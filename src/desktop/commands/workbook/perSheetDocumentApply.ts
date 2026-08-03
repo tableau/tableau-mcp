@@ -1,0 +1,138 @@
+import { Err, Ok, Result } from 'ts-results-es';
+
+import { log } from '../../../logging/logger.js';
+import { ExternalApiToolExecutor } from '../../externalApi/externalApiToolExecutor.js';
+import { isRouteMissing, resolveItemByNameOrId } from '../../externalApi/toolUtils.js';
+import {
+  ExecuteCommandError,
+  WithExecutorAndAbortSignal,
+} from '../../toolExecutor/toolExecutor.js';
+import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
+
+export type PerSheetKind = 'worksheet' | 'dashboard' | 'storyboard';
+
+/**
+ * Outcome of trying to apply a single sheet through its dedicated per-sheet `/document` POST route.
+ *
+ * The route resolves the target by id and CANNOT create a sheet (an unknown id is a 404 / FAILED
+ * operation). Two non-`applied` outcomes report why the surgical POST did not land: the name did not
+ * resolve to a live sheet (`sheet-absent` — a net-new sheet, or a pre-existing ambiguity the
+ * whole-workbook upsert resolves by first-match).
+ */
+export type PerSheetApplyOutcome = 'applied' | 'sheet-absent' | 'route-missing';
+
+const ITEM_LABEL: Record<PerSheetKind, string> = {
+  worksheet: 'Worksheet',
+  dashboard: 'Dashboard',
+  storyboard: 'Storyboard',
+};
+
+/**
+ * Apply one edited sheet fragment in place via its dedicated per-sheet `/document` POST route.
+ *
+ * Resolves the sheet name to its live id first; a name that does not resolve, or a build that lacks the
+ * route, returns a non-`applied` outcome and the caller decides whether to surface it or fall back
+ * to the whole-workbook apply. On a successful POST it dispatches the requested focus (best-effort,
+ * never fails the landed apply).
+ */
+export async function tryApplyViaPerSheetRoute({
+  kind,
+  sheetName,
+  fragmentXml,
+  focus,
+  executor,
+  signal,
+}: {
+  kind: PerSheetKind;
+  sheetName: string;
+  fragmentXml: string;
+  focus: ApplyFocus;
+} & WithExecutorAndAbortSignal): Promise<Result<PerSheetApplyOutcome, ExecuteCommandError>> {
+  const client = executor as ExternalApiToolExecutor;
+
+  const listResult = await listSheetsOfKind(kind, client, signal);
+  if (listResult.isErr()) {
+    // A missing list route means the per-sheet POST route is missing too (they ship together) —
+    // let the caller take the whole-workbook path instead of surfacing a route error.
+    if (isRouteMissing(listResult.error)) {
+      return Ok('route-missing');
+    }
+    return Err(listResult.error);
+  }
+
+  const resolved = resolveItemByNameOrId(ITEM_LABEL[kind], sheetName, listResult.value);
+  if (resolved.isErr()) {
+    // Not found (net-new sheet) or an ambiguous name (which the whole-workbook upsert resolves by
+    // first-match): report `sheet-absent` and let the caller decide — surface it (in-place apply) or
+    // fall back to the whole-workbook apply (create-capable caller).
+    return Ok('sheet-absent');
+  }
+
+  // POST the sheet fragment as-is: Tableau Desktop wraps it into the live workbook on the per-sheet
+  // `/document` route, so the MCP does not build a workbook envelope.
+  const applyResult = await applyDocumentForKind(
+    kind,
+    resolved.value.id,
+    fragmentXml,
+    client,
+    signal,
+  );
+  if (applyResult.isErr()) {
+    // A build with the list route but not the POST route (unlikely) still falls back cleanly.
+    if (isRouteMissing(applyResult.error)) {
+      return Ok('route-missing');
+    }
+    return Err(applyResult.error);
+  }
+
+  log({
+    level: 'info',
+    message: `per-sheet ${kind} document apply completed`,
+    logger: 'workbookCommands',
+    data: { sheetName, id: resolved.value.id },
+  });
+
+  // The POST moves the view whether we ask or not, so state where it belongs. Never fails the
+  // apply that already landed.
+  await dispatchApplyFocus({ focus, postedXml: fragmentXml, executor, signal });
+
+  return Ok('applied');
+}
+
+async function listSheetsOfKind(
+  kind: PerSheetKind,
+  client: ExternalApiToolExecutor,
+  signal: AbortSignal,
+): Promise<Result<Array<{ id: string; name: string }>, ExecuteCommandError>> {
+  switch (kind) {
+    case 'worksheet': {
+      const result = await client.listWorksheets(signal);
+      return result.map((value) => value.worksheets ?? []);
+    }
+    case 'dashboard': {
+      const result = await client.listDashboards(signal);
+      return result.map((value) => value.dashboards ?? []);
+    }
+    case 'storyboard': {
+      const result = await client.listStoryboards(signal);
+      return result.map((value) => value.storyboards ?? []);
+    }
+  }
+}
+
+async function applyDocumentForKind(
+  kind: PerSheetKind,
+  id: string,
+  documentXml: string,
+  client: ExternalApiToolExecutor,
+  signal: AbortSignal,
+): Promise<Result<unknown, ExecuteCommandError>> {
+  switch (kind) {
+    case 'worksheet':
+      return client.applyWorksheetDocument(id, documentXml, signal);
+    case 'dashboard':
+      return client.applyDashboardDocument(id, documentXml, signal);
+    case 'storyboard':
+      return client.applyStoryboardDocument(id, documentXml, signal);
+  }
+}

@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { applyWorkbookText } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
+import { pollReadback } from '../../../desktop/commands/workbook/pollReadback.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { validateWorkbookDocumentApply } from '../../../desktop/workbookDocumentGuard.js';
 import {
@@ -87,14 +88,18 @@ export const getFormatLabelsTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new DesktopCommandExecutionError(loadResult.error).toErr();
           }
 
-          const readbackResult = await getWorkbookXml({ executor, signal: extra.signal });
-          if (readbackResult.isErr()) {
-            return new DesktopCommandExecutionError(readbackResult.error).toErr();
+          const readback = await pollReadback({
+            read: () => getWorkbookXml({ executor, signal: extra.signal }),
+            settled: (xml) => {
+              const worksheetXml = extractWorksheet(xml, worksheet.trim());
+              return worksheetXml !== undefined && hasMarkLabelsSetting(worksheetXml, showLabels);
+            },
+            signal: extra.signal,
+          });
+          if (!readback.ok) {
+            return new DesktopCommandExecutionError(readback.error).toErr();
           }
-          const worksheetXml = extractWorksheet(readbackResult.value, worksheet.trim());
-          const applied =
-            worksheetXml !== undefined && hasMarkLabelsSetting(worksheetXml, showLabels);
-          if (!applied) {
+          if (!readback.settled) {
             return new XmlModificationError(
               'load completed but did not apply: readback did not carry the mark-labels setting',
             ).toErr();

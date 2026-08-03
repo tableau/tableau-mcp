@@ -6,7 +6,7 @@ import { normalizeArray, parseXML } from '../../metadata/parser.js';
 import type { ParsedWindow } from '../../metadata/types.js';
 import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
-import { loadWorksheetXml } from './loadWorksheetXml.js';
+import { loadWorksheetXml, verifyPostApplyWorksheetReadback } from './loadWorksheetXml.js';
 
 // Focus is a required argument at every write seam. Suites that are not about
 // navigation pass the disposition that dispatches nothing.
@@ -106,9 +106,22 @@ describe('loadWorksheetXml (External Client API transport)', () => {
         executeCommand,
         getWorkbookDocument,
         applyWorkbookDocument,
-        listWorksheets: vi
-          .fn()
-          .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] })),
+        // This double implements the whole-workbook transport (getWorkbookDocument +
+        // applyWorkbookDocument) that flag-off callers (build-and-apply-worksheet, refine-worksheet)
+        // use directly — they never attempt the per-sheet route. Its list route returns `not-found`
+        // so the flag-on route-missing tests below (apply-worksheet, which DOES attempt the per-sheet
+        // route) see `route-missing`. The per-sheet 'applied' path is covered in
+        // perSheetDocumentApply.test.ts.
+        listWorksheets: vi.fn().mockResolvedValue(
+          Err({
+            type: 'command-failed',
+            error: {
+              code: 'not-found',
+              message: 'No route matches GET /v0/workbook/worksheets',
+              recoverable: false,
+            },
+          }),
+        ),
       } as unknown as ToolExecutor,
       calls,
     };
@@ -359,12 +372,127 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     }
   });
 
+  // An executor whose per-sheet list route works but does NOT contain the target worksheet, so a
+  // flag-on apply-worksheet's tryApplyViaPerSheetRoute resolves `sheet-absent`. It still implements the
+  // whole-workbook transport that flag-off callers use directly (they never attempt the per-sheet
+  // route, so the list route stays untouched for them).
+  function absentSheetExecutor(liveWorksheetNames: string[]): {
+    executor: ToolExecutor;
+    calls: Array<{ kind: 'command' | 'apply'; xml?: string }>;
+  } {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(liveWorksheetNames));
+    (executor as unknown as { listWorksheets: unknown }).listWorksheets = vi.fn().mockResolvedValue(
+      Ok({
+        worksheets: liveWorksheetNames.map((name, i) => ({ id: `id-${i}`, name, hidden: false })),
+      }),
+    );
+    return { executor, calls };
+  }
+
+  it('surfaces sheet-absent (no whole-workbook fallback) when requireExistingSheet is set', async () => {
+    const { executor, calls } = absentSheetExecutor(['Some Other Sheet']);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error.type).toBe('sheet-absent');
+    }
+    // The whole-workbook apply must NOT have run — apply-worksheet does not create a sheet.
+    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+  });
+
+  it('goes straight to the whole-workbook apply for an absent sheet when requireExistingSheet is off', async () => {
+    const { executor, calls } = absentSheetExecutor(['Some Other Sheet']);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    // The flag-off caller never attempts the per-sheet route, so the net-new sheet is appended via the
+    // whole-workbook apply.
+    const applyCall = calls.find((c) => c.kind === 'apply');
+    expect(applyCall?.xml).toContain('name="Sheet 1"');
+    expect(applyCall?.xml).toContain('name="Some Other Sheet"');
+  });
+
+  // apply-worksheet is a pure per-sheet apply: any non-`applied` outcome errors and never falls back to
+  // the whole-workbook re-post. When the per-sheet route is unavailable (dispatchingExecutor's list
+  // route returns `not-found` → route-missing) it must NOT quietly whole-workbook apply — even for an
+  // existing sheet.
+  it('errors and never whole-workbook applies when requireExistingSheet is set and the route is missing (absent name)', async () => {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other Sheet']));
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error.type).toBe('sheet-absent');
+    }
+    // The whole-workbook apply must NOT have run — apply-worksheet does not create a sheet.
+    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+  });
+
+  it('errors and never whole-workbook applies when requireExistingSheet is set and the route is missing (existing sheet)', async () => {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sheet 1', 'Other']));
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    // Even though the sheet exists live, apply-worksheet requires the per-sheet route — it does not
+    // silently re-post the whole workbook instead.
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error.type).toBe('sheet-absent');
+    }
+    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+  });
+
   it('should return execute-command-error when the workbook fetch fails', async () => {
     const error = {
       type: 'command-failed' as const,
       error: { code: 'ERROR', message: 'Failed', recoverable: false },
     };
     const mockExecutor = {
+      // Route-missing list defers to the whole-workbook path, where the fetch below fails.
+      listWorksheets: vi.fn().mockResolvedValue(
+        Err({
+          type: 'command-failed',
+          error: {
+            code: 'not-found',
+            message: 'No route matches GET /v0/workbook/worksheets',
+            recoverable: false,
+          },
+        }),
+      ),
       getWorkbookDocument: vi.fn().mockResolvedValue(Err(error)),
     } as unknown as ToolExecutor;
 
@@ -381,5 +509,66 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       invariant(result.error.type === 'execute-command-error');
       expect(result.error.error).toEqual(error);
     }
+  });
+});
+
+describe('verifyPostApplyWorksheetReadback (async-settle poll)', () => {
+  const signal = new AbortController().signal;
+  const GEO = '[DS].[none:State:nk]';
+  const PROFIT = '[DS].[sum:Profit:qk]';
+
+  const worksheet = (withLod: boolean): string =>
+    '<worksheet name="Blank Map"><table>' +
+    '<panes><pane><mark class="Shape"/><encodings>' +
+    (withLod ? `<lod column="${GEO}"/>` : '') +
+    `<color column="${PROFIT}"/>` +
+    '</encodings></pane></panes>' +
+    `<rows>${GEO}</rows><cols>${PROFIT}</cols>` +
+    '</table></worksheet>';
+
+  const workbookDoc = (withLod: boolean): { xml: string } => ({
+    xml: `<workbook><worksheets>${worksheet(withLod)}</worksheets></workbook>`,
+  });
+
+  const listOk = (): ReturnType<typeof Ok> =>
+    Ok({ worksheets: [{ id: 'sheet-1', name: 'Blank Map' }] });
+
+  it('retries past a racing pre-apply read and passes once the apply settles', async () => {
+    const getWorksheetDocument = vi
+      .fn()
+      .mockResolvedValueOnce(Ok(workbookDoc(false)))
+      .mockResolvedValueOnce(Ok(workbookDoc(false)))
+      .mockResolvedValue(Ok(workbookDoc(true)));
+    const executor = {
+      listWorksheets: vi.fn().mockResolvedValue(listOk()),
+      getWorksheetDocument,
+    } as unknown as ToolExecutor;
+
+    const verification = await verifyPostApplyWorksheetReadback(
+      'Blank Map',
+      worksheet(true),
+      executor,
+      signal,
+    );
+
+    expect(verification.status).toBe('passed');
+    expect(getWorksheetDocument.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('reports a durable drop as failed after exhausting the poll budget', async () => {
+    const executor = {
+      listWorksheets: vi.fn().mockResolvedValue(listOk()),
+      getWorksheetDocument: vi.fn().mockResolvedValue(Ok(workbookDoc(false))),
+    } as unknown as ToolExecutor;
+
+    const verification = await verifyPostApplyWorksheetReadback(
+      'Blank Map',
+      worksheet(true),
+      executor,
+      signal,
+    );
+
+    expect(verification.status).toBe('failed');
+    expect(verification.findings.some((f) => f.severity === 'error')).toBe(true);
   });
 });

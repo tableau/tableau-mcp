@@ -158,6 +158,65 @@ describe('ExternalApiClient', () => {
     expect(last?.path).toBe('/v0/workbook/worksheets');
   });
 
+  it('polls an overflowed (202) JSON read and returns the terminal result body', async () => {
+    server.setOverride('GET /v0/workbook/worksheets', {
+      status: 202,
+      contentType: 'application/json',
+      headers: {
+        location: '/v0/operations/op-ws',
+        'retry-after': '0',
+        'x-tableau-operation-id': 'op-ws',
+      },
+      body: JSON.stringify({ id: 'op-ws', kind: 'workbook.listWorksheets', state: 'RUNNING' }),
+    });
+    server.setOperation('op-ws', {
+      retryAfterSeconds: 0,
+      poll: [
+        { id: 'op-ws', kind: 'workbook.listWorksheets', state: 'RUNNING' },
+        {
+          id: 'op-ws',
+          kind: 'workbook.listWorksheets',
+          state: 'SUCCEEDED',
+          result: { worksheets: [{ id: 'sheet-sales', name: 'Sales by Region', hidden: false }] },
+        },
+      ],
+    });
+
+    const result = await client.listWorksheets();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().worksheets).toEqual([
+      expect.objectContaining({ id: 'sheet-sales', name: 'Sales by Region' }),
+    ]);
+    expect(server.requests.some((r) => r.path === '/v0/operations/op-ws')).toBe(true);
+  });
+
+  it('polls an overflowed (202) XML document read and unwraps result.document', async () => {
+    server.setOverride('GET /v0/workbook/document', {
+      status: 202,
+      contentType: 'application/json',
+      headers: { location: '/v0/operations/op-doc', 'x-tableau-operation-id': 'op-doc' },
+      body: JSON.stringify({ id: 'op-doc', kind: 'workbook.getDocument', state: 'RUNNING' }),
+    });
+    server.setOperation('op-doc', {
+      retryAfterSeconds: 0,
+      poll: [
+        {
+          id: 'op-doc',
+          kind: 'workbook.getDocument',
+          state: 'SUCCEEDED',
+          result: { document: '<workbook version="18.1"><worksheets /></workbook>' },
+        },
+      ],
+    });
+
+    const result = await client.getWorkbookDocument();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().xml).toBe('<workbook version="18.1"><worksheets /></workbook>');
+    expect(server.requests.some((r) => r.path === '/v0/operations/op-doc')).toBe(true);
+  });
+
   it('lists dashboards from GET /v0/workbook/dashboards', async () => {
     const result = await client.listDashboards();
 
@@ -342,7 +401,8 @@ describe('ExternalApiClient', () => {
     const result = await client.getStoryboardDocument('story-qbr');
 
     expect(result.isOk()).toBe(true);
-    expect(result.unwrap().xml).toContain('<storyboard name="QBR Story"');
+    // A storyboard serializes as a `<dashboard type="storyboard">` inside a whole <workbook>.
+    expect(result.unwrap().xml).toContain('<dashboard name="QBR Story" type="storyboard"');
 
     const last = server.requests.at(-1);
     expect(last?.method).toBe('GET');

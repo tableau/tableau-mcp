@@ -4,16 +4,16 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
-import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
+import { loadStoryboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { formatDashboardPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import {
   ArgsValidationError,
   CacheSessionMismatchError,
-  DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
   FileReadError,
+  StoryboardXmlLoadFailedError,
   WorkbookNotFoundError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -21,19 +21,19 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
   session: z.string().optional(),
-  dashboardName: z.string(),
-  dashboardFile: z.string().optional(),
+  storyboardName: z.string(),
+  storyboardFile: z.string().optional(),
 };
 
-const title = 'Apply Dashboard';
-export const getApplyDashboardTool = (
+const title = 'Apply Storyboard';
+export const getApplyStoryboardTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
-  const applyDashboardTool = new DesktopTool({
+  const applyStoryboardTool = new DesktopTool({
     server,
-    name: 'apply-dashboard',
+    name: 'apply-storyboard',
     title,
-    description: 'Apply modified dashboard layout to Tableau.',
+    description: 'Apply modified storyboard document to Tableau.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -41,37 +41,38 @@ export const getApplyDashboardTool = (
       destructiveHint: true,
       idempotentHint: false,
     },
-    callback: async ({ session, dashboardName, dashboardFile }, extra): Promise<CallToolResult> => {
-      return await applyDashboardTool.logAndExecute({
+    callback: async (
+      { session, storyboardName, storyboardFile },
+      extra,
+    ): Promise<CallToolResult> => {
+      return await applyStoryboardTool.logAndExecute({
         extra,
-        args: { session, dashboardName, dashboardFile },
+        args: { session, storyboardName, storyboardFile },
         callback: async () => {
-          // No inline document parameter: the cached file path IS the handle. Making the
-          // model retype a document cost ~190s of pure emission across six asks, and
-          // inline content carried no cache fingerprint, so it also skipped the
-          // cross-instance bleed guard below.
-          if (!dashboardFile?.trim()) {
+          // No inline document parameter: the cached file path IS the handle. Inline content
+          // carries no cache fingerprint, so it would also skip the cross-instance bleed guard below.
+          if (!storyboardFile?.trim()) {
             return new ArgsValidationError(
               [
-                'A non-empty dashboard file path is required.',
-                'Use a cached dashboard path, edit it with read-cached-xml and',
+                'A non-empty storyboard file path is required.',
+                'Use a cached storyboard path, edit it with read-cached-xml and',
                 'write-cached-xml, then pass that path here.',
               ].join(' '),
             ).toErr();
           }
 
-          if (!existsSync(dashboardFile)) {
+          if (!existsSync(storyboardFile)) {
             return new WorkbookNotFoundError(
               [
-                `Cached dashboard file not found: ${dashboardFile}`,
-                'Provide an existing cached dashboard path.',
+                `Cached storyboard file not found: ${storyboardFile}`,
+                'Provide an existing cached storyboard path.',
               ].join(' '),
             ).toErr();
           }
 
-          let dashboardXml: string;
+          let storyboardXml: string;
           try {
-            dashboardXml = readFileSync(dashboardFile, 'utf-8');
+            storyboardXml = readFileSync(storyboardFile, 'utf-8');
           } catch (error) {
             return new FileReadError(error).toErr();
           }
@@ -83,23 +84,22 @@ export const getApplyDashboardTool = (
           const resolvedSession = sessionResult.value;
 
           // Cross-instance cache-bleed guard (W9): refuse a cache file produced by a
-          // different (or restarted) Desktop session before applying it. Now that every
-          // apply goes through a cache file, no payload can skip this check.
-          const sidecar = checkSidecar(dashboardFile, resolvedSession, 'dashboard');
+          // different (or restarted) Desktop session before applying it.
+          const sidecar = checkSidecar(storyboardFile, resolvedSession, 'storyboard');
           if (!sidecar.ok) {
             return new CacheSessionMismatchError(sidecar.message!).toErr();
           }
 
           const executor = await extra.getExecutor(resolvedSession);
-          const result = await loadDashboardXml({
-            dashboardName,
-            xml: dashboardXml,
-            focus: { navigate: 'artifact', sheetName: dashboardName },
+          const result = await loadStoryboardXml({
+            storyboardName,
+            xml: storyboardXml,
+            focus: { navigate: 'artifact', sheetName: storyboardName },
             executor,
             signal: extra.signal,
-            // apply-dashboard updates an existing dashboard in place via the per-sheet `/document`
+            // apply-storyboard updates an existing storyboard in place via the per-sheet `/document`
             // route; a name that does not resolve surfaces as an error rather than creating a
-            // dashboard through the whole-workbook path.
+            // storyboard through the whole-workbook path.
             requireExistingSheet: true,
           });
 
@@ -109,16 +109,15 @@ export const getApplyDashboardTool = (
               case 'execute-command-error':
                 return new DesktopCommandExecutionError(error).toErr();
               case 'load-dashboard-xml-error':
-                return new DashboardXmlLoadFailedError(error).toErr();
+                return new StoryboardXmlLoadFailedError(error).toErr();
               default: {
                 const _: never = type;
               }
             }
           }
 
-          // Host verification receipt (W-23447506): dashboard applies have no
-          // structural readback, so say so honestly instead of implying full
-          // re-verification happened.
+          // Host verification receipt (W-23447506): storyboard applies have no structural
+          // readback, so say so honestly instead of implying full re-verification happened.
           const receipt = result.isOk()
             ? formatDashboardPromiseCheck(result.value.validationWarnings)
             : '';
@@ -127,19 +126,19 @@ export const getApplyDashboardTool = (
               type: 'apply_succeeded',
               session_id: resolvedSession,
               episode_id: currentEpisodeId(resolvedSession),
-              tool: 'apply-dashboard',
-              operation: 'load-dashboard',
+              tool: 'apply-storyboard',
+              operation: 'load-storyboard',
               promise_outcome: 'unverified',
             });
           }
 
           return new Ok({
-            message: `Successfully applied dashboard update for "${dashboardName}". The dashboard has been updated.${receipt}`,
+            message: `Successfully applied storyboard update for "${storyboardName}". The storyboard has been updated.${receipt}`,
           });
         },
       });
     },
   });
 
-  return applyDashboardTool;
+  return applyStoryboardTool;
 };

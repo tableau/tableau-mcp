@@ -16,6 +16,7 @@ import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
+import { type PerSheetKind, tryApplyViaPerSheetRoute } from './perSheetDocumentApply.js';
 
 export type LoadDashboardXmlError =
   | { type: 'invalid-xml' }
@@ -28,7 +29,10 @@ export type LoadDashboardXmlError =
   // The load-dashboard command reported command-level completion, but Tableau
   // rejected the actual document load (surfaced in the response payload, not in
   // `status`). `message` carries Desktop's own error text.
-  | { type: 'load-rejected'; message: string };
+  | { type: 'load-rejected'; message: string }
+  // Only surfaced when a caller opts in with `requireExistingSheet` (apply-dashboard, apply-storyboard);
+  // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
+  | { type: 'sheet-absent'; message: string };
 
 export interface LoadDashboardXmlOk {
   validationWarnings: ValidationIssue[];
@@ -104,16 +108,28 @@ function resolveCanonicalDashboardName(
   return Ok(xmlName);
 }
 
+type LoadDashboardKind = Extract<PerSheetKind, 'dashboard' | 'storyboard'>;
+
 export async function loadDashboardXml({
   dashboardName,
   xml,
   focus,
   executor,
   signal,
+  kind = 'dashboard',
+  requireExistingSheet = false,
 }: {
   dashboardName: string;
   xml: string;
   focus: ApplyFocus;
+  kind?: LoadDashboardKind;
+  // Picks the External Client API call this apply uses.
+  // On/True (apply-dashboard, apply-storyboard): replace an existing dashboard/storyboard by id via the
+  // per-sheet `/document` route, leaving other sheets untouched. That route is replace-only, so a name
+  // that resolves to no live sheet surfaces a `sheet-absent` error instead of creating one.
+  // Off/False (build-and-apply-dashboard, apply-dashboard-with-viewpoints): the dashboard may be net-new, so
+  // the whole-workbook re-post upserts it (appending when absent). That is the create path.
+  requireExistingSheet?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -169,9 +185,31 @@ export async function loadDashboardXml({
   const canonicalFocus: ApplyFocus =
     focus.navigate === 'artifact' ? { ...focus, sheetName: canonicalName } : focus;
 
-  // External Client API ("Athena V0") exposes no per-dashboard apply route, so applying a single
-  // dashboard re-posts the whole live workbook with just this dashboard swapped in (the POST
-  // replaces the open workbook wholesale, so anything omitted would be pruned).
+  if (requireExistingSheet) {
+    const perSheetResult = await withApplyLock(() =>
+      tryApplyViaPerSheetRoute({
+        kind,
+        sheetName: canonicalName,
+        fragmentXml: xml,
+        focus: canonicalFocus,
+        executor,
+        signal,
+      }),
+    );
+    if (perSheetResult.isErr()) {
+      return Err({ type: 'execute-command-error', error: perSheetResult.error });
+    }
+    if (perSheetResult.value !== 'applied') {
+      return Err({
+        type: 'load-dashboard-xml-error',
+        error: { type: 'sheet-absent', message: sheetAbsentMessage(kind, canonicalName) },
+      });
+    }
+    // Preflight warnings ride along so apply responses can compute the host
+    // verification receipt (W-23447506) without re-running validation.
+    return Ok({ validationWarnings: validation.issues });
+  }
+
   const result = await loadDashboardXmlViaExternalApi({
     dashboardName: canonicalName,
     xml,
@@ -185,6 +223,34 @@ export async function loadDashboardXml({
   // Preflight warnings ride along so apply responses can compute the host
   // verification receipt (W-23447506) without re-running validation.
   return Ok({ validationWarnings: validation.issues });
+}
+
+/**
+ * Apply an edited storyboard in place. A storyboard is a `<dashboard type='storyboard'>`, so this is
+ * {@link loadDashboardXml} with the storyboard per-sheet route.
+ */
+export async function loadStoryboardXml({
+  storyboardName,
+  xml,
+  focus,
+  executor,
+  signal,
+  requireExistingSheet = false,
+}: {
+  storyboardName: string;
+  xml: string;
+  focus: ApplyFocus;
+  requireExistingSheet?: boolean;
+} & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
+  return loadDashboardXml({
+    dashboardName: storyboardName,
+    xml,
+    focus,
+    executor,
+    signal,
+    kind: 'storyboard',
+    requireExistingSheet,
+  });
 }
 
 async function loadDashboardXmlViaExternalApi({
@@ -225,6 +291,21 @@ async function loadDashboardXmlViaExternalApi({
 
     return Ok.EMPTY;
   });
+}
+
+function sheetAbsentMessage(kind: LoadDashboardKind, canonicalName: string): string {
+  if (kind === 'storyboard') {
+    return (
+      `No storyboard named "${canonicalName}" is open to update. This updates an existing ` +
+      'storyboard in place and does not create one. FIX: verify the storyboard name and that it ' +
+      'exists in the open workbook.'
+    );
+  }
+  return (
+    `No dashboard named "${canonicalName}" is open to update. This updates an existing dashboard ` +
+    'in place and does not create one. FIX: check the name with list-dashboards, or create a new ' +
+    'dashboard with build-and-apply-dashboard.'
+  );
 }
 
 function sanitize(value: unknown): unknown {

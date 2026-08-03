@@ -27,6 +27,15 @@ export type MockOverride = {
   contentType?: string;
   body?: string;
   hang?: boolean;
+  /** Extra response headers (e.g. `Location`, `Retry-After`) — the async-dispatch 202 carries these. */
+  headers?: Record<string, string>;
+};
+
+/** Successive `GET /v0/operations/{id}` responses; each poll advances one entry, the last repeats. */
+export type MockOperation = {
+  poll: Array<Record<string, unknown>>;
+  /** `Retry-After` (seconds) stamped on every poll response; omit for none. */
+  retryAfterSeconds?: number;
 };
 
 export type MockExternalApiServer = {
@@ -37,6 +46,12 @@ export type MockExternalApiServer = {
   setToken: (token: string) => void;
   /** Force a canned response for a `${METHOD} ${path}` key; pass undefined to clear. */
   setOverride: (key: string, override: MockOverride | undefined) => void;
+  /**
+   * Register an operation the `/v0/operations/{id}` poll route will serve. Pass undefined to
+   * make it a 404 `operation-not-found`. Combine with a 202 override on the dispatching route
+   * (Location → `/v0/operations/{id}`) to exercise the full 202 → poll → terminal path.
+   */
+  setOperation: (id: string, operation: MockOperation | undefined) => void;
   close: () => Promise<void>;
 };
 
@@ -54,7 +69,14 @@ const DEFAULT_DASHBOARD_DOCUMENT_XML =
   '<?xml version="1.0"?><workbook><dashboards>' +
   '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
   '</dashboards></workbook>';
-const DEFAULT_STORYBOARD_XML = '<storyboard name="QBR Story"><story-points /></storyboard>';
+// A storyboard serializes as a `<dashboard type='storyboard'>` under `<dashboards>` within a whole
+// `<workbook>` document — the same envelope shape as a dashboard, not a bare `<storyboard>` element.
+// The document carries a sibling dashboard the slice must exclude by name.
+const DEFAULT_STORYBOARD_DOCUMENT_XML =
+  '<?xml version="1.0"?><workbook><dashboards>' +
+  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
+  '<dashboard name="QBR Story" type="storyboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
+  '</dashboards></workbook>';
 const DEFAULT_WORKSHEETS = [
   {
     id: 'sheet-sales',
@@ -194,6 +216,40 @@ const sendProblem = (res: ServerResponse, status: number, code: string, detail: 
   );
 };
 
+// The per-sheet `/document` POST routes share the whole-workbook POST contract: reject a non-XML
+// content type (415), an empty body (400), or an unknown sheet id (404 — the route resolves by id
+// and cannot create), and otherwise return a succeeded operation envelope. `known` guards the id.
+const sendDocumentApply = (
+  res: ServerResponse,
+  contentType: string | undefined,
+  body: string,
+  id: string,
+  known: boolean,
+  kind: string,
+): void => {
+  if (!known) {
+    sendProblem(res, 404, 'sheet-not-found', `${kind} not found: ${id}`);
+    return;
+  }
+  const ct = (contentType ?? '').split(';')[0].trim();
+  if (ct !== 'application/xml' && ct !== 'text/xml') {
+    sendProblem(res, 415, 'unsupported-content-type', `Unsupported content type: ${ct}`);
+    return;
+  }
+  if (body.trim().length === 0) {
+    sendProblem(res, 400, 'invalid-request-body', 'Empty document body.');
+    return;
+  }
+  sendJson(res, 200, {
+    id: 'op-doc-1',
+    kind: `${kind.toLowerCase()}.document.apply`,
+    state: 'succeeded',
+    createdAt: '2026-07-07T10:00:00Z',
+    completedAt: '2026-07-07T10:00:01Z',
+    result: { bytesApplied: body.length },
+  });
+};
+
 // A 1x1 PNG, base64-encoded — enough to exercise the inline-image decode path.
 const SAMPLE_IMAGE_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
@@ -237,6 +293,8 @@ export async function startMockExternalApiServer(
   const workbookXml = options.workbookXml ?? DEFAULT_WORKBOOK_XML;
   const requests: Array<RecordedRequest> = [];
   const overrides = new Map<string, MockOverride>();
+  const operations = new Map<string, MockOperation>();
+  const operationCursors = new Map<string, number>();
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const method = req.method ?? 'GET';
@@ -262,8 +320,37 @@ export async function startMockExternalApiServer(
       }
       res.writeHead(override.status, {
         'content-type': override.contentType ?? 'application/problem+json',
+        ...override.headers,
       });
       res.end(override.body ?? '');
+      return;
+    }
+
+    const operationByIdMatch = path.match(/^\/v0\/operations\/([^/]+)$/);
+    if (method === 'GET' && operationByIdMatch) {
+      const operationId = decodeURIComponent(operationByIdMatch[1]);
+      const operation = operations.get(operationId);
+      if (!operation || operation.poll.length === 0) {
+        sendProblem(res, 404, 'operation-not-found', `Operation not found: ${operationId}`);
+        return;
+      }
+      const cursor = operationCursors.get(operationId) ?? 0;
+      const state = operation.poll[Math.min(cursor, operation.poll.length - 1)];
+      operationCursors.set(operationId, cursor + 1);
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (operation.retryAfterSeconds !== undefined) {
+        headers['retry-after'] = String(operation.retryAfterSeconds);
+      }
+      res.writeHead(200, headers);
+      res.end(JSON.stringify(state));
+      return;
+    }
+
+    if (method === 'GET' && path === '/v0/operations') {
+      const all = [...operations.values()].flatMap((op) =>
+        op.poll.length > 0 ? [op.poll[op.poll.length - 1]] : [],
+      );
+      sendJson(res, 200, { operations: all });
       return;
     }
 
@@ -362,36 +449,57 @@ export async function startMockExternalApiServer(
     }
 
     const worksheetDocumentMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/document$/);
-    if (method === 'GET' && worksheetDocumentMatch) {
+    if (worksheetDocumentMatch) {
       const worksheetId = decodeURIComponent(worksheetDocumentMatch[1]);
-      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
-        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+      const known = DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId);
+      if (method === 'GET') {
+        if (!known) {
+          sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+          return;
+        }
+        sendXml(res, 200, DEFAULT_WORKSHEET_DOCUMENT_XML);
         return;
       }
-      sendXml(res, 200, DEFAULT_WORKSHEET_DOCUMENT_XML);
-      return;
+      if (method === 'POST') {
+        sendDocumentApply(res, contentType, body, worksheetId, known, 'Worksheet');
+        return;
+      }
     }
 
     const dashboardDocumentMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)\/document$/);
-    if (method === 'GET' && dashboardDocumentMatch) {
+    if (dashboardDocumentMatch) {
       const dashboardId = decodeURIComponent(dashboardDocumentMatch[1]);
-      if (!DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId)) {
-        sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
+      const known = DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId);
+      if (method === 'GET') {
+        if (!known) {
+          sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
+          return;
+        }
+        sendXml(res, 200, DEFAULT_DASHBOARD_DOCUMENT_XML);
         return;
       }
-      sendXml(res, 200, DEFAULT_DASHBOARD_DOCUMENT_XML);
-      return;
+      if (method === 'POST') {
+        sendDocumentApply(res, contentType, body, dashboardId, known, 'Dashboard');
+        return;
+      }
     }
 
     const storyboardDocumentMatch = path.match(/^\/v0\/workbook\/storyboards\/([^/]+)\/document$/);
-    if (method === 'GET' && storyboardDocumentMatch) {
+    if (storyboardDocumentMatch) {
       const storyboardId = decodeURIComponent(storyboardDocumentMatch[1]);
-      if (!DEFAULT_STORYBOARDS.some((storyboard) => storyboard.id === storyboardId)) {
-        sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
+      const known = DEFAULT_STORYBOARDS.some((storyboard) => storyboard.id === storyboardId);
+      if (method === 'GET') {
+        if (!known) {
+          sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
+          return;
+        }
+        sendXml(res, 200, DEFAULT_STORYBOARD_DOCUMENT_XML);
         return;
       }
-      sendXml(res, 200, DEFAULT_STORYBOARD_XML);
-      return;
+      if (method === 'POST') {
+        sendDocumentApply(res, contentType, body, storyboardId, known, 'Storyboard');
+        return;
+      }
     }
 
     const worksheetMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)$/);
@@ -570,6 +678,14 @@ export async function startMockExternalApiServer(
         overrides.set(key, override);
       } else {
         overrides.delete(key);
+      }
+    },
+    setOperation: (id: string, operation: MockOperation | undefined): void => {
+      operationCursors.delete(id);
+      if (operation) {
+        operations.set(id, operation);
+      } else {
+        operations.delete(id);
       }
     },
     close: (): Promise<void> =>
