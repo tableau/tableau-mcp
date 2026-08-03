@@ -245,7 +245,6 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['refine-worksheet', 1583], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow
-    ['validate-proposal', 1630], // ratcheted down with compact shared proposal descriptions; 46k stays green
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {

@@ -128,8 +128,6 @@ const QUERY_STOPWORDS = new Set([
 const QUERY_TOOL_JARGON = new Set([
   'bind-template',
   'tableau-bind-template',
-  'validate-proposal',
-  'tableau-validate-proposal',
   'tabdoc',
   'tabui',
   'nextaction',
