@@ -8,7 +8,14 @@ import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { constrainFlowRuns, getListFlowRunsTool } from './listFlowRuns.js';
-import { mockFlowRuns } from './mockFlowRuns.js';
+import {
+  mockFlowRunFlowIds,
+  mockFlowRuns,
+  mockFlowRunsUnresolvedFailure,
+  mockFlowRunsWithFailureReasons,
+} from './mockFlowRuns.js';
+
+const { FLOW_A, FLOW_B } = mockFlowRunFlowIds;
 
 const mocks = vi.hoisted(() => ({
   mockGetFlowRuns: vi.fn(),
@@ -579,6 +586,94 @@ describe('listFlowRunsTool', () => {
     });
   });
 
+  describe('failureSummary', () => {
+    it('groups the window failure causes when the runs carry reasons', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRunsWithFailureReasons);
+      const result = await getToolResult({});
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.mcp.failureSummary.failedRunCount).toBe(6);
+      expect(payload.mcp.failureSummary.failedFlowCount).toBe(3);
+      expect(payload.mcp.failureSummary.reasons[0]).toEqual({
+        message: 'Table "orders" was not found.',
+        available: true,
+        runCount: 3,
+        // Ascending, so FLOW_B ("c1e8...") precedes FLOW_A ("d007...").
+        flowIds: [FLOW_B, FLOW_A],
+      });
+    });
+
+    it('skips the fallback REST call when a failure has a resolved reason', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRunsWithFailureReasons);
+      const result = await getToolResult({});
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.mcp.failureSummary).toBeDefined();
+      expect(payload.mcp.failureInsight).toBeUndefined();
+      expect(mocks.mockQueryFlow).not.toHaveBeenCalled();
+    });
+
+    // The half a naive "skip the fallback whenever reasons exist" gets wrong: an
+    // unresolved reason is a placeholder, so the deep link is still needed.
+    it('still resolves the deep link when every reason in the window is unresolved', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRunsUnresolvedFailure);
+      const result = await getToolResult({});
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.mcp.failureSummary.reasons).toEqual([
+        { message: 'Error in flow steps', available: false, runCount: 1, flowIds: [FLOW_A] },
+      ]);
+      expect(payload.mcp.failureInsight.example.runHistoryUrl).toBe(
+        `${FLOW_WEBPAGE_URL}/runHistory`,
+      );
+      expect(mocks.mockQueryFlow).toHaveBeenCalledTimes(1);
+
+      // Both fields describe the same window, so their counts must agree — they
+      // share one definition of "failed run" precisely so this cannot drift.
+      expect(payload.mcp.failureInsight.failedRunCount).toBe(
+        payload.mcp.failureSummary.failedRunCount,
+      );
+      expect(payload.mcp.failureInsight.failedFlowCount).toBe(
+        payload.mcp.failureSummary.failedFlowCount,
+      );
+    });
+
+    // AC3: on a pre-3.30 server nothing about the response changes.
+    it('emits no failureSummary and keeps the deep link when no run carries a reason', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+      const result = await getToolResult({ filter: `flowId:eq:${FLOW_ID}` });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.mcp.failureSummary).toBeUndefined();
+      expect(payload.mcp.failureInsight).toEqual({
+        failedRunCount: 1,
+        failedFlowCount: 1,
+        example: { flowId: FLOW_ID, runHistoryUrl: `${FLOW_WEBPAGE_URL}/runHistory` },
+      });
+      expect(mocks.mockQueryFlow).toHaveBeenCalledTimes(1);
+    });
+
+    it('emits neither failure field when nothing failed', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue(buildRuns(3, 'Success'));
+      const result = await getToolResult({});
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.mcp.failureSummary).toBeUndefined();
+      expect(payload.mcp.failureInsight).toBeUndefined();
+      expect(mocks.mockQueryFlow).not.toHaveBeenCalled();
+    });
+  });
+
   describe('constrainFlowRuns', () => {
     it('returns the baseline empty message when no runs are found', () => {
       const result = constrainFlowRuns({
@@ -674,6 +769,38 @@ describe('listFlowRunsTool', () => {
         boundedContext: { ...NO_BOUNDED_CONTEXT, projectIds: new Set(['p1']) },
       });
       // Bounded context fails closed → empty result, so no link leaks out.
+      invariant(result.type === 'empty');
+    });
+
+    it('passes failureSummary through on the success path', () => {
+      const failureSummary = {
+        failedRunCount: 2,
+        failedFlowCount: 1,
+        reasons: [{ message: 'Boom', available: true, runCount: 2, flowIds: [FLOW_ID] }],
+      };
+      const result = constrainFlowRuns({
+        result: {
+          flowRuns: mockFlowRuns,
+          mcp: { resultInfo: { returnedCount: 3, truncated: false }, failureSummary },
+        },
+        boundedContext: NO_BOUNDED_CONTEXT,
+      });
+      invariant(result.type === 'success');
+      expect(result.result.mcp.failureSummary).toEqual(failureSummary);
+    });
+
+    it('drops failureSummary when a bounded context forces an empty result', () => {
+      const result = constrainFlowRuns({
+        result: {
+          flowRuns: mockFlowRuns,
+          mcp: {
+            resultInfo: { returnedCount: 3, truncated: false },
+            failureSummary: { failedRunCount: 1, failedFlowCount: 1, reasons: [] },
+          },
+        },
+        boundedContext: { ...NO_BOUNDED_CONTEXT, projectIds: new Set(['p1']) },
+      });
+      // No failure detail leaks out of a fail-closed result.
       invariant(result.type === 'empty');
     });
   });

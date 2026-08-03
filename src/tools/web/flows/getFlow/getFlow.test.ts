@@ -6,7 +6,13 @@ import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getGetFlowTool } from './getFlow.js';
-import { mockConnections, mockFlow, mockFlowRuns, mockOutputSteps } from './mockFlow.js';
+import {
+  mockConnections,
+  mockFlow,
+  mockFlowRuns,
+  mockFlowRunsWithFailureReason,
+  mockOutputSteps,
+} from './mockFlow.js';
 
 const mocks = vi.hoisted(() => ({
   mockQueryFlow: vi.fn(),
@@ -230,6 +236,115 @@ describe('getFlowTool', () => {
     // but never an actual password string. Make sure that contract holds.
     expect(result.content[0].text).not.toMatch(/"password"\s*:\s*"[^"]+"/);
     expect(result.content[0].text).not.toMatch(/X-Tableau-Auth/);
+  });
+
+  // ------------------------------------------------------------------------
+  // failureSummary — and the four states of the optional `mcp` container
+  // ------------------------------------------------------------------------
+  // `mcp` holds two independent optional members, so all four combinations must
+  // be correct. The no-warnings/no-summary case is the AC3 guarantee for this
+  // tool: the key is absent entirely, exactly as before this field existed.
+  describe('failureSummary', () => {
+    it('groups the failure causes of the returned runs', async () => {
+      mocks.mockQueryFlow.mockResolvedValue({ flow: mockFlow, outputSteps: mockOutputSteps });
+      mocks.mockQueryFlowConnections.mockResolvedValue(mockConnections);
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRunsWithFailureReason);
+
+      const result = await getToolResult({ flowId: mockFlow.id });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.mcp.failureSummary).toEqual({
+        failedRunCount: 1,
+        failedFlowCount: 1,
+        reasons: [
+          {
+            message: 'Table "orders" was not found.',
+            available: true,
+            runCount: 1,
+            flowIds: [mockFlow.id],
+          },
+        ],
+      });
+      expect(parsed.mcp.warnings).toBeUndefined();
+    });
+
+    it('omits the whole mcp container when there are no warnings and no reasons', async () => {
+      mocks.mockQueryFlow.mockResolvedValue({ flow: mockFlow, outputSteps: mockOutputSteps });
+      mocks.mockQueryFlowConnections.mockResolvedValue(mockConnections);
+      // Includes a Failed run, but with no reason — a pre-3.30 server.
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+
+      const result = await getToolResult({ flowId: mockFlow.id });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.mcp).toBeUndefined();
+      expect(result.content[0].text).not.toContain('failureSummary');
+    });
+
+    it('emits warnings alone when a sidecar fails and no run carries a reason', async () => {
+      mocks.mockQueryFlow.mockResolvedValue({ flow: mockFlow, outputSteps: mockOutputSteps });
+      mocks.mockQueryFlowConnections.mockRejectedValue(new Error('Connections forbidden'));
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+
+      const result = await getToolResult({ flowId: mockFlow.id });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.mcp.warnings).toHaveLength(1);
+      expect(parsed.mcp.failureSummary).toBeUndefined();
+    });
+
+    it('emits warnings and the summary together', async () => {
+      mocks.mockQueryFlow.mockResolvedValue({ flow: mockFlow, outputSteps: mockOutputSteps });
+      mocks.mockQueryFlowConnections.mockRejectedValue(new Error('Connections forbidden'));
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRunsWithFailureReason);
+
+      const result = await getToolResult({ flowId: mockFlow.id });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.mcp.warnings).toHaveLength(1);
+      expect(parsed.mcp.failureSummary.reasons).toHaveLength(1);
+    });
+
+    it('omits the summary when flow runs were not requested', async () => {
+      mocks.mockQueryFlow.mockResolvedValue({ flow: mockFlow, outputSteps: mockOutputSteps });
+      mocks.mockQueryFlowConnections.mockResolvedValue(mockConnections);
+
+      const result = await getToolResult({ flowId: mockFlow.id, includeFlowRuns: false });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.mcp).toBeUndefined();
+      expect(mocks.mockGetFlowRuns).not.toHaveBeenCalled();
+    });
+
+    // `available: false` still gets grouped — get-flow has no deep-link fallback,
+    // so the placeholder is all it can offer, flagged as unresolved.
+    it('reports an unresolved reason as available false', async () => {
+      mocks.mockQueryFlow.mockResolvedValue({ flow: mockFlow, outputSteps: mockOutputSteps });
+      mocks.mockQueryFlowConnections.mockResolvedValue(mockConnections);
+      mocks.mockGetFlowRuns.mockResolvedValue([
+        { ...mockFlowRuns[1], failureReason: { available: false, message: 'Error in flow steps' } },
+      ]);
+
+      const result = await getToolResult({ flowId: mockFlow.id });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.mcp.failureSummary.reasons[0].available).toBe(false);
+      expect(parsed.mcp.failureSummary.reasons[0].message).toBe('Error in flow steps');
+      // This tool never emits the list-flow-runs deep link.
+      expect(parsed.mcp.failureInsight).toBeUndefined();
+    });
   });
 
   // ------------------------------------------------------------------------

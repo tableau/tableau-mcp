@@ -161,20 +161,70 @@ warning is emitted (verified live against Tableau REST 3.30).
 times") when this warning is present — the response is a window onto a longer history, not the
 complete record. Daily-running production flows can easily accumulate hundreds of runs per year.
 
+## Failure reasons (`mcp.failureSummary`)
+
+On Tableau REST API >= 3.30, a `Failed` run carries `failureReason: { available, message }` giving the
+cause of the failure. It is readable by any caller who can see the run — it comes from the flow's
+output-step errors, not the admin-only background job.
+
+When at least one returned run carries a reason, the tool also emits `mcp.failureSummary`, which
+groups those failures by reported message:
+
+- `failedRunCount` — `Failed` runs among the returned runs.
+- `failedFlowCount` — **distinct** flows with a failure. Here that is `1` (or `0` if Tableau omits
+  `flowId` on the runs), since this tool returns runs for a single flow; the field exists so the shape
+  matches [List Flow Runs](list-flow-runs.md#mcpfailuresummary) exactly.
+- `reasons` — one entry per distinct failure **message**, largest first, as
+  `{ message, available, runCount, flowIds }`. A group is not always a single root cause: several
+  distinct underlying errors can map to the same short localized message, and the REST API does not
+  expose the underlying error identifier.
+- `available: false` means Tableau could not determine the cause and `message` is a generic
+  placeholder. Do not present it as a diagnosis. This tool emits no run-history deep link of its own —
+  append `/runHistory` to the `webpageUrl` already in the response to open the flow's run history and
+  read the error in the Tableau UI.
+
+Because the counts cover all `Failed` runs while `reasons` covers only reason-bearing ones,
+`sum(reasons[].runCount)` can be less than `failedRunCount`. On servers below REST API 3.30 both
+`failureReason` and `mcp.failureSummary` are absent.
+
+```json
+{
+  "mcp": {
+    "failureSummary": {
+      "failedRunCount": 1,
+      "failedFlowCount": 1,
+      "reasons": [
+        {
+          "message": "Table \"orders\" was not found.",
+          "available": true,
+          "runCount": 1,
+          "flowIds": ["d00700fe-28a0-4ece-a7af-5543ddf38a82"]
+        }
+      ]
+    }
+  }
+}
+```
+
 ## Limitations
 
 A few things this tool deliberately does **not** expose in the current version:
 
-- **No error details for `Failed` flow runs.** The `flowRuns[*].status` field is available (e.g.
-  `Success`, `Failed`, `Cancelled`), but the underlying job error message is not surfaced by the
-  public Tableau REST API and is therefore not exposed here. To investigate a failure, inspect the
-  run in the Tableau Server / Cloud UI.
+- **Failure reasons need REST API >= 3.30, and only cover `Failed` runs.** On older servers
+  `failureReason` and [`mcp.failureSummary`](#failure-reasons-mcpfailuresummary) are simply omitted and
+  the response is unchanged. Even on 3.30+, there is no reason for a `Cancelled` run and nothing
+  explaining why a run is slow or stuck `InProgress`.
+- **A reason is a short message, not a log.** `failureReason.message` is a short localized cause. The
+  full underlying job error is not surfaced by the public Tableau REST API and reading it requires
+  site-administrator access. To investigate further, inspect the run in the Tableau Server / Cloud UI.
 - **No per-output-step run details.** The `flowRuns` field reflects ad-hoc runs returned by the
   public REST API; per-output-step success/failure breakdowns and timings are not included.
 - **No exact total-run count.** Tableau's Flow Runs endpoint does not expose a `totalAvailable`
   field, so the tool cannot report exactly how many runs exist beyond what was returned — only
   whether more do, via the [`FLOW_RUNS_TRUNCATED`](#run-history-truncation-flow_runs_truncated)
   warning. For deeper history queries, see the recovery actions on that warning.
+  `mcp.failureSummary`'s counts inherit this limit: they describe the returned runs only, so never
+  report them as the flow's total or historical failure rate.
 
 ## Example result
 
@@ -218,7 +268,33 @@ A few things this tool deliberately does **not** expose in the current version:
       "startedAt": "2025-04-01T10:00:00Z",
       "completedAt": "2025-04-01T10:05:00Z",
       "progress": 100
+    },
+    {
+      "id": "a2a2a2a2-2222-2222-2222-222222222222",
+      "flowId": "d00700fe-28a0-4ece-a7af-5543ddf38a82",
+      "status": "Failed",
+      "startedAt": "2025-03-31T10:00:00Z",
+      "completedAt": "2025-03-31T10:02:00Z",
+      "progress": 50,
+      "failureReason": {
+        "available": true,
+        "message": "Table \"orders\" was not found."
+      }
     }
-  ]
+  ],
+  "mcp": {
+    "failureSummary": {
+      "failedRunCount": 1,
+      "failedFlowCount": 1,
+      "reasons": [
+        {
+          "message": "Table \"orders\" was not found.",
+          "available": true,
+          "runCount": 1,
+          "flowIds": ["d00700fe-28a0-4ece-a7af-5543ddf38a82"]
+        }
+      ]
+    }
+  }
 }
 ```
