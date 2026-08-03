@@ -52,11 +52,33 @@ tableau-viz {
 }
 
 .open-in-tableau:hover {
-  background-color: #f0f0f0;
   text-decoration: underline;
 }
 
 .open-in-tableau:focus {
+  outline: 2px solid #0066CC;
+  outline-offset: 2px;
+}
+
+.viz-control {
+  display: inline-block;
+  margin: 1rem 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.875rem;
+  color: #0066CC;
+  background: none;
+  border: 1px solid #0066CC;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.viz-control:hover {
+  text-decoration: underline;
+}
+
+.viz-control:focus {
   outline: 2px solid #0066CC;
   outline-offset: 2px;
 }

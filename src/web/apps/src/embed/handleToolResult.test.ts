@@ -12,10 +12,12 @@ vi.mock('./getEmbedTokenToolClient.js');
 vi.mock('./embedTableauViz.js');
 vi.mock('./loadTableauEmbeddingApi.js');
 vi.mock('./openInTableauLink.js');
+vi.mock('./fullscreenButton.js');
 vi.mock('../shared/recordEventClient.js');
 
 import { recordEvent } from '../shared/recordEventClient.js';
 import { embedTableauViz } from './embedTableauViz.js';
+import { setupFullscreenButton } from './fullscreenButton.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
@@ -322,6 +324,7 @@ describe('handleToolResult', () => {
 
     vi.mocked(callGetEmbedTokenTool).mockResolvedValue('test-token-123');
     vi.mocked(embedTableauViz).mockImplementation(() => {});
+    vi.mocked(setupFullscreenButton).mockImplementation(() => {});
     vi.mocked(setupOpenInTableauLink).mockImplementation(() => {});
 
     await handleToolResult(mockApp, validResult);
@@ -340,8 +343,16 @@ describe('handleToolResult', () => {
       expect.any(Function),
     );
 
-    // Assert setupOpenInTableauLink WAS called
+    // Assert setupOpenInTableauLink WAS called first (left of button in controls row)
     expect(vi.mocked(setupOpenInTableauLink)).toHaveBeenCalledTimes(1);
+
+    // Assert setupFullscreenButton WAS called second (right of link in controls row)
+    expect(vi.mocked(setupFullscreenButton)).toHaveBeenCalledTimes(1);
+
+    // Verify order: link setup called before button setup
+    const linkCallOrder = vi.mocked(setupOpenInTableauLink).mock.invocationCallOrder[0];
+    const buttonCallOrder = vi.mocked(setupFullscreenButton).mock.invocationCallOrder[0];
+    expect(linkCallOrder).toBeLessThan(buttonCallOrder);
   });
 
   it('no-ops on an empty (dataless) delivery instead of showing PARSE_ERROR', async () => {

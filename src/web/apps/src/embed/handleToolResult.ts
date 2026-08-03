@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { extractToolErrorMessage } from '../../../../utils/extractToolErrorMessage.js';
 import { showError } from '../shared/showError.js';
 import { embedTableauViz } from './embedTableauViz.js';
+import { setupFullscreenButton } from './fullscreenButton.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
@@ -100,5 +101,6 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
   const main = document.querySelector('.main');
   if (main) {
     setupOpenInTableauLink(app, viewUrl, main as HTMLElement);
+    setupFullscreenButton(app, main as HTMLElement);
   }
 }
