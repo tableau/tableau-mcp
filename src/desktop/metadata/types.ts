@@ -58,7 +58,7 @@ export interface FieldReference {
    * into user-named members. Groups are inherently NON-portable (they enumerate the
    * specific values of one dataset) and cannot be referenced through the ordinary
    * `[none:field:nk]` column-instance form, so generic template slots must never
-   * auto-bind to one. See field-builder.ts and takeCompatibleSource.
+   * auto-bind to one. See field-builder.ts and autoMapFields.
    */
   isGroup?: boolean;
 }

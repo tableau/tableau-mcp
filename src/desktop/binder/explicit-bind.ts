@@ -203,13 +203,7 @@ function buildProposalFromOrderedRefs(
 
   for (const slot of manifest.slots) {
     if (!slot.bindable) continue;
-    const source = takeCompatibleSource(
-      slot,
-      sources,
-      used,
-      reusableByTemplateField,
-      needsGeocodableGeo,
-    );
+    const source = autoMapFields(slot, sources, used, reusableByTemplateField, needsGeocodableGeo);
     if (!source) continue;
     reusableByTemplateField.set(slot.template_field, source);
     fieldBySlot.set(slot.slot_id, source.field);
@@ -230,12 +224,15 @@ function buildProposalFromFieldMapping(
   title?: string,
 ): ProposalBuild {
   const warnings: string[] = [];
-  const needsGeocodableGeo = requiresGeocodableGeo(manifest);
-  const usedKeys = new Set<string>();
-  const usedFields = new Set<SchemaField>();
   const fieldBySlot = new Map<string, SchemaField>();
   const bindings: BindingProposal['bindings'] = [];
 
+  // The caller (the agent) owns slot→field mapping on this path: we bind ONLY the slots
+  // it explicitly keyed. Unmapped slots are deliberately left unbound — a required one
+  // then surfaces as a `missing-required-slot` blocker in validate.ts so the agent learns
+  // the slot is required, and an optional one is handled by the optional-field mechanism.
+  // We never auto-fill an unmapped slot from leftover mapping values (that guessing lives
+  // only on the ordered-refs / ShowMe path via autoMapFields).
   for (const slot of manifest.slots) {
     if (!slot.bindable) continue;
     const key = mappingKeyForSlot(slot, manifest, mapping);
@@ -247,32 +244,8 @@ function buildProposalFromFieldMapping(
       continue;
     }
 
-    usedKeys.add(key);
-    usedFields.add(resolved.field);
     fieldBySlot.set(slot.slot_id, resolved.field);
     bindings.push({ slot_id: slot.slot_id, field: resolved.field.name });
-  }
-
-  const remainingSources: ResolvedSource[] = [];
-  for (const [key, value] of Object.entries(mapping)) {
-    if (usedKeys.has(key)) continue;
-    const resolved = resolveSource(value, schema);
-    if ('field' in resolved) remainingSources.push(resolved);
-  }
-
-  for (const slot of manifest.slots) {
-    if (!slot.bindable || !slot.required || fieldBySlot.has(slot.slot_id)) continue;
-    const source = takeCompatibleSource(
-      slot,
-      remainingSources,
-      usedFields,
-      new Map(),
-      needsGeocodableGeo,
-    );
-    if (!source) continue;
-    usedFields.add(source.field);
-    fieldBySlot.set(slot.slot_id, source.field);
-    bindings.push({ slot_id: slot.slot_id, field: source.field.name });
   }
 
   return {
@@ -304,7 +277,7 @@ function slotAffinity(slot: SlotSpec, f: SchemaField): number {
   return 0;
 }
 
-function takeCompatibleSource(
+function autoMapFields(
   slot: SlotSpec,
   sources: ResolvedSource[],
   used: Set<SchemaField>,

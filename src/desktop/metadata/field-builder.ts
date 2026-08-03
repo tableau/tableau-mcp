@@ -408,7 +408,7 @@ export function listAvailableFields(
       let formula: string | undefined;
       // A user-defined GROUP is a top-level <column> whose calculation bins concrete
       // values of a base column (class='categorical-bin'). Flag it so generic template
-      // slots never auto-bind to this non-portable derivation (see takeCompatibleSource).
+      // slots never auto-bind to this non-portable derivation (see autoMapFields).
       let isGroup = false;
 
       if (source === 'top-level') {

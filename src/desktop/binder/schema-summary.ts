@@ -36,7 +36,7 @@ export interface SchemaField {
   /**
    * True for a user-defined GROUP (categorical-bin column). Non-portable and not
    * referenceable through the ordinary column-instance form, so generic slots must
-   * not auto-bind to it. See field-builder.ts and explicit-bind.takeCompatibleSource.
+   * not auto-bind to it. See field-builder.ts and explicit-bind.autoMapFields.
    */
   isGroup?: boolean;
   column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
