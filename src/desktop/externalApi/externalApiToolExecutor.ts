@@ -651,9 +651,9 @@ function mapClientError(
         error: {
           code: 'read-overflowed',
           message:
-            'The read exceeded the Desktop sync window and returned an async operation. ' +
-            'Retrieval of overflowed reads is not yet supported by this Desktop build — retry, ' +
-            'or narrow the read (fewer rows / a single sheet).',
+            'The document read exceeded the Desktop sync window and returned an async operation, ' +
+            'but XML document reads cannot be retrieved from that operation — retry, or narrow the ' +
+            'read (a single sheet rather than the whole workbook).',
           recoverable: true,
         },
       };

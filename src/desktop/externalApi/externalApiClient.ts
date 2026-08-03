@@ -432,21 +432,32 @@ export class ExternalApiClient {
     signal?: AbortSignal,
   ): Promise<Result<z.infer<T>, ExternalApiError>> {
     const response = await this.request('GET', route, { signal });
-    return this.parseJson(response, schema);
+    return this.parseJson(response, schema, signal);
   }
 
   private async parseJson<T extends z.ZodTypeAny>(
     response: Result<Response, ExternalApiError>,
     schema: T,
+    signal?: AbortSignal,
   ): Promise<Result<z.infer<T>, ExternalApiError>> {
     if (response.isErr()) {
       return Err(response.error);
     }
 
     const res = response.value;
-    const overflow = await readOverflowError(res);
-    if (overflow) {
-      return Err(overflow);
+    // On overflow (202) the terminal Operation's `result` carries the same body the in-window
+    // 200 would have, so poll and read from there. (A 503 precursor overflow is a retry signal,
+    // not a pollable operation.)
+    if (res.status === HTTP_ACCEPTED) {
+      const operation = await this.pollOperation(res, signal);
+      if (operation.isErr()) {
+        return Err(operation.error);
+      }
+      return parseAgainstSchema(operation.value.result ?? {}, schema);
+    }
+    const pending = await pendingOverflowError(res);
+    if (pending) {
+      return Err(pending);
     }
     if (!res.ok) {
       return Err(await mapErrorResponse(res));
@@ -459,11 +470,7 @@ export class ExternalApiClient {
       return Err({ type: 'invalid-response', error });
     }
 
-    const parsed = schema.safeParse(json);
-    if (!parsed.success) {
-      return Err({ type: 'invalid-response', error: parsed.error });
-    }
-    return Ok(parsed.data);
+    return parseAgainstSchema(json, schema);
   }
 
   private async getXml(
@@ -575,10 +582,10 @@ async function parseOperationBody(
   return Ok(parsed.data);
 }
 
-// A typed read's payload is unreachable by polling, so an overflow (202) is a terminal error here,
-// not a poll trigger like it is on the write path. A 503 is only an `operation-pending` precursor
-// overflow when its Problem code says so — a genuine api-disabled/shutting-down 503 must fall
-// through to mapErrorResponse and keep its real code.
+// XML document reads are scoped out of the poll-payload projection (a raw-XML body can't ride in a
+// JSON Operation envelope), so an overflow (202) stays a terminal error for them, unlike JSON reads
+// which poll. A 503 is only an `operation-pending` precursor overflow when its Problem code says so
+// — a genuine api-disabled/shutting-down 503 must fall through to mapErrorResponse and keep its code.
 async function readOverflowError(res: Response): Promise<ExternalApiError | undefined> {
   if (res.status === HTTP_ACCEPTED) {
     return {
@@ -586,6 +593,13 @@ async function readOverflowError(res: Response): Promise<ExternalApiError | unde
       operationId: res.headers.get(HEADER_OPERATION_ID) ?? undefined,
     };
   }
+  return pendingOverflowError(res);
+}
+
+// The precursor-overflow signal shared by JSON and XML reads: a 503 whose Problem code is
+// `operation-pending` means an internal precursor (e.g. summaryData's {id} resolution) overflowed
+// and there is no operation to poll — retry the whole request. Any other 503 is left to the caller.
+async function pendingOverflowError(res: Response): Promise<ExternalApiError | undefined> {
   if (res.status === HTTP_SERVICE_UNAVAILABLE && (await problemCode(res)) === 'operation-pending') {
     const seconds = Number.parseInt(res.headers.get(HEADER_RETRY_AFTER) ?? '', 10);
     return {
@@ -594,6 +608,17 @@ async function readOverflowError(res: Response): Promise<ExternalApiError | unde
     };
   }
   return undefined;
+}
+
+function parseAgainstSchema<T extends z.ZodTypeAny>(
+  value: unknown,
+  schema: T,
+): Result<z.infer<T>, ExternalApiError> {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    return Err({ type: 'invalid-response', error: parsed.error });
+  }
+  return Ok(parsed.data);
 }
 
 // Reads a clone so the body stays available for mapErrorResponse on the fall-through path.

@@ -158,6 +158,53 @@ describe('ExternalApiClient', () => {
     expect(last?.path).toBe('/v0/workbook/worksheets');
   });
 
+  it('polls an overflowed (202) JSON read and returns the terminal result body', async () => {
+    server.setOverride('GET /v0/workbook/worksheets', {
+      status: 202,
+      contentType: 'application/json',
+      headers: {
+        location: '/v0/operations/op-ws',
+        'retry-after': '0',
+        'x-tableau-operation-id': 'op-ws',
+      },
+      body: JSON.stringify({ id: 'op-ws', kind: 'workbook.listWorksheets', state: 'RUNNING' }),
+    });
+    server.setOperation('op-ws', {
+      retryAfterSeconds: 0,
+      poll: [
+        { id: 'op-ws', kind: 'workbook.listWorksheets', state: 'RUNNING' },
+        {
+          id: 'op-ws',
+          kind: 'workbook.listWorksheets',
+          state: 'SUCCEEDED',
+          result: { worksheets: [{ id: 'sheet-sales', name: 'Sales by Region', hidden: false }] },
+        },
+      ],
+    });
+
+    const result = await client.listWorksheets();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().worksheets).toEqual([
+      expect.objectContaining({ id: 'sheet-sales', name: 'Sales by Region' }),
+    ]);
+    expect(server.requests.some((r) => r.path === '/v0/operations/op-ws')).toBe(true);
+  });
+
+  it('returns read-overflowed for an overflowed (202) XML document read (scoped out of poll projection)', async () => {
+    server.setOverride('GET /v0/workbook/document', {
+      status: 202,
+      contentType: 'application/json',
+      headers: { location: '/v0/operations/op-doc', 'x-tableau-operation-id': 'op-doc' },
+      body: JSON.stringify({ id: 'op-doc', kind: 'workbook.getDocument', state: 'RUNNING' }),
+    });
+
+    const result = await client.getWorkbookDocument();
+
+    expect(result.isErr()).toBe(true);
+    expect(result.unwrapErr().type).toBe('read-overflowed');
+  });
+
   it('lists dashboards from GET /v0/workbook/dashboards', async () => {
     const result = await client.listDashboards();
 

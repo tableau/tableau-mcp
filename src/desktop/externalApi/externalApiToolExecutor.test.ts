@@ -658,12 +658,35 @@ describe('ExternalApiToolExecutor', () => {
       expect(result.unwrapErr().type).toBe('command-failed');
     });
 
-    it('surfaces read-overflowed as a recoverable command-failed rather than empty data', async () => {
+    it('polls an overflowed JSON read to its terminal result instead of erroring', async () => {
       server.setOverride('GET /v0/workbook/worksheets', accepted202('op-read'));
+      server.setOperation('op-read', {
+        retryAfterSeconds: 0,
+        poll: [
+          { id: 'op-read', kind: 'workbook.listWorksheets', state: 'RUNNING' },
+          {
+            id: 'op-read',
+            kind: 'workbook.listWorksheets',
+            state: 'SUCCEEDED',
+            result: { worksheets: [{ id: 'ws-1', name: 'Sales', hidden: false }] },
+          },
+        ],
+      });
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
       const result = await executor.listWorksheets(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().worksheets?.[0]?.name).toBe('Sales');
+    });
+
+    it('surfaces read-overflowed for an XML document read (scoped out of poll projection)', async () => {
+      server.setOverride('GET /v0/workbook/document', accepted202('op-doc'));
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getWorkbookDocument(signal);
 
       expect(result.isErr()).toBe(true);
       const error = result.unwrapErr();

@@ -148,6 +148,7 @@ describe('ExternalApiClient async dispatch (0.2.0)', () => {
   });
 
   describe('typed read path', () => {
+    // XML document reads are scoped out of the poll-payload projection, so a 202 stays terminal.
     it('returns read-overflowed (never JSON-as-XML) when a workbook-document read 202s', async () => {
       server.setOverride('GET /v0/workbook/document', accepted202('op-read-1'));
 
@@ -160,12 +161,28 @@ describe('ExternalApiClient async dispatch (0.2.0)', () => {
       }
     });
 
-    it('returns read-overflowed (never silent-empty) when an inventory read 202s', async () => {
+    // JSON reads DO poll: the terminal operation's `result` carries the body the 200 would have.
+    it('polls an overflowed JSON read to its terminal result (never silent-empty)', async () => {
       server.setOverride('GET /v0/workbook/worksheets', accepted202('op-read-2'));
+      server.setOperation('op-read-2', {
+        retryAfterSeconds: 0,
+        poll: [
+          { id: 'op-read-2', kind: 'workbook.listWorksheets', state: 'RUNNING' },
+          {
+            id: 'op-read-2',
+            kind: 'workbook.listWorksheets',
+            state: 'SUCCEEDED',
+            result: { worksheets: [{ id: 'sheet-sales', name: 'Sales by Region', hidden: false }] },
+          },
+        ],
+      });
 
       const result = await client.listWorksheets();
-      expect(result.isErr()).toBe(true);
-      expect(result.unwrapErr().type).toBe('read-overflowed');
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().worksheets).toEqual([
+        expect.objectContaining({ id: 'sheet-sales', name: 'Sales by Region' }),
+      ]);
+      expect(server.requests.some((r) => r.path === '/v0/operations/op-read-2')).toBe(true);
     });
 
     it('returns operation-pending on a 503 (precursor read overflow)', async () => {
