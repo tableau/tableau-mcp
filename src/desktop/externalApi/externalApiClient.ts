@@ -174,7 +174,7 @@ export class ExternalApiClient {
       contentType: 'application/xml',
       body: xml,
     });
-    return this.parseEnvelope(response);
+    return this.parseEnvelope(response, signal);
   }
 
   async applyDashboardDocument(
@@ -187,7 +187,7 @@ export class ExternalApiClient {
       contentType: 'application/xml',
       body: xml,
     });
-    return this.parseEnvelope(response);
+    return this.parseEnvelope(response, signal);
   }
 
   async applyStoryboardDocument(
@@ -200,7 +200,7 @@ export class ExternalApiClient {
       contentType: 'application/xml',
       body: xml,
     });
-    return this.parseEnvelope(response);
+    return this.parseEnvelope(response, signal);
   }
 
   async validateWorkbookDocument(
