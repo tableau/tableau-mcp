@@ -42,9 +42,12 @@ The MCP transport type to use for the server.
 The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 - Default: `pat`
-- Possible values: `pat`, `direct-trust`, or `oauth`
+- Possible values: `pat`, `direct-trust`, `oauth`, or `passthrough`
 - See [Authentication](authentication) for additional required variables depending on the desired
   method.
+- Setting `passthrough` implies [`ENABLE_PASSTHROUGH_AUTH`](authentication/passthrough.md#enable_passthrough_auth)
+  is `true` and requires every request to carry an `X-Tableau-Auth` token (there is no fallback auth
+  method). See [Passthrough Authentication](authentication/passthrough).
 
 <hr />
 

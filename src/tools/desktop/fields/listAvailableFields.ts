@@ -4,15 +4,22 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
+  ArgsValidationError,
   DesktopCommandExecutionError,
   FileReadError,
   McpToolError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+import {
+  filterListAvailableFieldsSlimByLuid,
+  ListAvailableFieldsSlimResult,
+  projectListAvailableFieldsSlim,
+} from './listAvailableFieldsSlim.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 
 const paramsSchema = {
@@ -21,7 +28,9 @@ const paramsSchema = {
   verbosity: z
     .enum(['slim', 'full'])
     .optional()
-    .describe('full (default): table + column_ref. slim: grouped ref parts, no column_ref.'),
+    .describe('full (default): table + fields. slim: candidate tuples by datasource.'),
+  hasLuid: z.boolean().optional().describe('Slim: LUID-backed only; live required.'),
+  luids: z.array(z.string().min(1)).optional().describe('Slim: LUIDs; [] all; any miss errors.'),
 };
 
 class WorkbookFileNotFoundError extends McpToolError {
@@ -47,12 +56,6 @@ const typeAbbrev = (type: string): string => {
   return type;
 };
 
-const typePivot = (type: string): string => {
-  if (type === 'quantitative') return 'qk';
-  if (type === 'ordinal') return 'ok';
-  return 'nk';
-};
-
 const tableauDatatypeLabel = (datatype?: string): string => {
   switch (datatype) {
     case 'integer':
@@ -72,35 +75,9 @@ const tableauDatatypeLabel = (datatype?: string): string => {
   }
 };
 
-interface SlimField {
-  caption: string;
-  localName: string;
-  columnInstanceName: string;
-  derivation: string;
-  type: string;
-  typePivot: string;
-  role: string;
-  datatype?: string;
-  isAggregated?: boolean;
-}
-
-/** One datasource's slim fields. Slim always groups by datasource. */
-interface SlimDatasourceGroup {
-  datasource: string | null;
-  // The datasource's contentUrl when it's a published datasource — the input
-  // resolve-datasource-luid needs to get the server LUID. Omitted for
-  // embedded/local datasources (no server copy, so no contentUrl).
-  contentUrl?: string;
-  fields: SlimField[];
-}
-
 type ListAvailableFieldsResult =
   | { message: string; fields: ReturnType<typeof listAvailableFields> }
-  // Slim: fields grouped by datasource so the datasource name is carried once
-  // per group, never repeated on every field (keeps slim small). Always this
-  // shape — even for a single datasource (one group) — so callers parse one
-  // consistent structure.
-  | { count: number; datasources: SlimDatasourceGroup[] };
+  | ListAvailableFieldsSlimResult;
 
 const title = 'List All Available Fields in Workbook Datasources';
 export const getListAvailableFieldsTool = (
@@ -113,7 +90,7 @@ export const getListAvailableFieldsTool = (
     description: [
       'List datasource fields for exploration/field questions/non-template authoring.',
       'Available anytime; not needed before bind-template.',
-      'Full gives column_ref; slim ref parts.',
+      'Full gives column_ref; slim gives insight candidate tuples.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -122,24 +99,46 @@ export const getListAvailableFieldsTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ session, workbookFile, verbosity }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { session, workbookFile, verbosity, hasLuid, luids },
+      extra,
+    ): Promise<CallToolResult> => {
       return await listAvailableFieldsTool.logAndExecute<ListAvailableFieldsResult>({
         extra,
-        args: { session, workbookFile, verbosity },
+        args: { session, workbookFile, verbosity, hasLuid, luids },
         callback: async () => {
+          if (luids !== undefined && hasLuid !== true) {
+            return new ArgsValidationError('luids requires hasLuid: true.').toErr();
+          }
+          if ((hasLuid !== undefined || luids !== undefined) && verbosity !== 'slim') {
+            return new ArgsValidationError('hasLuid and luids require verbosity: slim.').toErr();
+          }
+
           const cacheWorkbookFile = workbookFile?.trim() ? workbookFile : undefined;
+          const explicitSession = session?.trim();
+          if (
+            hasLuid === true &&
+            cacheWorkbookFile &&
+            (!explicitSession || explicitSession.toLowerCase() === 'default')
+          ) {
+            return new ArgsValidationError(
+              'LUID filtering with workbookFile requires an explicit live session.',
+            ).toErr();
+          }
 
           if (cacheWorkbookFile && !existsSync(cacheWorkbookFile)) {
             return new WorkbookFileNotFoundError(cacheWorkbookFile).toErr();
           }
 
           let workbookXml: string;
+          let resolvedSession: string | undefined;
+          let executor: Awaited<ReturnType<typeof extra.getExecutor>> | undefined;
           if (session || cacheWorkbookFile === undefined) {
             const sessionResult = resolveSession(session);
             if (sessionResult.isErr()) {
               return sessionResult.error.toErr();
             }
-            const resolvedSession = sessionResult.value;
+            resolvedSession = sessionResult.value;
 
             if (cacheWorkbookFile) {
               // Shared refresh seam (W-23447478): resolve-field reuses the identical
@@ -156,7 +155,7 @@ export const getListAvailableFieldsTool = (
               }
               workbookXml = refresh.xml;
             } else {
-              const executor = await extra.getExecutor(resolvedSession);
+              executor = await extra.getExecutor(resolvedSession);
               const liveWorkbook = await getWorkbookXml({ executor, signal: extra.signal });
               if (liveWorkbook.isErr()) {
                 return new DesktopCommandExecutionError(liveWorkbook.error).toErr();
@@ -173,48 +172,31 @@ export const getListAvailableFieldsTool = (
 
           const fields = listAvailableFields(workbookXml);
 
-          // Slim: no table and no full column_ref, but keep the ingredients
-          // needed to construct [datasource].[derivation:LocalName:typePivot].
-          //
-          // `listAvailableFields` spans ALL datasources (one flat array, each
-          // field carrying its own datasource). Slim always GROUPS by
-          // datasource — one group per datasource, in first-seen order — so the
-          // datasource name is carried once per group rather than hoisted (which
-          // would misattribute every field past the first in a multi-datasource
-          // workbook and erase the only disambiguator for same-caption fields)
-          // or repeated per field (which would bloat slim). A single-datasource
-          // workbook is just one group, so callers always parse one shape.
           if (verbosity === 'slim') {
-            const toSlimField = (f: (typeof fields)[number]): SlimField => {
-              const localName = f.columnName.replace(/^\[|\]$/g, '');
-              return {
-                caption: f.caption || localName,
-                localName,
-                columnInstanceName: f.columnInstanceName,
-                derivation: f.derivation,
-                type: f.type,
-                typePivot: typePivot(f.type),
-                role: f.role,
-                datatype: f.datatype,
-                ...(f.isAggregated ? { isAggregated: true } : {}),
-              };
-            };
+            const result = projectListAvailableFieldsSlim(fields);
+            if (hasLuid !== true) return new Ok(result);
 
-            // Group by datasource name (first-seen order). Each group also
-            // carries the datasource's contentUrl (same for all its fields) —
-            // present only for published datasources.
-            const groups = new Map<string | null, SlimDatasourceGroup>();
-            for (const f of fields) {
-              let group = groups.get(f.datasource);
-              if (!group) {
-                group = { datasource: f.datasource, contentUrl: f.contentUrl, fields: [] };
-                groups.set(f.datasource, group);
+            if (executor === undefined) {
+              if (resolvedSession === undefined) {
+                return new ArgsValidationError(
+                  'LUID filtering requires a live Desktop session.',
+                ).toErr();
               }
-              group.fields.push(toSlimField(f));
+              executor = await extra.getExecutor(resolvedSession);
             }
-            return new Ok({
-              count: fields.length,
-              datasources: Array.from(groups.values()),
+
+            const workbookDatasourceResult = await executor.listWorkbookDatasources(extra.signal);
+            if (workbookDatasourceResult.isErr()) {
+              if (isRouteMissing(workbookDatasourceResult.error)) {
+                return endpointNotInThisBuild('workbook datasources').toErr();
+              }
+              return new DesktopCommandExecutionError(workbookDatasourceResult.error).toErr();
+            }
+
+            return filterListAvailableFieldsSlimByLuid({
+              result,
+              workbookDatasources: workbookDatasourceResult.value.datasources ?? [],
+              luids: luids ?? [],
             });
           }
 
