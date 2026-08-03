@@ -100,6 +100,10 @@ export function filterListAvailableFieldsSlimByLuid({
   const requestedLuids = new Set(luids);
   const datasources: DatasourceFieldCandidateGroup[] = [];
   let matchedWorkbookIdentity = false;
+  // Workbook datasources whose identity matched a field group but that carried no LUID.
+  // Kept distinct from a total identity miss so installer troubleshooting can tell a
+  // Desktop/MCP contract-version lag (matched, but no LUID field) from an empty workbook.
+  const matchedWithoutLuid = new Set<string>();
 
   for (const group of result.datasources) {
     // Workbook fields carry the datasource's internal name, which the API exposes as `id`
@@ -120,7 +124,10 @@ export function filterListAvailableFieldsSlimByLuid({
         typeof datasource.luid === 'string' && datasource.luid.length > 0,
     );
 
-    if (luidBackedMatches.length === 0) continue;
+    if (luidBackedMatches.length === 0) {
+      if (matchingDatasources.length > 0) matchedWithoutLuid.add(group.datasource);
+      continue;
+    }
     if (
       requestedLuids.size > 0 &&
       !luidBackedMatches.some((datasource) => requestedLuids.has(datasource.luid))
@@ -154,6 +161,16 @@ export function filterListAvailableFieldsSlimByLuid({
     );
     return new ArgsValidationError(
       `Could not match workbook field datasource identities (${fieldIdentities.join(', ')}) to workbook datasource metadata (${workbookIdentities.join(', ')}).`,
+    ).toErr();
+  }
+
+  if (requestedLuids.size === 0 && datasources.length === 0 && matchedWithoutLuid.size > 0) {
+    return new ArgsValidationError(
+      [
+        `Matched workbook datasource(s) [${[...matchedWithoutLuid].join(', ')}] but none carried a LUID.`,
+        'This usually means the Desktop/MCP build predates the workbook-datasource LUID contract,',
+        'not that the workbook has no eligible fields. Update Tableau Desktop / the MCP server.',
+      ].join(' '),
     ).toErr();
   }
 

@@ -214,6 +214,35 @@ describe('listAvailableFieldsSlim', () => {
       luids: [],
     });
 
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('Expected a matched-without-LUID diagnostic');
+    expect(result.error.message).toContain('but none carried a LUID');
+  });
+
+  it('flags a matched-but-LUID-less group distinctly from a total identity mismatch', () => {
+    const result = filterListAvailableFieldsSlimByLuid({
+      result: projectListAvailableFieldsSlim([baseField] as any),
+      workbookDatasources: [{ name: 'Sample - Superstore' }],
+      luids: [],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('Expected a matched-without-LUID diagnostic');
+    // Distinct from the identity-mismatch message, and names the matched datasource.
+    expect(result.error.message).toContain('Sample - Superstore');
+    expect(result.error.message).toContain('but none carried a LUID');
+    expect(result.error.message).not.toContain(
+      'Could not match workbook field datasource identities',
+    );
+  });
+
+  it('returns an empty success when there are genuinely no eligible fields to group', () => {
+    const result = filterListAvailableFieldsSlimByLuid({
+      result: { datasources: [] },
+      workbookDatasources: [{ name: 'Sample - Superstore', luid: 'luid-superstore' }],
+      luids: [],
+    });
+
     expect(result.isOk()).toBe(true);
     if (result.isErr()) throw result.error;
     expect(result.value).toEqual({ datasources: [] });
