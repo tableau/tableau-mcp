@@ -6,15 +6,20 @@ import { idealCardinality } from '../../../desktop/binder/cardinality.js';
 import { FAMILY_VALUES } from '../../../desktop/binder/manifest.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
+import { resolveAllTemplateManifests } from '../../../desktop/templates/templateSlots.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
-// list-templates is the FIRST consumer of the milestone-1 AuthoringIntelligenceProvider
-// seam. It serves the bundled snapshot THROUGH the provider
-// (`bundledIntelligenceProvider.listTemplateManifests()` / `getStatus()`), never raw
-// `loadManifests()`, so the moment milestone 2 swaps in a remote content-pack provider
-// this tool follows without edits. A pure reference-library tool: no session, no
-// command layer (AGENTS.md permits this for local/bundled reads).
+// list-templates serves the bundled template catalog for agent discovery. It routes the
+// catalog THROUGH `resolveAllTemplateManifests()` — the metadata-optional resolver — rather
+// than the curated-only `bundledIntelligenceProvider.listTemplateManifests()`, so a `.tbm`
+// dropped into the templates folder with NO hand-authored manifest surfaces here from its
+// inferred slots (source `inferred`); a curated manifest, when present, overlays inference
+// field-by-field. Provider `getStatus()` is still the snapshot-health source, so the
+// moment milestone 2 swaps in a remote content-pack provider the status line follows. On a
+// tree where every `.tbm` also carries a curated manifest, the resolved set is identical to
+// the curated set. A pure reference-library tool: no session, no command layer (AGENTS.md
+// permits this for local/bundled reads).
 
 // WATCH-CLASS tightening (fail-open lens): the closed `Family` taxonomy is enforced at
 // the schema boundary via z.enum. A bare-string family filter would be LENIENT — a
@@ -162,7 +167,7 @@ export const getListTemplatesTool = (
         args: { family, fastPathOnly },
         callback: async () => {
           const status = bundledIntelligenceProvider.getStatus();
-          const all = bundledIntelligenceProvider.listTemplateManifests();
+          const all = [...resolveAllTemplateManifests().values()];
 
           const templates = all
             .filter(
