@@ -45,7 +45,7 @@ export const getApplyWorksheetTool = (
     name: 'apply-worksheet',
     title,
     description:
-      'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path.',
+      'Insert or entirely replace (upsert) a worksheet in the live workbook, matched by name.',
     paramsSchema,
     annotations: {
       title,
