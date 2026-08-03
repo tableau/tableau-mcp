@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { applyWorkbookText } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
+import { pollReadback } from '../../../desktop/commands/workbook/pollReadback.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { validateWorkbookDocumentApply } from '../../../desktop/workbookDocumentGuard.js';
 import {
@@ -220,36 +221,29 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new DesktopCommandExecutionError(loadResult.error).toErr();
           }
 
-          const readbackResult = await getWorkbookXml({ executor, signal: extra.signal });
-          if (readbackResult.isErr()) {
-            return new DesktopCommandExecutionError(readbackResult.error).toErr();
+          const targetParamLanded = (xml: string): boolean =>
+            mode === 'set'
+              ? hasActionWithTargetParam(xml, 'edit-group-action', caption, 'target-group', target)
+              : hasActionWithTargetParam(
+                  xml,
+                  'edit-parameter-action',
+                  caption,
+                  'target-parameter',
+                  target,
+                );
+          const readback = await pollReadback({
+            read: () => getWorkbookXml({ executor, signal: extra.signal }),
+            settled: targetParamLanded,
+            signal: extra.signal,
+          });
+          if (!readback.ok) {
+            return new DesktopCommandExecutionError(readback.error).toErr();
           }
-          if (
-            mode === 'set' &&
-            !hasActionWithTargetParam(
-              readbackResult.value,
-              'edit-group-action',
-              caption,
-              'target-group',
-              target,
-            )
-          ) {
+          if (!readback.settled) {
             return new XmlModificationError(
-              'action applied but the target-group param did not survive readback',
-            ).toErr();
-          }
-          if (
-            mode === 'parameter' &&
-            !hasActionWithTargetParam(
-              readbackResult.value,
-              'edit-parameter-action',
-              caption,
-              'target-parameter',
-              target,
-            )
-          ) {
-            return new XmlModificationError(
-              'action applied but the target-parameter param did not survive readback',
+              mode === 'set'
+                ? 'action applied but the target-group param did not survive readback'
+                : 'action applied but the target-parameter param did not survive readback',
             ).toErr();
           }
 

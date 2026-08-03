@@ -9,6 +9,7 @@ import {
 } from '../../../desktop/binder/schema-summary.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { applyWorkbookText } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
+import { pollReadback } from '../../../desktop/commands/workbook/pollReadback.js';
 import { WithExecutorAndAbortSignal } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { validateWorkbookDocumentApply } from '../../../desktop/workbookDocumentGuard.js';
 import {
@@ -92,19 +93,24 @@ export async function authorCalculationsInWorkbook({
     return new DesktopCommandExecutionError(loadResult.error).toErr();
   }
 
-  const readbackResult = await getWorkbookXml({ executor, signal });
-  if (readbackResult.isErr()) {
-    return new DesktopCommandExecutionError(readbackResult.error).toErr();
+  const readback = await pollReadback({
+    read: () => getWorkbookXml({ executor, signal }),
+    settled: (xml) =>
+      prepared.value.authoredCalcs.every((calc) =>
+        hasColumnNameAndCaption(xml, calc.calcName, calc.caption),
+      ),
+    signal,
+  });
+  if (!readback.ok) {
+    return new DesktopCommandExecutionError(readback.error).toErr();
   }
-  for (const calc of prepared.value.authoredCalcs) {
-    if (!hasColumnNameAndCaption(readbackResult.value, calc.calcName, calc.caption)) {
-      return new XmlModificationError(
-        'load completed but did not apply: readback did not contain the new column name and caption',
-      ).toErr();
-    }
+  if (!readback.settled) {
+    return new XmlModificationError(
+      'load completed but did not apply: readback did not contain the new column name and caption',
+    ).toErr();
   }
 
-  return new Ok({ workbookXml: readbackResult.value, authoredCalcs: prepared.value.authoredCalcs });
+  return new Ok({ workbookXml: readback.value, authoredCalcs: prepared.value.authoredCalcs });
 }
 
 function prepareCalculationBatch({
