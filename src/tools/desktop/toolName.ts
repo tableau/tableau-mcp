@@ -61,6 +61,7 @@ export const desktopToolNames = [
   'read-cached-xml',
   'write-cached-xml',
   'inject-template',
+  'build-worksheets-from-templates',
   'get-dashboard-guide',
   'list-knowledge-resources',
   'read-knowledge-resource',

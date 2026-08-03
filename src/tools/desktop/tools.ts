@@ -53,6 +53,7 @@ import { getSearchExamplesTool } from './search/searchExamples.js';
 import { getSearchWorkbookExamplesTool } from './search/searchWorkbookExamples.js';
 import { getCheckForUserChangesTool } from './session/checkForUserChanges.js';
 import { getListInstancesTool } from './session/listInstances.js';
+import { getBuildWorksheetsFromTemplatesTool } from './template/buildWorksheetsFromTemplates.js';
 import { getInjectTemplateTool } from './template/injectTemplate.js';
 import { getActivateSheetTool } from './workbook/activateSheet.js';
 import { getApplyWorkbookTool } from './workbook/applyWorkbook.js';
@@ -125,6 +126,7 @@ export const desktopToolFactories = [
   getReadCachedXmlTool,
   getWriteCachedXmlTool,
   getInjectTemplateTool,
+  getBuildWorksheetsFromTemplatesTool,
   getGetDashboardGuideTool,
   getListKnowledgeResourcesTool,
   getReadKnowledgeResourceTool,
