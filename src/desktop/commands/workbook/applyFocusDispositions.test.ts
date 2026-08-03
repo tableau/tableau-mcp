@@ -21,7 +21,12 @@ import ts from 'typescript';
 const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
   'src/desktop/commands/workbook/loadWorkbookXml.ts': ['applyWorkbookText:forward'],
   'src/desktop/commands/workbook/loadWorksheetXml.ts': ['applyWorkbookText:forward'],
-  'src/desktop/commands/workbook/loadDashboardXml.ts': ['applyWorkbookText:forward'],
+  // loadStoryboardXml forwards its caller's verdict straight into loadDashboardXml (storyboards
+  // reuse the dashboard per-sheet path), so this file has two forward seams in source order.
+  'src/desktop/commands/workbook/loadDashboardXml.ts': [
+    'loadDashboardXml:forward',
+    'applyWorkbookText:forward',
+  ],
   'src/tools/desktop/binder/bindTemplate.ts': ['loadWorkbookXml:artifact'],
   'src/tools/desktop/coordination/buildAndApplyWorksheet.ts': ['loadWorksheetXml:artifact'],
   'src/tools/desktop/coordination/batchCreateAndCacheSheets.ts': ['loadWorkbookXml:restore'],

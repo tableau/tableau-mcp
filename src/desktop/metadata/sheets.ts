@@ -160,12 +160,12 @@ export function worksheetDocumentToFragment(documentXml: string, sheetName: stri
   return parseXML(documentXml).worksheet ? documentXml : null;
 }
 
-// The External Client API has no per-sheet write route — applying one sheet re-POSTs the whole
-// document, which Desktop treats as authoritative and replaces the open workbook with. So the doc
-// must carry the ENTIRE live workbook with only this sheet swapped in; anything omitted (sibling
-// sheets, dashboards) would be pruned. Upsert by name: replace the matching worksheet, or append
-// it if absent (a new sheet). Preserve existing windows and synthesize this sheet's window when
-// missing, because Tableau drops worksheets that lack a matching worksheet window.
+// The External Client API's whole-workbook POST route treats the posted document as authoritative
+// and replaces the open workbook with it. So the doc must carry the ENTIRE live workbook with only
+// this sheet swapped in; anything omitted (sibling sheets, dashboards) would be pruned. Upsert by
+// name: replace the matching worksheet, or append it if absent (a new sheet). Preserve existing
+// windows and synthesize this sheet's window when missing, because Tableau drops worksheets that
+// lack a matching worksheet window. This is the create path; the per-sheet route is replace-only.
 export function upsertSheetIntoWorkbook(
   workbookXml: string,
   sheetName: string,

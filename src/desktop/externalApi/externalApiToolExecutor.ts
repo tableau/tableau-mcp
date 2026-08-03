@@ -213,8 +213,57 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     xml: string,
     signal: AbortSignal,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (client) => client.applyWorkbookDocument(xml, signal),
+      'apply-workbook-document',
+    );
+  }
+
+  async applyWorksheetDocument(
+    worksheetId: string,
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (client) => client.applyWorksheetDocument(worksheetId, xml, signal),
+      'apply-worksheet-document',
+    );
+  }
+
+  async applyDashboardDocument(
+    dashboardId: string,
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (client) => client.applyDashboardDocument(dashboardId, xml, signal),
+      'apply-dashboard-document',
+    );
+  }
+
+  async applyStoryboardDocument(
+    storyboardId: string,
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (client) => client.applyStoryboardDocument(storyboardId, xml, signal),
+      'apply-storyboard-document',
+    );
+  }
+
+  /**
+   * Shared document-apply pipeline for the whole-workbook and per-sheet POST routes: run the
+   * client call through withRescan, normalize the operation envelope, then fold it into a
+   * command-status result (envelope FAILED / Tableau error → command-failed). `command` labels
+   * the operation for logs and the synthetic command id.
+   */
+  private async applyDocument(
+    call: (client: ExternalApiClient) => Promise<Result<OperationEnvelope, ExternalApiError>>,
+    command: string,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     const outcomeResult = await this.withRescan(async (client) => {
-      const result = await client.applyWorkbookDocument(xml, signal);
+      const result = await call(client);
       if (result.isErr()) {
         return Err(result.error);
       }
@@ -224,7 +273,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     if (outcomeResult.isErr()) {
       const mapped = mapClientError(outcomeResult.error, this.deps.pid);
       log({
-        message: 'Failed to apply workbook document via External Client API',
+        message: `Failed to ${command} via External Client API`,
         level: 'error',
         logger: LOGGER,
         data: mapped,
@@ -234,11 +283,11 @@ export class ExternalApiToolExecutor extends ToolExecutor {
 
     const statusResult = buildCommandStatus(outcomeResult.value, {
       namespace: 'external-api',
-      command: 'apply-workbook-document',
+      command,
     });
     if (statusResult.isErr()) {
       log({
-        message: 'Workbook document apply failed',
+        message: `Document apply failed: ${command}`,
         level: 'error',
         logger: LOGGER,
         data: statusResult.error,

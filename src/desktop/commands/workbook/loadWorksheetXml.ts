@@ -23,6 +23,7 @@ import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { getWorksheetFragment } from './getWorksheetXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
+import { tryApplyViaPerSheetRoute } from './perSheetDocumentApply.js';
 
 export type LoadWorksheetXmlError =
   | { type: 'invalid-xml' }
@@ -39,7 +40,10 @@ export type LoadWorksheetXmlError =
   // Apply succeeded but the post-apply readback proved Tableau silently dropped or
   // changed an intent-bearing node (the silently-dropped-pill killer, W4). `message`
   // carries the agent-facing fix recipe; `findings` the structured evidence.
-  | { type: 'readback-failed'; findings: ReadbackFinding[]; message: string };
+  | { type: 'readback-failed'; findings: ReadbackFinding[]; message: string }
+  // Only surfaced when a caller opts in with `requireExistingSheet` (apply-worksheet);
+  // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
+  | { type: 'sheet-absent'; message: string };
 
 /** Non-fatal readback warnings surfaced on a successful apply (sort drops/changes). */
 export interface LoadWorksheetXmlOk {
@@ -202,6 +206,13 @@ function resolveCanonicalWorksheetName(
 
   return Ok(xmlName);
 }
+function worksheetAbsentMessage(canonicalName: string): string {
+  return (
+    `No worksheet named "${canonicalName}" is open to update. This updates an existing worksheet ` +
+    'in place and does not create one. FIX: check the name with list-worksheets, or create a new ' +
+    'worksheet with build-and-apply-worksheet.'
+  );
+}
 
 export async function loadWorksheetXml({
   worksheetName,
@@ -210,11 +221,19 @@ export async function loadWorksheetXml({
   executor,
   signal,
   readbackVerificationOut,
+  requireExistingSheet = false,
 }: {
   worksheetName: string;
   xml: string;
   focus: ApplyFocus;
   readbackVerificationOut?: ReadbackVerificationResult[];
+  // Picks the External Client API call this apply uses.
+  // On (apply-worksheet): replace an existing worksheet by id via the per-sheet `/document` route,
+  // leaving other sheets untouched. That route is replace-only, so a name that resolves to no live
+  // worksheet surfaces a `sheet-absent` error instead of creating one.
+  // Off (build-and-apply-worksheet, refine-worksheet): the worksheet may be net-new, so the
+  // whole-workbook re-post upserts it (appending when absent). That is the create path.
+  requireExistingSheet?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -270,9 +289,42 @@ export async function loadWorksheetXml({
   const canonicalFocus: ApplyFocus =
     focus.navigate === 'artifact' ? { ...focus, sheetName: canonicalName } : focus;
 
-  // External Client API ("Athena V0") exposes no per-sheet apply route, so applying a single sheet
-  // re-posts the whole live workbook with just this sheet swapped in (the POST replaces the open
-  // workbook wholesale, so anything omitted would be pruned).
+  if (requireExistingSheet) {
+    return withApplyLock(async (): Promise<LoadWorksheetXmlResult> => {
+      const outcome = await tryApplyViaPerSheetRoute({
+        kind: 'worksheet',
+        sheetName: canonicalName,
+        fragmentXml: xml,
+        focus: canonicalFocus,
+        executor,
+        signal,
+      });
+      if (outcome.isErr()) {
+        return Err({ type: 'execute-command-error', error: outcome.error });
+      }
+      if (outcome.value !== 'applied') {
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: { type: 'sheet-absent', message: worksheetAbsentMessage(canonicalName) },
+        });
+      }
+      const verification = await verifyPostApplyWorksheetReadback(
+        canonicalName,
+        xml,
+        executor,
+        signal,
+      );
+      readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
+      const outcomeResult = readbackOutcome(verification);
+      if (outcomeResult.isErr()) {
+        return outcomeResult;
+      }
+      // Preflight warnings ride along so apply responses can compute the host
+      // verification receipt (W-23447506) without re-running validation.
+      return Ok({ ...outcomeResult.value, validationWarnings: validation.issues });
+    });
+  }
+
   const result = await loadWorksheetXmlViaExternalApi({
     worksheetName: canonicalName,
     xml,

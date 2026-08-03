@@ -210,11 +210,11 @@ describe('desktop tools/list serialized surface', () => {
     // guards that invariant). The full desktop surface is opt-in (TOOL_PROFILE=full), not
     // what clients see by default; its looser cap only catches runaway growth without
     // forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 29,463 bytes dynamic and 46,377 bytes full: the full
-    // surface rose by the two full-profile-only export-image tools.
+    // Honest wire measurements are 29,463 bytes dynamic and 46,872 bytes full: the full
+    // surface rose by the full-profile-only get-storyboard-xml and apply-storyboard tools.
     // Keep only a few bytes of ratchet headroom on each cap.
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_479);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(46_393);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(46_888);
   });
 });
 
