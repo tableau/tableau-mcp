@@ -11,6 +11,13 @@ import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 import { getDirname } from '../utils/getDirname.js';
+import {
+  _setSeaApiForTest as _setSharedSeaApiForTest,
+  readSeaAssetBytes,
+  readSeaAssetText,
+  runningAsSea,
+  type SeaApi,
+} from '../utils/sea.js';
 
 const MANIFEST_KEY = 'asset-manifest.json';
 
@@ -52,65 +59,10 @@ export function getResourcesRoot(): string {
 export const DATA_ROOT = getDataRoot();
 export const RESOURCES_ROOT = getResourcesRoot();
 
-type SeaApi = {
-  isSea: () => boolean;
-  getAsset: (key: string, encoding?: string) => string | ArrayBuffer;
-};
-
 type ManifestEntry = { sha256: string; bytes: number };
 
-let _seaApi: SeaApi | null | undefined;
 let _manifest: Map<string, ManifestEntry> | undefined;
 const _verifiedAssets = new Map<string, string>();
-
-function getSeaApi(): SeaApi | null {
-  if (_seaApi !== undefined) {
-    return _seaApi;
-  }
-  try {
-    // node:sea is only meaningful inside a SEA; require may be unavailable under
-    // some test runtimes, so guard it. isSea() returns false outside a SEA.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    _seaApi = require('node:sea') as SeaApi;
-  } catch {
-    _seaApi = null;
-  }
-  return _seaApi;
-}
-
-export function runningAsSea(): boolean {
-  try {
-    return getSeaApi()?.isSea() ?? false;
-  } catch {
-    return false;
-  }
-}
-
-function readSeaAssetText(key: string): string | null {
-  const sea = getSeaApi();
-  if (!sea) {
-    return null;
-  }
-  try {
-    const asset = sea.getAsset(key, 'utf8');
-    return typeof asset === 'string' ? asset : null;
-  } catch {
-    return null;
-  }
-}
-
-function readSeaAssetBytes(key: string): Buffer | null {
-  const sea = getSeaApi();
-  if (!sea) {
-    return null;
-  }
-  try {
-    const asset = sea.getAsset(key);
-    return typeof asset === 'string' ? Buffer.from(asset, 'utf-8') : Buffer.from(asset);
-  } catch {
-    return null;
-  }
-}
 
 // The SEA asset manifest maps every embedded asset key to its build-time sha256 and
 // byte length. buildSea.ts hashes each file as it embeds it, so coverage cannot drift:
@@ -216,7 +168,7 @@ export function dataAssetExists(relPath: string): boolean {
 }
 
 export function _setSeaApiForTest(seaApi: SeaApi | null): void {
-  _seaApi = seaApi;
+  _setSharedSeaApiForTest(seaApi);
   _manifest = undefined;
   _verifiedAssets.clear();
 }

@@ -12,6 +12,11 @@ export const MANIFEST_KEY = 'asset-manifest.json';
 
 export const DESKTOP_ASSET_DIRS: readonly string[] = ['resources/desktop', 'desktop/data'];
 
+// Single files (build-root relative) embedded into every SEA blob regardless of variant.
+// features.json is read by ServerFeatureGate at startup; a SEA has no filesystem next to
+// the binary, so it must ride in the blob or the feature gate loads with all features off.
+export const ALWAYS_EMBEDDED_FILES: readonly string[] = ['features.json'];
+
 async function walkFiles(dir: string): Promise<string[]> {
   const out: string[] = [];
   const entries = await readdir(dir, { withFileTypes: true });
@@ -33,9 +38,6 @@ export async function buildAssetsMap(
   assets: Record<string, string>;
   manifestPath: string | null;
 }> {
-  if (assetDirs.length === 0) {
-    return { assets: {}, manifestPath: null };
-  }
   const buildDir = join(repoRoot, 'build');
   const assets: Record<string, string> = {};
   for (const assetDir of assetDirs) {
@@ -47,6 +49,13 @@ export async function buildAssetsMap(
       const key = relative(buildDir, file).split(sep).join(posix.sep);
       assets[key] = file;
     }
+  }
+  for (const relPath of ALWAYS_EMBEDDED_FILES) {
+    const absFile = join(buildDir, ...relPath.split('/'));
+    if (!existsSync(absFile)) {
+      throw new Error(`Embedded file missing: build/${relPath}. Run the build first.`);
+    }
+    assets[relPath.split('/').join(posix.sep)] = absFile;
   }
   const manifest: Record<string, { sha256: string; bytes: number }> = {};
   for (const key of Object.keys(assets).sort()) {

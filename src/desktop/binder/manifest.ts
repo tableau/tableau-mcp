@@ -23,7 +23,8 @@
 import fs from 'fs';
 import path from 'path';
 
-import { listDataAssetNames, readDataAsset, runningAsSea } from '../assets.js';
+import { runningAsSea } from '../../utils/sea.js';
+import { listDataAssetNames, readDataAsset } from '../assets.js';
 import type { TemplateManifest } from './manifest-types.js';
 import {
   type BinderFixture,

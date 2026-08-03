@@ -13,7 +13,7 @@ import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
 
-const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
+const authTypes = ['pat', 'uat', 'direct-trust', 'oauth', 'passthrough'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
@@ -191,7 +191,7 @@ export class Config extends BaseConfig {
 
     this.enableMcpSiteSettings = enableMcpSiteSettings !== 'false';
     this.allowSitesToConfigureRequestOverrides = allowSitesToConfigureRequestOverrides === 'true';
-    this.enablePassthroughAuth = enablePassthroughAuth === 'true';
+    this.enablePassthroughAuth = enablePassthroughAuth === 'true' || auth === 'passthrough';
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
@@ -318,6 +318,10 @@ export class Config extends BaseConfig {
       throw new Error(
         'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
       );
+    }
+
+    if (this.auth === 'passthrough' && this.transport === 'stdio') {
+      throw new Error('TRANSPORT must be "http" when AUTH is "passthrough"');
     }
 
     if (this.auth === 'oauth') {
