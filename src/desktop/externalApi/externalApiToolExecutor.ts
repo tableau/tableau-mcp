@@ -296,6 +296,18 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return statusResult;
   }
 
+  async undo(
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument((client) => client.undo(signal), 'undo');
+  }
+
+  async redo(
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument((client) => client.redo(signal), 'redo');
+  }
+
   async health(signal: AbortSignal): Promise<Result<{ healthy: boolean }, ExecuteCommandError>> {
     return this.readExternalApi((client) => client.health(signal));
   }

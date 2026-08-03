@@ -177,6 +177,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.workbookDocumentValidate,
       EXTERNAL_API_ROUTES.workbookStoryboards,
       EXTERNAL_API_ROUTES.workbookWorksheets,
+      EXTERNAL_API_ROUTES.workbookUndo,
+      EXTERNAL_API_ROUTES.workbookRedo,
       EXTERNAL_API_ROUTES.dashboardById,
       EXTERNAL_API_ROUTES.dashboardDocument,
       EXTERNAL_API_ROUTES.storyboardById,
