@@ -192,11 +192,11 @@ export function dashboardDocumentToFragment(
   return parseXML(documentXml).dashboard ? documentXml : null;
 }
 
-// The External Client API has no per-dashboard write route — applying one dashboard re-POSTs the
-// whole document, which Desktop treats as authoritative and replaces the open workbook with. So the
-// doc must carry the ENTIRE live workbook (worksheets included — the dashboard's zones reference
-// them by name) with only this dashboard swapped in; anything omitted would be pruned. Upsert by
-// name: replace the matching dashboard, or append it if absent. Windows are left intact.
+// The External Client API's whole-workbook POST route treats the posted document as authoritative
+// and replaces the open workbook with it. So the doc must carry the ENTIRE live workbook (worksheets
+// included — the dashboard's zones reference them by name) with only this dashboard swapped in;
+// anything omitted would be pruned. Upsert by name: replace the matching dashboard, or append it if
+// absent. Windows are left intact. This is the create path; the per-sheet route is replace-only.
 export function upsertDashboardIntoWorkbook(
   workbookXml: string,
   dashboardName: string,

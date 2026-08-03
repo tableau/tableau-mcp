@@ -23,7 +23,7 @@ export interface InstanceFingerprint {
   start_time: string;
 }
 
-export type CacheArtifactKind = 'worksheet' | 'workbook' | 'dashboard';
+export type CacheArtifactKind = 'worksheet' | 'workbook' | 'dashboard' | 'storyboard';
 
 export interface CacheSidecarMeta extends InstanceFingerprint {
   session_id: string;
@@ -42,6 +42,7 @@ const READ_TOOL_BY_KIND: Record<CacheArtifactKind, string> = {
   worksheet: 'get-worksheet-xml',
   workbook: 'get-workbook-xml',
   dashboard: 'get-dashboard-xml',
+  storyboard: 'get-storyboard-xml',
 };
 
 export function sidecarPath(cacheFile: string): string {
