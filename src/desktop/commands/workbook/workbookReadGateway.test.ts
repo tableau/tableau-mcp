@@ -84,7 +84,6 @@ function makeExecutor(): ToolExecutor {
     executeCommand: vi.fn(),
     getWorkbookDocument: vi.fn(),
     applyWorkbookDocument: vi.fn(),
-    getEvents: vi.fn(),
   } as unknown as ToolExecutor;
 }
 

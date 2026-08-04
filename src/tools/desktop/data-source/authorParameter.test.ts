@@ -377,6 +377,5 @@ function mockExecutor(
     executeCommand,
     getWorkbookDocument,
     applyWorkbookDocument: vi.fn(),
-    getEvents: vi.fn(),
   } as unknown as ExternalApiToolExecutor;
 }

@@ -204,16 +204,6 @@ export const getDashboardAutoApplyTool = (
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
 
-          // ── Events anchor (pre-read) — identical rationale to bindTemplate.ts's
-          // pre-bind anchor: capturing BEFORE the read makes the (read, apply] window
-          // checkable, so a mid-flight user edit is refused (safe) rather than silently
-          // reverted by the whole-document apply.
-          let eventsAnchor: number | undefined;
-          const anchor = await executor.getEvents({ signal: extra.signal });
-          if (anchor.isOk()) {
-            eventsAnchor = anchor.value.latest_sequence;
-          }
-
           const readStart = Date.now();
           const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (xmlResult.isErr()) {
@@ -417,27 +407,6 @@ export const getDashboardAutoApplyTool = (
           }
           currentXml = injectViewpoints(currentXml, dashboardName, resolvedTitles);
           const injectMs = Date.now() - injectStart;
-
-          // ── Events re-check pre-dispatch (P1-5): a user edit between the anchor and
-          // now refuses the WHOLE batch — the binds/injects were computed against the
-          // pre-edit workbook, so applying them would silently revert the user's changes.
-          if (eventsAnchor !== undefined) {
-            const events = await executor.getEvents({
-              signal: extra.signal,
-              sinceSequence: eventsAnchor,
-            });
-            if (events.isOk() && events.value.count > 0) {
-              return refusal(
-                outcomes,
-                'Server-side auto-apply was refused: the user changed the workbook after it was read ' +
-                  `(${events.value.count} event(s) since read). Re-run dashboard-auto-apply so it reads the ` +
-                  'current workbook — do NOT re-apply, the binds were computed against the pre-edit workbook ' +
-                  'and re-applying could revert their changes.',
-                `user changed the workbook during the batch (${events.value.count} event(s) since read)`,
-                prefillNextAction('Re-run dashboard-auto-apply'),
-              );
-            }
-          }
 
           // ── ONE content-creation dispatch (primary mode), with the same
           // runValidation workbook preflight guarantee every apply path has.

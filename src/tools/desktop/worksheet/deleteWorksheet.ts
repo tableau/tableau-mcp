@@ -144,10 +144,7 @@ export function removeWorksheetFromWorkbook(
 
 // ── Tool registration ────────────────────────────────────────────────────────
 
-type DeleteWorksheetRefusalReason =
-  | 'dashboard-referenced'
-  | 'last-worksheet'
-  | 'user-changed-workbook';
+type DeleteWorksheetRefusalReason = 'dashboard-referenced' | 'last-worksheet';
 
 type DeleteWorksheetToolResult =
   | { deleted: true; worksheet: string; guidance: string }
@@ -199,16 +196,6 @@ export const getDeleteWorksheetTool = (
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
 
-          // ── Events anchor (pre-read) — the standard gate (bindTemplate.ts /
-          // dashboardAutoApply.ts): capture BEFORE the read so the (read, apply]
-          // window is checkable. Best-effort: a transport without event support
-          // proceeds without the gate.
-          let eventsAnchor: number | undefined;
-          const anchor = await executor.getEvents({ signal: extra.signal });
-          if (anchor.isOk()) {
-            eventsAnchor = anchor.value.latest_sequence;
-          }
-
           const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (xmlResult.isErr()) {
             return new DesktopCommandExecutionError(xmlResult.error).toErr();
@@ -253,24 +240,6 @@ export const getDeleteWorksheetTool = (
                 'Nothing was applied.',
               removal.dashboards,
             );
-          }
-
-          // ── Events re-check pre-dispatch: a user edit after our read means the
-          // removal was computed against a stale workbook — applying it would silently
-          // revert their changes. Refuse; a re-run reads fresh.
-          if (eventsAnchor !== undefined) {
-            const events = await executor.getEvents({
-              signal: extra.signal,
-              sinceSequence: eventsAnchor,
-            });
-            if (events.isOk() && events.value.count > 0) {
-              return refusal(
-                'user-changed-workbook',
-                `Refused: the user changed the workbook after it was read (${events.value.count} ` +
-                  'event(s) since read). Re-run delete-worksheet so it reads the current ' +
-                  'workbook. Nothing was applied.',
-              );
-            }
           }
 
           // ── SAME validated apply path as every apply tool (runValidation preflight

@@ -183,8 +183,6 @@ export interface AppliedSheetRecord {
   sheetName: string;
   /** The bound template, for the reuse receipt. */
   template: string;
-  /** Latest Desktop event sequence observed after the successful apply. */
-  eventSequence?: number;
   /** ISO timestamp of the apply. */
   ts: string;
 }

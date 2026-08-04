@@ -37,9 +37,7 @@ describe('DesktopMcpServer', () => {
 
     const allTools = desktopToolFactories.map((toolFactory) => toolFactory(server));
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
-    const tools = allTools.filter(
-      (tool, i) => !disabledFlags[i] && tool.name !== 'check-for-user-changes',
-    );
+    const tools = allTools.filter((tool, i) => !disabledFlags[i]);
     expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(tools.length);
     for (const tool of tools) {
       expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
@@ -53,17 +51,6 @@ describe('DesktopMcpServer', () => {
         expect.any(Function),
       );
     }
-  });
-
-  it('does not register check-for-user-changes on the External Client API transport', async () => {
-    const server = getServer();
-    await server.registerTools();
-
-    const registeredNames = (
-      vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
-    ).map(([name]) => name);
-    expect(registeredNames).not.toContain('check-for-user-changes');
-    expect(registeredNames).toContain('list-worksheets');
   });
 
   it('registers list-instances even when a Desktop session is pinned', async () => {
@@ -590,8 +577,7 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
     const registeredNames = vi
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0]);
-    expect(registeredNames.length).toBe(desktopToolFactories.length - 1);
-    expect(registeredNames).not.toContain('check-for-user-changes');
+    expect(registeredNames.length).toBe(desktopToolFactories.length);
   });
 });
 

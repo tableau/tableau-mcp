@@ -233,7 +233,7 @@ const successSchema = z.object({
 
 const refusalSchema = z.object({
   deleted: z.literal(false),
-  reason: z.enum(['dashboard-referenced', 'last-worksheet', 'user-changed-workbook']),
+  reason: z.enum(['dashboard-referenced', 'last-worksheet']),
   dashboards: z.array(z.string()).optional(),
   guidance: z.string(),
 });
@@ -298,39 +298,6 @@ describe('deleteWorksheetTool', () => {
     expect(parsed.dashboards).toEqual(['Dash One']);
     expect(parsed.guidance).toContain('"Dash One"');
     expect(loadSpy).not.toHaveBeenCalled();
-  });
-
-  it('refuses when the user changed the workbook between read and apply (events gate)', async () => {
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(buildWorkbook()));
-    const loadSpy = vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml');
-    const getEvents = vi
-      .fn()
-      .mockResolvedValueOnce(Ok({ events: [], latest_sequence: 41, count: 0 }))
-      .mockResolvedValue(Ok({ events: [{}], latest_sequence: 42, count: 1 }));
-
-    const result = await getToolResult({ worksheetName: 'Beta', getEvents });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
-    expect(parsed.reason).toBe('user-changed-workbook');
-    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ sinceSequence: 41 }));
-    expect(loadSpy).not.toHaveBeenCalled();
-  });
-
-  it('proceeds without the events gate on transports without event support', async () => {
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(buildWorkbook()));
-    const loadSpy = vi
-      .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
-    const getEvents = vi.fn().mockResolvedValue(Err('events unsupported on this transport'));
-
-    const result = await getToolResult({ worksheetName: 'Beta', getEvents });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    successSchema.parse(JSON.parse(result.content[0].text));
-    expect(loadSpy).toHaveBeenCalledTimes(1);
   });
 
   it('refuses to delete the last remaining worksheet', async () => {
@@ -412,17 +379,15 @@ describe('deleteWorksheetTool', () => {
 
 async function getToolResult({
   worksheetName,
-  getEvents = vi.fn().mockResolvedValue(Ok({ events: [], latest_sequence: 41, count: 0 })),
 }: {
   worksheetName: string;
-  getEvents?: ReturnType<typeof vi.fn>;
 }): Promise<CallToolResult> {
   const tool = getDeleteWorksheetTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
 
   const extra = {
     ...getMockRequestHandlerExtra(),
-    getExecutor: vi.fn().mockResolvedValue({ getEvents }),
+    getExecutor: vi.fn().mockResolvedValue({}),
   };
 
   return await callback({ session: '12345', worksheetName }, extra);
