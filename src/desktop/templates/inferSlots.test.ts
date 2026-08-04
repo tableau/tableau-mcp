@@ -135,6 +135,28 @@ describe('inferFromBookmark — placed calc decomposes to its base leaves', () =
     expect(fields).toEqual(['Profit', 'Revenue']);
     expect(inf.slots.some((s) => s.sourceField === 'Margin')).toBe(false);
   });
+
+  it('binds decomposed leaves at derivation `none`, NOT the calc outer aggregation', () => {
+    // A gantt-style duration calc placed as [sum:Calc:qk] over two DATE inputs. The outer
+    // `sum` aggregates the DATEDIFF result — it must NOT be stamped onto the date leaves, or
+    // the binder rejects `sum` on a date (Gate 4) and the whole template fails.
+    const raw =
+      "<?xml version='1.0'?><bookmark version='10.1'>" +
+      "<datasources><datasource name='ds1'>" +
+      "<column name='[Duration]' datatype='integer' role='measure'>" +
+      "<calculation class='tableau' formula='DATEDIFF(&apos;day&apos;,[Order Date],[Ship Date])'/>" +
+      '</column>' +
+      "<column name='[Order Date]' datatype='date' role='dimension'/>" +
+      "<column name='[Ship Date]' datatype='date' role='dimension'/>" +
+      '</datasource></datasources>' +
+      '<table><cols>[ds1].[sum:Duration:qk]</cols></table>' +
+      '</bookmark>';
+    const inf = inferFromBookmark(raw);
+    const derivs = new Map(inf.slots.map((s) => [s.sourceField, s.derivation]));
+    expect(derivs.get('Order Date')).toBe('none');
+    expect(derivs.get('Ship Date')).toBe('none');
+    expect([...derivs.values()]).not.toContain('sum');
+  });
 });
 
 // A field can appear ONLY at a refinement site — a categorical filter/slices pill, a

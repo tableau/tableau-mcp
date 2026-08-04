@@ -96,6 +96,14 @@ export type EscalateReason =
   // and the fix is to rebind a geocodable field, not to abandon the template.
   | 'geo-not-geocodable'
   | 'derivation-illegal'
+  // An already-aggregated source (SUM/AVG-based calc, usr: table calc) was bound to a slot
+  // that FEEDS a template calculation — a query-time Tableau error either way the formula
+  // consumes it: wrapped in an aggregation (SUM([slot])) it would re-aggregate an already-
+  // aggregated field, and bare at row level ([slot]-[other]) it would mix aggregate and
+  // non-aggregate arguments. Distinct from 'kind-mismatch' (the field IS a valid measure)
+  // and 'derivation-illegal' (that gate exempts aggregated fields): the fix is to bind a
+  // row-level field, not change the grain.
+  | 'aggregation-level-mismatch'
   | 'base-column-conflict'
   | 'cross-datasource-binding'
   | 'calc-dependency-unmet'
@@ -664,6 +672,49 @@ export function validateBinding(
             `role=${f.role}, datatype=${f.datatype}. Aggregations (sum/avg/median/count) apply only ` +
             'to numeric measures (min/max also apply to date/datetime fields) — bind a numeric ' +
             'measure or drop the derivation override.',
+        });
+        continue;
+      }
+    }
+
+    // ── Gate 4b: aggregate source into a calc-input slot ─────────────
+    // An already-aggregated source (a SUM/AVG-based calc like Profit Ratio, or any usr:
+    // table calc) substituted into a slot that FEEDS a template calculation breaks the calc
+    // at query time, in one of two ways depending on how the formula consumes the slot:
+    //   • WRAPPED in an aggregation — e.g. deviation-arrow's SIGN(SUM([Actual])-SUM([Line]))
+    //     (calc-input slots authored at derivation `sum`). An aggregate input yields
+    //     SUM(<already-aggregated>) → "Cannot aggregate an already-aggregated field".
+    //   • BARE at row level — e.g. Goal Difference = [goalsFor]-[goalsAgainst] (leaves
+    //     decomposed at derivation `none`). An aggregate input alongside row-level args →
+    //     "Cannot mix aggregate and non-aggregate arguments".
+    // Gate 4 above exempts aggregated fields from legality and gate 7 silently re-derives
+    // them as `usr`, so the broken calc ships clean through validate AND live apply (proven:
+    // viz-ext-bookmark-test test C — Profit Ratio into the goalsFor leaf emitted
+    // `[Profit Ratio] - [Profit]`; the deviation-arrow SUM([Actual]) leaf would emit
+    // SUM([Profit Ratio])). Both families are illegal, so block whenever an aggregated source
+    // feeds a calc — the ONLY level-safe exemption is a slot whose OWN derivation is `usr` (a
+    // genuine aggregate-calc placeholder that expects another aggregate). Direct shelf
+    // placement on a NON-calc slot is unaffected: gate 7 places the aggregate as `usr` with no
+    // re-aggregation, which is correct.
+    if (f.isAggregated && effDeriv !== 'usr') {
+      const feedsCalc = m.calcs.some(
+        (c) =>
+          (c.depends_on_slots ?? []).includes(slotId) ||
+          (c.inputs ?? []).some(
+            (inp) => inp.slot_id === slotId && inp.required && !inp.template_internal,
+          ),
+      );
+      if (feedsCalc) {
+        blockers.push({
+          code: 'aggregation-level-mismatch',
+          slot_id: slotId,
+          detail:
+            `slot '${slotId}' feeds a template calculation, but "${fieldQuery}" is an already-aggregated ` +
+            'field (a SUM/AVG-based calc or a table calc). The calculation consumes this slot either ' +
+            'wrapped in an aggregation — which would re-aggregate an already-aggregated field — or bare ' +
+            'at row level alongside other row-level arguments — which mixes aggregate and non-aggregate ' +
+            'arguments. Tableau rejects both at query time. Bind a row-level (non-aggregated) measure or ' +
+            'dimension instead.',
         });
         continue;
       }

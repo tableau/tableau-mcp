@@ -573,6 +573,13 @@ function fixForBlocker(b: Blocker): string {
       );
     case 'derivation-illegal':
       return 'Drop the illegal derivation override or bind a field whose datatype supports it.';
+    case 'aggregation-level-mismatch':
+      return (
+        'Bind a row-level (non-aggregated) measure or dimension to this slot. The template uses ' +
+        'it inside a calculation, so an already-aggregated field (a SUM/AVG-based calc, or any ' +
+        'table calc) breaks the formula — it either re-aggregates an already-aggregated field or ' +
+        'mixes aggregate and non-aggregate arguments.'
+      );
     case 'base-column-conflict':
       return 'Use the same base column for all qualified derivations of one template field.';
     case 'cross-datasource-binding':

@@ -217,6 +217,30 @@ describe('bookmarkToTemplateWorkbook', () => {
     expect(xml).toContain('[none:{{field_base_1}}:nk]'); // ref tokenized
   });
 
+  it('tokenizes calc-formula base-input refs to {{field_base_N}} (formula is NOT shielded)', () => {
+    // Task #28: a donor calc formula names its base inputs bare ([Sales], [Profit]). Those
+    // inputs are decomposed into slots, so the formula MUST tokenize like any other ref —
+    // otherwise the emitted calc references donor fields absent from the target and Tableau
+    // strips it (the calc-guard failure class). This is the deliberate inverse of the
+    // semantic-role shield above.
+    const inf = inference(
+      [slot('Sales', { derivation: 'sum' }), slot('Profit', { derivation: 'sum' })],
+      ['federated.x'],
+    );
+    const raw =
+      "<?xml version='1.0'?><bookmark version='10.1'>" +
+      "<table><datasource-dependencies datasource='federated.x'>" +
+      "<column name='[Calculation_1]' datatype='real' role='measure' type='quantitative'>" +
+      "<calculation class='tableau' formula='SUM([Sales])/SUM([Profit])'/></column>" +
+      '</datasource-dependencies>' +
+      '<cols>[federated.x].[sum:Sales:qk]</cols><rows>[federated.x].[sum:Profit:qk]</rows></table>' +
+      "<window class='worksheet' name='Sheet 1'/></bookmark>";
+    const { xml } = bookmarkToTemplateWorkbook(raw, inf);
+    expect(xml).toContain("formula='SUM([{{field_base_1}}])/SUM([{{field_base_2}}])'");
+    expect(xml).not.toMatch(/\[Sales\]/); // donor names fully replaced
+    expect(xml).not.toMatch(/\[Profit\]/);
+  });
+
   it('tries the bracket-doubled datasource spelling first', () => {
     // A datasource named `V [x] C` appears as `V [x]] C]` inside refs (Tableau doubles `]`).
     const inf = inference([slot('Sales')], ['V [x] C']);

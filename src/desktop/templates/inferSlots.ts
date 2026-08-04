@@ -22,6 +22,7 @@ import type {
 import {
   type ColumnDef,
   type Inference,
+  type InferredCalc,
   type InferredSlot,
   parseBookmarkDom,
   parseInstanceRef,
@@ -369,8 +370,17 @@ export function inferFromBookmark(rawXml: string): Inference {
   for (const p of placedCalcs) {
     const def = cols.get(p.base);
     if (!def) continue;
+    // A decomposed leaf binds at derivation `none`, NOT the calc's outer aggregation
+    // (`p.derivation`). Inside a formula the base columns are referenced RAW / row-level —
+    // `DATEDIFF('day',[Order Date],[Ship Date])`, `SPLIT([Product Name],…)`,
+    // `{ FIXED [Customer Name]: SUM([Profit]) }` — while the calc's `sum` wraps the whole
+    // expression's scalar result, not each input. Stamping the outer `sum` onto a date or
+    // string leaf produced an illegal (kind, derivation) pair the binder correctly rejects at
+    // Gate 4 ("aggregation 'sum' requires a numeric measure"), failing the whole template. The
+    // raw base name is also exactly what the formula-rewriter emits for the token, so `none` is
+    // both the correct binding derivation and what the injected formula needs.
     for (const leaf of def.baseInputs) {
-      emits.push({ base: leaf, derivation: p.derivation, shelves: p.shelves, tier: 'primary' });
+      emits.push({ base: leaf, derivation: 'none', shelves: p.shelves, tier: 'primary' });
     }
   }
 
@@ -474,8 +484,41 @@ export function inferFromBookmark(rawXml: string): Inference {
 
   for (const e of emits) emit(e);
 
+  // Build the calc contract from the placed calcs decomposed above. A decomposed leaf binds at
+  // derivation `none` (the calc references its base columns row-level), so each formula ref
+  // resolves to the leaf slot whose sourceField is that base AND derivation is `none` — the
+  // SAME slot the emit loop produced. Deduped per DISTINCT calc base, shelves unioned. Refs that
+  // resolve to no bindable slot (unknown-kind bases, nested calcs already excluded by
+  // baseInputsOf) are dropped, so dependsOnSlots always lines up with real slot ids.
+  const slotIdForLeaf = (leafBase: string): string | undefined =>
+    slots.find((s) => s.sourceField === leafBase && s.derivation === 'none')?.slot_id;
+  const calcByBase = new Map<string, InferredCalc>();
+  for (const p of placedCalcs) {
+    const def = cols.get(p.base);
+    if (!def) continue;
+    const existing = calcByBase.get(p.base);
+    if (existing) {
+      existing.shelves = [...new Set([...existing.shelves, ...p.shelves])];
+      continue;
+    }
+    const dependsOnSlots = def.baseInputs
+      .map(slotIdForLeaf)
+      .filter((id): id is string => id !== undefined);
+    calcByBase.set(p.base, {
+      slotId: `calc_${p.base.replace(/[^a-zA-Z0-9]+/g, '_').toLowerCase()}`,
+      templateField: p.base,
+      caption: def.caption ?? '',
+      formula: def.formula ?? '',
+      formulaRefs: def.baseInputs.slice(),
+      dependsOnSlots,
+      shelves: [...p.shelves],
+    });
+  }
+  const calcs = [...calcByBase.values()];
+
   return {
     slots,
+    calcs,
     unknownCount,
     donorCaptions: [...cols.values()].map((c) => c.caption).filter(Boolean),
     donorDatasources: [
@@ -540,6 +583,24 @@ export function synthesizeManifest(name: string, inf: Inference): TemplateManife
       ...(s.tableCalc ? { table_calc: s.tableCalc } : {}),
     };
   });
+  // Calc contract from the decomposed placed calcs. A calc is template-owned derived structure
+  // (never user-bindable), declared here as a CalcSlot so the binder's calc-dependency gate
+  // (Gate 6) and aggregation-level gate (Gate 4b) can fire on the pure-inferred path. The outer
+  // derivation is `usr` (a user calc, matching a curated manifest); depends_on_slots are the
+  // already-resolved leaf slot_ids, so the calc contract is consistent with `slots` by
+  // construction. `inputs` is left off — Gate 6 falls back to depends_on_slots.
+  const calcs: CalcSlot[] = inf.calcs.map((c) => ({
+    slot_id: c.slotId,
+    template_field: c.templateField,
+    derivation: 'usr',
+    role: c.shelves.slice(),
+    kind: 'calc',
+    bindable: false,
+    required: true,
+    formula: c.formula,
+    formula_refs: c.formulaRefs.slice(),
+    depends_on_slots: c.dependsOnSlots.slice(),
+  }));
   return {
     template: name,
     family: 'specialized',
@@ -552,7 +613,7 @@ export function synthesizeManifest(name: string, inf: Inference): TemplateManife
     intent_keywords: [],
     description: `Inferred from bookmark ${name}`,
     slots,
-    calcs: [],
+    calcs,
     hazards: [],
   };
 }

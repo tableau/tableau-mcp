@@ -1201,6 +1201,213 @@ describe('binder/validate — gate 6: first-class calc inputs (H3)', () => {
   });
 });
 
+describe('binder/validate — gate 4b: aggregate source into a calc-input slot', () => {
+  // A consistent manifest (slot_ids match the calc's depends_on_slots) with TWO calc
+  // shapes: `wrapped` re-aggregates its inputs (SUM([A])-SUM([B])) and `bare` uses them
+  // at row level ([C]-[D]). Both must reject an already-aggregated source bound to a
+  // calc-input slot — the wrapped calc would re-aggregate it (SUM(SUM(..))), the bare
+  // calc would mix aggregate + non-aggregate arguments.
+  const calcLevels: TemplateManifest = {
+    template: 'x-calc-levels',
+    family: 'specialized',
+    readiness: 'GREEN',
+    fast_path_eligible: true,
+    fast_path_blockers: [],
+    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
+    datasource_placeholder: true,
+    placeholders: ['TITLE', 'DATASOURCE'],
+    intent_keywords: ['x'],
+    description: 'test',
+    slots: [
+      // wrapped-calc inputs (authored at an aggregation, like deviation-arrow's sum leaves)
+      {
+        slot_id: 'a',
+        template_field: 'A',
+        derivation: 'sum',
+        role: ['cols'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+      {
+        slot_id: 'b',
+        template_field: 'B',
+        derivation: 'sum',
+        role: ['rows'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+      // bare-calc inputs (decomposed row-level leaves, like a Goal Difference = [C]-[D])
+      {
+        slot_id: 'c',
+        template_field: 'C',
+        derivation: 'none',
+        role: ['detail'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+      {
+        slot_id: 'd',
+        template_field: 'D',
+        derivation: 'none',
+        role: ['detail'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+      // a plain measure slot that feeds NO calc — the aggregate-into-shelf case gate 7 handles
+      {
+        slot_id: 'plain',
+        template_field: 'P',
+        derivation: 'sum',
+        role: ['size'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+    ],
+    calcs: [
+      {
+        slot_id: 'wrapped',
+        template_field: 'Calculation_W',
+        derivation: 'usr',
+        role: ['color'],
+        kind: 'calc',
+        bindable: false,
+        required: true,
+        formula: 'SUM([A])-SUM([B])',
+        formula_refs: ['A', 'B'],
+        depends_on_slots: ['a', 'b'],
+        result_role: 'measure',
+        inputs: [
+          {
+            ref: 'A',
+            slot_id: 'a',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+          {
+            ref: 'B',
+            slot_id: 'b',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+        ],
+      },
+      {
+        slot_id: 'bare',
+        template_field: 'Calculation_B',
+        derivation: 'usr',
+        role: ['label'],
+        kind: 'calc',
+        bindable: false,
+        required: true,
+        formula: '[C]-[D]',
+        formula_refs: ['C', 'D'],
+        depends_on_slots: ['c', 'd'],
+        result_role: 'measure',
+        inputs: [
+          {
+            ref: 'C',
+            slot_id: 'c',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+          {
+            ref: 'D',
+            slot_id: 'd',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+        ],
+      },
+    ],
+    hazards: [],
+  };
+
+  const bindAll = (over: Record<string, string>): BindingProposal => ({
+    template: calcLevels.template,
+    title: 't',
+    bindings: [
+      { slot_id: 'a', field: over.a ?? 'Sales' },
+      { slot_id: 'b', field: over.b ?? 'Profit' },
+      { slot_id: 'c', field: over.c ?? 'Sales' },
+      { slot_id: 'd', field: over.d ?? 'Profit' },
+      { slot_id: 'plain', field: over.plain ?? 'Sales' },
+    ],
+  });
+
+  it('fire: aggregate into a SUM-wrapped calc input → aggregation-level-mismatch (would re-aggregate)', () => {
+    const r = validateBinding(calcLevels, bindAll({ a: 'Profit Ratio' }), SUMMARY);
+    expect(r.ok).toBe(false);
+    if (!r.ok)
+      expect(
+        r.blockers.some((x) => x.code === 'aggregation-level-mismatch' && x.slot_id === 'a'),
+      ).toBe(true);
+  });
+
+  it('fire: aggregate into a BARE row-level calc input → aggregation-level-mismatch (would mix levels)', () => {
+    const r = validateBinding(calcLevels, bindAll({ c: 'Profit Ratio' }), SUMMARY);
+    expect(r.ok).toBe(false);
+    if (!r.ok)
+      expect(
+        r.blockers.some((x) => x.code === 'aggregation-level-mismatch' && x.slot_id === 'c'),
+      ).toBe(true);
+  });
+
+  it('no-fire: a row-level (non-aggregated) source into a calc input binds cleanly', () => {
+    const r = validateBinding(calcLevels, bindAll({}), SUMMARY);
+    expect(r.ok).toBe(true);
+  });
+
+  it('no-fire: an aggregate into a plain measure slot that feeds NO calc (gate 7 forces usr)', () => {
+    const r = validateBinding(calcLevels, bindAll({ plain: 'Profit Ratio' }), SUMMARY);
+    expect(r.ok).toBe(true);
+    // gate 7 emits the aggregate as usr on the shelf, with no re-aggregation
+    if (r.ok) expect(r.field_mapping['P']).toBe('[Superstore].[usr:Calculation_9999:qk]');
+  });
+
+  it('real manifest (deviation-arrow): aggregate into its SUM([Actual]) calc leaf is blocked', () => {
+    const m = manifests.get('deviation-arrow')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'member', field: 'Category' },
+        { slot_id: 'actual', field: 'Profit Ratio' },
+        { slot_id: 'line', field: 'Profit' },
+      ],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+    expect(r.ok).toBe(false);
+    if (!r.ok)
+      expect(
+        r.blockers.some((x) => x.code === 'aggregation-level-mismatch' && x.slot_id === 'actual'),
+      ).toBe(true);
+  });
+
+  it('real manifest (deviation-arrow): row-level measures into the same leaves bind cleanly', () => {
+    const m = manifests.get('deviation-arrow')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'member', field: 'Category' },
+        { slot_id: 'actual', field: 'Sales' },
+        { slot_id: 'line', field: 'Profit' },
+      ],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+    expect(r.ok).toBe(true);
+  });
+});
+
 describe('binder/validate — gate 7: temporal suffix', () => {
   // P1-3: the column-instance pivot suffix for a TRUNCATED date slot must be the
   // continuous ':qk' the template authored, not derived from the field's `type`.

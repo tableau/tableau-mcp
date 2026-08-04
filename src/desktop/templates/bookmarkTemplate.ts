@@ -102,8 +102,32 @@ export interface InferredSlot {
   tableCalc?: TableCalcFact;
 }
 
+/**
+ * A placed calculated field decomposed to the bindable base-input leaves it references at
+ * ROW LEVEL. Emitted per DISTINCT calc base (shelves unioned across placements). `dependsOnSlots`
+ * are already resolved to the leaf slot_ids in {@link Inference.slots}, so the synthesized
+ * manifest's calc contract lines up with its slot ids by construction — the same consistency a
+ * curated manifest hand-authors. This is what lets the binder's calc-dependency gate (Gate 6)
+ * and aggregation-level gate (Gate 4b) fire on the PURE-INFERRED path (no sidecar manifest).
+ */
+export interface InferredCalc {
+  /** Stable id for the calc itself — NOT a bindable slot (lives only in manifest.calcs). */
+  slotId: string;
+  /** The calc column's identity (its bare name); calcs are not tokenized to {{field_base_N}}. */
+  templateField: string;
+  caption: string;
+  formula: string;
+  /** Base-input leaf names the formula references at row level (nested Calculation_* skipped). */
+  formulaRefs: string[];
+  /** The bindable leaf slot_ids (in `slots`) those refs resolve to — the Gate 4b/6 join key. */
+  dependsOnSlots: string[];
+  shelves: Shelf[];
+}
+
 export interface Inference {
   slots: InferredSlot[];
+  /** Placed calcs, decomposed to their base-input leaf slots. Empty when the bookmark places none. */
+  calcs: InferredCalc[];
   unknownCount: number;
   /** Donor field captions — retained ONLY to mechanically assert none leak into a purpose. */
   donorCaptions: string[];
@@ -302,11 +326,26 @@ export function bookmarkToTemplateWorkbook(
   //     donor field literally named "State" would otherwise become
   //     semantic-role='[N].[Name]', which the rewriter can't map, so the token survives
   //     and the whole inject throws (the single largest failure cause in the corpus).
-  //   - calculation@formula / @column — a formula names the donor's own calc columns;
-  //     the binder rebinds a calc's BASE INPUTS, it does not rewrite formula text.
-  //   - table-calc@ordering-field — emits the BARE `[ds].[base]` form the rewriter's
-  //     three-part regex can't match.
-  const PROTECTED_ATTRS = /\b(semantic-role|formula|ordering-field)='[^']*'/g;
+  //   - table-calc@ordering-field AND the nested `<order field='…'>` / `<table-calc field='…'>`
+  //     compute-along directives — all emit the BARE `[ds].[base]` form the rewriter's
+  //     three-part regex can't match. They name an addressing/ordering field (Compute Using),
+  //     never a primary placement (those live in rows/cols text or an encoding `column=`), so
+  //     shielding `field='…'` wholesale is safe. Without this a bare `<order field='[ds].[Order
+  //     Date]'>` tokenized to `[{{DATASOURCE}}].[{{field_base_N}}]` with no slot/mapping key,
+  //     survived the rewrite, and threw "binding is incomplete" (deviation-gain-loss-chart).
+  //
+  // calculation@formula is DELIBERATELY tokenized (NOT shielded — task #28). A donor calc's
+  // BASE-INPUT refs are bare `[Field]` names in the SAME datasource (verified: no `.tbm` calc
+  // formula carries a datasource-qualified `].[` ref), and inference decomposes every base
+  // input into its own bindable slot (inferSlots.ts). Tokenizing them to `{{field_base_N}}`
+  // lets the rewriter's §3b formula pass (fieldReferenceRewriter.ts:rewriteFormulaFieldRefs)
+  // rebind them to the BOUND target fields — exactly what the curated `.xml` calc templates
+  // already do (e.g. deviation-diverging-bar: `formula='SUM([{{field_base_2}}])/SUM([{{field_base_3}}])'`).
+  // Leaving the formula shielded stranded the donor names, so the emitted calc referenced
+  // fields absent from the target and Tableau silently stripped it (the calc-guard failure
+  // class). Nested `[Calculation_*]` refs are NOT base inputs (baseInputsOf skips them) and are
+  // handled separately by per-apply calc namespacing (fieldReferenceRewriter.ts §0).
+  const PROTECTED_ATTRS = /\b(semantic-role|ordering-field|field)='[^']*'/g;
   // Sentinel uses U+0001 (\u0001) delimited indices: control chars cannot appear in well-formed
   // XML, so the placeholder can never collide with real document content.
   const shield: string[] = [];
