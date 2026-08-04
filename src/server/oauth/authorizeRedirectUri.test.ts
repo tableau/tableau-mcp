@@ -11,7 +11,7 @@ const INVALID = (redirectUri: string): { error: string; error_description: strin
 function registrations(entries: Record<string, string[]>): Map<string, ClientRegistration> {
   const map = new Map<string, ClientRegistration>();
   for (const [clientId, redirectUris] of Object.entries(entries)) {
-    map.set(clientId, { redirectUris, tokenEndpointAuthMethod: 'client_secret_basic' });
+    map.set(clientId, { redirectUris });
   }
   return map;
 }

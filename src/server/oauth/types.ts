@@ -54,5 +54,4 @@ export type RefreshTokenData = UserAndTokens & {
 
 export type ClientRegistration = {
   redirectUris: string[];
-  tokenEndpointAuthMethod: string;
 };

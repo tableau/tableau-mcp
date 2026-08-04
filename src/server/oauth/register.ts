@@ -46,7 +46,6 @@ export function register(
     const clientId = randomUUID();
     clientRegistrations.set(clientId, {
       redirectUris: validatedRedirectUris,
-      tokenEndpointAuthMethod: token_endpoint_auth_method,
     });
 
     res.json({
