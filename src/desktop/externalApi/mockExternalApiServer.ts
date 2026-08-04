@@ -69,14 +69,11 @@ const DEFAULT_DASHBOARD_DOCUMENT_XML =
   '<?xml version="1.0"?><workbook><dashboards>' +
   '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
   '</dashboards></workbook>';
-// A storyboard serializes as a `<dashboard type='storyboard'>` under `<dashboards>` within a whole
-// `<workbook>` document — the same envelope shape as a dashboard, not a bare `<storyboard>` element.
-// The document carries a sibling dashboard the slice must exclude by name.
+// A storyboard serializes as a `<dashboard type='storyboard'>`, and its /document route returns
+// that bare fragment directly — not a `<storyboard>` element, and not wrapped in a `<workbook>`.
 const DEFAULT_STORYBOARD_DOCUMENT_XML =
-  '<?xml version="1.0"?><workbook><dashboards>' +
-  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
-  '<dashboard name="QBR Story" type="storyboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
-  '</dashboards></workbook>';
+  '<?xml version="1.0"?>' +
+  '<dashboard name="QBR Story" type="storyboard"><zones><zone name="Sales by Region" /></zones></dashboard>';
 const DEFAULT_WORKSHEETS = [
   {
     id: 'sheet-sales',
