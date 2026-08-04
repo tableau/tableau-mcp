@@ -8,10 +8,10 @@ vi.mock('./assets.js', () => ({
 
 const REFERENCE = {
   commands: [
-    { fully_qualified_serialized_name: 'tabdoc:save' },
-    { fully_qualified_serialized_name: 'tabdoc:save-as' },
-    { fully_qualified_serialized_name: 'tabdoc:goto-sheet' },
-    { fully_qualified_serialized_name: 'tabui:export-theme' },
+    { serialized: { fully_qualified_name: 'tabdoc:save' } },
+    { serialized: { fully_qualified_name: 'tabdoc:save-as' } },
+    { serialized: { fully_qualified_name: 'tabdoc:goto-sheet' } },
+    { serialized: { fully_qualified_name: 'tabui:export-theme' } },
   ],
 };
 

@@ -43,10 +43,13 @@ type CommandParameter = {
   comment?: unknown;
 };
 
+// Nested-schema shape (tableau-desktop-commands-reference.json): the fully-qualified name is
+// under `serialized`, the parameter contract under `invocation.parameters`, and the
+// blocking-dialog flag under `agent.opens_blocking_dialog`.
 type CommandReferenceEntry = {
-  fully_qualified_serialized_name?: unknown;
-  parameters?: unknown;
-  opens_blocking_dialog?: unknown;
+  serialized?: { fully_qualified_name?: unknown };
+  invocation?: { parameters?: unknown };
+  agent?: { opens_blocking_dialog?: unknown };
 };
 
 type CommandReference = {
@@ -75,7 +78,7 @@ function commandsByName(): Map<string, CommandReferenceEntry> | null {
 
     const map = new Map<string, CommandReferenceEntry>();
     for (const entry of reference.commands as CommandReferenceEntry[]) {
-      const fq = entry?.fully_qualified_serialized_name;
+      const fq = entry?.serialized?.fully_qualified_name;
       if (typeof fq === 'string' && fq.length > 0) {
         map.set(fq, entry);
       }
@@ -89,10 +92,11 @@ function commandsByName(): Map<string, CommandReferenceEntry> | null {
 }
 
 function inParams(entry: CommandReferenceEntry): CommandParameter[] {
-  if (!Array.isArray(entry.parameters)) {
+  const params = entry.invocation?.parameters;
+  if (!Array.isArray(params)) {
     return [];
   }
-  return (entry.parameters as CommandParameter[]).filter(
+  return (params as CommandParameter[]).filter(
     (param): param is CommandParameter => param?.direction === 'in',
   );
 }
@@ -112,7 +116,7 @@ function formatParam(param: CommandParameter): string {
 }
 
 function blockingDialogNote(entry: CommandReferenceEntry): string {
-  return entry.opens_blocking_dialog === true
+  return entry.agent?.opens_blocking_dialog === true
     ? ' This command is flagged opens_blocking_dialog=true — a wrong call here pops a blocking modal error ' +
         "dialog on the user's screen (and a stuck-open modal can fail subsequent commands too)."
     : '';

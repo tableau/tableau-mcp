@@ -7,7 +7,9 @@ const COMMANDS_REFERENCE_ASSET = 'tableau-desktop-commands-reference.json';
 const MAX_SUGGESTIONS = 3;
 
 type CommandReferenceEntry = {
-  fully_qualified_serialized_name?: unknown;
+  // Nested-schema shape (tableau-desktop-commands-reference.json): the fully-qualified
+  // serialized name lives under `serialized.fully_qualified_name`.
+  serialized?: { fully_qualified_name?: unknown };
 };
 
 type CommandReference = {
@@ -38,7 +40,7 @@ export function knownCommands(): Set<string> | null {
 
     knownCommandsCache = new Set(
       (reference.commands as CommandReferenceEntry[])
-        .map((entry: CommandReferenceEntry) => entry.fully_qualified_serialized_name)
+        .map((entry: CommandReferenceEntry) => entry.serialized?.fully_qualified_name)
         .filter((name): name is string => typeof name === 'string' && name.length > 0),
     );
     return knownCommandsCache;

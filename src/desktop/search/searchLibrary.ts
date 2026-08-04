@@ -35,29 +35,31 @@ function loadCommandsReference(): any {
 function ensureCommandsSearchIndex(): any {
   if (_commandsSearchIndex && _commandsFuse) return _commandsSearchIndex;
   const ref = loadCommandsReference();
+  // Nested-schema reference: command list under `commands`, agent guidance under
+  // `agent_guidance`, and the name-keyed index arrays under `indexes`.
   const allCommands: any[] = Array.isArray(ref.commands) ? ref.commands : [];
-  const nonMcpTypes = new Set<string>(ref.non_mcp_friendly_param_types || []);
-  const agentAllow = new Set<string>(ref.command_names_agent_can_invoke || []);
-  const blockingNames = new Set<string>(ref.command_names_opening_blocking_dialog || []);
+  const nonMcpTypes = new Set<string>(ref.agent_guidance?.non_mcp_friendly_param_types || []);
+  const agentAllow = new Set<string>(ref.indexes?.command_names_agent_can_invoke || []);
+  const blockingNames = new Set<string>(ref.indexes?.command_names_opening_blocking_dialog || []);
   const recommendation: string =
-    ref.recommendation_when_no_invocable_match ||
+    ref.agent_guidance?.recommendation_when_no_invocable_match ||
     'No simple MCP-invocable command found. For chart/viz asks use bind-template (or refine-worksheet to edit in place); for calcs/parameters/sets/actions use the author-* verbs; fall back to the workbook-document round-trip, then workbook XML editing, only when neither covers the ask.';
 
   const invocable = allCommands.filter((cmd: any) => {
     if (!cmd || typeof cmd !== 'object') return false;
-    const name = cmd.command_name;
+    const name = cmd.name;
     let agentOk: boolean;
     if (agentAllow.size > 0 && typeof name === 'string') {
       agentOk = agentAllow.has(name);
-    } else if (typeof cmd.agent_can_invoke === 'boolean') {
-      agentOk = cmd.agent_can_invoke;
-    } else if (typeof cmd.mcp_can_invoke_without_binary_args === 'boolean') {
-      agentOk = cmd.mcp_can_invoke_without_binary_args;
+    } else if (typeof cmd.agent?.can_invoke === 'boolean') {
+      agentOk = cmd.agent.can_invoke;
+    } else if (typeof cmd.agent?.mcp_can_invoke_without_binary_args === 'boolean') {
+      agentOk = cmd.agent.mcp_can_invoke_without_binary_args;
     } else {
       agentOk = true;
     }
     if (!agentOk) return false;
-    const params = Array.isArray(cmd.parameters) ? cmd.parameters : [];
+    const params = Array.isArray(cmd.invocation?.parameters) ? cmd.invocation.parameters : [];
     for (const p of params) {
       if (!p || typeof p !== 'object') continue;
       if (p.direction === 'in' && p.required) {
@@ -72,12 +74,12 @@ function ensureCommandsSearchIndex(): any {
   _commandsSearchIndex = { commands: invocable, blockingNames, recommendation };
   _commandsFuse = new Fuse(invocable, {
     keys: [
-      'command_name',
-      'serialized_name',
-      'fully_qualified_serialized_name',
-      'description',
-      { name: 'parameters[].local_name', weight: 0.5 },
-      { name: 'parameters[].comment', weight: 0.5 },
+      'name',
+      'serialized.name',
+      'serialized.fully_qualified_name',
+      'summary.description',
+      { name: 'invocation.parameters.local_name', weight: 0.5 },
+      { name: 'invocation.parameters.comment', weight: 0.5 },
     ],
     threshold: 0.4,
     ignoreLocation: true,
@@ -86,26 +88,27 @@ function ensureCommandsSearchIndex(): any {
 }
 
 function formatCommandSearchResult(cmd: any, blockingNames: Set<string>): any {
+  // Read from the nested schema; the RESULT keys stay flat — that is the search tool's
+  // stable output contract to the agent.
+  const fqName = cmd.serialized?.fully_qualified_name;
   const opensDialog =
-    !!(
-      blockingNames &&
-      cmd &&
-      typeof cmd.command_name === 'string' &&
-      blockingNames.has(cmd.command_name)
-    ) || !!cmd.opens_blocking_dialog;
+    !!(blockingNames && cmd && typeof cmd.name === 'string' && blockingNames.has(cmd.name)) ||
+    !!cmd.agent?.opens_blocking_dialog;
   const result: any = {
-    fully_qualified_serialized_name: cmd.fully_qualified_serialized_name,
-    command_name: cmd.command_name,
-    description: cmd.description,
-    module_and_command: cmd.fully_qualified_serialized_name,
-    parameters: (Array.isArray(cmd.parameters) ? cmd.parameters : []).map((p: any) => ({
-      direction: p.direction,
-      local_name: p.local_name,
-      type_id: p.type_id,
-      required: !!p.required,
-      comment: p.comment,
-      cannot_provide_from_mcp: !!p.cannot_provide_from_mcp,
-    })),
+    fully_qualified_serialized_name: fqName,
+    command_name: cmd.name,
+    description: cmd.summary?.description,
+    module_and_command: fqName,
+    parameters: (Array.isArray(cmd.invocation?.parameters) ? cmd.invocation.parameters : []).map(
+      (p: any) => ({
+        direction: p.direction,
+        local_name: p.local_name,
+        type_id: p.type_id,
+        required: !!p.required,
+        comment: p.comment,
+        cannot_provide_from_mcp: !!p.cannot_provide_from_mcp,
+      }),
+    ),
   };
   if (opensDialog) {
     result.warning =

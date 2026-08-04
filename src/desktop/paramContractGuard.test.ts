@@ -6,50 +6,58 @@ vi.mock('./assets.js', () => ({
   readDataAsset: mocks.readDataAsset,
 }));
 
+// Nested-schema fixtures: fully-qualified name under `serialized`, the parameter contract
+// under `invocation.parameters`, and the blocking-dialog flag under `agent`.
 const REFERENCE = {
   commands: [
     {
-      fully_qualified_serialized_name: 'tabdoc:mock-goto',
-      opens_blocking_dialog: false,
-      parameters: [
-        {
-          direction: 'in',
-          local_name: 'WindowLocator',
-          required: true,
-          comment: 'locator for the window',
-        },
-        { direction: 'out', local_name: 'ConnectionAttemptInfo', required: false },
-      ],
+      serialized: { fully_qualified_name: 'tabdoc:mock-goto' },
+      agent: { opens_blocking_dialog: false },
+      invocation: {
+        parameters: [
+          {
+            direction: 'in',
+            local_name: 'WindowLocator',
+            required: true,
+            comment: 'locator for the window',
+          },
+          { direction: 'out', local_name: 'ConnectionAttemptInfo', required: false },
+        ],
+      },
     },
     {
-      fully_qualified_serialized_name: 'tabui:copy-sheet-image-u-i',
-      opens_blocking_dialog: true,
-      parameters: [
-        { direction: 'in', local_name: 'Sheet', required: true, comment: 'sheet to copy' },
-      ],
+      serialized: { fully_qualified_name: 'tabui:copy-sheet-image-u-i' },
+      agent: { opens_blocking_dialog: true },
+      invocation: {
+        parameters: [
+          { direction: 'in', local_name: 'Sheet', required: true, comment: 'sheet to copy' },
+        ],
+      },
     },
     {
-      fully_qualified_serialized_name: 'tabdoc:save',
-      opens_blocking_dialog: false,
-      parameters: [],
+      serialized: { fully_qualified_name: 'tabdoc:save' },
+      agent: { opens_blocking_dialog: false },
+      invocation: { parameters: [] },
     },
     {
-      fully_qualified_serialized_name: 'tabdoc:generate-viz-from-notional-spec',
-      opens_blocking_dialog: false,
-      parameters: [],
+      serialized: { fully_qualified_name: 'tabdoc:generate-viz-from-notional-spec' },
+      agent: { opens_blocking_dialog: false },
+      invocation: { parameters: [] },
     },
     {
-      fully_qualified_serialized_name: 'tabdoc:delete-sheet',
-      opens_blocking_dialog: false,
-      parameters: [
-        { direction: 'in', local_name: 'Sheet', required: true, comment: 'Target sheet' },
-        {
-          direction: 'in',
-          local_name: 'DeleteOrphans',
-          required: false,
-          comment: 'Delete orphans',
-        },
-      ],
+      serialized: { fully_qualified_name: 'tabdoc:delete-sheet' },
+      agent: { opens_blocking_dialog: false },
+      invocation: {
+        parameters: [
+          { direction: 'in', local_name: 'Sheet', required: true, comment: 'Target sheet' },
+          {
+            direction: 'in',
+            local_name: 'DeleteOrphans',
+            required: false,
+            comment: 'Delete orphans',
+          },
+        ],
+      },
     },
   ],
 };
