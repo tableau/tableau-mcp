@@ -174,7 +174,6 @@ describe('server', () => {
 
     // Insight tools are gated off by default so hosts (e.g. Slackbot) stay stable...
     expect(registeredToolNames).not.toContain('generate-insight-cards');
-    expect(registeredToolNames).not.toContain('resolve-datasource-luid');
     // ...while unrelated tools stay registered.
     expect(registeredToolNames).toContain('list-datasources');
   });
@@ -189,7 +188,6 @@ describe('server', () => {
       .mock.calls.map((call) => call[0 /* tool name */]);
 
     expect(registeredToolNames).toContain('generate-insight-cards');
-    expect(registeredToolNames).toContain('resolve-datasource-luid');
     expect(registeredToolNames).toContain('list-datasources');
   });
 

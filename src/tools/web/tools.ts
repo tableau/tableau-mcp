@@ -3,7 +3,6 @@ import { getDeleteContentTool } from './_lib/deleteContent.js';
 import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
-import { getResolveDatasourceLuidTool } from './datasources/resolveDatasourceLuid.js';
 import { getConfirmUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/confirmUpdateCloudExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
@@ -46,7 +45,6 @@ export const webToolFactories = [
   getRecordEventTool,
   getRenderInteractiveVizTool,
   getListDatasourcesTool,
-  getResolveDatasourceLuidTool,
   getListExtractRefreshTasksTool,
   getUpdateCloudExtractRefreshTaskTool,
   getConfirmUpdateCloudExtractRefreshTaskTool,
