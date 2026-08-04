@@ -3,7 +3,7 @@
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Edit data/template-manifests/*.manifest.json and re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
   "_source": "data/template-manifests/*.manifest.json",
-  "count": 44,
+  "count": 46,
   "fast_path_templates": [
     "box-plot-chart",
     "connected-scatterplot",
@@ -13,6 +13,8 @@
     "distribution-bar-code-chart",
     "funnel-chart",
     "gantt-task-rollup-chart",
+    "insight_barchart",
+    "insight_unusualchange",
     "kpi-text",
     "magnitude-simple-bar",
     "part-to-whole-pie-chart",
@@ -2500,6 +2502,185 @@
           "code": "continuous-date-axis-required",
           "detail": "cols carries a CONTINUOUS truncated-day date [tdy:Start Date:qk] (green pill) — the timeline axis. The start_date slot must bind a real date/datetime field; binding a non-date field (or a discrete date part) collapses the timeline to categorical headers and the GanttBars lose their time positions.",
           "xml": "gantt-timeline-chart.xml:31"
+        }
+      ]
+    },
+    {
+      "template": "insight_barchart",
+      "family": "magnitude",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-31",
+        "render_evidence": {
+          "basis": "templatized from a hand-authored live bar-chart worksheet (pulse templates/BarChartTest (1), sheet 'Sheet 2', refreshed 2026-07-31); datasource/dimension/measure placeholdered, DESC shelf-sort + a categorical Top-50 groupfilter (count='50' end='top', ordered by SUM(measure) DESC) preserved verbatim. No color encoding (a mark colored by the same dimension already on rows is rejected by the redundant-color-encoding preflight rule).",
+          "lane": "insight-template (Pulse: Bar Chart)",
+          "structural": null,
+          "critical_pass": "not recorded (authored-from-live; earned by human review)",
+          "high_pass": "not recorded (authored-from-live; earned by human review)",
+          "pixel_oracle": "none",
+          "gate_composite": null
+        }
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE",
+        "field_base_1",
+        "field_base_2"
+      ],
+      "intent_keywords": [
+        "top-contributors",
+        "bottom-contributors",
+        "top-drivers",
+        "top-detractors"
+      ],
+      "description": "INSIGHT template (Pulse: Bar Chart) — horizontal bars of an aggregated measure across the members of a categorical dimension, limited to the Top 50 members by the measure and sorted DESC (biggest bar first). No color encoding. Templatized from the hand-authored 'Sheet 2' bar worksheet.",
+      "avoid_when": [
+        "The x-axis should be a CONTINUOUS TIME field (a trend over time) — use insight-unusual-change / trend-line-chart instead. This template compares a measure across DISCRETE categorical members, not across time."
+      ],
+      "slots": [
+        {
+          "slot_id": "category",
+          "template_field": "{{field_base_1}}",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "purpose": "Categorical dimension whose members become the bars (on rows). The bars are sorted DESC by the measure.",
+          "examples": [
+            "Impact",
+            "Priority",
+            "Team"
+          ],
+          "notes": "Bound to TWO references that must stay in sync: the rows pill [none:{{field_base_1}}:nk] and the <shelf-sort-v2 dimension-to-sort=...>. Rebinding must update both."
+        },
+        {
+          "slot_id": "measure",
+          "template_field": "{{field_base_2}}",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "purpose": "Aggregated measure that gives each bar its length (on cols = horizontal bars) and the DESC sort key.",
+          "examples": [
+            "Story Points",
+            "Revenue",
+            "Open Count"
+          ],
+          "notes": "On cols so bars run horizontally. Also referenced by <shelf-sort-v2 measure-to-sort-by=...>; rebinding must update both."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "desc-sort-is-the-shape",
+          "detail": "The <shelf-sort-v2 direction='DESC' ...> ranks bars biggest-first — the defining feature of this insight ('top contributors'). Preserve the shelf-sort block; rebinding category/measure must update BOTH its dimension-to-sort and measure-to-sort-by, or the sort silently reverts to alphabetical.",
+          "xml": "insight_barchart.xml:23"
+        },
+        {
+          "code": "measure-on-cols-means-horizontal",
+          "detail": "Measure on <cols> and dimension on <rows> produces HORIZONTAL bars. Do not swap them; a vertical column chart is a different shape. Do NOT add a color encoding on the same dimension already on rows — the redundant-color-encoding preflight rule rejects it.",
+          "xml": "insight_barchart.xml:38"
+        },
+        {
+          "code": "top50-groupfilter-references-measure-by-name",
+          "detail": "The categorical Top-50 filter (<groupfilter count='50' end='top' ...> ordered by SUM([{{field_base_2}}]) DESC) limits the view to the 50 biggest members. Its inner expression references the measure by BASE NAME (SUM([{{field_base_2}}])), NOT a datasource-qualified id — so rebinding the measure must also rewrite that expression. Two known failure modes: (1) if the measure is not rebound in the expression the Top-N silently drops on apply and ALL members render; (2) on the whole-workbook apply path a published (sqlproxy) datasource gets cloned to '(copy)', and the filter's base ref no longer matches the bound (copy) datasource, so Desktop drops the filter — the same symptom that made an earlier Top-20 vanish. Verify member count after apply.",
+          "xml": "insight_barchart.xml:15"
+        }
+      ]
+    },
+    {
+      "template": "insight_unusualchange",
+      "family": "time-series",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-31",
+        "render_evidence": {
+          "basis": "templatized from a hand-authored live 'Unusual Change' worksheet (pulse templates/UnusualChangeTest (2), refreshed 2026-07-31); datasource/date/measure placeholdered, trendline + relative-date window (last ~100 days, first-period='-99') preserved verbatim.",
+          "lane": "insight-template (Pulse: Unusual Change)",
+          "structural": null,
+          "critical_pass": "not recorded (authored-from-live; earned by human review)",
+          "high_pass": "not recorded (authored-from-live; earned by human review)",
+          "pixel_oracle": "none",
+          "gate_composite": null
+        }
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE",
+        "field_base_1",
+        "field_base_2"
+      ],
+      "intent_keywords": [
+        "unusualchange",
+        "unusual change"
+      ],
+      "description": "INSIGHT template (Pulse: Unusual Change) — a daily (Day-Trunc) line of an aggregated measure over the last ~100 days with a linear trendline + confidence bands; the anomaly is the point(s) falling outside the band. Templatized from the hand-authored 'Unusual Change' worksheet.",
+      "avoid_when": [
+        "The x-axis is a set of DISCRETE, non-temporal CATEGORIES instead of a continuous time axis. A line implies continuity between adjacent points; a cross-category breakdown with no time axis belongs on a bar chart. Bind only a continuous time field to field_base_1."
+      ],
+      "slots": [
+        {
+          "slot_id": "event_date",
+          "template_field": "{{field_base_1}}",
+          "derivation": "tdy",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "temporal_from_string": true,
+          "purpose": "Temporal dimension that defines the continuous Day-Trunc x-axis; also carries the relative-date filter (last ~100 days).",
+          "examples": [
+            "Created Date",
+            "Event Date",
+            "Snapshot Time"
+          ],
+          "notes": "XML instances: the x-axis pill is [tdy:{{field_base_1}}:qk] derivation='Day-Trunc'; the relative-date filter + <slices> reference [none:{{field_base_1}}:qk] (derivation='None'). Both instances must reference the SAME bound date field. The relative-date filter (first-period='-99' last-period='0' period-type-v2='day') scopes the view to the last ~100 days — adjust first-period to change the window."
+        },
+        {
+          "slot_id": "measure",
+          "template_field": "{{field_base_2}}",
+          "derivation": "sum",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "purpose": "Continuous measure plotted daily on the y-axis; the trendline + confidence bands are fit to this series.",
+          "examples": [
+            "Age Hour",
+            "Revenue",
+            "Open Count"
+          ]
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "trendline-is-the-signal",
+          "detail": "The <trendline enable-confidence-bands='true' fit='linear'> block is the defining feature of this insight — it is what makes a point 'unusual' (outside the band). Do NOT strip it during binding; the field-swap injector must preserve the <pane> trendline + its style-rule verbatim.",
+          "xml": "insight_unusualchange.xml:26"
+        },
+        {
+          "code": "day-trunc-and-relative-date-coupled",
+          "detail": "The x-axis uses Day-Trunc (tdy), NOT Month-Trunc. The relative-date filter and <slices> reference the SAME date field via its 'none' instance. Rebinding field_base_1 must update all three references (tdy pill, filter column, slices column) to the same bound field, or the filter silently no-ops.",
+          "xml": "insight_unusualchange.xml:16"
         }
       ]
     },
