@@ -40,8 +40,11 @@ tableau-viz {
   transition: height 0.3s ease;
 }
 
+/* !important so the hidden attribute wins over elements that set an explicit
+   display (e.g. .viz-fullscreen-floating uses display: inline-flex, which has
+   equal specificity and would otherwise override display: none by source order). */
 [hidden] {
-  display: none;
+  display: none !important;
 }
 
 .viz-controls {
