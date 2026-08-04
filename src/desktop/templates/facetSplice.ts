@@ -127,10 +127,21 @@ function resolveFacet(
   }
   if (candidates.length === 1) return candidates[0];
 
+  // A non-empty manifest slot set is AUTHORITATIVE: zero optional-categorical facet
+  // candidates means the template has no facet, so we must NOT guess one structurally.
+  // The structural scan below exists ONLY for manifest-less direct callers (no slots
+  // passed). Running it when slots WERE supplied spuriously matches REQUIRED dimension
+  // base columns that merely lack a column-instance — e.g. gantt-chart's size-shelf
+  // date, or ww-ou-arrow/ww-ou-diff's several required rows/cols dimensions — throwing
+  // "cannot resolve trellis shelf" / "multiple structural placeholder facet candidates
+  // are ambiguous" on charts that were never small-multiples faceted. Since inferSlots
+  // now always supplies manifest slots, both production apply chokepoints pass them.
+  const hasManifestSlots = (slots?.length ?? 0) > 0;
+
   // Manifest-less direct callers can still identify the migrated facet
   // structurally: it is the one mapped field placeholder declared as a
   // dimension base column with no authored column-instance.
-  if (templateXml) {
+  if (!hasManifestSlots && templateXml) {
     const structuralCandidates = Object.entries(fieldMapping)
       .map(([key, value]) => ({ key: key.replace(/@[A-Za-z][A-Za-z0-9-]*$/, ''), value }))
       .filter(({ key }) => /^\{\{field_base_[1-9]\d*\}\}$/.test(key))

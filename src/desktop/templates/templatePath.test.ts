@@ -90,7 +90,7 @@ describe('listTemplateNames', () => {
   });
 });
 
-describe('readTemplate — `.tbm` fallback for a metadata-free drop-in', () => {
+describe('readTemplate — `.tbm` is the canonical source', () => {
   const originalTemplatesDir = process.env['TEMPLATES_DIR'];
 
   afterEach(() => {
@@ -120,14 +120,18 @@ describe('readTemplate — `.tbm` fallback for a metadata-free drop-in', () => {
     }
   });
 
-  it('prefers a tokenized `.xml` over the bookmark when both exist', () => {
+  it('prefers the bookmark over a tokenized `.xml` when both exist (TBM is canonical)', () => {
     const templatesDir = mkdtempSync(join(process.cwd(), 'tmp-template-path-test-'));
     try {
       writeFileSync(join(templatesDir, 'dropped-in-chart.tbm'), DROPPED_IN_BOOKMARK);
       writeFileSync(join(templatesDir, 'dropped-in-chart.xml'), '<workbook data-xml-tier/>');
       process.env['TEMPLATES_DIR'] = templatesDir;
 
-      expect(readTemplate('dropped-in-chart')).toBe('<workbook data-xml-tier/>');
+      // The `.tbm` wins: the served XML is the freshly-inferred injectable workbook, NOT
+      // the stale `.xml` fallback. Tokenization is a computed detail of the canonical .tbm.
+      const xml = readTemplate('dropped-in-chart');
+      expect(xml).not.toBe('<workbook data-xml-tier/>');
+      expect(xml).toContain('{{field_base_1}}');
     } finally {
       rmSync(templatesDir, { recursive: true, force: true });
     }

@@ -9,6 +9,8 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 import { loadManifests } from '../binder/manifest.js';
+import { normalizeArray, parseXML } from '../metadata/parser.js';
+import { ParsedWindow, ParsedWorksheet } from '../metadata/types.js';
 import { injectTemplate } from './injectTemplate.js';
 import {
   buildInjectedWorkbookXml,
@@ -838,5 +840,49 @@ describe('buildInjectedWorkbookXml — bound categorical-bin GROUP survives inje
     // No group was bound, so no categorical-bin body is introduced.
     expect(result.xml).not.toContain('categorical-bin');
     expect(result.xml).toContain('none:Segment:nk');
+  });
+});
+
+describe('injectTemplate — simple-id (worksheet content model)', () => {
+  // Tableau's <worksheet> content model requires a trailing <simple-id>
+  // ('(((layout-options?)|(repository-location?)),table,simple-id)'); a bookmark-derived
+  // worksheet/window omits it, so validateWorkbookDocument rejects the whole apply. inject
+  // must add one to BOTH the sheet and its window (matching a real saved workbook), each with
+  // a UNIQUE uuid so re-using one template across sheets never collides.
+  const EMPTY_TARGET =
+    "<?xml version='1.0'?><workbook><worksheets><worksheet name='Keep'><table/><simple-id uuid='{KEEP-WS}' /></worksheet></worksheets>" +
+    "<windows><window class='worksheet' name='Keep'><cards/><simple-id uuid='{KEEP-WIN}' /></window></windows></workbook>";
+  // A bookmark→template workbook exactly as bookmarkToTemplateWorkbook emits it: NO simple-id
+  // on either the worksheet or the window.
+  const TEMPLATE_NO_SIMPLE_ID =
+    "<?xml version='1.0'?><workbook><worksheets><worksheet name='New Sheet'><table><rows /><cols /></table></worksheet></worksheets>" +
+    "<windows><window class='worksheet' name='New Sheet'><cards /></window></windows></workbook>";
+
+  it('adds a <simple-id> to a worksheet AND window that lack one', () => {
+    const out = injectTemplate(EMPTY_TARGET, TEMPLATE_NO_SIMPLE_ID, 'worksheet');
+    const parsed = parseXML(out);
+    const worksheets = normalizeArray<ParsedWorksheet>(parsed.workbook?.worksheets?.worksheet);
+    const newWs = worksheets.find((w) => w?.['@_name'] === 'New Sheet');
+    const windows = normalizeArray<ParsedWindow>(parsed.workbook?.windows?.window);
+    const newWin = windows.find((w) => w?.['@_name'] === 'New Sheet');
+
+    expect(newWs?.['simple-id']?.['@_uuid']).toMatch(/^\{[0-9A-F-]+\}$/);
+    expect(newWin?.['simple-id']?.['@_uuid']).toMatch(/^\{[0-9A-F-]+\}$/);
+    // Distinct objects get distinct ids.
+    expect(newWs?.['simple-id']?.['@_uuid']).not.toBe(newWin?.['simple-id']?.['@_uuid']);
+    // simple-id serializes AFTER table (content-model order).
+    expect(out.indexOf('<simple-id', out.indexOf('</table>'))).toBeGreaterThan(-1);
+  });
+
+  it('gives distinct uuids to two injections of the SAME template (no collision)', () => {
+    const first = injectTemplate(EMPTY_TARGET, TEMPLATE_NO_SIMPLE_ID, 'worksheet');
+    const second = injectTemplate(
+      first,
+      TEMPLATE_NO_SIMPLE_ID.replace(/New Sheet/g, 'New Sheet 2'),
+      'worksheet',
+    );
+    const ids = [...second.matchAll(/<simple-id uuid="([^"]+)"/g)].map((m) => m[1]);
+    // Every simple-id in the merged doc is unique.
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

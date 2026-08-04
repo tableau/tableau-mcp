@@ -86,18 +86,19 @@ export function listBookmarkNames(): string[] {
 
 export function readTemplate(templateName: string): string | null {
   validateTemplateName(templateName);
-  const xml = process.env['TEMPLATES_DIR']
+  // The `.tbm` bookmark is the CANONICAL stored format — it is what a user drops in and
+  // what they re-open/edit in Desktop, so it is the source of truth and is read FIRST.
+  // Tokenization is a computed detail, not a stored artifact: produce the injectable
+  // worksheet-workbook on the fly (bookmarkToTemplateWorkbook) from the SAME inference pass
+  // a synthesized manifest uses, so slot tokens agree. A tokenized `.xml` is only a FALLBACK
+  // for the curated tier that ships no bookmark (and the raw `.xml` orphans on disk).
+  const tbm = readBookmark(templateName);
+  if (tbm !== null) {
+    return bookmarkToTemplateWorkbook(tbm, inferFromBookmark(tbm)).xml;
+  }
+  return process.env['TEMPLATES_DIR']
     ? readXmlFromDisk(templateName)
     : readDataAsset(`templates/${templateName}.xml`);
-  if (xml !== null) return xml;
-  // Drop-in `.tbm` with no tokenized `.xml`: the bookmark IS the canonical source, so
-  // produce the tokenized worksheet-workbook on the fly — the SAME shape the inject core
-  // consumes (bookmarkToTemplateWorkbook), from the SAME inference pass a synthesized
-  // manifest uses, so slot tokens agree. A template a user simply dropped in is thus
-  // fully injectable with zero metadata. Templates that ship a `.xml` are unaffected.
-  const tbm = readBookmark(templateName);
-  if (tbm === null) return null;
-  return bookmarkToTemplateWorkbook(tbm, inferFromBookmark(tbm)).xml;
 }
 
 /** Read a template's tokenized `.xml` from the working-tree store, or null if absent. */
