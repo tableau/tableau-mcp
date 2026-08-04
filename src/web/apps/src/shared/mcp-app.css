@@ -41,7 +41,7 @@ tableau-viz {
 
 .open-in-tableau {
   display: inline-block;
-  margin: 1rem 0 0 0;
+  margin: 0 0 0.75rem 0;
   padding: 0.5rem 0.75rem;
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 0.875rem;
@@ -62,7 +62,7 @@ tableau-viz {
 
 .viz-control {
   display: inline-block;
-  margin: 1rem 0.5rem 0 0;
+  margin: 0 0 0.75rem 0.5rem;
   padding: 0.5rem 0.75rem;
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 0.875rem;

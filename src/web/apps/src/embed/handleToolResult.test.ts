@@ -26,12 +26,13 @@ describe('handleToolResult', () => {
   let mockApp: App;
 
   beforeEach(() => {
-    // Set up DOM
+    // Set up DOM (simulating the real app structure with viz-container)
     const main = document.createElement('div');
     main.className = 'main';
-    const container = document.createElement('div');
-    container.id = 'tableauVizContainer';
-    main.appendChild(container);
+    const vizContainer = document.createElement('div');
+    vizContainer.className = 'viz-container';
+    vizContainer.id = 'tableauVizContainer';
+    main.appendChild(vizContainer);
     document.body.appendChild(main);
 
     // Create mock app
@@ -343,13 +344,13 @@ describe('handleToolResult', () => {
       expect.any(Function),
     );
 
-    // Assert setupOpenInTableauLink WAS called first (left of button in controls row)
+    // Assert setupOpenInTableauLink WAS called first (left of button in top controls row)
     expect(vi.mocked(setupOpenInTableauLink)).toHaveBeenCalledTimes(1);
 
-    // Assert setupFullscreenButton WAS called second (right of link in controls row)
+    // Assert setupFullscreenButton WAS called second (right of link in top controls row)
     expect(vi.mocked(setupFullscreenButton)).toHaveBeenCalledTimes(1);
 
-    // Verify order: link setup called before button setup
+    // Verify order: link setup called before button setup (left-to-right in controls row)
     const linkCallOrder = vi.mocked(setupOpenInTableauLink).mock.invocationCallOrder[0];
     const buttonCallOrder = vi.mocked(setupFullscreenButton).mock.invocationCallOrder[0];
     expect(linkCallOrder).toBeLessThan(buttonCallOrder);

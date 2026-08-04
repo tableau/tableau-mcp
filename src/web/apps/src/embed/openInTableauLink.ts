@@ -80,6 +80,11 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
     }
   };
 
-  // Append to container
-  container.appendChild(link);
+  // Insert before the viz container to place controls at the top
+  const vizContainer = container.querySelector('.viz-container');
+  if (vizContainer) {
+    container.insertBefore(link, vizContainer);
+  } else {
+    container.appendChild(link);
+  }
 }

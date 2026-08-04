@@ -95,12 +95,12 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
     return;
   }
 
-  // Auth failure (runtime) - handled by onError callback
-  embedTableauViz(viewUrl, token, () => showError('AUTH_ERROR', undefined, app));
-
   const main = document.querySelector('.main');
   if (main) {
     setupOpenInTableauLink(app, viewUrl, main as HTMLElement);
     setupFullscreenButton(app, main as HTMLElement);
   }
+
+  // Auth failure (runtime) - handled by onError callback
+  embedTableauViz(viewUrl, token, () => showError('AUTH_ERROR', undefined, app));
 }

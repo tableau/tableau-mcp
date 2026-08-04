@@ -18,6 +18,10 @@ describe('setupFullscreenButton', () => {
   beforeEach(() => {
     container = document.createElement('main');
     container.className = 'main';
+    // Add viz container to simulate the real DOM structure
+    const vizContainer = document.createElement('div');
+    vizContainer.className = 'viz-container';
+    container.appendChild(vizContainer);
     document.body.appendChild(container);
 
     hostContext = { displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] };
@@ -57,6 +61,21 @@ describe('setupFullscreenButton', () => {
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(button.getAttribute('aria-label')).toBe('Enter fullscreen');
     expect(button.textContent).toBe('⛶ Fullscreen');
+  });
+
+  it('places button before the viz container (at the top)', () => {
+    setupFullscreenButton(mockApp, container);
+
+    const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
+    const vizContainer = container.querySelector('.viz-container') as HTMLElement;
+
+    expect(button).not.toBeNull();
+    expect(vizContainer).not.toBeNull();
+
+    // Button should come before viz container in DOM order
+    const buttonIndex = Array.from(container.children).indexOf(button);
+    const vizIndex = Array.from(container.children).indexOf(vizContainer);
+    expect(buttonIndex).toBeLessThan(vizIndex);
   });
 
   it('does not render when fullscreen is not an available display mode', () => {

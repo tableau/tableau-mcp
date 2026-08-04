@@ -109,5 +109,11 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
     document.removeEventListener('keydown', onKeydown);
   };
 
-  container.appendChild(button);
+  // Insert before the viz container to place controls at the top
+  const vizContainer = container.querySelector('.viz-container');
+  if (vizContainer) {
+    container.insertBefore(button, vizContainer);
+  } else {
+    container.appendChild(button);
+  }
 }

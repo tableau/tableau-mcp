@@ -17,6 +17,10 @@ describe('setupOpenInTableauLink', () => {
     // Create container element (simulating the main element)
     container = document.createElement('main');
     container.className = 'main';
+    // Add viz container to simulate the real DOM structure
+    const vizContainer = document.createElement('div');
+    vizContainer.className = 'viz-container';
+    container.appendChild(vizContainer);
     document.body.appendChild(container);
 
     // Create mock App with openLink and getHostCapabilities
@@ -51,6 +55,23 @@ describe('setupOpenInTableauLink', () => {
     expect(linkElement.textContent).toBe('Open in Tableau ↗');
     expect(linkElement.hidden).toBe(false);
     expect(linkElement.getAttribute('href')).toBe(url);
+  });
+
+  it('should place link before the viz container (at the top)', () => {
+    const url = 'https://tableau.example.com/views/workbook/view';
+
+    setupOpenInTableauLink(mockApp, url, container);
+
+    const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
+    const vizContainer = container.querySelector('.viz-container') as HTMLElement;
+
+    expect(linkElement).not.toBeNull();
+    expect(vizContainer).not.toBeNull();
+
+    // Link should come before viz container in DOM order
+    const linkIndex = Array.from(container.children).indexOf(linkElement);
+    const vizIndex = Array.from(container.children).indexOf(vizContainer);
+    expect(linkIndex).toBeLessThan(vizIndex);
   });
 
   it('should not create link when URL is empty', () => {
