@@ -2,9 +2,19 @@ import levenshtein from 'fast-levenshtein';
 
 import { readDataAsset } from './assets.js';
 import { crashPronePolicyFor } from './commandPolicy.js';
+import { GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND } from './notionalSpecGuard.js';
 
 const COMMANDS_REFERENCE_ASSET = 'tableau-desktop-commands-reference.json';
 const MAX_SUGGESTIONS = 3;
+
+// Commands that are executable but which the codegen reference's extraction pass omits
+// (pane-invoked commands have no serialized parameter contract, so they are filtered out
+// during generation). They are still real, dispatchable verbs with their own dedicated
+// payload guards, so the known-command guard must not reject them as hallucinated. The
+// notional-spec command carries its own NotionalSpec payload guard (see notionalSpecGuard).
+const REFERENCE_OMITTED_EXECUTABLE_COMMANDS: readonly string[] = [
+  GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND,
+];
 
 type CommandReferenceEntry = {
   // Nested-schema shape (tableau-desktop-commands-reference.json): the fully-qualified
@@ -43,6 +53,11 @@ export function knownCommands(): Set<string> | null {
         .map((entry: CommandReferenceEntry) => entry.serialized?.fully_qualified_name)
         .filter((name): name is string => typeof name === 'string' && name.length > 0),
     );
+    // Union in the executable commands the codegen reference filters out (pane-invoked),
+    // so the fail-closed guard doesn't reject a real, dispatchable verb.
+    for (const command of REFERENCE_OMITTED_EXECUTABLE_COMMANDS) {
+      knownCommandsCache.add(command);
+    }
     return knownCommandsCache;
   } catch {
     knownCommandsCache = null;

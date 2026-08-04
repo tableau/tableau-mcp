@@ -21,13 +21,28 @@ describe('commandRegistry', () => {
     mocks.readDataAsset.mockReset();
   });
 
-  it('loads fully qualified command names from the bundled reference', async () => {
+  it('loads fully qualified command names from the bundled reference, unioning the reference-omitted executables', async () => {
     mocks.readDataAsset.mockReturnValue(JSON.stringify(REFERENCE));
     const { knownCommands } = await import('./commandRegistry.js');
 
+    // The codegen reference omits pane-invoked commands (no serialized param contract), so
+    // knownCommands() unions in the executable ones by name — here generate-viz-from-notional-spec.
     expect(knownCommands()).toEqual(
-      new Set(['tabdoc:save', 'tabdoc:save-as', 'tabdoc:goto-sheet', 'tabui:export-theme']),
+      new Set([
+        'tabdoc:save',
+        'tabdoc:save-as',
+        'tabdoc:goto-sheet',
+        'tabui:export-theme',
+        'tabdoc:generate-viz-from-notional-spec',
+      ]),
     );
+  });
+
+  it('accepts generate-viz-from-notional-spec even though the reference omits it', async () => {
+    mocks.readDataAsset.mockReturnValue(JSON.stringify(REFERENCE));
+    const { validateKnownCommand } = await import('./commandRegistry.js');
+
+    expect(validateKnownCommand('tabdoc:generate-viz-from-notional-spec')).toEqual({ ok: true });
   });
 
   it('fails open when the bundled reference is unreadable', async () => {
