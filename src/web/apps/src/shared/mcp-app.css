@@ -22,6 +22,11 @@ body:has(.mcp-app-error) {
   min-height: 600px;
 }
 
+.viz-stage {
+  position: relative;
+  width: 100%;
+}
+
 .viz-container {
   width: 100%;
   height: 100%;
@@ -43,7 +48,7 @@ tableau-viz {
   display: flex;
   min-height: 48px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 3px 16px;
   background: #f9fbfe;
 }
@@ -76,6 +81,48 @@ tableau-viz {
 }
 
 .viz-control-action:focus {
+  outline: 2px solid #0b5cab;
+  outline-offset: 2px;
+}
+
+.viz-control-action.primary {
+  border-color: #0b5cab;
+  background: #0b5cab;
+  color: #fff;
+  font-weight: 600;
+}
+
+.viz-control-action.primary:hover {
+  border-color: #014486;
+  background: #014486;
+  color: #fff;
+}
+
+.viz-fullscreen-floating {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid #c4c7c9;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 94%);
+  color: #3f464b;
+  cursor: pointer;
+  box-shadow: 0 3px 12px rgb(0 0 0 / 18%);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.875rem;
+}
+
+.viz-fullscreen-floating:hover {
+  color: #014486;
+  border-color: #014486;
+}
+
+.viz-fullscreen-floating:focus {
   outline: 2px solid #0b5cab;
   outline-offset: 2px;
 }

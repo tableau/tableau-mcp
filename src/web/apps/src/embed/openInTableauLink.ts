@@ -53,7 +53,7 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
   // Create the link element with icon + label
   const link = document.createElement('a');
   link.id = 'openInTableauLink';
-  link.className = 'viz-control-action';
+  link.className = 'viz-control-action primary';
   link.setAttribute('href', url);
   link.setAttribute('rel', 'noopener noreferrer');
   link.setAttribute('aria-label', 'Open in Tableau (opens in a new browser tab)');
@@ -95,7 +95,7 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
     }
   };
 
-  // Append to the controls bar (left side, due to justify-content: space-between)
+  // Append to the left-aligned controls bar (this is the only control in the bar)
   const controlsBar = container.querySelector('#vizControlsBar');
   if (controlsBar) {
     controlsBar.appendChild(link);

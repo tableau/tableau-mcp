@@ -54,7 +54,7 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
   const button = document.createElement('button');
   button.type = 'button';
   button.id = FULLSCREEN_BUTTON_ID;
-  button.className = 'viz-control-action';
+  button.className = 'viz-fullscreen-floating';
 
   // Create icon (inline SVG using the symbol)
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -130,12 +130,12 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
     document.removeEventListener('keydown', onKeydown);
   };
 
-  // Append to the controls bar (right side, due to justify-content: space-between)
-  const controlsBar = container.querySelector('#vizControlsBar');
-  if (controlsBar) {
-    controlsBar.appendChild(button);
+  // Append to the viz-stage wrapper (floating over viz bottom-right)
+  const vizStage = container.querySelector('#vizStage');
+  if (vizStage) {
+    vizStage.appendChild(button);
   } else {
-    // Fallback: append to container if bar is missing
+    // Fallback: append to container if wrapper is missing
     container.appendChild(button);
   }
 }

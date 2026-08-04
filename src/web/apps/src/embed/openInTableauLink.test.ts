@@ -52,7 +52,7 @@ describe('setupOpenInTableauLink', () => {
     const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
     expect(linkElement).not.toBeNull();
     expect(linkElement.id).toBe('openInTableauLink');
-    expect(linkElement.className).toBe('viz-control-action');
+    expect(linkElement.className).toBe('viz-control-action primary');
     expect(linkElement.getAttribute('rel')).toBe('noopener noreferrer');
     expect(linkElement.getAttribute('aria-label')).toBe(
       'Open in Tableau (opens in a new browser tab)',

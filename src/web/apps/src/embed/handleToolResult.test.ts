@@ -26,13 +26,19 @@ describe('handleToolResult', () => {
   let mockApp: App;
 
   beforeEach(() => {
-    // Set up DOM (simulating the real app structure with viz-container)
+    // Set up DOM (simulating the real app structure with viz-stage wrapper)
     const main = document.createElement('div');
     main.className = 'main';
+    // Add viz stage wrapper
+    const vizStage = document.createElement('div');
+    vizStage.id = 'vizStage';
+    vizStage.className = 'viz-stage';
+    // Add viz container inside the stage
     const vizContainer = document.createElement('div');
     vizContainer.className = 'viz-container';
     vizContainer.id = 'tableauVizContainer';
-    main.appendChild(vizContainer);
+    vizStage.appendChild(vizContainer);
+    main.appendChild(vizStage);
     // Add controls bar
     const controlsBar = document.createElement('div');
     controlsBar.id = 'vizControlsBar';
@@ -349,13 +355,13 @@ describe('handleToolResult', () => {
       expect.any(Function),
     );
 
-    // Assert setupOpenInTableauLink WAS called first (left of button in top controls row)
+    // Assert setupOpenInTableauLink WAS called first (creates link in bottom controls bar)
     expect(vi.mocked(setupOpenInTableauLink)).toHaveBeenCalledTimes(1);
 
-    // Assert setupFullscreenButton WAS called second (right of link in top controls row)
+    // Assert setupFullscreenButton WAS called second (creates floating button over viz)
     expect(vi.mocked(setupFullscreenButton)).toHaveBeenCalledTimes(1);
 
-    // Verify order: link setup called before button setup (left-to-right in controls row)
+    // Verify order: link setup called before button setup
     const linkCallOrder = vi.mocked(setupOpenInTableauLink).mock.invocationCallOrder[0];
     const buttonCallOrder = vi.mocked(setupFullscreenButton).mock.invocationCallOrder[0];
     expect(linkCallOrder).toBeLessThan(buttonCallOrder);

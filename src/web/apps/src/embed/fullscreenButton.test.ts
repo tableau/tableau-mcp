@@ -18,10 +18,16 @@ describe('setupFullscreenButton', () => {
   beforeEach(() => {
     container = document.createElement('main');
     container.className = 'main';
-    // Add viz container to simulate the real DOM structure
+    // Add viz stage wrapper
+    const vizStage = document.createElement('div');
+    vizStage.id = 'vizStage';
+    vizStage.className = 'viz-stage';
+    // Add viz container inside the stage
     const vizContainer = document.createElement('div');
+    vizContainer.id = 'tableauVizContainer';
     vizContainer.className = 'viz-container';
-    container.appendChild(vizContainer);
+    vizStage.appendChild(vizContainer);
+    container.appendChild(vizStage);
     // Add controls bar
     const controlsBar = document.createElement('div');
     controlsBar.id = 'vizControlsBar';
@@ -62,7 +68,7 @@ describe('setupFullscreenButton', () => {
     const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
     expect(button).not.toBeNull();
     expect(button.type).toBe('button');
-    expect(button.className).toBe('viz-control-action');
+    expect(button.className).toBe('viz-fullscreen-floating');
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(button.getAttribute('aria-label')).toBe('Enter fullscreen');
 
@@ -74,24 +80,43 @@ describe('setupFullscreenButton', () => {
     expect(label?.textContent).toBe('Fullscreen');
   });
 
-  it('places button in the controls bar after the viz container', () => {
+  it('places button floating over viz inside viz-stage wrapper and survives viz re-embed', () => {
     setupFullscreenButton(mockApp, container);
 
     const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
-    const vizContainer = container.querySelector('.viz-container') as HTMLElement;
-    const controlsBar = container.querySelector('#vizControlsBar') as HTMLElement;
+    const vizStage = container.querySelector('#vizStage') as HTMLElement;
+    const vizContainer = container.querySelector('#tableauVizContainer') as HTMLElement;
 
     expect(button).not.toBeNull();
+    expect(vizStage).not.toBeNull();
     expect(vizContainer).not.toBeNull();
-    expect(controlsBar).not.toBeNull();
 
-    // Button should be inside the controls bar
-    expect(controlsBar.contains(button)).toBe(true);
+    // Button should be inside the viz-stage wrapper (sibling of viz-container, NOT inside it)
+    expect(vizStage.contains(button)).toBe(true);
+    expect(vizContainer.contains(button)).toBe(false);
 
-    // Controls bar should come after viz container in DOM order
-    const controlsIndex = Array.from(container.children).indexOf(controlsBar);
-    const vizIndex = Array.from(container.children).indexOf(vizContainer);
-    expect(controlsIndex).toBeGreaterThan(vizIndex);
+    // Button should be a direct child of viz-stage (survives replaceChildren on viz-container)
+    expect(Array.from(vizStage.children)).toContain(button);
+    expect(Array.from(vizStage.children)).toContain(vizContainer);
+
+    // Survival test: Simulate embedTableauViz's replaceChildren behavior on the viz-container.
+    // This is the CRITICAL risk: embedTableauViz calls container.replaceChildren(viz), which
+    // destroys all children of #tableauVizContainer. The fullscreen button MUST survive because
+    // it lives in the parent #vizStage wrapper (NOT inside #tableauVizContainer).
+    // This test FAILS if someone later moves the button into the viz-container.
+    const newViz = document.createElement('tableau-viz');
+    vizContainer.replaceChildren(newViz);
+
+    // Button should STILL exist after re-embed (it's in vizStage, not vizContainer)
+    const buttonAfterEmbed = container.querySelector('#fullscreenButton') as HTMLButtonElement;
+    expect(buttonAfterEmbed).toBe(button); // Same button instance
+    expect(vizStage.contains(buttonAfterEmbed)).toBe(true);
+    expect(vizContainer.contains(buttonAfterEmbed)).toBe(false);
+
+    // Verify the new viz is now in the container, but the button survived
+    expect(vizContainer.contains(newViz)).toBe(true);
+    expect(Array.from(vizStage.children)).toContain(buttonAfterEmbed);
+    expect(Array.from(vizStage.children)).toContain(vizContainer);
   });
 
   it('does not render when fullscreen is not an available display mode', () => {
