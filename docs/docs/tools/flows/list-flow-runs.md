@@ -5,8 +5,9 @@ sidebar_position: 3
 # List Flow Runs
 
 Retrieves the run history (executions) of Tableau Prep flows on a site. Each flow run records one
-execution attempt with its status, start/finish timestamps, progress, the flow it belongs to, and
-the background job id.
+execution attempt with its status, start/finish timestamps, progress, the flow it belongs to, the
+background job id, and — for `Failed` runs on Tableau REST API >= 3.30 — a `failureReason` giving the
+cause of the failure.
 
 This is the dedicated, filterable, site-wide run-history tool:
 
@@ -25,7 +26,8 @@ When the MCP server authenticates with OAuth (connected-app JWT), this tool requ
 
 - `tableau:flow_runs:read`
 - `tableau:flows:read` — to resolve a failed run's flow `webpageUrl` into the run-history deep link
-  in `mcp.failureInsight`.
+  in [`mcp.failureInsight`](#failure-reporting). Only requested on that fallback path; when the runs
+  carry a resolved `failureReason` the tool makes no such call.
 - `tableau:mcp_site_settings:read`
 
 See [OAuth configuration](../../configuration/mcp-config/oauth.md) for how scopes are negotiated.
@@ -160,6 +162,57 @@ When `truncated` is `true`, report "at least N" — never invent a total.
 user. Translate it into one plain sentence — "These are all 12 matching runs" or "Here are the first
 50; more match" — and never surface the field names to the end user. :::
 
+## Failure reporting
+
+When the returned window contains a `Failed` run, the tool reports on it through up to two fields.
+`mcp.failureSummary` appears whenever a `Failed` run carries a reason; `mcp.failureInsight` is **added**
+whenever no reason resolves the failure. They therefore co-occur when every reason in the window is
+`available: false` — the summary counts the failures, the link is where the cause can actually be read.
+
+### `mcp.failureSummary`
+
+Present when the window's `Failed` runs carry a `failureReason` (Tableau REST API >= 3.30). It groups
+the window's failures by reported message, so a caller can tell one systemic problem from many
+unrelated ones without reading every record:
+
+- `failedRunCount` — `Failed` runs in the returned window.
+- `failedFlowCount` — **distinct** flows with a failure in that window.
+- `reasons` — one entry per distinct failure **message**, largest first, as
+  `{ message, available, runCount, flowIds }`. `runCount` is how many runs reported that message, and
+  `flowIds` lists the **distinct** flows it affected (its blast radius).
+
+A group is not always a single root cause. Tableau reports a short localized message, and several
+distinct underlying errors can map to the same one — a flow-execution failure and an authentication
+failure both surface as `Flow processing error`, for example. The underlying error identifier is not
+exposed by the REST API, so treat a group as one **symptom**, which may have more than one cause.
+- `available: false` means Tableau could not determine the cause and `message` is a generic
+  placeholder. Do not present it as a diagnosis. Unresolved groups are common on real sites, and are
+  often the largest — to investigate one, call [Get Flow](get-flow.md) on any of its `flowIds` and
+  append `/runHistory` to the returned `webpageUrl`.
+
+`failedRunCount` and `failedFlowCount` cover **all** `Failed` runs, while `reasons` covers only those
+carrying a reason, so `sum(reasons[].runCount)` can be less than `failedRunCount`. Both counts
+describe the returned window only — when `truncated` is `true` they are not site-wide failure totals
+or rates.
+
+### `mcp.failureInsight`
+
+The fallback, for failures that cannot explain themselves — either the server predates REST API 3.30
+(no `failureReason` at all) or every reason returned has `available: false`. It carries the same
+`failedRunCount` / `failedFlowCount` (identical values, since both fields count the same window), plus
+an `example` of `{ flowId, runHistoryUrl }` for one affected flow (the most-recent failure) when
+resolvable. Open `runHistoryUrl` in a browser and expand the failed run to read the error in the
+Tableau UI.
+
+Only one flow is resolved, which costs one extra
+[Query Flow](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#query_flow)
+call; use [Get Flow](get-flow.md) to resolve the others if `failedFlowCount` is greater than 1.
+
+In a **mixed** window — some reasons resolved, some not — this field is deliberately absent, since the
+resolved reasons already answer the question and the link would cost that extra call. An
+`available: false` group in such a window therefore has no link of its own; reach one through
+[Get Flow](get-flow.md) as described above.
+
 ## Bounded context (fail-closed)
 
 A flow run carries no project or tag, so when the server is restricted to a
@@ -172,8 +225,14 @@ itself).
 
 ## Limitations
 
-- **No error details for `Failed` runs.** The `status` is available, but the underlying job error
-  message is not surfaced by the public Tableau REST API. Inspect the run in the Tableau UI.
+- **Failure reasons need REST API >= 3.30, and only cover `Failed` runs.** On older servers
+  `failureReason` is absent entirely and the tool falls back to the
+  [`mcp.failureInsight`](#mcpfailureinsight) deep link. Even on 3.30+, there is no reason for a
+  `Cancelled` run and nothing explaining why a run is slow or stuck `InProgress`.
+- **A reason is a short message, not a log.** `failureReason.message` is a short localized cause. The
+  full underlying job error is not surfaced by the public REST API and reading it requires
+  site-administrator access to the job behind `backgroundJobId`. Inspect the run in the Tableau UI for
+  the detail.
 - **No exact total-run count.** The endpoint does not expose `totalAvailable`; the tool reports only
   whether more runs exist via `truncated`.
 
@@ -196,6 +255,68 @@ itself).
     "resultInfo": {
       "returnedCount": 1,
       "truncated": false
+    }
+  }
+}
+```
+
+With a failure, on Tableau REST API >= 3.30:
+
+```json
+{
+  "flowRuns": [
+    {
+      "id": "a2a2a2a2-2222-2222-2222-222222222222",
+      "flowId": "d00700fe-28a0-4ece-a7af-5543ddf38a82",
+      "status": "Failed",
+      "startedAt": "2025-04-02T10:00:00Z",
+      "completedAt": "2025-04-02T10:01:00Z",
+      "progress": 100,
+      "backgroundJobId": "b3b3b3b3-3333-3333-3333-333333333333",
+      "failureReason": {
+        "available": true,
+        "message": "Table \"orders\" was not found."
+      }
+    }
+  ],
+  "mcp": {
+    "resultInfo": {
+      "returnedCount": 1,
+      "truncated": false
+    },
+    "failureSummary": {
+      "failedRunCount": 1,
+      "failedFlowCount": 1,
+      "reasons": [
+        {
+          "message": "Table \"orders\" was not found.",
+          "available": true,
+          "runCount": 1,
+          "flowIds": ["d00700fe-28a0-4ece-a7af-5543ddf38a82"]
+        }
+      ]
+    }
+  }
+}
+```
+
+On a server below REST API 3.30 the same window has no `failureReason` and the tool returns the deep
+link instead:
+
+```json
+{
+  "mcp": {
+    "resultInfo": {
+      "returnedCount": 1,
+      "truncated": false
+    },
+    "failureInsight": {
+      "failedRunCount": 1,
+      "failedFlowCount": 1,
+      "example": {
+        "flowId": "d00700fe-28a0-4ece-a7af-5543ddf38a82",
+        "runHistoryUrl": "https://my.tableau.example.com/#/site/mysite/flows/96151/runHistory"
+      }
     }
   }
 }

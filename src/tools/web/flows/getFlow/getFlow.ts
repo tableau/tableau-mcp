@@ -23,6 +23,7 @@ import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../../../utils/getHttpStatus.js';
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
+import { FlowRunFailureSummary, summarizeFlowRunFailures } from '../flowRunFailure.js';
 
 const FLOW_RUN_LIMIT_MAX = 100;
 
@@ -67,8 +68,12 @@ export type GetFlowResult = Flow & {
   outputSteps: FlowOutputStep[];
   connections?: FlowConnection[];
   flowRuns?: FlowRun[];
+  // Both members are optional and the container itself is omitted when neither
+  // applies, so a flow with no warnings and no failures emits no `mcp` key at all
+  // — exactly as it did before `failureSummary` existed.
   mcp?: {
-    warnings: GetFlowWarning[];
+    warnings?: GetFlowWarning[];
+    failureSummary?: FlowRunFailureSummary;
   };
 };
 
@@ -86,7 +91,8 @@ export const getGetFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   - Flow metadata: id, name, description, webpageUrl, fileType, createdAt, updatedAt, project, owner, tags, parameters.
   - \`outputSteps\`: array of \`{id, name}\` for each output step in the flow.
   - \`connections\` (when \`includeConnections=true\`): array of input data connections (id, type, serverAddress, userName, embedPassword).
-  - \`flowRuns\` (when \`includeFlowRuns=true\`, on Tableau versions that support the flow-runs endpoint): up to \`flowRunLimit\` most-recent flow runs (id, status, startedAt, completedAt, progress, backgroundJobId), newest first.
+  - \`flowRuns\` (when \`includeFlowRuns=true\`, on Tableau versions that support the flow-runs endpoint): up to \`flowRunLimit\` most-recent flow runs (id, status, startedAt, completedAt, progress, backgroundJobId, and \`failureReason\` on \`Failed\` runs), newest first. \`failureReason: { available, message }\` gives the cause of a failure and requires Tableau REST API **3.30+**; on older servers it is absent. \`available: false\` means Tableau could not determine the cause and \`message\` is a generic placeholder — do NOT present it as a diagnosis.
+  - \`mcp.failureSummary\` (only when the returned runs include a \`Failed\` run carrying a \`failureReason\`): that window's failures, grouped by reported message. \`failedRunCount\` and \`failedFlowCount\` cover ALL \`Failed\` runs returned; \`reasons\` holds one entry per distinct failure *message*, biggest first, as \`{ message, available, runCount, flowIds }\` where \`flowIds\` are the DISTINCT flows that the message affected. A group is not always a single root cause — different underlying errors can share one short localized message. Identical in shape to the field \`list-flow-runs\` returns. Because the counts cover all failed runs while \`reasons\` covers only reason-bearing ones, \`sum(reasons[].runCount)\` can be less than \`failedRunCount\`. This tool emits no run-history deep link of its own: for an \`available: false\` group, append \`/runHistory\` to this response's \`webpageUrl\` to reach the flow's run-history page and read the error there.
   - \`mcp.warnings\` (only when warnings are emitted): list of non-fatal issues. Warning types include:
     - \`SIDECAR_FETCH_FAILED\`: an optional sidecar fetch (connections or runs) failed; the rest of the response is still valid.
     - \`VERSION_GATE_SKIPPED\`: this Tableau version does not support the flow-runs endpoint.
@@ -104,9 +110,9 @@ export const getGetFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   A single call returns at most \`flowRunLimit\` runs (newest first). If the flow has more, the response carries a \`FLOW_RUNS_TRUNCATED\` warning — the ONLY signal that the window is partial, so never report a truncated window as the complete history. To see more: re-call with a higher \`flowRunLimit\` (max 100); for deeper history or a specific date range, use the Tableau Flow Runs REST API directly (\`filter=flowId:eq:<id>\` with \`pageNumber\` pagination, or a \`startedAt\` date filter).
 
   **Limitations**
-  - Error details for \`Failed\` flow runs are not exposed in this version of the tool. The \`status\` field is available; the underlying job error message is not.
+  - Failure reasons cover \`Failed\` runs only, and only on REST API 3.30+. There is nothing for \`Cancelled\` runs, and nothing that explains why a run is slow or stuck \`InProgress\`. \`message\` is a short localized reason, not a stack trace or job log — the full underlying job error still requires **site-administrator** access. On servers below 3.30, \`failureReason\` and \`mcp.failureSummary\` are simply omitted and the response is unchanged.
   - The \`flowRuns\` field reflects ad-hoc runs returned by the public REST API; per-output-step details are not included.
-  - A single call returns at most 100 \`flowRuns\` (\`flowRunLimit\` max). Tableau's Flow Runs endpoint does not expose a total-count field, so the tool cannot tell you exactly how many runs exist beyond what was returned — only that more do (via the \`FLOW_RUNS_TRUNCATED\` warning).
+  - A single call returns at most 100 \`flowRuns\` (\`flowRunLimit\` max). Tableau's Flow Runs endpoint does not expose a total-count field, so the tool cannot tell you exactly how many runs exist beyond what was returned — only that more do (via the \`FLOW_RUNS_TRUNCATED\` warning). \`mcp.failureSummary\`'s counts inherit this limit: they describe the returned window only, so never report them as a flow's total or historical failure rate.
 
   **Example Usage**
   - Get a flow's metadata and output steps only (cheapest call, no sidecars):
@@ -262,12 +268,22 @@ export const getGetFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
                   }
                 }
 
+                // Same grouping helper list-flow-runs uses, so both tools emit an
+                // identical `failureSummary`. The runs are already in hand, so
+                // this costs no extra request.
+                const failureSummary = flowRuns ? summarizeFlowRunFailures(flowRuns) : undefined;
+
+                const mcp = {
+                  ...(warnings.length > 0 && { warnings }),
+                  ...(failureSummary !== undefined && { failureSummary }),
+                };
+
                 const result: GetFlowResult = {
                   ...flow,
                   outputSteps,
                   ...(connections !== undefined && { connections }),
                   ...(flowRuns !== undefined && { flowRuns }),
-                  ...(warnings.length > 0 && { mcp: { warnings } }),
+                  ...(Object.keys(mcp).length > 0 && { mcp }),
                 };
 
                 return result;
