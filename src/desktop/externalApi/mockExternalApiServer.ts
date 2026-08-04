@@ -57,18 +57,14 @@ export type MockExternalApiServer = {
 
 const DEFAULT_TOKEN = 'valid-token';
 const DEFAULT_WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets /></workbook>';
-// The live per-item /document routes return a whole <workbook> scoped to the requested item, NOT a
-// bare fragment (verified against Desktop 0.1.1). The mock mirrors that so the read paths' slice is
-// exercised: the worksheet document carries a sibling sheet the slice must exclude by name.
+// The per-item /document routes return the requested item's bare fragment directly — a
+// `<worksheet>` or `<dashboard>`, not wrapped in a `<workbook>`. The handler serves the same
+// fragment for any known id of that kind, standing in for the resolved item.
 const DEFAULT_WORKSHEET_DOCUMENT_XML =
-  '<?xml version="1.0"?><workbook><worksheets>' +
-  '<worksheet name="Sales by Region"><table><rows /></table></worksheet>' +
-  '<worksheet name="Profit by Category"><table><rows /></table></worksheet>' +
-  '</worksheets></workbook>';
+  '<?xml version="1.0"?>' + '<worksheet name="Sales by Region"><table><rows /></table></worksheet>';
 const DEFAULT_DASHBOARD_DOCUMENT_XML =
-  '<?xml version="1.0"?><workbook><dashboards>' +
-  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
-  '</dashboards></workbook>';
+  '<?xml version="1.0"?>' +
+  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>';
 // A storyboard serializes as a `<dashboard type='storyboard'>`, and its /document route returns
 // that bare fragment directly — not a `<storyboard>` element, and not wrapped in a `<workbook>`.
 const DEFAULT_STORYBOARD_DOCUMENT_XML =
