@@ -18,9 +18,9 @@ vi.mock('fs');
 import { writeFileSync } from 'fs';
 
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
-import { getDashboardFragment } from '../../../desktop/commands/workbook/getDashboardXml.js';
+import { getDashboardXml } from '../../../desktop/commands/workbook/getDashboardXml.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
-import { getWorksheetFragment } from '../../../desktop/commands/workbook/getWorksheetXml.js';
+import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { addDashboard, addSheet } from '../../../desktop/metadata/index.js';
 import { deflectionText } from '../../../desktop/route/route-gate.js';
@@ -42,8 +42,8 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(addSheet).mockReturnValue(WORKBOOK_XML);
   vi.mocked(addDashboard).mockReturnValue(WORKBOOK_XML);
   vi.mocked(loadWorkbookXml).mockResolvedValue(new Ok({ validationWarnings: [] }));
-  vi.mocked(getWorksheetFragment).mockResolvedValue(new Ok(WORKSHEET_XML));
-  vi.mocked(getDashboardFragment).mockResolvedValue(new Ok(DASHBOARD_XML));
+  vi.mocked(getWorksheetXml).mockResolvedValue(new Ok(WORKSHEET_XML));
+  vi.mocked(getDashboardXml).mockResolvedValue(new Ok(DASHBOARD_XML));
   vi.mocked(writeFileSync).mockImplementation(() => {});
   vi.mocked(writeSidecar).mockImplementation(() => {});
   return extra;
@@ -141,7 +141,7 @@ describe('batchCreateAndCacheSheetsTool', () => {
 
   it('should return an error naming a worksheet fetch failure', async () => {
     const extra = makeExtra();
-    vi.mocked(getWorksheetFragment).mockResolvedValue(
+    vi.mocked(getWorksheetXml).mockResolvedValue(
       new Err({
         type: 'get-worksheet-xml-error',
         error: { type: 'no-worksheet-found' as const, message: 'Not found' },
@@ -170,7 +170,7 @@ describe('batchCreateAndCacheSheetsTool', () => {
 
   it('should aggregate partial worksheet and dashboard cache failures', async () => {
     const extra = makeExtra();
-    vi.mocked(getWorksheetFragment)
+    vi.mocked(getWorksheetXml)
       .mockResolvedValueOnce(new Ok(WORKSHEET_XML))
       .mockResolvedValueOnce(
         new Err({
@@ -178,7 +178,7 @@ describe('batchCreateAndCacheSheetsTool', () => {
           error: { type: 'no-worksheet-found' as const, message: 'Missing worksheet' },
         }),
       );
-    vi.mocked(getDashboardFragment).mockResolvedValue(
+    vi.mocked(getDashboardXml).mockResolvedValue(
       new Err({
         type: 'get-dashboard-xml-error',
         error: { type: 'no-dashboard-found' as const, message: 'Missing dashboard' },

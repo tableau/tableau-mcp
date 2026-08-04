@@ -178,20 +178,6 @@ export function extractDashboardXml(workbookXml: string, dashboardName: string):
   return serializeXML({ dashboard });
 }
 
-// The External Client API per-dashboard `/document` route returns a whole `<workbook>` scoped to
-// the requested dashboard, but callers require a single `<dashboard>` fragment. Slice it out. A
-// document that is already a bare `<dashboard>` fragment is returned unchanged; null if absent.
-export function dashboardDocumentToFragment(
-  documentXml: string,
-  dashboardName: string,
-): string | null {
-  const fragment = extractDashboardXml(documentXml, dashboardName);
-  if (fragment !== null) {
-    return fragment;
-  }
-  return parseXML(documentXml).dashboard ? documentXml : null;
-}
-
 // The External Client API's whole-workbook POST route treats the posted document as authoritative
 // and replaces the open workbook with it. So the doc must carry the ENTIRE live workbook (worksheets
 // included — the dashboard's zones reference them by name) with only this dashboard swapped in;

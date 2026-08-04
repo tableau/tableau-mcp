@@ -21,7 +21,7 @@ import { xmlNamesEqual } from '../../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
-import { getWorksheetFragment } from './getWorksheetXml.js';
+import { getWorksheetXml } from './getWorksheetXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
 import { tryApplyViaPerSheetRoute } from './perSheetDocumentApply.js';
 import { pollReadback } from './pollReadback.js';
@@ -93,7 +93,7 @@ export async function verifyPostApplyWorksheetReadback(
     // The apply lands asynchronously, so a re-read that looks like it dropped a node might just be
     // the pre-apply worksheet — poll rather than trust the first read.
     const polled = await pollReadback({
-      read: () => getWorksheetFragment({ worksheetName, executor, signal }),
+      read: () => getWorksheetXml({ worksheetName, executor, signal }),
       settled: (fragment) =>
         !verifyWorksheetReadback(intendedXml, fragment).some((f) => f.severity === 'error'),
       signal,

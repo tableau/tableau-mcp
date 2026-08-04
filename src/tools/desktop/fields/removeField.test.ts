@@ -230,7 +230,7 @@ describe('removeFieldTool', () => {
 
   it('fetches and caches the sheet by name when no worksheetFile is given, then edits it', async () => {
     const fragment = '<worksheet name="Sheet 1"><table/></worksheet>';
-    vi.mocked(getWorksheetXmlModule.getWorksheetFragment).mockResolvedValue(Ok(fragment));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(fragment));
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(fragment);
     vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
@@ -246,7 +246,7 @@ describe('removeFieldTool', () => {
     invariant(result.content[0].type === 'text');
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(body.message).toContain('Rows shelf');
-    expect(getWorksheetXmlModule.getWorksheetFragment).toHaveBeenCalledWith(
+    expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledWith(
       expect.objectContaining({ worksheetName: 'Sheet 1' }),
     );
     expect(body.file).toMatch(/worksheet-Sheet_1-/);
@@ -270,7 +270,7 @@ describe('removeFieldTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(resultSchema.parse(JSON.parse(result.content[0].text)).file).toBe(WORKSHEET_FILE);
-    expect(getWorksheetXmlModule.getWorksheetFragment).not.toHaveBeenCalled();
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
   });
 
   it('errors when neither worksheetName nor worksheetFile is provided', async () => {
@@ -283,7 +283,7 @@ describe('removeFieldTool', () => {
         'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
       ).message,
     );
-    expect(getWorksheetXmlModule.getWorksheetFragment).not.toHaveBeenCalled();
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
@@ -292,7 +292,7 @@ describe('removeFieldTool', () => {
       type: 'get-worksheet-xml-error' as const,
       error: { type: 'no-worksheet-found' as const, message: 'No worksheet found for Ghost.' },
     };
-    vi.mocked(getWorksheetXmlModule.getWorksheetFragment).mockResolvedValue(Err(fetchErr));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Err(fetchErr));
 
     const result = await getResult({
       worksheetName: 'Ghost',
@@ -319,7 +319,7 @@ describe('removeFieldTool', () => {
         },
       },
     };
-    vi.mocked(getWorksheetXmlModule.getWorksheetFragment).mockResolvedValue(Err(routeMissingErr));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Err(routeMissingErr));
     vi.mocked(getWorksheetXmlModule.isRouteMissing).mockReturnValue(true);
 
     const result = await getResult({
@@ -341,7 +341,7 @@ describe('removeFieldTool', () => {
     const addedXml = '<worksheet name="Sheet 1"><table><rows>[Profit]</rows></table></worksheet>';
     const removedXml = '<worksheet name="Sheet 1"><table><rows/></table></worksheet>';
     const files = new Map<string, string>();
-    vi.mocked(getWorksheetXmlModule.getWorksheetFragment).mockResolvedValue(Ok(baseXml));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
     vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
     vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
     vi.mocked(writeFileSync).mockImplementation((path, data) => {
@@ -377,7 +377,7 @@ describe('removeFieldTool', () => {
     });
 
     expect(applyResult.isError).toBe(false);
-    expect(getWorksheetXmlModule.getWorksheetFragment).toHaveBeenCalledTimes(1);
+    expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledTimes(1);
     expect(loadWorksheetXmlModule.loadWorksheetXml).toHaveBeenCalledWith(
       expect.objectContaining({ worksheetName: 'Sheet 1', xml: removedXml }),
     );

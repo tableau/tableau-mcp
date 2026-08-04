@@ -12,15 +12,10 @@ import { getStoryboardXmlTool } from './getStoryboardXml.js';
 
 vi.mock('fs');
 
-// A storyboard serializes as a `<dashboard type="storyboard">`, so its /document route returns a
-// whole <workbook>; the tool slices it to the single fragment by the resolved storyboard name.
+// A storyboard serializes as a `<dashboard type="storyboard">`, and its /document route returns
+// that bare fragment directly — no surrounding <workbook>, no sibling dashboards.
 function storyboardDocument(name: string, filler = ''): string {
-  return (
-    '<?xml version="1.0"?><workbook><dashboards>' +
-    '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
-    `<dashboard name="${name}" type="storyboard"><zones><zone name="Sales by Region" />${filler}</zones></dashboard>` +
-    '</dashboards></workbook>'
-  );
+  return `<dashboard name="${name}" type="storyboard"><zones><zone name="Sales by Region" />${filler}</zones></dashboard>`;
 }
 
 describe('getStoryboardXmlTool', () => {
@@ -48,7 +43,7 @@ describe('getStoryboardXmlTool', () => {
     expect(tool.annotations).toMatchObject({ readOnlyHint: false });
   });
 
-  it('writes the sliced fragment to a cache file and points at apply-storyboard (default mode)', async () => {
+  it('writes the fragment to a cache file and points at apply-storyboard (default mode)', async () => {
     const result = await getToolResult({ storyboard: 'QBR Story' });
 
     expect(result.isError).toBe(false);
@@ -60,7 +55,7 @@ describe('getStoryboardXmlTool', () => {
     expect(resultObj.instructions).toContain('apply-storyboard');
   });
 
-  it('returns the sliced fragment inline when mode is inline', async () => {
+  it('returns the fragment inline when mode is inline', async () => {
     const result = await getToolResult({ storyboard: 'QBR Story', mode: 'inline' });
 
     expect(result.isError).toBe(false);
@@ -71,8 +66,14 @@ describe('getStoryboardXmlTool', () => {
     expect(resultObj.message).toContain('inline');
     expect(resultObj.storyboardXml).toContain('name="QBR Story"');
     expect(resultObj.storyboardXml).toContain('type="storyboard"');
-    // The sibling dashboard is sliced out by name.
-    expect(resultObj.storyboardXml).not.toContain('Executive Dashboard');
+  });
+
+  it('errors when the document route returns no <dashboard> subtree', async () => {
+    const result = await getToolResult({ storyboard: 'QBR Story', emptyDocument: true });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('No storyboard document subtree found');
   });
 
   it('forces file mode when the inline fragment exceeds the cap, regardless of requested mode', async () => {
@@ -141,10 +142,12 @@ function makeExecutor({
   bigDocument,
   listRouteMissing,
   documentRouteMissing,
+  emptyDocument,
 }: {
   bigDocument?: string;
   listRouteMissing?: boolean;
   documentRouteMissing?: boolean;
+  emptyDocument?: boolean;
 }): {
   executor: {
     listStoryboards: ReturnType<typeof vi.fn>;
@@ -158,13 +161,12 @@ function makeExecutor({
         ? Err(routeMissing)
         : Ok({ storyboards: [{ id: 'story-qbr', name: 'QBR Story', hidden: false }] }),
     );
+  const documentXml = emptyDocument
+    ? '<empty />'
+    : (bigDocument ?? storyboardDocument('QBR Story'));
   const getStoryboardDocument = vi
     .fn()
-    .mockResolvedValue(
-      documentRouteMissing
-        ? Err(routeMissing)
-        : Ok({ xml: bigDocument ?? storyboardDocument('QBR Story') }),
-    );
+    .mockResolvedValue(documentRouteMissing ? Err(routeMissing) : Ok({ xml: documentXml }));
   return { executor: { listStoryboards, getStoryboardDocument } };
 }
 
@@ -176,6 +178,7 @@ async function getToolResult(opts: {
   bigDocument?: string;
   listRouteMissing?: boolean;
   documentRouteMissing?: boolean;
+  emptyDocument?: boolean;
   customSignal?: AbortSignal;
 }): Promise<CallToolResult> {
   const { session = '12345', storyboard, mode = 'file', capBytes, customSignal } = opts;

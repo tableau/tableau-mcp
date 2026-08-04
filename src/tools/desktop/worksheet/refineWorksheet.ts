@@ -14,7 +14,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getWorksheetFragment } from '../../../desktop/commands/workbook/getWorksheetXml.js';
+import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import {
   pollReadback,
@@ -169,7 +169,7 @@ export const getRefineWorksheetTool = (
           const executor = await extra.getExecutor(resolvedSession);
 
           // 1. ONE fetch of the target worksheet.
-          const fetched = await getWorksheetFragment({
+          const fetched = await getWorksheetXml({
             worksheetName,
             executor,
             signal: extra.signal,
@@ -286,6 +286,11 @@ export const getRefineWorksheetTool = (
             focus: { navigate: 'artifact', sheetName: canonicalWorksheetName },
             executor,
             signal: extra.signal,
+            // refine-worksheet only ever edits a sheet it already fetched above, so it replaces an
+            // existing worksheet in place via the per-sheet `/document` route — the same route
+            // apply-worksheet uses. It never creates a sheet, so it must not take the whole-workbook
+            // upsert (create) path. A name that no longer resolves surfaces as an error, not a create.
+            requireExistingSheet: true,
           });
           if (applied.isErr()) {
             const { type, error } = applied.error;
@@ -306,7 +311,7 @@ export const getRefineWorksheetTool = (
           // first read can race the settle and still show pre-apply XML.
           const readback = await pollReadback({
             read: () =>
-              getWorksheetFragment({
+              getWorksheetXml({
                 worksheetName: canonicalWorksheetName,
                 executor,
                 signal: extra.signal,

@@ -12,7 +12,7 @@ import {
   logInlineXmlCapHit,
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
-import { dashboardDocumentToFragment } from '../../../desktop/metadata/dashboards.js';
+import { parseXML } from '../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError, UnknownError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
@@ -62,10 +62,8 @@ export const getStoryboardXmlTool = (
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
 
-          // A storyboard serializes as a `<dashboard type='storyboard'>`, so its `/document` route
-          // returns a whole `<workbook>` scoped to it — the same shape as a dashboard. Resolve the
-          // name to an id, fetch the document, then slice out the single `<dashboard>` fragment by
-          // the resolved name so callers get exactly what apply-storyboard expects.
+          // A storyboard serializes as a `<dashboard type='storyboard'>`, and its `/document` route
+          // returns that bare fragment directly. Resolve the name to an id, then fetch the document.
           const listResult = await executor.listStoryboards(extra.signal);
           if (listResult.isErr()) {
             if (isRouteMissing(listResult.error)) {
@@ -92,11 +90,8 @@ export const getStoryboardXmlTool = (
             return new DesktopCommandExecutionError(documentResult.error).toErr();
           }
 
-          const storyboardXml = dashboardDocumentToFragment(
-            documentResult.value.xml,
-            resolved.name,
-          );
-          if (storyboardXml === null) {
+          const storyboardXml = documentResult.value.xml;
+          if (!parseXML(storyboardXml).dashboard) {
             return new UnknownError(
               `No storyboard document subtree found for "${storyboard}".`,
             ).toErr();

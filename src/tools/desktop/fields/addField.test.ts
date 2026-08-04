@@ -233,7 +233,7 @@ describe('addFieldTool', () => {
   // --- name-based path (no prior get-worksheet-xml call) ---
   it('fetches + caches the sheet by name when no worksheetFile is given, then edits it', async () => {
     const FRAGMENT = '<worksheet name="Sheet 1"><table/></worksheet>';
-    vi.mocked(getWorksheetXmlModule.getWorksheetFragment).mockResolvedValue(Ok(FRAGMENT));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(FRAGMENT));
     // The minted cache file exists after the internal write; the edit reads it back.
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(FRAGMENT);
@@ -252,7 +252,7 @@ describe('addFieldTool', () => {
     expect(body.message).toContain('Rows shelf');
     // The fetch happened, and the minted cache path (worksheet-Sheet_1-*) is returned so
     // follow-up edits can pass it as worksheetFile.
-    expect(getWorksheetXmlModule.getWorksheetFragment).toHaveBeenCalledWith(
+    expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledWith(
       expect.objectContaining({ worksheetName: 'Sheet 1' }),
     );
     expect(body.file).toMatch(/worksheet-Sheet_1-/);
@@ -267,7 +267,7 @@ describe('addFieldTool', () => {
       type: 'get-worksheet-xml-error' as const,
       error: { type: 'no-worksheet-found' as const, message: 'No worksheet found for Ghost.' },
     };
-    vi.mocked(getWorksheetXmlModule.getWorksheetFragment).mockResolvedValue(Err(fetchErr));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Err(fetchErr));
 
     const result = await getResult({
       worksheetName: 'Ghost',
@@ -294,7 +294,7 @@ describe('addFieldTool', () => {
         },
       },
     };
-    vi.mocked(getWorksheetXmlModule.getWorksheetFragment).mockResolvedValue(Err(routeMissingErr));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Err(routeMissingErr));
     vi.mocked(getWorksheetXmlModule.isRouteMissing).mockReturnValue(true);
 
     const result = await getResult({
@@ -321,7 +321,7 @@ describe('addFieldTool', () => {
         'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
       ).message,
     );
-    expect(getWorksheetXmlModule.getWorksheetFragment).not.toHaveBeenCalled();
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
@@ -342,7 +342,7 @@ describe('addFieldTool', () => {
     invariant(result.content[0].type === 'text');
     expect(resultSchema.parse(JSON.parse(result.content[0].text)).file).toBe(WORKSHEET_FILE);
     // worksheetFile is authoritative — the name-based fetch must not run.
-    expect(getWorksheetXmlModule.getWorksheetFragment).not.toHaveBeenCalled();
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
   });
 
   it('should pass index and workbookFile to addFieldToRows (target=rows)', async () => {

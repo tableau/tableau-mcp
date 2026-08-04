@@ -239,11 +239,11 @@ describe('External API coverage tools', () => {
     }
   });
 
-  it('gets a storyboard document by name, sliced to its <dashboard> fragment', async () => {
+  it('gets a storyboard document by name after resolving it to an id', async () => {
     const harness = await startHarness(getStoryboardXmlTool);
     try {
-      // A storyboard serializes as a `<dashboard type="storyboard">`; the whole-workbook document
-      // is sliced to that single fragment (the sibling dashboard is excluded by name).
+      // A storyboard serializes as a `<dashboard type="storyboard">`; its /document route returns
+      // that bare fragment directly, so the tool returns it as-is.
       const result = await harness.callTool({ storyboard: 'QBR Story', mode: 'inline' });
 
       expect(result.isError).toBe(false);
@@ -252,7 +252,6 @@ describe('External API coverage tools', () => {
         .parse(parseResult(result)).storyboardXml;
       expect(storyboardXml).toContain('name="QBR Story"');
       expect(storyboardXml).toContain('type="storyboard"');
-      expect(storyboardXml).not.toContain('Executive Dashboard');
       expect(harness.server.requests.map((request) => request.path)).toEqual([
         '/v0/workbook/storyboards',
         '/v0/workbook/storyboards/story-qbr/document',

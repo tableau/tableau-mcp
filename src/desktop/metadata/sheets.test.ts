@@ -6,7 +6,6 @@ import {
   extractSheetXml,
   listSheets,
   upsertSheetIntoWorkbook,
-  worksheetDocumentToFragment,
 } from './sheets.js';
 
 // Real-world shape: the <workbook> root declares xmlns:user, and a worksheet's level-members
@@ -68,37 +67,6 @@ describe('extractSheetXml', () => {
     expect(xml).not.toContain('http://www.tableausoftware.com/xml/user');
   });
 });
-describe('worksheetDocumentToFragment', () => {
-  // The live per-sheet /document route returns a whole <workbook> carrying every sheet, not a bare
-  // fragment. The helper must slice out only the requested sheet.
-  const WORKBOOK_WITH_TWO_SHEETS = `<?xml version='1.0' encoding='utf-8' ?>
-<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
-  <worksheets>
-    <worksheet name='Sales by Region'><table /></worksheet>
-    <worksheet name='Profit by Category'><table /></worksheet>
-  </worksheets>
-</workbook>`;
-
-  it('slices the requested sheet out of a whole-workbook document, excluding siblings', () => {
-    const xml = worksheetDocumentToFragment(WORKBOOK_WITH_TWO_SHEETS, 'Sales by Region');
-    expect(xml).not.toBeNull();
-    expect(xml).toContain('name="Sales by Region"');
-    expect(xml).not.toContain('<workbook');
-    expect(xml).not.toContain('Profit by Category');
-  });
-
-  it('returns a document that is already a bare <worksheet> fragment unchanged', () => {
-    const fragment = '<worksheet name="Solo"><table /></worksheet>';
-    expect(worksheetDocumentToFragment(fragment, 'Solo')).toBe(fragment);
-  });
-
-  it('returns null when the document contains no worksheet', () => {
-    expect(
-      worksheetDocumentToFragment('<workbook><worksheets /></workbook>', 'Missing'),
-    ).toBeNull();
-  });
-});
-
 describe('upsertSheetIntoWorkbook', () => {
   // The External Client API POST replaces the open workbook wholesale, so the posted doc must carry
   // the entire live workbook with only the target sheet swapped in — siblings and dashboards intact.
