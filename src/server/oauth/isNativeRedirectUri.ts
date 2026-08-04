@@ -1,3 +1,5 @@
+import { LOOPBACK_HOSTS } from './loopbackHosts.js';
+
 /**
  * Returns true iff `redirectUri` is a native redirect URI suitable for
  * fallback when an opaque client_id is unknown (not registered).
@@ -19,11 +21,8 @@ export function isNativeRedirectUri(redirectUri: unknown): boolean {
     const url = new URL(redirectUri);
 
     // Allow HTTP only for loopback hosts (RFC 8252 §7.3).
-    // Node's URL parser keeps IPv6 hostnames bracketed (e.g. '[::1]').
     if (url.protocol === 'http:') {
-      return (
-        url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
-      );
+      return LOOPBACK_HOSTS.has(url.hostname);
     }
 
     // Reject remote https (and all other https)
