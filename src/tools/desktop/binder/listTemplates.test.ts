@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { loadManifests } from '../../../desktop/binder/manifest.js';
 import type { Family, TemplateManifest } from '../../../desktop/binder/manifest-types.js';
+import { listBookmarkNames } from '../../../desktop/templates/templatePath.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -14,6 +15,11 @@ import { deriveFastPathBlockers, getListTemplatesTool } from './listTemplates.js
 // AuthoringIntelligenceProvider seam, not a raw loadManifests() reader.
 
 const allManifests = [...loadManifests().values()];
+// The tool lists the provider's full set: curated manifests unioned with a synthesized
+// manifest for every `.tbm` drop-in that has no curated manifest. Derive from live sources.
+const curatedNames = new Set(allManifests.map((m) => m.template));
+const expectedTotal =
+  allManifests.length + listBookmarkNames().filter((n) => !curatedNames.has(n)).length;
 
 describe('listTemplatesTool', () => {
   it('should create a tool instance with correct properties', () => {
@@ -33,9 +39,9 @@ describe('listTemplatesTool', () => {
 
   it('lists the full bundled set with an HONEST bundled-snapshot status', async () => {
     const body = await getBody({});
-    expect(body.total).toBe(allManifests.length);
-    expect(body.count).toBe(allManifests.length);
-    expect(body.templates).toHaveLength(allManifests.length);
+    expect(body.total).toBe(expectedTotal);
+    expect(body.count).toBe(expectedTotal);
+    expect(body.templates).toHaveLength(expectedTotal);
     // Freshness is surfaced honestly through the provider seam.
     expect(body.status.kind).toBe('bundled');
     expect(body.status.freshness).toBe('bundled-snapshot');

@@ -48,12 +48,20 @@ describe('listTemplateNames', () => {
     else process.env['TEMPLATES_DIR'] = originalTemplatesDir;
   });
 
-  it('lists only manifest-backed XML templates', () => {
+  it('lists every backed template (.tbm bookmark or manifest-backed .xml), hiding raw orphans', () => {
     const templates = listTemplateNames();
 
-    expect(templates).toHaveLength(44);
+    // Every `.tbm` bookmark is listable; the listing is the deduped union of those with
+    // the manifest-backed `.xml` names. Assert against the live sources, not a magic count,
+    // so dropping in another bookmark doesn't require touching this test.
+    const bookmarks = listBookmarkNames();
+    expect(new Set(templates).size).toBe(templates.length); // deduped
+    expect(templates.length).toBeGreaterThanOrEqual(bookmarks.length);
+    for (const b of bookmarks) expect(templates).toContain(b);
+
     expect(templates).toContain('ranking-ordered-bar');
     expect(templates).toContain('ranking-ordered-column');
+    // Raw orphans — a `.xml` with neither a curated manifest nor a `.tbm` — stay hidden.
     expect(templates).not.toContain('ranking-bullet-chart');
     expect(templates).not.toContain('part-to-whole-waterfall-chart');
     expect(templates).not.toContain('spatial-filled-map');

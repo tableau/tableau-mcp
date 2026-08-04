@@ -3,6 +3,7 @@ import { join } from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { loadManifests } from '../binder/manifest.js';
+import { listBookmarkNames } from '../templates/templatePath.js';
 import { BundledIntelligenceProvider } from './provider.js';
 
 const provider = new BundledIntelligenceProvider();
@@ -72,9 +73,14 @@ describe('intelligence/BundledIntelligenceProvider — getContentManifest', () =
 });
 
 describe('intelligence/BundledIntelligenceProvider — template accessors', () => {
-  it('listTemplateManifests returns the full bundled set', () => {
+  it('listTemplateManifests returns the full bundled set (curated + `.tbm` drop-ins)', () => {
     const list = provider.listTemplateManifests();
-    expect(list.length).toBe(loadManifests().size);
+    // Curated manifests union with a synthesized manifest for every `.tbm` bookmark that
+    // has no curated manifest — the metadata-free drop-in tier. Derive the expected count
+    // from the live sources so adding a bookmark doesn't require editing a magic number.
+    const curated = loadManifests();
+    const expected = curated.size + listBookmarkNames().filter((n) => !curated.has(n)).length;
+    expect(list.length).toBe(expected);
     expect(list.map((m) => m.template)).toContain('ww-ou-arrow');
   });
 
