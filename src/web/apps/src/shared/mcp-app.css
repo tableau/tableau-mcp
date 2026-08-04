@@ -85,19 +85,6 @@ tableau-viz {
   outline-offset: 2px;
 }
 
-.viz-control-action.primary {
-  border-color: #0b5cab;
-  background: #0b5cab;
-  color: #fff;
-  font-weight: 600;
-}
-
-.viz-control-action.primary:hover {
-  border-color: #014486;
-  background: #014486;
-  color: #fff;
-}
-
 .viz-fullscreen-floating {
   position: absolute;
   right: 18px;

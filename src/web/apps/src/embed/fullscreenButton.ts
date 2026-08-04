@@ -10,9 +10,14 @@ const FULLSCREEN_BUTTON_ID = 'fullscreenButton';
 // module-level teardown reference is sufficient.
 let teardownPrevious: (() => void) | undefined;
 
-/** Syncs the button's label span text and ARIA state to the given mode. */
+/** Syncs the button's visibility and ARIA state to the given mode. */
 function syncButton(button: HTMLButtonElement, fullscreen: boolean): void {
+  // Hide the button when in fullscreen (host chrome provides exit affordance)
+  button.hidden = fullscreen;
+
   button.setAttribute('aria-pressed', String(fullscreen));
+  // When inline (visible), label is "Fullscreen" / "Enter fullscreen"
+  // When fullscreen (hidden), ARIA is moot but keep it consistent
   button.setAttribute('aria-label', fullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
 
   // Update the label span text WITHOUT destroying the icon

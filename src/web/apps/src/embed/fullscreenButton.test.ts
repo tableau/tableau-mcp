@@ -71,6 +71,7 @@ describe('setupFullscreenButton', () => {
     expect(button.className).toBe('viz-fullscreen-floating');
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(button.getAttribute('aria-label')).toBe('Enter fullscreen');
+    expect(button.hidden).toBe(false); // Visible in inline mode
 
     // Verify icon + label structure
     const icon = button.querySelector('svg.viz-control-icon');
@@ -131,33 +132,36 @@ describe('setupFullscreenButton', () => {
     expect(container.querySelector('#fullscreenButton')).toBeNull();
   });
 
-  it('click requests fullscreen and updates label/aria-pressed from the result', async () => {
+  it('click requests fullscreen and hides the button', async () => {
     setupFullscreenButton(mockApp, container);
     const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
+
+    expect(button.hidden).toBe(false); // Initially visible (inline mode)
 
     button.click();
     await flush();
 
     expect(mockApp.requestDisplayMode).toHaveBeenCalledWith({ mode: 'fullscreen' });
+    expect(button.hidden).toBe(true); // Hidden in fullscreen mode
     expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.getAttribute('aria-label')).toBe('Exit fullscreen');
 
-    // Verify label span text updated (icon remains)
-    const label = button.querySelector('span');
-    expect(label?.textContent).toBe('Exit fullscreen');
+    // Icon still exists (button structure intact, just hidden)
     const icon = button.querySelector('svg.viz-control-icon');
     expect(icon).not.toBeNull();
   });
 
-  it('click while fullscreen requests inline', async () => {
+  it('click while fullscreen requests inline and shows the button', async () => {
     hostContext.displayMode = 'fullscreen';
     setupFullscreenButton(mockApp, container);
     const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
+
+    expect(button.hidden).toBe(true); // Initially hidden (fullscreen mode)
 
     button.click();
     await flush();
 
     expect(mockApp.requestDisplayMode).toHaveBeenCalledWith({ mode: 'inline' });
+    expect(button.hidden).toBe(false); // Visible again in inline mode
   });
 
   it('reflects host refusal: keeps inline state when the result stays inline', async () => {
@@ -169,6 +173,7 @@ describe('setupFullscreenButton', () => {
     button.click();
     await flush();
 
+    expect(button.hidden).toBe(false); // Still visible (inline mode)
     expect(button.getAttribute('aria-pressed')).toBe('false');
     const label = button.querySelector('span');
     expect(label?.textContent).toBe('Fullscreen');
@@ -184,18 +189,35 @@ describe('setupFullscreenButton', () => {
     expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'MCP_APP_CLICKED', 'fullscreen');
   });
 
-  it('re-syncs the button when hostcontextchanged fires', () => {
+  it('re-syncs the button when hostcontextchanged fires (host-initiated mode change)', () => {
     setupFullscreenButton(mockApp, container);
     const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
+    expect(button.hidden).toBe(false); // Initially visible (inline)
     expect(button.getAttribute('aria-pressed')).toBe('false');
 
     // Host switches to fullscreen on its own.
     hostContext.displayMode = 'fullscreen';
     contextListeners.forEach((h) => h());
 
+    expect(button.hidden).toBe(true); // Hidden when host enters fullscreen
     expect(button.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('shows the button again when host exits fullscreen via hostcontextchanged', () => {
+    // Start in fullscreen mode
+    hostContext.displayMode = 'fullscreen';
+    setupFullscreenButton(mockApp, container);
+    const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
+    expect(button.hidden).toBe(true); // Initially hidden (fullscreen)
+
+    // Host exits fullscreen (e.g., user clicks host chrome exit button)
+    hostContext.displayMode = 'inline';
+    contextListeners.forEach((h) => h());
+
+    expect(button.hidden).toBe(false); // Visible again in inline mode
+    expect(button.getAttribute('aria-pressed')).toBe('false');
     const label = button.querySelector('span');
-    expect(label?.textContent).toBe('Exit fullscreen');
+    expect(label?.textContent).toBe('Fullscreen');
   });
 
   it('Escape exits fullscreen when in fullscreen mode', async () => {
@@ -231,32 +253,34 @@ describe('setupFullscreenButton', () => {
     const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
     const getLabel = (): string | null | undefined => button.querySelector('span')?.textContent;
 
-    // Initial state: inline mode
+    // Initial state: inline mode (visible)
+    expect(button.hidden).toBe(false);
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(getLabel()).toBe('Fullscreen');
 
-    // Click 1: Enter fullscreen
+    // Click 1: Enter fullscreen (button hides)
     button.click();
     await flush();
     expect(mockApp.requestDisplayMode).toHaveBeenCalledWith({ mode: 'fullscreen' });
+    expect(button.hidden).toBe(true);
     expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(getLabel()).toBe('Exit fullscreen');
 
     // hostContext.displayMode is STILL 'inline' (SDK doesn't update it on requestDisplayMode resolution)
     expect(hostContext.displayMode).toBe('inline');
 
-    // Click 2: Exit fullscreen (this is where the bug manifests - should request 'inline', not 'fullscreen' again)
+    // Click 2: Exit fullscreen (button shows again - this is where the bug manifests - should request 'inline', not 'fullscreen' again)
     button.click();
     await flush();
     expect(mockApp.requestDisplayMode).toHaveBeenCalledWith({ mode: 'inline' });
+    expect(button.hidden).toBe(false);
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(getLabel()).toBe('Fullscreen');
 
-    // Click 3: Enter fullscreen again (toggle keeps working)
+    // Click 3: Enter fullscreen again (button hides - toggle keeps working)
     button.click();
     await flush();
     expect(mockApp.requestDisplayMode).toHaveBeenCalledWith({ mode: 'fullscreen' });
+    expect(button.hidden).toBe(true);
     expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(getLabel()).toBe('Exit fullscreen');
   });
 });
