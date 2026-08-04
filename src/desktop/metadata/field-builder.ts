@@ -299,7 +299,7 @@ export function listAvailableFields(
     if (!datasourceName || datasourceName === 'Parameters') continue;
 
     // A PUBLISHED datasource carries a repository-location whose id is its
-    // contentUrl (the input resolve-datasource-luid needs). Embedded/local
+    // contentUrl (the input generate-insight-cards resolves). Embedded/local
     // datasources have no repository-location, so this stays undefined.
     const contentUrl = datasource['repository-location']?.['@_id'];
 

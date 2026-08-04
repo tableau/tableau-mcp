@@ -12,7 +12,6 @@ export const webToolNames = [
   'list-flows',
   'query-datasource',
   'get-datasource-metadata',
-  'resolve-datasource-luid',
   'get-embed-token',
   'get-workbook',
   'get-view',
@@ -58,12 +57,7 @@ export const webToolGroupNames = [
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
 export const webToolGroups = {
-  datasource: [
-    'list-datasources',
-    'get-datasource-metadata',
-    'resolve-datasource-luid',
-    'query-datasource',
-  ],
+  datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook'],
   project: ['list-projects'],
   view: [
