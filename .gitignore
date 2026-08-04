@@ -39,3 +39,10 @@ src/web/apps/dist/
 .work/reports/*.md
 !.work/specs/TEMPLATE.md
 !.work/**/.gitkeep
+
+# Live Canvas (co-editing pane) + agent worktrees
+.canvas/
+.claude/worktrees/
+
+# Throwaway test bookmark (not a real template)
+src/desktop/data/templates/viz-ext-bookmark-test.tbm
