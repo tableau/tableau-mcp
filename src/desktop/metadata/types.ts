@@ -33,7 +33,7 @@ export interface FieldReference {
   /** Remote relation/table from metadata-record parent-name, when Tableau supplies it. */
   table?: string;
   // Published datasource's contentUrl (from the workbook's repository-location);
-  // the input `resolve-datasource-luid` needs to get the server LUID. Undefined
+  // the input `generate-insight-cards` resolves to the server LUID. Undefined
   // for embedded/local datasources, which have no server copy.
   contentUrl?: string;
   columnName: string;
