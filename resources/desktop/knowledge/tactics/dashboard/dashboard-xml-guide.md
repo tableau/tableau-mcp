@@ -201,7 +201,7 @@ Note: The worksheet name goes in the `name` attribute on the zone itself, NOT in
 6. **Worksheet zones**: To reference a worksheet, use the `name` attribute directly on the zone
    element (NOT a child `<zone-pane>` element)
 7. **Zone styling**: Worksheet zones should include `<zone-style>` with border and margin formatting
-8. **Validate after changes**: Use `tableau-apply-dashboard` which validates before sending
+8. **Validate after changes**: Use `apply-dashboard` which validates before sending
 
 ## Critical Rules
 
@@ -254,10 +254,10 @@ Example: If your dashboard has zones with `name="Sheet 1"` and `name="Sheet 2"`,
 
 ### ⚠️ CRITICAL: Application Order Matters!
 
-**The Problem:** `tableau-apply-workbook` replaces the **ENTIRE** workbook state. If you apply a
+**The Problem:** `apply-workbook` replaces the **ENTIRE** workbook state. If you apply a
 dashboard, then apply a stale workbook XML, your dashboard changes will be **OVERWRITTEN**.
 
-### Recommended: Use `tableau-apply-dashboard-with-viewpoints`
+### Recommended: Use `apply-dashboard-with-viewpoints`
 
 This tool handles both safely:
 
@@ -266,7 +266,7 @@ This tool handles both safely:
 3. Applies both in the correct order
 
 ```typescript
-tableau-apply-dashboard-with-viewpoints({
+apply-dashboard-with-viewpoints({
   dashboard_name: "My Dashboard",
   dashboard_file: "path/to/dashboard.xml",
   worksheet_names: ["Sheet 1", "Sheet 2"]
@@ -277,12 +277,12 @@ tableau-apply-dashboard-with-viewpoints({
 
 If you must edit manually, follow this order:
 
-1. `tableau-get-dashboard` - Get current dashboard XML
+1. `get-dashboard-xml` - Get current dashboard XML
 2. Edit dashboard zones XML
-3. `tableau-apply-dashboard` - Apply dashboard changes **FIRST**
-4. `tableau-get-workbook` - Get **FRESH** workbook (includes dashboard changes)
+3. `apply-dashboard` - Apply dashboard changes **FIRST**
+4. `get-workbook-xml` - Get **FRESH** workbook (includes dashboard changes)
 5. Edit workbook to add viewpoints to the dashboard window
-6. `tableau-apply-workbook` - Apply window viewpoint changes
+6. `apply-workbook` - Apply window viewpoint changes
 
 **⚠️ WRONG ORDER (Will Overwrite Dashboard):**
 
