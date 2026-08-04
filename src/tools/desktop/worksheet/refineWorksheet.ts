@@ -286,6 +286,11 @@ export const getRefineWorksheetTool = (
             focus: { navigate: 'artifact', sheetName: canonicalWorksheetName },
             executor,
             signal: extra.signal,
+            // refine-worksheet only ever edits a sheet it already fetched above, so it replaces an
+            // existing worksheet in place via the per-sheet `/document` route — the same route
+            // apply-worksheet uses. It never creates a sheet, so it must not take the whole-workbook
+            // upsert (create) path. A name that no longer resolves surfaces as an error, not a create.
+            requireExistingSheet: true,
           });
           if (applied.isErr()) {
             const { type, error } = applied.error;

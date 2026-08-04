@@ -190,6 +190,12 @@ describe('refineWorksheetTool — top_n happy path', () => {
     // Applied exactly once (never a second apply).
     expect(loadMock()).toHaveBeenCalledTimes(1);
 
+    // Refine edits a sheet it already fetched, so it applies via the per-sheet replace-by-id
+    // route (requireExistingSheet), never the whole-workbook upsert/create path.
+    expect(loadMock()).toHaveBeenCalledWith(
+      expect.objectContaining({ requireExistingSheet: true }),
+    );
+
     // The applied XML carries the native Top-N filter + a slices entry.
     const out = applied()!;
     expect(out).toMatch(/function='end'\s+end='top'\s+count='5'/);
@@ -268,6 +274,9 @@ describe('refineWorksheetTool — sort_direction happy path', () => {
     const parsed = successSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.message).toMatch(/Applied sort_direction/);
     expect(loadMock()).toHaveBeenCalledTimes(1);
+    expect(loadMock()).toHaveBeenCalledWith(
+      expect.objectContaining({ requireExistingSheet: true }),
+    );
     expect(applied()!).toContain("direction='ASC'");
     expect(applied()!).not.toContain("direction='DESC'");
   });
@@ -291,6 +300,9 @@ describe('refineWorksheetTool — sort_by_field happy path', () => {
     const parsed = successSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.message).toMatch(/Applied sort_by_field/);
     expect(loadMock()).toHaveBeenCalledTimes(1);
+    expect(loadMock()).toHaveBeenCalledWith(
+      expect.objectContaining({ requireExistingSheet: true }),
+    );
     expect(applied()!).toContain(
       "<computed-sort column='[Superstore].[none:line_item:nk]' direction='ASC' using='[Superstore].[sum:display_order:qk]' />",
     );
@@ -525,6 +537,33 @@ describe('refineWorksheetTool — refusals and errors', () => {
     expect(parsed.reason).toMatch(/preflight validation failed/);
     expect(parsed.reason).toMatch(/invalid-derivation-string/);
     expect(loadMock()).not.toHaveBeenCalled();
+  });
+
+  it('surfaces sheet-absent as an error when the per-sheet route cannot resolve the worksheet', async () => {
+    // The behavior this commit introduces: because refine now applies through the per-sheet
+    // replace-by-id route (requireExistingSheet:true), a worksheet that vanished between the
+    // initial fetch and the apply surfaces as a sheet-absent error — it is NOT silently
+    // re-created via the old whole-workbook upsert path.
+    const applyErr = {
+      type: 'load-worksheet-xml-error' as const,
+      error: {
+        type: 'sheet-absent' as const,
+        message: 'No worksheet named "Sales by Region" is open to update.',
+      },
+    };
+    setupMocks({ applyErr });
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(new WorksheetXmlLoadFailedError(applyErr.error).message);
+    expect(loadMock()).toHaveBeenCalledTimes(1);
+    expect(loadMock()).toHaveBeenCalledWith(
+      expect.objectContaining({ requireExistingSheet: true }),
+    );
   });
 
   it('errors when the single apply fails, with no second apply', async () => {
