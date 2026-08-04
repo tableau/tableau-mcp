@@ -344,12 +344,6 @@ describe('desktop-read dispatcher', () => {
       overrideKey: 'GET /v0/workbook/storyboards/story-qbr',
       expectedMessage: 'does not serve the storyboard metadata endpoint',
     },
-    {
-      method: 'storyboard-document',
-      args: { target: 'story-qbr' },
-      overrideKey: 'GET /v0/workbook/storyboards/story-qbr/document',
-      expectedMessage: 'does not serve the storyboard document endpoint',
-    },
   ])(
     '$method reports an honest too-new endpoint 404',
     async ({ method, args, overrideKey, expectedMessage }) => {

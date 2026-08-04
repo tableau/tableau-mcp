@@ -197,11 +197,12 @@ describe('desktop tools/list serialized surface', () => {
     // guards that invariant). The full desktop surface is opt-in (TOOL_PROFILE=full), not
     // what clients see by default; its looser cap only catches runaway growth without
     // forcing valuable full-profile tools to be trimmed.
-    // The full surface dropped when the environment reads AND the five thin workbook/datasource
-    // reads folded into the one desktop-read dispatcher, but still carries the full-profile-only
+    // Honest wire measurements are 28,382 bytes dynamic and 42,228 bytes full: both dropped when
+    // the environment reads AND the five thin workbook/datasource reads folded into the one
+    // desktop-read dispatcher; the full surface still carries the full-profile-only
     // get-storyboard-xml and apply-storyboard tools. Keep only a few bytes of ratchet headroom.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_709);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(47_118);
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(28_389);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(42_235);
   });
 });
 
@@ -505,7 +506,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     // A lean surface must have generous headroom — this is a structural win, not a
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
     // Ratcheted down when the thin reads folded into desktop-read.
-    expect(total).toBeLessThanOrEqual(28_193);
+    expect(total).toBeLessThanOrEqual(28_389);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {

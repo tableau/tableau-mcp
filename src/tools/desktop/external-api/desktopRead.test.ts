@@ -29,7 +29,6 @@ describe('getDesktopReadTool', () => {
         'worksheet-info',
         'dashboard-info',
         'storyboard-info',
-        'storyboard-document',
       ]),
     );
   });
