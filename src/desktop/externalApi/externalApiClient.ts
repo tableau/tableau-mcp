@@ -246,6 +246,16 @@ export class ExternalApiClient {
     return this.parseEnvelope(response, signal);
   }
 
+  async undo(signal?: AbortSignal): Promise<Result<OperationEnvelope, ExternalApiError>> {
+    const response = await this.request('POST', EXTERNAL_API_ROUTES.workbookUndo, { signal });
+    return this.parseEnvelope(response, signal);
+  }
+
+  async redo(signal?: AbortSignal): Promise<Result<OperationEnvelope, ExternalApiError>> {
+    const response = await this.request('POST', EXTERNAL_API_ROUTES.workbookRedo, { signal });
+    return this.parseEnvelope(response, signal);
+  }
+
   async fetchOpenApi(signal?: AbortSignal): Promise<Result<unknown, ExternalApiError>> {
     const response = await this.request('GET', EXTERNAL_API_ROUTES.openapi, { signal });
     if (response.isErr()) {

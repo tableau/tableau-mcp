@@ -3,6 +3,8 @@ export const desktopToolNames = [
   'get-workbook-xml',
   'apply-workbook',
   'activate-sheet',
+  'undo-workbook',
+  'redo-workbook',
   'list-worksheets',
   'list-dashboards',
   'get-worksheet-xml',

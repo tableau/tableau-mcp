@@ -138,6 +138,9 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     // Atomic navigation fallback: switch the workbook active window without exposing the
     // whole-document read/apply authoring escape hatch.
     'activate-sheet',
+    // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.
+    'undo-workbook',
+    'redo-workbook',
     'ask-user',
     'list-instances',
     'list-available-fields',

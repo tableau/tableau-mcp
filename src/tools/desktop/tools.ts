@@ -39,6 +39,8 @@ import { getStoryboardInfoTool } from './external-api/getStoryboardInfo.js';
 import { getStoryboardXmlTool } from './external-api/getStoryboardXml.js';
 import { getWorksheetInfoTool } from './external-api/getWorksheetInfo.js';
 import { getListStoryboardsTool } from './external-api/listStoryboards.js';
+import { getRedoWorkbookTool } from './external-api/redoWorkbook.js';
+import { getUndoWorkbookTool } from './external-api/undoWorkbook.js';
 import { getAddFieldTool } from './fields/addField.js';
 import { getListAvailableFieldsTool } from './fields/listAvailableFields.js';
 import { getListFieldsTool } from './fields/listFields.js';
@@ -71,6 +73,8 @@ export const desktopToolFactories = [
   getGetWorkbookXmlTool,
   getApplyWorkbookTool,
   getActivateSheetTool,
+  getUndoWorkbookTool,
+  getRedoWorkbookTool,
   getListWorksheetsTool,
   getListDashboardsTool,
   getGetWorksheetXmlTool,

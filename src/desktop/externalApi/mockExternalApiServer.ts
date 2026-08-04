@@ -644,6 +644,22 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    if (
+      method === 'POST' &&
+      (path === EXTERNAL_API_ROUTES.workbookUndo || path === EXTERNAL_API_ROUTES.workbookRedo)
+    ) {
+      const command = path === EXTERNAL_API_ROUTES.workbookUndo ? 'undo' : 'redo';
+      sendJson(res, 200, {
+        id: `op-${command}-1`,
+        kind: `tabdoc:${command}`,
+        state: 'succeeded',
+        createdAt: '2026-07-07T10:00:00Z',
+        completedAt: '2026-07-07T10:00:01Z',
+        result: {},
+      });
+      return;
+    }
+
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',

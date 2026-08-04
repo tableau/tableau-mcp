@@ -22,6 +22,8 @@ export const EXTERNAL_API_ROUTES = {
   workbookDocumentValidate: '/v0/workbook/document:validate',
   workbookStoryboards: '/v0/workbook/storyboards',
   workbookWorksheets: '/v0/workbook/worksheets',
+  workbookUndo: '/v0/workbook:undo',
+  workbookRedo: '/v0/workbook:redo',
   dashboardById: '/v0/workbook/dashboards/{id}',
   dashboardDocument: '/v0/workbook/dashboards/{id}/document',
   dashboardImage: '/v0/workbook/dashboards/{id}/image',
