@@ -317,9 +317,9 @@ export class Config extends BaseConfig {
     // Flow tools are gated off by default while flow rollouts are staged into
     // production; set FLOW_TOOLS_ENABLED=true to register them.
     this.flowToolsEnabled = flowToolsEnabled === 'true';
-    // Insight-cards tools (generate-insight-cards, resolve-datasource-luid) are
-    // gated off by default while the insights rollout is staged (keeps hosts
-    // like Slackbot stable); set INSIGHTS_TOOLS_ENABLED=true to register them.
+    // Insight-cards tools (generate-insight-cards) are gated off by default while
+    // the insights rollout is staged (keeps hosts like Slackbot stable); set
+    // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools

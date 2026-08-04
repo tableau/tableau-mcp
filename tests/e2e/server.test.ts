@@ -60,10 +60,7 @@ describe('server', () => {
         'list-flow-tasks',
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
-      const insightsTools: ReadonlyArray<WebToolName> = [
-        'generate-insight-cards',
-        'resolve-datasource-luid',
-      ];
+      const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
 
       let expectedToolNames = [...webToolNames];
 
@@ -172,10 +169,7 @@ describe('server', () => {
         'list-flow-tasks',
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
-      const insightsTools: ReadonlyArray<WebToolName> = [
-        'generate-insight-cards',
-        'resolve-datasource-luid',
-      ];
+      const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
 
       let expectedWebToolNames = [...webToolNames];
 
