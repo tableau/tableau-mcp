@@ -562,6 +562,26 @@ function planComputedSortByRefs(
  * <sort class="computed-sort"> crash form, or if the sheet is unsorted AND richer than a
  * simple bar. Pure.
  */
+/**
+ * Flip the `direction` on the worksheet's single self-closing <shelf-sort-v2/> — the sort
+ * form the insight_barchart template ships (a categorical rank by a measure). Returns null
+ * (fall through to the computed-sort paths) when there is not exactly one flippable
+ * shelf-sort-v2, so the caller's existing refusal/insertion logic is unchanged for every
+ * other shape. The confirmation `column` is the node's `dimension-to-sort` (its analogue of
+ * computed-sort's `column`), so confirmSortDirectionApplied can match it on readback.
+ */
+function planShelfSortV2Direction(xml: string, direction: SortDirection): SortPlan | null {
+  const selfClosing = [...xml.matchAll(/<shelf-sort-v2\b[^>]*\/>/g)];
+  if (selfClosing.length !== 1) return null;
+  const tag = selfClosing[0][0];
+  const column = attrVal(tag, 'dimension-to-sort');
+  const newTag = /\bdirection=(?:'[^']*'|"[^"]*")/.test(tag)
+    ? tag.replace(/\bdirection=(?:'[^']*'|"[^"]*")/, `direction='${direction}'`)
+    : tag.replace(/\s*\/>$/, ` direction='${direction}' />`);
+  if (newTag === tag) return null;
+  return { ok: true, xml: xml.replace(tag, newTag), column, direction };
+}
+
 export function planSortDirection(
   xml: string,
   opts: { direction: SortDirection },
@@ -586,11 +606,18 @@ export function planSortDirection(
 
   const selfClosing = [...xml.matchAll(/<computed-sort\b[^>]*\/>/g)];
   if (selfClosing.length === 0) {
+    // No computed-sort: a shelf-sort-v2 may be the sort that actually governs the sheet
+    // (the insight_barchart template ranks via <shelf-sort-v2 direction=…>, never a
+    // computed-sort). Flip its direction in place — inserting a computed-sort instead would
+    // be a no-op Desktop ignores in favor of the existing shelf-sort, so the readback would
+    // never confirm and the flip would falsely report "not durable".
+    const shelfSort = planShelfSortV2Direction(xml, direction);
+    if (shelfSort) return shelfSort;
     // No sort yet: ADD one iff the sheet is the safe simple-bar shape; otherwise keep the
     // historic refusal so a richer shape falls back to the standard build path.
     const inserted = planSortInsertion(xml, direction);
     if (inserted) return inserted;
-    return refuse('no <computed-sort> present to change direction on.');
+    return refuse('no <computed-sort> or <shelf-sort-v2> present to change direction on.');
   }
   if (selfClosing.length > 1) {
     return refuse('more than one <computed-sort> present; the target sort is ambiguous.');
@@ -741,10 +768,17 @@ export function confirmSortDirectionApplied(
   const doc = parseXml(readbackXml);
   if (!doc) return false;
   // Same quote-safety rule as confirmTopNApplied: attribute match in JS.
-  const sorts = (xpath.select('//computed-sort', doc as unknown as Node) as Element[]).filter(
-    (s) => !column || s.getAttribute('column') === column,
-  );
-  return sorts.some((s) => (s.getAttribute('direction') ?? '') === direction);
+  const computedSorts = (
+    xpath.select('//computed-sort', doc as unknown as Node) as Element[]
+  ).filter((s) => !column || s.getAttribute('column') === column);
+  if (computedSorts.some((s) => (s.getAttribute('direction') ?? '') === direction)) return true;
+  // A shelf-sort-v2 (the insight_barchart rank sort) is the other durable sort form; its
+  // `dimension-to-sort` is the analogue of computed-sort's `column`. planShelfSortV2Direction
+  // reports that as the confirmation `column`, so match it here or the flip reads as "not durable".
+  const shelfSorts = (
+    xpath.select('//shelf-sort-v2', doc as unknown as Node) as Element[]
+  ).filter((s) => !column || s.getAttribute('dimension-to-sort') === column);
+  return shelfSorts.some((s) => (s.getAttribute('direction') ?? '') === direction);
 }
 
 /** Confirm that the computed-sort column/using/direction tuple landed on readback. */
