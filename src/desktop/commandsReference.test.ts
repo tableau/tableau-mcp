@@ -67,7 +67,7 @@ describe('tableau desktop command reference sort entries', () => {
   it('pins the generated reference schema version and command count', () => {
     const reference = loadReference();
     expect(reference.schema_version).toBe('2025.2.2');
-    expect(reference.commands).toHaveLength(450);
+    expect(reference.commands).toHaveLength(549);
     // The parameter-type enum map moved under reference_data; its documented entry shape
     // carries an enum_name and the serialized wire name the executor expects.
     expect(reference.reference_data?.parameter_type_enums?.DPI_CardType).toMatchObject({
