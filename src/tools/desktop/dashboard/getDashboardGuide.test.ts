@@ -45,7 +45,9 @@ describe('getDashboardGuideTool', () => {
   it('should read the dashboard-xml-guide.md resource asset', async () => {
     await getResult();
 
-    expect(readResourceAsset).toHaveBeenCalledWith('dashboard-xml-guide.md');
+    expect(readResourceAsset).toHaveBeenCalledWith(
+      'knowledge/tactics/dashboard/dashboard-xml-guide.md',
+    );
   });
 });
 

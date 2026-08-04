@@ -30,7 +30,7 @@ export const getGetDashboardGuideTool = (
         extra,
         args: {},
         callback: async () => {
-          const guide = readResourceAsset('dashboard-xml-guide.md');
+          const guide = readResourceAsset('knowledge/tactics/dashboard/dashboard-xml-guide.md');
           if (guide === null) {
             return new FileNotFoundError('dashboard layout guide').toErr();
           }

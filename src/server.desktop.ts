@@ -316,7 +316,7 @@ export class DesktopMcpServer extends Server {
   };
 
   private _registerDashboardXmlGuide = async (): Promise<void> => {
-    const text = readResourceAsset('dashboard-xml-guide.md');
+    const text = readResourceAsset('knowledge/tactics/dashboard/dashboard-xml-guide.md');
     if (text === null) {
       throw new McpError(ErrorCode.InternalError, 'Dashboard layout guide asset not found.');
     }
