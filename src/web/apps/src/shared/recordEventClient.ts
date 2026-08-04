@@ -1,5 +1,15 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
+export const McpAppEvent = {
+  MCP_APP_CLICKED: 'MCP_APP_CLICKED',
+  TOOL_ERROR: 'TOOL_ERROR',
+  PARSE_ERROR: 'PARSE_ERROR',
+  AUTH_ERROR: 'AUTH_ERROR',
+  EMBED_LOAD_ERROR: 'EMBED_LOAD_ERROR',
+} as const;
+
+export type McpAppEventType = (typeof McpAppEvent)[keyof typeof McpAppEvent];
+
 /**
  * Best-effort telemetry reporter for MCP app events (errors, user actions, etc.).
  * Calls the app-only `record-event` server tool via the host proxy. Fire-and-forget:
@@ -10,7 +20,7 @@ import type { App } from '@modelcontextprotocol/ext-apps';
  * @param eventType - The event type (e.g. 'TOOL_ERROR', 'MCP_APP_CLICKED').
  * @param detail - Optional detail context (error message, URL, etc.).
  */
-export function recordEvent(app: App, eventType: string, detail?: unknown): void {
+export function recordEvent(app: App, eventType: McpAppEventType, detail?: unknown): void {
   try {
     if (!app.getHostCapabilities()?.serverTools) {
       return;

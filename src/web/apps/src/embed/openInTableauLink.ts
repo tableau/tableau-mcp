@@ -1,6 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
-import { recordEvent } from '../shared/recordEventClient.js';
+import { McpAppEvent, recordEvent } from '../shared/recordEventClient.js';
 
 /**
  * Shows an inline error message when the link fails to open.
@@ -50,19 +50,34 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
     return;
   }
 
-  // Create the link element
+  // Create the link element with icon + label
   const link = document.createElement('a');
   link.id = 'openInTableauLink';
-  link.className = 'open-in-tableau';
+  link.className = 'viz-control-action';
   link.setAttribute('href', url);
   link.setAttribute('rel', 'noopener noreferrer');
   link.setAttribute('aria-label', 'Open in Tableau (opens in a new browser tab)');
-  link.textContent = 'Open in Tableau ↗';
+
+  // Create label span
+  const label = document.createElement('span');
+  label.textContent = 'Open in Tableau';
+
+  // Create icon (inline SVG using the symbol)
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('class', 'viz-control-icon');
+  icon.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#external-icon');
+  icon.appendChild(use);
+
+  // Assemble link: label + icon (left to right)
+  link.appendChild(label);
+  link.appendChild(icon);
 
   // Set onclick handler to use host-mediated link opening
   link.onclick = async (e) => {
     e.preventDefault();
-    recordEvent(app, 'MCP_APP_CLICKED', url);
+    recordEvent(app, McpAppEvent.MCP_APP_CLICKED, url);
 
     try {
       const result = await app.openLink({ url });
@@ -80,11 +95,12 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
     }
   };
 
-  // Insert before the viz container to place controls at the top
-  const vizContainer = container.querySelector('.viz-container');
-  if (vizContainer) {
-    container.insertBefore(link, vizContainer);
+  // Append to the controls bar (left side, due to justify-content: space-between)
+  const controlsBar = container.querySelector('#vizControlsBar');
+  if (controlsBar) {
+    controlsBar.appendChild(link);
   } else {
+    // Fallback: append to container if bar is missing
     container.appendChild(link);
   }
 }

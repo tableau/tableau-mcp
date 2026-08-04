@@ -22,6 +22,11 @@ describe('setupFullscreenButton', () => {
     const vizContainer = document.createElement('div');
     vizContainer.className = 'viz-container';
     container.appendChild(vizContainer);
+    // Add controls bar
+    const controlsBar = document.createElement('div');
+    controlsBar.id = 'vizControlsBar';
+    controlsBar.className = 'viz-controls';
+    container.appendChild(controlsBar);
     document.body.appendChild(container);
 
     hostContext = { displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] };
@@ -57,25 +62,36 @@ describe('setupFullscreenButton', () => {
     const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
     expect(button).not.toBeNull();
     expect(button.type).toBe('button');
-    expect(button.className).toBe('viz-control');
+    expect(button.className).toBe('viz-control-action');
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(button.getAttribute('aria-label')).toBe('Enter fullscreen');
-    expect(button.textContent).toBe('⛶ Fullscreen');
+
+    // Verify icon + label structure
+    const icon = button.querySelector('svg.viz-control-icon');
+    const label = button.querySelector('span');
+    expect(icon).not.toBeNull();
+    expect(label).not.toBeNull();
+    expect(label?.textContent).toBe('Fullscreen');
   });
 
-  it('places button before the viz container (at the top)', () => {
+  it('places button in the controls bar after the viz container', () => {
     setupFullscreenButton(mockApp, container);
 
     const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
     const vizContainer = container.querySelector('.viz-container') as HTMLElement;
+    const controlsBar = container.querySelector('#vizControlsBar') as HTMLElement;
 
     expect(button).not.toBeNull();
     expect(vizContainer).not.toBeNull();
+    expect(controlsBar).not.toBeNull();
 
-    // Button should come before viz container in DOM order
-    const buttonIndex = Array.from(container.children).indexOf(button);
+    // Button should be inside the controls bar
+    expect(controlsBar.contains(button)).toBe(true);
+
+    // Controls bar should come after viz container in DOM order
+    const controlsIndex = Array.from(container.children).indexOf(controlsBar);
     const vizIndex = Array.from(container.children).indexOf(vizContainer);
-    expect(buttonIndex).toBeLessThan(vizIndex);
+    expect(controlsIndex).toBeGreaterThan(vizIndex);
   });
 
   it('does not render when fullscreen is not an available display mode', () => {
@@ -100,7 +116,12 @@ describe('setupFullscreenButton', () => {
     expect(mockApp.requestDisplayMode).toHaveBeenCalledWith({ mode: 'fullscreen' });
     expect(button.getAttribute('aria-pressed')).toBe('true');
     expect(button.getAttribute('aria-label')).toBe('Exit fullscreen');
-    expect(button.textContent).toBe('⛶ Exit fullscreen');
+
+    // Verify label span text updated (icon remains)
+    const label = button.querySelector('span');
+    expect(label?.textContent).toBe('Exit fullscreen');
+    const icon = button.querySelector('svg.viz-control-icon');
+    expect(icon).not.toBeNull();
   });
 
   it('click while fullscreen requests inline', async () => {
@@ -124,7 +145,8 @@ describe('setupFullscreenButton', () => {
     await flush();
 
     expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.textContent).toBe('⛶ Fullscreen');
+    const label = button.querySelector('span');
+    expect(label?.textContent).toBe('Fullscreen');
   });
 
   it('records MCP_APP_CLICKED telemetry on click', async () => {
@@ -147,7 +169,8 @@ describe('setupFullscreenButton', () => {
     contextListeners.forEach((h) => h());
 
     expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.textContent).toBe('⛶ Exit fullscreen');
+    const label = button.querySelector('span');
+    expect(label?.textContent).toBe('Exit fullscreen');
   });
 
   it('Escape exits fullscreen when in fullscreen mode', async () => {
@@ -181,17 +204,18 @@ describe('setupFullscreenButton', () => {
     // rely on getHostContext() for the toggle decision or it will compute the wrong target.
     setupFullscreenButton(mockApp, container);
     const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
+    const getLabel = (): string | null | undefined => button.querySelector('span')?.textContent;
 
     // Initial state: inline mode
     expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.textContent).toBe('⛶ Fullscreen');
+    expect(getLabel()).toBe('Fullscreen');
 
     // Click 1: Enter fullscreen
     button.click();
     await flush();
     expect(mockApp.requestDisplayMode).toHaveBeenCalledWith({ mode: 'fullscreen' });
     expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.textContent).toBe('⛶ Exit fullscreen');
+    expect(getLabel()).toBe('Exit fullscreen');
 
     // hostContext.displayMode is STILL 'inline' (SDK doesn't update it on requestDisplayMode resolution)
     expect(hostContext.displayMode).toBe('inline');
@@ -201,13 +225,13 @@ describe('setupFullscreenButton', () => {
     await flush();
     expect(mockApp.requestDisplayMode).toHaveBeenCalledWith({ mode: 'inline' });
     expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.textContent).toBe('⛶ Fullscreen');
+    expect(getLabel()).toBe('Fullscreen');
 
     // Click 3: Enter fullscreen again (toggle keeps working)
     button.click();
     await flush();
     expect(mockApp.requestDisplayMode).toHaveBeenCalledWith({ mode: 'fullscreen' });
     expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.textContent).toBe('⛶ Exit fullscreen');
+    expect(getLabel()).toBe('Exit fullscreen');
   });
 });

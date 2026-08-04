@@ -33,6 +33,11 @@ describe('handleToolResult', () => {
     vizContainer.className = 'viz-container';
     vizContainer.id = 'tableauVizContainer';
     main.appendChild(vizContainer);
+    // Add controls bar
+    const controlsBar = document.createElement('div');
+    controlsBar.id = 'vizControlsBar';
+    controlsBar.className = 'viz-controls';
+    main.appendChild(controlsBar);
     document.body.appendChild(main);
 
     // Create mock app

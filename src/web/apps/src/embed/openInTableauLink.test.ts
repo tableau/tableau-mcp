@@ -21,6 +21,11 @@ describe('setupOpenInTableauLink', () => {
     const vizContainer = document.createElement('div');
     vizContainer.className = 'viz-container';
     container.appendChild(vizContainer);
+    // Add controls bar
+    const controlsBar = document.createElement('div');
+    controlsBar.id = 'vizControlsBar';
+    controlsBar.className = 'viz-controls';
+    container.appendChild(controlsBar);
     document.body.appendChild(container);
 
     // Create mock App with openLink and getHostCapabilities
@@ -47,31 +52,41 @@ describe('setupOpenInTableauLink', () => {
     const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
     expect(linkElement).not.toBeNull();
     expect(linkElement.id).toBe('openInTableauLink');
-    expect(linkElement.className).toBe('open-in-tableau');
+    expect(linkElement.className).toBe('viz-control-action');
     expect(linkElement.getAttribute('rel')).toBe('noopener noreferrer');
     expect(linkElement.getAttribute('aria-label')).toBe(
       'Open in Tableau (opens in a new browser tab)',
     );
-    expect(linkElement.textContent).toBe('Open in Tableau ↗');
-    expect(linkElement.hidden).toBe(false);
     expect(linkElement.getAttribute('href')).toBe(url);
+
+    // Verify icon + label structure
+    const icon = linkElement.querySelector('svg.viz-control-icon');
+    const label = linkElement.querySelector('span');
+    expect(icon).not.toBeNull();
+    expect(label).not.toBeNull();
+    expect(label?.textContent).toBe('Open in Tableau');
   });
 
-  it('should place link before the viz container (at the top)', () => {
+  it('should place link in the controls bar after the viz container', () => {
     const url = 'https://tableau.example.com/views/workbook/view';
 
     setupOpenInTableauLink(mockApp, url, container);
 
     const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
     const vizContainer = container.querySelector('.viz-container') as HTMLElement;
+    const controlsBar = container.querySelector('#vizControlsBar') as HTMLElement;
 
     expect(linkElement).not.toBeNull();
     expect(vizContainer).not.toBeNull();
+    expect(controlsBar).not.toBeNull();
 
-    // Link should come before viz container in DOM order
-    const linkIndex = Array.from(container.children).indexOf(linkElement);
+    // Link should be inside the controls bar
+    expect(controlsBar.contains(linkElement)).toBe(true);
+
+    // Controls bar should come after viz container in DOM order
+    const controlsIndex = Array.from(container.children).indexOf(controlsBar);
     const vizIndex = Array.from(container.children).indexOf(vizContainer);
-    expect(linkIndex).toBeLessThan(vizIndex);
+    expect(controlsIndex).toBeGreaterThan(vizIndex);
   });
 
   it('should not create link when URL is empty', () => {

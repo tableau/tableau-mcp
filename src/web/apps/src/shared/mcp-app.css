@@ -39,48 +39,56 @@ tableau-viz {
   display: none;
 }
 
-.open-in-tableau {
-  display: inline-block;
-  margin: 0 0 0.75rem 0;
-  padding: 0.5rem 0.75rem;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 0.875rem;
-  color: #0066CC;
-  text-decoration: none;
-  border-radius: 4px;
-  transition: background-color 0.2s ease;
+.viz-controls {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 16px;
+  background: #f9fbfe;
 }
 
-.open-in-tableau:hover {
-  text-decoration: underline;
+.viz-controls:empty {
+  display: none;
 }
 
-.open-in-tableau:focus {
-  outline: 2px solid #0066CC;
-  outline-offset: 2px;
-}
-
-.viz-control {
-  display: inline-block;
-  margin: 0 0 0.75rem 0.5rem;
-  padding: 0.5rem 0.75rem;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 0.875rem;
-  color: #0066CC;
-  background: none;
-  border: 1px solid #0066CC;
-  border-radius: 4px;
+.viz-control-action {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #0b5cab;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.875rem;
 }
 
-.viz-control:hover {
-  text-decoration: underline;
+.viz-control-action:hover {
+  background: rgb(11 92 171 / 10%);
+  color: #014486;
 }
 
-.viz-control:focus {
-  outline: 2px solid #0066CC;
+.viz-control-action:focus {
+  outline: 2px solid #0b5cab;
   outline-offset: 2px;
+}
+
+.viz-control-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .open-in-tableau-error {

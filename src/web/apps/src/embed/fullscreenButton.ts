@@ -1,6 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
-import { recordEvent } from '../shared/recordEventClient.js';
+import { McpAppEvent, recordEvent } from '../shared/recordEventClient.js';
 
 const FULLSCREEN_BUTTON_ID = 'fullscreenButton';
 
@@ -10,11 +10,16 @@ const FULLSCREEN_BUTTON_ID = 'fullscreenButton';
 // module-level teardown reference is sufficient.
 let teardownPrevious: (() => void) | undefined;
 
-/** Syncs the button's label, glyph, and ARIA state to the given mode. */
+/** Syncs the button's label span text and ARIA state to the given mode. */
 function syncButton(button: HTMLButtonElement, fullscreen: boolean): void {
   button.setAttribute('aria-pressed', String(fullscreen));
   button.setAttribute('aria-label', fullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
-  button.textContent = fullscreen ? '⛶ Exit fullscreen' : '⛶ Fullscreen';
+
+  // Update the label span text WITHOUT destroying the icon
+  const labelSpan = button.querySelector('span');
+  if (labelSpan) {
+    labelSpan.textContent = fullscreen ? 'Exit fullscreen' : 'Fullscreen';
+  }
 }
 
 /**
@@ -49,7 +54,23 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
   const button = document.createElement('button');
   button.type = 'button';
   button.id = FULLSCREEN_BUTTON_ID;
-  button.className = 'viz-control';
+  button.className = 'viz-control-action';
+
+  // Create icon (inline SVG using the symbol)
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('class', 'viz-control-icon');
+  icon.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#fullscreen-icon');
+  icon.appendChild(use);
+
+  // Create label span
+  const label = document.createElement('span');
+
+  // Assemble button: icon + label (left to right)
+  button.appendChild(icon);
+  button.appendChild(label);
+
   syncButton(button, isFullscreen);
 
   const onKeydown = (e: KeyboardEvent): void => {
@@ -83,7 +104,7 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
 
   button.addEventListener('click', () => {
     const target = isFullscreen ? 'inline' : 'fullscreen';
-    recordEvent(app, 'MCP_APP_CLICKED', target);
+    recordEvent(app, McpAppEvent.MCP_APP_CLICKED, target);
     void requestMode(target);
   });
 
@@ -109,11 +130,12 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
     document.removeEventListener('keydown', onKeydown);
   };
 
-  // Insert before the viz container to place controls at the top
-  const vizContainer = container.querySelector('.viz-container');
-  if (vizContainer) {
-    container.insertBefore(button, vizContainer);
+  // Append to the controls bar (right side, due to justify-content: space-between)
+  const controlsBar = container.querySelector('#vizControlsBar');
+  if (controlsBar) {
+    controlsBar.appendChild(button);
   } else {
+    // Fallback: append to container if bar is missing
     container.appendChild(button);
   }
 }

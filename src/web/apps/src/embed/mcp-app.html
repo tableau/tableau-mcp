@@ -6,8 +6,22 @@
   <title>Tableau MCP App</title>
 </head>
 <body>
+  <svg width="0" height="0" aria-hidden="true" style="position: absolute;">
+    <symbol id="external-icon" viewBox="0 0 24 24">
+      <path d="M14 5h5v5"></path>
+      <path d="m19 5-9 9"></path>
+      <path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path>
+    </symbol>
+    <symbol id="fullscreen-icon" viewBox="0 0 24 24">
+      <path d="M8 3H3v5"></path>
+      <path d="M16 3h5v5"></path>
+      <path d="M8 21H3v-5"></path>
+      <path d="M16 21h5v-5"></path>
+    </symbol>
+  </svg>
   <main class="main">
     <div id="tableauVizContainer" class="viz-container"></div>
+    <div id="vizControlsBar" class="viz-controls"></div>
   </main>
   <script type="module" src="./mcp-app.ts"></script>
 </body>
