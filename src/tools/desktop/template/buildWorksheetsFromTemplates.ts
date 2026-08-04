@@ -1,76 +1,130 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
-import { existsSync, readFileSync } from 'fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, type Stats } from 'fs';
 import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  bindExplicitTemplate,
-  formatExplicitBindErrors,
-} from '../../../desktop/binder/explicit-bind.js';
+import { bindExplicitTemplate } from '../../../desktop/binder/explicit-bind.js';
+import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { summarizeSchema } from '../../../desktop/binder/schema-summary.js';
-import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
-import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
+import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
-import { extractSheetXml } from '../../../desktop/metadata/sheets.js';
+import { extractLastWorksheetArtifact } from '../../../desktop/metadata/sheets.js';
+import {
+  deriveWorksheetApplyState,
+  type WorksheetApplyState,
+} from '../../../desktop/metadata/targetWorksheetState.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import type { OptionalFieldPruneSpec } from '../../../desktop/templates/optionalFieldPrune.js';
-import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
-  resolveAllTemplateManifests,
-  resolveTemplateManifest,
-} from '../../../desktop/templates/templateSlots.js';
+  getTemplateArtifactStore,
+  templateArtifactSessionIdentity,
+} from '../../../desktop/templates/templateArtifactStore.js';
 import {
-  classifyWorksheetPromiseOutcome,
-  formatWorksheetPromiseCheck,
-} from '../../../desktop/validation/promise-check.js';
-import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  FileNotFoundError,
-  FileReadError,
-  WorksheetXmlLoadFailedError,
-  XmlValidationError,
-} from '../../../errors/mcpToolError.js';
+  listTemplateCatalog,
+  MAX_EXTERNAL_TEMPLATE_BYTES,
+} from '../../../desktop/templates/templatePath.js';
+import { resolveTemplateSnapshot } from '../../../desktop/templates/templateSlots.js';
+import { ArgsValidationError, XmlValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  workbookFile: z.string().describe(''),
-  templateName: z.string().describe(''),
-  title: z.string().describe(''),
-  datasource: z.string().describe(''),
+  workbookFile: z.string().max(4096).optional().describe('Workbook file; omit for live Desktop.'),
+  session: z.string().max(64).optional().describe('Live Desktop session.'),
+  templateName: z.string().min(1).max(255).describe('list-templates value.'),
+  title: z.string().min(1).max(255).describe('Sheet title.'),
+  datasource: z.string().min(1).max(255).describe('Mapped datasource.'),
   fieldMapping: z
-    .record(z.string())
-    .describe(
-      "Map each slot id to a field: a plain column ref [ds].[Sales] when the slot's derivation is 'none', else a column instance [ds].[sum:Sales:qk] for an aggregated slot.",
-    ),
-  mode: z.enum(['buildAndReturn', 'buildAndApply']).describe(''),
-  insertAfter: z.string().optional().describe(''),
+    .record(z.string().max(128), z.string().max(512))
+    .refine(
+      (mapping) => Object.keys(mapping).length <= 32,
+      'fieldMapping supports at most 32 slots.',
+    )
+    .describe('Slots.'),
 };
 
-/**
- * Metadata-optional, deterministic worksheet constructor: fill a template's slots with a
- * caller-supplied field mapping and either RETURN the built worksheet for review
- * (`buildAndReturn`) or upsert it into the live workbook (`buildAndApply`, via the same
- * apply-worksheet seam — {@link loadWorksheetXml}). Unlike inject-template it routes every
- * manifest through {@link resolveAllTemplateManifests}/{@link resolveTemplateManifest}, so a
- * `.tbm` dropped in with NO curated manifest is fully buildable from its inferred slots.
- */
+const BUILD_RESPONSE_LIMIT_BYTES = 12_288;
+export const MAX_OFFLINE_WORKBOOK_BYTES = 64 * 1024 * 1024;
+const OFFLINE_WORKBOOK_READ_ERROR = `The saved workbook file could not be read safely. It must be a regular file no larger than ${MAX_OFFLINE_WORKBOOK_BYTES} bytes. No template artifact was created.`;
+const OFFLINE_WORKBOOK_XML_ERROR =
+  'The saved workbook could not be safely parsed or used to build a template artifact. No template artifact was created; inspect the workbook file and retry.';
+
+type OfflineWorkbookReadResult = { ok: true; text: string } | { ok: false };
+
+function haveMatchingFileIdentity(opened: Stats, current: Stats): boolean {
+  if (opened.ino === 0 || current.ino === 0) return process.platform === 'win32';
+  return opened.dev === current.dev && opened.ino === current.ino;
+}
+
+function readOfflineWorkbookFile(path: string): OfflineWorkbookReadResult {
+  let fd: number | null = null;
+  try {
+    const resolvedPath = resolve(path);
+    const noFollow = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0;
+    fd = openSync(resolvedPath, constants.O_RDONLY | noFollow);
+    const opened = fstatSync(fd);
+    const current = lstatSync(resolvedPath);
+    if (
+      !opened.isFile() ||
+      !current.isFile() ||
+      current.isSymbolicLink() ||
+      !haveMatchingFileIdentity(opened, current) ||
+      opened.size > MAX_OFFLINE_WORKBOOK_BYTES ||
+      current.size > MAX_OFFLINE_WORKBOOK_BYTES
+    ) {
+      return { ok: false };
+    }
+
+    // Match the repository-template reader's max+1 overflow check without allocating the full cap.
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    while (totalBytes <= MAX_OFFLINE_WORKBOOK_BYTES) {
+      const buffer = Buffer.allocUnsafe(
+        Math.min(64 * 1024, MAX_OFFLINE_WORKBOOK_BYTES + 1 - totalBytes),
+      );
+      const count = readSync(fd, buffer, 0, buffer.length, null);
+      if (count === 0) break;
+      totalBytes += count;
+      chunks.push(buffer.subarray(0, count));
+    }
+    return totalBytes > MAX_OFFLINE_WORKBOOK_BYTES
+      ? { ok: false }
+      : { ok: true, text: Buffer.concat(chunks, totalBytes).toString('utf-8') };
+  } catch {
+    return { ok: false };
+  } finally {
+    if (fd !== null) {
+      try {
+        closeSync(fd);
+      } catch {
+        // A failed close cannot make an untrusted offline workbook safe to consume.
+      }
+    }
+  }
+}
+
+/** Metadata-optional constructor whose XML, eligibility, and slots share one source read. */
 interface BuildSuccess {
-  mode: 'buildAndReturn' | 'buildAndApply';
+  artifactId: string;
+  artifactExpiresAt: string;
   templateName: string;
-  title: string;
-  /** The built worksheet fragment — streamed back in buildAndReturn, carried in buildAndApply. */
-  worksheetXml: string;
-  warnings: string[];
-  /** buildAndApply-only honest host-verification tails (empty otherwise). */
-  readbackWarning: string;
-  receipt: string;
+  templateProvenance: string;
+  metadataTrust: 'trusted-protected-or-dev' | 'untrusted-repository';
+  overridesLowerPrecedence: boolean;
+  preview: {
+    worksheetName: string;
+    datasource: string;
+    fieldMapping: Record<string, string>;
+    targetState: WorksheetApplyState['target']['state'];
+    targetWindowState: WorksheetApplyState['targetWindow']['state'];
+    warningCount: number;
+    artifactBytes: number;
+  };
+  guidance: string;
 }
 
 function inferSingleDatasourceFromFieldMapping(
@@ -88,236 +142,282 @@ const toolTitle = 'Build Worksheets From Templates';
 export const getBuildWorksheetsFromTemplatesTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
+  const artifactStore = getTemplateArtifactStore(server);
   const tool = new DesktopTool({
     server,
     name: 'build-worksheets-from-templates',
     title: toolTitle,
     description:
-      "Fill a template's slots with your datasource fields to build a worksheet, then either return it for review or upsert it into the live workbook.",
+      'Build a template worksheet for confirmation without changing the workbook. Apply it with apply-worksheet.',
     paramsSchema,
     annotations: {
       title: toolTitle,
-      readOnlyHint: false,
+      readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: false,
       openWorldHint: false,
     },
     callback: async (
-      { session, workbookFile, templateName, title, datasource, fieldMapping, mode, insertAfter },
+      { workbookFile, session, templateName, title, datasource, fieldMapping },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
         args: {
-          session,
           workbookFile,
+          session,
           templateName,
           title,
           datasource,
           fieldMapping,
-          mode,
-          insertAfter,
         },
         callback: async () => {
-          if (!existsSync(resolve(workbookFile))) {
-            return new FileNotFoundError(workbookFile).toErr();
+          if (workbookFile !== undefined && session !== undefined) {
+            return new ArgsValidationError(
+              'workbookFile and session cannot both be provided. Use workbookFile for a saved snapshot, or omit it to read the live workbook.',
+            ).toErr();
           }
 
-          const templateXml = readTemplate(templateName);
-          if (templateXml === null) {
-            const files = listTemplateNames();
-            const available = files.length > 0 ? files.join(', ') : 'none';
+          const environmentRepositoryRoot = process.env['TABLEAU_REPOSITORY_DIR'];
+          let repositoryRoot = workbookFile === undefined ? undefined : environmentRepositoryRoot;
+          let resolvedLiveSession: string | undefined;
+          let liveExecutor: Awaited<ReturnType<typeof extra.getExecutor>> | undefined;
+          if (workbookFile === undefined) {
+            const requestedSession = session?.trim();
+            const explicitSession =
+              requestedSession !== undefined &&
+              requestedSession.length > 0 &&
+              requestedSession.toLowerCase() !== 'default';
+            const sessionResult = resolveSession(session);
+            if (sessionResult.isErr()) return sessionResult.error.toErr();
+            const resolvedSession = sessionResult.value;
+            resolvedLiveSession = resolvedSession;
+            liveExecutor = await extra.getExecutor(resolvedSession);
+            try {
+              const appResult = await liveExecutor.getApp(extra.signal);
+              if (appResult.isOk()) {
+                const liveRoot = appResult.value.repositoryLocation?.trim();
+                if (liveRoot) repositoryRoot = liveRoot;
+              }
+            } catch {
+              // The environment fallback below is the only caller-neutral fallback.
+            }
+            if (!repositoryRoot && explicitSession && !process.env['TEMPLATES_DIR']) {
+              return new ArgsValidationError(
+                `Template repository discovery failed for explicit Desktop session "${requestedSession}". No worksheet was produced.`,
+              ).toErr();
+            }
+            repositoryRoot ??= environmentRepositoryRoot;
+            if (!repositoryRoot && !process.env['TEMPLATES_DIR']) {
+              return new ArgsValidationError(
+                'Template repository discovery unavailable: Desktop app info did not provide repositoryLocation and TABLEAU_REPOSITORY_DIR is not set. No worksheet was produced.',
+              ).toErr();
+            }
+          }
+
+          const templateSnapshot = resolveTemplateSnapshot(templateName, { repositoryRoot });
+          if (templateSnapshot === null) {
+            const catalog = listTemplateCatalog({ repositoryRoot });
+            const rejected = catalog.find(
+              (entry) => entry.template === templateName && entry.discoveryIssue !== undefined,
+            );
+            if (rejected?.discoveryIssue) {
+              const issueDescription =
+                rejected.discoveryIssue === 'file-too-large'
+                  ? 'too large'
+                  : 'invalid or unreadable';
+              const limit =
+                rejected.discoveryIssue === 'file-too-large'
+                  ? ` (external template limit: ${MAX_EXTERNAL_TEMPLATE_BYTES} bytes)`
+                  : '';
+              return new ArgsValidationError(
+                `Template "${templateName}" from ${rejected.provenance} is ${issueDescription}${limit}. No worksheet was produced, and the lower-precedence template was not used.`,
+              ).toErr();
+            }
             return new ArgsValidationError(
-              `Template "${templateName}" not found.\n\nAvailable templates: ${available}\n\nUse the template list tool to see all options.`,
+              `Template "${templateName}" not found. Use list-templates to choose a current catalog entry.`,
+            ).toErr();
+          }
+          const {
+            artifact: templateArtifact,
+            resolvedManifest,
+            provenance: templateProvenance,
+            overridesLowerPrecedence,
+          } = templateSnapshot;
+          if (!templateArtifact.eligibility.pass1_eligible) {
+            return new ArgsValidationError(
+              `Template "${templateName}" from ${templateProvenance} is not supported for artifact construction. No worksheet was produced; choose another template from list-templates.`,
             ).toErr();
           }
 
           let workbookXml: string;
+          if (workbookFile !== undefined) {
+            const readResult = readOfflineWorkbookFile(workbookFile);
+            if (!readResult.ok) return new ArgsValidationError(OFFLINE_WORKBOOK_READ_ERROR).toErr();
+            workbookXml = readResult.text;
+          } else {
+            const workbookResult = await getWorkbookXml({
+              executor: liveExecutor!,
+              signal: extra.signal,
+            });
+            if (workbookResult.isErr()) {
+              return new ArgsValidationError(
+                'The live workbook could not be read. No template artifact was created; inspect Tableau and retry.',
+              ).toErr();
+            }
+            workbookXml = workbookResult.value;
+          }
+
           try {
-            workbookXml = readFileSync(resolve(workbookFile), 'utf-8');
-          } catch (err) {
-            return new FileReadError(err).toErr();
-          }
+            // Metadata-optional binding: the binder is handed the FULL resolved catalog so a
+            // `.tbm`-only template (no curated manifest) still binds against its inferred slots.
+            const manifests = new Map<string, TemplateManifest>();
+            if (resolvedManifest) manifests.set(templateName, resolvedManifest.manifest);
+            let appliedFieldMapping = fieldMapping;
+            let optionalFieldPrunes: OptionalFieldPruneSpec[] = [];
+            const warnings: string[] = [];
+            if (fieldMapping && Object.keys(fieldMapping).length > 0) {
+              const explicitBind = bindExplicitTemplate(
+                templateName,
+                fieldMapping,
+                summarizeSchema(workbookXml),
+                { title, datasource, manifests },
+              );
 
-          // Metadata-optional binding: the binder is handed the FULL resolved catalog so a
-          // `.tbm`-only template (no curated manifest) still binds against its inferred slots.
-          const manifests = resolveAllTemplateManifests();
-          let appliedFieldMapping = fieldMapping;
-          let optionalFieldPrunes: OptionalFieldPruneSpec[] = [];
-          const warnings: string[] = [];
-          if (fieldMapping && Object.keys(fieldMapping).length > 0) {
-            const explicitBind = bindExplicitTemplate(
-              templateName,
-              fieldMapping,
-              summarizeSchema(workbookXml),
-              { title, datasource, manifests },
-            );
+              if (!explicitBind.ok) {
+                if (workbookFile !== undefined) {
+                  return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
+                }
+                return new ArgsValidationError(
+                  `Template binding failed for "${templateName}". No worksheet was produced; inspect the bounded slot contract from list-templates and retry the caller-supplied mapping.`,
+                ).toErr();
+              }
 
-            if (!explicitBind.ok) {
+              const resolvedDatasource = explicitBind.passthrough
+                ? (inferSingleDatasourceFromFieldMapping(fieldMapping) ?? explicitBind.datasource)
+                : explicitBind.datasource;
+
+              if (resolvedDatasource !== datasource) {
+                if (workbookFile !== undefined) {
+                  return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
+                }
+                return new ArgsValidationError(
+                  `Template binding BLOCKED for "${templateName}". No worksheet was produced.\n\n` +
+                    `  • [datasource-mismatch] caller datasource "${datasource}" does not match resolved mapping datasource "${resolvedDatasource}".\n` +
+                    `    FIX: Set datasource to "${resolvedDatasource}" and retry with the same fieldMapping.`,
+                ).toErr();
+              }
+
+              if (!explicitBind.passthrough) appliedFieldMapping = explicitBind.fieldMapping;
+              optionalFieldPrunes = explicitBind.optionalFieldPrunes;
+              warnings.push(...explicitBind.warnings);
+            }
+
+            const applyNonce = `${workbookFile ?? session ?? 'live'}:${Date.now()}:${randomUUID()}`;
+            const built = buildInjectedWorkbookXml({
+              workbookXml,
+              templateXml: templateArtifact.xml,
+              title,
+              sheetType: 'worksheet',
+              templateParameters: { DATASOURCE: datasource },
+              fieldMapping: appliedFieldMapping,
+              // Metadata-optional slots: the merged manifest (inferred + any curated overlay).
+              templateSlots: resolvedManifest?.manifest.slots,
+              insertPosition: 'end',
+              applyNonce,
+              optionalFieldPrunes,
+            });
+
+            if (!built.ok) {
+              if (workbookFile !== undefined) {
+                return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
+              }
               return new ArgsValidationError(
-                formatExplicitBindErrors(templateName, explicitBind.errors),
+                `Template "${templateName}" from ${templateProvenance} could not be safely constructed. No worksheet was produced; choose another template or repair the source outside MCP.`,
               ).toErr();
             }
 
-            const resolvedDatasource = explicitBind.passthrough
-              ? (inferSingleDatasourceFromFieldMapping(fieldMapping) ?? explicitBind.datasource)
-              : explicitBind.datasource;
-
-            if (resolvedDatasource !== datasource) {
-              return new ArgsValidationError(
-                `Template binding BLOCKED for "${templateName}". No worksheet was produced.\n\n` +
-                  `  • [datasource-mismatch] caller datasource "${datasource}" does not match resolved mapping datasource "${resolvedDatasource}".\n` +
-                  `    FIX: Set datasource to "${resolvedDatasource}" and retry with the same fieldMapping.`,
-              ).toErr();
+            const artifact = extractLastWorksheetArtifact(built.xml, title);
+            if (!artifact) {
+              if (workbookFile !== undefined) {
+                return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
+              }
+              return new XmlValidationError([
+                `Built workbook did not contain a worksheet and worksheet window named "${title}".`,
+              ]).toErr();
             }
-
-            if (!explicitBind.passthrough) appliedFieldMapping = explicitBind.fieldMapping;
-            optionalFieldPrunes = explicitBind.optionalFieldPrunes;
-            warnings.push(...explicitBind.warnings);
-          }
-
-          const applyNonce = `${workbookFile}:${Date.now()}:${randomUUID()}`;
-          const built = buildInjectedWorkbookXml({
-            workbookXml,
-            templateXml,
-            title,
-            sheetType: 'worksheet',
-            templateParameters: { DATASOURCE: datasource },
-            fieldMapping: appliedFieldMapping,
-            // Metadata-optional slots: the merged manifest (inferred + any curated overlay),
-            // NOT the curated-only provider inject-template reads.
-            templateSlots: resolveTemplateManifest(templateName)?.manifest.slots,
-            insertPosition: insertAfter ? 'after_sheet' : 'end',
-            relativeSheetName: insertAfter,
-            applyNonce,
-            optionalFieldPrunes,
-          });
-
-          if (!built.ok) {
-            return new XmlValidationError(built.issues).toErr();
-          }
-
-          // The built workbook holds exactly the one sheet we asked for; extract it so both
-          // modes speak the standalone-worksheet contract the apply seam expects.
-          const worksheetXml = extractSheetXml(built.xml, title);
-          if (!worksheetXml) {
-            return new XmlValidationError([
-              `Built workbook did not contain a worksheet named "${title}".`,
-            ]).toErr();
-          }
-
-          if (mode === 'buildAndReturn') {
-            return new Ok<BuildSuccess>({
-              mode,
-              templateName,
+            const { worksheetXml, worksheetWindowXml } = artifact;
+            const expectedState = deriveWorksheetApplyState(
+              workbookXml,
               title,
               worksheetXml,
-              warnings,
-              readbackWarning: '',
-              receipt: '',
-            });
-          }
-
-          // buildAndApply — upsert through the same seam apply-worksheet uses.
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
-          const resolvedSession = sessionResult.value;
-          const executor = await extra.getExecutor(resolvedSession);
-          const result = await loadWorksheetXml({
-            worksheetName: title,
-            xml: worksheetXml,
-            executor,
-            signal: extra.signal,
-          });
-
-          if (result.isErr()) {
-            const { type, error } = result.error;
-            switch (type) {
-              case 'execute-command-error':
-                return new DesktopCommandExecutionError(error).toErr();
-              case 'load-worksheet-xml-error':
-                return new WorksheetXmlLoadFailedError(error).toErr();
-              default: {
-                const _: never = type;
-              }
-            }
-          }
-
-          // Honest host-verification tails, mirroring apply-worksheet — the receipt line is
-          // host-derived (preflight + readback), never model-filled.
-          const readbackWarning = result.isOk()
-            ? formatReadbackVerificationWarnings(result.value.readbackWarnings)
-            : '';
-          const receiptInput = result.isOk()
-            ? {
-                validationWarnings: result.value.validationWarnings ?? [],
-                readback: result.value.readbackVerification,
-                readbackFindings: result.value.readbackWarnings,
-              }
-            : undefined;
-          const promiseOutcome = receiptInput
-            ? classifyWorksheetPromiseOutcome(receiptInput)
-            : 'unverified';
-          if (result.isOk()) {
-            await emitWorksheetPromiseEvents({
-              config: extra.config,
-              sessionId: resolvedSession,
-              tool: 'build-worksheets-from-templates',
-              operation: 'load-worksheet',
-              readback: result.value.readbackVerification,
-              findings: result.value.readbackWarnings,
-              promiseOutcome,
-            });
-          }
-          const receipt = receiptInput ? formatWorksheetPromiseCheck(receiptInput) : '';
-
-          return new Ok<BuildSuccess>({
-            mode,
-            templateName,
-            title,
-            worksheetXml,
-            warnings,
-            readbackWarning,
-            receipt,
-          });
-        },
-        getSuccessResult: (value) => {
-          const { templateName, title, warnings } = value;
-          const advisory =
-            warnings.length > 0
-              ? `\n\nTemplate advisory warnings:\n${warnings.map((w) => `  - ${w}`).join('\n')}`
-              : '';
-
-          if (value.mode === 'buildAndReturn') {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text:
-                    `Built "${title}" from template "${templateName}". ` +
-                    'The workbook file was NOT modified. The filled worksheet follows.' +
-                    advisory +
-                    `\n\n${value.worksheetXml}`,
-                },
-              ],
+              worksheetWindowXml,
+            );
+            const metadataTrust: BuildSuccess['metadataTrust'] =
+              templateProvenance === 'protected' || templateProvenance === 'dev-override'
+                ? 'trusted-protected-or-dev'
+                : 'untrusted-repository';
+            const preview: BuildSuccess['preview'] = {
+              worksheetName: title,
+              datasource,
+              fieldMapping: appliedFieldMapping,
+              targetState: expectedState.target.state,
+              targetWindowState: expectedState.targetWindow.state,
+              warningCount: warnings.length,
+              artifactBytes:
+                Buffer.byteLength(worksheetXml) + Buffer.byteLength(worksheetWindowXml),
             };
-          }
+            const baseResponse = {
+              templateName,
+              templateProvenance,
+              metadataTrust,
+              overridesLowerPrecedence,
+              preview,
+              guidance:
+                'The live workbook was not modified. The caller must confirm this bounded preview with the user before mutation, then call apply-worksheet with the returned artifactId. Do not request or reconstruct raw worksheet XML.',
+            };
+            const projectedResponse: BuildSuccess = {
+              artifactId: '00000000-0000-4000-8000-000000000000',
+              artifactExpiresAt: new Date(0).toISOString(),
+              ...baseResponse,
+            };
+            if (
+              Buffer.byteLength(JSON.stringify(jsonToolResult(projectedResponse)), 'utf8') >
+              BUILD_RESPONSE_LIMIT_BYTES
+            ) {
+              return new ArgsValidationError(
+                'The validated caller-supplied preview exceeds the artifact response limit. Reduce fieldMapping size or field-name length and rebuild.',
+              ).toErr();
+            }
 
-          return {
-            content: [
-              {
-                type: 'text',
-                text:
-                  `Built "${title}" from template "${templateName}" and applied it to the live workbook.` +
-                  advisory +
-                  value.readbackWarning +
-                  value.receipt,
-              },
-            ],
-          };
+            const artifactSessionIdentity =
+              resolvedLiveSession === undefined
+                ? null
+                : templateArtifactSessionIdentity(
+                    resolvedLiveSession,
+                    liveExecutor?.desktopInstanceId,
+                  );
+            const { artifactId, expiresAt } = artifactStore.put(artifactSessionIdentity, {
+              worksheetName: title,
+              worksheetXml,
+              worksheetWindowXml,
+              expectedState,
+              templateProvenance,
+              metadataTrust,
+            });
+            return new Ok<BuildSuccess>({
+              artifactId,
+              artifactExpiresAt: new Date(expiresAt).toISOString(),
+              ...baseResponse,
+            });
+          } catch (error) {
+            if (workbookFile !== undefined) {
+              return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
+            }
+            throw error;
+          }
         },
+        getSuccessResult: (value) => jsonToolResult(value),
       });
     },
   });

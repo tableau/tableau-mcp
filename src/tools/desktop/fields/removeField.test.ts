@@ -598,11 +598,14 @@ async function getApplyResult(params: {
   const callback = await Provider.from(tool.callback);
   return await callback(
     {
+      artifactId: undefined,
       session,
       worksheetName: params.worksheetName,
       mode: 'file',
       worksheetFile: params.worksheetFile,
       worksheetXml: undefined,
+      worksheetWindowXml: undefined,
+      expectedState: undefined,
     },
     getMockRequestHandlerExtra(),
   );

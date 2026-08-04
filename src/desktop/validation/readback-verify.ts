@@ -8,7 +8,7 @@
  */
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 
-export type ReadbackFindingKind = 'encoding' | 'shelf' | 'mark' | 'filter' | 'sort';
+export type ReadbackFindingKind = 'encoding' | 'shelf' | 'mark' | 'filter' | 'sort' | 'window';
 export type ReadbackFindingSeverity = 'error' | 'warning';
 
 export interface ReadbackFinding {
@@ -363,6 +363,12 @@ export function formatReadbackFinding(finding: ReadbackFinding): string {
 export function formatReadbackVerificationError(findings: ReadbackFinding[]): string {
   const errors = findings.filter((finding) => finding.severity === 'error');
   if (errors.length === 0) return '';
+  if (errors.some((finding) => finding.kind === 'window')) {
+    return (
+      'apply succeeded but Tableau changed or dropped the confirmed worksheet window/cards. ' +
+      'The live workbook does NOT match the confirmed artifact. Rebuild from the live workbook and reconfirm before applying again.'
+    );
+  }
   return (
     `apply succeeded but Tableau silently dropped: ${errors.map(formatReadbackFinding).join(', ')}. ` +
     'The rendered chart does NOT match the intent — likely an invalid/unsupported node. ' +

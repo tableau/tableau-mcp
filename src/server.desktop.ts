@@ -37,10 +37,10 @@ const serverVersion = pkg.version;
  * and a per-turn token/cost reduction. Reconciled from BOTH source lists: the spike's
  * fast-path/coordination tools (bind-template, list-instances, list-available-fields,
  * list-worksheets, apply-workbook, batch-create-and-cache-sheets, build-and-apply-dashboard)
- * UNION the preamble-hunt's escalation-fallback chain it insists must stay
- * (get-workbook-xml, inject-template, apply-worksheet — apply-workbook/list-instances/
- * list-worksheets already overlap). Without the fallback chain the propose/escalate paths
- * (per DESKTOP_INSTRUCTIONS) would have no tools to route to.
+ * UNION the escalation path's legacy injector, template catalog, read-only worksheet
+ * constructor, and guarded apply boundary (inject-template, list-templates,
+ * build-worksheets-from-templates, apply-worksheet). The whole-workbook tools remain for
+ * other full-document workflows while callers migrate to the confirmed template path.
  */
 export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
   'bind-template',
@@ -51,6 +51,8 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
   'apply-workbook',
   'get-workbook-xml',
   'inject-template',
+  'list-templates',
+  'build-worksheets-from-templates',
   'apply-worksheet',
   'batch-create-and-cache-sheets',
   'build-and-apply-dashboard',
@@ -87,19 +89,22 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * key signature, born at OPEN), author-action (parameter-change wiring), format-labels
  * (mark labels) — PLUS ask-user (ambiguity goes to the human, never to a guess) and
  * search-commands (how the singer discovers the execute-tableau-command dialect) — PLUS
- * bind-template, the deterministic fast-path (no LLM, ~0.3s) for plain chart shapes,
- * and refine-worksheet, the primitives-only top-N/sort editor that carries
- * edit-in-place now that the notional-spec loop is retired.
+ * bind-template, the deterministic fast-path (no LLM, ~0.3s) for plain chart shapes;
+ * list-templates + build-worksheets-from-templates, the read-only catalog/construction
+ * path that returns a guarded worksheet artifact for confirmation before apply-worksheet;
+ * and refine-worksheet, the primitives-only top-N/sort editor that carries edit-in-place
+ * now that the notional-spec loop is retired.
  * PLUS the two knowledge doors — list-knowledge-resources + read-knowledge-resource —
  * without which the system prompt's "consult the expertise library BEFORE authoring"
  * instruction had no tool to route to: the singer could not read the curated corpus at
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
  * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Thirty-two tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
- * and first-class workbook/data reads/navigation; the only raw XML read is get-worksheet-xml,
- * the read leg the manual add-field/remove-field/apply-worksheet path needs to mint its
- * worksheetFile — no whole-workbook get/apply, no cache, no validation XML tools. This is the
+ * Thirty-four tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
+ * and first-class workbook/data reads/navigation. Model-visible raw XML is limited to
+ * get-worksheet-xml, the read leg the manual add-field/remove-field/apply-worksheet path needs;
+ * template construction returns a bounded preview plus an opaque server-side artifact id — no
+ * whole-workbook get/apply, no cache, no validation XML tools. This is the
  * "make it shorter" answer — a lean, semantically-named surface under the 46k tools/list cliff,
  * not a describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19 (CODA):
  * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
@@ -107,6 +112,8 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
     'bind-template',
+    'list-templates',
+    'build-worksheets-from-templates',
     'refine-worksheet',
     'add-field',
     'remove-field',

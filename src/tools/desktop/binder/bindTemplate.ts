@@ -43,7 +43,10 @@ import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
 } from '../../../desktop/templates/injectTemplateCore.js';
-import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import {
+  readTemplateArtifact,
+  type TemplateArtifact,
+} from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { decodeXmlEntities } from '../../../desktop/xmlElement.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
@@ -300,7 +303,9 @@ function nextActionForEscalation(reason: EscalateReason): NextAction {
     return prefillNextAction('Pick a higher-confidence proposal');
   }
   if (reason === 'geo-not-geocodable') {
-    return prefillNextAction('Rebind the geo slot to a geocodable field, or pick a non-map template');
+    return prefillNextAction(
+      'Rebind the geo slot to a geocodable field, or pick a non-map template',
+    );
   }
   if (TIER2_REASONS.has(reason)) {
     return prefillNextAction('Build via build-and-apply-worksheet');
@@ -1059,6 +1064,7 @@ async function performAutoApply({
   schemaSummary,
   suppressActivation,
   manifest,
+  templateArtifact,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -1071,6 +1077,7 @@ async function performAutoApply({
   schemaSummary: SchemaSummary;
   suppressActivation: boolean;
   manifest: TemplateManifest;
+  templateArtifact: TemplateArtifact;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
@@ -1113,17 +1120,12 @@ async function performAutoApply({
   const injectStart = Date.now();
   let injected: ReturnType<typeof buildInjectedWorkbookXml>;
   try {
-    // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
-    const templateXml = readTemplate(args.template_name);
-    if (!templateXml) {
-      throw new Error(`template "${args.template_name}" not found in template assets`);
-    }
     // Per-apply calc-namespacing identity: session + apply timestamp (randomUUID
     // guards same-millisecond applies), mirroring the inject-template tool's nonce.
     const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
     injected = buildInjectedWorkbookXml({
       workbookXml,
-      templateXml,
+      templateXml: templateArtifact.xml,
       title: args.title,
       sheetType: args.sheet_type,
       templateParameters: args.template_parameters,
@@ -1547,7 +1549,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           );
 
           // ── Auto-apply gate (defense in depth) ───────────────────────────
-          // Auto-apply only for a bound result whose manifest remains fast-path eligible.
+          // Auto-apply only for a bound result whose template remains fast-path and pass 1 eligible.
           // A Call-2 proposal bind is validated by the binder against the live workbook and
           // the apply runs under the SAME events-anchor user-change guard; on the slim
           // surface the manual apply tools do not exist, so the alternative is the model
@@ -1556,14 +1558,59 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           // events anchor, not Call-1/Call-2 parity.
           const manifest =
             res.status === 'bound' ? manifests.get(res.args.template_name) : undefined;
+          let templateArtifact: TemplateArtifact | null = null;
+          if (
+            auto_apply === true &&
+            res.status === 'bound' &&
+            manifest?.fast_path_eligible === true
+          ) {
+            try {
+              templateArtifact = readTemplateArtifact(res.args.template_name);
+            } catch {
+              templateArtifact = null;
+            }
+          }
+          const pass1Eligibility = templateArtifact?.eligibility;
           const canAutoApply =
-            auto_apply === true && res.status === 'bound' && manifest?.fast_path_eligible === true;
+            auto_apply === true &&
+            res.status === 'bound' &&
+            manifest?.fast_path_eligible === true &&
+            pass1Eligibility?.pass1_eligible === true;
 
           if (res.status !== 'bound') {
             return new Ok(base);
           }
 
-          if (!canAutoApply || manifest === undefined) {
+          if (
+            auto_apply === true &&
+            manifest?.fast_path_eligible === true &&
+            pass1Eligibility?.pass1_eligible !== true
+          ) {
+            const eligibilityFailure = pass1Eligibility
+              ? `template is not supported in pass 1: ${pass1Eligibility.pass1_blockers.join('; ')}`
+              : 'template pass 1 eligibility could not be verified';
+            recordBindRecoveryAttemptFailOpen({
+              session: resolvedSession,
+              askKey,
+              outcome: res.status,
+              currentProposalSignature,
+              reservationId: bindRecoveryReservationId,
+              terminal: true,
+            });
+            return new IncompleteOperationError(
+              applyFallback(
+                base,
+                eligibilityFailure,
+                `Server-side auto-apply was refused because template "${res.args.template_name}" ${
+                  pass1Eligibility
+                    ? 'is not supported in pass 1'
+                    : 'has no verified pass 1 eligibility'
+                }. Choose another pass 1 eligible template with list-templates, or build the worksheet directly with build-and-apply-worksheet. No worksheet was produced.`,
+              ),
+            ).toErr();
+          }
+
+          if (!canAutoApply || manifest === undefined || templateArtifact === null) {
             recordBindRecoveryAttemptFailOpen({
               session: resolvedSession,
               askKey,
@@ -1587,6 +1634,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             schemaSummary,
             suppressActivation: target_worksheet !== undefined,
             manifest,
+            templateArtifact,
           });
           const appliedResult = autoApplyResult.result;
           recordBoundRecoveryAfterFinalResult({

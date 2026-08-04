@@ -12,6 +12,7 @@
 // structure per base (the dataset-independence proof) and ZERO donor-name leakage.
 
 import type {
+  CalcSlot,
   CommunicativeRole,
   Derivation,
   SlotKind,

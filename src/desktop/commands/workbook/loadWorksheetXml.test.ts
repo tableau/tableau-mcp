@@ -3,6 +3,8 @@ import { Err, Ok } from 'ts-results-es';
 import * as loggerModule from '../../../logging/logger.js';
 import invariant from '../../../utils/invariant.js';
 import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import { extractSheetXml } from '../../metadata/sheets.js';
+import { deriveWorksheetApplyState } from '../../metadata/targetWorksheetState.js';
 import type { ParsedWindow } from '../../metadata/types.js';
 import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
@@ -11,7 +13,12 @@ import { loadWorksheetXml } from './loadWorksheetXml.js';
 const sheetUpsertMock = vi.hoisted(() => ({
   upsertSheetIntoWorkbook: undefined as
     | undefined
-    | ((workbookXml: string, sheetName: string, editedWorksheetXml: string) => string),
+    | ((
+        workbookXml: string,
+        sheetName: string,
+        editedWorksheetXml: string,
+        editedWorksheetWindowXml?: string,
+      ) => string),
 }));
 
 vi.mock('../../metadata/sheets.js', async (importOriginal) => {
@@ -22,10 +29,21 @@ vi.mock('../../metadata/sheets.js', async (importOriginal) => {
       workbookXml: string,
       sheetName: string,
       editedWorksheetXml: string,
+      editedWorksheetWindowXml?: string,
     ) =>
       sheetUpsertMock.upsertSheetIntoWorkbook
-        ? sheetUpsertMock.upsertSheetIntoWorkbook(workbookXml, sheetName, editedWorksheetXml)
-        : actual.upsertSheetIntoWorkbook(workbookXml, sheetName, editedWorksheetXml),
+        ? sheetUpsertMock.upsertSheetIntoWorkbook(
+            workbookXml,
+            sheetName,
+            editedWorksheetXml,
+            editedWorksheetWindowXml,
+          )
+        : actual.upsertSheetIntoWorkbook(
+            workbookXml,
+            sheetName,
+            editedWorksheetXml,
+            editedWorksheetWindowXml,
+          ),
   };
 });
 
@@ -96,6 +114,36 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     };
   }
 
+  function statefulExecutor(initialWorkbookXml: string): {
+    executor: ToolExecutor;
+    appliedDocuments: string[];
+  } {
+    let liveWorkbookXml = initialWorkbookXml;
+    const appliedDocuments: string[] = [];
+    const executor = {
+      getWorkbookDocument: vi.fn(async () =>
+        Ok({
+          xml: liveWorkbookXml,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(async (xml: string) => {
+        appliedDocuments.push(xml);
+        liveWorkbookXml = xml;
+        return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+      }),
+      listWorksheets: vi.fn(async () =>
+        Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] }),
+      ),
+      getWorksheetDocument: vi.fn(async () =>
+        Ok({ xml: extractSheetXml(liveWorkbookXml, worksheetName) ?? '' }),
+      ),
+    } as unknown as ToolExecutor;
+
+    return { executor, appliedDocuments };
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     sheetUpsertMock.upsertSheetIntoWorkbook = undefined;
@@ -129,6 +177,52 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     // MUST survive in the posted doc — omitting them would prune them from Desktop.
     expect(applyCall?.xml).toContain('name="Other"');
     expect(applyCall?.xml).toContain('name="Dashboard 1"');
+  });
+
+  it('preserves the generic one-GET apply path when no confirmed state is supplied', async () => {
+    const sourceWorkbook = `<?xml version='1.0'?><workbook>
+      <worksheets>
+        <worksheet name='Sheet 1'><table /></worksheet>
+        <worksheet name='Other'><table><rows /></table></worksheet>
+      </worksheets>
+      <windows>
+        <window class='worksheet' name='Sheet 1' />
+        <window class='worksheet' name='Other' />
+      </windows>
+    </workbook>`;
+    const laterWorkbook = sourceWorkbook.replace('<rows />', '<cols />');
+    const appliedDocuments: string[] = [];
+    const executor = {
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValueOnce(
+          Ok({ xml: sourceWorkbook, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        )
+        .mockResolvedValue(
+          Ok({ xml: laterWorkbook, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        ),
+      applyWorkbookDocument: vi.fn(async (xml: string) => {
+        appliedDocuments.push(xml);
+        return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+      }),
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] })),
+      getWorksheetDocument: vi.fn(async () => Ok({ xml: validXml })),
+    } as unknown as ToolExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(executor.getWorkbookDocument).toHaveBeenCalledOnce();
+    expect(appliedDocuments).toHaveLength(1);
+    expect(appliedDocuments[0]).toContain('<rows>');
+    expect(appliedDocuments[0]).not.toContain('<cols>');
   });
 
   it('preserves the live active window and does not navigate after apply', async () => {
@@ -179,6 +273,555 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(applyCall?.xml).toContain('class="worksheet" name="Sheet 1"');
     expect(applyCall?.xml).toContain('name="Some Other Sheet"');
   });
+
+  it('refuses when an expected-absent target appeared after preview', async () => {
+    const previewWorkbook = liveWorkbook([]);
+    const { executor, appliedDocuments } = statefulExecutor(liveWorkbook([worksheetName]));
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      expectedState: deriveWorksheetApplyState(previewWorkbook, worksheetName, validXml),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error).toMatchObject({
+        type: 'preview-state-changed',
+        message: expect.stringMatching(/changed after preview.*rebuilt.*reconfirmed/i),
+      });
+    }
+    expect(appliedDocuments).toHaveLength(0);
+  });
+
+  it('refuses before POST when the incoming worksheet differs from the confirmed artifact', async () => {
+    const previewWorkbook = liveWorkbook([worksheetName]);
+    const confirmedXml = `<worksheet name='${worksheetName}'><table><rows /></table></worksheet>`;
+    const { executor, appliedDocuments } = statefulExecutor(previewWorkbook);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: `<worksheet name='${worksheetName}'><table><cols /></table></worksheet>`,
+      expectedState: deriveWorksheetApplyState(previewWorkbook, worksheetName, confirmedXml),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error).toMatchObject({
+        type: 'preview-state-changed',
+        message: expect.stringMatching(/confirmed artifact.*reconfirmed/i),
+      });
+    }
+    expect(appliedDocuments).toHaveLength(0);
+  });
+
+  it('refuses before POST when the incoming worksheet window differs from the confirmed artifact', async () => {
+    const previewWorkbook = liveWorkbook([worksheetName]);
+    const confirmedWindow = `<window class='worksheet' name='${worksheetName}'><cards><card type='filters' /></cards></window>`;
+    const { executor, appliedDocuments } = statefulExecutor(previewWorkbook);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      worksheetWindowXml: `<window class='worksheet' name='${worksheetName}'><cards><card type='marks' /></cards></window>`,
+      expectedState: deriveWorksheetApplyState(
+        previewWorkbook,
+        worksheetName,
+        validXml,
+        confirmedWindow,
+      ),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(appliedDocuments).toHaveLength(0);
+  });
+
+  it('refuses when the target worksheet changed after preview', async () => {
+    const previewWorkbook = `<?xml version='1.0'?><workbook><worksheets>
+      <worksheet name='Sheet 1'><table><rows /></table></worksheet>
+    </worksheets><windows><window class='worksheet' name='Sheet 1' /></windows></workbook>`;
+    const changedWorkbook = previewWorkbook.replace('<rows />', '<cols />');
+    const { executor, appliedDocuments } = statefulExecutor(changedWorkbook);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      expectedState: deriveWorksheetApplyState(previewWorkbook, worksheetName, validXml),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error.type).toBe('preview-state-changed');
+    }
+    expect(appliedDocuments).toHaveLength(0);
+  });
+
+  it('refuses before POST when the target worksheet window changed after preview', async () => {
+    const previewWorkbook = `<?xml version='1.0'?><workbook><worksheets>
+      <worksheet name='Sheet 1'><table /></worksheet>
+    </worksheets><windows><window class='worksheet' name='Sheet 1'><cards><card type='filters' /></cards></window></windows></workbook>`;
+    const changedWorkbook = previewWorkbook.replace("type='filters'", "type='marks'");
+    const intendedWindow =
+      "<window class='worksheet' name='Sheet 1'><cards><card type='pages' /></cards></window>";
+    const { executor, appliedDocuments } = statefulExecutor(changedWorkbook);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      worksheetWindowXml: intendedWindow,
+      expectedState: deriveWorksheetApplyState(
+        previewWorkbook,
+        worksheetName,
+        validXml,
+        intendedWindow,
+      ),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(appliedDocuments).toHaveLength(0);
+  });
+
+  it('replaces the target when its live state still matches the preview', async () => {
+    const initialWorkbook = liveWorkbook([worksheetName]);
+    const { executor, appliedDocuments } = statefulExecutor(initialWorkbook);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      expectedState: deriveWorksheetApplyState(initialWorkbook, worksheetName, validXml),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(appliedDocuments).toHaveLength(1);
+    expect(appliedDocuments[0]).toContain('<rows');
+  });
+
+  it('applies the exact confirmed worksheet window and cards when live state still matches', async () => {
+    const initialWorkbook = liveWorkbook([worksheetName]).replace(
+      `<window class='worksheet' name='${worksheetName}' />`,
+      `<window class='worksheet' name='${worksheetName}'><cards><old-card /></cards></window>`,
+    );
+    const intendedWindow = `<window class='worksheet' name='${worksheetName}'><cards><card type='filters' /></cards></window>`;
+    const { executor, appliedDocuments } = statefulExecutor(initialWorkbook);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      worksheetWindowXml: intendedWindow,
+      expectedState: deriveWorksheetApplyState(
+        initialWorkbook,
+        worksheetName,
+        validXml,
+        intendedWindow,
+      ),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(appliedDocuments).toHaveLength(1);
+    expect(appliedDocuments[0]).toContain('<card type="filters">');
+    expect(appliedDocuments[0]).not.toContain('<old-card>');
+  });
+
+  it.each([
+    ['changes', '<card type="marks">'],
+    ['drops', ''],
+  ])(
+    'refuses success when Tableau %s the confirmed worksheet cards after POST',
+    async (_, card) => {
+      const initialWorkbook = liveWorkbook([worksheetName]);
+      const intendedWindow = `<window class='worksheet' name='${worksheetName}'><cards><card type='filters' /></cards></window>`;
+      let liveWorkbookXml = initialWorkbook;
+      const executor = {
+        getWorkbookDocument: vi.fn(async () =>
+          Ok({
+            xml: liveWorkbookXml,
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        ),
+        applyWorkbookDocument: vi.fn(async (xml: string) => {
+          liveWorkbookXml = xml.replace('<card type="filters">', card);
+          return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+        }),
+        listWorksheets: vi.fn(async () =>
+          Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] }),
+        ),
+        getWorksheetDocument: vi.fn(async () =>
+          Ok({ xml: extractSheetXml(liveWorkbookXml, worksheetName) ?? '' }),
+        ),
+      } as unknown as ToolExecutor;
+
+      const result = await loadWorksheetXml({
+        worksheetName,
+        xml: validXml,
+        worksheetWindowXml: intendedWindow,
+        expectedState: deriveWorksheetApplyState(
+          initialWorkbook,
+          worksheetName,
+          validXml,
+          intendedWindow,
+        ),
+        executor,
+        signal: mockSignal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-worksheet-xml-error');
+        expect(result.error.error).toMatchObject({
+          type: 'readback-failed',
+          findings: [expect.objectContaining({ kind: 'window' })],
+        });
+      }
+      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it('allows sibling and dashboard edits while guarding only the target worksheet', async () => {
+    const previewWorkbook = `<?xml version='1.0'?><workbook>
+      <worksheets>
+        <worksheet name='Sheet 1'><table /></worksheet>
+        <worksheet name='Other'><table><rows /></table></worksheet>
+      </worksheets>
+      <dashboards><dashboard name='Dashboard 1'><zones /></dashboard></dashboards>
+      <windows>
+        <window class='worksheet' name='Sheet 1' />
+        <window class='worksheet' name='Other' />
+      </windows>
+    </workbook>`;
+    const liveEditedWorkbook = previewWorkbook
+      .replace('<rows />', '<cols><column /></cols>')
+      .replace('<zones />', '<zones><zone id="new" /></zones>');
+    const { executor, appliedDocuments } = statefulExecutor(liveEditedWorkbook);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      expectedState: deriveWorksheetApplyState(previewWorkbook, worksheetName, validXml),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(appliedDocuments).toHaveLength(1);
+    expect(appliedDocuments[0]).toContain('name="Other"');
+    expect(appliedDocuments[0]).toContain('<cols>');
+    expect(appliedDocuments[0]).toContain('name="Dashboard 1"');
+    expect(appliedDocuments[0]).toContain('id="new"');
+  });
+
+  it('rebases and preserves an unrelated edit that lands on the pre-POST stability read', async () => {
+    const previewWorkbook = `<?xml version='1.0'?><workbook>
+      <worksheets>
+        <worksheet name='Sheet 1'><table /></worksheet>
+        <worksheet name='Other'><table><rows /></table></worksheet>
+      </worksheets>
+      <windows>
+        <window class='worksheet' name='Sheet 1' />
+        <window class='worksheet' name='Other' />
+      </windows>
+    </workbook>`;
+    const editedWorkbook = previewWorkbook.replace('<rows />', '<cols><column /></cols>');
+    const appliedDocuments: string[] = [];
+    const executor = {
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValueOnce(
+          Ok({ xml: previewWorkbook, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        )
+        .mockResolvedValue(
+          Ok({ xml: editedWorkbook, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        ),
+      applyWorkbookDocument: vi.fn(async (xml: string) => {
+        appliedDocuments.push(xml);
+        return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+      }),
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] })),
+      getWorksheetDocument: vi.fn(async () => Ok({ xml: validXml })),
+    } as unknown as ToolExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      expectedState: deriveWorksheetApplyState(previewWorkbook, worksheetName, validXml),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(3);
+    expect(appliedDocuments).toHaveLength(1);
+    expect(appliedDocuments[0]).toContain('<cols>');
+    expect(appliedDocuments[0]).toContain('<column>');
+  });
+
+  it('refuses before POST when the protected target changes on the pre-POST stability read', async () => {
+    const previewWorkbook = liveWorkbook([worksheetName]);
+    const changedWorkbook = previewWorkbook.replace('<table />', '<table><cols /></table>');
+    const appliedDocuments: string[] = [];
+    const executor = {
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValueOnce(
+          Ok({ xml: previewWorkbook, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        )
+        .mockResolvedValue(
+          Ok({ xml: changedWorkbook, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        ),
+      applyWorkbookDocument: vi.fn(async (xml: string) => {
+        appliedDocuments.push(xml);
+        return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+      }),
+    } as unknown as ToolExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      expectedState: deriveWorksheetApplyState(previewWorkbook, worksheetName, validXml),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(appliedDocuments).toHaveLength(0);
+  });
+
+  it('refuses before POST when unrelated workbook state never stabilizes', async () => {
+    const previewWorkbook = `<?xml version='1.0'?><workbook>
+      <worksheets>
+        <worksheet name='Sheet 1'><table /></worksheet>
+        <worksheet name='Other'><table><rows /></table></worksheet>
+      </worksheets>
+      <windows><window class='worksheet' name='Sheet 1' /><window class='worksheet' name='Other' /></windows>
+    </workbook>`;
+    let read = 0;
+    const appliedDocuments: string[] = [];
+    const executor = {
+      getWorkbookDocument: vi.fn(async () => {
+        const xml = previewWorkbook.replace('<rows />', `<rows><read value='${read++}' /></rows>`);
+        return Ok({ xml, applicationVersion: undefined, xsdPayloadVersion: undefined });
+      }),
+      applyWorkbookDocument: vi.fn(async (xml: string) => {
+        appliedDocuments.push(xml);
+        return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+      }),
+    } as unknown as ToolExecutor;
+
+    const initial = previewWorkbook.replace('<rows />', "<rows><read value='0' /></rows>");
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      expectedState: deriveWorksheetApplyState(initial, worksheetName, validXml),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error).toMatchObject({
+        type: 'preview-state-changed',
+        message: expect.stringMatching(/kept changing.*retry/i),
+      });
+    }
+    expect(appliedDocuments).toHaveLength(0);
+  });
+
+  it('refuses before POST when a referenced field definition changed after preview', async () => {
+    const incomingXml = `<worksheet name='${worksheetName}'><table><rows>[Orders].[sum:Sales:qk]</rows></table></worksheet>`;
+    const previewWorkbook = workbookWithReferencedField('real');
+    const liveWorkbookXml = workbookWithReferencedField('integer');
+    const { executor, appliedDocuments } = statefulExecutor(liveWorkbookXml);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: incomingXml,
+      expectedState: deriveWorksheetApplyState(previewWorkbook, worksheetName, incomingXml),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error).toMatchObject({
+        type: 'preview-state-changed',
+        message: expect.stringMatching(/referenced fields changed.*rebuilt.*reconfirmed/i),
+      });
+    }
+    expect(appliedDocuments).toHaveLength(0);
+  });
+
+  it('refuses before POST when a referenced field was removed after preview', async () => {
+    const incomingXml = `<worksheet name='${worksheetName}'><table><rows>[Orders].[sum:Sales:qk]</rows></table></worksheet>`;
+    const previewWorkbook = workbookWithReferencedField('real');
+    const liveWorkbookXml = workbookWithReferencedField(undefined);
+    const { executor, appliedDocuments } = statefulExecutor(liveWorkbookXml);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: incomingXml,
+      expectedState: deriveWorksheetApplyState(previewWorkbook, worksheetName, incomingXml),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(appliedDocuments).toHaveLength(0);
+  });
+
+  it('allows unrelated field, datasource, connection, and value changes', async () => {
+    const incomingXml = `<worksheet name='${worksheetName}'><table><rows>[Orders].[sum:Sales:qk]</rows></table></worksheet>`;
+    const previewWorkbook = workbookWithReferencedField('real');
+    const liveWorkbookXml = workbookWithReferencedField(
+      'real',
+      "<column name='[Unused]' role='dimension' type='nominal' datatype='date' />",
+      "<connection class='sqlserver'><relation name='renamed'><rows><row value='new' /></rows></relation></connection>",
+    ).replace(
+      "<datasource name='Other'><column name='[Other]' role='dimension' type='nominal' datatype='string' /></datasource>",
+      "<datasource name='Other'><column name='[Other]' role='measure' type='quantitative' datatype='integer' /></datasource>",
+    );
+    const { executor, appliedDocuments } = statefulExecutor(liveWorkbookXml);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: incomingXml,
+      expectedState: deriveWorksheetApplyState(previewWorkbook, worksheetName, incomingXml),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(appliedDocuments).toHaveLength(1);
+  });
+
+  it('allows exactly one concurrent same-target apply from the same preview state', async () => {
+    const initialWorkbook = liveWorkbook([worksheetName]);
+    const incomingXml = `<worksheet name='${worksheetName}'><table><rows /></table></worksheet>`;
+    const expectedState = deriveWorksheetApplyState(initialWorkbook, worksheetName, incomingXml);
+    const { executor, appliedDocuments } = statefulExecutor(initialWorkbook);
+
+    const [first, second] = await Promise.all([
+      loadWorksheetXml({
+        worksheetName,
+        xml: incomingXml,
+        expectedState,
+        executor,
+        signal: mockSignal,
+      }),
+      loadWorksheetXml({
+        worksheetName,
+        xml: incomingXml,
+        expectedState,
+        executor,
+        signal: mockSignal,
+      }),
+    ]);
+
+    expect(first.isOk()).toBe(true);
+    expect(second.isErr()).toBe(true);
+    if (second.isErr()) {
+      invariant(second.error.type === 'load-worksheet-xml-error');
+      expect(second.error.error.type).toBe('preview-state-changed');
+    }
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(3);
+    expect(appliedDocuments).toHaveLength(1);
+  });
+
+  it('preserves both concurrent different-target confirmed applies', async () => {
+    const secondWorksheetName = 'Sheet 2';
+    const initialWorkbook = liveWorkbook([worksheetName, secondWorksheetName]);
+    const firstXml = `<worksheet name='${worksheetName}'><table><rows /></table></worksheet>`;
+    const secondXml = `<worksheet name='${secondWorksheetName}'><table><cols /></table></worksheet>`;
+    let liveWorkbookXml = initialWorkbook;
+    const appliedDocuments: string[] = [];
+    const executor = {
+      getWorkbookDocument: vi.fn(async () =>
+        Ok({
+          xml: liveWorkbookXml,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(async (xml: string) => {
+        appliedDocuments.push(xml);
+        liveWorkbookXml = xml;
+        return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+      }),
+      listWorksheets: vi.fn(async () =>
+        Ok({
+          worksheets: [
+            { id: 'sheet-1', name: worksheetName },
+            { id: 'sheet-2', name: secondWorksheetName },
+          ],
+        }),
+      ),
+      getWorksheetDocument: vi.fn(async (id: string) => {
+        const name = id === 'sheet-1' ? worksheetName : secondWorksheetName;
+        return Ok({ xml: extractSheetXml(liveWorkbookXml, name) ?? '' });
+      }),
+    } as unknown as ToolExecutor;
+
+    const [first, second] = await Promise.all([
+      loadWorksheetXml({
+        worksheetName,
+        xml: firstXml,
+        expectedState: deriveWorksheetApplyState(initialWorkbook, worksheetName, firstXml),
+        executor,
+        signal: mockSignal,
+      }),
+      loadWorksheetXml({
+        worksheetName: secondWorksheetName,
+        xml: secondXml,
+        expectedState: deriveWorksheetApplyState(initialWorkbook, secondWorksheetName, secondXml),
+        executor,
+        signal: mockSignal,
+      }),
+    ]);
+
+    expect(first.isOk()).toBe(true);
+    expect(second.isOk()).toBe(true);
+    expect(appliedDocuments).toHaveLength(2);
+    expect(extractSheetXml(liveWorkbookXml, worksheetName)).toContain('<rows>');
+    expect(extractSheetXml(liveWorkbookXml, secondWorksheetName)).toContain('<cols>');
+  });
+
+  function workbookWithReferencedField(
+    datatype: string | undefined,
+    extraOrdersField = '',
+    connection = "<connection class='textscan'><relation name='orders.csv' /></connection>",
+  ): string {
+    const sales = datatype
+      ? `<column name='[Sales]' role='measure' type='quantitative' datatype='${datatype}' />`
+      : '';
+    return `<?xml version='1.0'?><workbook>
+      <datasources>
+        <datasource name='Orders'>${sales}${extraOrdersField}${connection}</datasource>
+        <datasource name='Other'><column name='[Other]' role='dimension' type='nominal' datatype='string' /></datasource>
+      </datasources>
+      <worksheets><worksheet name='${worksheetName}'><table /></worksheet></worksheets>
+      <windows><window class='worksheet' name='${worksheetName}' /></windows>
+    </workbook>`;
+  }
 
   it('continues worksheet apply when both preflight stages contain only telemetry findings', async () => {
     const telemetryIssue = {

@@ -3,6 +3,7 @@ import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import {
   addSheet,
   deleteSheet,
+  extractLastWorksheetArtifact,
   extractSheetXml,
   listSheets,
   upsertSheetIntoWorkbook,
@@ -68,6 +69,39 @@ describe('extractSheetXml', () => {
     expect(xml).not.toContain('http://www.tableausoftware.com/xml/user');
   });
 });
+
+describe('extractLastWorksheetArtifact', () => {
+  it('selects the appended same-name worksheet and its worksheet window', () => {
+    const xml = `<workbook>
+      <worksheets>
+        <worksheet name="Sales"><table><old /></table></worksheet>
+        <worksheet name="Sales"><table><new /></table></worksheet>
+      </worksheets>
+      <windows>
+        <window class="dashboard" name="Sales"><cards><dashboard-card /></cards></window>
+        <window class="worksheet" name="Sales"><cards><old-card /></cards></window>
+        <window class="worksheet" name="Sales"><cards><new-card /></cards></window>
+      </windows>
+    </workbook>`;
+
+    const artifact = extractLastWorksheetArtifact(xml, 'Sales');
+
+    expect(artifact?.worksheetXml).toContain('<new');
+    expect(artifact?.worksheetXml).not.toContain('<old');
+    expect(artifact?.worksheetWindowXml).toContain('<new-card');
+    expect(artifact?.worksheetWindowXml).not.toContain('<old-card');
+    expect(artifact?.worksheetWindowXml).not.toContain('<dashboard-card');
+  });
+
+  it('returns null unless both the worksheet and its worksheet window exist', () => {
+    expect(
+      extractLastWorksheetArtifact(
+        '<workbook><worksheets><worksheet name="Sales"><table /></worksheet></worksheets></workbook>',
+        'Sales',
+      ),
+    ).toBeNull();
+  });
+});
 describe('worksheetDocumentToFragment', () => {
   // The live per-sheet /document route returns a whole <workbook> carrying every sheet, not a bare
   // fragment. The helper must slice out only the requested sheet.
@@ -126,6 +160,85 @@ describe('upsertSheetIntoWorkbook', () => {
     expect(doc).toContain('name="Sheet 2"');
     expect(doc).toContain('name="Dashboard 1"');
     expect(listSheets(doc)).toEqual(['Sheet 1', 'Sheet 2']);
+  });
+
+  it('replaces NFC-equivalent worksheet and window names instead of appending duplicates', () => {
+    const composed = 'Caf\u00e9';
+    const decomposed = 'Cafe\u0301';
+    const workbook = `<workbook>
+      <worksheets><worksheet name="${composed}"><table><old /></table></worksheet></worksheets>
+      <windows><window class="worksheet" name="${composed}"><cards><old-card /></cards></window></windows>
+    </workbook>`;
+    const edited = `<worksheet name="${decomposed}"><table><new /></table></worksheet>`;
+    const editedWindow = `<window class="worksheet" name="${decomposed}"><cards><new-card /></cards></window>`;
+
+    const doc = upsertSheetIntoWorkbook(workbook, decomposed, edited, editedWindow);
+
+    expect(listSheets(doc)).toEqual([decomposed]);
+    expect(doc.match(/<worksheet\b/g) ?? []).toHaveLength(1);
+    expect(doc.match(/<window\b/g) ?? []).toHaveLength(1);
+    expect(doc).toContain('<new>');
+    expect(doc).toContain('<new-card>');
+    expect(doc).not.toContain('<old>');
+    expect(doc).not.toContain('<old-card>');
+  });
+
+  it('replaces the matching worksheet window with the confirmed cards', () => {
+    const workbook = LIVE_WORKBOOK.replace(
+      '</windows>',
+      '<window class="dashboard" name="Sheet 1"><cards><dashboard-card /></cards></window></windows>',
+    );
+    const edited = "<worksheet name='Sheet 1'><table><new /></table></worksheet>";
+    const editedWindow =
+      "<window class='worksheet' name='Sheet 1'><cards><card type='filters' /></cards></window>";
+
+    const doc = upsertSheetIntoWorkbook(workbook, 'Sheet 1', edited, editedWindow);
+
+    expect(doc).toContain('<card type="filters">');
+    expect(doc).not.toContain('<window class="worksheet" name="Sheet 1"><cards/>');
+    expect(doc).toContain('<dashboard-card>');
+  });
+
+  it('adds a confirmed worksheet window when the target has none', () => {
+    const workbook =
+      '<workbook><worksheets><worksheet name="Sheet 1"><table /></worksheet></worksheets></workbook>';
+    const edited = '<worksheet name="Sheet 1"><table><new /></table></worksheet>';
+    const editedWindow =
+      '<window class="worksheet" name="Sheet 1"><cards><card type="marks" /></cards></window>';
+
+    const doc = upsertSheetIntoWorkbook(workbook, 'Sheet 1', edited, editedWindow);
+
+    expect(doc).toContain('<card type="marks">');
+  });
+
+  it('rejects a confirmed window for a different sheet', () => {
+    const edited = '<worksheet name="Sheet 1"><table><new /></table></worksheet>';
+    const wrongWindow = '<window class="worksheet" name="Wrong"><cards /></window>';
+
+    expect(() => upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 1', edited, wrongWindow)).toThrow(
+      /window.*Sheet 1/i,
+    );
+  });
+
+  it('rejects a fragment that is not exactly one worksheet-class window', () => {
+    const edited = '<worksheet name="Sheet 1"><table><new /></table></worksheet>';
+
+    expect(() =>
+      upsertSheetIntoWorkbook(
+        LIVE_WORKBOOK,
+        'Sheet 1',
+        edited,
+        '<window name="Sheet 1"><cards /></window>',
+      ),
+    ).toThrow(/class="worksheet"/);
+    expect(() =>
+      upsertSheetIntoWorkbook(
+        LIVE_WORKBOOK,
+        'Sheet 1',
+        edited,
+        '<window class="worksheet" name="Sheet 1" /><window class="worksheet" name="Sheet 1" />',
+      ),
+    ).toThrow(/exactly one/i);
   });
 
   it('appends a brand-new sheet, keeping the existing ones', () => {

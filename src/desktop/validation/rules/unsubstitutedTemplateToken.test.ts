@@ -45,11 +45,27 @@ describe('unsubstituted-template-token rule', () => {
     expect(unsubstitutedTemplateTokenRule.validate(xml)).toHaveLength(0);
   });
 
-  it('does not flag single-brace text or lowercase double-brace text', () => {
+  it('does not flag single-brace text, generic lowercase text, or the optional-field marker', () => {
     const xml =
-      '<calc formula="IF {x} > 0 THEN &quot;a&quot; END" /><x note="{not a token}" y="{{lower_case}}"/>';
+      '<calc formula="IF {x} > 0 THEN &quot;a&quot; END" />' +
+      '<x note="{not a token}" y="{{lower_case}}" optional="{{semantic field in plain English terms}}; original field [X]"/>';
 
     expect(unsubstitutedTemplateTokenRule.validate(xml)).toHaveLength(0);
+  });
+
+  it('errors on lowercase {{field_base_N}} residue without matching symbolic N', () => {
+    const issues = unsubstitutedTemplateTokenRule.validate(
+      '<worksheet><rows>[{{DATASOURCE}}].[{{field_base_2}}]</rows><x note="{{field_base_N}}"/></worksheet>',
+    );
+
+    expect(issues).toHaveLength(2);
+    expect(issues.map((issue) => issue.message)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('{{DATASOURCE}}'),
+        expect.stringContaining('{{field_base_2}}'),
+      ]),
+    );
+    expect(issues.some((issue) => issue.message.includes('{{field_base_N}}'))).toBe(false);
   });
 
   it('returns nothing for empty XML', () => {

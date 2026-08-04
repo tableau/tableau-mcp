@@ -140,6 +140,24 @@ export interface Inference {
   hasColumnDict: boolean;
 }
 
+export interface TemplatePass1Eligibility {
+  pass1_eligible: boolean;
+  pass1_blockers: string[];
+}
+
+/** Pass 1 excludes bookmark conversions that leave bare table-calc field tokens behind. */
+export function deriveTemplatePass1Eligibility(
+  converted: Pick<ReturnType<typeof bookmarkToTemplateWorkbook>, 'bareRefs'>,
+): TemplatePass1Eligibility {
+  const bareRefs = [...new Set(converted.bareRefs)].sort((a, b) => a.localeCompare(b));
+  return bareRefs.length === 0
+    ? { pass1_eligible: true, pass1_blockers: [] }
+    : {
+        pass1_eligible: false,
+        pass1_blockers: [`unresolved-table-calc-bareRefs: ${bareRefs.join(', ')}`],
+      };
+}
+
 /**
  * Canonical derivation short-forms the binder keys qualified slots on
  * (`template_field@derivation`, explicit-bind.ts:291). Mirrors the Derivation union

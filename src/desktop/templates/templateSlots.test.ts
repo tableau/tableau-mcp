@@ -5,21 +5,44 @@ import type { TemplateManifest } from '../binder/manifest-types.js';
 // resolveTemplateSlots joins two sources — the inferred `.tbm` and an optional curated
 // manifest — so both are mocked. Inference itself (inferFromBookmark/synthesizeManifest)
 // runs for real against the fixture, so the merge is exercised end-to-end.
-vi.mock('./templatePath.js', () => ({ readBookmark: vi.fn(), listTemplateNames: vi.fn() }));
+vi.mock('./templatePath.js', () => ({
+  getLegacyTemplateCatalogEntry: vi.fn(),
+  getTemplateCatalogEntry: vi.fn(),
+  listLegacyTemplateCatalog: vi.fn(),
+  readBookmarkFromCatalogEntry: vi.fn(),
+  readXmlFromCatalogEntry: vi.fn(),
+  readBookmark: vi.fn(),
+  listTemplateCatalog: vi.fn(),
+}));
 vi.mock('../intelligence/provider.js', () => ({
   bundledIntelligenceProvider: { getTemplateManifest: vi.fn() },
 }));
 
 import { bundledIntelligenceProvider } from '../intelligence/provider.js';
-import { listTemplateNames, readBookmark } from './templatePath.js';
 import {
+  getLegacyTemplateCatalogEntry,
+  getTemplateCatalogEntry,
+  listLegacyTemplateCatalog,
+  listTemplateCatalog,
+  readBookmark,
+  readBookmarkFromCatalogEntry,
+  readXmlFromCatalogEntry,
+} from './templatePath.js';
+import {
+  resolveAllTemplateCatalog,
   resolveAllTemplateManifests,
   resolveTemplateManifest,
   resolveTemplateSlots,
+  resolveTemplateSnapshot,
 } from './templateSlots.js';
 
 const readBookmarkMock = vi.mocked(readBookmark);
-const listTemplateNamesMock = vi.mocked(listTemplateNames);
+const readBookmarkFromCatalogEntryMock = vi.mocked(readBookmarkFromCatalogEntry);
+const readXmlFromCatalogEntryMock = vi.mocked(readXmlFromCatalogEntry);
+const getTemplateCatalogEntryMock = vi.mocked(getTemplateCatalogEntry);
+const getLegacyTemplateCatalogEntryMock = vi.mocked(getLegacyTemplateCatalogEntry);
+const listTemplateCatalogMock = vi.mocked(listTemplateCatalog);
+const listLegacyTemplateCatalogMock = vi.mocked(listLegacyTemplateCatalog);
 const getManifestMock = vi.mocked(bundledIntelligenceProvider.getTemplateManifest);
 
 const MODERN_BOOKMARK =
@@ -54,13 +77,18 @@ function curatedManifest(overrides: Partial<TemplateManifest> = {}): TemplateMan
 
 beforeEach(() => {
   readBookmarkMock.mockReset();
-  listTemplateNamesMock.mockReset();
+  readBookmarkFromCatalogEntryMock.mockReset();
+  listTemplateCatalogMock.mockReset();
+  listLegacyTemplateCatalogMock.mockReset();
   getManifestMock.mockReset();
+  getTemplateCatalogEntryMock.mockReset();
+  getLegacyTemplateCatalogEntryMock.mockReset();
 });
 
 describe('resolveTemplateSlots — inferred only (.tbm, no manifest)', () => {
   it('reports source "inferred" and derives slots from the bookmark', () => {
     readBookmarkMock.mockReturnValue(MODERN_BOOKMARK);
+    readBookmarkFromCatalogEntryMock.mockReturnValue(MODERN_BOOKMARK);
     getManifestMock.mockReturnValue(undefined);
 
     const resolved = resolveTemplateSlots('my-template');
@@ -266,6 +294,33 @@ describe('resolveTemplateManifest — full-manifest resolver', () => {
     ]);
   });
 
+  it('does not overlay a bundled curated manifest onto a custom bookmark with the same name', () => {
+    const entry = {
+      template: 'my-template',
+      provenance: 'custom',
+      overridesLowerPrecedence: true,
+      format: 'tbm',
+      bookmarkPath: '/contained/my-template.tbm',
+    } as const;
+    readBookmarkFromCatalogEntryMock.mockReturnValue(MODERN_BOOKMARK);
+    getManifestMock.mockReturnValue(
+      curatedManifest({
+        description: 'BUNDLED DESCRIPTION MUST NOT SURVIVE',
+        family: 'ranking',
+      }),
+    );
+
+    const resolved = resolveTemplateManifest('my-template', entry);
+
+    expect(resolved).toMatchObject({
+      source: 'inferred',
+      provenance: 'custom',
+      overridesLowerPrecedence: true,
+    });
+    expect(resolved!.manifest.description).toBe('Inferred from bookmark my-template');
+    expect(resolved!.manifest.family).toBe('specialized');
+  });
+
   it('serves the curated manifest verbatim when there is no bookmark to infer from', () => {
     readBookmarkMock.mockReturnValue(null);
     getManifestMock.mockReturnValue(curatedManifest({ description: 'manifest-only' }));
@@ -283,11 +338,89 @@ describe('resolveTemplateManifest — full-manifest resolver', () => {
   });
 });
 
+describe('resolveTemplateSnapshot — one source read', () => {
+  it('derives template XML, eligibility, and manifest from the same bookmark bytes', () => {
+    const entry = {
+      template: 'my-template',
+      provenance: 'custom' as const,
+      overridesLowerPrecedence: true,
+      format: 'tbm' as const,
+      bookmarkPath: '/contained/my-template.tbm',
+      sourceRoot: '/contained',
+    };
+    getTemplateCatalogEntryMock.mockReturnValue(entry);
+    readBookmarkFromCatalogEntryMock
+      .mockReturnValueOnce(MODERN_BOOKMARK)
+      .mockReturnValueOnce(MODERN_BOOKMARK.replace('<rows>', '<rows>[federated.x].[sum:Other:qk]'));
+
+    const snapshot = resolveTemplateSnapshot('my-template', { repositoryRoot: '/repository' });
+
+    expect(getTemplateCatalogEntryMock).toHaveBeenCalledWith('my-template', {
+      repositoryRoot: '/repository',
+    });
+    expect(readBookmarkFromCatalogEntryMock).toHaveBeenCalledTimes(1);
+    expect(readXmlFromCatalogEntryMock).not.toHaveBeenCalled();
+    expect(snapshot).toMatchObject({
+      provenance: 'custom',
+      overridesLowerPrecedence: true,
+      artifact: {
+        xml: expect.stringContaining('{{field_base_1}}'),
+        eligibility: { pass1_eligible: true, pass1_blockers: [] },
+      },
+      resolvedManifest: {
+        provenance: 'custom',
+        overridesLowerPrecedence: true,
+      },
+    });
+    expect(snapshot!.resolvedManifest!.manifest.slots.map((slot) => slot.hint)).toEqual([
+      'Category',
+      'Sales',
+    ]);
+  });
+
+  it('does not fall back when an invalid custom source shadows a protected name', () => {
+    getTemplateCatalogEntryMock.mockReturnValue({
+      template: 'my-template',
+      provenance: 'custom',
+      overridesLowerPrecedence: true,
+      format: 'tbm',
+      bookmarkPath: '/contained/my-template.tbm',
+      sourceRoot: '/contained',
+      discoveryIssue: 'invalid-or-unreadable',
+    });
+    readBookmarkFromCatalogEntryMock.mockReturnValue(null);
+
+    expect(resolveTemplateSnapshot('my-template')).toBeNull();
+    expect(getManifestMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('resolveAllTemplateManifests — catalog resolver', () => {
   it('maps every listed name to its merged manifest and skips names that resolve to nothing', () => {
-    listTemplateNamesMock.mockReturnValue(['from-tbm', 'from-manifest', 'ghost']);
+    listLegacyTemplateCatalogMock.mockReturnValue([
+      {
+        template: 'from-tbm',
+        provenance: 'protected',
+        overridesLowerPrecedence: false,
+        format: 'tbm',
+      },
+      {
+        template: 'from-manifest',
+        provenance: 'protected',
+        overridesLowerPrecedence: false,
+        format: 'xml',
+      },
+      {
+        template: 'ghost',
+        provenance: 'protected',
+        overridesLowerPrecedence: false,
+        format: 'xml',
+      },
+    ]);
     // 'from-tbm' → inferred; 'from-manifest' → curated; 'ghost' → nothing.
-    readBookmarkMock.mockImplementation((name) => (name === 'from-tbm' ? MODERN_BOOKMARK : null));
+    readBookmarkFromCatalogEntryMock.mockImplementation((entry) =>
+      entry.template === 'from-tbm' ? MODERN_BOOKMARK : null,
+    );
     getManifestMock.mockImplementation((name) =>
       name === 'from-manifest' ? curatedManifest({ template: 'from-manifest' }) : undefined,
     );
@@ -300,7 +433,57 @@ describe('resolveAllTemplateManifests — catalog resolver', () => {
   });
 
   it('returns an empty map when there are no templates', () => {
-    listTemplateNamesMock.mockReturnValue([]);
+    listLegacyTemplateCatalogMock.mockReturnValue([]);
     expect(resolveAllTemplateManifests().size).toBe(0);
+  });
+
+  it('preserves protected-provider integrity failures instead of dropping the template', () => {
+    listLegacyTemplateCatalogMock.mockReturnValue([
+      {
+        template: 'protected-template',
+        provenance: 'protected',
+        overridesLowerPrecedence: false,
+        format: 'tbm',
+      },
+    ]);
+    readBookmarkFromCatalogEntryMock.mockImplementation(() => {
+      throw new Error('SEA integrity mismatch');
+    });
+
+    expect(() => resolveAllTemplateManifests()).toThrow('SEA integrity mismatch');
+  });
+
+  it('keeps repository templates out of the legacy manifest catalog', () => {
+    listLegacyTemplateCatalogMock.mockReturnValue([]);
+    listTemplateCatalogMock.mockReturnValue([
+      {
+        template: 'external-template',
+        provenance: 'bookmark',
+        overridesLowerPrecedence: false,
+        format: 'tbm',
+        bookmarkPath: '/contained/external-template.tbm',
+      },
+    ]);
+    readBookmarkFromCatalogEntryMock.mockReturnValue(MODERN_BOOKMARK);
+
+    expect(resolveAllTemplateManifests().size).toBe(0);
+    expect(resolveAllTemplateCatalog().has('external-template')).toBe(true);
+  });
+
+  it('drops one unreadable external template without sinking the all-source catalog', () => {
+    listTemplateCatalogMock.mockReturnValue([
+      {
+        template: 'external-template',
+        provenance: 'bookmark',
+        overridesLowerPrecedence: false,
+        format: 'tbm',
+        bookmarkPath: '/contained/external-template.tbm',
+      },
+    ]);
+    readBookmarkFromCatalogEntryMock.mockImplementation(() => {
+      throw new Error('external file changed');
+    });
+
+    expect(resolveAllTemplateCatalog().size).toBe(0);
   });
 });

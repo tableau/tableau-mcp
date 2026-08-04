@@ -4,6 +4,12 @@ import { log } from '../../../logging/logger.js';
 import { sanitizeValue } from '../../../logging/sanitize.js';
 import { normalizeArray, parseXML } from '../../metadata/parser.js';
 import { upsertSheetIntoWorkbook } from '../../metadata/sheets.js';
+import {
+  deriveTargetWorksheetWindowState,
+  deriveWorksheetApplyState,
+  deriveWorksheetArtifactSha256,
+  type WorksheetApplyState,
+} from '../../metadata/targetWorksheetState.js';
 import type { ParsedWorksheet } from '../../metadata/types.js';
 import {
   ExecuteCommandError,
@@ -35,6 +41,7 @@ export type LoadWorksheetXmlError =
   // rejected the actual document load (surfaced in the response payload, not in
   // `status`). `message` carries Desktop's own error text.
   | { type: 'load-rejected'; message: string }
+  | { type: 'preview-state-changed'; message: string }
   // Apply succeeded but the post-apply readback proved Tableau silently dropped or
   // changed an intent-bearing node (the silently-dropped-pill killer, W4). `message`
   // carries the agent-facing fix recipe; `findings` the structured evidence.
@@ -56,6 +63,8 @@ type LoadWorksheetXmlResult = Result<
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'load-worksheet-xml-error'; error: LoadWorksheetXmlError }
 >;
+
+const PRE_APPLY_STABILITY_ATTEMPTS = 3;
 
 /**
  * Post-apply readback verification. Re-reads the just-applied worksheet and compares
@@ -201,10 +210,14 @@ export async function loadWorksheetXml({
   executor,
   signal,
   readbackVerificationOut,
+  expectedState,
+  worksheetWindowXml,
 }: {
   worksheetName: string;
   xml: string;
   readbackVerificationOut?: ReadbackVerificationResult[];
+  expectedState?: WorksheetApplyState;
+  worksheetWindowXml?: string;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -267,6 +280,8 @@ export async function loadWorksheetXml({
     executor,
     signal,
     readbackVerificationOut,
+    expectedState,
+    worksheetWindowXml,
   });
   if (result.isErr()) {
     return result;
@@ -282,68 +297,171 @@ async function loadWorksheetXmlViaExternalApi({
   executor,
   signal,
   readbackVerificationOut,
+  expectedState,
+  worksheetWindowXml,
 }: {
   worksheetName: string;
   xml: string;
   readbackVerificationOut?: ReadbackVerificationResult[];
+  expectedState?: WorksheetApplyState;
+  worksheetWindowXml?: string;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
-  return withApplyLock(async () => {
+  const apply = async (): Promise<LoadWorksheetXmlResult> => {
+    if (
+      expectedState !== undefined &&
+      deriveWorksheetArtifactSha256(xml, worksheetWindowXml) !== expectedState.artifactSha256
+    ) {
+      return Err({
+        type: 'load-worksheet-xml-error',
+        error: {
+          type: 'preview-state-changed',
+          message:
+            `The confirmed artifact for worksheet "${worksheetName}" does not match the supplied worksheet or window. ` +
+            'The update must be rebuilt and reconfirmed before applying.',
+        },
+      });
+    }
+
     const workbookResult = await getWorkbookXml({ executor, signal });
     if (workbookResult.isErr()) {
       return Err({ type: 'execute-command-error', error: workbookResult.error });
     }
 
-    let workbookDoc: string;
-    try {
-      workbookDoc = upsertSheetIntoWorkbook(workbookResult.value, worksheetName, xml);
-    } catch (error) {
-      return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+    let sourceWorkbookXml = workbookResult.value;
+    let workbookDoc: string | null = null;
+    // ECA exposes no revision/If-Match primitive; this bounded stable-read loop narrows but cannot eliminate the final read-to-POST race.
+    for (let attempt = 1; attempt <= PRE_APPLY_STABILITY_ATTEMPTS; attempt++) {
+      if (expectedState !== undefined) {
+        let currentState: WorksheetApplyState;
+        try {
+          currentState = deriveWorksheetApplyState(
+            sourceWorkbookXml,
+            worksheetName,
+            xml,
+            worksheetWindowXml,
+          );
+        } catch (error) {
+          return Err({
+            type: 'execute-command-error',
+            error: { type: 'invalid-response', error },
+          });
+        }
+
+        if (!worksheetApplyStatesEqual(currentState, expectedState)) {
+          return previewStateChanged(worksheetName);
+        }
+      }
+
+      let candidateWorkbookDoc: string;
+      try {
+        candidateWorkbookDoc = upsertSheetIntoWorkbook(
+          sourceWorkbookXml,
+          worksheetName,
+          xml,
+          worksheetWindowXml,
+        );
+      } catch (error) {
+        return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+      }
+
+      const workbookDocValidation = runValidation(candidateWorkbookDoc, 'workbook');
+      const workbookBlockingIssues = blockingValidationIssues(workbookDocValidation.issues);
+      if (workbookBlockingIssues.length > 0) {
+        log({
+          level: 'error',
+          message:
+            'Constructed worksheet apply document failed workbook validation — XML not sent to Tableau',
+          logger: 'worksheetCommands',
+          data: {
+            worksheetName,
+            issues: workbookBlockingIssues,
+            xmlPreview: sanitize(candidateWorkbookDoc),
+          },
+        });
+
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: { type: 'validation-failed', issues: workbookBlockingIssues },
+        });
+      }
+
+      const workbookWarningIssues = workbookDocValidation.issues.filter(
+        (issue) => issue.severity !== 'error',
+      );
+      if (workbookWarningIssues.length > 0) {
+        log({
+          level: 'warning',
+          message: 'Constructed worksheet apply document has non-blocking validation findings',
+          logger: 'worksheetCommands',
+          data: {
+            worksheetName,
+            warningCount: workbookWarningIssues.length,
+            issues: sanitize(
+              workbookWarningIssues.slice(0, 5).map((issue) => ({
+                ruleId: issue.ruleId,
+                severity: issue.severity,
+                message: issue.message.slice(0, 200),
+              })),
+            ),
+          },
+        });
+      }
+
+      // Generic apply has no confirmed snapshot to protect; retain its existing one-read path.
+      if (expectedState === undefined) {
+        workbookDoc = candidateWorkbookDoc;
+        break;
+      }
+
+      const stabilityRead = await getWorkbookXml({ executor, signal });
+      if (stabilityRead.isErr()) {
+        return Err({ type: 'execute-command-error', error: stabilityRead.error });
+      }
+      if (stabilityRead.value === sourceWorkbookXml) {
+        workbookDoc = candidateWorkbookDoc;
+        break;
+      }
+
+      if (expectedState !== undefined) {
+        let latestState: WorksheetApplyState;
+        try {
+          latestState = deriveWorksheetApplyState(
+            stabilityRead.value,
+            worksheetName,
+            xml,
+            worksheetWindowXml,
+          );
+        } catch (error) {
+          return Err({
+            type: 'execute-command-error',
+            error: { type: 'invalid-response', error },
+          });
+        }
+        if (!worksheetApplyStatesEqual(latestState, expectedState)) {
+          return previewStateChanged(worksheetName);
+        }
+      }
+
+      if (attempt === PRE_APPLY_STABILITY_ATTEMPTS) {
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: {
+            type: 'preview-state-changed',
+            message:
+              `The live workbook kept changing while preparing worksheet "${worksheetName}". ` +
+              'Nothing was applied. Retry after the workbook is stable.',
+          },
+        });
+      }
+      sourceWorkbookXml = stabilityRead.value;
     }
 
-    const workbookDocValidation = runValidation(workbookDoc, 'workbook');
-    const workbookBlockingIssues = blockingValidationIssues(workbookDocValidation.issues);
-    if (workbookBlockingIssues.length > 0) {
-      log({
-        level: 'error',
-        message:
-          'Constructed worksheet apply document failed workbook validation — XML not sent to Tableau',
-        logger: 'worksheetCommands',
-        data: {
-          worksheetName,
-          issues: workbookBlockingIssues,
-          xmlPreview: sanitize(workbookDoc),
-        },
-      });
-
+    if (workbookDoc === null) {
       return Err({
         type: 'load-worksheet-xml-error',
-        error: { type: 'validation-failed', issues: workbookBlockingIssues },
-      });
-    }
-
-    // Non-blocking findings from the CONSTRUCTED workbook (e.g. a parameter that
-    // only exists in workbook context) never appear in the fragment's warning
-    // ride-along — log them so receipts/diagnostics can still find them.
-    const workbookWarningIssues = workbookDocValidation.issues.filter(
-      (issue) => issue.severity !== 'error',
-    );
-    if (workbookWarningIssues.length > 0) {
-      log({
-        level: 'warning',
-        message: 'Constructed worksheet apply document has non-blocking validation findings',
-        logger: 'worksheetCommands',
-        data: {
-          worksheetName,
-          warningCount: workbookWarningIssues.length,
-          // Capped + sanitized: validation messages can quote field names and
-          // XML context, so never log the unbounded raw array.
-          issues: sanitize(
-            workbookWarningIssues.slice(0, 5).map((issue) => ({
-              ruleId: issue.ruleId,
-              severity: issue.severity,
-              message: issue.message.slice(0, 200),
-            })),
-          ),
+        error: {
+          type: 'preview-state-changed',
+          message: `Could not establish a stable workbook state for worksheet "${worksheetName}". Retry the apply.`,
         },
       });
     }
@@ -366,12 +484,84 @@ async function loadWorksheetXmlViaExternalApi({
       executor,
       signal,
     );
+    if (verification.ok && expectedState !== undefined && worksheetWindowXml !== undefined) {
+      const workbookReadback = await getWorkbookXml({ executor, signal });
+      if (workbookReadback.isErr()) {
+        return Err({ type: 'execute-command-error', error: workbookReadback.error });
+      }
+
+      try {
+        const intendedWindow = deriveTargetWorksheetWindowState(workbookDoc, worksheetName);
+        const liveWindow = deriveTargetWorksheetWindowState(workbookReadback.value, worksheetName);
+        const windowsMatch =
+          intendedWindow.state === liveWindow.state &&
+          (intendedWindow.state === 'absent' ||
+            (liveWindow.state === 'present' && intendedWindow.sha256 === liveWindow.sha256));
+        if (!windowsMatch) {
+          verification.ok = false;
+          verification.status = 'failed';
+          verification.findings.push({
+            kind: 'window',
+            node: 'window/cards',
+            intended: `<window class="worksheet" name="${worksheetName}">`,
+            readback: liveWindow.state === 'absent' ? 'missing' : 'changed',
+            severity: 'error',
+          });
+        }
+      } catch (error) {
+        return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+      }
+    }
     readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
     const outcomeResult = readbackOutcome(verification);
     if (outcomeResult.isErr()) return outcomeResult;
 
     return outcomeResult;
+  };
+
+  const lockKey =
+    expectedState === undefined
+      ? undefined
+      : executor.desktopInstanceId
+        ? `instance:${executor.desktopInstanceId}`
+        : executor.desktopProcessId !== undefined
+          ? `pid:${executor.desktopProcessId}`
+          : undefined;
+  try {
+    return await withApplyLock(apply, lockKey === undefined ? undefined : { key: lockKey, signal });
+  } catch (error) {
+    return Err({ type: 'execute-command-error', error: { type: 'unknown', error } });
+  }
+}
+
+function previewStateChanged(worksheetName: string): LoadWorksheetXmlResult {
+  return Err({
+    type: 'load-worksheet-xml-error',
+    error: {
+      type: 'preview-state-changed',
+      message:
+        `Worksheet "${worksheetName}", its worksheet window, or one of its referenced fields changed after preview. ` +
+        'The worksheet update must be rebuilt from the current workbook state and reconfirmed by the user before applying.',
+    },
   });
+}
+
+function worksheetApplyStatesEqual(
+  current: WorksheetApplyState,
+  expected: WorksheetApplyState,
+): boolean {
+  const targetsMatch =
+    current.target.state === expected.target.state &&
+    (current.target.state === 'absent' ||
+      (expected.target.state === 'present' && current.target.sha256 === expected.target.sha256));
+  const targetWindowsMatch =
+    current.targetWindow.state === expected.targetWindow.state &&
+    (current.targetWindow.state === 'absent' ||
+      (expected.targetWindow.state === 'present' &&
+        current.targetWindow.sha256 === expected.targetWindow.sha256));
+  return (
+    targetsMatch && targetWindowsMatch && current.dependenciesSha256 === expected.dependenciesSha256
+  );
 }
 
 function sanitize(value: unknown): unknown {

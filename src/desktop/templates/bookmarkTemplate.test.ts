@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   bookmarkToTemplateWorkbook,
+  deriveTemplatePass1Eligibility,
   type Inference,
   type InferredSlot,
   normalizeBookmarkXml,
@@ -43,6 +44,7 @@ function withTokens(slots: InferredSlot[]): InferredSlot[] {
 function inference(slots: InferredSlot[], donorDatasourceNames: string[]): Inference {
   return {
     slots: withTokens(slots),
+    calcs: [],
     unknownCount: 0,
     donorCaptions: [],
     donorDatasources: [],
@@ -262,5 +264,25 @@ describe('bookmarkToTemplateWorkbook', () => {
       "<window class='worksheet' name='Sheet 1'/></bookmark>";
     const { xml } = bookmarkToTemplateWorkbook(raw, inf);
     expect(xml).not.toContain('Secret Donor');
+  });
+});
+
+describe('deriveTemplatePass1Eligibility', () => {
+  it('allows converted bookmarks without unresolved bare field references', () => {
+    expect(deriveTemplatePass1Eligibility({ bareRefs: [] })).toEqual({
+      pass1_eligible: true,
+      pass1_blockers: [],
+    });
+  });
+
+  it('blocks converted bookmarks with a stable sorted list of unresolved bare references', () => {
+    expect(
+      deriveTemplatePass1Eligibility({
+        bareRefs: ['{{field_base_4}}', '{{field_base_1}}', '{{field_base_4}}'],
+      }),
+    ).toEqual({
+      pass1_eligible: false,
+      pass1_blockers: ['unresolved-table-calc-bareRefs: {{field_base_1}}, {{field_base_4}}'],
+    });
   });
 });

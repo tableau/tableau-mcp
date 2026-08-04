@@ -45,6 +45,8 @@ describe('ExternalApiToolExecutor', () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
       expect(executor.isAvailable()).toBe(true);
+      expect(executor.desktopInstanceId).toBe('inst-exec');
+      expect(executor.desktopProcessId).toBe(999);
     });
 
     it('is not available when no instance is discovered', async () => {

@@ -100,8 +100,8 @@ describe('intelligence/BundledIntelligenceProvider — template accessors', () =
   it('getTemplateXmlFragment ships XML for every manifest (no golden-only orphans)', () => {
     // ww-ou-diff moved to the shipped set with the day-1 vendor sync (2026-07-09):
     // its manifest-without-XML state stranded a live session — the binder offered it,
-    // then inject-template 404'd. Same move ww-ou-arrow made in W59. The manifest
-    // stays fast_path_eligible:false, so shipping XML only enables the inject path.
+    // then template construction could not load it. Same move ww-ou-arrow made in W59.
+    // The manifest stays fast_path_eligible:false, so shipping XML only enables construction.
     expect(provider.getTemplateManifest('ww-ou-diff')).toBeDefined();
     const xml = provider.getTemplateXmlFragment('ww-ou-diff');
     expect(xml).not.toBeNull();

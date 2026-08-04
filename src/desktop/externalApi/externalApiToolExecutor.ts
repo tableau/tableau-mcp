@@ -88,6 +88,14 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     this.deps = deps;
   }
 
+  override get desktopInstanceId(): string | undefined {
+    return this.client?.instanceId;
+  }
+
+  override get desktopProcessId(): number | undefined {
+    return this.client?.pid ?? this.deps.pid;
+  }
+
   async start(): Promise<void> {
     log({
       message:

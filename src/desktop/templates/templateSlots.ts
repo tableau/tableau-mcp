@@ -17,9 +17,27 @@
 
 import type { SlotSpec, TemplateManifest } from '../binder/manifest-types.js';
 import { bundledIntelligenceProvider } from '../intelligence/provider.js';
+import {
+  bookmarkToTemplateWorkbook,
+  deriveTemplatePass1Eligibility,
+  type Inference,
+  type TemplatePass1Eligibility,
+} from './bookmarkTemplate.js';
 import type { TemplateSlotReference } from './fieldReferenceRewriter.js';
 import { inferFromBookmark, synthesizeManifest } from './inferSlots.js';
-import { listTemplateNames, readBookmark } from './templatePath.js';
+import {
+  getLegacyTemplateCatalogEntry,
+  getTemplateCatalogEntry,
+  listLegacyTemplateCatalog,
+  listTemplateCatalog as listTemplateSourceCatalog,
+  readBookmark,
+  readBookmarkFromCatalogEntry,
+  readXmlFromCatalogEntry,
+  type TemplateArtifact,
+  type TemplateCatalogEntry,
+  type TemplateCatalogOptions,
+  type TemplateProvenance,
+} from './templatePath.js';
 
 /**
  * Where a resolved slot set's authority comes from:
@@ -115,12 +133,22 @@ function mergeSlots(inferred: SlotSpec[], curated: SlotSpec[]): SlotSpec[] {
  * Resolve the bindable slots for a template by name. Never throws for a missing
  * template — returns an empty slot set so callers can list gracefully.
  */
-export function resolveTemplateSlots(templateName: string): ResolvedTemplateSlots {
-  const bookmarkXml = readBookmark(templateName);
+export function resolveTemplateSlots(
+  templateName: string,
+  catalogEntry = getLegacyTemplateCatalogEntry(templateName),
+): ResolvedTemplateSlots {
+  const bookmarkXml = catalogEntry
+    ? readBookmarkFromCatalogEntry(catalogEntry)
+    : readBookmark(templateName);
   const inferred = bookmarkXml
     ? synthesizeManifest(templateName, inferFromBookmark(bookmarkXml))
     : null;
-  const curated = bundledIntelligenceProvider.getTemplateManifest(templateName) ?? null;
+  const curated =
+    !catalogEntry ||
+    catalogEntry.provenance === 'protected' ||
+    catalogEntry.provenance === 'dev-override'
+      ? (bundledIntelligenceProvider.getTemplateManifest(templateName) ?? null)
+      : null;
 
   if (inferred && curated) {
     return {
@@ -155,6 +183,70 @@ export interface ResolvedTemplateManifest {
   source: SlotSource;
   /** True when a `.tbm` bookmark backed the inference (vs. a manifest-only template). */
   fromBookmark: boolean;
+  eligibility: TemplatePass1Eligibility;
+  provenance: TemplateProvenance;
+  overridesLowerPrecedence: boolean;
+}
+
+export interface ResolvedTemplateSnapshot {
+  artifact: TemplateArtifact;
+  resolvedManifest: ResolvedTemplateManifest | null;
+  provenance: TemplateProvenance;
+  overridesLowerPrecedence: boolean;
+}
+
+export interface ResolveTemplateSnapshotOptions {
+  catalogEntry?: TemplateCatalogEntry | null;
+  repositoryRoot?: string;
+}
+
+function resolveTemplateManifestFromInference(
+  templateName: string,
+  catalogEntry: TemplateCatalogEntry | null,
+  inference: Inference | null,
+  eligibility: TemplatePass1Eligibility,
+): ResolvedTemplateManifest | null {
+  const inferred = inference ? synthesizeManifest(templateName, inference) : null;
+  const curated =
+    !catalogEntry ||
+    catalogEntry.provenance === 'protected' ||
+    catalogEntry.provenance === 'dev-override'
+      ? (bundledIntelligenceProvider.getTemplateManifest(templateName) ?? null)
+      : null;
+  const provenance = catalogEntry?.provenance ?? 'protected';
+  const overridesLowerPrecedence = catalogEntry?.overridesLowerPrecedence ?? false;
+
+  if (inferred && curated) {
+    return {
+      manifest: { ...inferred, ...curated, slots: mergeSlots(inferred.slots, curated.slots) },
+      source: curatedSource(curated),
+      fromBookmark: true,
+      eligibility,
+      provenance,
+      overridesLowerPrecedence,
+    };
+  }
+  if (inferred) {
+    return {
+      manifest: inferred,
+      source: 'inferred',
+      fromBookmark: true,
+      eligibility,
+      provenance,
+      overridesLowerPrecedence,
+    };
+  }
+  if (curated) {
+    return {
+      manifest: curated,
+      source: curatedSource(curated),
+      fromBookmark: false,
+      eligibility,
+      provenance,
+      overridesLowerPrecedence,
+    };
+  }
+  return null;
 }
 
 /**
@@ -168,39 +260,102 @@ export interface ResolvedTemplateManifest {
  * Returns `null` (never throws) when the name resolves to neither a bookmark nor a curated
  * manifest, so callers iterating the catalog can skip gracefully.
  */
-export function resolveTemplateManifest(templateName: string): ResolvedTemplateManifest | null {
-  const bookmarkXml = readBookmark(templateName);
-  const inferred = bookmarkXml
-    ? synthesizeManifest(templateName, inferFromBookmark(bookmarkXml))
-    : null;
-  const curated = bundledIntelligenceProvider.getTemplateManifest(templateName) ?? null;
-
-  if (inferred && curated) {
-    // Spread curated over inferred so curated wins every top-level field it defines
-    // (an omitted optional field is simply an absent key, so it can't clobber inference),
-    // then replace `slots` with the token-keyed union — the same shape overlaySpec uses.
-    return {
-      manifest: { ...inferred, ...curated, slots: mergeSlots(inferred.slots, curated.slots) },
-      source: curatedSource(curated),
-      fromBookmark: true,
-    };
-  }
-  if (inferred) return { manifest: inferred, source: 'inferred', fromBookmark: true };
-  if (curated) return { manifest: curated, source: curatedSource(curated), fromBookmark: false };
-  return null;
+export function resolveTemplateManifest(
+  templateName: string,
+  catalogEntry: TemplateCatalogEntry | null = getLegacyTemplateCatalogEntry(templateName),
+): ResolvedTemplateManifest | null {
+  const bookmarkXml = catalogEntry
+    ? readBookmarkFromCatalogEntry(catalogEntry)
+    : readBookmark(templateName);
+  const inference = bookmarkXml ? inferFromBookmark(bookmarkXml) : null;
+  const eligibility =
+    bookmarkXml && inference
+      ? deriveTemplatePass1Eligibility(bookmarkToTemplateWorkbook(bookmarkXml, inference))
+      : { pass1_eligible: true, pass1_blockers: [] };
+  return resolveTemplateManifestFromInference(templateName, catalogEntry, inference, eligibility);
 }
 
-/**
- * Resolve EVERY template's merged manifest, keyed by name — the metadata-optional
- * replacement for `bundledIntelligenceProvider.listTemplateManifests()`, which is blind to
- * `.tbm`-only templates. Iterates {@link listTemplateNames} (lists both `.tbm` and `.xml`)
- * and drops any name that resolves to nothing.
- */
+/** Read one winning source version and derive every constructor input from that snapshot. */
+export function resolveTemplateSnapshot(
+  templateName: string,
+  options: ResolveTemplateSnapshotOptions = {},
+): ResolvedTemplateSnapshot | null {
+  const catalogEntry =
+    options.catalogEntry === undefined
+      ? getTemplateCatalogEntry(templateName, { repositoryRoot: options.repositoryRoot })
+      : options.catalogEntry;
+  if (!catalogEntry) return null;
+
+  const resolve = (): ResolvedTemplateSnapshot | null => {
+    if (catalogEntry.format === 'tbm') {
+      const bookmarkXml = readBookmarkFromCatalogEntry(catalogEntry);
+      if (bookmarkXml === null) return null;
+      const inference = inferFromBookmark(bookmarkXml);
+      const converted = bookmarkToTemplateWorkbook(bookmarkXml, inference);
+      const eligibility = deriveTemplatePass1Eligibility(converted);
+      return {
+        provenance: catalogEntry.provenance,
+        overridesLowerPrecedence: catalogEntry.overridesLowerPrecedence,
+        artifact: { xml: converted.xml, eligibility },
+        resolvedManifest: resolveTemplateManifestFromInference(
+          templateName,
+          catalogEntry,
+          inference,
+          eligibility,
+        ),
+      };
+    }
+
+    const xml = readXmlFromCatalogEntry(catalogEntry);
+    if (xml === null) return null;
+    const eligibility = { pass1_eligible: true, pass1_blockers: [] };
+    return {
+      provenance: catalogEntry.provenance,
+      overridesLowerPrecedence: catalogEntry.overridesLowerPrecedence,
+      artifact: { xml, eligibility },
+      resolvedManifest: resolveTemplateManifestFromInference(
+        templateName,
+        catalogEntry,
+        null,
+        eligibility,
+      ),
+    };
+  };
+
+  if (catalogEntry.provenance === 'protected') return resolve();
+  try {
+    return resolve();
+  } catch {
+    return null;
+  }
+}
+
+export function resolveAllTemplateCatalog(
+  options: TemplateCatalogOptions = {},
+): Map<string, ResolvedTemplateManifest> {
+  const catalog = new Map<string, ResolvedTemplateManifest>();
+  for (const source of listTemplateSourceCatalog(options)) {
+    if (source.provenance === 'protected') {
+      const resolved = resolveTemplateManifest(source.template, source);
+      if (resolved) catalog.set(source.template, resolved);
+      continue;
+    }
+    try {
+      const resolved = resolveTemplateManifest(source.template, source);
+      if (resolved) catalog.set(source.template, resolved);
+    } catch {
+      // A single malformed or unreadable external template cannot sink discovery.
+    }
+  }
+  return catalog;
+}
+
+/** Legacy apply catalog: MCP-protected assets, or the exclusive development override. */
 export function resolveAllTemplateManifests(): Map<string, TemplateManifest> {
   const manifests = new Map<string, TemplateManifest>();
-  for (const name of listTemplateNames()) {
-    const resolved = resolveTemplateManifest(name);
-    if (resolved) manifests.set(name, resolved.manifest);
+  for (const source of listLegacyTemplateCatalog()) {
+    const resolved = resolveTemplateManifest(source.template, source);
+    if (resolved) manifests.set(source.template, resolved.manifest);
   }
   return manifests;
 }

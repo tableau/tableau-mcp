@@ -19,7 +19,7 @@ import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
 } from '../../../desktop/templates/injectTemplateCore.js';
-import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import { readTemplateArtifact } from '../../../desktop/templates/templatePath.js';
 import * as validationRegistry from '../../../desktop/validation/registry.js';
 import {
   DesktopCommandExecutionError,
@@ -58,20 +58,20 @@ vi.mock('../../../desktop/templates/injectTemplateCore.js', () => ({
   buildInjectedWorkbookXml: vi.fn(),
   classifyWorksheetReplaceTarget: vi.fn(),
 }));
-// Stub ONLY the `readTemplate` seam; keep the rest of templatePath real so the
+// Stub ONLY the `readTemplateArtifact` seam; keep the rest of templatePath real so the
 // provider's `.tbm` listing (listBookmarkNames / readBookmark) resolves live via the
 // assets seam — the 44 corpus bookmarks all have curated manifests, so it adds nothing.
 vi.mock('../../../desktop/templates/templatePath.js', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../../desktop/templates/templatePath.js')>();
-  return { ...actual, readTemplate: vi.fn() };
+  return { ...actual, readTemplateArtifact: vi.fn() };
 });
 vi.mock('../../../desktop/validation/registry.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../desktop/validation/registry.js')>();
   return { ...actual, runValidation: vi.fn() };
 });
 // Partial fs mock: the bound template is read via the mocked SEA-aware
-// `readTemplate` seam (templatePath.js above), so fs reads stay live for the real
+// `readTemplateArtifact` seam (templatePath.js above), so fs reads stay live for the real
 // manifest/content loads (manifest.ts / provider.ts via the assets seam); only
 // writes are stubbed so no test touches disk.
 vi.mock('fs', async (importOriginal) => {
@@ -1391,6 +1391,8 @@ async function getToolResult({
 function setupAutoApplyMocks({
   bind = boundResult,
   fastPathEligible = true,
+  pass1Eligible = true,
+  pass1Blockers = [],
   inject = { ok: true as const, xml: '<workbook/>' },
   validationValid = true,
   dispatch = Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '', result: {} }),
@@ -1403,6 +1405,8 @@ function setupAutoApplyMocks({
 }: {
   bind?: BinderResult;
   fastPathEligible?: boolean;
+  pass1Eligible?: boolean;
+  pass1Blockers?: string[];
   inject?: { ok: true; xml: string } | { ok: false; issues: string[] };
   validationValid?: boolean;
   dispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
@@ -1430,7 +1434,10 @@ function setupAutoApplyMocks({
       fast_path_eligible: fastPathEligible,
     } as unknown as TemplateManifest,
   ]);
-  vi.mocked(readTemplate).mockReturnValue('<template/>');
+  vi.mocked(readTemplateArtifact).mockReturnValue({
+    xml: '<template/>',
+    eligibility: { pass1_eligible: pass1Eligible, pass1_blockers: pass1Blockers },
+  });
   vi.mocked(buildInjectedWorkbookXml).mockReturnValue(inject);
   // Force loadWorkbookXml down its text branch so the real validated path runs
   // without touching the on-disk JSON cache (DesktopCache mkdirs in its ctor).
@@ -2385,6 +2392,38 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBeUndefined();
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('refuses pass-1-ineligible ww-ou-arrow before any auto-apply dispatch', async () => {
+    const wwOuArrowBind: BinderResult = {
+      ...boundResult,
+      args: { ...boundResult.args, template_name: 'ww-ou-arrow' },
+    };
+    const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: wwOuArrowBind,
+      pass1Eligible: false,
+      pass1Blockers: ['unresolved-table-calc-bareRefs: {{field_base_2}}'],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'show an over-under arrow',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body).toMatchObject({
+      status: 'bound',
+      applied: false,
+    });
+    expect(body.apply_error).toContain('not supported in pass 1');
+    expect(body.guidance).toContain('Choose another pass 1 eligible template');
+    expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
     expect(executeCommand).not.toHaveBeenCalled();
   });
 

@@ -1,6 +1,6 @@
 import type { ValidationIssue, ValidationRule } from '../types.js';
 
-const TEMPLATE_TOKEN = /\{\{\s*([A-Z][A-Z0-9_]*)\s*\}\}/g;
+const TEMPLATE_TOKEN = /\{\{\s*([A-Z][A-Z0-9_]*|field_base_[1-9]\d*)\s*\}\}/g;
 
 export const unsubstitutedTemplateTokenRule: ValidationRule = {
   id: 'unsubstituted-template-token',

@@ -154,7 +154,7 @@ describe('serializeXML', () => {
     });
 
     it('still escapes genuine metacharacters (&, <, >) in attributes', () => {
-      const src = `<column caption="R&amp;D &lt;costs&gt;" formula="[Sales] &gt; 0" />`;
+      const src = '<column caption="R&amp;D &lt;costs&gt;" formula="[Sales] &gt; 0" />';
       const output = serializeXML(parseXML(src));
       expect(output).toContain('caption="R&amp;D &lt;costs&gt;"');
       // a real ampersand is still escaped, so the document stays well-formed

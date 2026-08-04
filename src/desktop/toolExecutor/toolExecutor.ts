@@ -48,6 +48,12 @@ export type ExecuteCommandResult<Z extends z.ZodTypeAny | undefined = undefined>
     : GetCommandStatusResponse & { warnings?: ExecuteCommandWarning[] };
 
 export abstract class ToolExecutor {
+  get desktopInstanceId(): string | undefined {
+    return undefined;
+  }
+  get desktopProcessId(): number | undefined {
+    return undefined;
+  }
   abstract start(): Promise<void>;
   abstract stop(): void;
   abstract isAvailable(): boolean;
