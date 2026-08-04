@@ -379,6 +379,24 @@ export function rewriteFieldReferencesWithDiagnostics(
   // 3c. Neutralize hard-coded filter members when the filtered field was
   //     remapped: collapse to the canonical "all members at this level"
   //     groupfilter so the viz doesn't render blank against target data.
+  //
+  //     EXCEPTION — a Top-N / Bottom-N RANK filter (a <groupfilter count=… end=
+  //     'top'|'bottom'> ordered by a measure expression) references NO literal
+  //     members, only a count + a measure, so it is valid against ANY target
+  //     data. Flattening it would silently drop the rank cap and render every
+  //     member (the insight_barchart Top-50 that came back as 160 marks). For a
+  //     rank filter we PRESERVE the structure and only rewrite the field refs the
+  //     later qualified-ref passes (steps 4/5) don't reach: the bare `[{{field}}]`
+  //     inside `expression`, and the column-instance in `level`. The filter's own
+  //     DS-qualified `column` attribute is left for step 5 to rewrite.
+  const rewriteColumnInstanceRef = (value: string): string =>
+    value.replace(/^\[([^:\]]+):(.+):([^:\]]+)\]$/, (whole, d: string, f: string, r: string) => {
+      if (!mappedFields.has(f)) return whole;
+      const bn = baseTarget[f];
+      if (!bn) return whole;
+      const info = resolveFieldInfo(f, d);
+      return `[${info ? info.derivation : d}:${bn}:${info ? info.role : r}]`;
+    });
   const filterElements = selectElements('//filter', doc);
   for (const filter of filterElements) {
     const colAttr = filter.getAttribute('column');
@@ -395,7 +413,26 @@ export function rewriteFieldReferencesWithDiagnostics(
 
     if (baseName === tField && deriv === tDeriv) continue;
 
-    if (filter.getElementsByTagName('groupfilter').length === 0) continue;
+    const groupfilters = Array.from(filter.getElementsByTagName('groupfilter'));
+    if (groupfilters.length === 0) continue;
+
+    const isRankFilter = groupfilters.some(
+      (g) =>
+        g.hasAttribute('count') &&
+        (g.getAttribute('end') === 'top' || g.getAttribute('end') === 'bottom'),
+    );
+    if (isRankFilter) {
+      for (const gf of groupfilters) {
+        for (const attr of Array.from(gf.attributes) as Attr[]) {
+          const rewritten = rewriteFormulaFieldRefs(
+            rewriteColumnInstanceRef(attr.value),
+            baseTarget,
+          );
+          if (rewritten !== attr.value) attr.value = rewritten;
+        }
+      }
+      continue;
+    }
 
     const mappedCi = `[${deriv}:${baseName}:${role}]`;
     filter.setAttribute('column', `[${datasourceName}].${mappedCi}`);
