@@ -2,9 +2,9 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.60.3+content.2026-07-31",
+  "content_version": "2.60.3+content.2026-08-03",
   "schema_version": "2",
-  "generated": "2026-07-31",
+  "generated": "2026-08-03",
   "engine_compat": {
     "server_min": "2.60.3",
     "node": ">=22.7.5"
@@ -114,6 +114,16 @@
       "path": "data-visualization-templates-xml/gantt-timeline-chart.xml",
       "sha256": "61b09b5f43eae3f5bfdd90c9de66abc1b5eba1ff9c04141738b05749851cac6a",
       "bytes": 1939
+    },
+    {
+      "path": "data-visualization-templates-xml/insight_barchart.xml",
+      "sha256": "bf6522c2dde81ffeaea143e5400329fb5066262f07c4cfe7561402eae744dab5",
+      "bytes": 2378
+    },
+    {
+      "path": "data-visualization-templates-xml/insight_unusualchange.xml",
+      "sha256": "e4f4ccf812f6fd73880e192ef1fd96461ccc90e77acefc897a2e670fc2e1f69d",
+      "bytes": 2203
     },
     {
       "path": "data-visualization-templates-xml/kpi-text.xml",

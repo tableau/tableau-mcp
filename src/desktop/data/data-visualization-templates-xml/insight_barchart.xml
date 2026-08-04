@@ -1,0 +1,53 @@
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='string' name='[{{field_base_1}}]' role='dimension' type='nominal' />
+        <column datatype='real' name='[{{field_base_2}}]' role='measure' type='quantitative' />
+        <column-instance column='[{{field_base_1}}]' derivation='None' name='[none:{{field_base_1}}:nk]' pivot='key' type='nominal' />
+        <column-instance column='[{{field_base_2}}]' derivation='Sum' name='[sum:{{field_base_2}}:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]'>
+        <groupfilter count='50' end='top' function='end' units='records' user:ui-marker='end' user:ui-top-by-field='true'>
+          <groupfilter direction='DESC' expression='SUM([{{field_base_2}}])' function='order' user:ui-marker='order'>
+            <groupfilter function='level-members' level='[none:{{field_base_1}}:nk]' user:ui-enumeration='all' user:ui-marker='enumerate' />
+          </groupfilter>
+        </groupfilter>
+      </filter>
+      <shelf-sorts>
+        <shelf-sort-v2 dimension-to-sort='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' direction='DESC' is-on-innermost-dimension='true' measure-to-sort-by='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' shelf='rows' />
+      </shelf-sorts>
+      <slices>
+        <column>[{{DATASOURCE}}].[none:{{field_base_1}}:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style />
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[none:{{field_base_1}}:nk]</rows>
+    <cols>[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

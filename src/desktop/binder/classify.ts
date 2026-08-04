@@ -704,6 +704,22 @@ const LATLON_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map-latlon';
 const GENERATED_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map';
 
 /**
+ * RESOLVER-ONLY create-viz templates — excluded from generic keyword scoring exactly the way
+ * spatial-symbol-map-latlon is (skipped in the classifyNoLlm loop and the buildLlmInput
+ * routable pool). These insight_* templates are fast_path_eligible + render-verified, but
+ * their intent_keywords (top-drivers / top-contributors / top-detractors, family magnitude)
+ * OVERLAP the ranking and magnitude families; letting them into keyword scoring would tie with
+ * ranking-ordered-bar / magnitude-simple-bar and demote generic "top / magnitude" asks to
+ * propose/null (carrier-uniqueness violation). They are reached ONLY by an explicit
+ * proposal.template from the create-viz-from-insight skill, never by ask keywords — so a
+ * generic ask keeps binding its correct generic template.
+ */
+const RESOLVER_ONLY_INSIGHT_TEMPLATES: ReadonlySet<string> = new Set([
+  'insight_barchart',
+  'insight_unusualchange',
+]);
+
+/**
  * POINT-LOCATION CUES (Blake wall #2). Coordinate/point-location intent a user types when
  * they want a map of WHERE things are — plotted points, not a filled/geocoded region map.
  * Matched as WHOLE tokens against the MASKED ask (field names blanked) so a field literally
@@ -3347,6 +3363,7 @@ export function classifyNoLlm(
   for (const m of manifests.values()) {
     if (!m.fast_path_eligible) continue;
     if (m.template === LATLON_SYMBOL_MAP_TEMPLATE) continue;
+    if (RESOLVER_ONLY_INSIGHT_TEMPLATES.has(m.template)) continue;
     const score = keywordScore(maskedAsk, m.intent_keywords);
     if (score > 0) scored.push({ m, score });
   }
@@ -3528,7 +3545,11 @@ export function buildLlmInput(
   // shortlist by family/keyword so the model can route to them. When no local set
   // is side-loaded this is byte-identical to the eligible-only pool.
   const routable = [...manifests.values()].filter(
-    (m) => m.fast_path_eligible || m.source === 'local',
+    (m) =>
+      (m.fast_path_eligible || m.source === 'local') &&
+      // Resolver-only insight templates are bound by explicit proposal.template only — keep
+      // them out of the propose shortlist too, so a generic ask never surfaces them.
+      !RESOLVER_ONLY_INSIGHT_TEMPLATES.has(m.template),
   );
 
   // Mask field names before scoring, in lockstep with classifyNoLlm (RT finding
