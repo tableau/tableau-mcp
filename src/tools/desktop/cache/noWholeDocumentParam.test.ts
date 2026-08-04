@@ -95,7 +95,7 @@ describe('the served profile still has a working edit path with no document para
   });
 
   it('runs the post-bind get -> slice-read -> splice-write -> apply(file) repair path', async () => {
-    vi.spyOn(getWorksheetXmlCmd, 'getWorksheetFragment').mockResolvedValue(Ok(SHEET));
+    vi.spyOn(getWorksheetXmlCmd, 'getWorksheetXml').mockResolvedValue(Ok(SHEET));
     const loadSpy = vi
       .spyOn(loadWorksheetXmlCmd, 'loadWorksheetXml')
       .mockResolvedValue(Ok({ validationWarnings: [], readbackWarnings: [] }));

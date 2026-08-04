@@ -7,7 +7,7 @@ import { formatArtifactSummary } from '../../../desktop/artifactSummary.js';
 import { DesktopCache } from '../../../desktop/cache.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import {
-  getWorksheetFragment,
+  getWorksheetXml,
   isRouteMissing,
 } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import {
@@ -71,7 +71,7 @@ export const getGetWorksheetXmlTool = (
           }
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
-          const result = await getWorksheetFragment({
+          const result = await getWorksheetXml({
             worksheetName,
             executor,
             signal: extra.signal,

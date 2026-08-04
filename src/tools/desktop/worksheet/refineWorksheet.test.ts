@@ -110,9 +110,8 @@ interface MockOpts {
   readbackXml?: string;
 }
 
-const getMock = (): ReturnType<
-  typeof vi.mocked<typeof getWorksheetXmlModule.getWorksheetFragment>
-> => vi.mocked(getWorksheetXmlModule.getWorksheetFragment);
+const getMock = (): ReturnType<typeof vi.mocked<typeof getWorksheetXmlModule.getWorksheetXml>> =>
+  vi.mocked(getWorksheetXmlModule.getWorksheetXml);
 const loadMock = (): ReturnType<typeof vi.mocked<typeof loadWorksheetXmlModule.loadWorksheetXml>> =>
   vi.mocked(loadWorksheetXmlModule.loadWorksheetXml);
 

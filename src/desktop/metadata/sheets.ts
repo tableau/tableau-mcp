@@ -149,17 +149,6 @@ export function extractSheetXml(workbookXml: string, sheetName: string): string 
   return serializeXML({ worksheet });
 }
 
-// The External Client API per-sheet `/document` route returns a whole `<workbook>` scoped to the
-// requested sheet, but callers require a single `<worksheet>` fragment. Slice it out. A document
-// that is already a bare `<worksheet>` fragment is returned unchanged; null if no worksheet exists.
-export function worksheetDocumentToFragment(documentXml: string, sheetName: string): string | null {
-  const fragment = extractSheetXml(documentXml, sheetName);
-  if (fragment !== null) {
-    return fragment;
-  }
-  return parseXML(documentXml).worksheet ? documentXml : null;
-}
-
 // The External Client API's whole-workbook POST route treats the posted document as authoritative
 // and replaces the open workbook with it. So the doc must carry the ENTIRE live workbook with only
 // this sheet swapped in; anything omitted (sibling sheets, dashboards) would be pruned. Upsert by

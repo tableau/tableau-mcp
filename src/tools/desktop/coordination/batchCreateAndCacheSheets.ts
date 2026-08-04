@@ -5,9 +5,9 @@ import { z } from 'zod';
 
 import { DesktopCache } from '../../../desktop/cache.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
-import { getDashboardFragment } from '../../../desktop/commands/workbook/getDashboardXml.js';
+import { getDashboardXml } from '../../../desktop/commands/workbook/getDashboardXml.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
-import { getWorksheetFragment } from '../../../desktop/commands/workbook/getWorksheetXml.js';
+import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
 import { addDashboard, addSheet } from '../../../desktop/metadata/index.js';
@@ -155,7 +155,7 @@ export const getBatchCreateAndCacheSheetsTool = (
           const worksheetFiles: Record<string, string> = {};
           const worksheetFailures: ArtifactFailure[] = [];
           for (const name of worksheetNames) {
-            const wsResult = await getWorksheetFragment({ worksheetName: name, executor, signal });
+            const wsResult = await getWorksheetXml({ worksheetName: name, executor, signal });
             if (wsResult.isErr()) {
               worksheetFailures.push({
                 name,
@@ -181,7 +181,7 @@ export const getBatchCreateAndCacheSheetsTool = (
           // Fetch and cache the dashboard working copy.
           let dashboardFile: string | null = null;
           const dashboardFailures: ArtifactFailure[] = [];
-          const dashResult = await getDashboardFragment({ dashboardName, executor, signal });
+          const dashResult = await getDashboardXml({ dashboardName, executor, signal });
           if (dashResult.isErr()) {
             dashboardFailures.push({
               name: dashboardName,

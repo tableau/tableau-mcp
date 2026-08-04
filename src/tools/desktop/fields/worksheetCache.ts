@@ -4,7 +4,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { DesktopCache } from '../../../desktop/cache.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import {
-  getWorksheetFragment,
+  getWorksheetXml,
   isRouteMissing,
 } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import {
@@ -31,7 +31,7 @@ export async function fetchAndCacheWorksheet({
   extra: TableauDesktopRequestHandlerExtra;
 }): Promise<Result<string, McpToolError>> {
   const executor = await extra.getExecutor(resolvedSession);
-  const fetched = await getWorksheetFragment({ worksheetName, executor, signal: extra.signal });
+  const fetched = await getWorksheetXml({ worksheetName, executor, signal: extra.signal });
   if (fetched.isErr()) {
     const { type, error } = fetched.error;
     switch (type) {
