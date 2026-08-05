@@ -14,7 +14,7 @@ This prompt is restricted to Tableau site administrators and requires the `ADMIN
 
 ## Workflow
 
-The prompt instructs the model to call [`get-stale-content-report`](../tools/admin-insights/get-stale-content-report.md) exactly once — which performs the TS Events / Site Content anti-join and applies the staleness threshold server-side — and render the already-filtered rows as a Markdown table. No client-side math; no tagging, notification, or deletion. Pair with [stale-content-cleanup-apply](stale-content-cleanup-apply.md) to act on the results.
+The prompt instructs the model to call [`query-admin-insights`](../tools/admin-insights/query-admin-insights.md) with `kind: "stale-content"` exactly once — which performs the TS Events / Site Content anti-join and applies the staleness threshold server-side — and render the already-filtered rows as a Markdown table. No client-side math; no tagging, notification, or deletion. Pair with [stale-content-cleanup-apply](stale-content-cleanup-apply.md) to act on the results.
 
 ## Arguments
 

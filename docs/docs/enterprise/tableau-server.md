@@ -114,7 +114,7 @@ flowchart TD
     that user's behalf.
   - No, I am testing or prototyping: A Personal Access Token can be used for basic testing, with the
     concurrency caveat noted below.
-  - No, I have a licensed and approved user-based licensing (UBL) scenario: A Direct Trust Connected
+  - No, I have a licensed and approved usage-based licensing (UBL) scenario: A Direct Trust Connected
     App may be appropriate. Confirm this with your Tableau licensing and security guidance before
     using a non-OAuth HTTP configuration.
 
@@ -460,7 +460,7 @@ will be mostly\* ignored from then on by the MCP server. Authentication to the u
 requests will use the Direct Trust Connected App instead. For OAuth-backed per-user access, set the
 generated JWT's `sub` claim to the signed-in Tableau user with `JWT_SUB_CLAIM={OAUTH_USERNAME}`. A
 hard-coded `sub` claim should only be used for deployments that are licensed and approved for that
-user-based licensing (UBL) pattern.
+usage-based licensing (UBL) pattern.
 
 ```
 SERVER=https://tableau.superstore.com

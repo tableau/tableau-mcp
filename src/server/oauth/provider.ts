@@ -4,6 +4,8 @@ import { readFileSync } from 'fs';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
+import { ExpiringMap } from '../../utils/expiringMap.js';
+import { milliseconds } from '../../utils/milliseconds.js';
 import { oauthAuthorizationServer } from './.well-known/oauth-authorization-server.js';
 import { oauthProtectedResource } from './.well-known/oauth-protected-resource.js';
 import {
@@ -17,7 +19,12 @@ import { callback } from './callback.js';
 import { register } from './register.js';
 import { revoke } from './revoke.js';
 import { token } from './token.js';
-import { AuthorizationCode, PendingAuthorization, RefreshTokenData } from './types.js';
+import {
+  AuthorizationCode,
+  ClientRegistration,
+  PendingAuthorization,
+  RefreshTokenData,
+} from './types.js';
 
 export const TABLEAU_CLOUD_SERVER_URL = 'https://online.tableau.com';
 
@@ -54,6 +61,10 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
   // Secondary index for O(1) revocation: Tableau access token -> MCP refresh token ID.
   // Expiry-timeout entries may become stale but are harmless and self-clean on next revoke.
   private readonly refreshTokenIndex = new Map<string, string>();
+  private readonly clientRegistrations = new ExpiringMap<string, ClientRegistration>({
+    defaultExpirationTimeMs: milliseconds.fromDays(24),
+    maxSize: 10_000,
+  });
 
   private readonly privateKey: KeyObject;
   private readonly publicKey: KeyObject;
@@ -77,10 +88,10 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
     oauthAuthorizationServer(app);
 
     // oauth2/register
-    register(app);
+    register(app, this.clientRegistrations);
 
     // oauth2/authorize
-    authorize(app, this.pendingAuthorizations);
+    authorize(app, this.pendingAuthorizations, this.clientRegistrations);
 
     // /Callback
     callback(app, this.pendingAuthorizations, this.authorizationCodes);

@@ -2,15 +2,25 @@ import { log } from '../../logging/logger.js';
 import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
+import { Flow, FlowOutputStep } from '../../sdks/tableau/types/flow.js';
 import { View } from '../../sdks/tableau/types/view.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
-import { RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES } from '../../server/oauth/scopes.js';
+import {
+  RESOURCE_ACCESS_CHECKER_FLOW_API_SCOPES,
+  RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+} from '../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { TableauWebRequestHandlerExtra } from './toolContext.js';
 
 type AllowedResult<T = unknown> =
   | { allowed: true; content?: T }
   | { allowed: false; message: string };
+
+/**
+ * The flow detail returned by "Query Flow" — surfaced as the `content` of an
+ * allowed flow result so `get-flow` can reuse it instead of re-fetching.
+ */
+type AllowedFlowContent = { flow: Flow; outputSteps: FlowOutputStep[] };
 
 class ResourceAccessChecker {
   private _testOverrides: {
@@ -122,6 +132,21 @@ class ResourceAccessChecker {
     return result;
   }
 
+  async isFlowAllowed({
+    flowId,
+    extra,
+  }: {
+    flowId: string;
+    extra: TableauWebRequestHandlerExtra;
+  }): Promise<AllowedResult<AllowedFlowContent>> {
+    const result = await this._isFlowAllowed({
+      flowId,
+      extra,
+    });
+
+    return result;
+  }
+
   async isViewAllowed({
     viewId,
     extra,
@@ -201,12 +226,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for datasource ${datasourceLuid}`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for datasource ${datasourceLuid}`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -233,12 +261,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for datasource ${datasourceLuid} tags`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for datasource ${datasourceLuid} tags`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -301,12 +332,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for workbook ${workbookId}`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for workbook ${workbookId}`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -333,12 +367,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for workbook ${workbookId} tags`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for workbook ${workbookId} tags`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -351,6 +388,103 @@ class ResourceAccessChecker {
     }
 
     return { allowed: true, content: workbook };
+  }
+
+  private async _isFlowAllowed({
+    flowId,
+    extra,
+  }: {
+    flowId: string;
+    extra: TableauWebRequestHandlerExtra;
+  }): Promise<AllowedResult<AllowedFlowContent>> {
+    // Flows have no dedicated `flowIds` bounded context (only projects and tags
+    // apply to flows), so unlike workbooks there is no id-based short circuit.
+    // The flow is fetched only when a project or tag filter is configured.
+    let flowResult: AllowedFlowContent | undefined;
+    async function getFlow(): Promise<AllowedFlowContent> {
+      return await useRestApi({
+        ...extra,
+        // Flows are gated by `tableau:flows:read`, not `tableau:content:read`.
+        jwtScopes: RESOURCE_ACCESS_CHECKER_FLOW_API_SCOPES,
+        callback: async (restApi) =>
+          await restApi.flowsMethods.queryFlow({
+            siteId: restApi.siteId,
+            flowId,
+          }),
+      });
+    }
+
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    if (allowedProjectIds) {
+      try {
+        flowResult = await getFlow();
+
+        if (!allowedProjectIds.has(flowResult.flow.project?.id ?? '')) {
+          return {
+            allowed: false,
+            message: [
+              'The set of allowed flows that can be queried is limited by the server configuration.',
+              `The flow with LUID ${flowId} cannot be queried because it does not belong to an allowed project.`,
+            ].join(' '),
+          };
+        }
+      } catch (error) {
+        log(
+          {
+            message: `Resource access check failed for flow ${flowId}`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
+        return {
+          allowed: false,
+          message: [
+            'The set of allowed flows that can be queried is limited by the server configuration.',
+            `An error occurred while checking if the flow with LUID ${flowId} is in an allowed project:`,
+            getExceptionMessage(error),
+          ].join(' '),
+        };
+      }
+    }
+
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (allowedTags) {
+      try {
+        flowResult = flowResult ?? (await getFlow());
+
+        if (!flowResult.flow.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
+          return {
+            allowed: false,
+            message: [
+              'The set of allowed flows that can be queried is limited by the server configuration.',
+              `The flow with LUID ${flowId} cannot be queried because it does not have one of the allowed tags.`,
+            ].join(' '),
+          };
+        }
+      } catch (error) {
+        log(
+          {
+            message: `Resource access check failed for flow ${flowId} tags`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
+        return {
+          allowed: false,
+          message: [
+            'The set of allowed flows that can be queried is limited by the server configuration.',
+            `An error occurred while checking if the flow with LUID ${flowId} has one of the allowed tags:`,
+            getExceptionMessage(error),
+          ].join(' '),
+        };
+      }
+    }
+
+    return { allowed: true, content: flowResult };
   }
 
   private async _isViewAllowed({
@@ -400,12 +534,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for view ${viewId} workbook`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for view ${viewId} workbook`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -432,12 +569,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for view ${viewId} project`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for view ${viewId} project`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -464,12 +604,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for view ${viewId} tags`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for view ${viewId} tags`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -513,12 +656,15 @@ class ResourceAccessChecker {
       });
       underlyingViewId = customView.view.id;
     } catch (error) {
-      log({
-        message: `Resource access check failed for custom view ${customViewId}`,
-        level: 'error',
-        logger: 'resource-access',
-        data: error,
-      });
+      log(
+        {
+          message: `Resource access check failed for custom view ${customViewId}`,
+          level: 'error',
+          logger: 'resource-access',
+          data: error,
+        },
+        extra,
+      );
       return {
         allowed: false,
         message: [

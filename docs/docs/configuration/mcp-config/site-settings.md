@@ -59,4 +59,5 @@ You might not see changes take immediate effect due to caching, see [`MCP_SITE_S
 - ### [`INCLUDE_WORKBOOK_IDS`](tool-scoping.md#include_workbook_ids)
 - ### [`MAX_RESULT_LIMIT`](env-vars.md#max_result_limit)
 - ### [`MAX_RESULT_LIMITS`](env-vars.md#max_result_limits)
+- ### [`STALE_CONTENT_MAX_ROWS`](env-vars.md#stale_content_max_rows)
 - ### [`STALE_CONTENT_MIN_AGE_DAYS`](env-vars.md#stale_content_min_age_days)

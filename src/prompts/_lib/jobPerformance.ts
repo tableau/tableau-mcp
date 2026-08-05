@@ -1,5 +1,5 @@
 /**
- * Shared constants for prompts that query the `query-admin-insights-job-performance` tool.
+ * Shared constants for prompts that query `query-admin-insights` (kind: job-performance).
  *
  * Centralized so the field list and the extract-refresh job-type set stay byte-for-byte identical
  * across the inform (`job-optimization-inform`) and apply (`extract-optimization-apply`) prompts.
@@ -8,9 +8,9 @@
  */
 
 /**
- * Fields requested for any optimization read against `query-admin-insights-job-performance`. This
- * 10-field set is the minimum needed to compute duration outliers, failure counts, and last-success
- * windows without a second round trip.
+ * Fields requested for any optimization read against `query-admin-insights` (kind: job-performance).
+ * This 10-field set is the minimum needed to compute duration outliers, failure counts, and
+ * last-success windows without a second round trip.
  */
 export const JOB_PERFORMANCE_FIELDS = [
   'Item Name',
@@ -28,7 +28,7 @@ export const JOB_PERFORMANCE_FIELDS = [
 /**
  * Raw `Job Type` values as stored in the Admin Insights datasource (no spaces). Extract refresh
  * spans direct and Bridge variants, so the default scope is all four. These match the job types
- * whose schedules `update-cloud-extract-refresh-task` / `delete-extract-refresh-task` can act on.
+ * whose schedules `update-cloud-extract-refresh-task` / `delete-content` can act on.
  */
 export const EXTRACT_REFRESH_JOB_TYPES = [
   'RefreshExtracts',

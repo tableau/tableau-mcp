@@ -28,9 +28,9 @@ describe('extract-optimization-apply prompt', () => {
   it('orchestrates the four expected tools', async () => {
     const text = await textOf();
     expect(text).toContain('`list-extract-refresh-tasks`');
-    expect(text).toContain('`query-admin-insights-job-performance`');
+    expect(text).toContain('`query-admin-insights`');
     expect(text).toContain('`update-cloud-extract-refresh-task`');
-    expect(text).toContain('`delete-extract-refresh-task`');
+    expect(text).toContain('`delete-content`');
   });
 
   it('marks itself DESTRUCTIVE and locks Steps 1-3 to read-only', async () => {
@@ -90,7 +90,9 @@ describe('extract-optimization-apply prompt', () => {
     expect(text).toContain('per-task `confirmationToken`');
     // The apply step must instruct the model to echo `confirm: true` + the preview's token.
     expect(text).toContain('`{ taskId, schedule, confirm: true, confirmationToken:');
-    expect(text).toContain('`{ taskId, confirm: true, confirmationToken:');
+    expect(text).toContain(
+      '`{ resourceType: "extract-refresh-task", resourceId: <taskId>, confirm: true, confirmationToken:',
+    );
   });
 
   it('includes the human-in-the-loop confirmation gate', async () => {
@@ -105,7 +107,7 @@ describe('extract-optimization-apply prompt', () => {
     const text = await textOf();
     expect(text).toContain('**Fixed notes**');
     expect(text).toContain(
-      '`delete-extract-refresh-task` is irreversible; `update-cloud-extract-refresh-task` is reversible',
+      '`delete-content` is irreversible; `update-cloud-extract-refresh-task` is reversible',
     );
     expect(text).toContain('No task is updated or deleted until the user approves');
   });

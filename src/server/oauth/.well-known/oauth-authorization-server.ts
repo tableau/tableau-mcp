@@ -10,7 +10,7 @@ import { getSupportedScopes } from '../scopes.js';
  * available endpoints, supported flows, and capabilities.
  */
 export function oauthAuthorizationServer(app: express.Application): void {
-  app.get('/.well-known/oauth-authorization-server', (_req, res) => {
+  app.get('/.well-known/oauth-authorization-server', async (_req, res) => {
     const { issuer, advertiseApiScopes, enforceScopes, clientIdSecretPairs } = getConfig().oauth;
 
     const grant_types_supported = ['authorization_code', 'refresh_token'];
@@ -32,7 +32,7 @@ export function oauthAuthorizationServer(app: express.Application): void {
       grant_types_supported,
       code_challenge_methods_supported: ['S256'],
       scopes_supported: enforceScopes
-        ? getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+        ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
         : [],
       token_endpoint_auth_methods_supported,
       subject_types_supported: ['public'],

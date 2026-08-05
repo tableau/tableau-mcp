@@ -12,7 +12,9 @@ import { milliseconds } from '../../utils/milliseconds.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { retry } from '../../utils/retry.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
+import { checkRedirectUriAllowed } from './authorizeRedirectUri.js';
 import { clientMetadataCache } from './clientMetadataCache.js';
+import { getDeviceId, getDeviceName } from './device.js';
 import { getDnsResolver } from './dnsResolver.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
@@ -20,7 +22,7 @@ import { matchesRegisteredRedirectUri } from './matchesRegisteredRedirectUri.js'
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
 import { getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
-import { PendingAuthorization } from './types.js';
+import { ClientRegistration, PendingAuthorization } from './types.js';
 
 /**
  * OAuth 2.1 Authorization Endpoint
@@ -32,6 +34,7 @@ import { PendingAuthorization } from './types.js';
 export function authorize(
   app: express.Application,
   pendingAuthorizations: Map<string, PendingAuthorization>,
+  clientRegistrations: Map<string, ClientRegistration>,
 ): void {
   const config = getConfig();
 
@@ -117,7 +120,7 @@ export function authorize(
     const requestedScopes = parseScopes(scope);
     const { valid: validScopes, invalid: invalidScopes } = validateScopes(
       requestedScopes,
-      getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
+      await getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
     );
 
     if (invalidScopes.length > 0) {
@@ -132,8 +135,22 @@ export function authorize(
       validScopes.length > 0
         ? validScopes
         : enforceScopes
-          ? getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+          ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
           : [];
+
+    // Redirect URI security enforcement for opaque client_ids (runs after baseline param
+    // validation, before storing pending auth). The CIMD path enforces its own allowlist above.
+    if (!clientIdUrl) {
+      const redirectError = checkRedirectUriAllowed({
+        clientId: client_id,
+        redirectUri: redirect_uri,
+        clientRegistrations,
+      });
+      if (redirectError) {
+        res.status(400).json(redirectError);
+        return;
+      }
+    }
 
     // Generate Tableau state and store pending authorization
     const tableauState = randomBytes(32).toString('hex');
@@ -167,9 +184,10 @@ export function authorize(
     oauthUrl.searchParams.set('response_type', 'code');
     oauthUrl.searchParams.set('redirect_uri', config.oauth.redirectUri);
     oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
-    oauthUrl.searchParams.set('device_id', randomUUID());
+    const deviceName = getDeviceName(redirect_uri, state ?? '', clientName);
+    oauthUrl.searchParams.set('device_id', getDeviceId(deviceName));
     oauthUrl.searchParams.set('target_site', config.siteName);
-    oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? '', clientName));
+    oauthUrl.searchParams.set('device_name', deviceName);
     oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
     if (config.oauth.lockSite) {
@@ -380,32 +398,3 @@ async function getClientFromMetadataDoc(
 
   return Ok(clientMetadataResult.data);
 }
-
-function getDeviceName(redirectUri: string, state: string, clientName: string | undefined): string {
-  if (clientName) {
-    return `tableau-mcp (${clientName})`;
-  }
-
-  const defaultDeviceName = 'tableau-mcp (Unknown agent)';
-
-  try {
-    const url = new URL(redirectUri);
-    if (url.protocol === 'https:' || url.protocol === 'http:') {
-      if (redirectUri === 'https://vscode.dev/redirect' && new URL(state).protocol === 'vscode:') {
-        // VS Code normally authenticates in a way that doesn't give any clues about who it is.
-        // It has a backup authentication method they call "URL Handler" that does though.
-        return 'tableau-mcp (VS Code)';
-      }
-
-      return defaultDeviceName;
-    } else if (url.protocol === 'cursor:') {
-      return 'tableau-mcp (Cursor)';
-    } else {
-      return `tableau-mcp (${url.protocol.slice(0, -1)})`;
-    }
-  } catch {
-    return defaultDeviceName;
-  }
-}
-
-export const exportedForTesting = { getDeviceName };

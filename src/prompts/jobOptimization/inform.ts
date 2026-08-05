@@ -4,7 +4,7 @@ import { EXTRACT_REFRESH_JOB_TYPES, JOB_PERFORMANCE_FIELDS } from '../_lib/jobPe
 import { WebPromptFactory } from '../registry.js';
 import { renderNotesFor } from './renderNotes.js';
 
-const TOOL_NAME = 'query-admin-insights-job-performance';
+const TOOL_NAME = 'query-admin-insights';
 
 // Placeholder the model substitutes per discovered job type in discovery mode.
 const JOB_TYPE_PLACEHOLDER = '__JOB_TYPE__';
@@ -61,6 +61,7 @@ const buildToolArgs = (
   }
 
   const toolArgs: Record<string, unknown> = {
+    kind: 'job-performance',
     query: {
       fields: JOB_PERFORMANCE_FIELDS.map((fieldCaption) => ({ fieldCaption })),
       filters,

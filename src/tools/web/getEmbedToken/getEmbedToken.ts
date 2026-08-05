@@ -5,6 +5,7 @@ import { EmbedTokenNotAvailableError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { buildAuthConfig } from '../../../sdks/tableau/buildAuthConfig.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import { EMBED_SCOPE, resolveEmbedToken } from './resolveEmbedToken.js';
 
@@ -39,7 +40,7 @@ This tool resolves the embed token from the current session's signing material â
         visibility: ['app'], // Only visible to the app, not the model
       },
     },
-    disabled: !getFeatureGate().isFeatureEnabled('mcp-apps'),
+    disabled: new Provider(async () => !(await getFeatureGate().isFeatureEnabled('mcp-apps'))),
     callback: async (_args, extra): Promise<CallToolResult> => {
       return getEmbedTokenTool.logAndExecute<{ token: string }>({
         extra,

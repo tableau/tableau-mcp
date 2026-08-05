@@ -2,7 +2,7 @@ import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
 
 const PROMPT_NAME = 'job-optimization-inform';
-const TOOL_NAME = 'query-admin-insights-job-performance';
+const TOOL_NAME = 'query-admin-insights';
 
 describe('job-optimization-inform prompt', () => {
   beforeAll(setEnv);

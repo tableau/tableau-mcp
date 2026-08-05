@@ -10,7 +10,10 @@ const tokenResponseSchema = z.object({
 
 test.describe('get-embed-token', () => {
   test('should return Bearer token', async ({ client }) => {
-    test.skip(!getFeatureGate().isFeatureEnabled('mcp-apps'), 'mcp-apps feature is disabled');
+    test.skip(
+      !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
+      'mcp-apps feature is disabled',
+    );
     const result = await client.callTool('get-embed-token', {
       schema: tokenResponseSchema,
       toolArgs: {},

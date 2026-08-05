@@ -66,7 +66,9 @@ describe('authorization code flow', () => {
     expect(location.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:3927/Callback');
     expect(location.searchParams.get('state')).not.toBeNull();
     expect(location.searchParams.get('state')).toContain(':');
-    expect(location.searchParams.get('device_id')).not.toBeNull();
+    expect(location.searchParams.get('device_id')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expect(location.searchParams.get('target_site')).toBe('mcp-test');
     expect(location.searchParams.get('device_name')).toBe('tableau-mcp (Unknown agent)');
     expect(location.searchParams.get('client_type')).toBe('tableau-mcp');
@@ -199,6 +201,55 @@ describe('authorization code flow', () => {
           error: 'invalid_request',
           error_description: 'Invalid redirect URI: 123http://example.com',
         });
+      });
+    });
+
+    describe('opaque client_id security - reject remote https for unknown clients', () => {
+      it('should reject remote https redirect URI for unknown opaque client_id', async () => {
+        const { app } = await startServer();
+
+        const response = await request(app).get('/oauth2/authorize').query({
+          client_id: 'unknown-opaque-client',
+          redirect_uri: 'https://evil.example.com/cb',
+          response_type: 'code',
+          code_challenge: 'test-code-challenge',
+          code_challenge_method: 'S256',
+        });
+
+        expect(response.status).toBe(400);
+        expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+        expect(response.body).toEqual({
+          error: 'invalid_request',
+          error_description: 'Invalid redirect URI: https://evil.example.com/cb',
+        });
+      });
+
+      it('should allow loopback http for unknown opaque client_id', async () => {
+        const { app } = await startServer();
+
+        const response = await request(app).get('/oauth2/authorize').query({
+          client_id: 'unknown-opaque-client',
+          redirect_uri: 'http://localhost:3000',
+          response_type: 'code',
+          code_challenge: 'test-code-challenge',
+          code_challenge_method: 'S256',
+        });
+
+        expect(response.status).toBe(302);
+      });
+
+      it('should allow custom scheme for unknown opaque client_id', async () => {
+        const { app } = await startServer();
+
+        const response = await request(app).get('/oauth2/authorize').query({
+          client_id: 'unknown-opaque-client',
+          redirect_uri: 'cursor://cb',
+          response_type: 'code',
+          code_challenge: 'test-code-challenge',
+          code_challenge_method: 'S256',
+        });
+
+        expect(response.status).toBe(302);
       });
     });
   });

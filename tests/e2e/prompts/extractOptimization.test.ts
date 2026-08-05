@@ -3,9 +3,9 @@ import { McpClient } from '../mcpClient.js';
 
 const PROMPT_NAME = 'extract-optimization-apply';
 const INVENTORY_TOOL = 'list-extract-refresh-tasks';
-const PERFORMANCE_TOOL = 'query-admin-insights-job-performance';
+const PERFORMANCE_TOOL = 'query-admin-insights';
 const UPDATE_TOOL = 'update-cloud-extract-refresh-task';
-const DELETE_TOOL = 'delete-extract-refresh-task';
+const DELETE_TOOL = 'delete-content';
 
 describe('extract-optimization-apply prompt', () => {
   beforeAll(setEnv);
@@ -93,7 +93,9 @@ describe('extract-optimization-apply prompt', () => {
       expect(text).toContain('per-task `confirmationToken`');
       expect(text).toContain('`confirm` omitted');
       expect(text).toContain('`{ taskId, schedule, confirm: true, confirmationToken:');
-      expect(text).toContain('`{ taskId, confirm: true, confirmationToken:');
+      expect(text).toContain(
+        '`{ resourceType: "extract-refresh-task", resourceId: <taskId>, confirm: true, confirmationToken:',
+      );
       // The shared renderConfirmInstructions block must surface verbatim in the apply step so a
       // future prompt edit can't quietly downgrade two-phase enforcement.
       expect(text).toContain(

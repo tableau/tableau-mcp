@@ -6,6 +6,7 @@ import { z, ZodError } from 'zod';
 import { DatasourceNotAllowedError, ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { notifier } from '../../logging/notification.js';
 import { WebMcpServer } from '../../server.web.js';
+import { TableauAuthInfo } from '../../server/oauth/schemas.js';
 import invariant from '../../utils/invariant.js';
 import { WebTool } from './tool.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
@@ -78,6 +79,8 @@ describe('Tool', () => {
   });
 
   it('should return successful result when callback succeeds', async () => {
+    vi.stubEnv('LOG_LEVEL', 'debug'); // Enable debug logs for this test
+
     const tool = new WebTool(mockParams);
     const successResult = { data: 'success' };
     const callback = vi
@@ -85,6 +88,7 @@ describe('Tool', () => {
       .mockImplementation(async (_requestId: string) => new Ok(successResult));
 
     const spy = vi.spyOn(tool, 'notifyInvocation');
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const result = await tool.logAndExecute({
       extra: mockExtra,
       args: { param1: 'test' },
@@ -107,6 +111,32 @@ describe('Tool', () => {
         param1: 'test',
       },
     });
+
+    // Assert that the invocation log line carries populated LUID fields
+    const logLines = stderrSpy.mock.calls
+      .map((call) => {
+        try {
+          return JSON.parse(call[0] as string);
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry) => entry !== null);
+
+    const invocationLogCall = logLines.find(
+      (entry) => entry.logger === 'tool' && entry.message?.includes('invoked'),
+    );
+
+    expect(invocationLogCall).toBeDefined();
+    expect(invocationLogCall).toMatchObject({
+      message: expect.stringContaining('get-datasource-metadata'),
+      level: 'debug',
+      logger: 'tool',
+      site_luid: 'test-site-luid',
+      user_luid: 'test-user-luid',
+    });
+
+    stderrSpy.mockRestore();
   });
 
   it('should return error result when callback throws', async () => {
@@ -229,6 +259,7 @@ describe('Tool', () => {
           is_hyperforce: false,
           success: true,
           error_code: '',
+          error_message: '',
         }),
       );
     });
@@ -251,6 +282,7 @@ describe('Tool', () => {
           is_hyperforce: false,
           success: false,
           error_code: '500',
+          error_message: 'requestId: 2, error: Callback failed',
         }),
       );
     });
@@ -315,6 +347,140 @@ describe('Tool', () => {
           is_hyperforce: false,
           success: true,
           error_code: '',
+        }),
+      );
+    });
+
+    const bearerAuthInfo = (clientId: string | undefined): TableauAuthInfo => ({
+      type: 'Bearer',
+      username: 'user@example.com',
+      server: 'https://my-tableau.example.com',
+      siteId: 'abc123',
+      siteName: 'my-site',
+      userId: 'uid-1',
+      raw: 'fake-token',
+      clientId,
+    });
+
+    it('should include raw oauth_client_id and mapped display name for a known Bearer client', async () => {
+      const tool = new WebTool(mockParams);
+      const clientId = 'https://claude.ai/.well-known/oauth/client-metadata.json';
+
+      await tool.logAndExecute({
+        extra: { ...mockExtra, tableauAuthInfo: bearerAuthInfo(clientId) },
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: clientId,
+          oauth_client_display_name: 'Claude',
+          auth_type: 'tableau-oauth',
+        }),
+      );
+    });
+
+    it('should fall back oauth_client_display_name to the raw client_id for an unknown Bearer client', async () => {
+      const tool = new WebTool(mockParams);
+      const clientId = 'https://www.unknown-client.com/.well-known/oauth/client-metadata.json';
+
+      await tool.logAndExecute({
+        extra: { ...mockExtra, tableauAuthInfo: bearerAuthInfo(clientId) },
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: clientId,
+          oauth_client_display_name: clientId,
+        }),
+      );
+    });
+
+    it('should emit empty oauth client fields when there is no Bearer client id', async () => {
+      const tool = new WebTool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: '',
+          oauth_client_display_name: '',
+          // mockExtra has no tableauAuthInfo, so auth_type falls through to config.auth ('pat' in tests).
+          auth_type: 'pat',
+        }),
+      );
+    });
+
+    // Embedded OAuth normalizes tableauAuthInfo to 'X-Tableau-Auth' (see
+    // accessTokenValidator), but the MCP-level authInfo still carries the client id. This
+    // constructs that production shape rather than a synthetic Bearer.
+    const embeddedTableauAuthInfo: TableauAuthInfo = {
+      type: 'X-Tableau-Auth',
+      username: 'user@example.com',
+      server: 'https://my-tableau.example.com',
+      siteName: 'my-site',
+      userId: 'uid-1',
+    };
+
+    it('should populate oauth client telemetry from authInfo.clientId on the embedded-OAuth path', async () => {
+      const tool = new WebTool(mockParams);
+      const clientId = 'https://claude.ai/.well-known/oauth/client-metadata.json';
+
+      await tool.logAndExecute({
+        extra: {
+          ...mockExtra,
+          tableauAuthInfo: embeddedTableauAuthInfo,
+          authInfo: {
+            token: 'fake-mcp-access-token',
+            clientId,
+            scopes: [],
+            extra: embeddedTableauAuthInfo,
+          },
+        },
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: clientId,
+          oauth_client_display_name: 'Claude',
+        }),
+      );
+    });
+
+    it('should sanitize an attacker-influenceable Bearer client_id before emitting telemetry', async () => {
+      const tool = new WebTool(mockParams);
+      const rawClientId =
+        'https://user:secret@claude.ai/.well-known/oauth/client-metadata.json?token=abc#frag';
+
+      await tool.logAndExecute({
+        extra: { ...mockExtra, tableauAuthInfo: bearerAuthInfo(rawClientId) },
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: 'https://claude.ai/.well-known/oauth/client-metadata.json',
+          oauth_client_display_name: 'Claude',
         }),
       );
     });
@@ -450,6 +616,16 @@ describe('Tool', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.data).toEqual(rawApiData.toString());
       expect(parsed.warning).toContain('Expected string, received object');
+
+      // The passthrough result carries the full API payload but is isError: false, so it must
+      // NOT leak into telemetry's error_message (keyed off isError, not the false `success`).
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_message: '',
+        }),
+      );
     });
 
     it('should return isError: false with validation warning for discriminatedUnion schema errors', async () => {

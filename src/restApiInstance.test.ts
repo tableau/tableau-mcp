@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getConfig } from './config.js';
+import { log } from './logging/logger.js';
 import { notifier } from './logging/notification.js';
 import {
   getRequestErrorInterceptor,
@@ -11,6 +12,11 @@ import {
 } from './restApiInstance.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { WebMcpServer } from './server.web.js';
+
+vi.mock('./logging/logger.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./logging/logger.js')>();
+  return { ...actual, log: vi.fn() };
+});
 
 vi.mock('./logging/notification.js', () => ({
   notifier: {
@@ -23,6 +29,7 @@ vi.mock('./logging/notification.js', () => ({
 describe('restApiInstance', () => {
   const mockHost = 'https://my-tableau-server.com';
   const mockRequestId = 'test-request-id';
+  const defaultLuidGetters = { getSiteLuid: () => '', getUserLuid: () => '' };
 
   beforeAll(() => {
     RestApi.host = mockHost;
@@ -48,6 +55,7 @@ describe('restApiInstance', () => {
         tableauAuthInfo: undefined,
         jwtScopes: [],
         signal: new AbortController().signal,
+        ...defaultLuidGetters,
         callback: (restApi) => Promise.resolve(restApi),
       });
 
@@ -75,6 +83,7 @@ describe('restApiInstance', () => {
         tableauAuthInfo: undefined,
         jwtScopes: [],
         signal: new AbortController().signal,
+        ...defaultLuidGetters,
         callback: (restApi) => Promise.resolve(restApi),
       });
 
@@ -108,6 +117,7 @@ describe('restApiInstance', () => {
         tableauAuthInfo: undefined,
         jwtScopes: [],
         signal: new AbortController().signal,
+        ...defaultLuidGetters,
         callback: (restApi) => Promise.resolve(restApi),
       });
 
@@ -146,6 +156,7 @@ describe('restApiInstance', () => {
         },
         jwtScopes: [],
         signal: new AbortController().signal,
+        ...defaultLuidGetters,
         callback: (restApi) => Promise.resolve(restApi),
       });
 
@@ -175,6 +186,7 @@ describe('restApiInstance', () => {
         },
         jwtScopes: [],
         signal: new AbortController().signal,
+        ...defaultLuidGetters,
         callback: (restApi) => Promise.resolve(restApi),
       });
 
@@ -185,6 +197,60 @@ describe('restApiInstance', () => {
       );
       expect(restApi.signIn).not.toHaveBeenCalled();
       expect(restApi.signOut).not.toHaveBeenCalled();
+    });
+
+    // W-23202034: a sign-out failure during teardown must not mask the callback's real result or
+    // error. A throw in the `finally` sign-out would otherwise replace whatever the callback
+    // returned/threw — e.g. a 404 from a missing resource surfacing to the caller as the sign-out's
+    // 401. Sign-out is best-effort cleanup; its failure is swallowed and logged.
+    it('should not let a sign-out failure mask the callback error', async () => {
+      vi.stubEnv('AUTH', 'pat');
+
+      const callbackError = new Error('Request failed with status code 404');
+
+      await expect(
+        useRestApi({
+          config: getConfig(),
+          requestId: mockRequestId,
+          server: new WebMcpServer(),
+          tableauAuthInfo: undefined,
+          jwtScopes: [],
+          signal: new AbortController().signal,
+          ...defaultLuidGetters,
+          callback: (restApi) => {
+            // Simulate the ephemeral session being torn down: sign-out now rejects (e.g. 401).
+            vi.mocked(restApi.signOut).mockRejectedValueOnce(
+              new Error('Request failed with status code 401'),
+            );
+            // The real failure the caller cares about.
+            return Promise.reject(callbackError);
+          },
+        }),
+        // The caller must see the callback's 404, NOT the sign-out's 401.
+      ).rejects.toBe(callbackError);
+    });
+
+    it('should not let a sign-out failure mask a successful callback result', async () => {
+      vi.stubEnv('AUTH', 'pat');
+
+      const result = await useRestApi({
+        config: getConfig(),
+        requestId: mockRequestId,
+        server: new WebMcpServer(),
+        tableauAuthInfo: undefined,
+        jwtScopes: [],
+        signal: new AbortController().signal,
+        ...defaultLuidGetters,
+        callback: (restApi) => {
+          vi.mocked(restApi.signOut).mockRejectedValueOnce(
+            new Error('Request failed with status code 401'),
+          );
+          return Promise.resolve('ok');
+        },
+      });
+
+      // A best-effort sign-out failure is swallowed; the successful result still reaches the caller.
+      expect(result).toBe('ok');
     });
 
     it('should set credentials when using Passthrough auth', async () => {
@@ -205,6 +271,7 @@ describe('restApiInstance', () => {
         },
         jwtScopes: [],
         signal: new AbortController().signal,
+        ...defaultLuidGetters,
         callback: (restApi: RestApi) => Promise.resolve(restApi),
       });
 
@@ -391,6 +458,109 @@ describe('restApiInstance', () => {
           notifier: 'rest-api',
           requestId: mockRequestId,
         }),
+      );
+    });
+  });
+
+  describe('LUID Context Integration', () => {
+    it('should pass LUID getters to log() on sign-out success', async () => {
+      vi.stubEnv('AUTH', 'pat');
+
+      const getSiteLuid = (): string => 'test-site-luid';
+      const getUserLuid = (): string => 'test-user-luid';
+
+      await useRestApi({
+        config: getConfig(),
+        requestId: mockRequestId,
+        server: new WebMcpServer(),
+        tableauAuthInfo: undefined,
+        jwtScopes: [],
+        signal: new AbortController().signal,
+        ...defaultLuidGetters,
+        getSiteLuid,
+        getUserLuid,
+        callback: (restApi) => Promise.resolve(restApi),
+      });
+
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Signed out of Tableau REST API',
+          level: 'debug',
+          logger: 'auth',
+        }),
+        { getSiteLuid, getUserLuid },
+      );
+    });
+
+    it('should pass LUID getters to log() on sign-out failure', async () => {
+      vi.stubEnv('AUTH', 'pat');
+
+      const getSiteLuid = (): string => 'test-site-luid';
+      const getUserLuid = (): string => 'test-user-luid';
+
+      await useRestApi({
+        config: getConfig(),
+        requestId: mockRequestId,
+        server: new WebMcpServer(),
+        tableauAuthInfo: undefined,
+        jwtScopes: [],
+        signal: new AbortController().signal,
+        ...defaultLuidGetters,
+        getSiteLuid,
+        getUserLuid,
+        callback: (restApi) => {
+          vi.mocked(restApi.signOut).mockRejectedValueOnce(new Error('Sign-out failed'));
+          return Promise.resolve('ok');
+        },
+      });
+
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Failed to sign out of Tableau REST API'),
+          level: 'warning',
+          logger: 'auth',
+        }),
+        { getSiteLuid, getUserLuid },
+      );
+    });
+
+    it('should pass LUID getters to log() via request error interceptor', () => {
+      const server = new WebMcpServer();
+      const ctx = { getSiteLuid: () => 'test-site-luid', getUserLuid: () => 'test-user-luid' };
+
+      const errorInterceptor = getRequestErrorInterceptor(server, mockRequestId, ctx);
+      const mockError = new Error('Non-Axios request error');
+
+      errorInterceptor(mockError, mockHost);
+
+      expect(log).toHaveBeenCalledWith(
+        {
+          message: `Request ${mockRequestId} failed`,
+          level: 'error',
+          logger: 'rest-api',
+          data: mockError,
+        },
+        ctx,
+      );
+    });
+
+    it('should pass LUID getters to log() via response error interceptor', () => {
+      const server = new WebMcpServer();
+      const ctx = { getSiteLuid: () => 'test-site-luid', getUserLuid: () => 'test-user-luid' };
+
+      const errorInterceptor = getResponseErrorInterceptor(server, mockRequestId, ctx);
+      const mockError = new Error('Non-Axios response error');
+
+      errorInterceptor(mockError, mockHost);
+
+      expect(log).toHaveBeenCalledWith(
+        {
+          message: `Response from request ${mockRequestId} failed`,
+          level: 'error',
+          logger: 'rest-api',
+          data: mockError,
+        },
+        ctx,
       );
     });
   });

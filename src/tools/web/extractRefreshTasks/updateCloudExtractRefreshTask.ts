@@ -5,16 +5,41 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { UnknownError } from '../../../errors/mcpToolError.js';
+import { PreviewNotRunError, UnknownError } from '../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   UpdateCloudExtractRefreshSchedule,
   updateCloudExtractRefreshScheduleSchema,
 } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { RegistryEvidence } from '../_lib/evidence.js';
+import { getAppConfig } from '../../../web/apps/appConfig.js';
+import {
+  AppApprovalEvidence,
+  getMutationPreviewTtlMs,
+  RegistryEvidence,
+} from '../_lib/evidence.js';
+import { renderConfirmClosedMessage, renderTokenConfirmNextStep } from '../_lib/hitlText.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
-import { WebTool } from '../tool.js';
+import { resolveExtractRefreshTaskTarget } from '../_lib/resolveExtractRefreshTaskTarget.js';
+import { AppToolResult, WebTool } from '../tool.js';
+
+/**
+ * The confirm-panel payload the update-cloud-extract-refresh-task preview returns (flag-ON) as
+ * `AppToolResult.data`, serialized into the tool-result text the MCP-Apps iframe parses to render the
+ * HITL confirm UI describing the SCHEDULE CHANGE (frequency + time window + a live countdown to
+ * `expiresAtMs`). The full `schedule` object is carried so the confirm tool can apply the exact same
+ * change. No secret/token is carried — the approval is presence-based server-side.
+ */
+export type UpdateCloudExtractRefreshTaskConfirmPanel = {
+  kind: 'update-cloud-extract-refresh-task-confirm';
+  taskId: string;
+  schedule: UpdateCloudExtractRefreshSchedule;
+  frequency: string;
+  start: string;
+  end?: string;
+  expiresAtMs: number;
+};
 
 const paramsSchema = {
   taskId: z.string().uuid('taskId must be a valid UUID'),
@@ -73,21 +98,29 @@ function canonicalize(value: unknown): unknown {
  * a token minted while previewing schedule A cannot confirm an update to schedule B — the confirmed
  * mutation is provably the one that was previewed.
  */
-function scheduleBinding(schedule: UpdateCloudExtractRefreshSchedule): string {
+export function scheduleBinding(schedule: UpdateCloudExtractRefreshSchedule): string {
   return createHash('sha256')
     .update(JSON.stringify(canonicalize(schedule)))
     .digest('hex');
 }
 
-export const getUpdateCloudExtractRefreshTaskTool = (
+export const getUpdateCloudExtractRefreshTaskTool = async (
   server: WebMcpServer,
-): WebTool<typeof paramsSchema> => {
+): Promise<WebTool<typeof paramsSchema>> => {
   const config = getConfig();
+  // MCP-Apps HITL: when the flag is ON, the preview carries an app so the host renders an iframe
+  // confirm panel and the schedule change is applied as a human gesture
+  // (confirm-update-cloud-extract-refresh-task). Flag OFF → no `app`, byte-identical to today's
+  // confirm-only behavior.
+  const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
   const updateCloudExtractRefreshTaskTool = new WebTool({
     server,
     name: 'update-cloud-extract-refresh-task',
     disabled: !config.adminToolsEnabled,
+    ...(mcpAppsEnabled
+      ? { app: getAppConfig('update-cloud-extract-refresh-task', 'hitl-confirm') }
+      : {}),
     description: `
   Updates the schedule of an extract refresh task on Tableau Cloud. Use this to change how often an extract refresh runs (e.g. downgrade Daily → Weekly), shift its time window, or modify the day/hour it executes — without recreating the task.
 
@@ -140,7 +173,9 @@ export const getUpdateCloudExtractRefreshTaskTool = (
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {
-      return await updateCloudExtractRefreshTaskTool.logAndExecute<string>({
+      return await updateCloudExtractRefreshTaskTool.logAndExecute<
+        string | AppToolResult<UpdateCloudExtractRefreshTaskConfirmPanel>
+      >({
         extra,
         args,
         callback: async () => {
@@ -148,16 +183,41 @@ export const getUpdateCloudExtractRefreshTaskTool = (
             ...extra,
             jwtScopes: updateCloudExtractRefreshTaskTool.requiredApiScopes,
             callback: async (restApi) => {
+              // Flag ON (MCP-Apps HITL): the model-driven confirm:true path is CLOSED so an agent
+              // cannot self-confirm a schedule change by re-calling this tool — the only route to
+              // applying the change is a human gesture in the confirm panel
+              // (confirm-update-cloud-extract-refresh-task). Reject before any side effect. Flag OFF
+              // keeps the original nonce-gated confirm:true path intact.
+              if (args.confirm && mcpAppsEnabled) {
+                return new PreviewNotRunError(
+                  renderConfirmClosedMessage({
+                    actionPhrase: 'changing an extract refresh schedule',
+                    panelName: 'the update-cloud-extract-refresh-task approval panel',
+                    previewTool: 'update-cloud-extract-refresh-task',
+                    appliedClause:
+                      'the change is applied by confirm-update-cloud-extract-refresh-task only when ' +
+                      'a person clicks Apply',
+                  }),
+                ).toErr();
+              }
+
               // The task carries no durable taggable state, so this two-phase mutation gates on a
               // server-generated single-use nonce (RegistryEvidence) — the same gate as
               // delete-extract-refresh-task. The nonce is additionally bound to a fingerprint of the
               // schedule (see scheduleBinding), so a token minted while previewing schedule A cannot
               // confirm an update to schedule B, and a confirm with no prior preview is rejected
               // server-side. The guard audits both the preview and the confirmed update.
-              const resolveTarget = async (): Promise<MutationTarget> => ({
-                id: args.taskId,
-                kind: 'extract-refresh-task',
-              });
+              // Enrich the audit target with the underlying content's name/project/owner (AC-3) via
+              // the shared best-effort helper. No task list is pre-fetched here, so the helper lists
+              // tasks once, finds this id, then does ONE content lookup + ONE owner lookup. A resolve
+              // failure degrades to an id-only target and never blocks the update.
+              const resolveTarget = async (): Promise<MutationTarget> =>
+                resolveExtractRefreshTaskTarget({
+                  restApi,
+                  siteId: restApi.siteId,
+                  taskId: args.taskId,
+                  logger: 'update-cloud-extract-refresh-task',
+                });
               const evidence = new RegistryEvidence();
               const binding = scheduleBinding(args.schedule);
               const guardResult = await guardMutation({
@@ -178,21 +238,60 @@ export const getUpdateCloudExtractRefreshTaskTool = (
               const { recordOutcome } = guardResult.value;
 
               // Preview phase: the guard minted a single-use, schedule-bound confirmation token.
-              // Report the change and surface the token. Nothing has been applied.
+              // Report the change and surface the token (flag OFF) or open the confirm panel (flag ON).
+              // Nothing has been applied.
               if (!args.confirm) {
                 const { frequency, frequencyDetails } = args.schedule;
                 const window = frequencyDetails.end
                   ? ` (${frequencyDetails.start}–${frequencyDetails.end})`
                   : ` (start ${frequencyDetails.start})`;
+
+                // Flag ON: ALSO record a single-use, TTL-bounded human-approval window and return an
+                // AppToolResult so the host renders the in-iframe confirm panel describing the schedule
+                // change. The change is then applied by the model-invisible
+                // confirm-update-cloud-extract-refresh-task tool — the approval recorded here is what its
+                // AppApprovalEvidence verifies. No secret is transported; approval is presence-based,
+                // keyed server-side by site+user+task.
+                if (mcpAppsEnabled) {
+                  await new AppApprovalEvidence('update-cloud-extract-refresh-task').establish({
+                    restApi,
+                    siteId: restApi.siteId,
+                    target: { id: args.taskId, kind: 'extract-refresh-task' },
+                    tool: 'confirm-update-cloud-extract-refresh-task',
+                    userLuid: extra.getUserLuid(),
+                    // Bind the approval to the previewed schedule so the confirm can only apply THIS
+                    // schedule — an approval minted here will not satisfy a confirm carrying a
+                    // different schedule (see AppApprovalEvidence.approvalKey).
+                    binding,
+                  });
+                  const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
+                  return new Ok<AppToolResult<UpdateCloudExtractRefreshTaskConfirmPanel>>({
+                    data: {
+                      kind: 'update-cloud-extract-refresh-task-confirm',
+                      taskId: args.taskId,
+                      schedule: args.schedule,
+                      frequency,
+                      start: frequencyDetails.start,
+                      end: frequencyDetails.end,
+                      expiresAtMs,
+                    },
+                    // No web URL to embed for a confirm panel; the host renders from `data`.
+                    url: '',
+                  });
+                }
+
+                // Flag OFF: today's exact preview text — surface the nonce so the caller can supply it
+                // on the confirmed call. No approval recorded, no iframe.
                 const nonce = evidence.getEstablishedNonce();
                 return new Ok(
                   `Preview — extract refresh task '${args.taskId}' would be updated to: ${frequency}${window}. ` +
                     'No change has been made. ' +
-                    'NEXT STEP — REQUIRED: present this change to the user and ask them to explicitly ' +
-                    'confirm it. Do NOT apply without the user’s approval. ' +
-                    `Once approved, call again with confirm: true and confirmationToken: "${nonce}" ` +
-                    '(the server will verify and consume this single-use token, which is bound to this ' +
-                    'exact schedule, before applying the update).',
+                    renderTokenConfirmNextStep({
+                      subject: 'present this change',
+                      approvalClause: 'confirm it. Do NOT apply',
+                      nonce,
+                      tail: ', which is bound to this exact schedule, before applying the update).',
+                    }),
                 );
               }
 

@@ -36,30 +36,37 @@ export const getSearchContentTool = (server: WebMcpServer): WebTool<typeof param
     server,
     name: 'search-content',
     description: `
-This tool searches across all supported content types for objects relevant to the search expression specified by search terms and filters.
+This tool searches and ranks Tableau content across many content types at once — including workbooks, views, datasources, projects, lenses, flows, tables, databases, virtual connections, data roles, and collections.
+Use this tool for keyword or free-text discovery: when you want to find content by name or topic, when you do not know which content type an item is, when you want to search several content types in a single call, or when you want the most relevant or most-viewed items surfaced first.
+It returns a single ranked page (the top N matches — default 100, max 2000) rather than an exhaustive enumeration of every match, so it is best suited to finding the most relevant items rather than returning every matching item.
 
 **Parameters:**
 
-- \`terms\` (optional): A string containing one or more search terms that the search uses as the basis for determining which items are relevant to return. If the terms parameter is not provided, it searches for everything bound by the specified filters.
+- \`terms\` (optional): A string containing one or more search terms that the search uses as the basis for determining which items are relevant to return.
 
 - \`filter\` (optional): Allows you to limit search results based on:
   - \`contentTypes\`: Filter by content types. Supported types are: 'lens', 'datasource', 'virtualconnection', 'collection', 'project', 'flow', 'datarole', 'table', 'database', 'view', 'workbook'
   - \`ownerIds\`: Filter by specific owner IDs (array of integers)
   - \`modifiedTime\`: Filter by last modified times using ISO 8601 date-time strings. Can be either a range (with startDate/endDate) or an array of specific date-times to include
 
-- \`limit\` (optional): The number of items to return in the search response (default: 100, max: 2000)
+- \`limit\` (optional): The maximum number of items to return in the search response (default: 100, max: 2000).
 
-- \`orderBy\` (optional): Determines the sorting method for returned items. Available sorting methods:
+- \`orderBy\` (optional): An array of \`{ method, sortDirection }\` objects that controls how results are sorted. If omitted, results are sorted by their "relevance score" in descending order — Tableau's internal ranking of how well each item matches your search terms. \`sortDirection\` is 'asc' (ascending) or 'desc' (descending) and defaults to 'asc'. The first element is the primary sort; any additional elements are tiebreakers, applied in order. Available sorting methods:
   - \`hitsTotal\`: Number of times a content item has been viewed since it was created
   - \`hitsSmallSpanTotal\`: Number of times a content item was viewed in the last month
   - \`hitsMediumSpanTotal\`: Number of times a content item was viewed in the last 3 months
   - \`hitsLargeSpanTotal\`: Number of times a content item was viewed in the last year
   - \`downstreamWorkbookCount\`: Number of workbooks in a given project. This value is only available when the content type filter includes 'database' or 'table'
 
-  For each sort method, you can specify a sort direction: 'asc' for ascending or 'desc' for descending (default: 'asc'). The orderBy parameter is an array of objects containing the sorting method and direction. The first element determines primary sorting, with subsequent elements used as tiebreakers.
+**Example Usage:**
 
-**Important Notes:**
-- If \`orderBy\` is omitted, the search will sort items by their "relevance score" in descending order, which is Tableau's internal algorithm for providing the most relevant results`,
+- Top 5 most-viewed workbooks (all time): \`{ limit: 5, filter: { contentTypes: ["workbook"] }, orderBy: [{ method: "hitsTotal", sortDirection: "desc" }] }\`
+- Free-text search for the most relevant content: \`{ terms: "quarterly sales" }\`
+- Find only workbooks and views matching a topic: \`{ terms: "revenue", filter: { contentTypes: ["workbook", "view"] } }\`
+- Surface the most-viewed datasources this month (no search terms): \`{ filter: { contentTypes: ["datasource"] }, orderBy: [{ method: "hitsSmallSpanTotal", sortDirection: "desc" }] }\`
+- Multi-key sort — most-viewed all-time first, using views this year as a tiebreaker: \`{ orderBy: [{ method: "hitsTotal", sortDirection: "desc" }, { method: "hitsLargeSpanTotal", sortDirection: "desc" }] }\`
+- Content owned by specific users, modified in a date range: \`{ filter: { ownerIds: [123, 456], modifiedTime: { startDate: "2026-01-01T00:00:00Z", endDate: "2026-06-30T23:59:59Z" } } }\`
+`,
     paramsSchema,
     annotations: {
       title: 'Search Content',

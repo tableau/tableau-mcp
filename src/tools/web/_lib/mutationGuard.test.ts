@@ -66,7 +66,7 @@ describe('guardMutation', () => {
     return guardMutation({
       restApi: makeRestApi(),
       extra: getMockRequestHandlerExtra(),
-      tool: 'delete-datasource',
+      tool: 'delete-content',
       action: 'delete',
       mode: 'preview-confirm',
       phase: 'preview',
@@ -90,7 +90,7 @@ describe('guardMutation', () => {
     expect(record.denyReason).toBe('not-admin');
     // Even a rejected privilege escalation names the target it tried to act on.
     expect(record.target.id).toBe('target-1');
-    expect(record.tool).toBe('delete-datasource');
+    expect(record.tool).toBe('delete-content');
   });
 
   it('resolves the target before emitting the not-admin denial so the record names it', async () => {
@@ -139,15 +139,48 @@ describe('guardMutation', () => {
     expect(record.phase).toBe('confirm');
   });
 
-  it('on confirm, allows and emits an ALLOWED audit when evidence.verify is true', async () => {
+  it('on a model-visible preview-confirm tool (no previewTool), the denial says to re-run with confirm omitted', async () => {
+    const evidence = makeEvidence({ verify: vi.fn().mockResolvedValue(false) });
+    const result = await run({ phase: 'confirm', evidence });
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.message).toContain('Run delete-content with confirm omitted');
+      // The app-only recovery (re-preview + approve in panel) must NOT appear for in-place tools.
+      expect(result.error.message).not.toContain('confirmation panel');
+    }
+  });
+
+  it('on an app-only confirm tool (previewTool set), the denial points at the preview tool + panel, not a confirm arg', async () => {
+    const evidence = makeEvidence({ verify: vi.fn().mockResolvedValue(false) });
+    const result = await run({
+      tool: 'delete-content',
+      previewTool: 'delete-content',
+      phase: 'confirm',
+      evidence,
+    });
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.message).toContain('Re-run delete-content to preview again');
+      expect(result.error.message).toContain('approve in the confirmation panel');
+      // The model-invisible confirm tool takes no `confirm` arg, so never tell the user to pass one.
+      expect(result.error.message).not.toContain('with confirm omitted');
+    }
+  });
+
+  it('on confirm, allows but emits NO record until recordOutcome fires, then a single terminal record', async () => {
     const evidence = makeEvidence({ verify: vi.fn().mockResolvedValue(true) });
     const result = await run({ phase: 'confirm', evidence });
     expect(result.isOk()).toBe(true);
 
+    // A confirm that passes the gate emits nothing on its own — the terminal outcome record is the
+    // sole audit entry for the confirm, so a confirm logs exactly once (not twice).
+    expect(getAuditRecords()).toHaveLength(0);
+
+    result.unwrap().recordOutcome({ ok: true });
     const audits = getAuditRecords();
     expect(audits).toHaveLength(1);
     const record = auditRecordSchema.parse(audits[0]);
-    expect(record.result).toBe('allowed');
+    expect(record.result).toBe('completed');
     expect(record.phase).toBe('confirm');
     expect(record.denyReason).toBeUndefined();
   });
@@ -170,7 +203,7 @@ describe('guardMutation', () => {
 
   // --- confirm-only mode ---
 
-  it('confirm-only mode never establishes or verifies and still emits an ALLOWED audit', async () => {
+  it('confirm-only mode never establishes or verifies and emits a single terminal record via recordOutcome', async () => {
     const evidence = new NoEvidence();
     const establishSpy = vi.spyOn(evidence, 'establish');
     const verifySpy = vi.spyOn(evidence, 'verify');
@@ -188,9 +221,14 @@ describe('guardMutation', () => {
     expect(establishSpy).not.toHaveBeenCalled();
     expect(verifySpy).not.toHaveBeenCalled();
 
+    // A confirm logs exactly once: nothing until the caller reports the outcome.
+    expect(getAuditRecords()).toHaveLength(0);
+    result.unwrap().recordOutcome({ ok: true });
+
     const record = auditRecordSchema.parse(getAuditRecords()[0]);
     expect(record.action).toBe('update');
     expect(record.confirmationEvidence.kind).toBe('none');
+    expect(record.result).toBe('completed');
   });
 
   // --- audit record fidelity ---
@@ -214,7 +252,7 @@ describe('guardMutation', () => {
     await guardMutation({
       restApi: makeRestApi(),
       extra: getMockRequestHandlerExtra(),
-      tool: 'delete-extract-refresh-task',
+      tool: 'delete-content',
       action: 'delete',
       mode: 'preview-confirm',
       phase: 'preview',

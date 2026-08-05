@@ -10,6 +10,7 @@ coverage/
 test-logs/
 config.json
 env.list
+*.env.list
 manifest.json
 sea-prep.blob
 tableau-mcp
@@ -20,6 +21,7 @@ tableau-mcp.mcpb
 *.tgz
 *.tar.gz
 *.zip
+.DS_Store
 
 # MCP Apps
 src/web/apps/dist/
@@ -50,3 +52,9 @@ src/web/apps/dist/
 
 # Local handoff/scratch notes and POCs — kept on disk, never committed.
 handoff/
+
+.worktrees/
+
+# Loose local report / probe artifacts (never commit)
+*.tsv
+stale-*.md

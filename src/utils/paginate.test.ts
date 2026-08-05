@@ -1,7 +1,13 @@
 import { Ok } from 'ts-results-es';
 
 import type { Pagination, PulsePagination } from '../sdks/tableau/types/pagination.js';
-import { paginate, pulsePaginate } from './paginate.js';
+import {
+  getPage,
+  getPageExceedsLimitMessage,
+  paginate,
+  paginateWithMetadata,
+  pulsePaginate,
+} from './paginate.js';
 
 describe('paginate', () => {
   beforeEach(() => {
@@ -324,6 +330,586 @@ describe('paginate', () => {
     ]);
     expect(result).toHaveLength(7);
     expect(getDataFn).toHaveBeenCalledTimes(3);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// paginateWithMetadata — exposes totalAvailable + truncatedByLimit
+// ----------------------------------------------------------------------------
+// Existing callers using `paginate` only get an array of items back; that
+// shape can't distinguish "you got everything" from "a configured limit cut
+// you off and more exist server-side". `paginateWithMetadata` surfaces both
+// `totalAvailable` and `truncatedByLimit` so callers can emit a structured
+// truncation signal (e.g. `list-flows`' `mcp.resultInfo.truncated` /
+// `truncationReason`) when the user's request was silently capped.
+describe('paginateWithMetadata', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns truncatedByLimit=false and the full set when no limit is set', async () => {
+    const data = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 10, totalAvailable: 3 },
+      data,
+    });
+
+    const result = await paginateWithMetadata({
+      pageConfig: { pageSize: 10, pageNumber: 1 },
+      getDataFn,
+    });
+
+    expect(result).toEqual({ items: data, totalAvailable: 3, truncatedByLimit: false });
+  });
+
+  it('returns truncatedByLimit=true when the limit cuts off available items', async () => {
+    // Single-page query where Tableau says totalAvailable=10 but the limit
+    // only lets us return 5: that's the canonical admin-cap-style trim.
+    const data = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 5, totalAvailable: 10 },
+      data,
+    });
+
+    const result = await paginateWithMetadata({
+      pageConfig: { pageSize: 5, pageNumber: 1, limit: 5 },
+      getDataFn,
+    });
+
+    expect(result).toEqual({ items: data, totalAvailable: 10, truncatedByLimit: true });
+  });
+
+  it('returns truncatedByLimit=true after multi-page pagination is cut by limit mid-page', async () => {
+    // Limit of 3 across pages of size 2: page 1 fetches 2, page 2 fetches 2,
+    // post-loop slice trims to 3. totalAvailable is 4, so result is truncated.
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 1, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 1 }, { id: 2 }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 2, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 3 }, { id: 4 }],
+      });
+
+    const result = await paginateWithMetadata({
+      pageConfig: { pageSize: 2, pageNumber: 1, limit: 3 },
+      getDataFn,
+    });
+
+    expect(result).toEqual({
+      items: [{ id: 1 }, { id: 2 }, { id: 3 }],
+      totalAvailable: 4,
+      truncatedByLimit: true,
+    });
+  });
+
+  it('returns truncatedByLimit=false when limit equals totalAvailable exactly (regression guard)', async () => {
+    // Boundary case: passing `limit: 4` with totalAvailable=4 must NOT be
+    // misreported as truncated. truncatedByLimit is strictly "more exists".
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 1, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 1 }, { id: 2 }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 2, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 3 }, { id: 4 }],
+      });
+
+    const result = await paginateWithMetadata({
+      pageConfig: { pageSize: 2, pageNumber: 1, limit: 4 },
+      getDataFn,
+    });
+
+    expect(result.truncatedByLimit).toBe(false);
+    expect(result.totalAvailable).toBe(4);
+    expect(result.items).toHaveLength(4);
+  });
+
+  it('returns truncatedByLimit=false when limit > totalAvailable', async () => {
+    const data = [{ id: 1 }, { id: 2 }];
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 10, totalAvailable: 2 },
+      data,
+    });
+
+    const result = await paginateWithMetadata({
+      pageConfig: { pageSize: 10, pageNumber: 1, limit: 100 },
+      getDataFn,
+    });
+
+    expect(result).toEqual({ items: data, totalAvailable: 2, truncatedByLimit: false });
+  });
+});
+
+// ----------------------------------------------------------------------------
+// paginateWithMetadata — opt-in filterFn (W-23600028)
+// ----------------------------------------------------------------------------
+// The bug: `limit` was applied to the FETCH before the client-side filter ran,
+// so a small `limit` + a selective filter returned 0 matches even though many
+// matched server-side. The fix: when a `filterFn` is supplied, `limit` bounds
+// POST-filter matches. The loop pages by `pageSize` (NOT the raw limit), counts
+// only PASSING rows toward `limit`, collects one past the limit ("limit+1") to
+// set `truncatedByLimit` honestly, then slices to `limit`.
+describe('paginateWithMetadata (filterFn — limit bounds post-filter matches)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('fetches additional pages until it has `limit` PASSING rows when early rows are rejected', async () => {
+    // filterFn keeps only even ids. limit 2, pageSize 2 across 3 pages (total 6).
+    // Page 1 [1,2] → 1 match; must fetch page 2 [3,4] → 2 matches; and page 3
+    // [5,6] to discover a 3rd match exists (limit+1) → truncatedByLimit=true.
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 1, pageSize: 2, totalAvailable: 6 },
+        data: [{ id: 1 }, { id: 2 }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 2, pageSize: 2, totalAvailable: 6 },
+        data: [{ id: 3 }, { id: 4 }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 3, pageSize: 2, totalAvailable: 6 },
+        data: [{ id: 5 }, { id: 6 }],
+      });
+
+    const result = await paginateWithMetadata<{ id: number }>({
+      pageConfig: { pageSize: 2, pageNumber: 1, limit: 2 },
+      getDataFn,
+      filterFn: (item) => item.id % 2 === 0,
+    });
+
+    // Up to `limit` PASSING rows are returned — never the raw first `limit` rows.
+    expect(result.items).toEqual([{ id: 2 }, { id: 4 }]);
+    // A further match ({id:6}) existed server-side beyond the limit → truncated.
+    expect(result.truncatedByLimit).toBe(true);
+    // totalAvailable is the server's RAW pre-filter count.
+    expect(result.totalAvailable).toBe(6);
+    expect(getDataFn).toHaveBeenCalledTimes(3);
+  });
+
+  it('reports truncatedByLimit=false when all filtered matches are fully returned', async () => {
+    // filterFn keeps only even ids; only 2 exist (2,4) in a 4-row set. limit 5.
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 1, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 1 }, { id: 2 }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 2, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 3 }, { id: 4 }],
+      });
+
+    const result = await paginateWithMetadata<{ id: number }>({
+      pageConfig: { pageSize: 2, pageNumber: 1, limit: 5 },
+      getDataFn,
+      filterFn: (item) => item.id % 2 === 0,
+    });
+
+    expect(result.items).toEqual([{ id: 2 }, { id: 4 }]);
+    expect(result.truncatedByLimit).toBe(false);
+    expect(result.totalAvailable).toBe(4);
+    expect(getDataFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('EXACT bug repro: first `limit` fetched rows fail the filter but later rows pass → returns passing rows, not 0', async () => {
+    // Single page: ids 1..5, all fetched. filter keeps id > 2. Under the OLD
+    // behavior `limit:2` bounded the FETCH, so only [1,2] were fetched, both
+    // failed the filter, and the result was empty. Now the filter runs inside
+    // the loop so `limit:2` returns the first 2 PASSING rows.
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 10, totalAvailable: 5 },
+      data: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }],
+    });
+
+    const result = await paginateWithMetadata<{ id: number }>({
+      pageConfig: { pageSize: 10, pageNumber: 1, limit: 2 },
+      getDataFn,
+      filterFn: (item) => item.id > 2,
+    });
+
+    expect(result.items).toEqual([{ id: 3 }, { id: 4 }]);
+    expect(result.items).not.toHaveLength(0);
+    expect(result.truncatedByLimit).toBe(true); // {id:5} matches beyond the limit
+  });
+
+  it('returns all passing rows (truncatedByLimit=false) when no limit is set with a filter', async () => {
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 10, totalAvailable: 5 },
+      data: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }],
+    });
+
+    const result = await paginateWithMetadata<{ id: number }>({
+      pageConfig: { pageSize: 10, pageNumber: 1 },
+      getDataFn,
+      filterFn: (item) => item.id > 2,
+    });
+
+    expect(result.items).toEqual([{ id: 3 }, { id: 4 }, { id: 5 }]);
+    expect(result.truncatedByLimit).toBe(false);
+  });
+
+  it('edge: filterFn that rejects everything exhausts all pages cleanly (no infinite loop, 0 matches)', async () => {
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 1, pageSize: 2, totalAvailable: 5 },
+        data: [{ id: 1 }, { id: 2 }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 2, pageSize: 2, totalAvailable: 5 },
+        data: [{ id: 3 }, { id: 4 }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 3, pageSize: 2, totalAvailable: 5 },
+        data: [{ id: 5 }],
+      });
+
+    const result = await paginateWithMetadata<{ id: number }>({
+      pageConfig: { pageSize: 2, pageNumber: 1 },
+      getDataFn,
+      filterFn: () => false,
+    });
+
+    expect(result.items).toEqual([]);
+    expect(result.truncatedByLimit).toBe(false);
+    expect(result.totalAvailable).toBe(5);
+    // All pages exhausted exactly once — the loop terminated when the raw fetch
+    // count reached totalAvailable, not by matches.
+    expect(getDataFn).toHaveBeenCalledTimes(3);
+  });
+
+  it('does NOT thread the raw `limit` into getDataFn on the filtered path (limit bounds post-filter, not the fetch)', async () => {
+    // Regression guard for the fix: the filtered path must page by pageSize only.
+    // If `limit` leaked into the fetch we would reintroduce the original bug.
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 1, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 1 }, { id: 2 }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 2, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 3 }, { id: 4 }],
+      });
+
+    await paginateWithMetadata<{ id: number }>({
+      pageConfig: { pageSize: 2, pageNumber: 1, limit: 3 },
+      getDataFn,
+      filterFn: () => true,
+    });
+
+    for (const call of getDataFn.mock.calls) {
+      expect(call[0]).not.toHaveProperty('limit');
+    }
+    expect(getDataFn).toHaveBeenNthCalledWith(1, { pageSize: 2, pageNumber: 1 });
+    expect(getDataFn).toHaveBeenNthCalledWith(2, { pageSize: 2, pageNumber: 2 });
+  });
+});
+
+// ----------------------------------------------------------------------------
+// Regression guard: NO-filterFn path must remain byte-for-byte unchanged.
+// ----------------------------------------------------------------------------
+// The fix added an opt-in filtered branch; the original no-filter branch (used
+// by list-flows, list-flow-runs, list-projects, …) must behave exactly as
+// before. Here `limit` bounds the RAW fetch and the returned slice — the OPPOSITE
+// of the filtered path — which is the invariant those callers depend on.
+describe('paginateWithMetadata (no filterFn — legacy behavior unchanged)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('limit bounds the raw fetch/slice (not post-filter) and threads `limit` into subsequent getDataFn calls', async () => {
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 1, pageSize: 2, totalAvailable: 5 },
+        data: [{ id: 1 }, { id: 2 }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 2, pageSize: 2, totalAvailable: 5 },
+        data: [{ id: 3 }, { id: 4 }],
+      });
+
+    const result = await paginateWithMetadata<{ id: number }>({
+      pageConfig: { pageSize: 2, pageNumber: 1, limit: 3 },
+      getDataFn,
+    });
+
+    // Raw first 3 rows — no filtering.
+    expect(result.items).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    // totalAvailable(5) > items(3) → truncated.
+    expect(result.truncatedByLimit).toBe(true);
+    expect(result.totalAvailable).toBe(5);
+    // Legacy path DOES thread `limit` into the paging calls.
+    expect(getDataFn).toHaveBeenNthCalledWith(2, { pageSize: 2, pageNumber: 2, limit: 3 });
+  });
+
+  it('single-page limit bounds the raw fetch (would-be-filtered rows are still returned raw)', async () => {
+    // Same 5-row single page as the filtered "bug repro" above, but WITHOUT a
+    // filterFn: the no-filter path returns the raw first `limit` rows [1,2].
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 10, totalAvailable: 5 },
+      data: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }],
+    });
+
+    const result = await paginateWithMetadata<{ id: number }>({
+      pageConfig: { pageSize: 10, pageNumber: 1, limit: 2 },
+      getDataFn,
+    });
+
+    expect(result.items).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(result.truncatedByLimit).toBe(true);
+    expect(getDataFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('paginate (delegates to paginateWithMetadata)', () => {
+  // Regression guard: paginate is now a thin wrapper over paginateWithMetadata.
+  // Make sure it still behaves identically to its prior contract — items only.
+  it('returns just the items array (matches existing public contract)', async () => {
+    const data = [{ id: 1 }, { id: 2 }];
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 10, totalAvailable: 2 },
+      data,
+    });
+
+    const result = await paginate({
+      pageConfig: { pageSize: 10, pageNumber: 1 },
+      getDataFn,
+    });
+
+    expect(result).toEqual(data);
+    expect(Array.isArray(result)).toBe(true);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// getPage — single-page fetch with a global offset ceiling
+// ----------------------------------------------------------------------------
+// Unlike `paginate`, `getPage` fetches exactly ONE page (no loop). It
+// always requests a full MAX_PAGE_SIZE page so absolute offsets stay stable,
+// then applies an optional global `maxResultLimit` offset ceiling and an
+// optional per-page `limit` trim. `totalAvailable` is capped to
+// `maxResultLimit` so it reflects the number of items actually reachable.
+describe('getPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('defaults pageNumber to 1 and requests a full page', async () => {
+    const data = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 3 },
+      data,
+    });
+
+    const result = await getPage({ getDataFn });
+
+    expect(result).toEqual({
+      data,
+      totalAvailable: 3,
+    });
+    expect(getDataFn).toHaveBeenCalledTimes(1);
+    expect(getDataFn).toHaveBeenCalledWith({ pageSize: 1000, pageNumber: 1 });
+  });
+
+  it('passes the explicit pageNumber to getDataFn with pageSize=1000', async () => {
+    const data = [{ id: 42 }];
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 5, pageSize: 1000, totalAvailable: 4001 },
+      data,
+    });
+
+    await getPage({ pageNumber: 5, getDataFn });
+
+    expect(getDataFn).toHaveBeenCalledTimes(1);
+    expect(getDataFn).toHaveBeenCalledWith({ pageSize: 1000, pageNumber: 5 });
+  });
+
+  it('calls getDataFn exactly once (never loops even when more pages exist)', async () => {
+    // totalAvailable (5000) far exceeds this page's data, but getPage must
+    // NOT loop to fetch the rest — it returns only the single requested page.
+    const data = Array.from({ length: 1000 }, (_, i) => ({ id: i }));
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 5000 },
+      data,
+    });
+
+    const result = await getPage({ pageNumber: 1, getDataFn });
+
+    expect(getDataFn).toHaveBeenCalledTimes(1);
+    expect(result.data).toHaveLength(1000);
+    expect(result.totalAvailable).toBe(5000);
+  });
+
+  it('trims within a page via limit without capping totalAvailable', async () => {
+    // A per-page `limit` is a caller-side trim, not a server cap, so it must
+    // not affect the reported `totalAvailable`.
+    const data = Array.from({ length: 100 }, (_, i) => ({ id: i }));
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 100 },
+      data,
+    });
+
+    const result = await getPage({ limit: 10, getDataFn });
+
+    expect(result.data).toHaveLength(10);
+    expect(result.data).toEqual(data.slice(0, 10));
+    expect(result.totalAvailable).toBe(100);
+  });
+
+  describe('maxResultLimit=8700 offset ceiling', () => {
+    const maxResultLimit = 8700;
+
+    it('page 8 returns a full 1000 items and caps totalAvailable to 8700 (offset 7000..7999)', async () => {
+      const data = Array.from({ length: 1000 }, (_, i) => ({ id: 7000 + i }));
+      const getDataFn = vi.fn().mockResolvedValue({
+        pagination: { pageNumber: 8, pageSize: 1000, totalAvailable: 10000 },
+        data,
+      });
+
+      const result = await getPage({ pageNumber: 8, maxResultLimit, getDataFn });
+
+      expect(result.data).toHaveLength(1000);
+      expect(result.totalAvailable).toBe(8700);
+    });
+
+    it('page 9 is trimmed to 700 items and caps totalAvailable to 8700 (offset 8000, cap at 8700)', async () => {
+      const data = Array.from({ length: 1000 }, (_, i) => ({ id: 8000 + i }));
+      const getDataFn = vi.fn().mockResolvedValue({
+        pagination: { pageNumber: 9, pageSize: 1000, totalAvailable: 10000 },
+        data,
+      });
+
+      const result = await getPage({ pageNumber: 9, maxResultLimit, getDataFn });
+
+      expect(result.data).toHaveLength(700);
+      expect(result.data).toEqual(data.slice(0, 700));
+      expect(result.totalAvailable).toBe(8700);
+    });
+
+    it('page 10 is trimmed to 0 items and caps totalAvailable to 8700 (offset 9000, past the cap)', async () => {
+      const data = Array.from({ length: 1000 }, (_, i) => ({ id: 9000 + i }));
+      const getDataFn = vi.fn().mockResolvedValue({
+        pagination: { pageNumber: 10, pageSize: 1000, totalAvailable: 10000 },
+        data,
+      });
+
+      const result = await getPage({ pageNumber: 10, maxResultLimit, getDataFn });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.totalAvailable).toBe(8700);
+    });
+  });
+
+  it('with maxResultLimit null, totalAvailable equals the raw server total', async () => {
+    const data = Array.from({ length: 1000 }, (_, i) => ({ id: i }));
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 5000 },
+      data,
+    });
+
+    const result = await getPage({ pageNumber: 1, maxResultLimit: null, getDataFn });
+
+    expect(result.totalAvailable).toBe(5000);
+    expect(result.data).toHaveLength(1000);
+  });
+
+  it('does NOT cap totalAvailable below the raw total for a naturally short final page', async () => {
+    // Final page of a data set: fewer than 1000 items because the data ran out,
+    // NOT because a server cap trimmed it. maxResultLimit (10000) exceeds the
+    // raw total, so totalAvailable stays at the raw total.
+    const data = Array.from({ length: 250 }, (_, i) => ({ id: 4000 + i }));
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 5, pageSize: 1000, totalAvailable: 4250 },
+      data,
+    });
+
+    const result = await getPage({ pageNumber: 5, maxResultLimit: 10000, getDataFn });
+
+    expect(result.data).toHaveLength(250);
+    expect(result.totalAvailable).toBe(4250);
+  });
+
+  it('validates pageNumber and limit (> 0, limit <= MAX_PAGE_SIZE) before calling getDataFn', async () => {
+    const getDataFn = vi.fn();
+
+    // pageNumber must be > 0
+    await expect(getPage({ pageNumber: 0, getDataFn })).rejects.toThrow(
+      'Number must be greater than 0',
+    );
+
+    // limit must be > 0
+    await expect(getPage({ limit: 0, getDataFn })).rejects.toThrow('Number must be greater than 0');
+
+    // limit may not exceed MAX_PAGE_SIZE (1000)
+    await expect(getPage({ limit: 1001, getDataFn })).rejects.toThrow(
+      'Number must be less than or equal to 1000',
+    );
+
+    expect(getDataFn).not.toHaveBeenCalled();
+  });
+});
+
+// ----------------------------------------------------------------------------
+// getPageExceedsLimitMessage — reachability guard for a requested page
+// ----------------------------------------------------------------------------
+// A page is reachable iff its first item's absolute (0-based) offset,
+// (pageNumber - 1) * 1000, is below the configured maxResultLimit. Without
+// this up-front guard, getPage would fetch the page and then trim every item
+// off, surfacing a misleading "no results were found" message even though
+// totalAvailable is non-zero. Returns null when reachable, else an explanatory
+// message.
+describe('getPageExceedsLimitMessage', () => {
+  it('returns null when there is no maxResultLimit (uncapped)', () => {
+    expect(getPageExceedsLimitMessage({ pageNumber: 9999, maxResultLimit: null })).toBeNull();
+    expect(getPageExceedsLimitMessage({ pageNumber: 9999 })).toBeNull();
+  });
+
+  it('returns null for page 1 regardless of a positive cap', () => {
+    expect(getPageExceedsLimitMessage({ pageNumber: 1, maxResultLimit: 1 })).toBeNull();
+    expect(getPageExceedsLimitMessage({ maxResultLimit: 1 })).toBeNull(); // defaults to page 1
+  });
+
+  describe('maxResultLimit=2700 (the canonical example: page 3 ok, page 4 not)', () => {
+    const maxResultLimit = 2700;
+
+    it('allows page 3 (offset 2000 < 2700 — the cap will trim it to 700 items)', () => {
+      expect(getPageExceedsLimitMessage({ pageNumber: 3, maxResultLimit })).toBeNull();
+    });
+
+    it('rejects page 4 (offset 3000 >= 2700) with a message naming the max reachable page', () => {
+      const message = getPageExceedsLimitMessage({ pageNumber: 4, maxResultLimit });
+      expect(message).not.toBeNull();
+      expect(message).toContain('The requested page (4) exceeds the response limit');
+      expect(message).toContain('2700');
+      // ceil(2700 / 1000) = 3
+      expect(message).toContain('the highest page you can request is 3');
+    });
+  });
+
+  it('rejects the page whose start offset equals the cap exactly (boundary)', () => {
+    // maxResultLimit=2000, page 3 starts at offset 2000 === cap -> unreachable.
+    const message = getPageExceedsLimitMessage({ pageNumber: 3, maxResultLimit: 2000 });
+    expect(message).not.toBeNull();
+    // ceil(2000 / 1000) = 2
+    expect(message).toContain('the highest page you can request is 2');
+  });
+
+  it('allows the last reachable page when the cap is not a multiple of the page size', () => {
+    // maxResultLimit=2500: page 3 offset 2000 < 2500 reachable; page 4 offset 3000 not.
+    expect(getPageExceedsLimitMessage({ pageNumber: 3, maxResultLimit: 2500 })).toBeNull();
+    const message = getPageExceedsLimitMessage({ pageNumber: 4, maxResultLimit: 2500 });
+    expect(message).not.toBeNull();
+    // ceil(2500 / 1000) = 3
+    expect(message).toContain('the highest page you can request is 3');
   });
 });
 

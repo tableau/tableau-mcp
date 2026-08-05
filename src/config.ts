@@ -75,7 +75,16 @@ export class Config extends BaseConfig {
   featureGate: FeatureGateConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
+  flowToolsEnabled: boolean;
+  insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
+  bucketS3: {
+    enabled: boolean;
+    bucket: string;
+    region: string;
+    keyPrefix: string;
+    presignTtlSeconds: number;
+  };
 
   constructor() {
     super();
@@ -140,7 +149,13 @@ export class Config extends BaseConfig {
       IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
+      FLOW_TOOLS_ENABLED: flowToolsEnabled,
+      INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
+      MCP_S3_BUCKET: bucketS3Bucket,
+      AWS_DEFAULT_REGION: awsDefaultRegion,
+      MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
+      FILE_TTL: bucketS3PresignTtlSeconds,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -299,6 +314,37 @@ export class Config extends BaseConfig {
 
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
     this.adminToolsEnabled = adminToolsEnabled === 'true';
+    // Flow tools are gated off by default while flow rollouts are staged into
+    // production; set FLOW_TOOLS_ENABLED=true to register them.
+    this.flowToolsEnabled = flowToolsEnabled === 'true';
+    // Insight-cards tools (generate-insight-cards) are gated off by default while
+    // the insights rollout is staged (keeps hosts like Slackbot stable); set
+    // INSIGHTS_TOOLS_ENABLED=true to register them.
+    this.insightsToolsEnabled = insightsToolsEnabled === 'true';
+
+    // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
+    // upload the payload (rendered image or CSV) to S3 and return a short-lived
+    // presigned URL instead of inlining base64/text. AWS credentials are
+    // resolved via the default AWS SDK credential chain (IAM role / instance
+    // profile / standard AWS_* env vars), so no credentials are read here. When
+    // unset, the tools fall back to returning the payload inline (unchanged
+    // behavior).
+    //
+    // `keyPrefix` (MCP_IMAGE_PREFIX) is the shared base folder; each tool
+    // appends its own segment (e.g. `view-images/`, `view-data/`), so an unset
+    // base falls back to the per-tool default rather than a global one.
+    const bucketS3BucketValue = bucketS3Bucket?.trim() ?? '';
+    this.bucketS3 = {
+      enabled: !!bucketS3BucketValue,
+      bucket: bucketS3BucketValue,
+      region: awsDefaultRegion?.trim() || '',
+      keyPrefix: bucketS3KeyPrefix?.trim() || '',
+      presignTtlSeconds: parseNumber(bucketS3PresignTtlSeconds, {
+        defaultValue: 60,
+        minValue: 5,
+        maxValue: 900,
+      }),
+    };
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

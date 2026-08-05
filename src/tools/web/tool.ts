@@ -6,8 +6,14 @@ import { ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { WebMcpServer } from '../../server.web.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
+import { getAuthTypeForTelemetry } from '../../telemetry/authType.js';
+import {
+  getClientDisplayName,
+  sanitizeClientIdForTelemetry,
+} from '../../telemetry/clientDisplayName.js';
 import { getTelemetryProvider } from '../../telemetry/init.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
@@ -135,12 +141,23 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     const { config, requestId, sessionId, tableauAuthInfo } = extra;
     const username = tableauAuthInfo?.username;
 
+    // The OAuth client_id (a CIMD URL) is carried on tableauAuthInfo only for the Bearer auth path.
+    // Embedded OAuth normalizes tableauAuthInfo to 'X-Tableau-Auth' (see accessTokenValidator), but
+    // the MCP-level authInfo still carries the client id, so fall back to it. The raw value is
+    // sanitized/bounded before it reaches telemetry (see sanitizeClientIdForTelemetry).
+    const oauthClientId =
+      (tableauAuthInfo?.type === 'Bearer' ? tableauAuthInfo.clientId : undefined) ??
+      extra.authInfo?.clientId;
+
     this.notifyInvocation({ requestId, args, username });
-    log({
-      message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
-      level: 'debug',
-      logger: 'tool',
-    });
+    log(
+      {
+        message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
+        level: 'debug',
+        logger: 'tool',
+      },
+      extra,
+    );
 
     const productTelemetryForwarder = getProductTelemetry(
       config.productTelemetryEndpoint,
@@ -150,7 +167,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
 
     let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
-    let toolResult: CallToolResult;
+    let toolResult: CallToolResult | undefined;
 
     try {
       const result = await callback();
@@ -201,12 +218,15 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       if (!errorCode) {
         errorCode = '500'; // Default to 500 if no HTTP status can be determined
       }
-      log({
-        message: 'Tool execution failed',
-        level: 'error',
-        logger: 'tool',
-        data: error,
-      });
+      log(
+        {
+          message: 'Tool execution failed',
+          level: 'error',
+          logger: 'tool',
+          data: error,
+        },
+        extra,
+      );
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
@@ -220,6 +240,14 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
         is_hyperforce: config.isHyperforce,
         success,
         error_code: errorCode,
+        // Only populated for genuine error results (isError: true). The ZodiosValidationError
+        // passthrough returns isError: false with the full API payload, so keying off isError
+        // (not !success) keeps successful response data out of telemetry.
+        error_message: toolResult?.isError ? extractToolErrorMessage(toolResult) : '',
+        oauth_client_id: sanitizeClientIdForTelemetry(oauthClientId),
+        oauth_client_display_name:
+          getClientDisplayName(oauthClientId) ?? sanitizeClientIdForTelemetry(oauthClientId),
+        auth_type: getAuthTypeForTelemetry(config, tableauAuthInfo),
       });
       // Record custom metric for this tool call
       const telemetry = getTelemetryProvider();

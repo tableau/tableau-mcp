@@ -9,6 +9,10 @@ export const contentPermissionsSchema = z.enum([
 export const projectSchema = z.object({
   id: z.string(),
   name: z.string(),
+  // `description` is not in the formal `<project>` XML schema for most endpoints,
+  // but Tableau Server / Cloud does return it on responses where `<project>` is
+  // embedded in another resource (e.g. `<flow>`, `<workbook>`). Capturing it as
+  // optional is forward-compatible: endpoints that omit it just leave it undefined.
   description: z.string().optional(),
   parentProjectId: z.string().optional(),
   contentPermissions: contentPermissionsSchema.optional(),

@@ -52,6 +52,18 @@ export class ArgsValidationError extends McpToolError {
   }
 }
 
+// Thrown by paginated list tools when the requested `pageNumber` is beyond the
+// reach of the tool's configured MAX_RESULT_LIMIT offset ceiling. Without this
+// up-front guard the page would be fetched and then trimmed to zero items,
+// surfacing a misleading "no results were found" message even though
+// totalAvailable is non-zero. statusCode 400: the requested page is invalid for
+// the current configuration.
+export class PageExceedsLimitError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'page-exceeds-limit', message, statusCode: 400 });
+  }
+}
+
 export class DatasourceNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'datasource-not-allowed', message, statusCode: 403 });
@@ -73,6 +85,12 @@ export class PreviewNotRunError extends McpToolError {
 export class FeatureDisabledError extends McpToolError {
   constructor(message: string) {
     super({ type: 'feature-disabled', message, statusCode: 404 });
+  }
+}
+
+export class FlowNotAllowedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'flow-not-allowed', message, statusCode: 403 });
   }
 }
 

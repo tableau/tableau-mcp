@@ -1,0 +1,179 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
+import { z } from 'zod';
+
+import { getConfig } from '../../../config.js';
+import { UnknownError } from '../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../features/init.js';
+import { useRestApi } from '../../../restApiInstance.js';
+import { updateCloudExtractRefreshScheduleSchema } from '../../../sdks/tableau/types/extractRefreshTask.js';
+import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
+import { AppApprovalEvidence } from '../_lib/evidence.js';
+import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
+import { resolveExtractRefreshTaskTarget } from '../_lib/resolveExtractRefreshTaskTarget.js';
+import { WebTool } from '../tool.js';
+import { scheduleBinding } from './updateCloudExtractRefreshTask.js';
+
+const paramsSchema = {
+  taskId: z.string().uuid('taskId must be a valid UUID'),
+  schedule: updateCloudExtractRefreshScheduleSchema,
+};
+
+/**
+ * confirm-update-cloud-extract-refresh-task — the human-gesture confirm step of the MCP-Apps HITL
+ * flow for update-cloud-extract-refresh-task (W-23202047, mirroring confirm-delete-workbook).
+ *
+ * This tool is APP-ONLY (`meta.ui.visibility = ['app']`), so a cooperating MCP client hides it from
+ * the model. In that cooperative flow the only path that reaches it is a human clicking "Apply
+ * schedule change" inside the rendered MCP-Apps iframe, which calls back via `app.callServerTool`.
+ * The mutating `updateCloudExtractRefreshTask` REST call lives ONLY here. NOTE: `visibility` is a
+ * client-side hint, not a server guarantee — a non-cooperating client could still call this tool
+ * directly. The task has no taggable state, so AppApprovalEvidence is the ONLY server gate here.
+ *
+ * This is a SCHEDULE CHANGE, not a deletion. The task has no durable, taggable state, so the human
+ * gesture in the iframe IS the proof: the guard verifies a fresh, single-use in-iframe human approval
+ * (AppApprovalEvidence, namespace 'update-cloud-extract-refresh-task') recorded by the
+ * update-cloud-extract-refresh-task preview within the MUTATION_PREVIEW_TTL_MINUTES window. Missing
+ * approval → PreviewNotRunError, no update.
+ *
+ * Gated behind the off-by-default `mcp-apps` flag AND ADMIN_TOOLS_ENABLED, so when the flag is off
+ * the model never sees a mutating tool that lacks a preview path.
+ */
+export const getConfirmUpdateCloudExtractRefreshTaskTool = (
+  server: WebMcpServer,
+): WebTool<typeof paramsSchema> => {
+  const config = getConfig();
+
+  const confirmUpdateCloudExtractRefreshTaskTool = new WebTool({
+    server,
+    name: 'confirm-update-cloud-extract-refresh-task',
+    disabled: new Provider(
+      async () =>
+        !config.adminToolsEnabled || !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
+    ),
+    description: `
+Confirms and applies a schedule change to an extract refresh task on Tableau Cloud, previously
+previewed by \`update-cloud-extract-refresh-task\`. This tool is **not visible to the model** — it is
+invoked only by an explicit human confirmation gesture inside the rendered MCP App interface, never by
+the assistant.
+
+Before applying the change, the server re-verifies that a human approved it in the App within the
+allowed time window. If the check fails the update is rejected and the user must preview again. The
+update overwrites the existing schedule wholesale; to revert, run the tool again with the prior
+schedule values.
+`.trim(),
+    paramsSchema,
+    annotations: {
+      title: 'Confirm Update Cloud Extract Refresh Task',
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    meta: {
+      ui: {
+        visibility: ['app'], // Cooperative-client hint: cooperating clients hide this from the model (not server-enforced).
+      },
+    },
+    callback: async (args, extra): Promise<CallToolResult> => {
+      return await confirmUpdateCloudExtractRefreshTaskTool.logAndExecute<string>({
+        extra,
+        args,
+        callback: async () => {
+          return await useRestApi({
+            ...extra,
+            jwtScopes: confirmUpdateCloudExtractRefreshTaskTool.requiredApiScopes,
+            callback: async (restApi) => {
+              // The task carries no durable taggable state; the human gesture in the iframe is the
+              // proof. Enrich the audit target with the underlying content's name/project/owner
+              // (AC-3) via the shared best-effort helper: it lists tasks once, finds this id, then
+              // does ONE content lookup + ONE owner lookup. A resolve failure degrades to an id-only
+              // target and never blocks the update.
+              const resolveTarget = async (): Promise<MutationTarget> =>
+                resolveExtractRefreshTaskTarget({
+                  restApi,
+                  siteId: restApi.siteId,
+                  taskId: args.taskId,
+                  logger: 'confirm-update-cloud-extract-refresh-task',
+                });
+
+              // Require a fresh, single-use in-iframe human approval recorded by the preview — bound to
+              // the exact schedule that was previewed/approved. `binding` is folded into the approval
+              // key, so an approval minted for schedule A cannot confirm an update to schedule B; the
+              // fingerprint MUST match the preview tool's, so it is computed by the SAME exported
+              // scheduleBinding().
+              const binding = scheduleBinding(args.schedule);
+              const guardResult = await guardMutation({
+                restApi,
+                extra,
+                tool: 'confirm-update-cloud-extract-refresh-task',
+                previewTool: 'update-cloud-extract-refresh-task',
+                action: 'update',
+                mode: 'preview-confirm',
+                phase: 'confirm',
+                evidence: new AppApprovalEvidence('update-cloud-extract-refresh-task'),
+                resolveTarget,
+                binding,
+              });
+              if (guardResult.isErr()) {
+                return guardResult.error.toErr();
+              }
+              const { recordOutcome } = guardResult.value;
+
+              const result = await restApi.tasksMethods.updateCloudExtractRefreshTask({
+                siteId: restApi.siteId,
+                taskId: args.taskId,
+                schedule: args.schedule,
+              });
+
+              if (result.isErr()) {
+                // Authorized-but-failed: emit the terminal 'failed' audit so the trail distinguishes
+                // this from a completed update. The target is unchanged.
+                if (result.error.type === 'tableau-api') {
+                  const { status, code, summary, detail } = result.error;
+                  const codeStr = code ? ` [${code}]` : '';
+                  const summaryDetail = [summary, detail].filter(Boolean).join(': ');
+                  recordOutcome({
+                    ok: false,
+                    failureDetail: `Tableau ${status}${codeStr}${summaryDetail ? `: ${summaryDetail}` : ''}`,
+                  });
+                  // 404 from Cloud commonly means the tool was called against a Tableau Server
+                  // site or the taskId doesn't exist on this site — surface a Cloud-only hint
+                  // instead of the bare "Not Found".
+                  if (status === 404) {
+                    return new UnknownError(
+                      `Tableau 404${codeStr}: extract refresh task '${args.taskId}' not found. This tool is Tableau Cloud only — verify you're connected to a Cloud site (not Server) and that the taskId came from list-extract-refresh-tasks.`,
+                      404,
+                    ).toErr();
+                  }
+                  const tail = summaryDetail ? `: ${summaryDetail}` : '';
+                  return new UnknownError(`Tableau ${status}${codeStr}${tail}`, status).toErr();
+                }
+                recordOutcome({ ok: false, failureDetail: result.error.message });
+                return new UnknownError(result.error.message).toErr();
+              }
+
+              recordOutcome({ ok: true });
+              const updated = result.value;
+              // Fall back to args for every field — the Cloud response payload varies by site
+              // and we don't want a partial response to produce a misleading message.
+              const frequency = updated.schedule?.frequency ?? args.schedule.frequency;
+              const start =
+                updated.schedule?.frequencyDetails?.start ?? args.schedule.frequencyDetails.start;
+              const end =
+                updated.schedule?.frequencyDetails?.end ?? args.schedule.frequencyDetails.end;
+              const window = end ? ` (${start}–${end})` : ` (start ${start})`;
+              return new Ok(
+                `Extract refresh task '${args.taskId}' has been successfully updated. New schedule: ${frequency}${window}.`,
+              );
+            },
+          });
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+    },
+  });
+
+  return confirmUpdateCloudExtractRefreshTaskTool;
+};

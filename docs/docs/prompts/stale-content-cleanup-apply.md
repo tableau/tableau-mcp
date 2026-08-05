@@ -16,11 +16,11 @@ This prompt is restricted to Tableau site administrators and requires the `ADMIN
 
 The prompt sequences existing deterministic tools — it performs no calculations itself. Steps 1–3 are read-only; no write happens until after the Step 4 approval break:
 
-1. **Report (read-only)** — calls [`get-stale-content-report`](../tools/admin-insights/get-stale-content-report.md) once; uses its rows verbatim. If the report returns more than 100 rows, the workflow refuses to act on the whole batch and asks the user to narrow scope first.
+1. **Report (read-only)** — calls [`query-admin-insights`](../tools/admin-insights/query-admin-insights.md) with `kind: "stale-content"` once; uses its rows verbatim. If the report returns more than 100 rows, the workflow refuses to act on the whole batch and asks the user to narrow scope first.
 2. **Resolve LUIDs (read-only)** — the report emits a numeric `itemId`, not the LUID the delete tools need. Each item's LUID is resolved via `list-workbooks` / `list-datasources` filtered by name and project. Ambiguous matches are skipped, never guessed.
 3. **Notify report (read-only)** — builds an owner-notification table using the report's `ownerEmail`, falling back to [`list-users`](../tools/users/list-users.md) filtered by owner LUID (`id:in:...`) for any gaps. Report-only; no email is sent.
 4. **Human confirmation break** — presents the resolved items and owners and requires explicit approval before any tag or delete. In a dry run (the default) the workflow stops here, having written nothing.
-5. **Tag approved items (reversible)** — only for approved items, calls the matching delete tool ([`delete-workbook`](../tools/workbooks/delete-workbook.md) / [`delete-datasource`](../tools/data-qna/delete-datasource.md)) in preview mode to tag each `pending-deletion`. The tag is the server-side record the delete step verifies. Nothing is deleted.
+5. **Tag approved items (reversible)** — only for approved items, calls [`delete-content`](../tools/content/delete-content.md) in preview mode (with the appropriate `resourceType`) to tag each `pending-deletion`. The tag is the server-side record the delete step verifies. Nothing is deleted.
 6. **Grace check** — confirms the notification window has elapsed and the items are still the intended targets.
 7. **Delete (confirmed)** — only for approved items, calls the delete tool with `confirm: true`. The tool re-fetches each item and deletes only if it still carries the `pending-deletion` tag from step 5 — a confirmed delete on an untagged item is rejected server-side. Deleted content goes to the Tableau recycle bin (recoverable for a limited time).
 

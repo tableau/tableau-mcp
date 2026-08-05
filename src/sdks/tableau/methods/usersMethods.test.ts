@@ -136,6 +136,30 @@ describe('UsersMethods', () => {
       });
     });
 
+    it('should forward the fields query param to the API client', async () => {
+      const mockApiClient = {
+        listUsers: vi.fn().mockResolvedValue({
+          users: { user: [] },
+        }),
+      };
+
+      const usersMethods = new UsersMethods('http://test', { type: 'Bearer', token: 'test' }, {});
+      // @ts-expect-error - Mocking private property
+      usersMethods._apiClient = mockApiClient;
+
+      await usersMethods.listUsers({
+        siteId: 'site-1',
+        fields: 'id,name,fullName,siteRole,email,lastLogin',
+      });
+
+      expect(mockApiClient.listUsers).toHaveBeenCalledWith(
+        expect.objectContaining({
+          params: { siteId: 'site-1' },
+          queries: expect.objectContaining({ fields: 'id,name,fullName,siteRole,email,lastLogin' }),
+        }),
+      );
+    });
+
     it('should handle users with different site roles', async () => {
       const mockApiClient = {
         listUsers: vi.fn().mockResolvedValue({
@@ -162,6 +186,34 @@ describe('UsersMethods', () => {
       expect(result.users[0].siteRole).toBe('ServerAdministrator');
       expect(result.users[4].siteRole).toBe('Unlicensed');
       expect(result.pagination?.totalAvailable).toBe(5);
+    });
+  });
+
+  describe('updateUser', () => {
+    it('should update user site role and return updated user', async () => {
+      const mockApiClient = {
+        updateUser: vi.fn().mockResolvedValue({
+          user: { id: 'u1', name: 'jsmith', siteRole: 'Unlicensed' },
+        }),
+      };
+
+      const usersMethods = new UsersMethods('http://test', { type: 'Bearer', token: 'test' }, {});
+      // @ts-expect-error - Mocking private property
+      usersMethods._apiClient = mockApiClient;
+
+      const result = await usersMethods.updateUser({
+        siteId: 'site-1',
+        userId: 'u1',
+        siteRole: 'Unlicensed',
+      });
+
+      expect(result).toEqual({ id: 'u1', name: 'jsmith', siteRole: 'Unlicensed' });
+      expect(mockApiClient.updateUser).toHaveBeenCalledWith(
+        { user: { siteRole: 'Unlicensed' } },
+        expect.objectContaining({
+          params: { siteId: 'site-1', userId: 'u1' },
+        }),
+      );
     });
   });
 });

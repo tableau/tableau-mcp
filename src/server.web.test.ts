@@ -7,7 +7,7 @@ import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasou
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
-import { webToolNames } from './tools/web/toolName.js';
+import { WebToolName, webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
@@ -64,7 +64,7 @@ describe('server', () => {
 
   function createMockAppTool(): WebTool<any> {
     return {
-      name: 'get-workbook',
+      name: 'mock-app-tool' as WebToolName,
       server: {} as any,
       title: 'Test App Tool',
       description: 'Test App Tool',
@@ -93,7 +93,9 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const allTools = webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const allTools = await Promise.all(
+      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
+    );
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
     const tools = allTools.filter((_, i) => !disabledFlags[i]);
     for (const tool of tools) {
@@ -118,8 +120,8 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const allDisabledTools = webToolFactories.map((toolFactory) =>
-      toolFactory(server, testProductVersion),
+    const allDisabledTools = await Promise.all(
+      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
     );
     const disabledToolFlags = await Promise.all(
       allDisabledTools.map((tool) => Provider.from(tool.disabled)),
@@ -132,6 +134,68 @@ describe('server', () => {
         expect.anything(),
       );
     }
+  });
+
+  it('should not register flow tools by default (FLOW_TOOLS_ENABLED unset)', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    // Flow tools are gated off by default...
+    expect(registeredToolNames).not.toContain('list-flows');
+    expect(registeredToolNames).not.toContain('get-flow');
+    expect(registeredToolNames).not.toContain('list-flow-runs');
+    expect(registeredToolNames).not.toContain('list-flow-tasks');
+    // ...while unrelated tools stay registered.
+    expect(registeredToolNames).toContain('list-datasources');
+  });
+
+  it('should register flow tools when FLOW_TOOLS_ENABLED is "true"', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    // The single switch turns on every flow tool...
+    expect(registeredToolNames).toContain('list-flows');
+    expect(registeredToolNames).toContain('get-flow');
+    expect(registeredToolNames).toContain('list-flow-runs');
+    expect(registeredToolNames).toContain('list-flow-tasks');
+    // ...alongside the unrelated tools.
+    expect(registeredToolNames).toContain('list-datasources');
+  });
+
+  it('should not register insight tools by default (INSIGHTS_TOOLS_ENABLED unset)', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    // Insight tools are gated off by default so hosts (e.g. Slackbot) stay stable...
+    expect(registeredToolNames).not.toContain('generate-insight-cards');
+    // ...while unrelated tools stay registered.
+    expect(registeredToolNames).toContain('list-datasources');
+  });
+
+  it('should register insight tools when INSIGHTS_TOOLS_ENABLED is "true"', async () => {
+    vi.stubEnv('INSIGHTS_TOOLS_ENABLED', 'true');
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).toContain('generate-insight-cards');
+    expect(registeredToolNames).toContain('list-datasources');
   });
 
   it('should register tools filtered by includeTools', async () => {
@@ -157,7 +221,9 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const tools = webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const tools = await Promise.all(
+      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
+    );
     const excludeDisabledFlags = await Promise.all(
       tools.map((tool) => Provider.from(tool.disabled)),
     );
@@ -232,7 +298,7 @@ describe('server', () => {
 
     expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
       server.mcpServer,
-      'get-workbook',
+      'mock-app-tool',
       {
         title: 'Test App Tool',
         description: 'Test App Tool',
@@ -256,7 +322,7 @@ describe('server', () => {
     // Assert registerAppResource was called with correct options (no _meta in options)
     expect(mocks.mockRegisterAppResource).toHaveBeenCalledWith(
       server.mcpServer,
-      'get-workbook',
+      'mock-app-tool',
       'tableau://app/test',
       {
         mimeType: expect.any(String),
@@ -313,7 +379,7 @@ describe('server', () => {
 
     // Should register as standard tool, not app tool
     expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
-      'get-workbook',
+      'mock-app-tool',
       {
         title: 'Test App Tool',
         description: 'Test App Tool',

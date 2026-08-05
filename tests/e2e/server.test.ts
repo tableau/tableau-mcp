@@ -36,19 +36,31 @@ describe('server', () => {
       const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
-        'delete-extract-refresh-task',
         'update-cloud-extract-refresh-task',
         'list-jobs',
         'list-users',
-        'delete-workbook',
-        'delete-datasource',
-        'query-admin-insights-ts-events',
-        'query-admin-insights-site-content',
-        'query-admin-insights-job-performance',
-        'get-stale-content-report',
+        'update-user',
+        'query-admin-insights',
+        'delete-content',
       ];
-      // get-embed-token is gated by the mcp-apps feature (disabled by default in features.json)
-      const mcpAppsTools: ReadonlyArray<WebToolName> = ['get-embed-token'];
+      // These tools are gated by the mcp-apps feature (disabled by default in features.json):
+      // get-embed-token and render-interactive-viz, plus the app-only record-event and confirm-* tools.
+      const mcpAppsTools: ReadonlyArray<WebToolName> = [
+        'get-embed-token',
+        'render-interactive-viz',
+        'record-event',
+        'confirm-delete-content',
+        'confirm-update-cloud-extract-refresh-task',
+      ];
+      // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
+      const flowTools: ReadonlyArray<WebToolName> = [
+        'list-flows',
+        'get-flow',
+        'list-flow-runs',
+        'list-flow-tasks',
+      ];
+      // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
+      const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
 
       let expectedToolNames = [...webToolNames];
 
@@ -60,6 +72,16 @@ describe('server', () => {
       // Filter out admin-only tools if admin tools are not enabled
       if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
+      }
+
+      // Filter out flow tools if they are not enabled
+      if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
+        expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
+      }
+
+      // Filter out insights tools if they are not enabled
+      if (process.env.INSIGHTS_TOOLS_ENABLED !== 'true') {
+        expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
@@ -123,19 +145,31 @@ describe('server', () => {
       const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
-        'delete-extract-refresh-task',
         'update-cloud-extract-refresh-task',
         'list-jobs',
         'list-users',
-        'delete-workbook',
-        'delete-datasource',
-        'query-admin-insights-ts-events',
-        'query-admin-insights-site-content',
-        'query-admin-insights-job-performance',
-        'get-stale-content-report',
+        'update-user',
+        'query-admin-insights',
+        'delete-content',
       ];
-      // get-embed-token is gated by the mcp-apps feature (disabled by default in features.json)
-      const mcpAppsTools: ReadonlyArray<WebToolName> = ['get-embed-token'];
+      // These tools are gated by the mcp-apps feature (disabled by default in features.json):
+      // get-embed-token and render-interactive-viz, plus the app-only record-event and confirm-* tools.
+      const mcpAppsTools: ReadonlyArray<WebToolName> = [
+        'get-embed-token',
+        'render-interactive-viz',
+        'record-event',
+        'confirm-delete-content',
+        'confirm-update-cloud-extract-refresh-task',
+      ];
+      // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
+      const flowTools: ReadonlyArray<WebToolName> = [
+        'list-flows',
+        'get-flow',
+        'list-flow-runs',
+        'list-flow-tasks',
+      ];
+      // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
+      const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -151,6 +185,16 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !adminOnlyTools.includes(name),
         );
+      }
+
+      // Filter out flow tools if they are not enabled
+      if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
+      }
+
+      // Filter out insights tools if they are not enabled
+      if (process.env.INSIGHTS_TOOLS_ENABLED !== 'true') {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)

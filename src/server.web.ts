@@ -52,11 +52,11 @@ export class WebMcpServer extends Server {
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
     const featureGate = getFeatureGate();
-    const mcpAppsEnabled = featureGate.isFeatureEnabled('mcp-apps');
+    const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
     // Resolve this coordinated gate exactly once for the complete registration lifecycle. Custom
     // providers may be dynamic; re-reading between tool and resource registration could otherwise
     // expose only half of the workflow.
-    const dataAppWorkspacesEnabled = featureGate.isFeatureEnabled('data-app-workspaces');
+    const dataAppWorkspacesEnabled = await featureGate.isFeatureEnabled('data-app-workspaces');
 
     for (const tool of await this._getToolsToRegister(dataAppWorkspacesEnabled, tableauAuthInfo)) {
       const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
@@ -146,8 +146,8 @@ export class WebMcpServer extends Server {
     // The caller must supply the single gate snapshot resolved for this registration lifecycle.
     const dataAppToolNames: ReadonlySet<WebToolName> = new Set(webToolGroups['data-app']);
 
-    const allTools = webToolFactories.map((toolFactory) =>
-      toolFactory(this, tableauServerInfo.productVersion),
+    const allTools = await Promise.all(
+      webToolFactories.map((toolFactory) => toolFactory(this, tableauServerInfo.productVersion)),
     );
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {

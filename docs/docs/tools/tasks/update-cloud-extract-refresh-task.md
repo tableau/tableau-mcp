@@ -6,11 +6,11 @@ sidebar_position: 3
 
 Updates the schedule of an extract refresh task on Tableau Cloud. Use this to change how often a refresh runs (e.g. downgrade Daily → Weekly), shift its time window, or modify the day/hour it executes — without recreating the task.
 
-:::warning Admin Only
+:::warning[Admin Only]
 This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
 :::
 
-:::info Tableau Cloud Only
+:::info[Tableau Cloud Only]
 This tool calls the **Cloud variant** of the update endpoint and is not appropriate for Tableau Server. The Server variant has a different payload shape and is tracked separately.
 :::
 
@@ -28,6 +28,31 @@ while previewing schedule A cannot confirm an update to schedule B, and a `confi
 prior preview (no valid token) is rejected server-side. This gate genuinely requires the preview
 phase to have run for exactly this change; it cannot be bypassed by computing a value. Present the
 change to the user and get explicit approval before confirming.
+
+### MCP-Apps confirm panel (cooperative human-in-the-loop)
+
+When the `mcp-apps` feature flag is enabled, this tool ships with an MCP App and the
+preview phase renders an in-iframe **confirm panel** describing the schedule change (new frequency and
+time window, plus a live countdown) instead of returning preview text the model could act on. The
+schedule change is then applied only when a person clicks **Apply schedule change** in that panel,
+which invokes the model-invisible `confirm-update-cloud-extract-refresh-task` tool
+(`visibility: ['app']`), passing the task id and the full structured schedule. With the flag on, the
+model-driven `confirm: true` path is **closed** — the assistant cannot apply the change on the user's
+behalf; the only route is the human gesture. The confirm tool verifies a fresh, single-use human
+approval recorded during the preview (within `MUTATION_PREVIEW_TTL_MINUTES`, default 5); a missing or
+expired approval rejects the update. When the flag is off the tool behaves exactly as the two-phase
+`confirm`/`confirmationToken` flow described above.
+
+:::warning[Cooperative, not server-enforced]
+This is **cooperative** human-in-the-loop: it depends on the MCP client honoring `visibility: ['app']`
+(hiding the `confirm-*` tool from the model) and rendering the confirm panel. The human approval is
+recorded during the model-driven preview phase, so a **non-cooperating** client that ignores the
+visibility hint could still drive `preview → confirm-*` back-to-back with no human gesture. This task
+tool has **no tag layer** — the app approval is the only gate — so a non-cooperating client has nothing
+else to clear (the schedule-bound registry nonce still proves a preview *ran*, but not that a human
+approved). Server-enforced HITL (an approval primitive the model cannot forge or reach) is tracked as
+follow-up work (W-23125362).
+:::
 
 :::note[Authoritative audit]
 Every attempt — both the preview and the confirmed update, and both allowed and denied attempts (for

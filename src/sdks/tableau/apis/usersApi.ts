@@ -58,6 +58,17 @@ const listUsersEndpoint = makeEndpoint({
       schema: z.boolean().optional(),
     },
     {
+      // Comma-separated list of user attributes to return, e.g.
+      // `id,name,fullName,siteRole,email,lastLogin`. Callers should name every
+      // field explicitly rather than relying on Tableau's default set, which on
+      // some sites silently omits lastLogin. Also accepts the special value
+      // `_all_`, though that pulls the more expensive SSO/authSetting path.
+      // @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_fields.htm
+      name: 'fields',
+      type: 'Query',
+      schema: z.string().optional(),
+    },
+    {
       name: 'includeUserCount',
       type: 'Query',
       schema: z.boolean().optional(),
@@ -89,5 +100,25 @@ const getUserOnSiteEndpoint = makeEndpoint({
   response: z.object({ user: userSchema }),
 });
 
-const usersApi = makeApi([listUsersEndpoint, getUserOnSiteEndpoint]);
+/**
+ * Update User
+ * PUT /api/api-version/sites/site-id/users/user-id
+ * Modifies information about the specified user (site role, auth setting, etc.).
+ * Tableau Cloud scope: tableau:users:update
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#update_user
+ */
+const updateUserEndpoint = makeEndpoint({
+  method: 'put',
+  path: '/sites/:siteId/users/:userId',
+  alias: 'updateUser',
+  description: 'Modifies information about the specified user',
+  parameters: [
+    { name: 'siteId', type: 'Path', schema: z.string() },
+    { name: 'userId', type: 'Path', schema: z.string() },
+    { name: 'body', type: 'Body', schema: z.object({ user: z.object({ siteRole: z.string() }) }) },
+  ],
+  response: z.object({ user: userSchema.partial() }),
+});
+
+const usersApi = makeApi([listUsersEndpoint, getUserOnSiteEndpoint, updateUserEndpoint]);
 export const usersApis = [...usersApi] as const satisfies ZodiosEndpointDefinitions;
