@@ -265,18 +265,18 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2463], // raised with sign-off (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
-    ['add-field', 1435], // provenance-style describes (from field resolution, never invented)
+    ['bind-template', 2467], // raised with sign-off (2026-08-05): agreed UI-label title 'Matching template' costs a few bytes over 'Bind Template'; earlier raise (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
+    ['add-field', 1438], // raised with sign-off (2026-08-05): agreed UI-label title 'Adding field'; provenance-style describes (from field resolution, never invented)
     ['inject-template', 1404], // provenance-style describes; session also made optional
-    ['refine-worksheet', 1464], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
-    ['plan-dashboard-creation', 1383], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
-    ['build-and-apply-dashboard', 1430], // ratcheted down in the CODA funding trim; do not grow
-    ['validate-proposal', 1510], // ratcheted down with compact shared proposal descriptions; 46k stays green
+    ['refine-worksheet', 1466], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
+    ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
+    ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
+    ['validate-proposal', 1512], // raised with sign-off (2026-08-05): agreed UI-label title 'Validating template'; ratcheted down earlier with compact shared proposal descriptions; 46k stays green
     // The template parameter is a z.enum over the real template vocabulary, so its cost
     // is the vocabulary itself, not prose. Agents invented 13 template ids against 47
     // real ones and burned 188s discovering it; the enum makes that unrepresentable.
     // Trim by retiring templates, not by re-opening the parameter to a free string.
-    ['build-and-apply-worksheet', 1786],
+    ['build-and-apply-worksheet', 1779],
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
