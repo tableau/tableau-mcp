@@ -43,10 +43,12 @@ export const getGetViewImageTool = (
     server,
     name: 'get-view-image',
     description: [
-      'Retrieves an image of the specified view in a Tableau workbook.',
+      'Returns a static, non-interactive image of the specified view in a Tableau workbook.',
+      'Use only when the user explicitly wants an image artifact — a screenshot, picture, thumbnail, PNG/PDF, or an image to embed in a document or export.',
+      'For a bare "show me / open / explore this view" the user wants the interactive embed — use render-interactive-viz instead.',
       'Optional width and height in pixels control render size.',
       'Optional view field names and values can be provided to filter the view.',
-      'For custom views, use the tool to get view custom view image by custom view id instead.',
+      'For custom views, use the tool to get custom view image by custom view id instead.',
     ].join(' '),
     paramsSchema,
     annotations: {
