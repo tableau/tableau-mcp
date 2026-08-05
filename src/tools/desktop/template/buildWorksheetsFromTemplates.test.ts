@@ -55,6 +55,11 @@ const TEMPLATE_XML =
   '<workbook><worksheets><worksheet name="{{TITLE}}"/></worksheets><windows><window class="worksheet" name="{{TITLE}}"><cards/></window></windows></workbook>';
 const BUILT_WORKBOOK_XML =
   '<?xml version="1.0"?><workbook><worksheets><worksheet name="My Bar"/></worksheets><windows><window class="worksheet" name="My Bar"><cards><card type="filters"/></cards></window></windows></workbook>';
+const INVALID_BUILT_WORKBOOK_XML =
+  '<?xml version="1.0"?><workbook><worksheets><worksheet name="My Bar"><table>' +
+  '<panes><pane><mark class="Bar"/><encodings><color column="[DS].[sum:Profit:qk]"/></encodings></pane></panes>' +
+  '<rows>[DS].[none:Sub-Category:nk]</rows><cols>[DS].[sum:Profit:qk]</cols>' +
+  '</table></worksheet></worksheets><windows><window class="worksheet" name="My Bar"><cards/></window></windows></workbook>';
 const WORKSHEET_FRAGMENT = '<worksheet name="My Bar"></worksheet>';
 const DATASOURCE = 'Sample Superstore';
 const OFFLINE_WORKBOOK_XML_ERROR =
@@ -1009,6 +1014,46 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     expect(result.content[0].text).not.toContain('hostile');
     expect(result.content[0].text).toContain('could not be safely constructed');
     expect(getWorkbookXml).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an artifact that worksheet preflight would deterministically block', async () => {
+    const extra = makeExtra();
+    const server = new DesktopMcpServer();
+    const putArtifact = vi.spyOn(getTemplateArtifactStore(server), 'put');
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({
+      ok: true,
+      xml: INVALID_BUILT_WORKBOOK_XML,
+    });
+
+    const result = await getResult(LIVE_PARAMS, extra, server);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('redundant-color-encoding');
+    expect(result.content[0].text).toContain('No template artifact was created');
+    expect(result.content[0].text).toContain(
+      'Do not rebuild the same template with the same field mapping',
+    );
+    expect(result.content[0].text).toContain('choose a different pass-1-eligible template');
+    expect(putArtifact).not.toHaveBeenCalled();
+  });
+
+  it('projects a blocking worksheet finding to the fixed offline error', async () => {
+    const extra = makeExtra();
+    const server = new DesktopMcpServer();
+    const putArtifact = vi.spyOn(getTemplateArtifactStore(server), 'put');
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({
+      ok: true,
+      xml: INVALID_BUILT_WORKBOOK_XML,
+    });
+
+    const result = await getResult(BASE_PARAMS, extra, server);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(OFFLINE_WORKBOOK_XML_ERROR);
+    expect(result.content[0].text).not.toContain('redundant-color-encoding');
+    expect(putArtifact).not.toHaveBeenCalled();
   });
 
   it('returns an error when the built workbook does not contain the named worksheet', async () => {

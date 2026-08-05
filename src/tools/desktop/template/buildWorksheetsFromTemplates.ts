@@ -30,6 +30,7 @@ import {
   MAX_EXTERNAL_TEMPLATE_BYTES,
 } from '../../../desktop/templates/templatePath.js';
 import { resolveTemplateSnapshot } from '../../../desktop/templates/templateSlots.js';
+import { blockingValidationIssues, runValidation } from '../../../desktop/validation/registry.js';
 import { ArgsValidationError, XmlValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { jsonToolResult } from '../structuredContent.js';
@@ -381,6 +382,25 @@ export const getBuildWorksheetsFromTemplatesTool = (
                 ]).toErr();
               }
               ({ worksheetXml, worksheetWindowXml } = artifact);
+              const blockingIssues = blockingValidationIssues(
+                runValidation(worksheetXml, 'worksheet').issues,
+              );
+              if (blockingIssues.length > 0) {
+                if (workbookFile !== undefined) {
+                  return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
+                }
+                const ruleIds = [
+                  ...new Set(
+                    blockingIssues
+                      .map((issue) => issue.ruleId.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 80))
+                      .filter(Boolean),
+                  ),
+                ].slice(0, 5);
+                const findings = ruleIds.length > 0 ? ` (${ruleIds.join(', ')})` : '';
+                return new ArgsValidationError(
+                  `Template construction blocked by worksheet validation${findings}. No template artifact was created and the workbook was not changed. Do not rebuild the same template with the same field mapping; choose a different pass-1-eligible template.`,
+                ).toErr();
+              }
               expectedState = deriveWorksheetApplyState(
                 workbookXml,
                 title,
