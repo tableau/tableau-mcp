@@ -183,6 +183,26 @@ describe('setupOpenInTableauLink', () => {
     expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'OPEN_IN_TABLEAU_CLICKED', url);
   });
 
+  it('records the click event even when openLink throws', async () => {
+    // The event captures the user's click action, not the request outcome, so it must be
+    // recorded unconditionally — including when the host-mediated openLink call rejects.
+    const url = 'https://tableau.example.com/views/workbook/view';
+    mockApp.openLink = vi.fn().mockRejectedValue(new Error('Connection lost'));
+
+    setupOpenInTableauLink(mockApp, url, container);
+
+    const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
+    expect(linkElement).not.toBeNull();
+
+    // Click the link
+    linkElement.click();
+
+    // Wait for async handler
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'OPEN_IN_TABLEAU_CLICKED', url);
+  });
+
   it('should show inline error when openLink returns isError true', async () => {
     const url = 'https://tableau.example.com/views/workbook/view';
     mockApp.openLink = vi.fn().mockResolvedValue({ isError: true });

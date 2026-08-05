@@ -3,6 +3,8 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 import { recordEvent } from '../shared/recordEventClient.js';
 import { getOrCreateOverlayGroup } from './overlayGroup.js';
 
+const OPEN_IN_TABLEAU_LINK_ID = 'openInTableauLink';
+
 /**
  * Shows an inline error message when the link fails to open.
  *
@@ -31,29 +33,53 @@ function clearOpenLinkError(container: HTMLElement): void {
 }
 
 /**
- * Sets up the "Open in Tableau" link element for host-mediated link opening.
- * Creates the link element dynamically and appends it to the provided container.
+ * Handles a click on the "Open in Tableau" link. Link opening is host-mediated, so this
+ * routes through {@link App.openLink} and surfaces an inline error when the host denies
+ * the request or it throws — clearing any leftover error once a later attempt succeeds.
  *
  * @param app - MCP App instance with openLink capability
- * @param url - URL to open when the link is clicked (empty URL means no link created)
- * @param container - Container element to append the link to
+ * @param url - URL to open
+ * @param container - Container the inline error message is rendered into
+ * @param event - The originating click event (its default navigation is suppressed)
  */
-export function setupOpenInTableauLink(app: App, url: string, container: HTMLElement): void {
-  // Remove any existing link first (idempotency guard)
-  const existingLink = container.querySelector('#openInTableauLink');
-  if (existingLink) {
-    existingLink.remove();
+async function handleOpenLinkClick(
+  app: App,
+  url: string,
+  container: HTMLElement,
+  event: MouseEvent,
+): Promise<void> {
+  event.preventDefault();
+  // Record the click immediately and unconditionally — the event captures the user's
+  // click action, not the request's outcome, so it must fire before the (awaited,
+  // possibly-throwing) openLink call rather than depending on it resolving.
+  recordEvent(app, 'OPEN_IN_TABLEAU_CLICKED', url);
+  try {
+    const result = await app.openLink({ url });
+    if (result.isError) {
+      console.warn('Open in Tableau link request denied by host', { url });
+      showOpenLinkError(container);
+    } else {
+      // Clear any error left over from a previous failed attempt.
+      clearOpenLinkError(container);
+    }
+  } catch (error) {
+    console.warn('Open in Tableau link request failed', { url, error });
+    showOpenLinkError(container);
   }
+}
 
-  // Don't create link if URL is empty or host lacks openLinks capability
-  const capabilities = app.getHostCapabilities();
-  if (!url || !capabilities?.openLinks) {
-    return;
-  }
-
-  // Create the link element with icon + label
+/**
+ * Builds the "Open in Tableau" link element: an `.overlay-control` anchor holding the
+ * label (leading) and the external-link icon. This builder assembles the static
+ * structure only — the click behavior is wired by {@link setupOpenInTableauLink} — so
+ * it mirrors the builder/setup split used by the sibling fullscreen button.
+ *
+ * @param url - URL the link points at (also opened via the host on click)
+ * @returns The assembled anchor, not yet attached to the DOM.
+ */
+function createOpenInTableauLinkElement(url: string): HTMLAnchorElement {
   const link = document.createElement('a');
-  link.id = 'openInTableauLink';
+  link.id = OPEN_IN_TABLEAU_LINK_ID;
   link.className = 'overlay-control';
   link.setAttribute('href', url);
   link.setAttribute('rel', 'noopener noreferrer');
@@ -75,26 +101,31 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
   link.appendChild(label);
   link.appendChild(icon);
 
-  // Set onclick handler to use host-mediated link opening
-  link.onclick = async (e) => {
-    e.preventDefault();
-    recordEvent(app, 'OPEN_IN_TABLEAU_CLICKED', url);
+  return link;
+}
 
-    try {
-      const result = await app.openLink({ url });
+/**
+ * Sets up the "Open in Tableau" link element for host-mediated link opening.
+ * Creates the link element dynamically and appends it to the provided container.
+ *
+ * @param app - MCP App instance with openLink capability
+ * @param url - URL to open when the link is clicked (empty URL means no link created)
+ * @param container - Container element to append the link to
+ */
+export function setupOpenInTableauLink(app: App, url: string, container: HTMLElement): void {
+  // Remove any existing link first (idempotency guard).
+  container.querySelector(`#${OPEN_IN_TABLEAU_LINK_ID}`)?.remove();
 
-      if (result.isError) {
-        console.warn('Open in Tableau link request denied by host', { url });
-        showOpenLinkError(container);
-      } else {
-        // Clear any error left over from a previous failed attempt.
-        clearOpenLinkError(container);
-      }
-    } catch (error) {
-      console.warn('Open in Tableau link request failed', { url, error });
-      showOpenLinkError(container);
-    }
-  };
+  // Don't create the link if URL is empty or the host lacks openLinks capability.
+  const capabilities = app.getHostCapabilities();
+  if (!url || !capabilities?.openLinks) {
+    return;
+  }
+
+  const link = createOpenInTableauLinkElement(url);
+
+  // Route clicks through the host (host-mediated link opening).
+  link.onclick = (e) => void handleOpenLinkClick(app, url, container, e);
 
   // Append to the shared overlay pill as the left-hand (first) control. handleToolResult
   // calls this before setupFullscreenButton, so the link lands left of the fullscreen
