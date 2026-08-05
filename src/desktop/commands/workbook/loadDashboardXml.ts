@@ -4,7 +4,7 @@ import { log } from '../../../logging/logger.js';
 import { sanitizeValue } from '../../../logging/sanitize.js';
 import { upsertDashboardIntoWorkbook } from '../../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../../metadata/parser.js';
-import type { ParsedDashboard } from '../../metadata/types.js';
+import type { ParsedDashboard, ParsedWindow } from '../../metadata/types.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
@@ -14,7 +14,13 @@ import { ValidationIssue } from '../../validation/types.js';
 import { xmlNamesEqual } from '../../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
+import {
+  candidateIntroducedBlockingIssues,
+  targetDashboardInvariantIssues,
+  validationIssueSignature,
+} from './dashboardCandidateValidation.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
+import { injectViewpoints } from './injectViewpoints.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
 import { type PerSheetKind, tryApplyViaPerSheetRoute } from './perSheetDocumentApply.js';
 
@@ -36,6 +42,7 @@ export type LoadDashboardXmlError =
 
 export interface LoadDashboardXmlOk {
   validationWarnings: ValidationIssue[];
+  viewpointsAppliedAtomically?: boolean;
 }
 
 type LoadDashboardXmlResult = Result<
@@ -45,7 +52,7 @@ type LoadDashboardXmlResult = Result<
 >;
 
 type LoadDashboardHelperResult = Result<
-  void,
+  { validationWarnings: ValidationIssue[]; viewpointsAppliedAtomically: boolean },
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'load-dashboard-xml-error'; error: LoadDashboardXmlError }
 >;
@@ -118,6 +125,7 @@ export async function loadDashboardXml({
   signal,
   kind = 'dashboard',
   requireExistingSheet = false,
+  viewpointWorksheetNames,
 }: {
   dashboardName: string;
   xml: string;
@@ -130,6 +138,7 @@ export async function loadDashboardXml({
   // Off/False (build-and-apply-dashboard, apply-dashboard-with-viewpoints): the dashboard may be net-new, so
   // the whole-workbook re-post upserts it (appending when absent). That is the create path.
   requireExistingSheet?: boolean;
+  viewpointWorksheetNames?: string[];
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -207,7 +216,7 @@ export async function loadDashboardXml({
     }
     // Preflight warnings ride along so apply responses can compute the host
     // verification receipt (W-23447506) without re-running validation.
-    return Ok({ validationWarnings: validation.issues });
+    return Ok({ validationWarnings: validation.issues, viewpointsAppliedAtomically: false });
   }
 
   const result = await loadDashboardXmlViaExternalApi({
@@ -216,13 +225,17 @@ export async function loadDashboardXml({
     focus: canonicalFocus,
     executor,
     signal,
+    viewpointWorksheetNames,
   });
   if (result.isErr()) {
     return result;
   }
   // Preflight warnings ride along so apply responses can compute the host
   // verification receipt (W-23447506) without re-running validation.
-  return Ok({ validationWarnings: validation.issues });
+  return Ok({
+    validationWarnings: [...validation.issues, ...result.value.validationWarnings],
+    viewpointsAppliedAtomically: result.value.viewpointsAppliedAtomically,
+  });
 }
 
 /**
@@ -259,10 +272,12 @@ async function loadDashboardXmlViaExternalApi({
   focus,
   executor,
   signal,
+  viewpointWorksheetNames,
 }: {
   dashboardName: string;
   xml: string;
   focus: ApplyFocus;
+  viewpointWorksheetNames?: string[];
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardHelperResult> {
   return withApplyLock(async () => {
     const workbookResult = await getWorkbookXml({ executor, signal });
@@ -277,6 +292,40 @@ async function loadDashboardXmlViaExternalApi({
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }
 
+    const dashboardWindowExists = normalizeArray<ParsedWindow>(
+      parseXML(workbookResult.value).workbook?.windows?.window,
+    ).some(
+      (window) =>
+        window['@_class'] === 'dashboard' &&
+        Boolean(window['@_name']) &&
+        xmlNamesEqual(window['@_name'], dashboardName),
+    );
+    const viewpointsAppliedAtomically =
+      viewpointWorksheetNames !== undefined && dashboardWindowExists;
+    if (viewpointsAppliedAtomically) {
+      workbookDoc = injectViewpoints(workbookDoc, dashboardName, viewpointWorksheetNames);
+    }
+
+    const baselineValidation = runValidation(workbookResult.value, 'workbook');
+    const validation = runValidation(workbookDoc, 'workbook');
+    const introducedIssues = candidateIntroducedBlockingIssues(
+      baselineValidation.issues,
+      validation.issues,
+    );
+    const targetIssues = targetDashboardInvariantIssues(workbookDoc, dashboardName);
+    const blockingIssues = [...introducedIssues, ...targetIssues].filter(
+      (issue, index, issues) =>
+        issues.findIndex(
+          (candidate) => validationIssueSignature(candidate) === validationIssueSignature(issue),
+        ) === index,
+    );
+    if (blockingIssues.length > 0) {
+      return Err({
+        type: 'load-dashboard-xml-error',
+        error: { type: 'validation-failed', issues: blockingIssues },
+      });
+    }
+
     const applyResult = await applyWorkbookText({ xml: workbookDoc, focus, executor, signal });
     if (applyResult.isErr()) {
       return Err({ type: 'execute-command-error', error: applyResult.error });
@@ -289,7 +338,10 @@ async function loadDashboardXmlViaExternalApi({
       data: { dashboardName },
     });
 
-    return Ok.EMPTY;
+    return Ok({
+      validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
+      viewpointsAppliedAtomically,
+    });
   });
 }
 

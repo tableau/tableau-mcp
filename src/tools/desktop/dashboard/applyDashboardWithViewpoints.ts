@@ -93,6 +93,7 @@ export const getApplyDashboardWithViewpointsTool = (
             focus: { navigate: 'artifact', sheetName: dashboardName },
             executor,
             signal: extra.signal,
+            viewpointWorksheetNames: worksheetNames,
           });
 
           if (dashboardApplyResult.isErr()) {
@@ -106,6 +107,18 @@ export const getApplyDashboardWithViewpointsTool = (
                 const _: never = type;
               }
             }
+          }
+
+          if (
+            dashboardApplyResult.isOk() &&
+            dashboardApplyResult.value.viewpointsAppliedAtomically
+          ) {
+            return new Ok({
+              message: `Successfully applied dashboard "${dashboardName}" with ${worksheetNames.length} viewpoint(s).`,
+              dashboardName,
+              viewpointCount: worksheetNames.length,
+              viewpointState: 'success',
+            });
           }
 
           // Re-read after dashboard apply so its window exists, then inject viewpoints.

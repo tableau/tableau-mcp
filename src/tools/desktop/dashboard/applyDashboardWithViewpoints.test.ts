@@ -45,7 +45,7 @@ describe('applyDashboardWithViewpointsTool', () => {
       Ok({ validationWarnings: [] }),
     );
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
-      Ok({ validationWarnings: [] }),
+      Ok({ validationWarnings: [], viewpointsAppliedAtomically: false }),
     );
   });
 
@@ -108,6 +108,62 @@ describe('applyDashboardWithViewpointsTool', () => {
     expect(dashboardApplyOrder).toBeLessThan(workbookReadOrder);
     expect(workbookReadOrder).toBeLessThan(viewpointInjectOrder);
     expect(viewpointInjectOrder).toBeLessThan(workbookApplyOrder);
+  });
+
+  it('uses the command atomic path for an existing dashboard and skips the second apply', async () => {
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
+      Ok({ validationWarnings: [], viewpointsAppliedAtomically: true }),
+    );
+
+    const result = await getToolResult({
+      dashboardFile: '/path/to/dashboard.xml',
+      worksheetNames: ['Sheet 1', 'Sheet 2'],
+    });
+
+    expect(result.isError).toBe(false);
+    expect(loadDashboardXmlModule.loadDashboardXml).toHaveBeenCalledWith(
+      expect.objectContaining({ viewpointWorksheetNames: ['Sheet 1', 'Sheet 2'] }),
+    );
+    expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
+    expect(injectViewpointsModule.injectViewpoints).not.toHaveBeenCalled();
+    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      viewpointCount: 2,
+      viewpointState: 'success',
+    });
+  });
+
+  it('completes the net-new second apply when dashboard and viewpoint names are canonically equivalent', async () => {
+    const dashboardName = 'Año';
+    const worksheetName = 'Café';
+    const postApplyWorkbook = `<workbook><windows>
+      <window class="dashboard" name="${dashboardName.normalize('NFD')}" />
+    </windows></workbook>`;
+    const withViewpoints = `<workbook><windows>
+      <window class="dashboard" name="${dashboardName.normalize('NFD')}">
+        <viewpoints><viewpoint name="${worksheetName.normalize('NFD')}" /></viewpoints>
+      </window>
+    </windows></workbook>`;
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(postApplyWorkbook));
+    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(withViewpoints);
+
+    const result = await getToolResult({
+      dashboardName,
+      dashboardFile: '/path/to/dashboard.xml',
+      worksheetNames: [worksheetName],
+    });
+
+    expect(result.isError).toBe(false);
+    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledWith(
+      expect.objectContaining({ xml: withViewpoints }),
+    );
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      dashboardName,
+      viewpointCount: 1,
+      viewpointState: 'success',
+    });
   });
 
   it('returns partial state with failed viewpoints when no dashboard window accepts injection', async () => {

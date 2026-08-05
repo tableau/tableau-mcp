@@ -191,7 +191,11 @@ export function upsertDashboardIntoWorkbook(
   const workbook = parseXML(workbookXml);
   const editedParsed = parseXML(editedDashboardXml);
   const editedDashboard = normalizeArray(editedParsed.dashboard as ParsedDashboard | undefined)[0];
-  if (!editedDashboard || editedDashboard['@_name'] !== dashboardName) {
+  if (
+    !editedDashboard ||
+    !editedDashboard['@_name'] ||
+    !xmlNamesEqual(editedDashboard['@_name'], dashboardName)
+  ) {
     throw new Error(`Edited XML does not contain a <dashboard name="${dashboardName}">`);
   }
 
@@ -199,7 +203,9 @@ export function upsertDashboardIntoWorkbook(
   if (!workbook.workbook.dashboards) workbook.workbook.dashboards = {};
 
   const dashboards = normalizeArray(workbook.workbook.dashboards.dashboard);
-  const index = dashboards.findIndex((db) => db['@_name'] === dashboardName);
+  const index = dashboards.findIndex(
+    (db) => db['@_name'] && xmlNamesEqual(db['@_name'], dashboardName),
+  );
   if (index === -1) {
     dashboards.push(editedDashboard);
   } else {

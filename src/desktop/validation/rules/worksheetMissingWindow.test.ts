@@ -39,6 +39,16 @@ describe('worksheet-missing-window rule', () => {
     ).toHaveLength(0);
   });
 
+  it('accepts a canonically equivalent worksheet window name', () => {
+    const worksheetName = 'Café';
+
+    expect(
+      worksheetMissingWindowRule.validate(
+        workbook([worksheetName.normalize('NFD')], [worksheetName]),
+      ),
+    ).toHaveLength(0);
+  });
+
   it('errors only for the worksheet whose window is missing', () => {
     const issues = worksheetMissingWindowRule.validate(
       workbook(['Sheet 1', 'Sheet 2'], ['Sheet 1']),

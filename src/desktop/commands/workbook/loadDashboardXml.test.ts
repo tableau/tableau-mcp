@@ -22,10 +22,13 @@ describe('loadDashboardXml (External Client API transport)', () => {
     const dashboards = dashboardNames
       .map((name) => `<dashboard name='${name}'><zones /></dashboard>`)
       .join('');
-    const windows = dashboardNames
+    const worksheetWindows = worksheetNames
+      .map((name) => `<window class='worksheet' name='${name}' />`)
+      .join('');
+    const dashboardWindows = dashboardNames
       .map((name) => `<window class='dashboard' name='${name}' />`)
       .join('');
-    return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets><dashboards>${dashboards}</dashboards><windows>${windows}</windows></workbook>`;
+    return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets><dashboards>${dashboards}</dashboards><windows>${worksheetWindows}${dashboardWindows}</windows></workbook>`;
   }
 
   // A goto-sheet moves the live document, so the readback the verify pass reads must
@@ -214,6 +217,70 @@ describe('loadDashboardXml (External Client API transport)', () => {
     ).toEqual([canonicalName]);
   });
 
+  it('atomically replaces an NFD live dashboard when the edited name is NFC', async () => {
+    const canonicalName = 'Año';
+    const liveName = canonicalName.normalize('NFD');
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <worksheets><worksheet name='Sheet 1'><table /></worksheet></worksheets>
+      <dashboards><dashboard name='${liveName}'><zones /></dashboard></dashboards>
+      <windows>
+        <window class='worksheet' name='Sheet 1' />
+        <window class='dashboard' name='${liveName}' />
+      </windows>
+    </workbook>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
+
+    const result = await loadDashboardXml({
+      dashboardName: canonicalName,
+      xml: `<dashboard name='${canonicalName}'><zones><zone name='Sheet 1' /></zones></dashboard>`,
+      viewpointWorksheetNames: ['Sheet 1'],
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    invariant(result.isOk());
+    expect(result.value.viewpointsAppliedAtomically).toBe(true);
+    const applyCalls = calls.filter((call) => call.kind === 'apply');
+    expect(applyCalls).toHaveLength(1);
+    const appliedWorkbook = parseXML(applyCalls[0].xml!);
+    expect(normalizeArray(appliedWorkbook.workbook?.dashboards?.dashboard)).toHaveLength(1);
+    const dashboardWindow = normalizeArray<ParsedWindow>(
+      appliedWorkbook.workbook?.windows?.window,
+    ).find((window) => window['@_class'] === 'dashboard');
+    expect(dashboardWindow?.['@_name']).toBe(liveName);
+    expect(normalizeArray(dashboardWindow?.viewpoints?.viewpoint)).toEqual([
+      expect.objectContaining({ '@_name': 'Sheet 1' }),
+    ]);
+  });
+
+  it('accepts an NFC dashboard zone backed by an NFD live worksheet and window', async () => {
+    const worksheetName = 'Café';
+    const liveWorksheetName = worksheetName.normalize('NFD');
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <worksheets><worksheet name='${liveWorksheetName}'><table /></worksheet></worksheets>
+      <dashboards><dashboard name='${dashboardName}'><zones /></dashboard></dashboards>
+      <windows>
+        <window class='worksheet' name='${liveWorksheetName}' />
+        <window class='dashboard' name='${dashboardName}' />
+      </windows>
+    </workbook>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: `<dashboard name='${dashboardName}'><zones><zone name='${worksheetName}' /></zones></dashboard>`,
+      viewpointWorksheetNames: [worksheetName],
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.filter((call) => call.kind === 'apply')).toHaveLength(1);
+  });
+
   it('keeps live worksheets referenced by the dashboard zones in the posted document', async () => {
     const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
     const { executor, calls } = dispatchingExecutor(
@@ -223,6 +290,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
     const result = await loadDashboardXml({
       dashboardName,
       xml: dashboardXml,
+      viewpointWorksheetNames: ['Sheet 1'],
       executor,
       signal: mockSignal,
       focus: NO_FOCUS,
@@ -232,6 +300,274 @@ describe('loadDashboardXml (External Client API transport)', () => {
     const applyCall = calls.find((c) => c.kind === 'apply');
     expect(applyCall?.xml).toContain('<worksheet');
     expect(applyCall?.xml).toContain('name="Sheet 1"');
+  });
+
+  it('blocks the composed workbook before apply when a dashboard zone lacks a viewpoint', async () => {
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <worksheets>
+        <worksheet name='Sales by State'><table /></worksheet>
+        <worksheet name='Profit vs Sales'><table /></worksheet>
+      </worksheets>
+      <dashboards><dashboard name='${dashboardName}'><zones /></dashboard></dashboards>
+      <windows>
+        <window class='worksheet' name='Sales by State' />
+        <window class='worksheet' name='Profit vs Sales' />
+        <window class='dashboard' name='${dashboardName}' />
+      </windows>
+    </workbook>`;
+    const dashboardXml = `<dashboard name='${dashboardName}'><zones>
+      <zone name='Sales by State' /><zone name='Profit vs Sales' />
+    </zones></dashboard>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: dashboardXml,
+      viewpointWorksheetNames: ['Sales by State'],
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    invariant(result.isErr());
+    expect(result.error).toMatchObject({
+      type: 'load-dashboard-xml-error',
+      error: {
+        type: 'validation-failed',
+        issues: [expect.objectContaining({ ruleId: 'dashboard-zones-have-viewpoints' })],
+      },
+    });
+    expect(calls.find((call) => call.kind === 'apply')).toBeUndefined();
+  });
+
+  it('applies an atomic dashboard replacement when the live workbook has an unrelated pre-existing error', async () => {
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <worksheets>
+        <worksheet name='Sheet 1'><table><rows>[none:Calculation_123456:nk]</rows></table></worksheet>
+      </worksheets>
+      <dashboards>
+        <dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>
+      </dashboards>
+      <windows>
+        <window class='worksheet' name='Sheet 1' />
+        <window class='dashboard' name='${dashboardName}'>
+          <viewpoints><viewpoint name='Sheet 1' /></viewpoints>
+        </window>
+      </windows>
+    </workbook>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`,
+      viewpointWorksheetNames: ['Sheet 1'],
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    invariant(result.isOk());
+    expect(result.value.validationWarnings).toEqual([]);
+    expect(calls.filter((call) => call.kind === 'apply')).toHaveLength(1);
+  });
+
+  it('repairs a pre-existing target-dashboard viewpoint inconsistency atomically', async () => {
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <worksheets><worksheet name='Sheet 1'><table /></worksheet></worksheets>
+      <dashboards>
+        <dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>
+      </dashboards>
+      <windows>
+        <window class='worksheet' name='Sheet 1' />
+        <window class='dashboard' name='${dashboardName}' />
+      </windows>
+    </workbook>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`,
+      viewpointWorksheetNames: ['Sheet 1'],
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    const applyCalls = calls.filter((call) => call.kind === 'apply');
+    expect(applyCalls).toHaveLength(1);
+    expect(applyCalls[0].xml).toContain('<viewpoint name="Sheet 1"');
+  });
+
+  it('blocks a pre-existing target-dashboard viewpoint inconsistency when the edit does not repair it', async () => {
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <worksheets><worksheet name='Sheet 1'><table /></worksheet></worksheets>
+      <dashboards>
+        <dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>
+      </dashboards>
+      <windows>
+        <window class='worksheet' name='Sheet 1' />
+        <window class='dashboard' name='${dashboardName}' />
+      </windows>
+    </workbook>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    invariant(result.isErr());
+    expect(result.error).toMatchObject({
+      type: 'load-dashboard-xml-error',
+      error: {
+        type: 'validation-failed',
+        issues: [expect.objectContaining({ ruleId: 'dashboard-zones-have-viewpoints' })],
+      },
+    });
+    expect(calls.find((call) => call.kind === 'apply')).toBeUndefined();
+  });
+
+  it('does not make an unrelated dashboard inconsistency veto a valid target edit', async () => {
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <worksheets>
+        <worksheet name='Sheet 1'><table /></worksheet>
+        <worksheet name='Other Sheet'><table /></worksheet>
+      </worksheets>
+      <dashboards>
+        <dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>
+        <dashboard name='Other Dashboard'><zones><zone name='Other Sheet' /></zones></dashboard>
+      </dashboards>
+      <windows>
+        <window class='worksheet' name='Sheet 1' />
+        <window class='worksheet' name='Other Sheet' />
+        <window class='dashboard' name='${dashboardName}'>
+          <viewpoints><viewpoint name='Sheet 1' /></viewpoints>
+        </window>
+        <window class='dashboard' name='Other Dashboard' />
+      </windows>
+    </workbook>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`,
+      viewpointWorksheetNames: ['Sheet 1'],
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.filter((call) => call.kind === 'apply')).toHaveLength(1);
+  });
+
+  it('blocks a newly introduced missing dashboard worksheet despite a pre-existing workbook error', async () => {
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <worksheets>
+        <worksheet name='Sheet 1'><table><rows>[none:Calculation_123456:nk]</rows></table></worksheet>
+      </worksheets>
+      <dashboards>
+        <dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>
+      </dashboards>
+      <windows>
+        <window class='worksheet' name='Sheet 1' />
+        <window class='dashboard' name='${dashboardName}'>
+          <viewpoints><viewpoint name='Sheet 1' /></viewpoints>
+        </window>
+      </windows>
+    </workbook>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: `<dashboard name='${dashboardName}'><zones><zone name='Missing Sheet' /></zones></dashboard>`,
+      viewpointWorksheetNames: ['Missing Sheet'],
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    invariant(result.isErr());
+    expect(result.error).toMatchObject({
+      type: 'load-dashboard-xml-error',
+      error: {
+        type: 'validation-failed',
+        issues: [
+          expect.objectContaining({
+            ruleId: 'dashboard-zones-reference-included-worksheets',
+          }),
+        ],
+      },
+    });
+    expect(calls.find((call) => call.kind === 'apply')).toBeUndefined();
+  });
+
+  it('atomically replaces an existing dashboard and its requested viewpoints in one workbook apply', async () => {
+    const replacementSheet = 'Profit vs Sales by Sub-Category';
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <worksheets>
+        <worksheet name='Profit by Category'><table /></worksheet>
+        <worksheet name='${replacementSheet}'><table /></worksheet>
+      </worksheets>
+      <dashboards>
+        <dashboard name='${dashboardName}'><zones><zone name='Profit by Category' /></zones></dashboard>
+      </dashboards>
+      <windows>
+        <window class='worksheet' name='Profit by Category' />
+        <window class='worksheet' name='${replacementSheet}' />
+        <window class='dashboard' name='${dashboardName}'>
+          <viewpoints><viewpoint name='Profit by Category' /></viewpoints>
+        </window>
+      </windows>
+    </workbook>`;
+    const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='${replacementSheet}' /></zones></dashboard>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: dashboardXml,
+      viewpointWorksheetNames: [replacementSheet],
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    invariant(result.isOk());
+    expect(result.value.viewpointsAppliedAtomically).toBe(true);
+    const applyCalls = calls.filter((call) => call.kind === 'apply');
+    expect(applyCalls).toHaveLength(1);
+    expect(applyCalls[0].xml).toContain(`<zone name="${replacementSheet}"`);
+    expect(applyCalls[0].xml).toContain(`<worksheet name="${replacementSheet}"`);
+    expect(applyCalls[0].xml).toContain(`<window class="worksheet" name="${replacementSheet}"`);
+    expect(applyCalls[0].xml).toContain(`<viewpoint name="${replacementSheet}"`);
+  });
+
+  it('defers requested viewpoints when a brand-new dashboard has no live window yet', async () => {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other DB']));
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      viewpointWorksheetNames: ['Sheet 1'],
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    invariant(result.isOk());
+    expect(result.value.viewpointsAppliedAtomically).toBe(false);
+    expect(calls.filter((call) => call.kind === 'apply')).toHaveLength(1);
+    expect(calls.find((call) => call.kind === 'apply')?.xml).not.toContain('<viewpoint');
   });
 
   it('appends a brand-new dashboard while preserving the existing one', async () => {

@@ -1,5 +1,7 @@
 import { DOMParser, Element as XmlElement, XMLSerializer } from '@xmldom/xmldom';
 
+import { xmlNamesEqual } from '../../xmlElement.js';
+
 /**
  * Injects viewpoint elements into the dashboard window inside workbook XML.
  * A viewpoint tells Tableau Desktop which worksheets are visible through
@@ -23,7 +25,13 @@ export function injectViewpoints(
   let dashboardWindow: XmlElement | null = null;
   for (let i = 0; i < windows.length; i++) {
     const w = windows.item(i);
-    if (w && w.getAttribute('class') === 'dashboard' && w.getAttribute('name') === dashboardName) {
+    const windowName = w?.getAttribute('name');
+    if (
+      w &&
+      windowName &&
+      w.getAttribute('class') === 'dashboard' &&
+      xmlNamesEqual(windowName, dashboardName)
+    ) {
       dashboardWindow = w;
       break;
     }
@@ -31,15 +39,6 @@ export function injectViewpoints(
 
   if (!dashboardWindow) {
     return workbookXml;
-  }
-
-  // Remove any existing <viewpoints> child
-  const existing = dashboardWindow.getElementsByTagName('viewpoints');
-  for (let i = existing.length - 1; i >= 0; i--) {
-    const node = existing.item(i);
-    if (node && node.parentNode === dashboardWindow) {
-      dashboardWindow.removeChild(node);
-    }
   }
 
   // Build new <viewpoints> element
@@ -52,7 +51,31 @@ export function injectViewpoints(
     vp.appendChild(zoom);
     viewpointsEl.appendChild(vp);
   }
-  dashboardWindow.appendChild(viewpointsEl);
+
+  const directViewpoints: XmlElement[] = [];
+  let firstMetadataChild: XmlElement | null = null;
+  for (let i = 0; i < dashboardWindow.childNodes.length; i++) {
+    const child = dashboardWindow.childNodes.item(i);
+    if (!child || child.nodeType !== 1) continue;
+    const element = child as XmlElement;
+    if (element.tagName === 'viewpoints') directViewpoints.push(element);
+    if (
+      !firstMetadataChild &&
+      ['active', 'device-preview', 'simple-id'].includes(element.tagName)
+    ) {
+      firstMetadataChild = element;
+    }
+  }
+
+  for (const existingViewpoints of directViewpoints) {
+    dashboardWindow.removeChild(existingViewpoints);
+  }
+
+  if (firstMetadataChild) {
+    dashboardWindow.insertBefore(viewpointsEl, firstMetadataChild);
+  } else {
+    dashboardWindow.appendChild(viewpointsEl);
+  }
 
   return new XMLSerializer().serializeToString(doc);
 }

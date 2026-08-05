@@ -1,6 +1,7 @@
 import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
+import { xmlNamesEqual } from '../../xmlElement.js';
 import type { ValidationIssue, ValidationRule } from '../types.js';
 
 export const worksheetMissingWindowRule: ValidationRule = {
@@ -21,20 +22,20 @@ export const worksheetMissingWindowRule: ValidationRule = {
     if (worksheets.length === 0) return [];
 
     const windows = xpath.select('//windows/window[@name]', doc as unknown as Node) as Element[];
-    const worksheetWindowNames = new Set(
-      windows
-        .filter((w) => {
-          const cls = w.getAttribute('class');
-          return cls === null || cls === '' || cls === 'worksheet';
-        })
-        .map((w) => w.getAttribute('name'))
-        .filter((name): name is string => Boolean(name)),
-    );
+    const worksheetWindowNames = windows
+      .filter((w) => {
+        const cls = w.getAttribute('class');
+        return cls === null || cls === '' || cls === 'worksheet';
+      })
+      .map((w) => w.getAttribute('name'))
+      .filter((name): name is string => Boolean(name));
 
     const issues: ValidationIssue[] = [];
     for (const worksheet of worksheets) {
       const name = worksheet.getAttribute('name');
-      if (!name || worksheetWindowNames.has(name)) continue;
+      if (!name || worksheetWindowNames.some((windowName) => xmlNamesEqual(windowName, name))) {
+        continue;
+      }
 
       issues.push({
         ruleId: 'worksheet-missing-window',

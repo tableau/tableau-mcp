@@ -13,6 +13,7 @@
 import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
+import { xmlNamesEqual } from '../../xmlElement.js';
 import type { ValidationIssue, ValidationRule } from '../types.js';
 
 function issueFor(dashboardName: string, worksheetName: string): ValidationIssue {
@@ -46,11 +47,11 @@ export const dashboardZonesReferenceIncludedWorksheetsRule: ValidationRule = {
       return [];
     }
 
-    const worksheetNames = new Set(
-      (xpath.select('//worksheets/worksheet[@name]', doc as unknown as Node) as Element[])
-        .map((worksheet) => worksheet.getAttribute('name'))
-        .filter((name): name is string => !!name),
-    );
+    const worksheetNames = (
+      xpath.select('//worksheets/worksheet[@name]', doc as unknown as Node) as Element[]
+    )
+      .map((worksheet) => worksheet.getAttribute('name'))
+      .filter((name): name is string => !!name);
 
     const dashboards = xpath.select(
       '//dashboards/dashboard[@name]',
@@ -64,15 +65,20 @@ export const dashboardZonesReferenceIncludedWorksheetsRule: ValidationRule = {
       if (!dashboardName) continue;
 
       // Worksheet zones are represented as <zone name="Worksheet Name" .../>. Layout,
-      // text, and blank zones carry type-v2 and do not name worksheets.
+      // text, and blank zones carry non-visual type-v2 values and do not name worksheets.
       const worksheetZones = xpath.select(
-        './/zone[@name and not(@type-v2)]',
+        './/zone[@name and (not(@type-v2) or @type-v2="visual")]',
         dashboard as unknown as Node,
       ) as Element[];
 
       for (const zone of worksheetZones) {
         const worksheetName = zone.getAttribute('name');
-        if (!worksheetName || worksheetNames.has(worksheetName)) continue;
+        if (
+          !worksheetName ||
+          worksheetNames.some((candidate) => xmlNamesEqual(candidate, worksheetName))
+        ) {
+          continue;
+        }
 
         const key = `${dashboardName}\u0000${worksheetName}`;
         if (seen.has(key)) continue;

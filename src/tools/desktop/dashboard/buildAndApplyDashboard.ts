@@ -118,6 +118,7 @@ export const getBuildAndApplyDashboardTool = (
             focus: { navigate: 'artifact', sheetName: dashboardName },
             executor,
             signal: extra.signal,
+            viewpointWorksheetNames: worksheetNames,
           });
 
           if (dashboardApplyResult.isErr()) {
@@ -131,6 +132,20 @@ export const getBuildAndApplyDashboardTool = (
                 const _: never = type;
               }
             }
+          }
+
+          if (
+            dashboardApplyResult.isOk() &&
+            dashboardApplyResult.value.viewpointsAppliedAtomically
+          ) {
+            return new Ok({
+              message: `Successfully built and applied dashboard "${dashboardName}".`,
+              dashboardName,
+              kpiCount: layoutSpec.kpis.length,
+              chartCount: layoutSpec.charts.length,
+              viewpointCount: worksheetNames.length,
+              viewpointState: 'success',
+            });
           }
 
           // Fetch the post-apply workbook, inject viewpoints, then apply that document.

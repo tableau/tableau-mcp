@@ -30,6 +30,28 @@ describe('dashboard-zones-reference-included-worksheets rule', () => {
     expect(errors[0].message).toContain('include the worksheet in the document or remove the zone');
   });
 
+  it('rejects an explicit visual zone when its worksheet is omitted', () => {
+    const result = runValidation(
+      workbookXml({
+        worksheets: ['Included Sheet'],
+        dashboards: [
+          {
+            name: 'Executive Dashboard',
+            zones: [
+              "<zone h='98000' id='4' name='Missing Visual' type-v2='visual' w='98000' x='1000' y='1000' />",
+            ],
+          },
+        ],
+      }),
+      'workbook',
+    );
+
+    expect(result.valid).toBe(false);
+    expect(
+      result.issues.filter((issue) => issue.ruleId === RULE_ID && issue.severity === 'error'),
+    ).toEqual([expect.objectContaining({ message: expect.stringContaining('Missing Visual') })]);
+  });
+
   it('allows a whole-workbook document when dashboard zones reference included worksheets', () => {
     const result = runValidation(
       workbookXml({

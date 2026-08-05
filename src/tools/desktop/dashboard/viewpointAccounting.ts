@@ -1,5 +1,7 @@
 import { DOMParser, Element as XmlElement, Node as XmlNode } from '@xmldom/xmldom';
 
+import { xmlNamesEqual } from '../../../desktop/xmlElement.js';
+
 export type ViewpointAccounting = {
   state: 'success' | 'success-already-present' | 'failed';
   requested: string[];
@@ -20,15 +22,15 @@ export function accountDashboardViewpoints({
 }): ViewpointAccounting {
   const before = dashboardViewpointNames(beforeXml, dashboardName);
   const after = dashboardViewpointNames(afterXml, dashboardName);
-  const landed = requested.filter((name) => after.has(name));
-  const failed = requested.filter((name) => !after.has(name));
+  const landed = requested.filter((name) => after.some((actual) => xmlNamesEqual(actual, name)));
+  const failed = requested.filter((name) => !after.some((actual) => xmlNamesEqual(actual, name)));
 
   if (failed.length === 0) {
     return {
       state:
         requested.length > 0 &&
         afterXml === beforeXml &&
-        requested.every((name) => before.has(name))
+        requested.every((name) => before.some((actual) => xmlNamesEqual(actual, name)))
           ? 'success-already-present'
           : 'success',
       requested,
@@ -40,25 +42,27 @@ export function accountDashboardViewpoints({
   return { state: 'failed', requested, landed, failed };
 }
 
-function dashboardViewpointNames(workbookXml: string, dashboardName: string): Set<string> {
+function dashboardViewpointNames(workbookXml: string, dashboardName: string): string[] {
   const parser = new DOMParser({ errorHandler: () => {} });
   const doc = parser.parseFromString(workbookXml.trim(), 'text/xml');
   const windows = doc.getElementsByTagName('window');
   for (let i = 0; i < windows.length; i++) {
     const window = windows.item(i);
+    const windowName = window?.getAttribute('name');
     if (
       window &&
+      windowName &&
       window.getAttribute('class') === 'dashboard' &&
-      window.getAttribute('name') === dashboardName
+      xmlNamesEqual(windowName, dashboardName)
     ) {
       return directViewpointNames(window);
     }
   }
-  return new Set();
+  return [];
 }
 
-function directViewpointNames(dashboardWindow: XmlElement): Set<string> {
-  const names = new Set<string>();
+function directViewpointNames(dashboardWindow: XmlElement): string[] {
+  const names: string[] = [];
   for (let i = 0; i < dashboardWindow.childNodes.length; i++) {
     const child = dashboardWindow.childNodes.item(i);
     if (!isElementNamed(child, 'viewpoints')) continue;
@@ -66,7 +70,7 @@ function directViewpointNames(dashboardWindow: XmlElement): Set<string> {
       const viewpoint = child.childNodes.item(j);
       if (isElementNamed(viewpoint, 'viewpoint')) {
         const name = viewpoint.getAttribute('name');
-        if (name) names.add(name);
+        if (name) names.push(name);
       }
     }
   }
