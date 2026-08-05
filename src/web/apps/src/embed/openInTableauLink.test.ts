@@ -166,7 +166,7 @@ describe('setupOpenInTableauLink', () => {
     expect(preventDefaultSpy).toHaveBeenCalled();
   });
 
-  it('should call recordEvent with MCP_APP_CLICKED when link is clicked', async () => {
+  it('should call recordEvent with OPEN_IN_TABLEAU_CLICKED when link is clicked', async () => {
     const url = 'https://tableau.example.com/views/workbook/view';
 
     setupOpenInTableauLink(mockApp, url, container);
@@ -180,7 +180,7 @@ describe('setupOpenInTableauLink', () => {
     // Wait for async handler
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'MCP_APP_CLICKED', url);
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'OPEN_IN_TABLEAU_CLICKED', url);
   });
 
   it('should show inline error when openLink returns isError true', async () => {

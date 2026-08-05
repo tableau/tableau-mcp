@@ -195,14 +195,18 @@ describe('setupFullscreenButton', () => {
     expect(label?.textContent).toBe('Fullscreen');
   });
 
-  it('records MCP_APP_CLICKED telemetry on click', async () => {
+  it('records FULLSCREEN_CLICKED telemetry on click', async () => {
     setupFullscreenButton(mockApp, container);
     const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
 
     button.click();
     await flush();
 
-    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'MCP_APP_CLICKED', 'fullscreen');
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(
+      mockApp,
+      'FULLSCREEN_CLICKED',
+      'fullscreen',
+    );
   });
 
   it('re-syncs the pill when hostcontextchanged fires (host-initiated mode change)', () => {

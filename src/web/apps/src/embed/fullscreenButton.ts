@@ -1,6 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
-import { McpAppEvent, recordEvent } from '../shared/recordEventClient.js';
+import { recordEvent } from '../shared/recordEventClient.js';
 import { getOrCreateOverlayGroup } from './overlayGroup.js';
 
 const FULLSCREEN_BUTTON_ID = 'fullscreenButton';
@@ -143,7 +143,7 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
 
   button.addEventListener('click', () => {
     const target = isFullscreen ? 'inline' : 'fullscreen';
-    recordEvent(app, McpAppEvent.MCP_APP_CLICKED, target);
+    recordEvent(app, 'FULLSCREEN_CLICKED', target);
     void requestMode(target);
   });
 

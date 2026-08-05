@@ -1,6 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
-import { McpAppEvent, recordEvent } from '../shared/recordEventClient.js';
+import { recordEvent } from '../shared/recordEventClient.js';
 import { getOrCreateOverlayGroup } from './overlayGroup.js';
 
 /**
@@ -78,7 +78,7 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
   // Set onclick handler to use host-mediated link opening
   link.onclick = async (e) => {
     e.preventDefault();
-    recordEvent(app, McpAppEvent.MCP_APP_CLICKED, url);
+    recordEvent(app, 'OPEN_IN_TABLEAU_CLICKED', url);
 
     try {
       const result = await app.openLink({ url });

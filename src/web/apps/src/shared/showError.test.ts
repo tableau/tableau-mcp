@@ -129,13 +129,14 @@ describe('showError', () => {
     expect(document.querySelector('.mcp-app-error')).toBeNull();
   });
 
-  it('reports telemetry with scenario and cause when app is provided', () => {
+  it('reports telemetry with scenario and cause as the errormessage arg when app is provided', () => {
     const app = {} as unknown as App;
     const cause = new Error('JSON parse failed');
 
     showError('PARSE_ERROR', cause, app);
 
-    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(app, 'PARSE_ERROR', cause);
+    // cause is routed to the dedicated errorMessage (4th) arg, not the generic detail (3rd) arg.
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(app, 'PARSE_ERROR', undefined, cause);
   });
 
   it('does not report telemetry when app is not provided', () => {
@@ -150,7 +151,12 @@ describe('showError', () => {
 
     showError('EMBED_LOAD_ERROR', undefined, app);
 
-    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(app, 'EMBED_LOAD_ERROR', undefined);
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(
+      app,
+      'EMBED_LOAD_ERROR',
+      undefined,
+      undefined,
+    );
     expect(document.querySelector('.mcp-app-error')).toBeNull();
   });
 });

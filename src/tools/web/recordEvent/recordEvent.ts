@@ -17,7 +17,7 @@ const paramsSchema = {
     .max(64)
     .regex(/^[A-Z][A-Z0-9_]*$/, 'event_type must be SCREAMING_SNAKE_CASE (e.g. TOOL_ERROR).')
     .describe(
-      'The event type for product telemetry, e.g. TOOL_ERROR, PARSE_ERROR, AUTH_ERROR, EMBED_LOAD_ERROR, MCP_APP_CLICKED.',
+      'The event type for product telemetry, e.g. TOOL_ERROR, PARSE_ERROR, AUTH_ERROR, EMBED_LOAD_ERROR, OPEN_IN_TABLEAU_CLICKED, FULLSCREEN_CLICKED.',
     ),
   // Optional free-text detail: truncate rather than reject so an over-long message never fails
   // the telemetry call (mirrors the length cap in src/telemetry/clientDisplayName.ts).
@@ -26,6 +26,13 @@ const paramsSchema = {
     .transform((s) => s.slice(0, 1024))
     .optional()
     .describe('Optional detail or context for the event.'),
+  // Optional error message for error events, kept separate from `message` so error causes
+  // never mix with generic action detail. Truncated with the same cap for the same reason.
+  errormessage: z
+    .string()
+    .transform((s) => s.slice(0, 1024))
+    .optional()
+    .describe('Optional error message for error events (e.g. TOOL_ERROR, PARSE_ERROR).'),
 };
 
 /**
@@ -70,6 +77,7 @@ export const getRecordEventTool = (server: WebMcpServer): WebTool<typeof paramsS
           productTelemetryForwarder.send('tableau_mcp_event', {
             event_type: args.event_type,
             message: args.message ?? '',
+            errormessage: args.errormessage ?? '',
             site_luid: extra.getSiteLuid(),
             user_luid: extra.getUserLuid(),
             podname: config.server,
