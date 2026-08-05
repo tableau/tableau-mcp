@@ -1,10 +1,10 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
 import DISCONNECTED_SVG from './assets/disconnected.svg?raw';
-import { recordEvent } from './recordEventClient.js';
+import { type McpAppEventType, recordEvent } from './recordEventClient.js';
 import { TABLEAU_VIZ_CONTAINER_ID } from './vizContainer.js';
 
-export type Scenario = 'TOOL_ERROR' | 'PARSE_ERROR' | 'AUTH_ERROR' | 'EMBED_LOAD_ERROR';
+export type Scenario = Exclude<McpAppEventType, 'OPEN_IN_TABLEAU_CLICKED' | 'FULLSCREEN_CLICKED'>;
 
 const ERROR_HEADING = 'Unable to load this Tableau view';
 
@@ -35,7 +35,8 @@ const ERROR_UI: Record<Scenario, { detail: string; logCode: string }> = {
  */
 export function showError(scenario: Scenario, cause?: unknown, app?: App): void {
   // Report telemetry first (best-effort), so errors are recorded even when the
-  // container is missing and the error UI cannot be rendered.
+  // container is missing and the error UI cannot be rendered. The cause is passed
+  // as the event detail (populates the telemetry `message` field).
   if (app) {
     recordEvent(app, scenario, cause);
   }

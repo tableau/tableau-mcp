@@ -82,7 +82,8 @@ describe('getRecordEventTool', () => {
       'PARSE_ERROR',
       'AUTH_ERROR',
       'EMBED_LOAD_ERROR',
-      'MCP_APP_CLICKED',
+      'OPEN_IN_TABLEAU_CLICKED',
+      'FULLSCREEN_CLICKED',
     ]) {
       expect(schema.safeParse({ event_type }).success).toBe(true);
     }
@@ -119,5 +120,11 @@ async function getToolResult(
   // Mirror the MCP framework: params are validated/transformed against paramsSchema before the
   // callback runs, so route args through the schema here (this is where message truncation happens).
   const parsedArgs = z.object(await Provider.from(tool.paramsSchema)).parse(args);
-  return await callback({ event_type: parsedArgs.event_type, message: parsedArgs.message }, extra);
+  return await callback(
+    {
+      event_type: parsedArgs.event_type,
+      message: parsedArgs.message,
+    },
+    extra,
+  );
 }

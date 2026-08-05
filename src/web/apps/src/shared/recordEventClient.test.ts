@@ -19,7 +19,19 @@ describe('recordEvent', () => {
     vi.restoreAllMocks();
   });
 
-  it('calls the record-event tool with event_type and Error message', () => {
+  it('calls the record-event tool with event_type and detail as message', () => {
+    recordEvent(mockApp, 'OPEN_IN_TABLEAU_CLICKED', 'https://tableau.example.com/view');
+
+    expect(callServerTool).toHaveBeenCalledWith({
+      name: 'record-event',
+      arguments: {
+        event_type: 'OPEN_IN_TABLEAU_CLICKED',
+        message: 'https://tableau.example.com/view',
+      },
+    });
+  });
+
+  it('sends an error cause as message', () => {
     recordEvent(mockApp, 'PARSE_ERROR', new Error('bad json'));
 
     expect(callServerTool).toHaveBeenCalledWith({

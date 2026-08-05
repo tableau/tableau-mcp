@@ -81,7 +81,7 @@ describe('getViewImageTool', () => {
     const getViewImageTool = getGetViewImageTool(new WebMcpServer(), testProductVersionWithSvg);
     expect(getViewImageTool.name).toBe('get-view-image');
     expect(getViewImageTool.description).toContain(
-      'Retrieves an image of the specified view in a Tableau workbook.',
+      'Returns a static, non-interactive image of the specified view in a Tableau workbook.',
     );
     expect(getViewImageTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
   });

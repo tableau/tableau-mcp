@@ -59,7 +59,7 @@ describe('renderInteractiveVizTool', () => {
   it('should have correct tool properties', () => {
     const tool = getRenderInteractiveVizTool(new WebMcpServer());
     expect(tool.name).toBe('render-interactive-viz');
-    expect(tool.description).toContain('interactive, embedded Tableau visualization');
+    expect(tool.description).toContain('live, interactive Tableau embed the user can explore');
     expect(tool.paramsSchema).toMatchObject({
       luid: expect.any(Object),
       objectType: expect.any(Object),

@@ -17,7 +17,7 @@ const paramsSchema = {
     .max(64)
     .regex(/^[A-Z][A-Z0-9_]*$/, 'event_type must be SCREAMING_SNAKE_CASE (e.g. TOOL_ERROR).')
     .describe(
-      'The event type for product telemetry, e.g. TOOL_ERROR, PARSE_ERROR, AUTH_ERROR, EMBED_LOAD_ERROR, MCP_APP_CLICKED.',
+      'The event type for product telemetry, e.g. TOOL_ERROR, PARSE_ERROR, AUTH_ERROR, EMBED_LOAD_ERROR, OPEN_IN_TABLEAU_CLICKED, FULLSCREEN_CLICKED.',
     ),
   // Optional free-text detail: truncate rather than reject so an over-long message never fails
   // the telemetry call (mirrors the length cap in src/telemetry/clientDisplayName.ts).

@@ -129,12 +129,13 @@ describe('showError', () => {
     expect(document.querySelector('.mcp-app-error')).toBeNull();
   });
 
-  it('reports telemetry with scenario and cause when app is provided', () => {
+  it('reports telemetry with scenario and cause as the detail arg when app is provided', () => {
     const app = {} as unknown as App;
     const cause = new Error('JSON parse failed');
 
     showError('PARSE_ERROR', cause, app);
 
+    // cause is passed as the event detail, which populates the telemetry message field.
     expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(app, 'PARSE_ERROR', cause);
   });
 
