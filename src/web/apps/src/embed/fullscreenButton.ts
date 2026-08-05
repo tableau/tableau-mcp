@@ -102,14 +102,6 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
     return;
   }
 
-  // Track the current display mode internally. This is the single source of truth
-  // for the toggle decision. Initialized from the host context, then updated from:
-  // - requestMode's result (authoritative for our own requests), OR
-  // - hostcontextchanged (authoritative for host-initiated changes).
-  // DO NOT read getHostContext().displayMode in the click handler — it is only
-  // updated on hostcontextchanged, not when requestDisplayMode resolves.
-  let isFullscreen = app.getHostContext()?.displayMode === 'fullscreen';
-
   const button = createFullscreenButtonElement();
 
   // Append to the shared overlay pill as the right-hand (last) control. Falls back
@@ -120,7 +112,16 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
   // In fullscreen, hide the entire pill (both controls); without a pill, hide the button.
   const visibilityTarget: HTMLElement = overlayGroup ?? button;
 
-  syncButton(container, visibilityTarget, button, isFullscreen);
+  // Current display mode, the single source of truth for the toggle decision. Only ever
+  // written through reflectMode (below); established for real by the reflectMode() init call
+  // at the end of setup, so it starts false here rather than reading the host directly.
+  let isFullscreen = false;
+
+  // Reads the mode the host currently reports. Used to seed initial state and to react to
+  // host-initiated changes — NOT in the click handler: getHostContext().displayMode only
+  // updates on hostcontextchanged, not when our own requestDisplayMode resolves, so the
+  // click handler must read `isFullscreen` instead.
+  const hostIsFullscreen = (): boolean => app.getHostContext()?.displayMode === 'fullscreen';
 
   const onKeydown = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') {
@@ -138,14 +139,21 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
     }
   }
 
+  // The ONLY writer of isFullscreen. Every mode change routes through here so all
+  // mode-dependent state — the button chrome and the Escape listener — is re-derived
+  // together and cannot drift out of sync with the flag.
+  function reflectMode(fullscreen: boolean): void {
+    isFullscreen = fullscreen;
+    syncButton(container, visibilityTarget, button, fullscreen);
+    setEscapeListener(fullscreen);
+  }
+
   // The host is the source of truth: reflect the mode it actually applied
   // (it may refuse the request and keep the current mode).
   async function requestMode(mode: 'inline' | 'fullscreen'): Promise<void> {
     try {
       const result = await app.requestDisplayMode({ mode });
-      isFullscreen = result.mode === 'fullscreen';
-      syncButton(container, visibilityTarget, button, isFullscreen);
-      setEscapeListener(isFullscreen);
+      reflectMode(result.mode === 'fullscreen');
     } catch (error) {
       console.warn('[mcp-app] requestDisplayMode failed', { mode, error });
     }
@@ -158,15 +166,12 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
   });
 
   // Re-sync if the host changes display mode on its own (e.g. host chrome exit).
-  const onHostContextChanged = (): void => {
-    isFullscreen = app.getHostContext()?.displayMode === 'fullscreen';
-    syncButton(container, visibilityTarget, button, isFullscreen);
-    setEscapeListener(isFullscreen);
-  };
+  const onHostContextChanged = (): void => reflectMode(hostIsFullscreen());
   app.addEventListener('hostcontextchanged', onHostContextChanged);
 
-  // Initialize the Escape listener to match the current mode.
-  setEscapeListener(isFullscreen);
+  // Paint initial state from the host's current mode (also attaches the Escape
+  // listener when we start in fullscreen).
+  reflectMode(hostIsFullscreen());
 
   teardownPrevious = () => {
     // SAFETY: App re-declares addEventListener but not removeEventListener, so TS
