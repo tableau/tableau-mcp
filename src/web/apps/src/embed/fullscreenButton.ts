@@ -51,6 +51,38 @@ function syncButton(
 }
 
 /**
+ * Builds the fullscreen toggle button element: an `.overlay-control` button holding
+ * the fullscreen icon (leading) and an empty label span. The label text, ARIA state,
+ * and mode class are all set later by {@link syncButton} to match the current mode,
+ * so this builder only assembles the static structure — no state, no listeners.
+ *
+ * @returns The assembled button, not yet attached to the DOM.
+ */
+function createFullscreenButtonElement(): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.id = FULLSCREEN_BUTTON_ID;
+  button.className = 'overlay-control';
+
+  // Create icon (inline SVG using the symbol)
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('class', 'viz-control-icon');
+  icon.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#fullscreen-icon');
+  icon.appendChild(use);
+
+  // Create label span
+  const label = document.createElement('span');
+
+  // Assemble button: icon + label (icon leads, matching Option B's Fullscreen control)
+  button.appendChild(icon);
+  button.appendChild(label);
+
+  return button;
+}
+
+/**
  * Sets up the Fullscreen toggle button. Expands the app to fill the host panel via
  * the ext-apps display-mode API (host-mediated; NOT the browser Fullscreen API).
  * Renders only when the host advertises the 'fullscreen' display mode.
@@ -82,25 +114,7 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
   // updated on hostcontextchanged, not when requestDisplayMode resolves.
   let isFullscreen = app.getHostContext()?.displayMode === 'fullscreen';
 
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.id = FULLSCREEN_BUTTON_ID;
-  button.className = 'overlay-control';
-
-  // Create icon (inline SVG using the symbol)
-  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  icon.setAttribute('class', 'viz-control-icon');
-  icon.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-  use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#fullscreen-icon');
-  icon.appendChild(use);
-
-  // Create label span
-  const label = document.createElement('span');
-
-  // Assemble button: icon + label (icon leads, matching Option B's Fullscreen control)
-  button.appendChild(icon);
-  button.appendChild(label);
+  const button = createFullscreenButtonElement();
 
   // Append to the shared overlay pill as the right-hand (last) control. Falls back
   // to the container when the pill's host (#vizStage) is missing.
