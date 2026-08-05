@@ -34,10 +34,19 @@ body:has(.mcp-app-error) {
 
 tableau-viz {
   width: 100%;
-  max-height: 1200px;
-  overflow-y: auto;
   display: block;
   transition: height 0.3s ease;
+}
+
+/* Inline (non-fullscreen): cap the embedded viz to a fixed height so the app
+   stays compact in the chat; taller vizzes scroll internally. In fullscreen the
+   `.fullscreen` class is toggled onto `.main` (see fullscreenButton.ts), so this
+   selector no longer matches and the cap is removed — the viz then uses its
+   natural height from the `firstvizsizeknown` handler. This is a plain max-height
+   (no viewport units, no !important) precisely so it never constrains fullscreen. */
+.main:not(.fullscreen) tableau-viz {
+  max-height: 600px;
+  overflow-y: auto;
 }
 
 /* !important so the hidden attribute wins over elements that set an explicit

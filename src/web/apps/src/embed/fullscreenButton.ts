@@ -12,8 +12,12 @@ const FULLSCREEN_BUTTON_ID = 'fullscreenButton';
 let teardownPrevious: (() => void) | undefined;
 
 /**
- * Syncs visibility and ARIA state to the given mode.
+ * Syncs visibility, ARIA state, and the mode class to the given mode.
  *
+ * @param modeRoot - The app root (`.main`). Carries the `.fullscreen` class so CSS
+ *   can key layout off the mode — notably the inline height cap
+ *   (`.main:not(.fullscreen) tableau-viz`), which is dropped in fullscreen so the
+ *   viz uses its natural height.
  * @param visibilityTarget - Element hidden in fullscreen. This is the whole overlay
  *   pill (so BOTH controls disappear when the host provides its own exit affordance),
  *   or the button itself when there is no pill (fallback path).
@@ -21,10 +25,16 @@ let teardownPrevious: (() => void) | undefined;
  * @param fullscreen - Whether the app is currently in fullscreen mode.
  */
 function syncButton(
+  modeRoot: HTMLElement,
   visibilityTarget: HTMLElement,
   button: HTMLButtonElement,
   fullscreen: boolean,
 ): void {
+  // Drive the mode class off the same source of truth as the pill. The inline
+  // height cap keys off `.main:not(.fullscreen)`, so entering fullscreen removes
+  // the cap and exiting reinstates it — no separate code path to drift.
+  modeRoot.classList.toggle('fullscreen', fullscreen);
+
   // Hide the pill when in fullscreen (host chrome provides exit affordance).
   visibilityTarget.hidden = fullscreen;
 
@@ -100,7 +110,7 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
   // In fullscreen, hide the entire pill (both controls); without a pill, hide the button.
   const visibilityTarget: HTMLElement = overlayGroup ?? button;
 
-  syncButton(visibilityTarget, button, isFullscreen);
+  syncButton(container, visibilityTarget, button, isFullscreen);
 
   const onKeydown = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') {
@@ -124,7 +134,7 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
     try {
       const result = await app.requestDisplayMode({ mode });
       isFullscreen = result.mode === 'fullscreen';
-      syncButton(visibilityTarget, button, isFullscreen);
+      syncButton(container, visibilityTarget, button, isFullscreen);
       setEscapeListener(isFullscreen);
     } catch (error) {
       console.warn('[mcp-app] requestDisplayMode failed', { mode, error });
@@ -140,7 +150,7 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
   // Re-sync if the host changes display mode on its own (e.g. host chrome exit).
   const onHostContextChanged = (): void => {
     isFullscreen = app.getHostContext()?.displayMode === 'fullscreen';
-    syncButton(visibilityTarget, button, isFullscreen);
+    syncButton(container, visibilityTarget, button, isFullscreen);
     setEscapeListener(isFullscreen);
   };
   app.addEventListener('hostcontextchanged', onHostContextChanged);

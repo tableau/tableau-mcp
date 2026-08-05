@@ -72,6 +72,10 @@ describe('setupFullscreenButton', () => {
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(button.getAttribute('aria-label')).toBe('Enter fullscreen');
 
+    // Inline mode: no `.fullscreen` class, so the CSS inline height cap
+    // (`.main:not(.fullscreen) tableau-viz`) applies.
+    expect(container.classList.contains('fullscreen')).toBe(false);
+
     // The pill exists and is visible in inline mode.
     expect(overlayGroup()).not.toBeNull();
     expect(overlayGroup().contains(button)).toBe(true);
@@ -151,6 +155,10 @@ describe('setupFullscreenButton', () => {
     expect(overlayGroup().hidden).toBe(true); // Pill hidden in fullscreen mode
     expect(button.getAttribute('aria-pressed')).toBe('true');
 
+    // Fullscreen: `.fullscreen` class added, so the inline height cap is dropped
+    // and the viz uses its natural height.
+    expect(container.classList.contains('fullscreen')).toBe(true);
+
     // Icon still exists (button structure intact, just hidden with the pill)
     const icon = button.querySelector('svg.viz-control-icon');
     expect(icon).not.toBeNull();
@@ -162,12 +170,14 @@ describe('setupFullscreenButton', () => {
     const button = container.querySelector('#fullscreenButton') as HTMLButtonElement;
 
     expect(overlayGroup().hidden).toBe(true); // Initially hidden (fullscreen mode)
+    expect(container.classList.contains('fullscreen')).toBe(true); // Cap dropped in fullscreen
 
     button.click();
     await flush();
 
     expect(mockApp.requestDisplayMode).toHaveBeenCalledWith({ mode: 'inline' });
     expect(overlayGroup().hidden).toBe(false); // Visible again in inline mode
+    expect(container.classList.contains('fullscreen')).toBe(false); // Inline cap reinstated
   });
 
   it('reflects host refusal: keeps inline state when the result stays inline', async () => {
@@ -207,6 +217,8 @@ describe('setupFullscreenButton', () => {
 
     expect(overlayGroup().hidden).toBe(true); // Pill hidden when host enters fullscreen
     expect(button.getAttribute('aria-pressed')).toBe('true');
+    // Host-initiated fullscreen also drops the inline cap.
+    expect(container.classList.contains('fullscreen')).toBe(true);
   });
 
   it('shows the pill again when host exits fullscreen via hostcontextchanged', () => {
