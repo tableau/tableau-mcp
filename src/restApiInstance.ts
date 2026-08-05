@@ -40,6 +40,7 @@ type JwtScopes =
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
   | 'tableau:workbooks:update'
+  | 'tableau:workbooks:download'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'

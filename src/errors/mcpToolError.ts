@@ -299,6 +299,17 @@ export class BuildTwbxError extends McpToolError {
   }
 }
 
+// edit-data-app: the downloaded workbook could not be interpreted as a data-app package — its bytes
+// are not a valid archive, it has no `Packages/<id>/manifest.json`, or that package has no
+// `content/index.html` entrypoint. In other words the workbook was not produced by the scaffold ->
+// publish flow, so there is nothing to reopen as an editable workspace. statusCode 422: the request
+// is well-formed (the workbook exists and downloaded) but its content cannot satisfy the operation.
+export class WorkbookDataAppNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'workbook-data-app-not-found', message, statusCode: 422 });
+  }
+}
+
 // A requested data-app workspace does not exist for the caller's actor scope, or it has expired and
 // is no longer readable. Opaque handles (`appId`) intentionally return the same not-found signal for
 // "never existed", "belongs to a different actor", and "expired" so a caller cannot probe for the

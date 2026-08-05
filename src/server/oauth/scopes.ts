@@ -53,6 +53,7 @@ export type TableauApiScope =
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
   | 'tableau:workbooks:update'
+  | 'tableau:workbooks:download'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
@@ -394,6 +395,10 @@ const toolScopeMap: Record<
   'scaffold-data-app': {
     mcp: [],
     api: new Set<TableauApiScope>(['tableau:content:read', 'tableau:viz_data_service:read']),
+  },
+  'edit-data-app': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'upsert-data-app-files': {
     mcp: [],

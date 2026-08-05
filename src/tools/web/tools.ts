@@ -3,6 +3,7 @@ import { getDeleteContentTool } from './_lib/deleteContent.js';
 import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
 import { getCreateAndPublishWorkbookTool } from './createAndPublishWorkbook/createAndPublishWorkbook.js';
+import { getEditDataAppTool } from './dataApps/editDataApp.js';
 import { getListDataAppFilesTool } from './dataApps/listDataAppFiles.js';
 import { getPatchDataAppFileTool } from './dataApps/patchDataAppFile.js';
 import { getReadDataAppFileTool } from './dataApps/readDataAppFile.js';
@@ -91,6 +92,7 @@ export const webToolFactories = [
   getDeleteContentTool,
   getConfirmDeleteContentTool,
   getScaffoldDataAppTool,
+  getEditDataAppTool,
   getUpsertDataAppFilesTool,
   getPatchDataAppFileTool,
   getSearchDataAppFileTool,

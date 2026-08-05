@@ -42,6 +42,7 @@ export const webToolNames = [
   'confirm-delete-content',
   'render-interactive-viz',
   'scaffold-data-app',
+  'edit-data-app',
   'upsert-data-app-files',
   'patch-data-app-file',
   'search-data-app-file',
@@ -117,6 +118,7 @@ export const webToolGroups = {
   // scaffold -> author -> validate -> publish workflow together.
   'data-app': [
     'scaffold-data-app',
+    'edit-data-app',
     'upsert-data-app-files',
     'patch-data-app-file',
     'search-data-app-file',
