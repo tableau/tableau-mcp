@@ -17,15 +17,16 @@ describe('setupOpenInTableauLink', () => {
     // Create container element (simulating the main element)
     container = document.createElement('main');
     container.className = 'main';
-    // Add viz container to simulate the real DOM structure
+    // Add viz stage wrapper with the viz container inside, mirroring the real DOM.
+    // The overlay pill (created on demand by setupOpenInTableauLink) lives in #vizStage.
+    const vizStage = document.createElement('div');
+    vizStage.id = 'vizStage';
+    vizStage.className = 'viz-stage';
     const vizContainer = document.createElement('div');
+    vizContainer.id = 'tableauVizContainer';
     vizContainer.className = 'viz-container';
-    container.appendChild(vizContainer);
-    // Add controls bar
-    const controlsBar = document.createElement('div');
-    controlsBar.id = 'vizControlsBar';
-    controlsBar.className = 'viz-controls';
-    container.appendChild(controlsBar);
+    vizStage.appendChild(vizContainer);
+    container.appendChild(vizStage);
     document.body.appendChild(container);
 
     // Create mock App with openLink and getHostCapabilities
@@ -52,7 +53,7 @@ describe('setupOpenInTableauLink', () => {
     const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
     expect(linkElement).not.toBeNull();
     expect(linkElement.id).toBe('openInTableauLink');
-    expect(linkElement.className).toBe('viz-control-action');
+    expect(linkElement.className).toBe('overlay-control');
     expect(linkElement.getAttribute('rel')).toBe('noopener noreferrer');
     expect(linkElement.getAttribute('aria-label')).toBe(
       'Open in Tableau (opens in a new browser tab)',
@@ -67,26 +68,41 @@ describe('setupOpenInTableauLink', () => {
     expect(label?.textContent).toBe('Open in Tableau');
   });
 
-  it('should place link in the controls bar after the viz container', () => {
+  it('should place link in the overlay pill inside the viz stage', () => {
     const url = 'https://tableau.example.com/views/workbook/view';
 
     setupOpenInTableauLink(mockApp, url, container);
 
     const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
-    const vizContainer = container.querySelector('.viz-container') as HTMLElement;
-    const controlsBar = container.querySelector('#vizControlsBar') as HTMLElement;
+    const vizStage = container.querySelector('#vizStage') as HTMLElement;
+    const vizContainer = container.querySelector('#tableauVizContainer') as HTMLElement;
+    const overlayGroup = container.querySelector('#vizOverlayGroup') as HTMLElement;
 
     expect(linkElement).not.toBeNull();
+    expect(vizStage).not.toBeNull();
     expect(vizContainer).not.toBeNull();
-    expect(controlsBar).not.toBeNull();
+    expect(overlayGroup).not.toBeNull();
 
-    // Link should be inside the controls bar
-    expect(controlsBar.contains(linkElement)).toBe(true);
+    // Link should be inside the overlay pill, which lives in the viz stage
+    // (sibling of the viz container, NOT inside it, so it survives re-embed).
+    expect(overlayGroup.contains(linkElement)).toBe(true);
+    expect(vizStage.contains(overlayGroup)).toBe(true);
+    expect(vizContainer.contains(linkElement)).toBe(false);
+  });
 
-    // Controls bar should come after viz container in DOM order
-    const controlsIndex = Array.from(container.children).indexOf(controlsBar);
-    const vizIndex = Array.from(container.children).indexOf(vizContainer);
-    expect(controlsIndex).toBeGreaterThan(vizIndex);
+  it('appends the link as the first control so it sits left of a later fullscreen button', () => {
+    const url = 'https://tableau.example.com/views/workbook/view';
+
+    setupOpenInTableauLink(mockApp, url, container);
+
+    // Simulate the fullscreen button being appended afterward (handleToolResult order).
+    const overlayGroup = container.querySelector('#vizOverlayGroup') as HTMLElement;
+    const laterButton = document.createElement('button');
+    laterButton.className = 'overlay-control';
+    overlayGroup.appendChild(laterButton);
+
+    const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
+    expect(Array.from(overlayGroup.children).indexOf(linkElement)).toBe(0);
   });
 
   it('should not create link when URL is empty', () => {

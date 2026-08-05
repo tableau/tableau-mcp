@@ -41,78 +41,62 @@ tableau-viz {
 }
 
 /* !important so the hidden attribute wins over elements that set an explicit
-   display (e.g. .viz-fullscreen-floating uses display: inline-flex, which has
-   equal specificity and would otherwise override display: none by source order). */
+   display (e.g. .overlay-group uses display: flex and .overlay-control uses
+   display: inline-flex, which have equal specificity and would otherwise
+   override display: none by source order). */
 [hidden] {
   display: none !important;
 }
 
-.viz-controls {
+/* Floating pill over the viz's bottom-right corner. Holds both the "Open in
+   Tableau" link and the "Fullscreen" button as one segmented control. Lives in
+   #vizStage (sibling of the viz container) so it survives viz re-embed. */
+.overlay-group {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
   display: flex;
-  min-height: 48px;
   align-items: center;
-  justify-content: flex-start;
-  padding: 3px 16px;
-  background: #f9fbfe;
+  padding: 4px;
+  border: 1px solid #c4c7c9;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 3px 12px rgb(0 0 0 / 18%);
 }
 
-.viz-controls:empty {
-  display: none;
-}
-
-.viz-control-action {
+.overlay-control {
   display: inline-flex;
-  min-height: 42px;
+  min-height: 36px;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 0 12px;
+  gap: 6px;
+  padding: 0 10px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: #0b5cab;
   cursor: pointer;
+  font-weight: 600;
   text-decoration: none;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 0.875rem;
 }
 
-.viz-control-action:hover {
-  background: rgb(11 92 171 / 10%);
-  color: #014486;
+/* Segmented divider between the two controls. */
+.overlay-control + .overlay-control {
+  border-left-color: #d9dcdf;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
-.viz-control-action:focus {
-  outline: 2px solid #0b5cab;
-  outline-offset: 2px;
-}
-
-.viz-fullscreen-floating {
-  position: absolute;
-  right: 18px;
-  bottom: 18px;
-  display: inline-flex;
-  min-height: 40px;
-  align-items: center;
-  gap: 7px;
-  padding: 0 13px;
-  border: 1px solid #c4c7c9;
-  border-radius: 7px;
-  background: rgb(255 255 255 / 94%);
-  color: #3f464b;
-  cursor: pointer;
-  box-shadow: 0 3px 12px rgb(0 0 0 / 18%);
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 0.875rem;
-}
-
-.viz-fullscreen-floating:hover {
-  color: #014486;
+.overlay-control:hover {
   border-color: #014486;
+  color: #014486;
+  background: #f3f7fb;
 }
 
-.viz-fullscreen-floating:focus {
+.overlay-control:focus {
   outline: 2px solid #0b5cab;
   outline-offset: 2px;
 }

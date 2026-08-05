@@ -1,6 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
 import { McpAppEvent, recordEvent } from '../shared/recordEventClient.js';
+import { getOrCreateOverlayGroup } from './overlayGroup.js';
 
 const FULLSCREEN_BUTTON_ID = 'fullscreenButton';
 
@@ -10,10 +11,22 @@ const FULLSCREEN_BUTTON_ID = 'fullscreenButton';
 // module-level teardown reference is sufficient.
 let teardownPrevious: (() => void) | undefined;
 
-/** Syncs the button's visibility and ARIA state to the given mode. */
-function syncButton(button: HTMLButtonElement, fullscreen: boolean): void {
-  // Hide the button when in fullscreen (host chrome provides exit affordance)
-  button.hidden = fullscreen;
+/**
+ * Syncs visibility and ARIA state to the given mode.
+ *
+ * @param visibilityTarget - Element hidden in fullscreen. This is the whole overlay
+ *   pill (so BOTH controls disappear when the host provides its own exit affordance),
+ *   or the button itself when there is no pill (fallback path).
+ * @param button - The fullscreen button, whose ARIA state and label always track the mode.
+ * @param fullscreen - Whether the app is currently in fullscreen mode.
+ */
+function syncButton(
+  visibilityTarget: HTMLElement,
+  button: HTMLButtonElement,
+  fullscreen: boolean,
+): void {
+  // Hide the pill when in fullscreen (host chrome provides exit affordance).
+  visibilityTarget.hidden = fullscreen;
 
   button.setAttribute('aria-pressed', String(fullscreen));
   // When inline (visible), label is "Fullscreen" / "Enter fullscreen"
@@ -31,6 +44,9 @@ function syncButton(button: HTMLButtonElement, fullscreen: boolean): void {
  * Sets up the Fullscreen toggle button. Expands the app to fill the host panel via
  * the ext-apps display-mode API (host-mediated; NOT the browser Fullscreen API).
  * Renders only when the host advertises the 'fullscreen' display mode.
+ *
+ * The button is the right-hand control in the shared floating overlay pill
+ * (`.overlay-group`) that lives in `#vizStage`, alongside the "Open in Tableau" link.
  *
  * @param app - MCP App instance.
  * @param container - Element to append the button to (the `.main` element).
@@ -59,7 +75,7 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
   const button = document.createElement('button');
   button.type = 'button';
   button.id = FULLSCREEN_BUTTON_ID;
-  button.className = 'viz-fullscreen-floating';
+  button.className = 'overlay-control';
 
   // Create icon (inline SVG using the symbol)
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -72,11 +88,19 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
   // Create label span
   const label = document.createElement('span');
 
-  // Assemble button: icon + label (left to right)
+  // Assemble button: icon + label (icon leads, matching Option B's Fullscreen control)
   button.appendChild(icon);
   button.appendChild(label);
 
-  syncButton(button, isFullscreen);
+  // Append to the shared overlay pill as the right-hand (last) control. Falls back
+  // to the container when the pill's host (#vizStage) is missing.
+  const overlayGroup = getOrCreateOverlayGroup(container);
+  (overlayGroup ?? container).appendChild(button);
+
+  // In fullscreen, hide the entire pill (both controls); without a pill, hide the button.
+  const visibilityTarget: HTMLElement = overlayGroup ?? button;
+
+  syncButton(visibilityTarget, button, isFullscreen);
 
   const onKeydown = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') {
@@ -100,7 +124,7 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
     try {
       const result = await app.requestDisplayMode({ mode });
       isFullscreen = result.mode === 'fullscreen';
-      syncButton(button, isFullscreen);
+      syncButton(visibilityTarget, button, isFullscreen);
       setEscapeListener(isFullscreen);
     } catch (error) {
       console.warn('[mcp-app] requestDisplayMode failed', { mode, error });
@@ -116,7 +140,7 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
   // Re-sync if the host changes display mode on its own (e.g. host chrome exit).
   const onHostContextChanged = (): void => {
     isFullscreen = app.getHostContext()?.displayMode === 'fullscreen';
-    syncButton(button, isFullscreen);
+    syncButton(visibilityTarget, button, isFullscreen);
     setEscapeListener(isFullscreen);
   };
   app.addEventListener('hostcontextchanged', onHostContextChanged);
@@ -134,13 +158,4 @@ export function setupFullscreenButton(app: App, container: HTMLElement): void {
     );
     document.removeEventListener('keydown', onKeydown);
   };
-
-  // Append to the viz-stage wrapper (floating over viz bottom-right)
-  const vizStage = container.querySelector('#vizStage');
-  if (vizStage) {
-    vizStage.appendChild(button);
-  } else {
-    // Fallback: append to container if wrapper is missing
-    container.appendChild(button);
-  }
 }

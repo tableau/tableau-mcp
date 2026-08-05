@@ -1,6 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
 import { McpAppEvent, recordEvent } from '../shared/recordEventClient.js';
+import { getOrCreateOverlayGroup } from './overlayGroup.js';
 
 /**
  * Shows an inline error message when the link fails to open.
@@ -53,7 +54,7 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
   // Create the link element with icon + label
   const link = document.createElement('a');
   link.id = 'openInTableauLink';
-  link.className = 'viz-control-action';
+  link.className = 'overlay-control';
   link.setAttribute('href', url);
   link.setAttribute('rel', 'noopener noreferrer');
   link.setAttribute('aria-label', 'Open in Tableau (opens in a new browser tab)');
@@ -95,12 +96,9 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
     }
   };
 
-  // Append to the left-aligned controls bar (this is the only control in the bar)
-  const controlsBar = container.querySelector('#vizControlsBar');
-  if (controlsBar) {
-    controlsBar.appendChild(link);
-  } else {
-    // Fallback: append to container if bar is missing
-    container.appendChild(link);
-  }
+  // Append to the shared overlay pill as the left-hand (first) control. handleToolResult
+  // calls this before setupFullscreenButton, so the link lands left of the fullscreen
+  // button. Falls back to the container when the pill's host (#vizStage) is missing.
+  const overlayGroup = getOrCreateOverlayGroup(container);
+  (overlayGroup ?? container).appendChild(link);
 }

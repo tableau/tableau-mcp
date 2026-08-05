@@ -39,11 +39,6 @@ describe('handleToolResult', () => {
     vizContainer.id = 'tableauVizContainer';
     vizStage.appendChild(vizContainer);
     main.appendChild(vizStage);
-    // Add controls bar
-    const controlsBar = document.createElement('div');
-    controlsBar.id = 'vizControlsBar';
-    controlsBar.className = 'viz-controls';
-    main.appendChild(controlsBar);
     document.body.appendChild(main);
 
     // Create mock app
@@ -355,13 +350,13 @@ describe('handleToolResult', () => {
       expect.any(Function),
     );
 
-    // Assert setupOpenInTableauLink WAS called first (creates link in bottom controls bar)
+    // Assert setupOpenInTableauLink WAS called first (adds the left control to the overlay pill)
     expect(vi.mocked(setupOpenInTableauLink)).toHaveBeenCalledTimes(1);
 
-    // Assert setupFullscreenButton WAS called second (creates floating button over viz)
+    // Assert setupFullscreenButton WAS called second (adds the right control to the overlay pill)
     expect(vi.mocked(setupFullscreenButton)).toHaveBeenCalledTimes(1);
 
-    // Verify order: link setup called before button setup
+    // Verify order: link setup called before button setup, so the link sits left of the button
     const linkCallOrder = vi.mocked(setupOpenInTableauLink).mock.invocationCallOrder[0];
     const buttonCallOrder = vi.mocked(setupFullscreenButton).mock.invocationCallOrder[0];
     expect(linkCallOrder).toBeLessThan(buttonCallOrder);
