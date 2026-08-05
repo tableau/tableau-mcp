@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { verifyWorksheetReadback } from './readback-verify.js';
+import { formatReadbackVerificationError, verifyWorksheetReadback } from './readback-verify.js';
 
 const GEO_FIELD = '[DS].[none:State:nk]';
 const PROFIT_FIELD = '[DS].[sum:Profit:qk]';
@@ -30,6 +30,21 @@ function encodedWorksheet(extra = ''): string {
 }
 
 describe('verifyWorksheetReadback', () => {
+  it('uses caller-neutral recovery when Tableau changes worksheet window state', () => {
+    const message = formatReadbackVerificationError([
+      {
+        kind: 'window',
+        node: 'window',
+        intended: 'worksheet window and cards',
+        readback: 'changed',
+        severity: 'error',
+      },
+    ]);
+
+    expect(message).toContain('current live workbook');
+    expect(message).not.toMatch(/confirm|reconfirm/i);
+  });
+
   it('flags intended lod encodings that Tableau silently strips on readback', () => {
     const readback = encodedWorksheet().replace(`<lod column="${GEO_FIELD}"/>`, '');
 

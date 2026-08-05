@@ -58,9 +58,9 @@ const BUILT_WORKBOOK_XML =
 const WORKSHEET_FRAGMENT = '<worksheet name="My Bar"></worksheet>';
 const DATASOURCE = 'Sample Superstore';
 const OFFLINE_WORKBOOK_XML_ERROR =
-  'The saved workbook could not be safely parsed or used to build a template artifact. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.';
+  'The saved workbook could not be safely parsed or used to build a template artifact. No template artifact was created and the workbook was not changed. Correct the saved workbook and build again if still wanted.';
 const LIVE_WORKSHEET_CONSTRUCTION_ERROR =
-  'The template worksheet could not be safely constructed from the live workbook. No template artifact was created and the workbook was not changed. Stop and report this failure; do not retry automatically. Choose another pass-1-eligible template, or build only on a later explicit user request.';
+  'The template worksheet could not be safely constructed from the live workbook. No template artifact was created and the workbook was not changed. Correct the current inputs or choose another pass-1-eligible template.';
 const RESOLVED_SLOTS = [
   { slot_id: 'measure', template_field: '{{field_base_1}}', derivation: 'sum' } as any,
 ];
@@ -214,10 +214,10 @@ describe('buildWorksheetsFromTemplatesTool', () => {
       idempotentHint: false,
       destructiveHint: false,
     });
-    expect(tool.description).toContain('without changing the workbook');
-    expect(tool.description).toContain('apply-worksheet');
-    expect(tool.description).toContain('same turn');
-    expect(tool.description).toContain('resolved new sheet');
+    expect(tool.description).toBe(
+      'Build a one-shot worksheet artifact with a byte-for-byte pre-dispatch source check.',
+    );
+    expect(tool.description).not.toContain('same turn');
     expect(tool.description).not.toContain('confirmation');
   });
 
@@ -260,13 +260,20 @@ describe('buildWorksheetsFromTemplatesTool', () => {
       'templateName',
       'templateProvenance',
     ]);
-    expect(body.guidance).toContain('live workbook was not modified');
+    expect(body.guidance).toContain('workbook was not modified');
     expect(body.guidance).toContain('not a visible preview');
-    expect(body.guidance).toContain('same turn');
-    expect(body.guidance).toContain('exactly once');
+    expect(body.guidance).toContain(
+      'Immediately before dispatch, apply-worksheet checks the source workbook byte-for-byte',
+    );
+    expect(body.guidance).toContain('cannot condition its final POST on a workbook revision');
+    expect(body.guidance).toContain('an edit that races that write remains possible');
+    expect(body.guidance).toContain('if the apply outcome is uncertain, stop and inspect Tableau');
+    expect(body.guidance).not.toContain('applies only while');
+    expect(body.guidance).toContain('one-shot');
     expect(body.guidance).toContain('apply-worksheet');
     expect(body.guidance).toContain('artifactId');
     expect(body.guidance).not.toContain('must confirm');
+    expect(body.guidance).not.toContain('same turn');
     expect(body.guidance).not.toContain('worksheetXml');
     expect(result.structuredContent).toBeUndefined();
     expect(resolveSession).not.toHaveBeenCalled();
@@ -281,6 +288,7 @@ describe('buildWorksheetsFromTemplatesTool', () => {
           /<window class="worksheet" name="My Bar">[\s\S]*<card type="filters">/,
         ),
         expectedState: {
+          workbookSha256: '271c7b13ffc595d87312a688fe31c68f5aa01a9a7cb6f79b19bc64d4a09cbe5a',
           target: { state: 'absent' },
           targetWindow: { state: 'absent' },
           dependenciesSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
@@ -348,10 +356,20 @@ describe('buildWorksheetsFromTemplatesTool', () => {
 
   it('auto-resolves the live workbook when both source parameters are omitted', async () => {
     const extra = makeExtra();
+    const server = new DesktopMcpServer();
 
-    const result = await getResult(LIVE_PARAMS, extra);
+    const result = await getResult(LIVE_PARAMS, extra, server);
 
     expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const artifactId = JSON.parse(result.content[0].text).artifactId as string;
+    const stored = getTemplateArtifactStore(server).consume(artifactId, '12345');
+    expect(stored.ok).toBe(true);
+    if (stored.ok) {
+      expect(stored.artifact.expectedState.workbookSha256).toBe(
+        '271c7b13ffc595d87312a688fe31c68f5aa01a9a7cb6f79b19bc64d4a09cbe5a',
+      );
+    }
     expect(resolveSession).toHaveBeenCalledWith(undefined);
     expect(getWorkbookXml).toHaveBeenCalledOnce();
   });
@@ -497,15 +515,15 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
-      'The live workbook could not be read. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.',
+      'The live workbook could not be read. No template artifact was created and the workbook was not changed. Read the current workbook and build again if still wanted.',
     );
-    expect(result.content[0].text).not.toMatch(/retry|rebuild/i);
+    expect(result.content[0].text).not.toMatch(/same turn|later explicit user request/i);
     expect(result.content[0].text).not.toContain(externalDetail);
     expect(Buffer.byteLength(JSON.stringify(result), 'utf8')).toBeLessThanOrEqual(12_288);
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
   });
 
-  it('stops after an oversized artifact plan without suggesting an automatic rebuild', async () => {
+  it('reports an oversized artifact plan without conversational recovery gating', async () => {
     const extra = makeExtra();
     const largeMapping = Object.fromEntries(
       Array.from({ length: 32 }, (_, index) => [
@@ -528,15 +546,14 @@ describe('buildWorksheetsFromTemplatesTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('artifact response limit');
+    expect(result.content[0].text).toContain('response limit');
     expect(result.content[0].text).toContain('workbook was not changed');
-    expect(result.content[0].text).toContain('Stop and report this failure');
-    expect(result.content[0].text).toContain('later explicit user request');
-    expect(result.content[0].text).not.toMatch(/retry|rebuild/i);
+    expect(result.content[0].text).toContain('Reduce the mapped inputs');
+    expect(result.content[0].text).not.toMatch(/same turn|later explicit user request/i);
     expect(putArtifact).not.toHaveBeenCalled();
   });
 
-  it('rejects an existing file target without hashing unrelated siblings into its state', async () => {
+  it('rejects an existing file target while binding each source workbook exactly', async () => {
     const extra = makeExtra();
     mockWorkbookReads(
       workbookWithExistingTarget(),
@@ -558,6 +575,7 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     const firstState = deriveState.mock.results[0]?.value;
     const secondState = deriveState.mock.results[1]?.value;
     expect(firstState).toEqual({
+      workbookSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
       artifactSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
       dependenciesSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
       target: {
@@ -569,7 +587,11 @@ describe('buildWorksheetsFromTemplatesTool', () => {
         sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
       },
     });
-    expect(secondState).toEqual(firstState);
+    expect(secondState?.workbookSha256).not.toBe(firstState?.workbookSha256);
+    expect(secondState?.target).toEqual(firstState?.target);
+    expect(secondState?.targetWindow).toEqual(firstState?.targetWindow);
+    expect(secondState?.dependenciesSha256).toBe(firstState?.dependenciesSha256);
+    expect(secondState?.artifactSha256).toBe(firstState?.artifactSha256);
     expect(putArtifact).not.toHaveBeenCalled();
   });
 
@@ -744,9 +766,9 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
-      `The saved workbook file could not be read safely. It must be a regular file no larger than ${MAX_OFFLINE_WORKBOOK_BYTES} bytes. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.`,
+      `The saved workbook file could not be read safely. It must be a regular file no larger than ${MAX_OFFLINE_WORKBOOK_BYTES} bytes. No template artifact was created and the workbook was not changed. Correct the workbook path or file and build again if still wanted.`,
     );
-    expect(result.content[0].text).not.toMatch(/retry|rebuild/i);
+    expect(result.content[0].text).not.toMatch(/same turn|later explicit user request/i);
     expect(result.content[0].text).not.toContain('/cache/workbook.xml');
   });
 
@@ -772,9 +794,9 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
-      `The saved workbook file could not be read safely. It must be a regular file no larger than ${MAX_OFFLINE_WORKBOOK_BYTES} bytes. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.`,
+      `The saved workbook file could not be read safely. It must be a regular file no larger than ${MAX_OFFLINE_WORKBOOK_BYTES} bytes. No template artifact was created and the workbook was not changed. Correct the workbook path or file and build again if still wanted.`,
     );
-    expect(result.content[0].text).not.toMatch(/retry|rebuild/i);
+    expect(result.content[0].text).not.toMatch(/same turn|later explicit user request/i);
     expect(readSync).not.toHaveBeenCalled();
     expect(summarizeSchema).not.toHaveBeenCalled();
     expect(closeSync).toHaveBeenCalledOnce();
@@ -833,7 +855,7 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     }
   });
 
-  it('projects unexpected live derived-state failures to a fixed stop error without storing or mutating', async () => {
+  it('projects unexpected live derived-state failures without storing or mutating', async () => {
     const extra = makeExtra();
     const executeCommand = vi.fn();
     vi.mocked(extra.getExecutor).mockResolvedValue({
@@ -854,14 +876,14 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(LIVE_WORKSHEET_CONSTRUCTION_ERROR);
     expect(result.content[0].text).not.toContain(externalDetail);
-    expect(result.content[0].text).toContain('do not retry automatically');
+    expect(result.content[0].text).toContain('Correct the current inputs');
     expect(result.content[0].text).toContain('another pass-1-eligible template');
-    expect(result.content[0].text).toContain('later explicit user request');
+    expect(result.content[0].text).not.toMatch(/same turn|later explicit user request/i);
     expect(putArtifact).not.toHaveBeenCalled();
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
-  it('keeps field-not-found cause and candidates but stops instead of telling artifact callers to retry', async () => {
+  it('keeps field-not-found cause and candidates with caller-neutral recovery', async () => {
     const extra = makeExtra();
     const errors = [
       {
@@ -877,7 +899,7 @@ describe('buildWorksheetsFromTemplatesTool', () => {
       errors,
     } as any);
 
-    // Prove the artifact path rejects retry guidance that direct flows intentionally retain.
+    // The artifact path projects trusted bind details without carrying the binder's raw fix text.
     expect(formatExplicitBindErrors('ranking-ordered-bar', errors)).toContain('retry');
 
     const result = await getResult(LIVE_PARAMS, extra);
@@ -890,9 +912,11 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     for (const candidate of errors[0].candidates) {
       expect(result.content[0].text).toContain(candidate);
     }
-    expect(result.content[0].text).not.toMatch(/retry/i);
     expect(result.content[0].text).toMatch(
-      /Stop here\. No template artifact was created; ask the user to choose another pass-1-eligible template from list-templates\.$/,
+      /No template artifact was created\. Choose another pass-1-eligible template from list-templates if still wanted\.$/,
+    );
+    expect(result.content[0].text).not.toMatch(
+      /ask the user|same turn|later explicit user request/i,
     );
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
     expect(getWorkbookXml).toHaveBeenCalledOnce();
@@ -925,7 +949,7 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     expect(result.content[0].text).toContain('candidates: Profit, Sales');
     expect(result.content[0].text).not.toMatch(/retry|add-field|plan-dashboard-creation|manual/i);
     expect(result.content[0].text).toMatch(
-      /Stop here\. No template artifact was created; ask the user to choose another pass-1-eligible template from list-templates\.$/,
+      /No template artifact was created\. Choose another pass-1-eligible template from list-templates if still wanted\.$/,
     );
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
   });
@@ -947,9 +971,11 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('[datasource-mismatch]');
     expect(result.content[0].text).toContain('OTHER_DS');
-    expect(result.content[0].text).toContain('clarify the datasource choice');
     expect(result.content[0].text).toContain('No template artifact was created');
-    expect(result.content[0].text).toContain('do not change the datasource or retry automatically');
+    expect(result.content[0].text).toContain('Use datasource "OTHER_DS" consistently');
+    expect(result.content[0].text).not.toMatch(
+      /clarify|ask the user|same turn|later user request/i,
+    );
     expect(result.content[0].text).not.toContain('FIX:');
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
   });

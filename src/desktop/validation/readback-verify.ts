@@ -365,8 +365,8 @@ export function formatReadbackVerificationError(findings: ReadbackFinding[]): st
   if (errors.length === 0) return '';
   if (errors.some((finding) => finding.kind === 'window')) {
     return (
-      'apply succeeded but Tableau changed or dropped the confirmed worksheet window/cards. ' +
-      'The live workbook does NOT match the confirmed artifact. Rebuild from the live workbook and reconfirm before applying again.'
+      'apply succeeded but Tableau changed or dropped the worksheet window/cards. ' +
+      'The current live workbook does NOT match the attempted worksheet. Read the current live workbook before deciding the next safe change.'
     );
   }
   return (

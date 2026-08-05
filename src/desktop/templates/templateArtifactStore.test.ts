@@ -8,6 +8,7 @@ import {
 } from './templateArtifactStore.js';
 
 const STATE: WorksheetApplyState = {
+  workbookSha256: 'e'.repeat(64),
   target: { state: 'absent' },
   targetWindow: { state: 'absent' },
   dependenciesSha256: 'c'.repeat(64),

@@ -33,7 +33,11 @@
     "TITLE",
     "DATASOURCE",
     "field_base_1",
-    "field_base_2"
+    "field_base_2",
+    "field_base_3",
+    "field_base_4",
+    "field_base_5",
+    "field_base_6"
   ],
   "intent_keywords": [
     "symbol-map",
@@ -49,88 +53,68 @@
   "description": "A point (symbol) map: one Circle mark per geographic member, placed on generated Lat/Long, sized by a measure. Distinct from a choropleth (which fills regions); use when magnitude is encoded by symbol size rather than region shading.",
   "slots": [
     {
-      "slot_id": "country",
-      "template_field": "Country/Region",
-      "derivation": "none",
-      "role": [
-        "lod"
-      ],
-      "kind": "geo",
-      "bindable": true,
-      "required": true,
-      "notes": "template column carries semantic-role='[Country].[ISO3166_2]'; the LOD level drives generated Lat/Long. Portability is 'across the committed fixture classes + render-verified', not a blanket 'any dataset'."
-    },
-    {
-      "slot_id": "state",
-      "template_field": "State/Province",
-      "derivation": "none",
-      "role": [
-        "lod"
-      ],
-      "kind": "geo",
-      "bindable": true,
-      "required": false,
-      "notes": "template column carries semantic-role='[State].[Name]'."
-    },
-    {
-      "slot_id": "city",
-      "template_field": "City",
-      "derivation": "none",
-      "role": [
-        "lod"
-      ],
-      "kind": "geo",
-      "bindable": true,
-      "required": false,
-      "notes": "template column carries semantic-role='[City].[Name]'; finest geographic grain \u2014 one symbol per city."
-    },
-    {
       "slot_id": "sales",
-      "template_field": "Sales",
+      "template_field": "{{field_base_1}}",
       "derivation": "sum",
-      "role": [
-        "size"
-      ],
+      "role": ["size"],
       "kind": "quantitative",
       "bindable": true,
       "required": true,
-      "notes": "aggregated measure driving symbol size (proportional-symbol encoding)."
+      "notes": "Aggregated measure driving symbol size (proportional-symbol encoding)."
     },
     {
       "slot_id": "color",
-      "template_field": "{{field_base_1}}",
+      "template_field": "{{field_base_2}}",
       "derivation": "sum",
-      "role": [
-        "color"
-      ],
+      "role": ["color"],
       "kind": "quantitative-or-categorical",
       "bindable": true,
       "required": false,
       "purpose": "Optional measure or dimension that controls mark color.",
-      "examples": [
-        "Points",
-        "Region",
-        "Status"
-      ],
+      "examples": ["Points", "Region", "Status"],
       "notes": "OPTIONAL: binds only from an explicit color shelf instruction. Categorical fields use derivation none; measures use the requested or default sum aggregation."
     },
     {
       "slot_id": "tooltip",
-      "template_field": "{{field_base_2}}",
+      "template_field": "{{field_base_3}}",
       "derivation": "sum",
-      "role": [
-        "tooltip"
-      ],
+      "role": ["tooltip"],
       "kind": "quantitative-or-categorical",
       "bindable": true,
       "required": false,
       "purpose": "Optional measure or dimension added to the mark tooltip.",
-      "examples": [
-        "Points",
-        "Country",
-        "Owner"
-      ],
+      "examples": ["Points", "Country", "Owner"],
       "notes": "OPTIONAL: binds only from an explicit tooltip shelf instruction. Categorical fields use derivation none; measures use the requested or default sum aggregation."
+    },
+    {
+      "slot_id": "country",
+      "template_field": "{{field_base_4}}",
+      "derivation": "none",
+      "role": ["lod"],
+      "kind": "geo",
+      "bindable": true,
+      "required": true,
+      "notes": "Template column carries semantic-role='[Country].[ISO3166_2]'; the LOD level drives generated Lat/Long. Portability is 'across the committed fixture classes + render-verified', not a blanket 'any dataset'."
+    },
+    {
+      "slot_id": "state",
+      "template_field": "{{field_base_5}}",
+      "derivation": "none",
+      "role": ["lod"],
+      "kind": "geo",
+      "bindable": true,
+      "required": false,
+      "notes": "Template column carries semantic-role='[State].[Name]'."
+    },
+    {
+      "slot_id": "city",
+      "template_field": "{{field_base_6}}",
+      "derivation": "none",
+      "role": ["lod"],
+      "kind": "geo",
+      "bindable": true,
+      "required": false,
+      "notes": "Template column carries semantic-role='[City].[Name]'; finest geographic grain \u2014 one symbol per city."
     }
   ],
   "calcs": [],

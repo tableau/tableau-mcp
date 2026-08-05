@@ -102,7 +102,7 @@ Template catalog names, descriptions, slot ids, and hints from non-protected rep
 
 Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.
 
-For any new worksheet or chart request that can use a template, including a direct named chart, an exploratory request, a recommendation, or a changed choice, FIRST call list-templates, then list-available-fields, then list-worksheets. For an open choice or an explicit request to hold changes, stop until the user selects or agrees to one; before stopping, offer 2-3 grounded choices as a chart type, what each helps answer, and the real fields it would use. For a direct named chart with one clear unambiguous new-sheet match, or after the user makes a concrete choice, build and apply it in the same turn. Offer only exact current entries with pass1_eligible: true. Never ask the user to choose a template id. Keep template id, provenance, pass1_eligible, slot ids, and artifact id internal unless the user asks or is debugging. If no eligible template fits, ask whether to use a non-template authoring path; never invent a template. Then call list-templates again with query=<template id>, includeSlots=true, limit=1. Stop unless detail returns exactly one eligible entry with matching id and provenance. Resolve datasource and field mapping ambiguity; choose a fresh unique worksheet title before construction. If the title exists, choose another; templates never replace worksheets or windows. Map only the returned slot ids and call build-worksheets-from-templates with that id. Its preview object is a structured artifact plan, not a rendered chart. Never describe the artifact plan as an image, rendered chart, or visible in-chat preview. If artifact construction fails, stop after one attempt and offer remaining eligible catalog entries. Do not retry, switch templates, or use another apply path after construction failure. For an unambiguous new worksheet, call apply-worksheet with only the exact artifact id in the same turn; do not ask again after construction. If apply-worksheet is stale, uncertain, or fails verification, do not retry or rebuild automatically. Report only the verified result.
+For a request for one or more new template-backed worksheets, from a named chart or analytical intent, FIRST call list-templates, then list-available-fields, then list-worksheets. If the user explicitly asks to hold changes, stop before construction. Otherwise choose pass1_eligible templates that fit the intent: one for a named chart, or up to three distinct perspectives for an open analytical request. Briefly correct a misleading chart request and use the nearest sound alternative. Never ask the user to choose a template id. Keep template id, provenance, slot ids, and artifact id internal unless asked or debugging. If no eligible template fits, continue through the normal non-template authoring path without asking permission; never invent a template. For each choice, call list-templates again with query=<template id>, includeSlots=true, limit=1. Stop unless detail returns exactly one eligible entry with matching id and provenance. Resolve datasource and field mapping ambiguity; choose a fresh unique worksheet title before construction. If the title exists, choose another; templates never replace worksheets or windows. Map only returned slot ids and call build-worksheets-from-templates. Its preview is a plan, not a rendered chart. Never describe the artifact plan as an image, rendered chart, or visible in-chat preview. After a pre-dispatch construction failure, try at most one different selected candidate, even if earlier sheets succeeded. For each successful build, call apply-worksheet immediately before building the next; never hold multiple live artifacts. If apply-worksheet reports no workbook change for a stale, expired, or unavailable artifact, never replay its id; read current state and build once more when intent remains clear. If the apply outcome is uncertain or post-apply verification fails or is unavailable, stop the sequence; never replay or rebuild automatically. Report verified sheets and skipped candidates.
 
 For a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %), author-calc the derived metric FIRST (read knowledge for the formula), then follow the worksheet-template protocol using the calc's caption.
 
@@ -114,7 +114,7 @@ For a data-value question, on a populated worksheet, call get-summary-data; answ
 
 For a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD), use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Any new template-backed worksheet then follows the worksheet-template protocol with the authored captions.
 
-If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.
+If ambiguity risks existing content or data meaning, call ask-user with urgency=blocking; stop. Do not ask for fresh template brainstorming.
 
 For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool. A template-backed chart is always a fresh uniquely named worksheet and follows the worksheet-template protocol; never use templates to replace the current sheet. Never create new sheets unless asked.
 
@@ -132,30 +132,25 @@ If NO native tool covers the asked shape, say so plainly — never invent or han
     expect(DESKTOP_INSTRUCTIONS).toContain('Use Tableau terms: workbook/viz/sheet/field');
   });
 
-  it('serves the artifact-construction failure stop without mutating fallbacks', () => {
+  it('permits one different candidate after a pre-dispatch construction failure', () => {
     expect(DESKTOP_INSTRUCTIONS).toContain(
-      'If artifact construction fails, stop after one attempt',
+      'After a pre-dispatch construction failure, try at most one different selected candidate, even if earlier sheets succeeded',
     );
     expect(DESKTOP_INSTRUCTIONS).toContain(
-      'Do not retry, switch templates, or use another apply path after construction failure',
-    );
-    expect(DESKTOP_INSTRUCTIONS).toContain(
-      'If apply-worksheet is stale, uncertain, or fails verification, do not retry or rebuild automatically',
+      'If the apply outcome is uncertain or post-apply verification fails or is unavailable, stop the sequence; never replay or rebuild automatically',
     );
   });
 
-  it('keeps confirmation caller-owned and applies a concrete new-sheet choice in one turn', () => {
+  it('builds named charts directly and open analytical requests as up to three sequential sheets', () => {
+    expect(DESKTOP_INSTRUCTIONS).toContain('from a named chart or analytical intent');
     expect(DESKTOP_INSTRUCTIONS).toContain(
-      'including a direct named chart, an exploratory request, a recommendation, or a changed choice',
+      'one for a named chart, or up to three distinct perspectives for an open analytical request',
     );
     expect(DESKTOP_INSTRUCTIONS).toContain(
-      'offer 2-3 grounded choices as a chart type, what each helps answer, and the real fields it would use',
+      'For each successful build, call apply-worksheet immediately before building the next',
     );
     expect(DESKTOP_INSTRUCTIONS).toContain(
-      'For an open choice or an explicit request to hold changes, stop until the user selects or agrees to one',
-    );
-    expect(DESKTOP_INSTRUCTIONS).toContain(
-      'For an unambiguous new worksheet, call apply-worksheet with only the exact artifact id in the same turn; do not ask again after construction',
+      'Briefly correct a misleading chart request and use the nearest sound alternative',
     );
     expect(DESKTOP_INSTRUCTIONS).toContain(
       'If the title exists, choose another; templates never replace worksheets or windows',
@@ -163,6 +158,9 @@ If NO native tool covers the asked shape, say so plainly — never invent or han
     expect(DESKTOP_INSTRUCTIONS).toContain(
       'Never describe the artifact plan as an image, rendered chart, or visible in-chat preview',
     );
+    expect(DESKTOP_INSTRUCTIONS).not.toContain('stop until the user selects');
+    expect(DESKTOP_INSTRUCTIONS).not.toContain('do not ask again');
+    expect(DESKTOP_INSTRUCTIONS).toContain('Do not ask for fresh template brainstorming');
     expect(DESKTOP_INSTRUCTIONS).not.toContain('bind-template(auto_apply:true)');
     expect(DESKTOP_INSTRUCTIONS).not.toContain('bind-template');
     expect(DESKTOP_INSTRUCTIONS).not.toContain('inject-template');
@@ -289,7 +287,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
     ['bind-template', 2190], // raised for the verbatim-ask describe (binding keys on the user's own words); no further slack
-    ['apply-worksheet', 1686], // opaque artifact apply plus guarded file/inline modes; no further slack
+    ['apply-worksheet', 1683], // opaque artifact apply plus guarded file/inline modes; no further slack
     ['refine-worksheet', 1583], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow

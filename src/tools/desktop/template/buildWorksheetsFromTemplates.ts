@@ -52,11 +52,11 @@ const paramsSchema = {
 
 const BUILD_RESPONSE_LIMIT_BYTES = 12_288;
 export const MAX_OFFLINE_WORKBOOK_BYTES = 64 * 1024 * 1024;
-const OFFLINE_WORKBOOK_READ_ERROR = `The saved workbook file could not be read safely. It must be a regular file no larger than ${MAX_OFFLINE_WORKBOOK_BYTES} bytes. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.`;
+const OFFLINE_WORKBOOK_READ_ERROR = `The saved workbook file could not be read safely. It must be a regular file no larger than ${MAX_OFFLINE_WORKBOOK_BYTES} bytes. No template artifact was created and the workbook was not changed. Correct the workbook path or file and build again if still wanted.`;
 const OFFLINE_WORKBOOK_XML_ERROR =
-  'The saved workbook could not be safely parsed or used to build a template artifact. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.';
+  'The saved workbook could not be safely parsed or used to build a template artifact. No template artifact was created and the workbook was not changed. Correct the saved workbook and build again if still wanted.';
 const LIVE_WORKSHEET_CONSTRUCTION_ERROR =
-  'The template worksheet could not be safely constructed from the live workbook. No template artifact was created and the workbook was not changed. Stop and report this failure; do not retry automatically. Choose another pass-1-eligible template, or build only on a later explicit user request.';
+  'The template worksheet could not be safely constructed from the live workbook. No template artifact was created and the workbook was not changed. Correct the current inputs or choose another pass-1-eligible template.';
 
 type OfflineWorkbookReadResult = { ok: true; text: string } | { ok: false };
 
@@ -147,7 +147,7 @@ function formatArtifactBindErrors(templateName: string, errors: ExplicitBindErro
 
   return (
     `Template artifact binding BLOCKED for '${templateName}'.${causes}\n\n` +
-    'Stop here. No template artifact was created; ask the user to choose another pass-1-eligible template from list-templates.'
+    'No template artifact was created. Choose another pass-1-eligible template from list-templates if still wanted.'
   );
 }
 
@@ -172,7 +172,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
     name: 'build-worksheets-from-templates',
     title: toolTitle,
     description:
-      'Build without changing the workbook. For a resolved new sheet, call apply-worksheet once in the same turn.',
+      'Build a one-shot worksheet artifact with a byte-for-byte pre-dispatch source check.',
     paramsSchema,
     annotations: {
       title: toolTitle,
@@ -292,7 +292,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
             });
             if (workbookResult.isErr()) {
               return new ArgsValidationError(
-                'The live workbook could not be read. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.',
+                'The live workbook could not be read. No template artifact was created and the workbook was not changed. Read the current workbook and build again if still wanted.',
               ).toErr();
             }
             workbookXml = workbookResult.value;
@@ -334,7 +334,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
                 return new ArgsValidationError(
                   `Template binding BLOCKED for "${templateName}". No worksheet was produced.\n\n` +
                     `  • [datasource-mismatch] caller datasource "${datasource}" does not match resolved mapping datasource "${resolvedDatasource}".\n` +
-                    '    Stop and clarify the datasource choice before constructing another worksheet. No template artifact was created; do not change the datasource or retry automatically.',
+                    `    No template artifact was created. Use datasource "${resolvedDatasource}" consistently, or choose fields from datasource "${datasource}" before building again.`,
                 ).toErr();
               }
 
@@ -423,7 +423,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
               overridesLowerPrecedence,
               preview,
               guidance:
-                'The live workbook was not modified. The preview object is a bounded artifact plan, not a visible preview. For this resolved new sheet, call apply-worksheet with this artifactId exactly once in the same turn. Do not request or reconstruct raw worksheet XML, and never retry an uncertain apply.',
+                'The workbook was not modified. This bounded artifact plan is not a visible preview. It is one-shot and expires. Immediately before dispatch, apply-worksheet checks the source workbook byte-for-byte. The External Client API cannot condition its final POST on a workbook revision, so an edit that races that write remains possible; if the apply outcome is uncertain, stop and inspect Tableau. Call apply-worksheet with this artifactId; if the pre-dispatch check finds a change, build a new artifact from the current workbook. Do not request or reconstruct raw worksheet XML, and never replay an uncertain apply.',
             };
             const projectedResponse: BuildSuccess = {
               artifactId: '00000000-0000-4000-8000-000000000000',
@@ -435,7 +435,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
               BUILD_RESPONSE_LIMIT_BYTES
             ) {
               return new ArgsValidationError(
-                'The validated caller-supplied artifact plan exceeds the artifact response limit. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.',
+                'The validated artifact plan exceeds the response limit. No template artifact was created and the workbook was not changed. Reduce the mapped inputs and build again if still wanted.',
               ).toErr();
             }
 

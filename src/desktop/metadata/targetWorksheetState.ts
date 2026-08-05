@@ -17,6 +17,7 @@ export const targetWorksheetStateSchema = z.discriminatedUnion('state', [
 
 export const worksheetApplyStateSchema = z
   .object({
+    workbookSha256: sha256Schema,
     target: targetWorksheetStateSchema,
     targetWindow: targetWorksheetStateSchema,
     dependenciesSha256: sha256Schema,
@@ -42,6 +43,12 @@ interface InstanceIdentity {
   derivation: string;
   role: string;
 }
+
+const TABLEAU_IMPLICIT_GENERATED_FIELDS = new Set([
+  'Latitude (generated)',
+  'Longitude (generated)',
+  'Geometry (generated)',
+]);
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -275,6 +282,10 @@ function fieldFromInstance(instance: string): string | null {
   return instanceIdentity(instance)?.field ?? null;
 }
 
+function isTableauImplicitGeneratedField(field: string): boolean {
+  return TABLEAU_IMPLICIT_GENERATED_FIELDS.has(field);
+}
+
 function instancesShareBindingIdentity(left: string, right: string): boolean {
   const leftIdentity = instanceIdentity(left);
   const rightIdentity = instanceIdentity(right);
@@ -354,7 +365,9 @@ function collectIncomingFieldKeys(worksheetXml: string): {
         (candidate) => normalizedFieldName(candidate['@_name'] ?? '') === reference.fieldOrInstance,
       );
       if (isDirectColumn) field = reference.fieldOrInstance;
-      else {
+      else if (isTableauImplicitGeneratedField(reference.fieldOrInstance)) {
+        field = reference.fieldOrInstance;
+      } else {
         throw new Error(
           `Referenced field instance [${reference.datasource}].[${reference.fieldOrInstance}] has no matching declaration`,
         );
@@ -532,6 +545,15 @@ function dependencyFingerprint(workbookXml: string, worksheetXml: string): strin
       continue;
     }
 
+    if (isTableauImplicitGeneratedField(key.field)) {
+      material.set(identity, {
+        datasource: key.datasource,
+        field: key.field,
+        source: 'tableau-implicit-generated',
+      });
+      continue;
+    }
+
     material.set(identity, {
       datasource: key.datasource,
       field: key.field,
@@ -551,6 +573,7 @@ export function deriveWorksheetApplyState(
   worksheetWindowXml?: string,
 ): WorksheetApplyState {
   return {
+    workbookSha256: sha256(workbookXml),
     target: deriveTargetWorksheetState(workbookXml, worksheetName),
     targetWindow: deriveTargetWorksheetWindowState(workbookXml, worksheetName),
     dependenciesSha256: dependencyFingerprint(workbookXml, worksheetXml),

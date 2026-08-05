@@ -17,6 +17,7 @@ import {
   classifyWorksheetReplaceTarget,
   removeSameNamedWorksheet,
 } from './injectTemplateCore.js';
+import { resolveTemplateSnapshot } from './templateSlots.js';
 
 // Pre-existing pile-up fixture (P2-8): two stale "Sales" copies in MIXED quote
 // styles + attribute orders (what Desktop dedup left behind before the strip was
@@ -33,6 +34,20 @@ const DUPLICATED_WORKBOOK_XML = [
   '<window class="dashboard" name="Sales"/></windows>',
   '</workbook>',
 ].join('');
+
+const SPATIAL_SYMBOL_MAP_SNAPSHOT = resolveTemplateSnapshot('spatial-symbol-map', {
+  catalogEntry: {
+    template: 'spatial-symbol-map',
+    provenance: 'protected',
+    overridesLowerPrecedence: false,
+    format: 'tbm',
+  },
+});
+if (!SPATIAL_SYMBOL_MAP_SNAPSHOT?.resolvedManifest) {
+  throw new Error('Expected the protected spatial-symbol-map runtime snapshot');
+}
+const SPATIAL_SYMBOL_MAP_TEMPLATE = SPATIAL_SYMBOL_MAP_SNAPSHOT.artifact.xml;
+const SPATIAL_SYMBOL_MAP_SLOTS = SPATIAL_SYMBOL_MAP_SNAPSHOT.resolvedManifest.manifest.slots;
 
 describe('removeSameNamedWorksheet — quote-agnostic strip (adversary P0-3)', () => {
   it('strips a double-quoted worksheet + window (the serializer emits double quotes)', () => {
@@ -415,11 +430,8 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
     join(__dirname, '../data/templates/spatial-choropleth-map.xml'),
     'utf-8',
   );
-  const SYMBOL_TEMPLATE = readFileSync(
-    join(__dirname, '../data/templates/spatial-symbol-map.xml'),
-    'utf-8',
-  );
-  const SYMBOL_SLOTS = loadManifests().get('spatial-symbol-map')!.slots;
+  const SYMBOL_TEMPLATE = SPATIAL_SYMBOL_MAP_TEMPLATE;
+  const SYMBOL_SLOTS = SPATIAL_SYMBOL_MAP_SLOTS;
 
   it('removes an unbound optional state LOD from a country-only choropleth', () => {
     const result = buildInjectedWorkbookXml({
@@ -453,12 +465,12 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
       sheetType: 'worksheet',
       templateParameters: { DATASOURCE: 'Football' },
       fieldMapping: {
-        'Country/Region': '[Football].[none:Country:nk]',
-        Sales: '[Football].[sum:Goals For:qk]',
+        country: '[Football].[none:Country:nk]',
+        sales: '[Football].[sum:Goals For:qk]',
       },
       optionalFieldPrunes: [
-        { templateField: 'State/Province', derivation: 'none', role: 'nk' },
-        { templateField: 'City', derivation: 'none', role: 'nk' },
+        { templateField: '{{field_base_5}}', derivation: 'none', role: 'nk' },
+        { templateField: '{{field_base_6}}', derivation: 'none', role: 'nk' },
       ],
       templateSlots: SYMBOL_SLOTS,
       applyNonce: 'country-symbol',
@@ -482,10 +494,10 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
       sheetType: 'worksheet',
       templateParameters: { DATASOURCE: 'Football' },
       fieldMapping: {
-        'Country/Region': '[Football].[none:Country:nk]',
-        'State/Province': '[Football].[none:State:nk]',
-        City: '[Football].[none:City:nk]',
-        Sales: '[Football].[sum:Goals For:qk]',
+        country: '[Football].[none:Country:nk]',
+        state: '[Football].[none:State:nk]',
+        city: '[Football].[none:City:nk]',
+        sales: '[Football].[sum:Goals For:qk]',
       },
       templateSlots: SYMBOL_SLOTS,
       applyNonce: 'full-symbol',
@@ -647,11 +659,8 @@ describe('classifyWorksheetReplaceTarget', () => {
 });
 
 describe('buildInjectedWorkbookXml — semantic-role reconciliation from the TARGET workbook', () => {
-  const SYMBOL_TEMPLATE = readFileSync(
-    join(__dirname, '../data/templates/spatial-symbol-map.xml'),
-    'utf-8',
-  );
-  const SYMBOL_SLOTS = loadManifests().get('spatial-symbol-map')!.slots;
+  const SYMBOL_TEMPLATE = SPATIAL_SYMBOL_MAP_TEMPLATE;
+  const SYMBOL_SLOTS = SPATIAL_SYMBOL_MAP_SLOTS;
 
   // Mirrors the World Indicators shape that produced the empty map in tbm-test.pptx:
   // ONE geocodable field (Country/Region) and string dimensions that merely READ like
@@ -674,11 +683,11 @@ describe('buildInjectedWorkbookXml — semantic-role reconciliation from the TAR
       sheetType: 'worksheet',
       templateParameters: { DATASOURCE: 'World Indicators' },
       fieldMapping: {
-        'Country/Region': '[World Indicators].[none:Business Tax Rate:nk]',
-        City: '[World Indicators].[none:Hours to do Tax:nk]',
-        Sales: '[World Indicators].[sum:Birth Rate:qk]',
+        country: '[World Indicators].[none:Business Tax Rate:nk]',
+        city: '[World Indicators].[none:Hours to do Tax:nk]',
+        sales: '[World Indicators].[sum:Birth Rate:qk]',
       },
-      optionalFieldPrunes: [{ templateField: 'State/Province', derivation: 'none', role: 'nk' }],
+      optionalFieldPrunes: [{ templateField: '{{field_base_5}}', derivation: 'none', role: 'nk' }],
       templateSlots: SYMBOL_SLOTS,
       applyNonce: 'no-transplant',
     });
@@ -700,12 +709,12 @@ describe('buildInjectedWorkbookXml — semantic-role reconciliation from the TAR
       sheetType: 'worksheet',
       templateParameters: { DATASOURCE: 'World Indicators' },
       fieldMapping: {
-        'Country/Region': '[World Indicators].[none:Country/Region:nk]',
-        Sales: '[World Indicators].[sum:Birth Rate:qk]',
+        country: '[World Indicators].[none:Country/Region:nk]',
+        sales: '[World Indicators].[sum:Birth Rate:qk]',
       },
       optionalFieldPrunes: [
-        { templateField: 'State/Province', derivation: 'none', role: 'nk' },
-        { templateField: 'City', derivation: 'none', role: 'nk' },
+        { templateField: '{{field_base_5}}', derivation: 'none', role: 'nk' },
+        { templateField: '{{field_base_6}}', derivation: 'none', role: 'nk' },
       ],
       templateSlots: SYMBOL_SLOTS,
       applyNonce: 'geocodable',
@@ -735,12 +744,12 @@ describe('buildInjectedWorkbookXml — semantic-role reconciliation from the TAR
       sheetType: 'worksheet',
       templateParameters: { DATASOURCE: 'Plain' },
       fieldMapping: {
-        'Country/Region': '[Plain].[none:Label:nk]',
-        Sales: '[Plain].[sum:Amount:qk]',
+        country: '[Plain].[none:Label:nk]',
+        sales: '[Plain].[sum:Amount:qk]',
       },
       optionalFieldPrunes: [
-        { templateField: 'State/Province', derivation: 'none', role: 'nk' },
-        { templateField: 'City', derivation: 'none', role: 'nk' },
+        { templateField: '{{field_base_5}}', derivation: 'none', role: 'nk' },
+        { templateField: '{{field_base_6}}', derivation: 'none', role: 'nk' },
       ],
       templateSlots: SYMBOL_SLOTS,
       applyNonce: 'no-geo',

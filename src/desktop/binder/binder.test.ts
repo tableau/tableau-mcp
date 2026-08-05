@@ -2189,12 +2189,12 @@ describe('binder/bindTemplate — country-only spatial maps', () => {
       expect(res.used_llm).toBe(false);
       expect(res.args.template_name).toBe('spatial-symbol-map');
       expect(res.args.field_mapping).toEqual({
-        'Country/Region': '[Football].[none:Country:nk]',
-        Sales: '[Football].[sum:Goals For:qk]',
+        '{{field_base_4}}': '[Football].[none:Country:nk]',
+        '{{field_base_1}}': '[Football].[sum:Goals For:qk]',
       });
       expect(res.args.optional_field_prunes).toEqual([
-        { templateField: 'State/Province', derivation: 'none', role: 'nk' },
-        { templateField: 'City', derivation: 'none', role: 'nk' },
+        { templateField: '{{field_base_5}}', derivation: 'none', role: 'nk' },
+        { templateField: '{{field_base_6}}', derivation: 'none', role: 'nk' },
       ]);
     }
   });
@@ -2616,8 +2616,8 @@ describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)',
     expect(cls).toEqual({
       template: 'spatial-symbol-map',
       bindings: [
-        { slot_id: 'country', field: 'Country Code' },
         { slot_id: 'sales', field: 'Goals For' },
+        { slot_id: 'country', field: 'Country Code' },
         { slot_id: 'color', field: 'Goals For' },
       ],
     });

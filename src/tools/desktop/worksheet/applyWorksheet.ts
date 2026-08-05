@@ -36,14 +36,14 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  artifactId: z.string().uuid().optional().describe('One-shot id from template build.'),
+  artifactId: z.string().uuid().optional().describe('Template artifact id.'),
   session: z.string().max(64).optional(),
   worksheetName: z.string().min(1).max(255).optional(),
   mode: z.enum(['file', 'inline']).optional(),
   worksheetFile: z.string().max(4096).optional(),
   worksheetXml: z.string().optional(),
-  worksheetWindowXml: z.string().optional().describe('Optional worksheet window.'),
-  expectedState: worksheetApplyStateSchema.optional().describe('Build-time worksheet state guard.'),
+  worksheetWindowXml: z.string().optional().describe('Worksheet window.'),
+  expectedState: worksheetApplyStateSchema.optional().describe('Build-time state guard.'),
 };
 
 const title = 'Apply Worksheet';
@@ -51,8 +51,8 @@ const title = 'Apply Worksheet';
 function formatArtifactValidationFailure(issues: ValidationIssue[]): string {
   if (issues.some((issue) => issue.ruleId === 'connections-not-authorable')) {
     return (
-      'Template artifact preflight failed (connections-not-authorable); no workbook change was sent. ' +
-      "Add or repair the connection in Desktop's Connect pane, then retry this same unexpired artifact once."
+      'Template artifact preflight failed (connections-not-authorable); no workbook change was sent; the artifact was consumed. ' +
+      "Fix the connection in Desktop's Connect pane, then build a new artifact from the current workbook if the worksheet is still wanted."
     );
   }
   const ruleIds = [
@@ -64,8 +64,8 @@ function formatArtifactValidationFailure(issues: ValidationIssue[]): string {
   ].slice(0, 5);
   const finding = ruleIds.length > 0 ? ` (${ruleIds.join(', ')})` : '';
   return (
-    `Template artifact preflight failed${finding}; no workbook change was sent. ` +
-    'Resolve the reported workbook issue, then retry this same unexpired artifact once.'
+    `Template artifact preflight failed${finding}; no workbook change was sent; the artifact was consumed. ` +
+    'Resolve the reported workbook issue, then build a new artifact from the current workbook if the worksheet is still wanted.'
   );
 }
 export const getApplyWorksheetTool = (
@@ -76,8 +76,7 @@ export const getApplyWorksheetTool = (
     server,
     name: 'apply-worksheet',
     title,
-    description:
-      'Insert or entirely replace (upsert) a worksheet in the live workbook, matched by name.',
+    description: 'Apply an artifact or cached sheet to live workbook.',
     paramsSchema,
     annotations: {
       title,
@@ -201,7 +200,7 @@ export const getApplyWorksheetTool = (
             );
             if (!reserved.ok) {
               return new ArgsValidationError(
-                'The template artifact is unavailable, expired, already used, currently in use, or belongs to another Desktop session. Do not rebuild or retry automatically; inspect and report the current workbook state, then rebuild from the still-current agreed inputs only on a later user request if it is still wanted.',
+                'The template artifact is unavailable, expired, already used, currently in use, or belongs to another Desktop session. No workbook change was sent. Read the current workbook and build a new artifact if the worksheet is still wanted.',
               ).toErr();
             }
             artifactReservation = reserved.reservation;
@@ -238,16 +237,12 @@ export const getApplyWorksheetTool = (
 
           if (result.isErr()) {
             if (artifactMode) {
-              const safeValidationFailure =
-                result.error.type === 'load-worksheet-xml-error' &&
-                result.error.error.type === 'validation-failed';
               if (artifactReservation !== undefined) {
-                if (safeValidationFailure) artifactStore.release(artifactReservation);
-                else artifactStore.commit(artifactReservation);
+                artifactStore.commit(artifactReservation);
               }
               if (result.error.type === 'execute-command-error') {
                 return new ArgsValidationError(
-                  `Template artifact apply outcome is uncertain (${result.error.error.type}). Do not rebuild or retry automatically; inspect Tableau and report the current workbook state, then rebuild from the still-current agreed inputs only on a later user request if it is still wanted.`,
+                  `Template artifact apply outcome is uncertain (${result.error.error.type}); the artifact was consumed. Do not replay it. Inspect Tableau and establish the current workbook state before any further change.`,
                 ).toErr();
               }
               switch (result.error.error.type) {
@@ -255,7 +250,7 @@ export const getApplyWorksheetTool = (
                 case 'name-mismatch':
                 case 'preview-state-changed':
                   return new ArgsValidationError(
-                    'The template artifact was not applied because it no longer matches the current workbook state. Do not rebuild or retry automatically; inspect and report the current workbook state, then rebuild from the still-current agreed inputs only on a later user request if it is still wanted.',
+                    'The template artifact was not applied because the workbook no longer matches its exact source state; the artifact was consumed. Read the current workbook and build a new artifact if the worksheet is still wanted.',
                   ).toErr();
                 case 'validation-failed':
                   return new ArgsValidationError(
@@ -263,11 +258,11 @@ export const getApplyWorksheetTool = (
                   ).toErr();
                 case 'load-rejected':
                   return new ArgsValidationError(
-                    'Tableau rejected the template artifact; no worksheet mutation was verified. Do not rebuild or retry automatically; inspect Tableau and report the current workbook state, then rebuild from the still-current agreed inputs only on a later user request if it is still wanted.',
+                    'Tableau rejected the template artifact; no worksheet mutation was verified and the artifact was consumed. Inspect Tableau and establish the current workbook state before any further change.',
                   ).toErr();
                 case 'readback-failed':
                   return new ArgsValidationError(
-                    'The template artifact MAY already be applied, but post-apply verification failed. Inspect Tableau and report only the verified workbook state. Do not replay the consumed artifact or automatically rebuild it; a fresh build requires a later explicit user request.',
+                    'The template artifact MAY already be applied, but post-apply verification failed. The artifact was consumed; do not replay it. Inspect Tableau and establish the current workbook state before any further change.',
                   ).toErr();
               }
             }
@@ -332,7 +327,7 @@ export const getApplyWorksheetTool = (
                 ? 'The template artifact MAY already be applied, but host verification failed.'
                 : 'The template artifact MAY already be applied, but host verification is unavailable.';
             return new ArgsValidationError(
-              `${verificationMessage} Inspect Tableau and report only the verified workbook state. Do not replay the consumed artifact or automatically rebuild it; a fresh build requires a later explicit user request.`,
+              `${verificationMessage} The artifact was consumed; do not replay it. Inspect Tableau and establish the current workbook state before any further change.`,
             ).toErr();
           }
           const receipt = receiptInput

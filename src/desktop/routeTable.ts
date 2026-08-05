@@ -52,9 +52,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'worksheet-template',
     trigger:
-      'any new worksheet or chart request that can use a template, including a direct named chart, an exploratory request, a recommendation, or a changed choice',
+      'a request for one or more new template-backed worksheets, from a named chart or analytical intent',
     action:
-      'FIRST call list-templates, then list-available-fields, then list-worksheets. For an open choice or an explicit request to hold changes, stop until the user selects or agrees to one; before stopping, offer 2-3 grounded choices as a chart type, what each helps answer, and the real fields it would use. For a direct named chart with one clear unambiguous new-sheet match, or after the user makes a concrete choice, build and apply it in the same turn. Offer only exact current entries with pass1_eligible: true. Never ask the user to choose a template id. Keep template id, provenance, pass1_eligible, slot ids, and artifact id internal unless the user asks or is debugging. If no eligible template fits, ask whether to use a non-template authoring path; never invent a template. Then call list-templates again with query=<template id>, includeSlots=true, limit=1. Stop unless detail returns exactly one eligible entry with matching id and provenance. Resolve datasource and field mapping ambiguity; choose a fresh unique worksheet title before construction. If the title exists, choose another; templates never replace worksheets or windows. Map only the returned slot ids and call build-worksheets-from-templates with that id. Its preview object is a structured artifact plan, not a rendered chart. Never describe the artifact plan as an image, rendered chart, or visible in-chat preview. If artifact construction fails, stop after one attempt and offer remaining eligible catalog entries. Do not retry, switch templates, or use another apply path after construction failure. For an unambiguous new worksheet, call apply-worksheet with only the exact artifact id in the same turn; do not ask again after construction. If apply-worksheet is stale, uncertain, or fails verification, do not retry or rebuild automatically. Report only the verified result.',
+      'FIRST call list-templates, then list-available-fields, then list-worksheets. If the user explicitly asks to hold changes, stop before construction. Otherwise choose pass1_eligible templates that fit the intent: one for a named chart, or up to three distinct perspectives for an open analytical request. Briefly correct a misleading chart request and use the nearest sound alternative. Never ask the user to choose a template id. Keep template id, provenance, slot ids, and artifact id internal unless asked or debugging. If no eligible template fits, continue through the normal non-template authoring path without asking permission; never invent a template. For each choice, call list-templates again with query=<template id>, includeSlots=true, limit=1. Stop unless detail returns exactly one eligible entry with matching id and provenance. Resolve datasource and field mapping ambiguity; choose a fresh unique worksheet title before construction. If the title exists, choose another; templates never replace worksheets or windows. Map only returned slot ids and call build-worksheets-from-templates. Its preview is a plan, not a rendered chart. Never describe the artifact plan as an image, rendered chart, or visible in-chat preview. After a pre-dispatch construction failure, try at most one different selected candidate, even if earlier sheets succeeded. For each successful build, call apply-worksheet immediately before building the next; never hold multiple live artifacts. If apply-worksheet reports no workbook change for a stale, expired, or unavailable artifact, never replay its id; read current state and build once more when intent remains clear. If the apply outcome is uncertain or post-apply verification fails or is unavailable, stop the sequence; never replay or rebuild automatically. Report verified sheets and skipped candidates.',
     toolSequence: [
       'list-templates',
       'list-available-fields',
@@ -63,15 +63,13 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'apply-worksheet',
     ],
     stopConditions: [
-      'If no eligible template fits, ask whether to use a non-template authoring path; never invent a template',
-      'For an open choice or an explicit request to hold changes, stop until the user selects or agrees to one',
+      'If the user explicitly asks to hold changes, stop before construction',
       'Stop unless detail returns exactly one eligible entry with matching id and provenance',
       'Resolve datasource and field mapping ambiguity; choose a fresh unique worksheet title before construction',
       'If the title exists, choose another; templates never replace worksheets or windows',
-      'If artifact construction fails, stop after one attempt and offer remaining eligible catalog entries',
-      'Do not retry, switch templates, or use another apply path after construction failure',
-      'For an unambiguous new worksheet, call apply-worksheet with only the exact artifact id in the same turn; do not ask again after construction',
-      'If apply-worksheet is stale, uncertain, or fails verification, do not retry or rebuild automatically',
+      'After a pre-dispatch construction failure, try at most one different selected candidate, even if earlier sheets succeeded',
+      'If apply-worksheet reports no workbook change for a stale, expired, or unavailable artifact, never replay its id; read current state and build once more when intent remains clear',
+      'If the apply outcome is uncertain or post-apply verification fails or is unavailable, stop the sequence; never replay or rebuild automatically',
     ],
     requiredEvidence: [
       'selected list-templates entry with pass1_eligible: true, exact template id, and provenance',
@@ -79,7 +77,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'pre-construction worksheet inventory proves the fresh title is unused, with datasource and field mapping resolved',
       'bounded artifact plan with exact worksheet title, field mappings, and artifact id',
       'build response templateName and templateProvenance match the refreshed catalog entry',
-      'one apply-worksheet receipt',
+      'one apply-worksheet receipt per applied worksheet',
     ],
   },
   {
@@ -157,7 +155,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'ask-user-ambiguity',
-    text: 'If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.',
+    text: 'If ambiguity risks existing content or data meaning, call ask-user with urgency=blocking; stop. Do not ask for fresh template brainstorming.',
   },
   {
     kind: 'route',

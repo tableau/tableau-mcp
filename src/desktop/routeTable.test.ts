@@ -107,12 +107,12 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     );
   });
 
-  it('stops open exploration before mutation and applies a concrete new-sheet choice once', () => {
+  it('builds one named chart or up to three analytical perspectives without a confirmation gate', () => {
     const worksheetTemplate = routes.find((route) => route.id === 'worksheet-template');
 
     expect(worksheetTemplate).toMatchObject({
       trigger:
-        'any new worksheet or chart request that can use a template, including a direct named chart, an exploratory request, a recommendation, or a changed choice',
+        'a request for one or more new template-backed worksheets, from a named chart or analytical intent',
       toolSequence: [
         'list-templates',
         'list-available-fields',
@@ -121,15 +121,13 @@ describe('DESKTOP_ROUTE_TABLE', () => {
         'apply-worksheet',
       ],
       stopConditions: [
-        'If no eligible template fits, ask whether to use a non-template authoring path; never invent a template',
-        'For an open choice or an explicit request to hold changes, stop until the user selects or agrees to one',
+        'If the user explicitly asks to hold changes, stop before construction',
         'Stop unless detail returns exactly one eligible entry with matching id and provenance',
         'Resolve datasource and field mapping ambiguity; choose a fresh unique worksheet title before construction',
         'If the title exists, choose another; templates never replace worksheets or windows',
-        'If artifact construction fails, stop after one attempt and offer remaining eligible catalog entries',
-        'Do not retry, switch templates, or use another apply path after construction failure',
-        'For an unambiguous new worksheet, call apply-worksheet with only the exact artifact id in the same turn; do not ask again after construction',
-        'If apply-worksheet is stale, uncertain, or fails verification, do not retry or rebuild automatically',
+        'After a pre-dispatch construction failure, try at most one different selected candidate, even if earlier sheets succeeded',
+        'If apply-worksheet reports no workbook change for a stale, expired, or unavailable artifact, never replay its id; read current state and build once more when intent remains clear',
+        'If the apply outcome is uncertain or post-apply verification fails or is unavailable, stop the sequence; never replay or rebuild automatically',
       ],
       requiredEvidence: [
         'selected list-templates entry with pass1_eligible: true, exact template id, and provenance',
@@ -137,24 +135,33 @@ describe('DESKTOP_ROUTE_TABLE', () => {
         'pre-construction worksheet inventory proves the fresh title is unused, with datasource and field mapping resolved',
         'bounded artifact plan with exact worksheet title, field mappings, and artifact id',
         'build response templateName and templateProvenance match the refreshed catalog entry',
-        'one apply-worksheet receipt',
+        'one apply-worksheet receipt per applied worksheet',
       ],
     });
     expect(worksheetTemplate?.action).toContain(
       'call list-templates again with query=<template id>, includeSlots=true, limit=1',
     );
     expect(worksheetTemplate?.action).toContain(
-      'offer 2-3 grounded choices as a chart type, what each helps answer, and the real fields it would use',
+      'one for a named chart, or up to three distinct perspectives for an open analytical request',
     );
     expect(worksheetTemplate?.action).toContain(
-      'For a direct named chart with one clear unambiguous new-sheet match, or after the user makes a concrete choice, build and apply it in the same turn',
+      'For each successful build, call apply-worksheet immediately before building the next',
+    );
+    expect(worksheetTemplate?.action).toContain(
+      'Briefly correct a misleading chart request and use the nearest sound alternative',
     );
     expect(worksheetTemplate?.action).toContain('Never ask the user to choose a template id');
     expect(worksheetTemplate?.action).toContain(
-      'Keep template id, provenance, pass1_eligible, slot ids, and artifact id internal unless the user asks or is debugging',
+      'Keep template id, provenance, slot ids, and artifact id internal unless asked or debugging',
     );
     expect(worksheetTemplate?.action).toContain(
-      'If apply-worksheet is stale, uncertain, or fails verification, do not retry or rebuild automatically',
+      'If no eligible template fits, continue through the normal non-template authoring path without asking permission; never invent a template',
+    );
+    expect(worksheetTemplate?.action).not.toContain(
+      'ask whether to use a non-template authoring path',
+    );
+    expect(worksheetTemplate?.action).toContain(
+      'If the apply outcome is uncertain or post-apply verification fails or is unavailable, stop the sequence; never replay or rebuild automatically',
     );
     expect(worksheetTemplate?.action).toContain(
       'Never describe the artifact plan as an image, rendered chart, or visible in-chat preview',
@@ -162,6 +169,8 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(worksheetTemplate?.action).toContain(
       'If the title exists, choose another; templates never replace worksheets or windows',
     );
+    expect(worksheetTemplate?.action).not.toContain('stop until the user selects');
+    expect(worksheetTemplate?.action).not.toContain('do not ask again');
   });
 
   it('does not advertise legacy template or dashboard auto-apply paths in default routing', () => {
@@ -178,6 +187,15 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       expect(rendered).not.toContain(legacyTool);
     }
     expect(routes.flatMap((route) => route.toolSequence)).not.toContain('bind-template');
+  });
+
+  it('does not treat fresh-sheet template brainstorming as blocking ambiguity', () => {
+    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
+
+    expect(rendered).toContain('Do not ask for fresh template brainstorming');
+    expect(rendered).not.toContain(
+      'If ambiguity changes workbook content, call ask-user with urgency=blocking; stop',
+    );
   });
 
   it('routes template-backed calc, dynamic, dashboard, and edit work through the protocol', () => {

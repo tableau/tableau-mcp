@@ -162,8 +162,8 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
     expect(result).not.toBeNull();
     expect(result!.template).toBe('spatial-symbol-map');
     expect(result!.bindings).toEqual([
-      { slot_id: 'country', field: 'Country' },
       { slot_id: 'sales', field: 'Points' },
+      { slot_id: 'country', field: 'Country' },
       { slot_id: 'color', field: 'Points' },
       { slot_id: 'tooltip', field: 'Points' },
     ]);
@@ -179,8 +179,8 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
     expect(result).toEqual({
       template: 'spatial-symbol-map',
       bindings: [
-        { slot_id: 'country', field: 'Country Code' },
         { slot_id: 'sales', field: 'Goals' },
+        { slot_id: 'country', field: 'Country Code' },
         { slot_id: 'color', field: 'Goals' },
         { slot_id: 'tooltip', field: 'Goals' },
       ],
@@ -197,8 +197,8 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
     expect(result).toEqual({
       template: 'spatial-symbol-map',
       bindings: [
-        { slot_id: 'country', field: 'Country Code' },
         { slot_id: 'sales', field: 'Goals' },
+        { slot_id: 'country', field: 'Country Code' },
       ],
     });
   });
@@ -213,8 +213,8 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
     expect(result).toEqual({
       template: 'spatial-symbol-map',
       bindings: [
-        { slot_id: 'country', field: 'Country Code' },
         { slot_id: 'sales', field: 'Goals' },
+        { slot_id: 'country', field: 'Country Code' },
         { slot_id: 'color', field: 'Goals Against' },
       ],
     });
@@ -232,8 +232,8 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
       expect(result).toEqual({
         template: 'spatial-symbol-map',
         bindings: [
-          { slot_id: 'country', field: 'Country' },
           { slot_id: 'sales', field },
+          { slot_id: 'country', field: 'Country' },
         ],
       });
     },
@@ -265,8 +265,9 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
     expect(result.status).toBe('bound');
     if (result.status !== 'bound') throw new Error(`expected bound, got ${result.status}`);
     expect(result.args.field_mapping).toMatchObject({
-      '{{field_base_1}}': '[Points].[none:Country:nk]',
+      '{{field_base_1}}': '[Points].[sum:Points:qk]',
       '{{field_base_2}}': '[Points].[none:Country:nk]',
+      '{{field_base_3}}': '[Points].[none:Country:nk]',
     });
   });
 

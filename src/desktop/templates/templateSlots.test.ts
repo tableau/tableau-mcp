@@ -77,6 +77,13 @@ const CONNECTED_SCATTER_BOOKMARK = readFileSync(
 const CONNECTED_SCATTER_MANIFEST = JSON.parse(
   readFileSync('src/desktop/data/template-manifests/connected-scatterplot.manifest.json', 'utf8'),
 ) as TemplateManifest;
+const SPATIAL_SYMBOL_MAP_BOOKMARK = readFileSync(
+  'src/desktop/data/templates/spatial-symbol-map.tbm',
+  'utf8',
+);
+const SPATIAL_SYMBOL_MAP_MANIFEST = JSON.parse(
+  readFileSync('src/desktop/data/template-manifests/spatial-symbol-map.manifest.json', 'utf8'),
+) as TemplateManifest;
 
 function curatedManifest(overrides: Partial<TemplateManifest> = {}): TemplateManifest {
   return {
@@ -432,6 +439,48 @@ describe('resolveTemplateSnapshot — one source read', () => {
 
     expect(resolveTemplateSnapshot('my-template')).toBeNull();
     expect(getManifestMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the spatial symbol-map slot contract aligned with its emitted bookmark encodings', () => {
+    readBookmarkFromCatalogEntryMock.mockReturnValue(SPATIAL_SYMBOL_MAP_BOOKMARK);
+    getManifestMock.mockReturnValue(SPATIAL_SYMBOL_MAP_MANIFEST);
+
+    const snapshot = resolveTemplateSnapshot('spatial-symbol-map', {
+      catalogEntry: {
+        template: 'spatial-symbol-map',
+        provenance: 'protected',
+        overridesLowerPrecedence: false,
+        format: 'tbm',
+      },
+    });
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot!.resolvedManifest!.manifest.slots).toMatchObject([
+      { slot_id: 'sales', template_field: '{{field_base_1}}', role: ['size'] },
+      { slot_id: 'color', template_field: '{{field_base_2}}', role: ['color'] },
+      { slot_id: 'tooltip', template_field: '{{field_base_3}}', role: ['tooltip'] },
+      { slot_id: 'country', template_field: '{{field_base_4}}', role: ['lod'] },
+      { slot_id: 'state', template_field: '{{field_base_5}}', role: ['lod'] },
+      { slot_id: 'city', template_field: '{{field_base_6}}', role: ['lod'] },
+    ]);
+    expect(snapshot!.artifact.xml).toContain(
+      "<size column='[{{DATASOURCE}}].[sum:{{field_base_1}}:qk]' />",
+    );
+    expect(snapshot!.artifact.xml).toContain(
+      "<color column='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />",
+    );
+    expect(snapshot!.artifact.xml).toContain(
+      "<tooltip column='[{{DATASOURCE}}].[sum:{{field_base_3}}:qk]' />",
+    );
+    expect(snapshot!.artifact.xml).toContain(
+      "<lod column='[{{DATASOURCE}}].[none:{{field_base_4}}:nk]' />",
+    );
+    expect(snapshot!.artifact.xml).toContain(
+      "<lod column='[{{DATASOURCE}}].[none:{{field_base_5}}:nk]' />",
+    );
+    expect(snapshot!.artifact.xml).toContain(
+      "<lod column='[{{DATASOURCE}}].[none:{{field_base_6}}:nk]' />",
+    );
   });
 
   it('emits Profit divided by Sales from both runtime-canonical scatter bookmarks', () => {

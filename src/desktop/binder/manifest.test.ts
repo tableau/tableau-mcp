@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { readTemplateArtifact } from '../templates/templatePath.js';
 import {
   computeFastPathEligible,
   computeFixtureBind,
@@ -44,6 +45,11 @@ function isVirtualSpliceSlot(template: string, spec: SlotSpec): boolean {
 
 function xmlPath(template: string): string {
   return path.join(XML_DIR, `${template}.xml`);
+}
+
+function templateContractXml(template: string): string | null {
+  if (template === 'spatial-symbol-map') return readTemplateArtifact(template)?.xml ?? null;
+  return fs.existsSync(xmlPath(template)) ? fs.readFileSync(xmlPath(template), 'utf8') : null;
 }
 
 let manifests: Map<string, TemplateManifest>;
@@ -546,13 +552,13 @@ describe('binder/manifest — XML cross-checks (XML is ground truth)', () => {
   // XML-ground-truth cross-checks below apply only to templates whose .xml SHIPS; golden-only
   // templates get a checkpoint_render provenance assertion (below) in its place. This narrows
   // each check to the ground truth that exists here — it does NOT weaken the assertion logic.
-  function hasShippedXml(name: string): boolean {
-    return fs.existsSync(xmlPath(name));
+  function hasShippedTemplate(name: string): boolean {
+    return templateContractXml(name) !== null;
   }
 
-  it('every template either ships a matching XML file OR is golden-only with checkpoint_render provenance', () => {
+  it('every template either ships a runtime artifact OR is golden-only with checkpoint_render provenance', () => {
     for (const [name, m] of manifests) {
-      if (hasShippedXml(name)) continue;
+      if (hasShippedTemplate(name)) continue;
       expect(
         typeof m.golden?.checkpoint_render === 'string' &&
           m.golden.checkpoint_render.trim().length > 0,
@@ -561,10 +567,10 @@ describe('binder/manifest — XML cross-checks (XML is ground truth)', () => {
     }
   });
 
-  it('every bindable/calc template_field is declared as a <column> in the XML', () => {
+  it('every bindable/calc template_field is declared as a <column> in the active artifact', () => {
     for (const [name, m] of manifests) {
-      if (!hasShippedXml(name)) continue; // golden-only: no shipped XML to cross-check against
-      const xml = fs.readFileSync(xmlPath(name), 'utf8');
+      const xml = templateContractXml(name);
+      if (xml === null) continue;
       const specs: SlotSpec[] = [...m.slots, ...m.calcs];
       for (const spec of specs) {
         if (NON_COLUMN_KINDS.has(spec.kind)) continue;
@@ -578,10 +584,10 @@ describe('binder/manifest — XML cross-checks (XML is ground truth)', () => {
     }
   });
 
-  it('declared placeholders are present in the XML', () => {
+  it('declared placeholders are present in the active artifact', () => {
     for (const [name, m] of manifests) {
-      if (!hasShippedXml(name)) continue; // golden-only: no shipped XML to cross-check against
-      const xml = fs.readFileSync(xmlPath(name), 'utf8');
+      const xml = templateContractXml(name);
+      if (xml === null) continue;
       for (const ph of m.placeholders) {
         expect(xml.includes(`{{${ph}}}`), `${name}: {{${ph}}} present`).toBe(true);
       }
@@ -590,8 +596,8 @@ describe('binder/manifest — XML cross-checks (XML is ground truth)', () => {
 
   it('datasource_placeholder reflects {{DATASOURCE}} presence in the XML', () => {
     for (const [name, m] of manifests) {
-      if (!hasShippedXml(name)) continue; // golden-only: no shipped XML to cross-check against
-      const xml = fs.readFileSync(xmlPath(name), 'utf8');
+      const xml = templateContractXml(name);
+      if (xml === null) continue;
       expect(m.datasource_placeholder, `${name}`).toBe(xml.includes('{{DATASOURCE}}'));
     }
   });

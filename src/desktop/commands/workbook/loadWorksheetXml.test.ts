@@ -291,13 +291,13 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       invariant(result.error.type === 'load-worksheet-xml-error');
       expect(result.error.error).toMatchObject({
         type: 'preview-state-changed',
-        message: expect.stringMatching(/changed after preview.*rebuilt.*reconfirmed/i),
+        message: expect.stringMatching(/workbook changed.*nothing was applied.*new artifact/i),
       });
     }
     expect(appliedDocuments).toHaveLength(0);
   });
 
-  it('refuses before POST when the incoming worksheet differs from the confirmed artifact', async () => {
+  it('refuses before POST when the incoming worksheet differs from the built artifact', async () => {
     const previewWorkbook = liveWorkbook([worksheetName]);
     const confirmedXml = `<worksheet name='${worksheetName}'><table><rows /></table></worksheet>`;
     const { executor, appliedDocuments } = statefulExecutor(previewWorkbook);
@@ -315,13 +315,13 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       invariant(result.error.type === 'load-worksheet-xml-error');
       expect(result.error.error).toMatchObject({
         type: 'preview-state-changed',
-        message: expect.stringMatching(/confirmed artifact.*reconfirmed/i),
+        message: expect.stringMatching(/artifact.*does not match.*new artifact/i),
       });
     }
     expect(appliedDocuments).toHaveLength(0);
   });
 
-  it('refuses before POST when the incoming worksheet window differs from the confirmed artifact', async () => {
+  it('refuses before POST when the incoming worksheet window differs from the built artifact', async () => {
     const previewWorkbook = liveWorkbook([worksheetName]);
     const confirmedWindow = `<window class='worksheet' name='${worksheetName}'><cards><card type='filters' /></cards></window>`;
     const { executor, appliedDocuments } = statefulExecutor(previewWorkbook);
@@ -801,7 +801,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     },
   );
 
-  it('allows sibling and dashboard edits while guarding only the target worksheet', async () => {
+  it('refuses before POST when the live session switches to a different workbook', async () => {
     const previewWorkbook = `<?xml version='1.0'?><workbook>
       <worksheets>
         <worksheet name='Sheet 1'><table /></worksheet>
@@ -826,15 +826,15 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       signal: mockSignal,
     });
 
-    expect(result.isOk()).toBe(true);
-    expect(appliedDocuments).toHaveLength(1);
-    expect(appliedDocuments[0]).toContain('name="Other"');
-    expect(appliedDocuments[0]).toContain('<cols>');
-    expect(appliedDocuments[0]).toContain('name="Dashboard 1"');
-    expect(appliedDocuments[0]).toContain('id="new"');
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error).toMatchObject({ type: 'preview-state-changed' });
+    }
+    expect(appliedDocuments).toHaveLength(0);
   });
 
-  it('rebases and preserves an unrelated edit that lands on the pre-POST stability read', async () => {
+  it('refuses an unrelated edit that lands on the pre-POST stability read', async () => {
     const previewWorkbook = `<?xml version='1.0'?><workbook>
       <worksheets>
         <worksheet name='Sheet 1'><table /></worksheet>
@@ -874,11 +874,9 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       signal: mockSignal,
     });
 
-    expect(result.isOk()).toBe(true);
-    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(3);
-    expect(appliedDocuments).toHaveLength(1);
-    expect(appliedDocuments[0]).toContain('<cols>');
-    expect(appliedDocuments[0]).toContain('<column>');
+    expect(result.isErr()).toBe(true);
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(appliedDocuments).toHaveLength(0);
   });
 
   it('refuses before POST when the protected target changes on the pre-POST stability read', async () => {
@@ -947,7 +945,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       invariant(result.error.type === 'load-worksheet-xml-error');
       expect(result.error.error).toMatchObject({
         type: 'preview-state-changed',
-        message: expect.stringMatching(/kept changing.*retry/i),
+        message: expect.stringMatching(/workbook changed.*nothing was applied/i),
       });
     }
     expect(appliedDocuments).toHaveLength(0);
@@ -972,7 +970,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       invariant(result.error.type === 'load-worksheet-xml-error');
       expect(result.error.error).toMatchObject({
         type: 'preview-state-changed',
-        message: expect.stringMatching(/referenced fields changed.*rebuilt.*reconfirmed/i),
+        message: expect.stringMatching(/workbook changed.*nothing was applied.*new artifact/i),
       });
     }
     expect(appliedDocuments).toHaveLength(0);
@@ -996,7 +994,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(appliedDocuments).toHaveLength(0);
   });
 
-  it('allows unrelated field, datasource, connection, and value changes', async () => {
+  it('refuses before POST when an offline artifact is applied to a different workbook', async () => {
     const incomingXml = `<worksheet name='${worksheetName}'><table><rows>[Orders].[sum:Sales:qk]</rows></table></worksheet>`;
     const previewWorkbook = workbookWithReferencedField('real');
     const liveWorkbookXml = workbookWithReferencedField(
@@ -1017,8 +1015,12 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       signal: mockSignal,
     });
 
-    expect(result.isOk()).toBe(true);
-    expect(appliedDocuments).toHaveLength(1);
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error).toMatchObject({ type: 'preview-state-changed' });
+    }
+    expect(appliedDocuments).toHaveLength(0);
   });
 
   it('allows exactly one concurrent same-target apply from the same preview state', async () => {
@@ -1054,7 +1056,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(appliedDocuments).toHaveLength(1);
   });
 
-  it('preserves both concurrent different-target confirmed applies', async () => {
+  it('allows only one concurrent different-target apply from the same workbook state', async () => {
     const secondWorksheetName = 'Sheet 2';
     const initialWorkbook = liveWorkbook([worksheetName, secondWorksheetName]);
     const firstXml = `<worksheet name='${worksheetName}'><table><rows /></table></worksheet>`;
@@ -1106,10 +1108,10 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     ]);
 
     expect(first.isOk()).toBe(true);
-    expect(second.isOk()).toBe(true);
-    expect(appliedDocuments).toHaveLength(2);
+    expect(second.isErr()).toBe(true);
+    expect(appliedDocuments).toHaveLength(1);
     expect(extractSheetXml(liveWorkbookXml, worksheetName)).toContain('<rows>');
-    expect(extractSheetXml(liveWorkbookXml, secondWorksheetName)).toContain('<cols>');
+    expect(extractSheetXml(liveWorkbookXml, secondWorksheetName)).not.toContain('<cols>');
   });
 
   function workbookWithReferencedField(

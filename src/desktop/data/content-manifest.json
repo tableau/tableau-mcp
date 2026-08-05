@@ -2,9 +2,9 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.56.2+content.2026-07-24",
+  "content_version": "2.56.2+content.2026-08-05",
   "schema_version": "2",
-  "generated": "2026-07-24",
+  "generated": "2026-08-05",
   "engine_compat": {
     "server_min": "2.56.2",
     "node": ">=22.7.5"
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "ea5a0aeb7693ee86b64ada566405e7b0e529b8c76824aa5ae7d3b2203381bda0",
-      "bytes": 280808
+      "sha256": "dec7f92e2bf90746b9ce93ac75f92f3a0b641c9128af5774a2ba910e2b3b8084",
+      "bytes": 280931
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -452,8 +452,8 @@
     },
     {
       "path": "template-manifests/spatial-symbol-map.manifest.json",
-      "sha256": "2b82774cb6da6f6c17c8932963ffe237a75ca3dd41b64a0605d7ced2eab0baf7",
-      "bytes": 5862
+      "sha256": "4b0cdb66c60676acd0ae449349267eec93b9c245a1f70d90aac7e505d66db3cb",
+      "bytes": 5809
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",

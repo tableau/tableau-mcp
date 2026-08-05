@@ -75,6 +75,7 @@ describe('worksheet apply state', () => {
     const state = deriveWorksheetApplyState(workbook(), 'Target', worksheetXml, worksheetWindowXml);
 
     expect(state).toEqual({
+      workbookSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
       target: { state: 'present', sha256: expect.stringMatching(/^[0-9a-f]{64}$/) },
       targetWindow: { state: 'present', sha256: expect.stringMatching(/^[0-9a-f]{64}$/) },
       dependenciesSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
@@ -83,6 +84,25 @@ describe('worksheet apply state', () => {
     expect(
       deriveWorksheetApplyState(workbook(), 'Target', worksheetXml, worksheetWindowXml),
     ).toEqual(state);
+  });
+
+  it('binds an artifact to the exact source workbook bytes', () => {
+    const sourceWorkbook = workbook();
+    const initial = deriveWorksheetApplyState(
+      sourceWorkbook,
+      'Target',
+      worksheetXml,
+      worksheetWindowXml,
+    );
+    const changed = deriveWorksheetApplyState(
+      sourceWorkbook.replace('<cards />', '<cards><card type="pages" /></cards>'),
+      'Target',
+      worksheetXml,
+      worksheetWindowXml,
+    );
+
+    expect(initial.workbookSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(changed.workbookSha256).not.toBe(initial.workbookSha256);
   });
 
   it('returns an absent target while still binding referenced fields', () => {
@@ -94,7 +114,7 @@ describe('worksheet apply state', () => {
     expect(state.artifactSha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('binds the exact worksheet and window artifact that the user confirmed', () => {
+  it('binds the exact built worksheet and window artifact', () => {
     const initial = deriveWorksheetApplyState(
       workbook(),
       'Target',
@@ -118,7 +138,7 @@ describe('worksheet apply state', () => {
     expect(windowChanged.artifactSha256).not.toBe(initial.artifactSha256);
   });
 
-  it('guards the matching worksheet window without binding unrelated windows', () => {
+  it('keeps the target-window fingerprint scoped while binding the full workbook separately', () => {
     const initial = deriveWorksheetApplyState(
       workbook(),
       'Target',
@@ -142,7 +162,10 @@ describe('worksheet apply state', () => {
     );
 
     expect(targetWindowChanged.targetWindow).not.toEqual(initial.targetWindow);
-    expect(siblingWindowChanged).toEqual(initial);
+    expect(siblingWindowChanged.targetWindow).toEqual(initial.targetWindow);
+    expect(siblingWindowChanged.dependenciesSha256).toBe(initial.dependenciesSha256);
+    expect(siblingWindowChanged.artifactSha256).toBe(initial.artifactSha256);
+    expect(siblingWindowChanged.workbookSha256).not.toBe(initial.workbookSha256);
   });
 
   it('guards every matching worksheet window that apply will replace or remove', () => {
@@ -430,6 +453,54 @@ describe('worksheet apply state', () => {
     expect(after.dependenciesSha256).not.toBe(before.dependenciesSha256);
   });
 
+  it('tracks Tableau implicit generated fields without requiring fabricated declarations', () => {
+    const implicitGeneratedFields = [
+      'Latitude (generated)',
+      'Longitude (generated)',
+      'Geometry (generated)',
+    ];
+    const fingerprints = implicitGeneratedFields.map((implicitField) => {
+      const generatedWorksheet = `
+        <worksheet name="Target">
+          <table>
+            <view>
+              <datasource-dependencies datasource="Orders">
+                <column name="[Sales]" role="measure" type="quantitative" datatype="real" />
+              </datasource-dependencies>
+            </view>
+            <rows>[Orders].[${implicitField}]</rows>
+          </table>
+        </worksheet>`;
+
+      return deriveWorksheetApplyState(workbook(), 'Target', generatedWorksheet).dependenciesSha256;
+    });
+
+    expect(fingerprints).toEqual([
+      expect.stringMatching(/^[0-9a-f]{64}$/),
+      expect.stringMatching(/^[0-9a-f]{64}$/),
+      expect.stringMatching(/^[0-9a-f]{64}$/),
+    ]);
+    expect(new Set(fingerprints)).toHaveLength(3);
+  });
+
+  it('still rejects undeclared real fields beside an existing dependencies block', () => {
+    const undeclaredWorksheet = `
+      <worksheet name="Target">
+        <table>
+          <view>
+            <datasource-dependencies datasource="Orders">
+              <column name="[Sales]" role="measure" type="quantitative" datatype="real" />
+            </datasource-dependencies>
+          </view>
+          <rows>[Orders].[Made Up]</rows>
+        </table>
+      </worksheet>`;
+
+    expect(() => deriveWorksheetApplyState(workbook(), 'Target', undeclaredWorksheet)).toThrow(
+      'Referenced field instance [Orders].[Made Up] has no matching declaration',
+    );
+  });
+
   it('resolves a compound table-calc instance when there is no dependencies block', () => {
     const noDependencies = `
       <worksheet name="Target">
@@ -546,7 +617,7 @@ describe('worksheet apply state', () => {
     );
   });
 
-  it('changes the target fingerprint only when the target worksheet changes', () => {
+  it('keeps the target fingerprint scoped while binding sibling edits separately', () => {
     const initial = deriveWorksheetApplyState(workbook(), 'Target', worksheetXml);
     const siblingChanged = deriveWorksheetApplyState(
       workbook().replace('<cols />', '<cols><column /></cols>'),
@@ -559,7 +630,10 @@ describe('worksheet apply state', () => {
       worksheetXml,
     );
 
-    expect(siblingChanged).toEqual(initial);
+    expect(siblingChanged.target).toEqual(initial.target);
+    expect(siblingChanged.dependenciesSha256).toBe(initial.dependenciesSha256);
+    expect(siblingChanged.artifactSha256).toBe(initial.artifactSha256);
+    expect(siblingChanged.workbookSha256).not.toBe(initial.workbookSha256);
     expect(targetChanged.target).not.toEqual(initial.target);
     expect(targetChanged.dependenciesSha256).toBe(initial.dependenciesSha256);
   });
@@ -596,6 +670,7 @@ describe('worksheet apply state', () => {
 
   it('strictly validates the public JSON contract', () => {
     const valid = {
+      workbookSha256: 'e'.repeat(64),
       target: { state: 'present', sha256: 'a'.repeat(64) },
       targetWindow: { state: 'present', sha256: 'b'.repeat(64) },
       dependenciesSha256: 'c'.repeat(64),

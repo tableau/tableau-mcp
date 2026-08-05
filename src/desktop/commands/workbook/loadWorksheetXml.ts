@@ -338,8 +338,8 @@ async function loadWorksheetXmlViaExternalApi({
         error: {
           type: 'preview-state-changed',
           message:
-            `The confirmed artifact for worksheet "${worksheetName}" does not match the supplied worksheet or window. ` +
-            'The update must be rebuilt and reconfirmed before applying.',
+            `The artifact for worksheet "${worksheetName}" does not match the supplied worksheet or window. ` +
+            'Build a new artifact from the intended worksheet and current workbook before applying.',
         },
       });
     }
@@ -430,7 +430,7 @@ async function loadWorksheetXmlViaExternalApi({
         });
       }
 
-      // Generic apply has no confirmed snapshot to protect; retain its existing one-read path.
+      // Generic apply has no build-time snapshot to protect; retain its existing one-read path.
       if (expectedState === undefined) {
         workbookDoc = candidateWorkbookDoc;
         break;
@@ -586,8 +586,8 @@ function previewStateChanged(worksheetName: string): LoadWorksheetXmlResult {
     error: {
       type: 'preview-state-changed',
       message:
-        `Worksheet "${worksheetName}", its worksheet window, or one of its referenced fields changed after preview. ` +
-        'The worksheet update must be rebuilt from the current workbook state and reconfirmed by the user before applying.',
+        `The workbook changed after the artifact for worksheet "${worksheetName}" was built. ` +
+        'Nothing was applied. Build a new artifact from the current workbook state if the worksheet is still wanted.',
     },
   });
 }
@@ -606,7 +606,10 @@ function worksheetApplyStatesEqual(
       (expected.targetWindow.state === 'present' &&
         current.targetWindow.sha256 === expected.targetWindow.sha256));
   return (
-    targetsMatch && targetWindowsMatch && current.dependenciesSha256 === expected.dependenciesSha256
+    current.workbookSha256 === expected.workbookSha256 &&
+    targetsMatch &&
+    targetWindowsMatch &&
+    current.dependenciesSha256 === expected.dependenciesSha256
   );
 }
 
