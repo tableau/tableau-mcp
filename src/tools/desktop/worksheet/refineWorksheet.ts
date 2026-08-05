@@ -96,7 +96,7 @@ const paramsSchema = {
   direction: z.enum(['asc', 'desc']).optional().describe('sort_by_field direction; default asc.'),
 };
 
-const title = 'Refine Worksheet';
+const title = 'Refining worksheet';
 
 export const REFINE_WORKSHEET_DESCRIPTION = 'Refine sheet: top-N/sort/by-field.';
 

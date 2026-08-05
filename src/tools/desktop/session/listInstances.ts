@@ -17,7 +17,7 @@ type ListedInstance = {
   hasToken?: boolean;
 };
 
-const title = 'List Running Tableau Desktop Instances';
+const title = 'Finding open windows';
 export const getListInstancesTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

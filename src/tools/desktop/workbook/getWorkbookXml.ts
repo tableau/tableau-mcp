@@ -34,7 +34,7 @@ type FileResult = {
 };
 type GetWorkbookXmlToolResult = { message: string } & (InlineResult | FileResult);
 
-const title = 'Get Workbook Structure';
+const title = 'Reading workbook';
 export const getGetWorkbookXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

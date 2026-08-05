@@ -97,7 +97,7 @@ function summarizeTemplate(m: TemplateManifest): TemplateSummary {
   };
 }
 
-const title = 'List Bundled Chart Templates';
+const title = 'Listing templates';
 
 export const getListTemplatesTool = (
   server: DesktopMcpServer,

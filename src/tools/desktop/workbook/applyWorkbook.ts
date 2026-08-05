@@ -24,7 +24,7 @@ const paramsSchema = {
   workbookFile: z.string().optional(),
 };
 
-const title = 'Apply Workbook';
+const title = 'Updating workbook';
 export const getApplyWorkbookTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

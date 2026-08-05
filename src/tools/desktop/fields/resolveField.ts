@@ -52,7 +52,7 @@ interface ResolveFieldResult {
   note?: string;
 }
 
-const title = 'Resolve Field Name to column_ref';
+const title = 'Finding field';
 export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const resolveFieldTool = new DesktopTool({
     server,

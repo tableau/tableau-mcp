@@ -171,7 +171,7 @@ function isReferencedByDashboardZone(workbookXml: string, title: string): boolea
   return new RegExp(`<zone [^>]*name=['"]${nameAttr}['"]`).test(workbookXml);
 }
 
-const title = 'Build Dashboard From Viz Asks (Fast Path)';
+const title = 'Assembling dashboard';
 
 export const getDashboardAutoApplyTool = (
   server: DesktopMcpServer,

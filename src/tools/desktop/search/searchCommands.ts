@@ -13,7 +13,7 @@ const paramsSchema = {
     .describe('Keywords; string splits on whitespace/commas.'),
 };
 
-const title = 'Search Tableau Commands Reference';
+const title = 'Searching commands';
 export const getSearchCommandsTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

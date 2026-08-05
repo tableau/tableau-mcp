@@ -11,7 +11,7 @@ const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
 };
 
-const title = 'List All Dashboards in Workbook';
+const title = 'Listing dashboards';
 export const getListDashboardsTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

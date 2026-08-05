@@ -63,7 +63,7 @@ const paramsSchema = {
   dashboardName: z.string(),
 };
 
-const toolTitle = 'Batch Create Sheets and Cache Working Copies';
+const toolTitle = 'Creating worksheets';
 export const getBatchCreateAndCacheSheetsTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

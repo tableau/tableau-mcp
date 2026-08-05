@@ -70,7 +70,7 @@ const VALID_GUIDANCE =
   'confidence floor. No worksheet was created — this is a dry run. To apply it, call bind-template with ' +
   'the same { session, ask, proposal }; it returns these same validated inject args plus an apply_instruction.';
 
-const title = 'Validate Proposal';
+const title = 'Validating template';
 
 export const getValidateProposalTool = (
   server: DesktopMcpServer,

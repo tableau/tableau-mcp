@@ -25,7 +25,7 @@ const paramsSchema = {
   dashboard: z.string().optional(),
 };
 
-const toolTitle = 'Save Cached Working Copy';
+const toolTitle = 'Saving draft';
 export const getWriteCachedXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

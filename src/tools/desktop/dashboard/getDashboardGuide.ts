@@ -8,7 +8,7 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {};
 
-const toolTitle = 'Get Dashboard Layout Editing Guide';
+const toolTitle = 'Getting layout guidance';
 export const getGetDashboardGuideTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

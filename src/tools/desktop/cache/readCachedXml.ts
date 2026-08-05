@@ -22,7 +22,7 @@ const paramsSchema = {
   endByte: z.number().int().min(0).optional(),
 };
 
-const toolTitle = 'Read Cached Working Copy';
+const toolTitle = 'Reading draft';
 export const getReadCachedXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

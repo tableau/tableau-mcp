@@ -7,7 +7,7 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {};
 
-const toolTitle = 'List Available Viz Templates';
+const toolTitle = 'Listing viz templates';
 export const getListXmlTemplatesTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
