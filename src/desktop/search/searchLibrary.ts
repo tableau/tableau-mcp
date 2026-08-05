@@ -106,7 +106,7 @@ function ensureCommandsSearchIndex(): any {
   const blockingNames = new Set<string>(ref.command_names_opening_blocking_dialog || []);
   const recommendation: string =
     ref.routing_recommendation ||
-    'If no command above does the job: for a chart or viz, call bind-template. To change an existing sheet — put a field on color, size or detail, or on rows/cols — call add-field (target=encoding, encodingType=color) then apply-worksheet; refine-worksheet only does top-N and sort. For calculated fields, parameters, sets and actions, call author-calc, author-parameter, author-set or author-action.';
+    'If no command above does the job: for a chart or viz, call list-templates, choose a current template, then call build-worksheets-from-templates and apply-worksheet. To change an existing sheet — put a field on color, size or detail, or on rows/cols — call add-field (target=encoding, encodingType=color) then apply-worksheet; refine-worksheet only does top-N and sort. For calculated fields, parameters, sets and actions, call author-calc, author-parameter, author-set or author-action.';
 
   const invocable = allCommands.filter((cmd: any) => {
     if (!cmd || typeof cmd !== 'object') return false;

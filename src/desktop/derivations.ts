@@ -88,6 +88,7 @@ export const CANONICAL_DERIVATIONS: ReadonlySet<string> = new Set<string>([
   // derivation="InOut" appears in captured real workbooks (twb-example-index.json,
   // corpus.json) — so rejecting it would fail preflight on Tableau's own output.
   'InOut',
+  'Collect',
 ]);
 
 /**
@@ -136,6 +137,7 @@ export const DERIVATION_LONG_TO_SHORT: Readonly<Record<string, string>> = {
   VarP: 'vrp',
   User: 'usr',
   InOut: 'io',
+  Collect: 'clct',
 };
 
 /**

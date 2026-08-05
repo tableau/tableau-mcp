@@ -1,3 +1,4 @@
+import { xmlNamesEqual } from '../xmlElement.js';
 import {
   carryNamespaceDeclarations,
   findWorksheet,
@@ -37,7 +38,7 @@ function createWorksheetWindow(sheetName: string): ParsedWindow {
 
 function isWorksheetWindowForSheet(window: ParsedWindow, sheetName: string): boolean {
   return (
-    window['@_name'] === sheetName &&
+    xmlNamesEqual(window['@_name'], sheetName) &&
     (window['@_class'] === undefined ||
       window['@_class'] === '' ||
       window['@_class'] === 'worksheet')
@@ -105,7 +106,7 @@ export function deleteSheet(workbookXml: string, sheetName: string): string {
 
   if (workbook.workbook?.worksheets) {
     const worksheets = normalizeArray(workbook.workbook.worksheets.worksheet);
-    const filtered = worksheets.filter((ws) => ws['@_name'] !== sheetName);
+    const filtered = worksheets.filter((ws) => !xmlNamesEqual(ws['@_name'], sheetName));
     if (filtered.length === 0) {
       delete workbook.workbook.worksheets.worksheet;
     } else if (filtered.length === 1) {
@@ -117,9 +118,7 @@ export function deleteSheet(workbookXml: string, sheetName: string): string {
 
   if (workbook.workbook?.windows) {
     const windows = normalizeArray(workbook.workbook.windows.window);
-    const filtered = windows.filter(
-      (win) => !(win['@_name'] === sheetName && win['@_class'] === 'worksheet'),
-    );
+    const filtered = windows.filter((win) => !isWorksheetWindowForSheet(win, sheetName));
     if (filtered.length === 0) {
       delete workbook.workbook.windows.window;
     } else if (filtered.length === 1) {
@@ -149,21 +148,64 @@ export function extractSheetXml(workbookXml: string, sheetName: string): string 
   return serializeXML({ worksheet });
 }
 
-// The External Client API's whole-workbook POST route treats the posted document as authoritative
-// and replaces the open workbook with it. So the doc must carry the ENTIRE live workbook with only
-// this sheet swapped in; anything omitted (sibling sheets, dashboards) would be pruned. Upsert by
-// name: replace the matching worksheet, or append it if absent (a new sheet). Preserve existing
-// windows and synthesize this sheet's window when missing, because Tableau drops worksheets that
-// lack a matching worksheet window. This is the create path; the per-sheet route is replace-only.
+export interface ExtractedWorksheetArtifact {
+  worksheetXml: string;
+  worksheetWindowXml: string;
+}
+
+export function extractLastWorksheetArtifact(
+  workbookXml: string,
+  sheetName: string,
+): ExtractedWorksheetArtifact | null {
+  const workbook = parseXML(workbookXml);
+  const worksheets = normalizeArray<ParsedWorksheet>(workbook.workbook?.worksheets?.worksheet);
+  const worksheet = [...worksheets]
+    .reverse()
+    .find((candidate) => xmlNamesEqual(candidate['@_name'], sheetName));
+  const windows = normalizeArray<ParsedWindow>(workbook.workbook?.windows?.window);
+  const worksheetWindow = [...windows]
+    .reverse()
+    .find((candidate) => isWorksheetWindowForSheet(candidate, sheetName));
+  if (!worksheet || !worksheetWindow) return null;
+
+  carryNamespaceDeclarations(workbook.workbook?.worksheets, worksheet);
+  carryNamespaceDeclarations(workbook.workbook, worksheet);
+  carryNamespaceDeclarations(workbook.workbook?.windows, worksheetWindow);
+  carryNamespaceDeclarations(workbook.workbook, worksheetWindow);
+
+  return {
+    worksheetXml: serializeXML({ worksheet }),
+    worksheetWindowXml: serializeXML({ window: worksheetWindow }),
+  };
+}
+
+// The External Client API per-sheet `/document` route returns a whole `<workbook>` scoped to the
+// requested sheet, but callers require a single `<worksheet>` fragment. Slice it out. A document
+// that is already a bare `<worksheet>` fragment is returned unchanged; null if no worksheet exists.
+export function worksheetDocumentToFragment(documentXml: string, sheetName: string): string | null {
+  const fragment = extractSheetXml(documentXml, sheetName);
+  if (fragment !== null) {
+    return fragment;
+  }
+  return parseXML(documentXml).worksheet ? documentXml : null;
+}
+
+// The External Client API has no per-sheet write route — applying one sheet re-POSTs the whole
+// document, which Desktop treats as authoritative and replaces the open workbook with. So the doc
+// must carry the ENTIRE live workbook with only this sheet swapped in; anything omitted (sibling
+// sheets, dashboards) would be pruned. Upsert by name: replace the matching worksheet, or append
+// it if absent (a new sheet). Preserve existing windows and synthesize this sheet's window when
+// missing, because Tableau drops worksheets that lack a matching worksheet window.
 export function upsertSheetIntoWorkbook(
   workbookXml: string,
   sheetName: string,
   editedWorksheetXml: string,
+  editedWorksheetWindowXml?: string,
 ): string {
   const workbook = parseXML(workbookXml);
   const editedParsed = parseXML(editedWorksheetXml);
   const editedWorksheet = normalizeArray(editedParsed.worksheet as ParsedWorksheet | undefined)[0];
-  if (!editedWorksheet || editedWorksheet['@_name'] !== sheetName) {
+  if (!editedWorksheet || !xmlNamesEqual(editedWorksheet['@_name'], sheetName)) {
     throw new Error(`Edited XML does not contain a <worksheet name="${sheetName}">`);
   }
 
@@ -171,14 +213,47 @@ export function upsertSheetIntoWorkbook(
   if (!workbook.workbook.worksheets) workbook.workbook.worksheets = {};
 
   const worksheets = normalizeArray(workbook.workbook.worksheets.worksheet);
-  const index = worksheets.findIndex((ws) => ws['@_name'] === sheetName);
+  const index = worksheets.findIndex((ws) => xmlNamesEqual(ws['@_name'], sheetName));
   if (index === -1) {
     worksheets.push(editedWorksheet);
   } else {
     worksheets[index] = editedWorksheet;
   }
   workbook.workbook.worksheets.worksheet = worksheets.length === 1 ? worksheets[0] : worksheets;
-  ensureWorksheetWindow(workbook, sheetName);
+
+  if (editedWorksheetWindowXml !== undefined) {
+    const editedWindowParsed = parseXML(editedWorksheetWindowXml);
+    const editedWindows = normalizeArray(
+      editedWindowParsed.window as ParsedWindow | ParsedWindow[] | undefined,
+    );
+    if (editedWindows.length !== 1) {
+      throw new Error('Edited window XML must contain exactly one top-level <window> fragment');
+    }
+    const editedWindow = editedWindows[0];
+    if (
+      editedWindow['@_class'] !== 'worksheet' ||
+      !xmlNamesEqual(editedWindow['@_name'], sheetName)
+    ) {
+      throw new Error(
+        `Edited window XML does not contain a <window class="worksheet" name="${sheetName}">`,
+      );
+    }
+
+    if (!workbook.workbook.windows) workbook.workbook.windows = {};
+    const windows = normalizeArray(workbook.workbook.windows.window);
+    let replaced = false;
+    const updatedWindows = windows.flatMap((window) => {
+      if (!isWorksheetWindowForSheet(window, sheetName)) return [window];
+      if (replaced) return [];
+      replaced = true;
+      return [editedWindow];
+    });
+    if (!replaced) updatedWindows.push(editedWindow);
+    workbook.workbook.windows.window =
+      updatedWindows.length === 1 ? updatedWindows[0] : updatedWindows;
+  } else {
+    ensureWorksheetWindow(workbook, sheetName);
+  }
 
   return serializeXML(workbook);
 }

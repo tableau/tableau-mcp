@@ -1,0 +1,72 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<bookmark version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user' source-platform='mac'>
+<window class='worksheet' name='part-to-whole-stacked-bar-chart'>
+  <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='2147483647'>
+            <card type='columns' />
+          </strip>
+          <strip size='2147483647'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='{00000000-0000-0000-0000-000000000002}' />
+</window>
+<table>
+    <view>
+      <datasources>
+        <datasource name='Sample - Superstore' />
+      </datasources>
+      <datasource-dependencies datasource='Sample - Superstore'>
+        <column datatype='string' name='[Product Name]' role='dimension' type='nominal' />
+        <column aggregate-role-from='[State/Province]' datatype='string' name='[Customer Name]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column-instance column='[Product Name]' derivation='None' name='[none:Product Name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Customer Name]' derivation='None' name='[none:Customer Name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <shelf-sorts>
+        <shelf-sort-v2 dimension-to-sort='[Sample - Superstore].[none:Customer Name:nk]' direction='DESC' is-on-innermost-dimension='true' measure-to-sort-by='[Sample - Superstore].[sum:Profit:qk]' shelf='rows' />
+      </shelf-sorts>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='cell'>
+        <format attr='height' field='[Sample - Superstore].[none:Customer Name:nk]' value='40' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[Sample - Superstore].[none:Product Name:nk]' />
+        </encodings>
+        <style>
+          <style-rule element='pane'>
+            <format attr='minheight' value='-1' />
+            <format attr='maxheight' value='-1' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[Sample - Superstore].[none:Customer Name:nk]</rows>
+    <cols>[Sample - Superstore].[sum:Profit:qk]</cols>
+  </table>
+</bookmark>

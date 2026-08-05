@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { dirname, relative, resolve } from 'path';
 
 import {
+  DEMO_TOOL_PROFILE,
   DesktopMcpServer,
   DYNAMIC_AUTHORING_TOOL_PROFILE,
   selectToolsForProfile,
@@ -27,6 +28,8 @@ const ALLOWED: Readonly<Record<string, string>> = {
     'escalation guidance hedges on availability ("if the inject-template/apply-workbook tools are available"), so it does not present an off-profile tool as a live route. Owned by the binder branches — revisit there, not here',
   'desktop/binder/binder.ts':
     'APPLY_INSTRUCTION describes the tableau-* template chain for full-profile callers and is dropped on the served auto-apply path. Owned by the binder branches — revisit there, not here',
+  'desktop/route/route-state.ts':
+    'BindRecoveryProposalContext types the full-profile binder call contract; its tool discriminator is state data, not rendered recovery text',
 };
 
 /**
@@ -155,7 +158,7 @@ describe('recovery text names only tools the caller actually has', () => {
   // is a guaranteed dead end — the model is told to call something it cannot see, so
   // its retry cannot differ. Fixing the six known strings does not stop the seventh;
   // this does.
-  it('names no tool outside the served profile, anywhere a served tool can reach', () => {
+  it('names no tool outside the dynamic served profile, anywhere a served tool can reach', () => {
     const modules = toolNameToModule();
     const cache = new Map<string, Set<string>>();
     const namedMemo = new Map<string, Set<string>>();
@@ -182,6 +185,41 @@ describe('recovery text names only tools the caller actually has', () => {
     }
 
     expect([...violations.values()].sort()).toEqual([]);
+  });
+
+  it('does not route demo callers to removed legacy template tools', () => {
+    const removedLegacyCallers = new Set([
+      'bind-template',
+      'dashboard-auto-apply',
+      'inject-template',
+    ]);
+    const modules = toolNameToModule();
+    const cache = new Map<string, Set<string>>();
+    const namedMemo = new Map<string, Set<string>>();
+    const served = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'demo',
+    ).map((tool) => tool.name);
+    const violations = new Map<string, string>();
+
+    for (const toolName of served) {
+      const entry = modules.get(toolName);
+      if (!entry) continue;
+      for (const module of reachableModules(entry, cache)) {
+        const relativePath = relative(SRC_ROOT, module);
+        if (WIRING.has(relativePath) || ALLOWED[relativePath]) continue;
+        for (const named of toolNamesNamedInModule(module, namedMemo)) {
+          if (!removedLegacyCallers.has(named)) continue;
+          const key = `${relativePath} names removed demo tool "${named}"`;
+          if (!violations.has(key)) violations.set(key, `${key} (reached by ${toolName})`);
+        }
+      }
+    }
+
+    expect([...violations.values()].sort()).toEqual([]);
+    for (const removed of removedLegacyCallers) {
+      expect(DEMO_TOOL_PROFILE.has(removed as never)).toBe(false);
+    }
   });
 
   it('keeps the allowlist honest — every entry must still resolve to a real module', () => {

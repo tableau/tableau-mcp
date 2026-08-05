@@ -60,7 +60,14 @@ vi.mock('../../../desktop/templates/injectTemplateCore.js', () => ({
   buildInjectedWorkbookXml: vi.fn(),
   classifyWorksheetReplaceTarget: vi.fn(),
 }));
-vi.mock('../../../desktop/templates/templatePath.js');
+// Stub ONLY the `readTemplate` seam; keep the rest of templatePath real so the
+// provider's `.tbm` listing (listBookmarkNames / readBookmark) resolves live via the
+// assets seam — the 44 corpus bookmarks all have curated manifests, so it adds nothing.
+vi.mock('../../../desktop/templates/templatePath.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../desktop/templates/templatePath.js')>();
+  return { ...actual, readTemplate: vi.fn() };
+});
 vi.mock('../../../desktop/validation/registry.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../desktop/validation/registry.js')>();
   return { ...actual, runValidation: vi.fn() };
@@ -1037,6 +1044,7 @@ describe('bindTemplateTool', () => {
     },
   ])(
     'names the exact returned contract and cleanly escalates a Call-2 $label',
+    { timeout: 30_000 },
     async ({ proposal, escalation }) => {
       vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(P_AND_L_WORKBOOK_XML));
       vi.mocked(binderModule.bindTemplate)

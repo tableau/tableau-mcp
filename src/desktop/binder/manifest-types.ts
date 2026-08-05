@@ -98,6 +98,21 @@ export type SlotKind =
   | 'parameter'; // Parameters datasource member
 
 /**
+ * What a slot COMMUNICATES in the chart — a single semantic descriptor, distinct from the
+ * structural `role[]` (which lists the shelves it sits on) and the prose `purpose`. Inferred
+ * from kind + derivation + placement so an agent can reason about a slot's job without reading
+ * shelf names or chart family. Exactly one applies per slot.
+ */
+export type CommunicativeRole =
+  | 'measure-value' // a measure whose aggregated value drives a visual quantity (bar length, position, size)
+  | 'axis-partition' // a dimension on a rows/cols axis — the chart's primary categorical/temporal breakout
+  | 'distribution-breakout' // a disaggregated dimension on a mark encoding that adds to the grain (marks/detail)
+  | 'decoration' // an LOD-neutral field that annotates marks (label/tooltip/title) without changing the chart
+  | 'filter-scope' // a field that scopes which data the sheet shows (filter/slices)
+  | 'tablecalc-addressing' // a dimension an absolute-addressed table calc runs ALONG (ordering-field / level-address)
+  | 'tablecalc-partition'; // a dimension an absolute-addressed table calc RESETS on (level-break)
+
+/**
  * Canonical derivation short-forms (written verbatim into column-instance names).
  * Each MUST be a key of the derivationMap in src/server/tools/templates.ts.
  * Month-Trunc is 'tmn' (the real short-form live Tableau writes); 'tmo' is only a
@@ -127,6 +142,31 @@ export type Derivation =
   | 'tmn'
   | 'tdy';
 
+/**
+ * A slot's TABLE-CALC semantics as a first-class fact (Track 1 chunk 4), attached to the
+ * MEASURE that carries the calc. A quick/custom table calc lives on a `<column-instance>` as
+ * one or more `<table-calc>` children; this summarizes them for an agent without reading XML:
+ *   • `types` — the calc operation(s), e.g. `['CumTotal']` or `['CumTotal','PctDiff']` (YTD
+ *     growth rate stacks two). Empty for a `derivation="User"` calc that declares no `type`.
+ *   • `addressing` — `absolute` when the computation is pinned to named dimensions
+ *     (`ordering-type="Field"` + `ordering-field` / `level-break` / `level-address`), else
+ *     `relative` (positional Compute Using — Table / Pane / Cell — that names no dimension).
+ *   • `along` — base names of the dimension(s) the calc runs ALONG (ordering-field +
+ *     level-address). Empty for relative addressing.
+ *   • `reset_on` — base names of the dimension(s) the calc RESETS on (level-break, e.g. the
+ *     YEAR a YTD accumulation restarts at). Empty for relative addressing.
+ * For absolute addressing the `along`/`reset_on` dimensions are load-bearing (drop one and the
+ * computation is undefined), so inference upgrades those dim slots to required with a
+ * tablecalc-addressing / tablecalc-partition communicative role. Populated by inference; a
+ * curated manifest may override. Not used by deterministic binding.
+ */
+export interface TableCalcFact {
+  types: string[];
+  addressing: 'relative' | 'absolute';
+  along: string[];
+  reset_on: string[];
+}
+
 export interface SlotSpec {
   slot_id: string; // stable id used by the LLM contract, e.g. "region", "order_date_month"
   /**
@@ -137,6 +177,12 @@ export interface SlotSpec {
   template_field: string;
   derivation: Derivation; // template's derivation for THIS instance → drives field_mapping key + value
   role: string[]; // structural roles this instance fills: ["rows","sort-dimension"]
+  /**
+   * What this slot COMMUNICATES (a single semantic descriptor) — complements the structural
+   * `role[]` and the prose `purpose`. Populated by inference; a curated manifest may override.
+   * Optional at runtime; not used by deterministic binding.
+   */
+  communicative_role?: CommunicativeRole;
   kind: SlotKind;
   bindable: boolean; // false ⇒ binder must NOT fill it (calc/generated/pseudo/parameter)
   required: boolean;
@@ -150,8 +196,23 @@ export interface SlotSpec {
    * as matching hints alongside `purpose`; not used by deterministic binding.
    */
   examples?: string[];
+  /**
+   * Agent-facing SUGGESTION metadata: the original donor field's caption (or its base
+   * name when the donor carried no caption) that this slot was inferred from. It is a
+   * HINT for picking an analogous field on a new dataset — never the slot's identity
+   * (that is `slot_id`/`template_field`, which must stay donor-free) and never used by
+   * deterministic binding. Populated by inference (`synthesizeManifest`); a curated
+   * manifest may override it.
+   */
+  hint?: string;
   /** true when template_field is reused at >1 derivation ⇒ binder MUST emit `template_field@derivation`. */
   qualified_key_required?: boolean;
+  /**
+   * TABLE-CALC semantics when this slot's measure carries a quick/custom table calc (Track 1
+   * chunk 4). Absent ⇒ the slot is not a table calc. Populated by inference; a curated manifest
+   * may override. Not used by deterministic binding.
+   */
+  table_calc?: TableCalcFact;
   /**
    * Opt-in (temporal slots only): when set, a date-like STRING field is an acceptable
    * source for this temporal slot. The binder injects a DATEPARSE calc that parses the

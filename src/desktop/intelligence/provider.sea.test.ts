@@ -21,25 +21,34 @@ async function importProviderWithAssetOnlyData(): Promise<typeof import('./provi
         ],
       ]),
   }));
-  vi.doMock('../assets.js', () => ({
-    readDataAsset: (relPath: string) => {
-      if (relPath === 'content-manifest.json') {
-        return JSON.stringify(rawContentManifest);
-      }
-      if (relPath === 'data-visualization-templates-xml/ranking-ordered-bar.xml') {
-        return '<worksheet name="ranking-ordered-bar" />';
-      }
-      return null;
-    },
-  }));
-  vi.doMock('fs', () => ({
-    default: {
-      existsSync: () => false,
-      readFileSync: () => {
-        throw new Error('provider must not read desktop content from disk');
+  vi.doMock('../assets.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../assets.js')>();
+    return {
+      ...actual,
+      readDataAsset: (relPath: string) => {
+        if (relPath === 'content-manifest.json') {
+          return JSON.stringify(rawContentManifest);
+        }
+        if (relPath === 'data-visualization-templates-xml/ranking-ordered-bar.xml') {
+          return '<worksheet name="ranking-ordered-bar" />';
+        }
+        return null;
       },
-    },
-  }));
+    };
+  });
+  vi.doMock('fs', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('fs')>();
+    return {
+      ...actual,
+      default: {
+        ...actual,
+        existsSync: () => false,
+        readFileSync: () => {
+          throw new Error('provider must not read desktop content from disk');
+        },
+      },
+    };
+  });
   return await import('./provider.js');
 }
 

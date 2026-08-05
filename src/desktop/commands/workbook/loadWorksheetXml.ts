@@ -4,6 +4,12 @@ import { log } from '../../../logging/logger.js';
 import { sanitizeValue } from '../../../logging/sanitize.js';
 import { normalizeArray, parseXML } from '../../metadata/parser.js';
 import { upsertSheetIntoWorkbook } from '../../metadata/sheets.js';
+import {
+  deriveTargetWorksheetWindowState,
+  deriveWorksheetApplyState,
+  deriveWorksheetArtifactSha256,
+  type WorksheetApplyState,
+} from '../../metadata/targetWorksheetState.js';
 import type { ParsedWorksheet } from '../../metadata/types.js';
 import {
   ExecuteCommandError,
@@ -38,6 +44,7 @@ export type LoadWorksheetXmlError =
   // rejected the actual document load (surfaced in the response payload, not in
   // `status`). `message` carries Desktop's own error text.
   | { type: 'load-rejected'; message: string }
+  | { type: 'preview-state-changed'; message: string }
   // Apply succeeded but the post-apply readback proved Tableau silently dropped or
   // changed an intent-bearing node (the silently-dropped-pill killer, W4). `message`
   // carries the agent-facing fix recipe; `findings` the structured evidence.
@@ -59,9 +66,38 @@ export interface PostApplyWorksheetReadbackVerification extends ReadbackVerifica
 
 type LoadWorksheetXmlResult = Result<
   LoadWorksheetXmlOk,
-  | { type: 'execute-command-error'; error: ExecuteCommandError }
+  | {
+      type: 'execute-command-error';
+      error: ExecuteCommandError;
+      dispatchState?: 'not-dispatched' | 'possibly-dispatched';
+      retrySafe?: boolean;
+    }
   | { type: 'load-worksheet-xml-error'; error: LoadWorksheetXmlError }
 >;
+
+const PRE_APPLY_STABILITY_ATTEMPTS = 3;
+const POST_APPLY_WINDOW_SETTLE_MS = 500;
+
+async function waitForDesktopSettle(ms: number, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) return false;
+
+  return await new Promise<boolean>((resolve) => {
+    const timeout = setTimeout(() => finish(true), ms);
+
+    function finish(settled: boolean): void {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', abort);
+      resolve(settled);
+    }
+
+    function abort(): void {
+      finish(false);
+    }
+
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+  });
+}
 
 /**
  * Post-apply readback verification. Re-reads the just-applied worksheet and compares
@@ -220,7 +256,7 @@ function worksheetAbsentMessage(canonicalName: string): string {
   return (
     `No worksheet named "${canonicalName}" is open to update. This updates an existing worksheet ` +
     'in place and does not create one. FIX: check the name with list-worksheets, or create a new ' +
-    'worksheet with build-and-apply-worksheet.'
+    'worksheet with list-templates, build-worksheets-from-templates, then apply-worksheet.'
   );
 }
 
@@ -232,6 +268,8 @@ export async function loadWorksheetXml({
   signal,
   readbackVerificationOut,
   requireExistingSheet = false,
+  expectedState,
+  worksheetWindowXml,
 }: {
   worksheetName: string;
   xml: string;
@@ -244,6 +282,8 @@ export async function loadWorksheetXml({
   // Off (build-and-apply-worksheet, refine-worksheet): the worksheet may be net-new, so the
   // whole-workbook re-post upserts it (appending when absent). That is the create path.
   requireExistingSheet?: boolean;
+  expectedState?: WorksheetApplyState;
+  worksheetWindowXml?: string;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -342,6 +382,8 @@ export async function loadWorksheetXml({
     executor,
     signal,
     readbackVerificationOut,
+    expectedState,
+    worksheetWindowXml,
   });
   if (result.isErr()) {
     return result;
@@ -358,76 +400,187 @@ async function loadWorksheetXmlViaExternalApi({
   executor,
   signal,
   readbackVerificationOut,
+  expectedState,
+  worksheetWindowXml,
 }: {
   worksheetName: string;
   xml: string;
   focus: ApplyFocus;
   readbackVerificationOut?: ReadbackVerificationResult[];
+  expectedState?: WorksheetApplyState;
+  worksheetWindowXml?: string;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
-  return withApplyLock(async () => {
-    const workbookResult = await getWorkbookXml({ executor, signal });
-    if (workbookResult.isErr()) {
-      return Err({ type: 'execute-command-error', error: workbookResult.error });
-    }
-
-    let workbookDoc: string;
-    try {
-      workbookDoc = upsertSheetIntoWorkbook(workbookResult.value, worksheetName, xml);
-    } catch (error) {
-      return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
-    }
-
-    const workbookDocValidation = runValidation(workbookDoc, 'workbook');
-    const workbookBlockingIssues = blockingValidationIssues(workbookDocValidation.issues);
-    if (workbookBlockingIssues.length > 0) {
-      log({
-        level: 'error',
-        message:
-          'Constructed worksheet apply document failed workbook validation — XML not sent to Tableau',
-        logger: 'worksheetCommands',
-        data: {
-          worksheetName,
-          issues: workbookBlockingIssues,
-          xmlPreview: sanitize(workbookDoc),
-        },
-      });
-
+  let didDispatch = false;
+  const apply = async (): Promise<LoadWorksheetXmlResult> => {
+    if (
+      expectedState !== undefined &&
+      deriveWorksheetArtifactSha256(xml, worksheetWindowXml) !== expectedState.artifactSha256
+    ) {
       return Err({
         type: 'load-worksheet-xml-error',
-        error: { type: 'validation-failed', issues: workbookBlockingIssues },
-      });
-    }
-
-    // Non-blocking findings from the CONSTRUCTED workbook (e.g. a parameter that
-    // only exists in workbook context) never appear in the fragment's warning
-    // ride-along — log them so receipts/diagnostics can still find them.
-    const workbookWarningIssues = workbookDocValidation.issues.filter(
-      (issue) => issue.severity !== 'error',
-    );
-    if (workbookWarningIssues.length > 0) {
-      log({
-        level: 'warning',
-        message: 'Constructed worksheet apply document has non-blocking validation findings',
-        logger: 'worksheetCommands',
-        data: {
-          worksheetName,
-          warningCount: workbookWarningIssues.length,
-          // Capped + sanitized: validation messages can quote field names and
-          // XML context, so never log the unbounded raw array.
-          issues: sanitize(
-            workbookWarningIssues.slice(0, 5).map((issue) => ({
-              ruleId: issue.ruleId,
-              severity: issue.severity,
-              message: issue.message.slice(0, 200),
-            })),
-          ),
+        error: {
+          type: 'preview-state-changed',
+          message:
+            `The artifact for worksheet "${worksheetName}" does not match the supplied worksheet or window. ` +
+            'Build a new artifact from the intended worksheet and current workbook before applying.',
         },
       });
     }
 
+    const workbookResult = await getWorkbookXml({ executor, signal });
+    if (workbookResult.isErr()) {
+      return Err({
+        type: 'execute-command-error',
+        error: workbookResult.error,
+        dispatchState: 'not-dispatched',
+        retrySafe: true,
+      });
+    }
+
+    let sourceWorkbookXml = workbookResult.value;
+    let workbookDoc: string | null = null;
+    for (let attempt = 1; attempt <= PRE_APPLY_STABILITY_ATTEMPTS; attempt++) {
+      if (expectedState !== undefined) {
+        let currentState: WorksheetApplyState;
+        try {
+          currentState = deriveWorksheetApplyState(
+            sourceWorkbookXml,
+            worksheetName,
+            xml,
+            worksheetWindowXml,
+          );
+        } catch (error) {
+          return Err({
+            type: 'execute-command-error',
+            error: { type: 'invalid-response', error },
+            dispatchState: 'not-dispatched',
+          });
+        }
+        if (!worksheetApplyStatesEqual(currentState, expectedState)) {
+          return previewStateChanged(worksheetName);
+        }
+      }
+
+      let candidateWorkbookDoc: string;
+      try {
+        candidateWorkbookDoc = upsertSheetIntoWorkbook(
+          sourceWorkbookXml,
+          worksheetName,
+          xml,
+          worksheetWindowXml,
+        );
+      } catch (error) {
+        return Err({
+          type: 'execute-command-error',
+          error: { type: 'invalid-response', error },
+          dispatchState: 'not-dispatched',
+        });
+      }
+
+      const workbookDocValidation = runValidation(candidateWorkbookDoc, 'workbook');
+      const workbookBlockingIssues = blockingValidationIssues(workbookDocValidation.issues);
+      if (workbookBlockingIssues.length > 0) {
+        log({
+          level: 'error',
+          message:
+            'Constructed worksheet apply document failed workbook validation — XML not sent to Tableau',
+          logger: 'worksheetCommands',
+          data: {
+            worksheetName,
+            issues: workbookBlockingIssues,
+            xmlPreview: sanitize(candidateWorkbookDoc),
+          },
+        });
+
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: { type: 'validation-failed', issues: workbookBlockingIssues },
+        });
+      }
+
+      const workbookWarningIssues = workbookDocValidation.issues.filter(
+        (issue) => issue.severity !== 'error',
+      );
+      if (workbookWarningIssues.length > 0) {
+        log({
+          level: 'warning',
+          message: 'Constructed worksheet apply document has non-blocking validation findings',
+          logger: 'worksheetCommands',
+          data: {
+            worksheetName,
+            warningCount: workbookWarningIssues.length,
+            issues: sanitize(
+              workbookWarningIssues.slice(0, 5).map((issue) => ({
+                ruleId: issue.ruleId,
+                severity: issue.severity,
+                message: issue.message.slice(0, 200),
+              })),
+            ),
+          },
+        });
+      }
+
+      if (expectedState === undefined) {
+        workbookDoc = candidateWorkbookDoc;
+        break;
+      }
+
+      const stabilityRead = await getWorkbookXml({ executor, signal });
+      if (stabilityRead.isErr()) {
+        return Err({
+          type: 'execute-command-error',
+          error: stabilityRead.error,
+          dispatchState: 'not-dispatched',
+          retrySafe: true,
+        });
+      }
+      if (stabilityRead.value === sourceWorkbookXml) {
+        workbookDoc = candidateWorkbookDoc;
+        break;
+      }
+
+      let latestState: WorksheetApplyState;
+      try {
+        latestState = deriveWorksheetApplyState(
+          stabilityRead.value,
+          worksheetName,
+          xml,
+          worksheetWindowXml,
+        );
+      } catch (error) {
+        return Err({
+          type: 'execute-command-error',
+          error: { type: 'invalid-response', error },
+          dispatchState: 'not-dispatched',
+        });
+      }
+      if (!worksheetApplyStatesEqual(latestState, expectedState)) {
+        return previewStateChanged(worksheetName);
+      }
+      if (attempt === PRE_APPLY_STABILITY_ATTEMPTS) {
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: {
+            type: 'preview-state-changed',
+            message:
+              `The live workbook kept changing while preparing worksheet "${worksheetName}". ` +
+              'Nothing was applied. Retry after the workbook is stable.',
+          },
+        });
+      }
+      sourceWorkbookXml = stabilityRead.value;
+    }
+
+    if (workbookDoc === null) return previewStateChanged(worksheetName);
+
+    didDispatch = true;
     const applyResult = await applyWorkbookText({ xml: workbookDoc, focus, executor, signal });
     if (applyResult.isErr()) {
-      return Err({ type: 'execute-command-error', error: applyResult.error });
+      return Err({
+        type: 'execute-command-error',
+        error: applyResult.error,
+        dispatchState: 'possibly-dispatched',
+      });
     }
 
     log({
@@ -443,12 +596,108 @@ async function loadWorksheetXmlViaExternalApi({
       executor,
       signal,
     );
+    if (verification.ok && expectedState !== undefined && worksheetWindowXml !== undefined) {
+      try {
+        const intendedWindow = deriveTargetWorksheetWindowState(workbookDoc, worksheetName);
+        const settled = await waitForDesktopSettle(POST_APPLY_WINDOW_SETTLE_MS, signal);
+        if (!settled) {
+          return Err({
+            type: 'execute-command-error',
+            error: {
+              type: 'unknown',
+              error:
+                signal.reason ?? new Error('Post-apply worksheet window verification was aborted'),
+            },
+            dispatchState: 'possibly-dispatched',
+          });
+        }
+
+        const workbookReadback = await getWorkbookXml({ executor, signal });
+        if (workbookReadback.isErr()) {
+          return Err({
+            type: 'execute-command-error',
+            error: workbookReadback.error,
+            dispatchState: 'possibly-dispatched',
+          });
+        }
+        const liveWindow = deriveTargetWorksheetWindowState(workbookReadback.value, worksheetName);
+        const windowsMatch =
+          intendedWindow.state === liveWindow.state &&
+          (intendedWindow.state === 'absent' ||
+            (liveWindow.state === 'present' && intendedWindow.sha256 === liveWindow.sha256));
+        if (!windowsMatch) {
+          log({
+            level: 'warning',
+            message: 'Post-apply worksheet window verification failed after Desktop settle',
+            logger: 'worksheetCommands',
+            data: sanitize({ worksheetName, intendedWindow, liveWindow }),
+          });
+          return Err({
+            type: 'load-worksheet-xml-error',
+            error: {
+              type: 'readback-failed',
+              findings: verification.findings,
+              message: `Worksheet window/cards for "${worksheetName}" did not match the applied artifact after Desktop settled.`,
+            },
+          });
+        }
+      } catch (error) {
+        return Err({
+          type: 'execute-command-error',
+          error: { type: 'invalid-response', error },
+          dispatchState: 'possibly-dispatched',
+        });
+      }
+    }
     readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
     const outcomeResult = readbackOutcome(verification);
     if (outcomeResult.isErr()) return outcomeResult;
 
     return outcomeResult;
+  };
+
+  try {
+    return await withApplyLock(apply);
+  } catch (error) {
+    return Err({
+      type: 'execute-command-error',
+      error: { type: 'unknown', error },
+      dispatchState: didDispatch ? 'possibly-dispatched' : 'not-dispatched',
+    });
+  }
+}
+
+function previewStateChanged(worksheetName: string): LoadWorksheetXmlResult {
+  return Err({
+    type: 'load-worksheet-xml-error',
+    error: {
+      type: 'preview-state-changed',
+      message:
+        `The workbook changed after the artifact for worksheet "${worksheetName}" was built. ` +
+        'Nothing was applied. Build a new artifact from the current workbook state if the worksheet is still wanted.',
+    },
   });
+}
+
+function worksheetApplyStatesEqual(
+  current: WorksheetApplyState,
+  expected: WorksheetApplyState,
+): boolean {
+  const targetsMatch =
+    current.target.state === expected.target.state &&
+    (current.target.state === 'absent' ||
+      (expected.target.state === 'present' && current.target.sha256 === expected.target.sha256));
+  const targetWindowsMatch =
+    current.targetWindow.state === expected.targetWindow.state &&
+    (current.targetWindow.state === 'absent' ||
+      (expected.targetWindow.state === 'present' &&
+        current.targetWindow.sha256 === expected.targetWindow.sha256));
+  return (
+    current.workbookSha256 === expected.workbookSha256 &&
+    targetsMatch &&
+    targetWindowsMatch &&
+    current.dependenciesSha256 === expected.dependenciesSha256
+  );
 }
 
 function sanitize(value: unknown): unknown {

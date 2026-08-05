@@ -32,6 +32,7 @@ export const desktopToolNames = [
   'dashboard-auto-apply',
   'dashboard-health-check',
   'list-templates',
+  'build-worksheets-from-templates',
   'propose-template',
   'validate-proposal',
   'plan-dashboard-creation',

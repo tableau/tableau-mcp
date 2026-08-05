@@ -35,27 +35,20 @@ const serverName = 'tableau-desktop-mcp';
 const serverVersion = pkg.version;
 
 /**
- * Slim demo tool set (W60 spike lever 1 / preamble-hunt P1): registering ~10 tools instead
- * of the full 42 shrinks the serialized schema surface (~15-25k → ~4-5k tokens), which the
- * preamble-hunt measured as the single biggest per-turn latency win (−4.5 to −5.5s/chart)
- * and a per-turn token/cost reduction. Reconciled from BOTH source lists: the spike's
- * fast-path/coordination tools (bind-template, list-instances, list-available-fields,
- * list-worksheets, apply-workbook, batch-create-and-cache-sheets, build-and-apply-dashboard)
- * UNION the preamble-hunt's escalation-fallback chain it insists must stay
- * (get-workbook-xml, inject-template, apply-worksheet — apply-workbook/list-instances/
- * list-worksheets already overlap). Without the fallback chain the propose/escalate paths
- * (per DESKTOP_INSTRUCTIONS) would have no tools to route to.
+ * Slim 11-tool demo set. New template worksheets use the caller-owned
+ * list-templates -> build-worksheets-from-templates -> apply-worksheet path. Discovery,
+ * existing-sheet inspection, the whole-workbook demo path, and dashboard composition remain;
+ * legacy template auto-apply and injection callers stay out.
  */
 export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
-  'bind-template',
-  'dashboard-auto-apply',
+  'list-templates',
+  'build-worksheets-from-templates',
   'list-instances',
   'list-worksheets',
   'list-available-fields',
   'get-worksheet-xml',
   'apply-workbook',
   'get-workbook-xml',
-  'inject-template',
   'apply-worksheet',
   'batch-create-and-cache-sheets',
   'build-and-apply-dashboard',
@@ -69,9 +62,9 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
  * API — is sufficient with no XML authoring tools, templates, or bind-template.
  * Everything a chart/calc/dashboard ask needs routes through execute-tableau-command;
  * the rest is discovery + readback (on apiVersion <=0.1.0 the /v0 generic route was
- * write-blind, so the list-* tools were how the model observed state). The gated
- * get-worksheet-xml repair read is retained across every profile but cannot run before
- * an authoring attempt. Proven by hand 2026-07-19: a full analytics workbook (calcs +
+ * write-blind, so the list-* tools were how the model observed state). get-worksheet-xml
+ * is retained across every profile for existing-sheet inspection and edits, including
+ * before any authoring attempt. Proven by hand 2026-07-19: a full analytics workbook (calcs +
  * charts + dashboard) authored live in seconds, zero agent-authored XML.
  * The known-command guard (from #542) makes the single execute-tableau-command tool
  * safe against hallucinated verbs.
@@ -94,26 +87,28 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * key signature, born at OPEN), author-action (parameter-change wiring), format-labels
  * (mark labels) — PLUS ask-user (ambiguity goes to the human, never to a guess) and
  * search-commands (how the singer discovers the execute-tableau-command dialect) — PLUS
- * bind-template, the deterministic fast-path (no LLM, ~0.3s) for plain chart shapes,
- * and refine-worksheet, the primitives-only top-N/sort editor that carries
- * edit-in-place now that the notional-spec loop is retired.
- * PLUS the two knowledge doors — search-knowledge + read-knowledge-resource —
+ * list-templates + build-worksheets-from-templates, the caller-owned catalog and guarded
+ * worksheet-construction path; and refine-worksheet, the primitives-only top-N/sort editor that carries
+ * edit-in-place now that the notional-spec loop is retired. Legacy template auto-apply and dashboard
+ * planner tools stay out; retained batch/dashboard tools do not bypass the caller-owned worksheet path.
+ * PLUS the three knowledge doors — list-knowledge-resources + search-knowledge + read-knowledge-resource —
  * without which the system prompt's "consult the expertise library BEFORE authoring"
  * instruction had no tool to route to: the singer could not read the curated corpus at
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
- * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Thirty-three tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
+ * served as MCP resources anyway; these three tiny tools are the only way the model reaches it.
+ * Thirty-four tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
  * and first-class workbook/data reads/navigation; the only raw XML read is get-worksheet-xml,
  * the read leg the manual add-field/remove-field/apply-worksheet path needs to mint its
- * worksheetFile — no whole-workbook get/apply, no cache, no validation XML tools. This is the
+ * worksheetFile — no whole-workbook get/apply or validation XML tools. This is the
  * "make it shorter" answer — a lean, semantically-named surface under the 46k tools/list cliff,
  * not a describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19 (CODA):
  * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
  */
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
-    'bind-template',
+    'list-templates',
+    'build-worksheets-from-templates',
     'refine-worksheet',
     'add-field',
     'remove-field',
@@ -128,9 +123,6 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'read-cached-xml',
     'write-cached-xml',
     'apply-worksheet',
-    'build-and-apply-worksheet',
-    'dashboard-auto-apply',
-    'plan-dashboard-creation',
     'batch-create-and-cache-sheets',
     'build-and-apply-dashboard',
     'execute-tableau-command',
@@ -155,6 +147,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'author-parameter',
     'author-action',
     'format-labels',
+    'list-knowledge-resources',
     'read-knowledge-resource',
     'search-knowledge',
   ]);

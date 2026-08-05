@@ -42,6 +42,37 @@ const parserOptions = {
   },
 };
 
+// Escape the genuine XML metacharacters (`&`, `<`, `>`) WITHOUT clobbering a numeric
+// character reference the parser deliberately left intact.
+//
+// Why this is needed: the parser decodes the five predefined named entities
+// (`&amp;`/`&lt;`/`&gt;`/`&quot;`/`&apos;`) to their literal characters but leaves NUMERIC
+// character references (`&#13;`, `&#10;`, `&#9;`, `&#xNN;`) as literal `&#…;` text. Tableau
+// stores newlines *inside* attribute values — most importantly multi-line calc `formula`s
+// with `//` line comments — as `&#13;&#10;`, precisely because XML attribute-value
+// normalization would otherwise fold a literal newline into a single space and merge the
+// comment into the next line (breaking the calc). A default builder re-escapes the `&` of
+// that surviving `&#13;` into `&amp;#13;`, so Tableau reads the literal text `&#13;` instead
+// of a newline and the whole calc errors out. The negative lookahead below leaves an
+// already-formed numeric reference untouched while still escaping every real `&`.
+const NUMERIC_ENTITY_LOOKAHEAD = /&(?!#\d+;|#x[0-9a-fA-F]+;)/g;
+function escapeXmlCore(value: unknown): string {
+  return String(value)
+    .replace(NUMERIC_ENTITY_LOOKAHEAD, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+// Escape `"` in both attributes and text: it is only strictly required inside a
+// double-quoted attribute, but the previous builder escaped it in text too (group-definition
+// `<value>"Acme"</value>` members round-trip as `&quot;…&quot;`), so we match that to keep the
+// only behavioural change the numeric-reference preservation above.
+function escapeAttributeValue(_name: string, value: unknown): string {
+  return escapeXmlCore(value).replace(/"/g, '&quot;');
+}
+function escapeTextValue(_name: string, value: unknown): string {
+  return escapeXmlCore(value).replace(/"/g, '&quot;');
+}
+
 const builderOptions = {
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
@@ -51,6 +82,12 @@ const builderOptions = {
   suppressEmptyNode: false,
   suppressBooleanAttributes: false,
   arrayNodeName: '',
+  // We fully own entity escaping via the processors below (see escapeXmlCore) so that numeric
+  // character references such as `&#13;&#10;` survive the round-trip; disable the builder's
+  // own entity processing to avoid double-escaping.
+  processEntities: false,
+  attributeValueProcessor: escapeAttributeValue,
+  tagValueProcessor: escapeTextValue,
 };
 
 const parser = new XMLParser(parserOptions);

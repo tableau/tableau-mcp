@@ -31,31 +31,42 @@ import { DesktopTool } from '../tool.js';
 // schema says required. resolveSession(undefined) falls back to the pin (or the sole running
 // Desktop), which is what the sidecar has always been stamped with anyway.
 const paramsSchema = {
-  session: z
-    .string()
-    .optional()
-    .describe('Desktop process ID; omit to use the pinned or only running instance.'),
-  workbookFile: z.string().describe('Cached workbook path from field resolution.'),
-  templateName: z.string().describe('ID of an existing template.'),
-  title: z.string().describe('Name for the sheet this creates.'),
-  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('What the template builds.'),
+  session: z.string().optional().describe('Desktop PID; omit for the pinned or only instance.'),
+  workbookFile: z.string().describe('Cached workbook path.'),
+  templateName: z.string().describe('Existing template ID.'),
+  title: z.string().describe('New sheet name.'),
+  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('Template output type.'),
   templateParameters: z
     .record(z.string())
     .optional()
-    .describe('Placeholder values required by the selected template (e.g. DATASOURCE).'),
-  fieldMapping: z
-    .record(z.string())
-    .optional()
-    .describe('Slot to qualified ref from field resolution, never invented.'),
+    .describe('Required placeholders, including DATASOURCE.'),
+  fieldMapping: z.record(z.string()).optional().describe('Resolved slot-to-field refs.'),
   insertPosition: z
     .enum(['end', 'before_sheet', 'after_sheet'])
     .optional()
-    .describe('end (default), or before_sheet/after_sheet next to relativeSheetName.'),
-  relativeSheetName: z
-    .string()
-    .optional()
-    .describe('Existing sheet name; omit when insertPosition defaults to end.'),
+    .describe('Placement relative to the anchor; default end.'),
+  relativeSheetName: z.string().optional().describe('Existing anchor sheet; omit for end.'),
+  output: z
+    .enum(['inject', 'xml'])
+    .default('inject')
+    .describe('inject saves to cache; alternate output returns the built sheet without saving.'),
 };
+
+/**
+ * Success payload shared by both output modes so `logAndExecute<T>` infers a single
+ * `T` (a union of literal `mode`s would otherwise lock onto whichever branch it sees
+ * first). `mode` discriminates in getSuccessResult; `xml` is always the built workbook
+ * XML (streamed back in 'xml' mode, carried but unused in 'inject' mode).
+ */
+interface InjectSuccess {
+  mode: 'inject' | 'xml';
+  workbookFile: string;
+  templateName: string;
+  title: string;
+  sheetType: 'worksheet' | 'dashboard' | 'story';
+  warnings: string[];
+  xml: string;
+}
 
 function inferSingleDatasourceFromFieldMapping(
   fieldMapping?: Record<string, string>,
@@ -95,6 +106,7 @@ export const getInjectTemplateTool = (
         fieldMapping,
         insertPosition,
         relativeSheetName,
+        output,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -110,6 +122,7 @@ export const getInjectTemplateTool = (
           fieldMapping,
           insertPosition,
           relativeSheetName,
+          output,
         },
         callback: async () => {
           const sessionResult = resolveSession(session);
@@ -206,33 +219,74 @@ export const getInjectTemplateTool = (
               return new XmlValidationError(result.issues).toErr();
             }
 
+            // LEG 4 fork. 'xml' streams the filled worksheet XML back to the agent and
+            // touches nothing on disk; 'inject' (default) writes the workbook + sidecar
+            // exactly as before. The residue/well-formedness guards already ran inside
+            // buildInjectedWorkbookXml, so the streamed XML carries no live tokens.
+            if (output === 'xml') {
+              return new Ok<InjectSuccess>({
+                mode: 'xml',
+                workbookFile,
+                templateName,
+                title,
+                sheetType,
+                warnings: explicitTemplateWarnings,
+                xml: result.xml,
+              });
+            }
+
             writeFileSync(resolve(workbookFile), result.xml, 'utf-8');
             writeSidecar(resolve(workbookFile), resolvedSession);
 
-            return new Ok({
+            return new Ok<InjectSuccess>({
+              mode: 'inject',
               workbookFile,
               templateName,
               title,
               sheetType,
               warnings: [...explicitTemplateWarnings, ...(result.warnings ?? [])],
+              xml: result.xml,
             });
           } catch (err) {
             return new FileReadError(err).toErr();
           }
         },
-        getSuccessResult: ({ workbookFile, templateName, title, sheetType, warnings }) => ({
-          content: [
-            {
-              type: 'text',
-              text:
-                `Injected template "${templateName}" as "${title}" (${sheetType}).` +
-                (warnings.length > 0
-                  ? `\n\nTemplate advisory warnings:\n${warnings.map((w) => `  - ${w}`).join('\n')}`
-                  : '') +
-                `\n\nUpdated file: ${workbookFile}\n\nUse apply-workbook to apply changes to Tableau.`,
-            },
-          ],
-        }),
+        getSuccessResult: (value) => {
+          const { templateName, title, sheetType, warnings } = value;
+          const advisory =
+            warnings.length > 0
+              ? `\n\nTemplate advisory warnings:\n${warnings.map((w) => `  - ${w}`).join('\n')}`
+              : '';
+
+          if (value.mode === 'xml') {
+            // Return the filled worksheet XML as the tool payload; the workbook file
+            // is untouched (the agent chose to receive the XML, not apply it).
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text:
+                    `Built template "${templateName}" as "${title}" (${sheetType}). ` +
+                    'The workbook file was NOT modified. The filled worksheet XML follows.' +
+                    advisory +
+                    `\n\n${value.xml}`,
+                },
+              ],
+            };
+          }
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text:
+                  `Injected template "${templateName}" as "${title}" (${sheetType}).` +
+                  advisory +
+                  `\n\nUpdated file: ${value.workbookFile}\n\nUse apply-workbook to apply changes to Tableau.`,
+              },
+            ],
+          };
+        },
       });
     },
   });

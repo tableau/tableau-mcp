@@ -595,6 +595,11 @@ function nextActionForEscalation(reason: EscalateReason): NextAction {
   if (reason === 'low-confidence') {
     return prefillNextAction('Pick a higher-confidence proposal');
   }
+  if (reason === 'geo-not-geocodable') {
+    return prefillNextAction(
+      'Rebind the geo slot to a geocodable field, or pick a non-map template',
+    );
+  }
   if (TIER2_REASONS.has(reason)) {
     return prefillNextAction('Build via build-and-apply-worksheet');
   }

@@ -1,0 +1,64 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<bookmark version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user' source-platform='mac'>
+<window class='worksheet' name='part-to-whole-pie-chart'>
+  <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='2147483647'>
+            <card type='columns' />
+          </strip>
+          <strip size='2147483647'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='{00000000-0000-0000-0000-000000000002}' />
+</window>
+<table>
+    <view>
+      <datasources>
+        <datasource name='Sample - Superstore' />
+      </datasources>
+      <datasource-dependencies datasource='Sample - Superstore'>
+        <column aggregate-role-from='[State/Province]' datatype='string' name='[Customer Name]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column-instance column='[Customer Name]' derivation='None' name='[none:Customer Name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style />
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Pie' />
+        <encodings>
+          <color column='[Sample - Superstore].[none:Customer Name:nk]' />
+          <wedge-size column='[Sample - Superstore].[sum:Profit:qk]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-labels-cull' value='true' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows />
+    <cols />
+  </table>
+</bookmark>

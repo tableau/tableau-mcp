@@ -117,4 +117,48 @@ describe('serializeXML', () => {
     expect(output).toContain('Sheet 1');
     expect(output).toContain('Sheet 2');
   });
+
+  // Regression: multi-line calc formulas store their newlines as the numeric character
+  // references `&#13;&#10;` in the `formula` attribute so XML attribute-value normalization
+  // cannot fold them into a space and merge a `//` comment into the next line. A whole-doc
+  // read→inject→write-back round-trip (injectTemplate, deleteWorksheet, addField, …) must not
+  // double-escape those references to `&amp;#13;`, which would corrupt every multi-line calc.
+  describe('multi-line calc formula round-trip', () => {
+    const CALC = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="DS">
+      <column caption="Order Profitable?" name="[Order Profitable?]">
+        <calculation class="tableau" formula="{fixed [Order ID]:sum([Profit])}&gt;0&#13;&#10;// calculates the profit at the order level" />
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+    it('preserves &#13;&#10; and does not double-escape the ampersand', () => {
+      const output = serializeXML(parseXML(CALC));
+      expect(output).toContain('&gt;0&#13;&#10;// calculates the profit at the order level');
+      expect(output).not.toContain('&amp;#13;');
+      expect(output).not.toContain('&amp;#10;');
+    });
+
+    it('keeps the formula intact across a second round-trip (no progressive escaping)', () => {
+      const once = serializeXML(parseXML(CALC));
+      const twice = serializeXML(parseXML(once));
+      // The builder's pretty-printer is not byte-idempotent on whitespace, but the formula
+      // payload must not drift or accrue extra escaping on repeated passes.
+      const formula = /formula="([^"]*)"/;
+      expect(twice.match(formula)?.[1]).toBe(once.match(formula)?.[1]);
+      expect(twice).toContain('&gt;0&#13;&#10;// calculates the profit at the order level');
+      expect(twice).not.toContain('&amp;#13;');
+    });
+
+    it('still escapes genuine metacharacters (&, <, >) in attributes', () => {
+      const src = '<column caption="R&amp;D &lt;costs&gt;" formula="[Sales] &gt; 0" />';
+      const output = serializeXML(parseXML(src));
+      expect(output).toContain('caption="R&amp;D &lt;costs&gt;"');
+      // a real ampersand is still escaped, so the document stays well-formed
+      expect(output).not.toMatch(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/);
+    });
+  });
 });

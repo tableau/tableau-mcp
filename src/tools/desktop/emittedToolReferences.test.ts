@@ -16,6 +16,18 @@ const SOURCE_FILES = [
 
 const CONDITIONAL_TOOLS = ['inject-template', 'apply-workbook', 'apply-dashboard'] as const;
 const NON_TOOL_VOCABULARY = [
+  // Geo + aggregation-compat blocker codes and binder prose (not tool names): emitted by
+  // bindTemplate.ts / explicit-bind.ts to explain why a slot could not bind.
+  'aggregation-level-mismatch',
+  'already-aggregated',
+  'generated-geo-required',
+  'geo-not-geocodable',
+  'non-aggregate',
+  'non-aggregated',
+  'non-map',
+  're-aggregates',
+  'row-level',
+  'semantic-role',
   'all-or-nothing',
   'already-bound',
   'ambiguous-field',

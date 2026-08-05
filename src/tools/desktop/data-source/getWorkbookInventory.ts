@@ -19,7 +19,7 @@ export const getWorkbookInventoryTool = (
     name: 'get-workbook-inventory',
     title,
     description:
-      'Orienting read: title, unsaved changes, and worksheet/dashboard/storyboard inventory. Not needed before bind-template; use for exploration or non-template authoring.',
+      'Orienting read: title, unsaved changes, and worksheet/dashboard/storyboard inventory. Template building reads the live workbook directly; use this for exploration or non-template authoring.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

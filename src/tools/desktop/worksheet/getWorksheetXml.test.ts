@@ -3,7 +3,6 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as getWorksheetXmlModule from '../../../desktop/commands/workbook/getWorksheetXml.js';
-import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
@@ -12,7 +11,6 @@ import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { BIND_FIRST_ORIENTATION_REDIRECT } from '../tool.js';
 import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getGetWorksheetXmlTool } from './getWorksheetXml.js';
@@ -34,8 +32,6 @@ describe('getWorksheetXmlTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    sessionRouteState.clear();
-    sessionRouteState.recordAuthoringAttempt('12345', 'bind-template');
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -53,9 +49,10 @@ describe('getWorksheetXmlTool', () => {
     });
   });
 
-  it('redirects before the first authoring attempt without invoking the host', async () => {
-    sessionRouteState.clear();
-    const mockExecutor = vi.fn();
+  it('reads worksheet XML before any authoring attempt', async () => {
+    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    const mockExecutor = vi.fn().mockResolvedValue({});
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(Ok(mockXml));
 
     const result = await getToolResult({
       session: '12345',
@@ -65,13 +62,10 @@ describe('getWorksheetXmlTool', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(result.content).toEqual([{ type: 'text', text: BIND_FIRST_ORIENTATION_REDIRECT }]);
-    expect(result.structuredContent).toMatchObject({
-      message: BIND_FIRST_ORIENTATION_REDIRECT,
-      nextAction: { kind: 'prefill' },
-    });
-    expect(mockExecutor).not.toHaveBeenCalled();
-    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
+    invariant(result.content[0].type === 'text');
+    expect(inlineResultSchema.parse(JSON.parse(result.content[0].text)).worksheetXml).toBe(mockXml);
+    expect(mockExecutor).toHaveBeenCalledWith('12345');
+    expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledOnce();
   });
 
   it('should return worksheet XML inline when mode is inline', async () => {

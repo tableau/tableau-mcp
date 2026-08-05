@@ -452,14 +452,121 @@ describe('binder/validate — gate 3: kind/role compatibility', () => {
     }
   });
 
-  it("no-fire: an untagged dimension keeps today's geo-slot acceptance", () => {
+  // Gate 3c: on a template that plots Tableau's GENERATED Latitude/Longitude, an
+  // untagged dimension is no longer accepted. It used to be — gate 3 proves only
+  // role==dimension and gate 3b fires only when BOTH concepts are known — and that
+  // hole shipped the tbm-test.pptx empty map: three plain `string` dimensions from
+  // World Indicators (Business Tax Rate / Ease of Business / Hours to do Tax) filled
+  // the geo slots and the sheet rendered zero marks with fully populated legends,
+  // because the generated coordinates only materialize for a geocoded field.
+  it('fire: an untagged dimension cannot bind a geo slot on a generated-Lat/Long map', () => {
     const m = manifests.get('spatial-choropleth-map')!;
-    expect(validateBinding(m, geoProposal(m), geoSummary(undefined)).ok).toBe(true);
+    const r = validateBinding(m, geoProposal(m), geoSummary(undefined));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const blocker = r.blockers.find(
+        (b) => b.code === 'geo-not-geocodable' && b.slot_id === 'state',
+      );
+      expect(blocker).toBeDefined();
+      expect(blocker!.detail).toContain('no geographic semantic-role');
+      // The agent is handed the fields that WOULD work rather than just a refusal.
+      expect(blocker!.candidates).toContain('Country');
+    }
+  });
+
+  // The gate is scoped to the manifest's own `generated-geo-required` hazard, NOT to
+  // `kind: 'geo'` at large. Two templates use geo slots without needing geocoding and
+  // must keep binding untagged dimensions: distribution-bar-code-chart puts them on
+  // detail, and spatial-symbol-map-latlon plots real coordinate measures.
+  it('no-fire: a non-map template still binds untagged dimensions to its geo slots', () => {
+    const m = manifests.get('distribution-bar-code-chart')!;
+    expect(m.hazards.some((h) => h.code === 'generated-geo-required')).toBe(false);
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'country_region', field: 'Country' },
+        { slot_id: 'state_province', field: 'Region' },
+        ...m.slots
+          .filter(
+            (s) =>
+              s.bindable &&
+              s.required &&
+              s.slot_id !== 'country_region' &&
+              s.slot_id !== 'state_province',
+          )
+          .map((s) => ({
+            slot_id: s.slot_id,
+            field: s.kind === 'quantitative' ? 'Profit' : 'Region',
+          })),
+      ],
+    };
+    const r = validateBinding(m, p, geoSummary(undefined));
+    if (!r.ok) {
+      expect(r.blockers.some((b) => b.code === 'geo-not-geocodable')).toBe(false);
+    }
   });
 
   it('no-fire: a matching State-tagged dimension binds the state geo slot', () => {
     const m = manifests.get('spatial-choropleth-map')!;
     expect(validateBinding(m, geoProposal(m), geoSummary('[State].[Name]')).ok).toBe(true);
+  });
+
+  // The tbm-test.pptx repro, verbatim from the injected TWB: `World Indicators`
+  // declares a geo role on [Country/Region] ONLY, and the three string dimensions
+  // that merely READ like quantities were bound to the symbol map's geo slots.
+  it('fire: the World Indicators repro is blocked and names the one geocodable field', () => {
+    const m = manifests.get('spatial-symbol-map')!;
+    const worldIndicators: SchemaSummary = {
+      datasource: 'World Indicators',
+      fields: [
+        field({
+          columnName: '[Country/Region]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          semanticRole: '[Country].[ISO3166_2]',
+        }),
+        // datatype string, but 186 distinct continuous-looking members.
+        field({
+          columnName: '[Business Tax Rate]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+        }),
+        field({
+          columnName: '[Hours to do Tax]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+        }),
+        field({
+          columnName: '[Birth Rate]',
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'real',
+        }),
+      ],
+    };
+    const p: BindingProposal = {
+      template: m.template,
+      title: 'P2 Symbol Map',
+      bindings: [
+        { slot_id: 'country', field: 'Business Tax Rate' },
+        { slot_id: 'city', field: 'Hours to do Tax' },
+        ...m.slots
+          .filter((s) => s.bindable && s.required && s.kind === 'quantitative')
+          .map((s) => ({ slot_id: s.slot_id, field: 'Birth Rate' })),
+      ],
+    };
+    const r = validateBinding(m, p, worldIndicators);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const geo = r.blockers.filter((b) => b.code === 'geo-not-geocodable');
+      expect(geo.map((b) => b.slot_id).sort()).toEqual(['city', 'country']);
+      // Only [Country/Region] carries a role, so it is the only candidate offered.
+      expect(geo[0].candidates).toEqual(['Country/Region']);
+    }
   });
 });
 
@@ -1093,6 +1200,213 @@ describe('binder/validate — gate 6: first-class calc inputs (H3)', () => {
       ],
     };
     expect(validateBinding(calcInputs, p, SUMMARY).ok).toBe(true);
+  });
+});
+
+describe('binder/validate — gate 4b: aggregate source into a calc-input slot', () => {
+  // A consistent manifest (slot_ids match the calc's depends_on_slots) with TWO calc
+  // shapes: `wrapped` re-aggregates its inputs (SUM([A])-SUM([B])) and `bare` uses them
+  // at row level ([C]-[D]). Both must reject an already-aggregated source bound to a
+  // calc-input slot — the wrapped calc would re-aggregate it (SUM(SUM(..))), the bare
+  // calc would mix aggregate + non-aggregate arguments.
+  const calcLevels: TemplateManifest = {
+    template: 'x-calc-levels',
+    family: 'specialized',
+    readiness: 'GREEN',
+    fast_path_eligible: true,
+    fast_path_blockers: [],
+    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
+    datasource_placeholder: true,
+    placeholders: ['TITLE', 'DATASOURCE'],
+    intent_keywords: ['x'],
+    description: 'test',
+    slots: [
+      // wrapped-calc inputs (authored at an aggregation, like deviation-arrow's sum leaves)
+      {
+        slot_id: 'a',
+        template_field: 'A',
+        derivation: 'sum',
+        role: ['cols'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+      {
+        slot_id: 'b',
+        template_field: 'B',
+        derivation: 'sum',
+        role: ['rows'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+      // bare-calc inputs (decomposed row-level leaves, like a Goal Difference = [C]-[D])
+      {
+        slot_id: 'c',
+        template_field: 'C',
+        derivation: 'none',
+        role: ['detail'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+      {
+        slot_id: 'd',
+        template_field: 'D',
+        derivation: 'none',
+        role: ['detail'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+      // a plain measure slot that feeds NO calc — the aggregate-into-shelf case gate 7 handles
+      {
+        slot_id: 'plain',
+        template_field: 'P',
+        derivation: 'sum',
+        role: ['size'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+    ],
+    calcs: [
+      {
+        slot_id: 'wrapped',
+        template_field: 'Calculation_W',
+        derivation: 'usr',
+        role: ['color'],
+        kind: 'calc',
+        bindable: false,
+        required: true,
+        formula: 'SUM([A])-SUM([B])',
+        formula_refs: ['A', 'B'],
+        depends_on_slots: ['a', 'b'],
+        result_role: 'measure',
+        inputs: [
+          {
+            ref: 'A',
+            slot_id: 'a',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+          {
+            ref: 'B',
+            slot_id: 'b',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+        ],
+      },
+      {
+        slot_id: 'bare',
+        template_field: 'Calculation_B',
+        derivation: 'usr',
+        role: ['label'],
+        kind: 'calc',
+        bindable: false,
+        required: true,
+        formula: '[C]-[D]',
+        formula_refs: ['C', 'D'],
+        depends_on_slots: ['c', 'd'],
+        result_role: 'measure',
+        inputs: [
+          {
+            ref: 'C',
+            slot_id: 'c',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+          {
+            ref: 'D',
+            slot_id: 'd',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+        ],
+      },
+    ],
+    hazards: [],
+  };
+
+  const bindAll = (over: Record<string, string>): BindingProposal => ({
+    template: calcLevels.template,
+    title: 't',
+    bindings: [
+      { slot_id: 'a', field: over.a ?? 'Sales' },
+      { slot_id: 'b', field: over.b ?? 'Profit' },
+      { slot_id: 'c', field: over.c ?? 'Sales' },
+      { slot_id: 'd', field: over.d ?? 'Profit' },
+      { slot_id: 'plain', field: over.plain ?? 'Sales' },
+    ],
+  });
+
+  it('fire: aggregate into a SUM-wrapped calc input → aggregation-level-mismatch (would re-aggregate)', () => {
+    const r = validateBinding(calcLevels, bindAll({ a: 'Profit Ratio' }), SUMMARY);
+    expect(r.ok).toBe(false);
+    if (!r.ok)
+      expect(
+        r.blockers.some((x) => x.code === 'aggregation-level-mismatch' && x.slot_id === 'a'),
+      ).toBe(true);
+  });
+
+  it('fire: aggregate into a BARE row-level calc input → aggregation-level-mismatch (would mix levels)', () => {
+    const r = validateBinding(calcLevels, bindAll({ c: 'Profit Ratio' }), SUMMARY);
+    expect(r.ok).toBe(false);
+    if (!r.ok)
+      expect(
+        r.blockers.some((x) => x.code === 'aggregation-level-mismatch' && x.slot_id === 'c'),
+      ).toBe(true);
+  });
+
+  it('no-fire: a row-level (non-aggregated) source into a calc input binds cleanly', () => {
+    const r = validateBinding(calcLevels, bindAll({}), SUMMARY);
+    expect(r.ok).toBe(true);
+  });
+
+  it('no-fire: an aggregate into a plain measure slot that feeds NO calc (gate 7 forces usr)', () => {
+    const r = validateBinding(calcLevels, bindAll({ plain: 'Profit Ratio' }), SUMMARY);
+    expect(r.ok).toBe(true);
+    // gate 7 emits the aggregate as usr on the shelf, with no re-aggregation
+    if (r.ok) expect(r.field_mapping['P']).toBe('[Superstore].[usr:Calculation_9999:qk]');
+  });
+
+  it('real manifest (deviation-arrow): aggregate into its SUM([Actual]) calc leaf is blocked', () => {
+    const m = manifests.get('deviation-arrow')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'member', field: 'Category' },
+        { slot_id: 'actual', field: 'Profit Ratio' },
+        { slot_id: 'line', field: 'Profit' },
+      ],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+    expect(r.ok).toBe(false);
+    if (!r.ok)
+      expect(
+        r.blockers.some((x) => x.code === 'aggregation-level-mismatch' && x.slot_id === 'actual'),
+      ).toBe(true);
+  });
+
+  it('real manifest (deviation-arrow): row-level measures into the same leaves bind cleanly', () => {
+    const m = manifests.get('deviation-arrow')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'member', field: 'Category' },
+        { slot_id: 'actual', field: 'Sales' },
+        { slot_id: 'line', field: 'Profit' },
+      ],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+    expect(r.ok).toBe(true);
   });
 });
 

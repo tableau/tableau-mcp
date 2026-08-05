@@ -311,6 +311,31 @@ export function listAvailableFields(
     const tableByColumn = new Map<string, string>();
     const ambiguousTableColumns = new Set<string>();
 
+    // Distinct-count estimates, indexed SEPARATELY from columnMap. Tableau publishes
+    // <approx-count> only inside <metadata-record>, but a field that also has a
+    // top-level <column> wins the dedupe below and its record is dropped — so reading
+    // the count off the winning column entry would lose it for exactly the curated
+    // fields the agent is most likely to bind. Building an independent index keyed on
+    // the bracketed local-name lets every branch pick up a count when one exists.
+    const approxCountByName = new Map<string, number>();
+    if (datasource.connection?.['metadata-records']) {
+      const records = normalizeArray(datasource.connection['metadata-records']['metadata-record']);
+      for (const record of records) {
+        if (record['@_class'] !== 'column') continue;
+        const localName = record['local-name'];
+        if (!localName) continue;
+        // parseTagValue is off in the shared parser, so text nodes arrive as raw
+        // (untrimmed) strings. Accept only a finite non-negative integer; anything
+        // else stays absent rather than becoming NaN or a bogus 0.
+        const raw = typeof record['approx-count'] === 'string' ? record['approx-count'] : undefined;
+        if (raw === undefined) continue;
+        const count = Number(raw.trim());
+        if (!Number.isInteger(count) || count < 0) continue;
+        const bracketedName = localName.startsWith('[') ? localName : `[${localName}]`;
+        approxCountByName.set(bracketedName, count);
+      }
+    }
+
     // Build folder lookup: field name -> folder name
     const folderMap = new Map<string, string>();
     const foldersCommon = datasource['folders-common'];
@@ -399,6 +424,10 @@ export function listAvailableFields(
 
       let isAggregated = false;
       let formula: string | undefined;
+      // A user-defined GROUP is a top-level <column> whose calculation bins concrete
+      // values of a base column (class='categorical-bin'). Flag it so generic template
+      // slots never auto-bind to this non-portable derivation (see autoMapFields).
+      let isGroup = false;
 
       if (source === 'top-level') {
         role = column['@_role'];
@@ -406,6 +435,10 @@ export function listAvailableFields(
         datatype = column['@_datatype'];
         caption = column['@_caption'];
         semanticRole = column['@_semantic-role'];
+
+        if (column.calculation && column.calculation['@_class'] === 'categorical-bin') {
+          isGroup = true;
+        }
 
         if (column.calculation && column.calculation['@_formula']) {
           formula = column.calculation['@_formula'];
@@ -477,9 +510,11 @@ export function listAvailableFields(
         datatype: datatype,
         caption: caption,
         semanticRole: semanticRole,
+        approxCount: approxCountByName.get(columnName),
         isAggregated: isAggregated,
         formula: formula,
         folder: folder,
+        isGroup: isGroup,
       };
 
       results.push({

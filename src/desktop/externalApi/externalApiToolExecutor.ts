@@ -132,6 +132,10 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return this.client !== undefined;
   }
 
+  get desktopInstanceId(): string | undefined {
+    return this.client?.instanceId;
+  }
+
   async executeCommand(
     args: ExecuteCommandArgs<undefined>,
   ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>>;

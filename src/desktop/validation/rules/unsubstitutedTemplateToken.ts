@@ -1,6 +1,6 @@
 import type { ValidationIssue, ValidationRule } from '../types.js';
 
-const TEMPLATE_TOKEN = /\{\{\s*([A-Z][A-Z0-9_]*)\s*\}\}/g;
+const TEMPLATE_TOKEN = /\{\{\s*([A-Z][A-Z0-9_]*|field_base_[1-9]\d*)\s*\}\}/g;
 
 export const unsubstitutedTemplateTokenRule: ValidationRule = {
   id: 'unsubstituted-template-token',
@@ -31,8 +31,8 @@ export const unsubstitutedTemplateTokenRule: ValidationRule = {
         suggestion:
           `Substitute ${token} with the real value before applying — e.g. replace [${token.replace(/[{}]/g, '')}] ` +
           'references with [Sample - Superstore] and use real field instances (tableau-list-available-fields) — OR ' +
-          'apply this template through bind-template or build-and-apply-worksheet, which run the ' +
-          'substitution for you. Never apply template XML that still holds placeholder tokens.',
+          'construct it through build-worksheets-from-templates, then apply the returned artifact with ' +
+          'apply-worksheet. Never apply template XML that still holds placeholder tokens.',
       });
     }
 

@@ -16,6 +16,12 @@ import type { Family, TemplateManifest } from './manifest-types.js';
 
 // Minimal Superstore-shaped workbook: workbook-level <datasources> is what
 // listAvailableFields reads (top-level <column> with role/type/datatype).
+// Mirrors real Sample - Superstore, whose four geographic fields DO carry
+// semantic-role (verified against ~/Documents/My Tableau Repository/Workbooks:
+// City, Country/Region, Postal Code, State/Province). The roles are load-bearing
+// for the generated-Lat/Long map templates: those plot Tableau's generated
+// coordinates, which materialize only for a field the datasource geocodes, so the
+// binder refuses a geo slot bound to an untagged dimension (gate 3c).
 const WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>
   <datasources>
@@ -24,8 +30,8 @@ const WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
       <column name='[Category]' role='dimension' type='nominal' datatype='string' />
       <column name='[Sub-Category]' role='dimension' type='nominal' datatype='string' />
       <column name='[Customer Name]' role='dimension' type='nominal' datatype='string' />
-      <column name='[Country/Region]' role='dimension' type='nominal' datatype='string' />
-      <column name='[State/Province]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Country/Region]' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[ISO3166_2]' />
+      <column name='[State/Province]' role='dimension' type='nominal' datatype='string' semantic-role='[State].[Name]' />
       <column name='[Order Date]' role='dimension' type='ordinal' datatype='date' />
       <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
       <column name='[Profit]' role='measure' type='quantitative' datatype='real' />

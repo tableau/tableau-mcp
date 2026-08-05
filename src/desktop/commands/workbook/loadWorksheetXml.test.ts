@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 import * as loggerModule from '../../../logging/logger.js';
 import invariant from '../../../utils/invariant.js';
 import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import { deriveWorksheetApplyState } from '../../metadata/targetWorksheetState.js';
 import type { ParsedWindow } from '../../metadata/types.js';
 import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
@@ -14,7 +15,12 @@ const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
 const sheetUpsertMock = vi.hoisted(() => ({
   upsertSheetIntoWorkbook: undefined as
     | undefined
-    | ((workbookXml: string, sheetName: string, editedWorksheetXml: string) => string),
+    | ((
+        workbookXml: string,
+        sheetName: string,
+        editedWorksheetXml: string,
+        editedWorksheetWindowXml?: string,
+      ) => string),
 }));
 
 vi.mock('../../metadata/sheets.js', async (importOriginal) => {
@@ -25,10 +31,21 @@ vi.mock('../../metadata/sheets.js', async (importOriginal) => {
       workbookXml: string,
       sheetName: string,
       editedWorksheetXml: string,
+      editedWorksheetWindowXml?: string,
     ) =>
       sheetUpsertMock.upsertSheetIntoWorkbook
-        ? sheetUpsertMock.upsertSheetIntoWorkbook(workbookXml, sheetName, editedWorksheetXml)
-        : actual.upsertSheetIntoWorkbook(workbookXml, sheetName, editedWorksheetXml),
+        ? sheetUpsertMock.upsertSheetIntoWorkbook(
+            workbookXml,
+            sheetName,
+            editedWorksheetXml,
+            editedWorksheetWindowXml,
+          )
+        : actual.upsertSheetIntoWorkbook(
+            workbookXml,
+            sheetName,
+            editedWorksheetXml,
+            editedWorksheetWindowXml,
+          ),
   };
 });
 
@@ -251,6 +268,63 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(applyCall).toBeDefined();
     expect(applyCall?.xml).toContain('class="worksheet" name="Sheet 1"');
     expect(applyCall?.xml).toContain('name="Some Other Sheet"');
+  });
+
+  it('refuses an artifact when an expected-absent worksheet appeared after build', async () => {
+    const previewWorkbook = liveWorkbook([]);
+    const { executor, calls } = dispatchingExecutor(liveWorkbook([worksheetName]));
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      expectedState: deriveWorksheetApplyState(previewWorkbook, worksheetName, validXml),
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error.type).toBe('preview-state-changed');
+    }
+    expect(calls.find((call) => call.kind === 'apply')).toBeUndefined();
+  });
+
+  it('applies the exact artifact worksheet window after a stable source reread', async () => {
+    const previewWorkbook = liveWorkbook(['Some Other Sheet']);
+    const worksheetWindowXml =
+      `<window class='worksheet' name='${worksheetName}'>` +
+      "<cards><card type='filters' /></cards></window>";
+    const { executor, calls } = dispatchingExecutor(previewWorkbook);
+    (executor as unknown as { getWorkbookDocument: ReturnType<typeof vi.fn> }).getWorkbookDocument =
+      vi.fn(async () =>
+        Ok({
+          xml: calls.find((call) => call.kind === 'apply')?.xml ?? previewWorkbook,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      );
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      worksheetWindowXml,
+      expectedState: deriveWorksheetApplyState(
+        previewWorkbook,
+        worksheetName,
+        validXml,
+        worksheetWindowXml,
+      ),
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    const applyCall = calls.find((call) => call.kind === 'apply');
+    expect(applyCall?.xml).toContain('type="filters"');
+    expect(calls.filter((call) => call.kind === 'apply')).toHaveLength(1);
   });
 
   it('continues worksheet apply when both preflight stages contain only telemetry findings', async () => {
@@ -508,7 +582,39 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     if (result.isErr()) {
       invariant(result.error.type === 'execute-command-error');
       expect(result.error.error).toEqual(error);
+      expect(result.error.dispatchState).toBe('not-dispatched');
     }
+  });
+
+  it('classifies a failed whole-workbook POST as possibly dispatched', async () => {
+    const error = { type: 'unknown' as const, error: new Error('dispatch outcome unknown') };
+    const applyWorkbookDocument = vi.fn().mockResolvedValue(Err(error));
+    const mockExecutor = {
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: liveWorkbook([worksheetName]),
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      ),
+      applyWorkbookDocument,
+    } as unknown as ToolExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'execute-command-error');
+      expect(result.error.error).toEqual(error);
+      expect(result.error.dispatchState).toBe('possibly-dispatched');
+    }
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
   });
 });
 

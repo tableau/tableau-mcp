@@ -43,10 +43,26 @@ export interface FieldReference {
   role: string;
   datatype?: string;
   semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
+  /**
+   * Tableau's OWN distinct-count estimate for this column, read verbatim from the
+   * connection's `<metadata-record><approx-count>`. Undefined when the connection
+   * publishes none (live connections often don't; extracts do), so a consumer must
+   * treat "absent" as "unknown", never as "low". Measured, not name-guessed.
+   */
+  approxCount?: number;
   caption?: string;
   isAggregated?: boolean;
   formula?: string;
   folder?: string;
+  /**
+   * True when this column is a user-defined GROUP — a `<column>` whose calculation
+   * has `class='categorical-bin'`, which bins concrete data values of a base column
+   * into user-named members. Groups are inherently NON-portable (they enumerate the
+   * specific values of one dataset) and cannot be referenced through the ordinary
+   * `[none:field:nk]` column-instance form, so generic template slots must never
+   * auto-bind to one. See field-builder.ts and autoMapFields.
+   */
+  isGroup?: boolean;
 }
 
 export interface ParsedWorkbook {
@@ -106,7 +122,11 @@ export interface ParsedColumn {
   '@_caption'?: string;
   calculation?: {
     '@_class': string;
-    '@_formula': string;
+    // A formula calc carries `@_formula`; a GROUP (class='categorical-bin') instead
+    // names its base column on `@_column` and has no formula — so both are optional.
+    '@_formula'?: string;
+    '@_column'?: string;
+    [key: string]: any;
   };
   [key: string]: any;
 }

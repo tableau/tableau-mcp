@@ -25,6 +25,27 @@ function assignFreshUuids(obj: unknown): void {
   }
 }
 
+/**
+ * Ensure the injected sheet/window ROOT carries a `<simple-id>`. Tableau's `<worksheet>`
+ * content model is `(((layout-options?)|(repository-location?)),table,simple-id)` — the
+ * trailing `simple-id` is REQUIRED, and a real Desktop-saved worksheet/window always carries
+ * one (verified: worksheet children `[table, simple-id]`, window children `[cards, simple-id]`).
+ * Hand-authored `.xml` templates and bookmark-derived worksheets omit it — Desktop auto-heals
+ * on apply, but the strict `validateWorkbookDocument` gate correctly rejects the missing
+ * element, which sinks the whole atomic apply. Add it as the LAST key so it serializes after
+ * `table`/`cards`, matching the content model. `assignFreshUuids` then hands it a unique uuid
+ * on every inject, so re-using one tokenized template across sheets can never collide.
+ * Root-only (NOT recursive): only the sheet and window objects own a `simple-id`; nested panes
+ * etc. must not gain one.
+ */
+function ensureRootSimpleId(obj: unknown): void {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return;
+  const o = obj as Record<string, unknown>;
+  if (!o['simple-id'] || typeof o['simple-id'] !== 'object' || Array.isArray(o['simple-id'])) {
+    o['simple-id'] = { '@_uuid': generateUUID() };
+  }
+}
+
 function stripNavigationFlags(window: Record<string, unknown>): void {
   delete window['@_active'];
   delete window['@_maximized'];
@@ -63,6 +84,8 @@ export function injectTemplate(
   if (!windowToInject)
     throw new Error(`Template does not contain a <window class="${windowClass}">`);
 
+  ensureRootSimpleId(sheetToInject);
+  ensureRootSimpleId(windowToInject);
   assignFreshUuids(sheetToInject);
   assignFreshUuids(windowToInject);
   stripNavigationFlags(windowToInject);

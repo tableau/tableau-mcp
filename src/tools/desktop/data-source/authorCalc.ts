@@ -87,7 +87,7 @@ export const getAuthorCalcTool = (server: DesktopMcpServer): DesktopTool<typeof 
             calcName: calc.calcName,
             caption: calc.caption,
             datasource: calc.datasource,
-            hint: 'reference it by caption in a bind-template ask (name the caption plus a chart shape), auto_apply: true',
+            hint: 'call list-available-fields to get its column_ref, then use that ref with build-worksheets-from-templates or add-field',
           });
         },
       });

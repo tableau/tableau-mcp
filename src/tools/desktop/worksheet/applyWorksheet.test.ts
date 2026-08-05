@@ -5,6 +5,11 @@ import { z } from 'zod';
 
 import * as loadWorksheetXmlModule from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import * as episodeEvents from '../../../desktop/episode-events.js';
+import type { WorksheetApplyState } from '../../../desktop/metadata/targetWorksheetState.js';
+import {
+  setTemplateArtifactStoreForTests,
+  TemplateArtifactStore,
+} from '../../../desktop/templates/templateArtifactStore.js';
 import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
 import {
   DesktopCommandExecutionError,
@@ -30,6 +35,10 @@ describe('applyWorksheetTool', () => {
     status: 'skipped' as const,
     message: 'worksheet busy',
   };
+  const verifiedArtifactApply = {
+    readbackWarnings: [],
+    readbackVerification: { ok: true, status: 'passed' as const },
+  };
   const promisedSortLossWarning: ReadbackFinding = {
     kind: 'sort',
     node: 'computed-sort',
@@ -51,9 +60,10 @@ describe('applyWorksheetTool', () => {
     const tool = getApplyWorksheetTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-worksheet');
     expect(tool.description).toBe(
-      'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path.',
+      'Apply a guarded template artifact or modified cached worksheet file to Desktop.',
     );
     expect(tool.paramsSchema).toMatchObject({
+      artifactId: expect.any(Object),
       session: expect.any(Object),
       worksheetName: expect.any(Object),
       worksheetFile: expect.any(Object),
@@ -62,6 +72,154 @@ describe('applyWorksheetTool', () => {
       readOnlyHint: false,
       openWorldHint: false,
     });
+  });
+
+  it('bounds session, worksheet name, and worksheet file inputs', () => {
+    const schema = getApplyWorksheetTool(new DesktopMcpServer()).paramsSchema as {
+      session: z.ZodTypeAny;
+      worksheetName: z.ZodTypeAny;
+      worksheetFile: z.ZodTypeAny;
+    };
+
+    expect(schema.session.safeParse('s'.repeat(64)).success).toBe(true);
+    expect(schema.session.safeParse('s'.repeat(65)).success).toBe(false);
+    expect(schema.worksheetName.safeParse('').success).toBe(false);
+    expect(schema.worksheetName.safeParse('w').success).toBe(true);
+    expect(schema.worksheetName.safeParse('w'.repeat(255)).success).toBe(true);
+    expect(schema.worksheetName.safeParse('w'.repeat(256)).success).toBe(false);
+    expect(schema.worksheetFile.safeParse('f'.repeat(4096)).success).toBe(true);
+    expect(schema.worksheetFile.safeParse('f'.repeat(4097)).success).toBe(false);
+  });
+
+  it('consumes a session-bound artifact and applies its exact guarded payload', async () => {
+    const server = new DesktopMcpServer();
+    const artifactId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const expectedState = putArtifact(server, artifactId, '12345:instance-live');
+    const load = vi
+      .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockResolvedValue(Ok(verifiedArtifactApply));
+    const mockExecutor = vi.fn().mockResolvedValue({ desktopInstanceId: 'instance-live' });
+
+    const first = await getToolResult({ session: '12345', artifactId, mockExecutor, server });
+    const replay = await getToolResult({ session: '12345', artifactId, mockExecutor, server });
+
+    expect(first.isError).toBe(false);
+    invariant(first.content[0].type === 'text');
+    expect(JSON.parse(first.content[0].text)).toMatchObject({
+      templateProvenance: 'custom',
+      metadataTrust: 'untrusted-repository',
+    });
+    expect(load).toHaveBeenCalledWith({
+      worksheetName: 'Stored Sheet',
+      xml: '<worksheet name="Stored Sheet"><table /></worksheet>',
+      worksheetWindowXml: '<window class="worksheet" name="Stored Sheet" />',
+      expectedState,
+      focus: { navigate: 'artifact', sheetName: 'Stored Sheet' },
+      executor: { desktopInstanceId: 'instance-live' },
+      signal: expect.any(AbortSignal),
+      requireExistingSheet: false,
+    });
+    expect(replay.isError).toBe(true);
+    expect(load).toHaveBeenCalledOnce();
+  });
+
+  it('rejects artifactId combined with manual worksheet arguments', async () => {
+    const load = vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml');
+
+    const result = await getToolResult({
+      session: '12345',
+      artifactId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      worksheetName: 'Manual Sheet',
+      worksheetFile: '/cache/manual.xml',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('artifactId cannot be combined');
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('releases an artifact only after a proven pre-dispatch read failure', async () => {
+    const server = new DesktopMcpServer();
+    const artifactId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    putArtifact(server, artifactId, '12345');
+    const load = vi
+      .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockResolvedValueOnce(
+        Err({
+          type: 'execute-command-error',
+          error: { type: 'unknown', error: new Error('read failed') },
+          dispatchState: 'not-dispatched',
+          retrySafe: true,
+        }),
+      )
+      .mockResolvedValueOnce(Ok(verifiedArtifactApply));
+    const mockExecutor = vi.fn().mockResolvedValue({});
+
+    const failedRead = await getToolResult({ session: '12345', artifactId, mockExecutor, server });
+    const retry = await getToolResult({ session: '12345', artifactId, mockExecutor, server });
+
+    expect(failedRead.isError).toBe(true);
+    invariant(failedRead.content[0].type === 'text');
+    expect(JSON.parse(failedRead.content[0].text)).toEqual({
+      mutationOutcome: 'not-dispatched',
+      guidance: expect.stringContaining('Retry apply-worksheet with this artifactId'),
+    });
+    expect(retry.isError).toBe(false);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('consumes a pre-dispatch failure that is not proven to be a read failure', async () => {
+    const server = new DesktopMcpServer();
+    const artifactId = 'cececece-cece-4ece-8ece-cececececece';
+    putArtifact(server, artifactId, '12345');
+    const load = vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Err({
+        type: 'execute-command-error',
+        error: { type: 'invalid-response', error: new Error('invalid guarded upsert') },
+        dispatchState: 'not-dispatched',
+      }),
+    );
+    const mockExecutor = vi.fn().mockResolvedValue({});
+
+    const failed = await getToolResult({ session: '12345', artifactId, mockExecutor, server });
+    const replay = await getToolResult({ session: '12345', artifactId, mockExecutor, server });
+
+    expect(failed.isError).toBe(true);
+    invariant(failed.content[0].type === 'text');
+    expect(JSON.parse(failed.content[0].text)).toEqual({
+      mutationOutcome: 'not-dispatched',
+      guidance: expect.stringContaining('artifact was consumed'),
+    });
+    expect(replay.isError).toBe(true);
+    expect(load).toHaveBeenCalledOnce();
+  });
+
+  it('consumes an artifact after a possibly-dispatched failure', async () => {
+    const server = new DesktopMcpServer();
+    const artifactId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    putArtifact(server, artifactId, '12345');
+    const load = vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Err({
+        type: 'execute-command-error',
+        error: { type: 'unknown', error: new Error('dispatch uncertain') },
+        dispatchState: 'possibly-dispatched',
+      }),
+    );
+    const mockExecutor = vi.fn().mockResolvedValue({});
+
+    const uncertain = await getToolResult({ session: '12345', artifactId, mockExecutor, server });
+    const replay = await getToolResult({ session: '12345', artifactId, mockExecutor, server });
+
+    expect(uncertain.isError).toBe(true);
+    invariant(uncertain.content[0].type === 'text');
+    expect(JSON.parse(uncertain.content[0].text)).toEqual({
+      mutationOutcome: 'possibly-dispatched',
+      guidance: expect.stringContaining('artifact was consumed'),
+    });
+    expect(replay.isError).toBe(true);
+    expect(load).toHaveBeenCalledOnce();
   });
 
   it('should successfully apply worksheet XML in inline mode', async () => {
@@ -349,22 +507,51 @@ describe('applyWorksheetTool', () => {
   });
 });
 
+function putArtifact(
+  server: DesktopMcpServer,
+  artifactId: string,
+  sessionId: string,
+): WorksheetApplyState {
+  const expectedState: WorksheetApplyState = {
+    workbookSha256: 'e'.repeat(64),
+    target: { state: 'absent' },
+    targetWindow: { state: 'absent' },
+    dependenciesSha256: 'c'.repeat(64),
+    artifactSha256: 'd'.repeat(64),
+  };
+  const store = new TemplateArtifactStore({ createId: () => artifactId });
+  setTemplateArtifactStoreForTests(server, store);
+  store.put(sessionId, {
+    worksheetName: 'Stored Sheet',
+    worksheetXml: '<worksheet name="Stored Sheet"><table /></worksheet>',
+    worksheetWindowXml: '<window class="worksheet" name="Stored Sheet" />',
+    expectedState,
+    templateProvenance: 'custom',
+    metadataTrust: 'untrusted-repository',
+  });
+  return expectedState;
+}
+
 async function getToolResult({
   session,
+  artifactId,
   worksheetName,
   worksheetFile,
   worksheetXml,
   mockExecutor,
   customSignal,
   configOverrides,
+  server,
 }: {
   session: string;
-  worksheetName: string;
+  artifactId?: string;
+  worksheetName?: string;
   worksheetFile?: string;
   worksheetXml?: string;
   mockExecutor: TableauDesktopToolContext['getExecutor'];
   customSignal?: AbortSignal;
   configOverrides?: Partial<TableauDesktopToolContext['config']>;
+  server?: DesktopMcpServer;
 }): Promise<CallToolResult> {
   // The tool no longer takes a document. Tests that supplied XML directly now get a
   // synthetic cache path backed by the fs mock, so they still exercise the apply leg.
@@ -374,7 +561,7 @@ async function getToolResult({
     vi.mocked(readFileSync).mockReturnValue(worksheetXml);
   }
 
-  const tool = getApplyWorksheetTool(new DesktopMcpServer());
+  const tool = getApplyWorksheetTool(server ?? new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
 
   const extra = {
@@ -384,5 +571,14 @@ async function getToolResult({
   };
   extra.config = { ...extra.config, ...configOverrides };
 
-  return await callback({ session, worksheetName, worksheetFile }, extra);
+  const artifactCallback = callback as unknown as (
+    args: {
+      session?: string;
+      artifactId?: string;
+      worksheetName?: string;
+      worksheetFile?: string;
+    },
+    callbackExtra: typeof extra,
+  ) => Promise<CallToolResult>;
+  return await artifactCallback({ session, artifactId, worksheetName, worksheetFile }, extra);
 }

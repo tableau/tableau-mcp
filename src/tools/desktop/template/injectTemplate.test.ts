@@ -299,6 +299,30 @@ describe('injectTemplateTool', () => {
     expect(capturedTemplate).toContain('My Sub');
     expect(capturedTemplate).not.toContain('{{SUBTITLE}}');
   });
+
+  // LEG 4 (DELIVER): output: 'xml' streams the filled worksheet XML back and writes nothing.
+  it("output: 'xml' returns the filled worksheet XML and does not write the workbook or sidecar", async () => {
+    const result = await getResult({ ...BASE_PARAMS, output: 'xml' });
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    // The injected workbook XML is streamed back to the agent verbatim.
+    expect(result.content[0].text).toContain(INJECTED_XML);
+    // And it says the file was untouched — no apply-workbook follow-up implied.
+    expect(result.content[0].text).toContain('NOT modified');
+    // Nothing is persisted in xml mode.
+    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
+  });
+
+  it("output: 'inject' (explicit) still writes the workbook exactly like the default", async () => {
+    const result = await getResult({ ...BASE_PARAMS, output: 'inject' });
+
+    expect(result.isError).toBeFalsy();
+    expect(writeFileSync).toHaveBeenCalledWith(resolve(WORKBOOK_FILE), INJECTED_XML, 'utf-8');
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('apply-workbook');
+  });
 });
 
 async function getResult(
@@ -307,6 +331,7 @@ async function getResult(
     fieldMapping?: Record<string, string>;
     insertPosition?: 'end' | 'before_sheet' | 'after_sheet';
     relativeSheetName?: string;
+    output?: 'inject' | 'xml';
   },
   extra = makeExtra(),
 ): Promise<CallToolResult> {

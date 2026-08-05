@@ -6,7 +6,6 @@ import { z } from 'zod';
 import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as metadataModule from '../../../desktop/metadata/index.js';
-import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { FileReadError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -76,7 +75,6 @@ const LIVE_XML = '<workbook><datasource name="live"/></workbook>';
 describe('listAvailableFieldsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    sessionRouteState.clear();
   });
 
   it('should create a tool instance with correct properties', async () => {
@@ -221,7 +219,6 @@ describe('listAvailableFieldsTool', () => {
       signal: extra.signal,
     });
     expect(metadataModule.listAvailableFields).toHaveBeenCalledWith(LIVE_XML);
-    expect(sessionRouteState.hasAuthoringAttempt(SESSION)).toBe(false);
   });
 
   it('without session preserves cache-only behavior', async () => {

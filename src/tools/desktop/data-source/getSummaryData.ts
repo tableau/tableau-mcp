@@ -26,11 +26,11 @@ import { fetchWorksheetSummaryData } from './summaryDataCore.js';
 const DEFAULT_MAX_ROWS = 200;
 const MAX_ROWS_CAP = 1000;
 const EMPTY_SHEET_GUIDANCE =
-  'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — bind a chart first (bind-template) or name a populated sheet.';
+  'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — build a chart first with list-templates, build-worksheets-from-templates, and apply-worksheet, or name a populated sheet.';
 const NO_ROWS_GUIDANCE =
   "The summary query returned no rows. Do NOT call get-summary-data again for this ask — the answer is 'no data'; say so.";
 const SUMMARY_DATA_DONE_LABEL = 'Data retrieval complete — no further calls needed';
-const EMPTY_SHEET_BIND_LABEL = 'Build the requested chart with bind-template';
+const EMPTY_SHEET_BIND_LABEL = 'Start the requested chart with list-templates';
 const SUMMARY_DATA_FAILURE_DONE_LABEL = 'Data retrieval failed — report outcome';
 const WORKSHEET_AMBIGUOUS_GUIDANCE =
   'Choose one worksheet by exact id or name, then call get-summary-data again.';

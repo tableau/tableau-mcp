@@ -51,6 +51,17 @@ describe('ExternalApiToolExecutor', () => {
       expect(executor.isAvailable()).toBe(true);
     });
 
+    it('exposes the active Desktop instance ID', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      expect(executor.desktopInstanceId).toBeUndefined();
+
+      await executor.start();
+      expect(executor.desktopInstanceId).toBe('inst-exec');
+
+      executor.stop();
+      expect(executor.desktopInstanceId).toBeUndefined();
+    });
+
     it('is not available when no instance is discovered', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [] });
       await executor.start();

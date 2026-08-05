@@ -29,7 +29,8 @@ import { type RouteDeflection, type RouteOverride, sessionRouteState } from './r
 export const ROUTE_ENFORCEMENT_ENV = 'ROUTE_ENFORCEMENT';
 
 /** The tmcp fast-lane tools the gate steers toward (no `tableau-` prefix, per tmcp naming). */
-export const BIND_TEMPLATE_TOOL = 'bind-template';
+export const LIST_TEMPLATES_TOOL = 'list-templates';
+export const BUILD_WORKSHEETS_FROM_TEMPLATES_TOOL = 'build-worksheets-from-templates';
 export const REFINE_WORKSHEET_TOOL = 'refine-worksheet';
 
 /**
@@ -79,8 +80,9 @@ export function decideRouteGate(args: {
  */
 export function deflectionText(template: string): string {
   return (
-    `Route: bind-first. Template '${template}' matches this ask — call ${BIND_TEMPLATE_TOOL} ` +
-    'first; if it escalates or proposes, retry this call and it will proceed.'
+    `Route: template-first. Template '${template}' matches this ask — call ${LIST_TEMPLATES_TOOL} ` +
+    `for its current metadata, then ${BUILD_WORKSHEETS_FROM_TEMPLATES_TOOL}; if it cannot build, ` +
+    'retry this call and it will proceed.'
   );
 }
 

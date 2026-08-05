@@ -2,10 +2,12 @@ import {
   parseColumnInstanceRef,
   parseDatasourceQualifiedColumnRef,
 } from '../metadata/field-resolver.js';
+import type { FieldMetadataOverride } from '../templates/fieldReferenceRewriter.js';
 import {
   optionalFieldPrunesFor,
   type OptionalFieldPruneSpec,
 } from '../templates/optionalFieldPrune.js';
+import { geoConceptFromSemanticRole, geoConceptFromSlotId } from './geo-concept.js';
 import { loadManifests } from './manifest.js';
 import type { Derivation, SlotSpec, TemplateManifest } from './manifest-types.js';
 import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
@@ -21,6 +23,7 @@ export interface AvailableFieldLike {
   datatype?: string;
   caption?: string;
   isAggregated?: boolean;
+  isGroup?: boolean;
   column_ref: string;
 }
 
@@ -45,7 +48,7 @@ export type ExplicitBindResult =
       template: string;
       datasource: string;
       fieldMapping: Record<string, string>;
-      fieldMetadata: Record<string, { datatype: string; type: string }>;
+      fieldMetadata: Record<string, FieldMetadataOverride>;
       consumedFieldRefs: string[];
       templateSlots: SlotSpec[];
       optionalFieldPrunes: OptionalFieldPruneSpec[];
@@ -95,6 +98,7 @@ export function schemaSummaryFromAvailableFields(fields: AvailableFieldLike[]): 
       datatype: f.datatype ?? '',
       datasource: f.datasource,
       isAggregated: !!f.isAggregated,
+      ...(f.isGroup ? { isGroup: true } : {}),
       column_ref: f.column_ref,
     };
   });
@@ -205,6 +209,7 @@ function buildProposalFromOrderedRefs(
     else warnings.push(`unresolved-column-ref: ${resolved.detail}`);
   }
 
+  const needsGeocodableGeo = requiresGeocodableGeo(manifest);
   const used = new Set<SchemaField>();
   const reusableByTemplateField = new Map<string, ResolvedSource>();
   const fieldBySlot = new Map<string, SchemaField>();
@@ -216,7 +221,13 @@ function buildProposalFromOrderedRefs(
     if (shouldReserveCategoricalSource(slot, orderedSlots.slice(index + 1), sources, used)) {
       continue;
     }
-    const selection = takeCompatibleSource(slot, sources, used, reusableByTemplateField);
+    const selection = takeCompatibleSource(
+      slot,
+      sources,
+      used,
+      reusableByTemplateField,
+      needsGeocodableGeo,
+    );
     if (!selection) continue;
     const { source, affinityPlaced } = selection;
     reusableByTemplateField.set(slot.template_field, source);
@@ -262,6 +273,12 @@ function buildProposalFromFieldMapping(
   const bindings: BindingProposal['bindings'] = [];
   const greedyAssignments: GreedyAssignment[] = [];
 
+  // The caller (the agent) owns slot→field mapping on this path: we bind ONLY the slots
+  // it explicitly keyed. Unmapped slots are deliberately left unbound — a required one
+  // then surfaces as a `missing-required-slot` blocker in validate.ts so the agent learns
+  // the slot is required, and an optional one is handled by the optional-field mechanism.
+  // We never auto-fill an unmapped slot from leftover mapping values (that guessing lives
+  // only on the ordered-refs / ShowMe path via autoMapFields).
   for (const slot of manifest.slots) {
     if (!slot.bindable) continue;
     const key = mappingKeyForSlot(slot, manifest, mapping);
@@ -288,7 +305,13 @@ function buildProposalFromFieldMapping(
 
   for (const slot of manifest.slots) {
     if (!slot.bindable || !slot.required || fieldBySlot.has(slot.slot_id)) continue;
-    const selection = takeCompatibleSource(slot, remainingSources, usedFields, new Map());
+    const selection = takeCompatibleSource(
+      slot,
+      remainingSources,
+      usedFields,
+      new Map(),
+      requiresGeocodableGeo(manifest),
+    );
     if (!selection) continue;
     const { source, affinityPlaced } = selection;
     usedFields.add(source.field);
@@ -305,14 +328,37 @@ function buildProposalFromFieldMapping(
   };
 }
 
+/**
+ * Preference score among kind-compatible candidates — higher wins, ties keep
+ * schema order so every existing bind is unchanged unless a genuinely better
+ * candidate exists.
+ *
+ * Only geo slots score today. Without this, the FIRST kind-compatible field in
+ * schema order won a geo slot, so a `city` slot could take a Country-tagged field
+ * merely because it appeared earlier — the concept-mismatch that validate.ts then
+ * rejects as a blocker (the §0 probe's sole Superstore bind failure). Ranking by
+ * declared concept means the right field is proposed instead of a valid bind being
+ * turned into an error.
+ */
+function slotAffinity(slot: SlotSpec, f: SchemaField): number {
+  if (slot.kind !== 'geo') return 0;
+  const slotConcept = geoConceptFromSlotId(slot.slot_id);
+  const fieldConcept = geoConceptFromSemanticRole(f.semanticRole);
+  if (slotConcept && fieldConcept) return slotConcept === fieldConcept ? 3 : -1;
+  // A geocodable field still beats an untagged one for a geo slot.
+  if (fieldConcept || f.semanticRole) return 1;
+  return 0;
+}
+
 function takeCompatibleSource(
   slot: SlotSpec,
   sources: ResolvedSource[],
   used: Set<SchemaField>,
   reusableByTemplateField: Map<string, ResolvedSource>,
+  needsGeocodableGeo = false,
 ): CompatibleSourceSelection | null {
   const reusable = reusableByTemplateField.get(slot.template_field);
-  if (reusable && kindCompatible(slot.kind, reusable.field)) {
+  if (reusable && kindCompatible(slot.kind, reusable.field, needsGeocodableGeo)) {
     return { source: reusable, affinityPlaced: false };
   }
 
@@ -320,7 +366,8 @@ function takeCompatibleSource(
     const affine = sources.filter(
       (source) =>
         !used.has(source.field) &&
-        kindCompatible(slot.kind, source.field) &&
+        !source.field.isGroup &&
+        kindCompatible(slot.kind, source.field, needsGeocodableGeo) &&
         fieldNameMatchesSlot(source.field, slot),
     );
     if (affine.length === 1) {
@@ -329,14 +376,22 @@ function takeCompatibleSource(
     }
   }
 
+  let best: ResolvedSource | null = null;
+  let bestScore = -Infinity;
   for (const source of sources) {
     if (used.has(source.field)) continue;
-    if (!kindCompatible(slot.kind, source.field)) continue;
-    used.add(source.field);
-    return { source, affinityPlaced: false };
+    if (source.field.isGroup) continue;
+    if (!kindCompatible(slot.kind, source.field, needsGeocodableGeo)) continue;
+    const score = slotAffinity(slot, source.field);
+    if (score > bestScore) {
+      best = source;
+      bestScore = score;
+    }
   }
 
-  return null;
+  if (!best) return null;
+  used.add(best.field);
+  return { source: best, affinityPlaced: false };
 }
 
 function fieldNameMatchesSlot(field: SchemaField, slot: SlotSpec): boolean {
@@ -436,7 +491,25 @@ function parseColumnRef(raw: string): { datasource?: string; base: string } | nu
 const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
 const TRUNCATION_DERIVATIONS: ReadonlySet<string> = new Set(['tyr', 'tqr', 'tmn', 'tdy']);
 
-function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
+/**
+ * On a template whose rows/cols are Tableau's GENERATED Latitude/Longitude, a geo
+ * slot must receive a field the datasource actually geocodes. `requiresGeocodableGeo`
+ * is keyed on the manifest's own `generated-geo-required` hazard rather than on
+ * `kind: 'geo'` at large, because two templates use geo slots without needing
+ * geocoding (distribution-bar-code-chart puts them on detail; spatial-symbol-map-latlon
+ * plots real coordinate measures) and must keep accepting untagged dimensions.
+ */
+const GENERATED_GEO_HAZARD = 'generated-geo-required';
+
+function requiresGeocodableGeo(manifest: TemplateManifest): boolean {
+  return (manifest.hazards ?? []).some((h) => h.code === GENERATED_GEO_HAZARD);
+}
+
+function kindCompatible(
+  kind: SlotSpec['kind'],
+  f: SchemaField,
+  needsGeocodableGeo = false,
+): boolean {
   switch (kind) {
     case 'quantitative':
       return f.role === 'measure' || f.isAggregated;
@@ -451,7 +524,9 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
     case 'temporal':
       return TEMPORAL_DATATYPES.has(f.datatype);
     case 'geo':
-      return f.role === 'dimension';
+      // A generated-Lat/Long map needs a genuinely geocoded field; elsewhere a geo
+      // slot is a grain/detail pill and any dimension is fine.
+      return f.role === 'dimension' && (!needsGeocodableGeo || !!f.semanticRole);
     default:
       return false;
   }
@@ -505,15 +580,22 @@ function emitRawFieldMapping(
 function fieldMetadataFor(
   manifest: TemplateManifest,
   fieldBySlot: Map<string, SchemaField>,
-): Record<string, { datatype: string; type: string }> {
-  const metadata: Record<string, { datatype: string; type: string }> = {};
+): Record<string, FieldMetadataOverride> {
+  const metadata: Record<string, FieldMetadataOverride> = {};
   for (const slot of manifest.slots) {
     const field = fieldBySlot.get(slot.slot_id);
     if (!field) continue;
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
-    metadata[key] = { datatype: field.datatype, type: field.type };
+    // semanticRole is the BOUND field's own geo role. Carrying it (and its absence)
+    // lets the rewriter replace or drop the donor template's semantic-role instead of
+    // transplanting a geography the target datasource never declared.
+    metadata[key] = {
+      datatype: field.datatype,
+      type: field.type,
+      ...(field.semanticRole ? { semanticRole: field.semanticRole } : {}),
+    };
   }
   return metadata;
 }
@@ -575,8 +657,22 @@ function fixForBlocker(b: Blocker): string {
       return 'Provide a compatible field for this required manifest slot.';
     case 'kind-mismatch':
       return 'Bind a field whose role/type/datatype matches the manifest slot kind.';
+    case 'geo-not-geocodable':
+      return (
+        'This map plots generated Latitude/Longitude, so the slot needs a field Tableau geocodes ' +
+        '(one carrying a geographic semantic-role — a Country/State/City/Postal Code field). ' +
+        'Rebind a geocodable field from the candidates, or choose a non-map template for these ' +
+        'fields — a plain string dimension yields a map with zero marks.'
+      );
     case 'derivation-illegal':
       return 'Drop the illegal derivation override or bind a field whose datatype supports it.';
+    case 'aggregation-level-mismatch':
+      return (
+        'Bind a row-level (non-aggregated) measure or dimension to this slot. The template uses ' +
+        'it inside a calculation, so an already-aggregated field (a SUM/AVG-based calc, or any ' +
+        'table calc) breaks the formula — it either re-aggregates an already-aggregated field or ' +
+        'mixes aggregate and non-aggregate arguments.'
+      );
     case 'base-column-conflict':
       return 'Use the same base column for all qualified derivations of one template field.';
     case 'cross-datasource-binding':
@@ -584,7 +680,7 @@ function fixForBlocker(b: Blocker): string {
     case 'calc-dependency-unmet':
       return 'Bind every manifest slot required by the template-owned calculation.';
     default:
-      return 'Fall back to plan-dashboard-creation, placing fields per sheet with add-field.';
+      return 'Choose another eligible template from list-templates, then rebuild.';
   }
 }
 

@@ -15,11 +15,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { loadManifests } from '../binder/manifest.js';
 import type { TemplateManifest } from '../binder/manifest-types.js';
 import {
-  BIND_TEMPLATE_TOOL,
+  BUILD_WORKSHEETS_FROM_TEMPLATES_TOOL,
   checkRouteGate,
   checkRouteGateForScratchEntry,
   decideRouteGate,
   deflectionText,
+  LIST_TEMPLATES_TOOL,
   REFINE_WORKSHEET_TOOL,
   refineDeflectionText,
   routeEnforcementEnabled,
@@ -118,12 +119,13 @@ describe('decideRouteGate (pure decision, flag-independent)', () => {
 });
 
 describe('deflection text names the tmcp fast-lane tool on a single actionable line', () => {
-  it('bind-first wording names bind-template', () => {
+  it('template-first wording names the catalog and artifact builder', () => {
     expect(deflectionText('ranking-ordered-bar')).toBe(
-      "Route: bind-first. Template 'ranking-ordered-bar' matches this ask — call bind-template first; if it escalates or proposes, retry this call and it will proceed.",
+      "Route: template-first. Template 'ranking-ordered-bar' matches this ask — call list-templates for its current metadata, then build-worksheets-from-templates; if it cannot build, retry this call and it will proceed.",
     );
     expect(deflectionText('x').includes('\n')).toBe(false);
-    expect(BIND_TEMPLATE_TOOL).toBe('bind-template');
+    expect(LIST_TEMPLATES_TOOL).toBe('list-templates');
+    expect(BUILD_WORKSHEETS_FROM_TEMPLATES_TOOL).toBe('build-worksheets-from-templates');
   });
   it('refine-op wording names refine-worksheet', () => {
     expect(refineDeflectionText()).toBe(

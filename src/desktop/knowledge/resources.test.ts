@@ -66,16 +66,17 @@ describe('desktop knowledge resources', () => {
     expect(content).toContain('True/False');
   });
 
-  it('does not claim field listing requires an authoring attempt', () => {
+  it('teaches the guarded template path without a bind-first inspection gate', () => {
     const uri = 'expertise://tableau/personalization/discovery-first-authoring';
     const content = readKnowledgeResource(uri);
 
-    expect(content).toContain('`list-available-fields` has no authoring prerequisite');
-    expect(content).not.toContain(
-      '`list-available-fields` and `get-worksheet-xml` unlock after an attempt',
-    );
-    expect(content).not.toContain(
-      'Calling `list-available-fields` or `get-worksheet-xml` before a chart attempt',
-    );
+    expect(content).toContain('`list-templates`');
+    expect(content).toContain('`build-worksheets-from-templates`');
+    expect(content).toContain('`apply-worksheet`');
+    expect(content).toContain('`get-worksheet-xml` is available before or after authoring');
+    expect(content).not.toContain('`bind-template`');
+    expect(content).not.toContain('after an authoring attempt');
+    expect(content).not.toMatch(/get-worksheet-xml.{0,80}(?:unlock|after an authoring attempt)/i);
+    expect(content).not.toMatch(/(?:redirect|gate).{0,80}bind-template/i);
   });
 });

@@ -87,11 +87,8 @@ export const getListAvailableFieldsTool = (
     server,
     name: 'list-available-fields',
     title,
-    description: [
-      'List datasource fields for exploration/field questions/non-template authoring.',
-      'Available anytime; not needed before bind-template.',
-      'Full gives column_ref; slim gives insight candidate tuples.',
-    ].join(' '),
+    description:
+      'List datasource fields for exploration and authoring. Use returned column_ref values for template mappings. Full returns fields; slim returns insight candidates.',
     paramsSchema,
     annotations: {
       readOnlyHint: false, // With session, rewrites the workbook cache file + sidecar
