@@ -202,7 +202,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(result.content[0].text).toContain('bundleRequest');
   });
 
-  it('should return an error when executing the tool against Tableau Server', async () => {
+  it('should return Tableau Server error for bare 404 without error code', async () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
       new PulseNotAvailableError().toErr(),
     );
@@ -210,6 +210,18 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
+  });
+
+  it('should return actionable error for 404 with a Pulse error code', async () => {
+    const formatted = formatPulseInsightsApiError(404, { code: '404900', message: '0x00000000' });
+    const apiError = new PulseInsightsApiError(formatted.message, 404, formatted.errorCode);
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(apiError.toErr());
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Pulse Insights API returned HTTP 404');
+    expect(result.content[0].text).toContain('404900');
+    expect(result.content[0].text).not.toContain('Tableau Server');
   });
 
   it('should return an error when Pulse is disabled', async () => {

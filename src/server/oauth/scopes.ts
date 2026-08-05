@@ -230,10 +230,6 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  'resolve-datasource-luid': {
-    mcp: ['tableau:mcp:datasource:read'],
-    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
-  },
   'get-embed-token': {
     mcp: [],
     api: new Set<TableauApiScope>(['tableau:views:embed']),

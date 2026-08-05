@@ -12,6 +12,7 @@ import { milliseconds } from '../../utils/milliseconds.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { retry } from '../../utils/retry.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
+import { checkRedirectUriAllowed } from './authorizeRedirectUri.js';
 import { clientMetadataCache } from './clientMetadataCache.js';
 import { getDeviceId, getDeviceName } from './device.js';
 import { getDnsResolver } from './dnsResolver.js';
@@ -21,7 +22,7 @@ import { matchesRegisteredRedirectUri } from './matchesRegisteredRedirectUri.js'
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
 import { getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
-import { PendingAuthorization } from './types.js';
+import { ClientRegistration, PendingAuthorization } from './types.js';
 
 /**
  * OAuth 2.1 Authorization Endpoint
@@ -33,6 +34,7 @@ import { PendingAuthorization } from './types.js';
 export function authorize(
   app: express.Application,
   pendingAuthorizations: Map<string, PendingAuthorization>,
+  clientRegistrations: Map<string, ClientRegistration>,
 ): void {
   const config = getConfig();
 
@@ -135,6 +137,20 @@ export function authorize(
         : enforceScopes
           ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
           : [];
+
+    // Redirect URI security enforcement for opaque client_ids (runs after baseline param
+    // validation, before storing pending auth). The CIMD path enforces its own allowlist above.
+    if (!clientIdUrl) {
+      const redirectError = checkRedirectUriAllowed({
+        clientId: client_id,
+        redirectUri: redirect_uri,
+        clientRegistrations,
+      });
+      if (redirectError) {
+        res.status(400).json(redirectError);
+        return;
+      }
+    }
 
     // Generate Tableau state and store pending authorization
     const tableauState = randomBytes(32).toString('hex');
