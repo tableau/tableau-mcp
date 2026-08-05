@@ -300,6 +300,20 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     });
   });
 
+  it('tells callers to apply this artifact before another template build invalidates it', async () => {
+    const extra = makeExtra();
+    const result = await getResult(LIVE_PARAMS, extra, new DesktopMcpServer());
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.guidance).toContain(
+      'Another template build in this Desktop session invalidates this artifact',
+    );
+    expect(body.guidance).toContain('Do not batch or parallelize build-worksheets-from-templates');
+    expect(body.guidance).toContain('apply this artifact before building the next worksheet');
+  });
+
   it('bounds caller-controlled preview fields at the schema boundary', async () => {
     const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer());
     const schema = z.object(await Provider.from(tool.paramsSchema));

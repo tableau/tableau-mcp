@@ -423,7 +423,11 @@ export const getBuildWorksheetsFromTemplatesTool = (
               overridesLowerPrecedence,
               preview,
               guidance:
-                'The workbook was not modified. This bounded artifact plan is not a visible preview. It is one-shot and expires. Immediately before dispatch, apply-worksheet checks the source workbook byte-for-byte. The External Client API cannot condition its final POST on a workbook revision, so an edit that races that write remains possible; if the apply outcome is uncertain, stop and inspect Tableau. Call apply-worksheet with this artifactId; if the pre-dispatch check finds a change, build a new artifact from the current workbook. Do not request or reconstruct raw worksheet XML, and never replay an uncertain apply.',
+                'The workbook was not modified. This bounded artifact plan is not a visible preview. It is one-shot and expires. Immediately before dispatch, apply-worksheet checks the source workbook byte-for-byte. The External Client API cannot condition its final POST on a workbook revision, so an edit that races that write remains possible; if the apply outcome is uncertain, stop and inspect Tableau. Call apply-worksheet with this artifactId; if the pre-dispatch check finds a change, build a new artifact from the current workbook.' +
+                (resolvedLiveSession === undefined
+                  ? ''
+                  : ' Another template build in this Desktop session invalidates this artifact. Do not batch or parallelize build-worksheets-from-templates; apply this artifact before building the next worksheet.') +
+                ' Do not request or reconstruct raw worksheet XML, and never replay an uncertain apply.',
             };
             const projectedResponse: BuildSuccess = {
               artifactId: '00000000-0000-4000-8000-000000000000',

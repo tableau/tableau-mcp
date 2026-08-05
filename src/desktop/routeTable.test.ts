@@ -145,7 +145,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'one for a named chart, or up to three distinct perspectives for an open analytical request',
     );
     expect(worksheetTemplate?.action).toContain(
-      'For each successful build, call apply-worksheet immediately before building the next',
+      'Apply each built artifact before another build; a same-session build invalidates it. Never batch or parallelize builds.',
     );
     expect(worksheetTemplate?.action).toContain(
       'Briefly correct a misleading chart request and use the nearest sound alternative',
