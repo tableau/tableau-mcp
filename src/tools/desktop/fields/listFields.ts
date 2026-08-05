@@ -16,7 +16,7 @@ const paramsSchema = {
   worksheetFile: z.string(),
 };
 
-const title = 'List Fields Already Placed on Worksheet';
+const title = 'Listing placed fields';
 export const getListFieldsTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const listFieldsTool = new DesktopTool({
     server,

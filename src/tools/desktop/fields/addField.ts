@@ -123,7 +123,7 @@ const paramsSchema = {
     ),
 };
 
-const title = 'Add Field';
+const title = 'Adding field';
 export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const addFieldTool = new DesktopTool({
     server,

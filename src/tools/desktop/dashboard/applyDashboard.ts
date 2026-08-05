@@ -25,7 +25,7 @@ const paramsSchema = {
   dashboardFile: z.string().optional(),
 };
 
-const title = 'Apply Dashboard';
+const title = 'Applying changes';
 export const getApplyDashboardTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

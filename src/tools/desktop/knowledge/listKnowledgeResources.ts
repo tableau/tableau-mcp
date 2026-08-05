@@ -7,7 +7,7 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {};
 
-const toolTitle = 'List Knowledge Resources';
+const toolTitle = 'Listing authoring guides';
 export const getListKnowledgeResourcesTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

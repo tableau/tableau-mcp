@@ -31,7 +31,7 @@ const paramsSchema = {
   max_results: z.number().optional().describe('Max examples; default 5.'),
 };
 
-const title = 'Search Workbook Transformation Examples';
+const title = 'Finding examples';
 export const getSearchExamplesTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

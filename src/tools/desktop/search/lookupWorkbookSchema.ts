@@ -13,7 +13,7 @@ const paramsSchema = {
   expandRefs: z.boolean().optional(),
 };
 
-const title = 'Lookup Workbook Schema (XSD)';
+const title = 'Checking valid settings';
 export const getLookupWorkbookSchemaTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

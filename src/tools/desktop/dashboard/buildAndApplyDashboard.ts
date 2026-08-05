@@ -41,7 +41,7 @@ type BuildAndApplyDashboardResult = {
   viewpointState: ViewpointAccounting['state'];
 };
 
-const title = 'Build and Apply Dashboard';
+const title = 'Building dashboard';
 export const getBuildAndApplyDashboardTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

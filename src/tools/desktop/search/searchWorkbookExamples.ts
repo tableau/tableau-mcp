@@ -38,7 +38,7 @@ const paramsSchema = {
     .describe('curated | diff-corpus | both'),
 };
 
-const title = 'Search Workbook Examples';
+const title = 'Searching example workbooks';
 export const getSearchWorkbookExamplesTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

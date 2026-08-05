@@ -51,7 +51,7 @@ const paramsSchema = {
   encodingType: z.enum(ENCODING_TYPES).optional().describe('Required when target=encoding.'),
 };
 
-const title = 'Remove Field';
+const title = 'Removing field';
 export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const removeFieldTool = new DesktopTool({
     server,

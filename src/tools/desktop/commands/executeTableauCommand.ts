@@ -18,7 +18,7 @@ const paramsSchema = {
   args: z.record(z.any()).optional().describe('JSON command args.'),
 };
 
-const title = 'Execute Tableau Command';
+const title = 'Running command';
 export const getExecuteTableauCommandTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

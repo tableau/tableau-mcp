@@ -77,7 +77,7 @@ function fieldCacheKey(field: PlannerFieldRequest): string {
   return JSON.stringify([field.query, field.datasource ?? null]);
 }
 
-const toolTitle = 'Plan Dashboard Creation';
+const toolTitle = 'Planning dashboard';
 export const getPlanDashboardCreationTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

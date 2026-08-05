@@ -11,7 +11,7 @@ const paramsSchema = {
   uri: z.string().describe('expertise://tableau/{slug}, +#section for a section'),
 };
 
-const toolTitle = 'Read Knowledge Resource';
+const toolTitle = 'Reading authoring guide';
 export const getReadKnowledgeResourceTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

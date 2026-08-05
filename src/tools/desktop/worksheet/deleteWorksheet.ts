@@ -168,7 +168,7 @@ const paramsSchema = {
   worksheetName: z.string().min(1),
 };
 
-const title = 'Delete Worksheet';
+const title = 'Deleting worksheet';
 export const getDeleteWorksheetTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

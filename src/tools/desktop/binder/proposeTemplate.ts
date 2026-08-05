@@ -76,7 +76,7 @@ const PROPOSE_GUIDANCE =
   'set a 0..1 confidence, then call validate-proposal (dry-run gate) or bind-template with a { proposal } ' +
   'matching output_schema.';
 
-const title = 'Propose Chart Template Candidates for an Ask';
+const title = 'Suggesting templates';
 
 export const getProposeTemplateTool = (
   server: DesktopMcpServer,

@@ -37,7 +37,7 @@ type InlineResult = { dashboardXml: string };
 type FileResult = { file: string; instructions: string };
 type GetDashboardXmlToolResult = { message: string } & (InlineResult | FileResult);
 
-const title = 'Get Dashboard Layout';
+const title = 'Reading dashboard';
 export const getGetDashboardXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

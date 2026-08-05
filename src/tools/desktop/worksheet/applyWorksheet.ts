@@ -29,7 +29,7 @@ const paramsSchema = {
   worksheetFile: z.string().optional(),
 };
 
-const title = 'Apply Worksheet';
+const title = 'Updating worksheet';
 export const getApplyWorksheetTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

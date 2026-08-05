@@ -11,7 +11,7 @@ const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
 };
 
-const title = 'List All Worksheets in Workbook';
+const title = 'Listing worksheets';
 export const getListWorksheetsTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

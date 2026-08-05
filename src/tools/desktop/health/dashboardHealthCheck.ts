@@ -385,7 +385,7 @@ const paramsSchema = {
   manifest: bindingRecordSchema,
 };
 
-const title = 'Dashboard Health Check (Flag-Only)';
+const title = 'Reviewing dashboard';
 export const getDashboardHealthCheckTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

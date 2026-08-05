@@ -1988,7 +1988,7 @@ function hasDivisionOperator(formula: string): boolean {
   return false;
 }
 
-const title = 'Bind Template';
+const title = 'Matching template';
 
 export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const bindTemplateTool = new DesktopTool({

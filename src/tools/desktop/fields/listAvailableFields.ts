@@ -79,7 +79,7 @@ type ListAvailableFieldsResult =
   | { message: string; fields: ReturnType<typeof listAvailableFields> }
   | ListAvailableFieldsSlimResult;
 
-const title = 'List All Available Fields in Workbook Datasources';
+const title = 'Listing available fields';
 export const getListAvailableFieldsTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

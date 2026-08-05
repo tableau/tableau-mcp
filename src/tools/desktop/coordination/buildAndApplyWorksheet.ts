@@ -276,7 +276,7 @@ const paramsSchema = {
   }),
 };
 
-const toolTitle = 'Build and Apply Worksheet';
+const toolTitle = 'Building worksheet';
 export const getBuildAndApplyWorksheetTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

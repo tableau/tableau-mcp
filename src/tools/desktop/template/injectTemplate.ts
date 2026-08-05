@@ -68,7 +68,7 @@ function inferSingleDatasourceFromFieldMapping(
   return datasources.size === 1 ? [...datasources][0] : null;
 }
 
-const toolTitle = 'Inject Template';
+const toolTitle = 'Adding template';
 export const getInjectTemplateTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

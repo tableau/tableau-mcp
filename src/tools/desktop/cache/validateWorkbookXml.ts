@@ -27,7 +27,7 @@ type ServerValidationResult = {
 
 type WorkbookValidationResult = LocalValidationResult | ServerValidationResult;
 
-const toolTitle = 'Check Workbook Structure';
+const toolTitle = 'Validating workbook draft';
 export const getValidateWorkbookXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {

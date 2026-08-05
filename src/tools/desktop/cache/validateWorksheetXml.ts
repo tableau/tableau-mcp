@@ -10,7 +10,7 @@ const paramsSchema = {
   xml: z.string().describe('The worksheet content to validate.'),
 };
 
-const toolTitle = 'Check Worksheet Structure';
+const toolTitle = 'Validating worksheet draft';
 export const getValidateWorksheetXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
