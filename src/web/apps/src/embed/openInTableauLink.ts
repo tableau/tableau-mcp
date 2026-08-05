@@ -1,6 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
 import { recordEvent } from '../shared/recordEventClient.js';
+import { createControlIcon } from './controlIcon.js';
 import { getOrCreateOverlayGroup } from './overlayGroup.js';
 
 const OPEN_IN_TABLEAU_LINK_ID = 'openInTableauLink';
@@ -90,12 +91,7 @@ function createOpenInTableauLinkElement(url: string): HTMLAnchorElement {
   label.textContent = 'Open in Tableau';
 
   // Create icon (inline SVG using the symbol)
-  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  icon.setAttribute('class', 'viz-control-icon');
-  icon.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-  use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#external-icon');
-  icon.appendChild(use);
+  const icon = createControlIcon('#external-icon');
 
   // Assemble link: label + icon (left to right)
   link.appendChild(label);

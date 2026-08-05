@@ -1,6 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
 import { recordEvent } from '../shared/recordEventClient.js';
+import { createControlIcon } from './controlIcon.js';
 import { getOrCreateOverlayGroup } from './overlayGroup.js';
 
 const FULLSCREEN_BUTTON_ID = 'fullscreenButton';
@@ -65,12 +66,7 @@ function createFullscreenButtonElement(): HTMLButtonElement {
   button.className = 'overlay-control';
 
   // Create icon (inline SVG using the symbol)
-  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  icon.setAttribute('class', 'viz-control-icon');
-  icon.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-  use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#fullscreen-icon');
-  icon.appendChild(use);
+  const icon = createControlIcon('#fullscreen-icon');
 
   // Create label span
   const label = document.createElement('span');
