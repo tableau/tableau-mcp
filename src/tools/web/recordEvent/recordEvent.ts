@@ -26,13 +26,6 @@ const paramsSchema = {
     .transform((s) => s.slice(0, 1024))
     .optional()
     .describe('Optional detail or context for the event.'),
-  // Optional error message for error events, kept separate from `message` so error causes
-  // never mix with generic action detail. Truncated with the same cap for the same reason.
-  errormessage: z
-    .string()
-    .transform((s) => s.slice(0, 1024))
-    .optional()
-    .describe('Optional error message for error events (e.g. TOOL_ERROR, PARSE_ERROR).'),
 };
 
 /**
@@ -77,7 +70,6 @@ export const getRecordEventTool = (server: WebMcpServer): WebTool<typeof paramsS
           productTelemetryForwarder.send('tableau_mcp_event', {
             event_type: args.event_type,
             message: args.message ?? '',
-            errormessage: args.errormessage ?? '',
             site_luid: extra.getSiteLuid(),
             user_luid: extra.getUserLuid(),
             podname: config.server,

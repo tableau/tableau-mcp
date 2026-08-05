@@ -426,12 +426,10 @@ describe('handleToolResult', () => {
     await handleToolResult(mockApp, errorResult);
     await new Promise((r) => setTimeout(r, 0));
 
-    // showError routes the cause to the dedicated errorMessage (4th) arg, leaving the
-    // generic detail (3rd) arg undefined so error causes never mix with action detail.
+    // showError passes the cause as the event detail, which populates the telemetry message.
     expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(
       mockApp,
       'TOOL_ERROR',
-      undefined,
       'Tool execution failed',
     );
   });
@@ -440,11 +438,6 @@ describe('handleToolResult', () => {
     await handleToolResult(mockApp, null as any);
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(
-      mockApp,
-      'TOOL_ERROR',
-      undefined,
-      undefined,
-    );
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'TOOL_ERROR', undefined);
   });
 });

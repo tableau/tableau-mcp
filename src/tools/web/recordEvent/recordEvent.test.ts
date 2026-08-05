@@ -73,45 +73,6 @@ describe('getRecordEventTool', () => {
     );
   });
 
-  it('forwards errormessage separately from message for error events', async () => {
-    const extra = getMockRequestHandlerExtra();
-    await getToolResult(extra, { event_type: 'PARSE_ERROR', errormessage: 'bad json' });
-
-    expect(sendSpy).toHaveBeenCalledWith(
-      'tableau_mcp_event',
-      expect.objectContaining({
-        event_type: 'PARSE_ERROR',
-        message: '',
-        errormessage: 'bad json',
-      }),
-    );
-  });
-
-  it('defaults errormessage to empty string when omitted', async () => {
-    const extra = getMockRequestHandlerExtra();
-    await getToolResult(extra, { event_type: 'OPEN_IN_TABLEAU_CLICKED', message: 'https://x' });
-
-    expect(sendSpy).toHaveBeenCalledWith(
-      'tableau_mcp_event',
-      expect.objectContaining({
-        event_type: 'OPEN_IN_TABLEAU_CLICKED',
-        message: 'https://x',
-        errormessage: '',
-      }),
-    );
-  });
-
-  it('truncates errormessage longer than 1024 characters in the forwarded event', async () => {
-    const extra = getMockRequestHandlerExtra();
-    const longError = 'y'.repeat(2000);
-    await getToolResult(extra, { event_type: 'TOOL_ERROR', errormessage: longError });
-
-    const sentErrorMessage = sendSpy.mock.calls.find((c) => c[0] === 'tableau_mcp_event')?.[1]
-      ?.errormessage;
-    expect(sentErrorMessage).toBe('y'.repeat(1024));
-    expect(sentErrorMessage.length).toBe(1024);
-  });
-
   it('accepts SCREAMING_SNAKE_CASE event_type values', async () => {
     const schema = z.object(
       await Provider.from(getRecordEventTool(new WebMcpServer()).paramsSchema),
@@ -152,7 +113,7 @@ describe('getRecordEventTool', () => {
 
 async function getToolResult(
   extra: Extra,
-  args: { event_type: string; message?: string | undefined; errormessage?: string | undefined },
+  args: { event_type: string; message?: string | undefined },
 ): Promise<CallToolResult> {
   const tool = getRecordEventTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -163,7 +124,6 @@ async function getToolResult(
     {
       event_type: parsedArgs.event_type,
       message: parsedArgs.message,
-      errormessage: parsedArgs.errormessage,
     },
     extra,
   );

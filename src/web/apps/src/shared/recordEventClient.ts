@@ -20,38 +20,26 @@ export type McpAppEventType =
  * it never awaits, never throws, and silently no-ops when the host cannot
  * proxy server tools. Telemetry must never block the UI.
  *
- * `detail` and `errorMessage` are kept in separate telemetry fields so click
- * context (url, fullscreen target) never mixes with error causes: `detail`
- * populates `message` for user actions; `errorMessage` populates the dedicated
- * `errormessage` field for error events. A given event sets one or the other.
+ * `detail` carries any context for the event — a click target (url, fullscreen)
+ * for user actions, or the causing error for error events — and populates the
+ * telemetry `message` field.
  *
  * @param app - The MCP App instance.
  * @param eventType - The event type (e.g. 'TOOL_ERROR', 'FULLSCREEN_CLICKED').
- * @param detail - Optional generic context for user actions (URL, fullscreen target, etc.).
- * @param errorMessage - Optional error/cause for error events; its message is
- *   sent as the dedicated `errormessage` field.
+ * @param detail - Optional context for the event (URL, fullscreen target, or error cause).
  */
-export function recordEvent(
-  app: App,
-  eventType: McpAppEventType,
-  detail?: unknown,
-  errorMessage?: unknown,
-): void {
+export function recordEvent(app: App, eventType: McpAppEventType, detail?: unknown): void {
   try {
     if (!app.getHostCapabilities()?.serverTools) {
       return;
     }
 
     const message = toMessage(detail);
-    const errormessage = toMessage(errorMessage);
-    const args: { event_type: McpAppEventType; message?: string; errormessage?: string } = {
+    const args: { event_type: McpAppEventType; message?: string } = {
       event_type: eventType,
     };
     if (message !== undefined) {
       args.message = message;
-    }
-    if (errormessage !== undefined) {
-      args.errormessage = errormessage;
     }
 
     void app.callServerTool({ name: 'record-event', arguments: args }).catch(() => {

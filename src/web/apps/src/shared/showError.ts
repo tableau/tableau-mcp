@@ -35,10 +35,10 @@ const ERROR_UI: Record<Scenario, { detail: string; logCode: string }> = {
  */
 export function showError(scenario: Scenario, cause?: unknown, app?: App): void {
   // Report telemetry first (best-effort), so errors are recorded even when the
-  // container is missing and the error UI cannot be rendered. The cause goes in
-  // the dedicated errormessage field (4th arg), not the generic message field.
+  // container is missing and the error UI cannot be rendered. The cause is passed
+  // as the event detail (populates the telemetry `message` field).
   if (app) {
-    recordEvent(app, scenario, undefined, cause);
+    recordEvent(app, scenario, cause);
   }
 
   const container = document.getElementById(TABLEAU_VIZ_CONTAINER_ID);
