@@ -42,7 +42,7 @@ export const redundantColorEncodingRule: ValidationRule = {
         seen.add(colorRef);
         issues.push({
           ruleId: 'redundant-color-encoding',
-          severity: 'error',
+          severity: 'warning',
           message:
             `Color encoding references "${colorRef}", the same field already on rows/cols — the mark is colored by a value ` +
             'it already encodes positionally (e.g. a bar colored by its own length). This is usually a raw-measure gradient.',

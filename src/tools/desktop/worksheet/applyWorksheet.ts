@@ -48,6 +48,16 @@ const paramsSchema = {
 
 const title = 'Apply Worksheet';
 
+function sanitizedValidationRuleIds(issues: ValidationIssue[]): string[] {
+  return [
+    ...new Set(
+      issues
+        .map((issue) => issue.ruleId.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 80))
+        .filter(Boolean),
+    ),
+  ].slice(0, 5);
+}
+
 function formatArtifactValidationFailure(issues: ValidationIssue[]): string {
   if (issues.some((issue) => issue.ruleId === 'connections-not-authorable')) {
     return (
@@ -55,13 +65,7 @@ function formatArtifactValidationFailure(issues: ValidationIssue[]): string {
       "Fix the connection in Desktop's Connect pane, then build a new artifact from the current workbook if the worksheet is still wanted."
     );
   }
-  const ruleIds = [
-    ...new Set(
-      issues
-        .map((issue) => issue.ruleId.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 80))
-        .filter(Boolean),
-    ),
-  ].slice(0, 5);
+  const ruleIds = sanitizedValidationRuleIds(issues);
   const finding = ruleIds.length > 0 ? ` (${ruleIds.join(', ')})` : '';
   return (
     `Template artifact preflight failed${finding}; no workbook change was sent; the artifact was consumed. ` +
@@ -335,6 +339,14 @@ export const getApplyWorksheetTool = (
               ? `\n\nHOST VERIFICATION — ${promiseOutcome}. Template-derived readback detail is withheld from the model-visible artifact response; inspect Tableau directly before making a stronger claim.`
               : formatWorksheetPromiseCheck(receiptInput)
             : '';
+          const validationWarningRuleIds =
+            artifactMode && result.isOk()
+              ? sanitizedValidationRuleIds(
+                  (result.value.validationWarnings ?? []).filter(
+                    (issue) => issue.severity !== 'error',
+                  ),
+                )
+              : [];
 
           return new Ok({
             message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${note}${readbackWarning}${receipt}`,
@@ -342,6 +354,7 @@ export const getApplyWorksheetTool = (
               ? {
                   templateProvenance: artifactProvenance!,
                   metadataTrust: artifactMetadataTrust!,
+                  ...(validationWarningRuleIds.length > 0 ? { validationWarningRuleIds } : {}),
                 }
               : {}),
           });

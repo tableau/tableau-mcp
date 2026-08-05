@@ -122,10 +122,13 @@ describe('applyWorksheetTool', () => {
 
     expect(first.isError).toBe(false);
     invariant(first.content[0].type === 'text');
-    expect(JSON.parse(first.content[0].text)).toMatchObject({
+    const firstBody = JSON.parse(first.content[0].text);
+    expect(firstBody).toMatchObject({
       templateProvenance: 'custom',
       metadataTrust: 'untrusted-repository',
     });
+    expect(firstBody).not.toHaveProperty('telemetryFlags');
+    expect(firstBody).not.toHaveProperty('validationWarningRuleIds');
     expect(load).toHaveBeenCalledTimes(1);
     expect(load).toHaveBeenCalledWith({
       worksheetName: 'Stored Sheet',
@@ -139,6 +142,76 @@ describe('applyWorksheetTool', () => {
     invariant(replay.content[0].type === 'text');
     expect(replay.content[0].text).toContain('No workbook change was sent');
     expect(replay.content[0].text).not.toMatch(/same turn|later explicit user request/i);
+  });
+
+  it('reports bounded validation warning telemetry after a successful artifact apply', async () => {
+    const server = new DesktopMcpServer();
+    const artifactId = 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1';
+    const store = new TemplateArtifactStore({ createId: () => artifactId });
+    setTemplateArtifactStoreForTests(server, store);
+    store.put('12345:instance-live', {
+      worksheetName: 'Stored Sheet',
+      worksheetXml: '<worksheet name="Stored Sheet"><table /></worksheet>',
+      worksheetWindowXml: '<window class="worksheet" name="Stored Sheet" />',
+      expectedState: {
+        workbookSha256: 'e'.repeat(64),
+        target: { state: 'absent' },
+        targetWindow: { state: 'absent' },
+        dependenciesSha256: 'c'.repeat(64),
+        artifactSha256: 'd'.repeat(64),
+      },
+      templateProvenance: 'protected',
+      metadataTrust: 'trusted-protected-or-dev',
+    });
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Ok({
+        ...verifiedArtifactApply,
+        validationWarnings: [
+          {
+            ruleId: 'redundant-color-encoding',
+            severity: 'warning',
+            message: 'intentional gradient',
+          },
+          {
+            ruleId: 'redundant-color-encoding',
+            severity: 'warning',
+            message: 'duplicate',
+          },
+          {
+            ruleId: `unsafe <rule>${'x'.repeat(100)}`,
+            severity: 'warning',
+            message: 'sanitize and bound the id',
+          },
+          { ruleId: 'warning-3', severity: 'warning', message: 'three' },
+          { ruleId: 'warning-4', severity: 'warning', message: 'four' },
+          { ruleId: 'warning-5', severity: 'warning', message: 'five' },
+          { ruleId: 'warning-6', severity: 'warning', message: 'bounded out' },
+        ],
+      }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      artifactId,
+      mockExecutor: vi.fn().mockResolvedValue({ desktopInstanceId: 'instance-live' }),
+      server,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body).not.toHaveProperty('telemetryFlags');
+    expect(body.validationWarningRuleIds).toEqual([
+      'redundant-color-encoding',
+      `unsaferule${'x'.repeat(70)}`,
+      'warning-3',
+      'warning-4',
+      'warning-5',
+    ]);
+    expect(body.validationWarningRuleIds).toHaveLength(5);
+    expect(body.validationWarningRuleIds).toEqual(
+      body.validationWarningRuleIds.map((ruleId: string) => ruleId.slice(0, 80)),
+    );
   });
 
   it('rejects an artifact from another session without consuming it or mutating', async () => {

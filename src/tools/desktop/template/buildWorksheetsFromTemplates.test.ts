@@ -55,10 +55,14 @@ const TEMPLATE_XML =
   '<workbook><worksheets><worksheet name="{{TITLE}}"/></worksheets><windows><window class="worksheet" name="{{TITLE}}"><cards/></window></windows></workbook>';
 const BUILT_WORKBOOK_XML =
   '<?xml version="1.0"?><workbook><worksheets><worksheet name="My Bar"/></worksheets><windows><window class="worksheet" name="My Bar"><cards><card type="filters"/></cards></window></windows></workbook>';
-const INVALID_BUILT_WORKBOOK_XML =
+const BLOCKED_BUILT_WORKBOOK_XML =
   '<?xml version="1.0"?><workbook><worksheets><worksheet name="My Bar"><table>' +
-  '<panes><pane><mark class="Bar"/><encodings><color column="[DS].[sum:Profit:qk]"/></encodings></pane></panes>' +
-  '<rows>[DS].[none:Sub-Category:nk]</rows><cols>[DS].[sum:Profit:qk]</cols>' +
+  '<panes><pane><mark class="Bar"/></pane></panes><rows></rows><cols>{{field_base_99}}</cols>' +
+  '</table></worksheet></worksheets><windows><window class="worksheet" name="My Bar"><cards/></window></windows></workbook>';
+const WARNING_BUILT_WORKBOOK_XML =
+  '<?xml version="1.0"?><workbook><worksheets><worksheet name="My Bar"><table>' +
+  '<panes><pane><mark class="Bar"/><encodings><color column="[Sample Superstore].[sum:Profit:qk]"/></encodings></pane></panes>' +
+  '<rows>[Sample Superstore].[none:Sub-Category:nk]</rows><cols>[Sample Superstore].[sum:Profit:qk]</cols>' +
   '</table></worksheet></worksheets><windows><window class="worksheet" name="My Bar"><cards/></window></windows></workbook>';
 const WORKSHEET_FRAGMENT = '<worksheet name="My Bar"></worksheet>';
 const DATASOURCE = 'Sample Superstore';
@@ -883,13 +887,16 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     } as any);
     const externalDetail =
       'Referenced field instance [Sample Superstore].[none:Clipboard_20260804T195349:qk] has no matching declaration';
-    vi.spyOn(targetWorksheetStateModule, 'deriveWorksheetApplyState').mockImplementation(() => {
-      throw new Error(externalDetail);
-    });
+    const deriveState = vi
+      .spyOn(targetWorksheetStateModule, 'deriveWorksheetApplyState')
+      .mockImplementation(() => {
+        throw new Error(externalDetail);
+      });
     const server = new DesktopMcpServer();
     const putArtifact = vi.spyOn(getTemplateArtifactStore(server), 'put');
 
     const result = await getResult(LIVE_PARAMS, extra, server);
+    deriveState.mockRestore();
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -1022,14 +1029,14 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     const putArtifact = vi.spyOn(getTemplateArtifactStore(server), 'put');
     vi.mocked(buildInjectedWorkbookXml).mockReturnValue({
       ok: true,
-      xml: INVALID_BUILT_WORKBOOK_XML,
+      xml: BLOCKED_BUILT_WORKBOOK_XML,
     });
 
     const result = await getResult(LIVE_PARAMS, extra, server);
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('redundant-color-encoding');
+    expect(result.content[0].text).toContain('unsubstituted-template-token');
     expect(result.content[0].text).toContain('No template artifact was created');
     expect(result.content[0].text).toContain(
       'Do not rebuild the same template with the same field mapping',
@@ -1038,13 +1045,30 @@ describe('buildWorksheetsFromTemplatesTool', () => {
     expect(putArtifact).not.toHaveBeenCalled();
   });
 
+  it('mints an artifact when worksheet preflight reports only a warning', async () => {
+    const extra = makeExtra();
+    const server = new DesktopMcpServer();
+    const putArtifact = vi.spyOn(getTemplateArtifactStore(server), 'put');
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({
+      ok: true,
+      xml: WARNING_BUILT_WORKBOOK_XML,
+    });
+
+    const result = await getResult(LIVE_PARAMS, extra, server);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).artifactId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(putArtifact).toHaveBeenCalledOnce();
+  });
+
   it('projects a blocking worksheet finding to the fixed offline error', async () => {
     const extra = makeExtra();
     const server = new DesktopMcpServer();
     const putArtifact = vi.spyOn(getTemplateArtifactStore(server), 'put');
     vi.mocked(buildInjectedWorkbookXml).mockReturnValue({
       ok: true,
-      xml: INVALID_BUILT_WORKBOOK_XML,
+      xml: BLOCKED_BUILT_WORKBOOK_XML,
     });
 
     const result = await getResult(BASE_PARAMS, extra, server);
