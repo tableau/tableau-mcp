@@ -24,11 +24,25 @@ export interface TemplateArtifact {
 interface StoredTemplateArtifact extends TemplateArtifact {
   sessionId: string | null;
   expiresAt: number;
+  reservationId?: string;
 }
 
 export type TemplateArtifactConsumeResult =
   | { ok: true; artifact: TemplateArtifact }
-  | { ok: false; reason: 'not-found' | 'expired' | 'session-mismatch' };
+  | { ok: false; reason: 'not-found' | 'expired' | 'session-mismatch' | 'in-use' };
+
+export interface TemplateArtifactReservation {
+  artifactId: string;
+  reservationId: string;
+}
+
+export type TemplateArtifactReserveResult =
+  | {
+      ok: true;
+      reservation: TemplateArtifactReservation;
+      artifact: TemplateArtifact;
+    }
+  | { ok: false; reason: 'not-found' | 'expired' | 'session-mismatch' | 'in-use' };
 
 export class TemplateArtifactStore {
   private readonly artifacts = new Map<string, StoredTemplateArtifact>();
@@ -48,9 +62,12 @@ export class TemplateArtifactStore {
   ): { artifactId: string; expiresAt: number } {
     const now = this.now();
     this.removeExpired(now);
+    if (sessionId !== null) this.removeAvailable(sessionId);
     const maxCount = this.options.maxCount ?? MAX_TEMPLATE_ARTIFACTS;
     while (this.artifacts.size >= maxCount) {
-      const oldest = this.artifacts.keys().next().value as string | undefined;
+      const oldest = [...this.artifacts].find(
+        ([, stored]) => stored.reservationId === undefined,
+      )?.[0];
       if (oldest === undefined) break;
       this.artifacts.delete(oldest);
     }
@@ -70,28 +87,67 @@ export class TemplateArtifactStore {
     return { artifactId, expiresAt };
   }
 
+  invalidateAvailable(sessionId: string): number {
+    this.removeExpired(this.now());
+    return this.removeAvailable(sessionId);
+  }
+
   consume(artifactId: string, sessionId: string): TemplateArtifactConsumeResult {
+    const reserved = this.reserve(artifactId, sessionId);
+    if (!reserved.ok) return reserved;
+    this.commit(reserved.reservation);
+    return { ok: true, artifact: reserved.artifact };
+  }
+
+  reserve(artifactId: string, sessionId: string): TemplateArtifactReserveResult {
     const stored = this.artifacts.get(artifactId);
     if (!stored) return { ok: false, reason: 'not-found' };
+    if (stored.sessionId !== null && stored.sessionId !== sessionId) {
+      return { ok: false, reason: 'session-mismatch' };
+    }
+    if (stored.reservationId !== undefined) {
+      return { ok: false, reason: 'in-use' };
+    }
     if (stored.expiresAt <= this.now()) {
       this.artifacts.delete(artifactId);
       return { ok: false, reason: 'expired' };
     }
-    if (stored.sessionId !== null && stored.sessionId !== sessionId) {
-      return { ok: false, reason: 'session-mismatch' };
-    }
 
-    this.artifacts.delete(artifactId);
+    const reservation = { artifactId, reservationId: randomUUID() };
+    stored.reservationId = reservation.reservationId;
     return {
       ok: true,
-      artifact: {
-        worksheetName: stored.worksheetName,
-        worksheetXml: stored.worksheetXml,
-        worksheetWindowXml: stored.worksheetWindowXml,
-        expectedState: structuredClone(stored.expectedState),
-        templateProvenance: stored.templateProvenance,
-        metadataTrust: stored.metadataTrust,
-      },
+      reservation,
+      artifact: this.snapshot(stored),
+    };
+  }
+
+  commit(reservation: TemplateArtifactReservation): boolean {
+    const stored = this.artifacts.get(reservation.artifactId);
+    if (stored?.reservationId !== reservation.reservationId) return false;
+    this.artifacts.delete(reservation.artifactId);
+    return true;
+  }
+
+  release(reservation: TemplateArtifactReservation): boolean {
+    const stored = this.artifacts.get(reservation.artifactId);
+    if (stored?.reservationId !== reservation.reservationId) return false;
+    if (stored.expiresAt <= this.now()) {
+      this.artifacts.delete(reservation.artifactId);
+      return false;
+    }
+    delete stored.reservationId;
+    return true;
+  }
+
+  private snapshot(stored: StoredTemplateArtifact): TemplateArtifact {
+    return {
+      worksheetName: stored.worksheetName,
+      worksheetXml: stored.worksheetXml,
+      worksheetWindowXml: stored.worksheetWindowXml,
+      expectedState: structuredClone(stored.expectedState),
+      templateProvenance: stored.templateProvenance,
+      metadataTrust: stored.metadataTrust,
     };
   }
 
@@ -101,8 +157,21 @@ export class TemplateArtifactStore {
 
   private removeExpired(now: number): void {
     for (const [artifactId, artifact] of this.artifacts) {
-      if (artifact.expiresAt <= now) this.artifacts.delete(artifactId);
+      if (artifact.expiresAt <= now && artifact.reservationId === undefined) {
+        this.artifacts.delete(artifactId);
+      }
     }
+  }
+
+  private removeAvailable(sessionId: string): number {
+    let removed = 0;
+    for (const [artifactId, stored] of this.artifacts) {
+      if (stored.sessionId === sessionId && stored.reservationId === undefined) {
+        this.artifacts.delete(artifactId);
+        removed++;
+      }
+    }
+    return removed;
   }
 }
 

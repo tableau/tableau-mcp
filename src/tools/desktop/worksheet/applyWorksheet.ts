@@ -15,6 +15,7 @@ import { worksheetApplyStateSchema } from '../../../desktop/metadata/targetWorks
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   getTemplateArtifactStore,
+  type TemplateArtifactReservation,
   templateArtifactSessionIdentity,
 } from '../../../desktop/templates/templateArtifactStore.js';
 import {
@@ -22,6 +23,7 @@ import {
   formatWorksheetPromiseCheck,
 } from '../../../desktop/validation/promise-check.js';
 import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
+import type { ValidationIssue } from '../../../desktop/validation/types.js';
 import {
   ArgsValidationError,
   CacheSessionMismatchError,
@@ -45,6 +47,27 @@ const paramsSchema = {
 };
 
 const title = 'Apply Worksheet';
+
+function formatArtifactValidationFailure(issues: ValidationIssue[]): string {
+  if (issues.some((issue) => issue.ruleId === 'connections-not-authorable')) {
+    return (
+      'Template artifact preflight failed (connections-not-authorable); no workbook change was sent. ' +
+      "Add or repair the connection in Desktop's Connect pane, then retry this same unexpired artifact once."
+    );
+  }
+  const ruleIds = [
+    ...new Set(
+      issues
+        .map((issue) => issue.ruleId.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 80))
+        .filter(Boolean),
+    ),
+  ].slice(0, 5);
+  const finding = ruleIds.length > 0 ? ` (${ruleIds.join(', ')})` : '';
+  return (
+    `Template artifact preflight failed${finding}; no workbook change was sent. ` +
+    'Resolve the reported workbook issue, then retry this same unexpired artifact once.'
+  );
+}
 export const getApplyWorksheetTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -170,54 +193,81 @@ export const getApplyWorksheetTool = (
             | 'trusted-protected-or-dev'
             | 'untrusted-repository'
             | undefined;
+          let artifactReservation: TemplateArtifactReservation | undefined;
           if (artifactMode) {
-            const consumed = artifactStore.consume(
+            const reserved = artifactStore.reserve(
               artifactId,
               templateArtifactSessionIdentity(resolvedSession, executor.desktopInstanceId),
             );
-            if (!consumed.ok) {
+            if (!reserved.ok) {
               return new ArgsValidationError(
-                'The template artifact is unavailable, expired, already used, or belongs to another Desktop session; rebuild it with build-worksheets-from-templates, confirm the new preview, and retry once.',
+                'The template artifact is unavailable, expired, already used, currently in use, or belongs to another Desktop session. Do not rebuild or retry automatically; inspect and report the current workbook state, then rebuild from the still-current agreed inputs only on a later user request if it is still wanted.',
               ).toErr();
             }
-            worksheetName = consumed.artifact.worksheetName;
-            worksheetXml = consumed.artifact.worksheetXml;
-            worksheetWindowXml = consumed.artifact.worksheetWindowXml;
-            expectedState = consumed.artifact.expectedState;
-            artifactProvenance = consumed.artifact.templateProvenance;
-            artifactMetadataTrust = consumed.artifact.metadataTrust;
+            artifactReservation = reserved.reservation;
+            worksheetName = reserved.artifact.worksheetName;
+            worksheetXml = reserved.artifact.worksheetXml;
+            worksheetWindowXml = reserved.artifact.worksheetWindowXml;
+            expectedState = reserved.artifact.expectedState;
+            artifactProvenance = reserved.artifact.templateProvenance;
+            artifactMetadataTrust = reserved.artifact.metadataTrust;
+            if (
+              expectedState.target.state === 'present' ||
+              expectedState.targetWindow.state === 'present'
+            ) {
+              artifactStore.commit(reserved.reservation);
+              return new ArgsValidationError(
+                'This template artifact was discarded because it would replace an existing worksheet or window. The template path creates new worksheets only; choose a fresh unique worksheet title and construct a new artifact.',
+              ).toErr();
+            }
           }
-          const result = await loadWorksheetXml({
-            worksheetName: worksheetName!,
-            xml: worksheetXml!,
-            executor,
-            signal: extra.signal,
-            expectedState,
-            worksheetWindowXml,
-          });
+          let result: Awaited<ReturnType<typeof loadWorksheetXml>>;
+          try {
+            result = await loadWorksheetXml({
+              worksheetName: worksheetName!,
+              xml: worksheetXml!,
+              executor,
+              signal: extra.signal,
+              expectedState,
+              worksheetWindowXml,
+            });
+          } catch (error) {
+            if (artifactReservation !== undefined) artifactStore.commit(artifactReservation);
+            throw error;
+          }
 
           if (result.isErr()) {
             if (artifactMode) {
+              const safeValidationFailure =
+                result.error.type === 'load-worksheet-xml-error' &&
+                result.error.error.type === 'validation-failed';
+              if (artifactReservation !== undefined) {
+                if (safeValidationFailure) artifactStore.release(artifactReservation);
+                else artifactStore.commit(artifactReservation);
+              }
               if (result.error.type === 'execute-command-error') {
                 return new ArgsValidationError(
-                  `Template artifact apply outcome is uncertain (${result.error.error.type}). Inspect Tableau before any retry; if the worksheet is absent, rebuild and reconfirm a fresh artifact.`,
+                  `Template artifact apply outcome is uncertain (${result.error.error.type}). Do not rebuild or retry automatically; inspect Tableau and report the current workbook state, then rebuild from the still-current agreed inputs only on a later user request if it is still wanted.`,
                 ).toErr();
               }
               switch (result.error.error.type) {
                 case 'invalid-xml':
-                case 'validation-failed':
                 case 'name-mismatch':
                 case 'preview-state-changed':
                   return new ArgsValidationError(
-                    'The template artifact was not applied because its validated preview is no longer safe. Rebuild it, confirm the new preview, and retry once.',
+                    'The template artifact was not applied because it no longer matches the current workbook state. Do not rebuild or retry automatically; inspect and report the current workbook state, then rebuild from the still-current agreed inputs only on a later user request if it is still wanted.',
+                  ).toErr();
+                case 'validation-failed':
+                  return new ArgsValidationError(
+                    formatArtifactValidationFailure(result.error.error.issues),
                   ).toErr();
                 case 'load-rejected':
                   return new ArgsValidationError(
-                    'Tableau rejected the template artifact; no worksheet mutation was verified. Inspect Tableau before retrying, then rebuild and reconfirm if the worksheet is absent.',
+                    'Tableau rejected the template artifact; no worksheet mutation was verified. Do not rebuild or retry automatically; inspect Tableau and report the current workbook state, then rebuild from the still-current agreed inputs only on a later user request if it is still wanted.',
                   ).toErr();
                 case 'readback-failed':
                   return new ArgsValidationError(
-                    'The template artifact MAY already be applied, but post-apply verification failed. Inspect Tableau before any retry; do not replay the consumed artifact.',
+                    'The template artifact MAY already be applied, but post-apply verification failed. Inspect Tableau and report only the verified workbook state. Do not replay the consumed artifact or automatically rebuild it; a fresh build requires a later explicit user request.',
                   ).toErr();
               }
             }
@@ -232,6 +282,8 @@ export const getApplyWorksheetTool = (
               }
             }
           }
+
+          if (artifactReservation !== undefined) artifactStore.commit(artifactReservation);
 
           const capBytes = extra.config.inlineXmlMaxBytes;
           const inlineBytes =
@@ -273,6 +325,15 @@ export const getApplyWorksheetTool = (
               findings: result.value.readbackWarnings,
               promiseOutcome,
             });
+          }
+          if (artifactMode && promiseOutcome !== 'verified') {
+            const verificationMessage =
+              promiseOutcome === 'failed'
+                ? 'The template artifact MAY already be applied, but host verification failed.'
+                : 'The template artifact MAY already be applied, but host verification is unavailable.';
+            return new ArgsValidationError(
+              `${verificationMessage} Inspect Tableau and report only the verified workbook state. Do not replay the consumed artifact or automatically rebuild it; a fresh build requires a later explicit user request.`,
+            ).toErr();
           }
           const receipt = receiptInput
             ? artifactMode

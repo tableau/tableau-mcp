@@ -2,7 +2,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import * as loggerModule from '../../../logging/logger.js';
 import invariant from '../../../utils/invariant.js';
-import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import { normalizeArray, parseXML, serializeXML } from '../../metadata/parser.js';
 import { extractSheetXml } from '../../metadata/sheets.js';
 import { deriveWorksheetApplyState } from '../../metadata/targetWorksheetState.js';
 import type { ParsedWindow } from '../../metadata/types.js';
@@ -439,6 +439,313 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(appliedDocuments[0]).not.toContain('<old-card>');
   });
 
+  it('accepts Desktop-regenerated target window identity after a semantic match', async () => {
+    const windowBody =
+      '<cards><edge name="left"><strip size="160"><card type="filters" /></strip></edge></cards><viewpoints><viewpoint name="Sheet 1" /></viewpoints>';
+    const initialWorkbook = liveWorkbook([worksheetName]).replace(
+      `<window class='worksheet' name='${worksheetName}' />`,
+      `<window class='worksheet' name='${worksheetName}' active='true' maximized='true'>${windowBody}<simple-id uuid='{11111111-1111-4111-8111-111111111111}' /></window>`,
+    );
+    const intendedWindow = `<window class='worksheet' name='${worksheetName}' active='true' maximized='true'>${windowBody}<simple-id uuid='{9ED5A79A-5B32-4E10-A5A3-3954B21A8F76}' /></window>`;
+    let liveWorkbookXml = initialWorkbook;
+    const executor = {
+      getWorkbookDocument: vi.fn(async () =>
+        Ok({
+          xml: liveWorkbookXml,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(async (xml: string) => {
+        const parsed = parseXML(xml);
+        const targetWindow = normalizeArray<ParsedWindow>(parsed.workbook?.windows?.window).find(
+          (window) => window['@_name'] === worksheetName,
+        );
+        invariant(targetWindow);
+        targetWindow['@_active'] = 'false';
+        targetWindow['@_maximized'] = 'false';
+        targetWindow['simple-id'] = {
+          '@_uuid': '{CD75D4B2-0CFA-493E-9D13-5CD2844E0AC3}',
+        };
+        liveWorkbookXml = serializeXML(parsed);
+        return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+      }),
+      listWorksheets: vi.fn(async () =>
+        Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] }),
+      ),
+      getWorksheetDocument: vi.fn(async () =>
+        Ok({ xml: extractSheetXml(liveWorkbookXml, worksheetName) ?? '' }),
+      ),
+    } as unknown as ToolExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      worksheetWindowXml: intendedWindow,
+      expectedState: deriveWorksheetApplyState(
+        initialWorkbook,
+        worksheetName,
+        validXml,
+        intendedWindow,
+      ),
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(executor.applyWorkbookDocument).toHaveBeenCalledOnce();
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(3);
+  });
+
+  it('accepts a worksheet window that converges before the settled post-apply read', async () => {
+    vi.useFakeTimers();
+    try {
+      const initialWorkbook = liveWorkbook([worksheetName]);
+      const intendedWindow = `<window class='worksheet' name='${worksheetName}'><cards><card type='filters' /></cards></window>`;
+      let liveWorkbookXml = initialWorkbook;
+      const executor = {
+        getWorkbookDocument: vi.fn(async () =>
+          Ok({
+            xml: liveWorkbookXml,
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        ),
+        applyWorkbookDocument: vi.fn(async (xml: string) => {
+          liveWorkbookXml = xml.replace('<card type="filters">', '<card type="marks">');
+          setTimeout(() => {
+            liveWorkbookXml = xml;
+          }, 100);
+          return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+        }),
+        listWorksheets: vi.fn(async () =>
+          Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] }),
+        ),
+        getWorksheetDocument: vi.fn(async () => Ok({ xml: validXml })),
+      } as unknown as ToolExecutor;
+
+      const resultPromise = loadWorksheetXml({
+        worksheetName,
+        xml: validXml,
+        worksheetWindowXml: intendedWindow,
+        expectedState: deriveWorksheetApplyState(
+          initialWorkbook,
+          worksheetName,
+          validXml,
+          intendedWindow,
+        ),
+        executor,
+        signal: mockSignal,
+      });
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+
+      expect(result.isOk()).toBe(true);
+      expect(executor.applyWorkbookDocument).toHaveBeenCalledOnce();
+      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects an immediate window match when the authoritative settled read mismatches', async () => {
+    vi.useFakeTimers();
+    try {
+      const initialWorkbook = liveWorkbook([worksheetName]);
+      const intendedWindow = `<window class='worksheet' name='${worksheetName}'><cards><card type='filters' /></cards></window>`;
+      let liveWorkbookXml = initialWorkbook;
+      const executor = {
+        getWorkbookDocument: vi.fn(async () =>
+          Ok({
+            xml: liveWorkbookXml,
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        ),
+        applyWorkbookDocument: vi.fn(async (xml: string) => {
+          liveWorkbookXml = xml;
+          setTimeout(() => {
+            liveWorkbookXml = xml.replace('<card type="filters">', '<card type="marks">');
+          }, 100);
+          return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+        }),
+        listWorksheets: vi.fn(async () =>
+          Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] }),
+        ),
+        getWorksheetDocument: vi.fn(async () => Ok({ xml: validXml })),
+      } as unknown as ToolExecutor;
+
+      const resultPromise = loadWorksheetXml({
+        worksheetName,
+        xml: validXml,
+        worksheetWindowXml: intendedWindow,
+        expectedState: deriveWorksheetApplyState(
+          initialWorkbook,
+          worksheetName,
+          validXml,
+          intendedWindow,
+        ),
+        executor,
+        signal: mockSignal,
+      });
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-worksheet-xml-error');
+        expect(result.error.error).toMatchObject({
+          type: 'readback-failed',
+          findings: [expect.objectContaining({ kind: 'window' })],
+        });
+      }
+      expect(executor.applyWorkbookDocument).toHaveBeenCalledOnce();
+      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails window verification when the bounded settled post-apply read still mismatches', async () => {
+    vi.useFakeTimers();
+    try {
+      const initialWorkbook = liveWorkbook([worksheetName]);
+      const intendedWindow = `<window class='worksheet' name='${worksheetName}'><cards><card type='filters' /></cards></window>`;
+      let appliedWorkbookXml = '';
+      let workbookRead = 0;
+      const executor = {
+        getWorkbookDocument: vi.fn(async () => {
+          workbookRead++;
+          const xml =
+            workbookRead <= 2
+              ? initialWorkbook
+              : appliedWorkbookXml.replace('<card type="filters">', '<card type="marks">');
+          return Ok({ xml, applicationVersion: undefined, xsdPayloadVersion: undefined });
+        }),
+        applyWorkbookDocument: vi.fn(async (xml: string) => {
+          appliedWorkbookXml = xml;
+          return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+        }),
+        listWorksheets: vi.fn(async () =>
+          Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] }),
+        ),
+        getWorksheetDocument: vi.fn(async () => Ok({ xml: validXml })),
+      } as unknown as ToolExecutor;
+
+      const resultPromise = loadWorksheetXml({
+        worksheetName,
+        xml: validXml,
+        worksheetWindowXml: intendedWindow,
+        expectedState: deriveWorksheetApplyState(
+          initialWorkbook,
+          worksheetName,
+          validXml,
+          intendedWindow,
+        ),
+        executor,
+        signal: mockSignal,
+      });
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-worksheet-xml-error');
+        expect(result.error.error).toMatchObject({
+          type: 'readback-failed',
+          findings: [expect.objectContaining({ kind: 'window' })],
+        });
+      }
+      expect(executor.applyWorkbookDocument).toHaveBeenCalledOnce();
+      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(3);
+      const mismatchLog = vi
+        .mocked(loggerModule.log)
+        .mock.calls.find(
+          ([entry]) =>
+            entry.message ===
+            'Post-apply worksheet window verification failed after Desktop settle',
+        )?.[0];
+      expect(mismatchLog?.data).toEqual({
+        worksheetName,
+        attemptCount: 1,
+        intendedWindow: { state: 'present', sha256: expect.stringMatching(/^[0-9a-f]{64}$/) },
+        liveWindow: { state: 'present', sha256: expect.stringMatching(/^[0-9a-f]{64}$/) },
+      });
+      expect(JSON.stringify(mismatchLog?.data)).not.toContain('<window');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops without a second window read when aborted during the post-apply settle', async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const initialWorkbook = liveWorkbook([worksheetName]);
+      const intendedWindow = `<window class='worksheet' name='${worksheetName}'><cards><card type='filters' /></cards></window>`;
+      let appliedWorkbookXml = '';
+      let workbookRead = 0;
+      let resolveApplyCompleted: () => void = () => undefined;
+      const applyCompleted = new Promise<void>((resolve) => {
+        resolveApplyCompleted = resolve;
+      });
+      const executor = {
+        getWorkbookDocument: vi.fn(async () => {
+          workbookRead++;
+          const xml =
+            workbookRead <= 2
+              ? initialWorkbook
+              : workbookRead === 3
+                ? appliedWorkbookXml.replace('<card type="filters">', '<card type="marks">')
+                : appliedWorkbookXml;
+          return Ok({ xml, applicationVersion: undefined, xsdPayloadVersion: undefined });
+        }),
+        applyWorkbookDocument: vi.fn(async (xml: string) => {
+          appliedWorkbookXml = xml;
+          resolveApplyCompleted();
+          return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+        }),
+        listWorksheets: vi.fn(async () =>
+          Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] }),
+        ),
+        getWorksheetDocument: vi.fn(async () => Ok({ xml: validXml })),
+      } as unknown as ToolExecutor;
+
+      const resultPromise = loadWorksheetXml({
+        worksheetName,
+        xml: validXml,
+        worksheetWindowXml: intendedWindow,
+        expectedState: deriveWorksheetApplyState(
+          initialWorkbook,
+          worksheetName,
+          validXml,
+          intendedWindow,
+        ),
+        executor,
+        signal: controller.signal,
+      });
+      await applyCompleted;
+      for (let flush = 0; flush < 20 && vi.getTimerCount() === 0; flush++) {
+        await Promise.resolve();
+      }
+      expect(vi.getTimerCount()).toBe(1);
+      controller.abort(new Error('test abort'));
+      const result = await resultPromise;
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error).toMatchObject({
+          type: 'execute-command-error',
+          error: { type: 'unknown', error: expect.objectContaining({ message: 'test abort' }) },
+        });
+      }
+      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each([
     ['changes', '<card type="marks">'],
     ['drops', ''],
@@ -848,6 +1155,75 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     if (result.isOk()) {
       expect(result.value.validationWarnings).toEqual([telemetryIssue]);
     }
+  });
+
+  it('blocks an unchanged inherited Clipboard connection before whole-workbook dispatch', async () => {
+    vi.mocked(validationRegistry.runValidation).mockRestore();
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <datasources><datasource name='Clipboard'>
+        <connection class='federated'><named-connections>
+          <named-connection caption='Clipboard' name='Clipboard_20260804T195349leaf'>
+            <connection class='textscan' directory='/private/tmp' filename='clipboard.csv' />
+          </named-connection>
+        </named-connections></connection>
+      </datasource></datasources>
+      <worksheets><worksheet name='${worksheetName}'><table /></worksheet></worksheets>
+      <windows><window class='worksheet' name='${worksheetName}' /></windows>
+    </workbook>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ ruleId: 'connections-not-authorable' })]),
+      );
+    }
+    expect(calls.find((call) => call.kind === 'apply')).toBeUndefined();
+  });
+
+  it('still blocks connections-not-authorable when worksheet upsert changes workbook datasources', async () => {
+    vi.mocked(validationRegistry.runValidation).mockRestore();
+    const sourceWorkbook = `<?xml version='1.0'?><workbook>
+      <datasources><datasource name='Orders'><column name='[Sales]' /></datasource></datasources>
+      <worksheets><worksheet name='${worksheetName}'><table /></worksheet></worksheets>
+      <windows><window class='worksheet' name='${worksheetName}' /></windows>
+    </workbook>`;
+    sheetUpsertMock.upsertSheetIntoWorkbook = () => `<?xml version='1.0'?><workbook>
+      <datasources><datasource name='Orders'>
+        <connection class='federated'><named-connections>
+          <named-connection name='fabricated'><connection class='textscan' /></named-connection>
+        </named-connections></connection>
+      </datasource></datasources>
+      <worksheets><worksheet name='${worksheetName}'><table /></worksheet></worksheets>
+      <windows><window class='worksheet' name='${worksheetName}' /></windows>
+    </workbook>`;
+    const { executor, calls } = dispatchingExecutor(sourceWorkbook);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ ruleId: 'connections-not-authorable' })]),
+      );
+    }
+    expect(calls.find((call) => call.kind === 'apply')).toBeUndefined();
   });
 
   it('rejects a constructed workbook document missing the worksheet window before POST', async () => {

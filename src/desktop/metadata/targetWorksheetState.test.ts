@@ -168,6 +168,62 @@ describe('worksheet apply state', () => {
     expect(changed.targetWindow).not.toEqual(initial.targetWindow);
   });
 
+  it('ignores a live-regenerated worksheet-window simple-id and navigation state', () => {
+    const initial = deriveTargetWorksheetWindowState(
+      workbook({
+        targetWindow:
+          '<cards><card type="filters" /></cards><simple-id uuid="{9ED5A79A-5B32-4E10-A5A3-3954B21A8F76}" />',
+      }).replace(
+        '<window class="worksheet" name="Target">',
+        '<window class="worksheet" name="Target" active="true" maximized="true">',
+      ),
+      'Target',
+    );
+    const liveReadback = deriveTargetWorksheetWindowState(
+      workbook({
+        targetWindow:
+          '<cards><card type="filters" /></cards><simple-id uuid="{CD75D4B2-0CFA-493E-9D13-5CD2844E0AC3}" />',
+      }).replace(
+        '<window class="worksheet" name="Target">',
+        '<window class="worksheet" name="Target" active="false" maximized="false">',
+      ),
+      'Target',
+    );
+
+    expect(liveReadback).toEqual(initial);
+  });
+
+  it.each([
+    [
+      'cards',
+      '<cards><edge name="left"><strip size="160"><card type="marks" /></strip></edge></cards><viewpoints><viewpoint name="Target" /></viewpoints>',
+    ],
+    [
+      'layout',
+      '<cards><edge name="left"><strip size="240"><card type="filters" /></strip></edge></cards><viewpoints><viewpoint name="Target" /></viewpoints>',
+    ],
+    [
+      'viewpoint',
+      '<cards><edge name="left"><strip size="160"><card type="filters" /></strip></edge></cards><viewpoints><viewpoint name="Changed" /></viewpoints>',
+    ],
+  ])('still guards worksheet-window %s after volatile state normalization', (_label, changed) => {
+    const simpleId = '<simple-id uuid="{9ED5A79A-5B32-4E10-A5A3-3954B21A8F76}" />';
+    const initial = deriveTargetWorksheetWindowState(
+      workbook({
+        targetWindow:
+          '<cards><edge name="left"><strip size="160"><card type="filters" /></strip></edge></cards><viewpoints><viewpoint name="Target" /></viewpoints>' +
+          simpleId,
+      }),
+      'Target',
+    );
+    const changedState = deriveTargetWorksheetWindowState(
+      workbook({ targetWindow: changed + simpleId }),
+      'Target',
+    );
+
+    expect(changedState).not.toEqual(initial);
+  });
+
   it('ignores equivalent worksheet-window attribute, element, and formatting order', () => {
     const windowWorkbook = (windowXml: string, userUri = 'urn:user'): string => `
       <workbook xmlns:user="${userUri}">
@@ -197,6 +253,50 @@ describe('worksheet apply state', () => {
 
     expect(normalized).toEqual(before);
     expect(namespaceChanged).not.toEqual(before);
+  });
+
+  it('ignores an unused namespace declaration local to the worksheet window', () => {
+    const withoutUnusedNamespace = deriveTargetWorksheetWindowState(
+      '<workbook><windows><window class="worksheet" name="Target"><cards><card type="filters" /></cards></window></windows></workbook>',
+      'Target',
+    );
+    const withUnusedNamespace = deriveTargetWorksheetWindowState(
+      '<workbook><windows><window class="worksheet" name="Target" xmlns:user="urn:unused"><cards><card type="filters" /></cards></window></windows></workbook>',
+      'Target',
+    );
+
+    expect(withUnusedNamespace).toEqual(withoutUnusedNamespace);
+  });
+
+  it('keeps used local-prefix and default namespace declarations fingerprint-bearing', () => {
+    const namespacedWindow = (rootUri: string, localUri: string, defaultUri: string): string => `
+      <workbook xmlns:user="${rootUri}">
+        <windows>
+          <window class="worksheet" name="Target" xmlns="${defaultUri}" xmlns:user="${localUri}">
+            <cards><card type="filters" user:mode="compact" /></cards>
+          </window>
+        </windows>
+      </workbook>`;
+    const initial = deriveTargetWorksheetWindowState(
+      namespacedWindow('urn:root:1', 'urn:local:1', 'urn:default:1'),
+      'Target',
+    );
+    const ancestorChanged = deriveTargetWorksheetWindowState(
+      namespacedWindow('urn:root:2', 'urn:local:1', 'urn:default:1'),
+      'Target',
+    );
+    const localChanged = deriveTargetWorksheetWindowState(
+      namespacedWindow('urn:root:1', 'urn:local:2', 'urn:default:1'),
+      'Target',
+    );
+    const defaultChanged = deriveTargetWorksheetWindowState(
+      namespacedWindow('urn:root:1', 'urn:local:1', 'urn:default:2'),
+      'Target',
+    );
+
+    expect(ancestorChanged).toEqual(initial);
+    expect(localChanged).not.toEqual(initial);
+    expect(defaultChanged).not.toEqual(initial);
   });
 
   it('matches NFC-equivalent worksheet and worksheet-window names', () => {

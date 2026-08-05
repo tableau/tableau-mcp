@@ -1,19 +1,19 @@
 // src/desktop/route/route-gate.ts
 //
-// The one-shot deflection GATE (Slice B, adapted from a2td src/server/route-gate.ts).
+// The flag-gated deflection GATE (Slice B, adapted from a2td src/server/route-gate.ts).
 // Flag-gated (ROUTE_ENFORCEMENT, default OFF), fail-open, additive: on a scratch-path ENTRY
 // tool it either lets the call proceed (returns null) or returns a typed deflection to be
-// RETURNED INSTEAD of executing — steering the agent to run the fast lane first when a stamped
-// template (or a supported refine) already covers the ask.
+// RETURNED INSTEAD of executing — steering template asks through caller-owned selection and
+// one-shot artifact apply, or
+// supported refinements through their existing fast lane.
 //
 // SESSION-KEYED (constraint 1): tmcp has no episodes, so — unlike a2td, which pre-computed the
 // route at begin-episode and had the gate merely READ it — this gate CLASSIFIES the ask on
 // demand (via `classifyAskRoute`) and dedups per (session, ask) through the session route
 // state. Deflection text is generated at runtime; nothing is added to the tools/list surface.
 //
-// ONE-SHOT INVARIANT: at most one deflection per (session, ask). A SECOND scratch-entry call
-// for the same (session, ask) after a deflection executes and records a `route_override` —
-// never a loop.
+// REPEAT INVARIANT: template-routed scratch mutations remain deflected, while supported refine
+// operations keep their one-shot override. Repeated template deflections reuse one state record.
 //
 // WIRING: `checkRouteGate` remains the ask-driven entry point. `checkRouteGateForScratchEntry`
 // is the no-ask wiring path for structured slow-path tools: it reads the most recent
@@ -28,8 +28,10 @@ import { type RouteDeflection, type RouteOverride, sessionRouteState } from './r
 /** The env flag that turns the gate on. Values on/off; DEFAULT OFF. */
 export const ROUTE_ENFORCEMENT_ENV = 'ROUTE_ENFORCEMENT';
 
-/** The tmcp fast-lane tools the gate steers toward (no `tableau-` prefix, per tmcp naming). */
-export const BIND_TEMPLATE_TOOL = 'bind-template';
+/** The tmcp tools the gate steers toward (no `tableau-` prefix, per tmcp naming). */
+export const LIST_TEMPLATES_TOOL = 'list-templates';
+export const BUILD_TEMPLATE_ARTIFACT_TOOL = 'build-worksheets-from-templates';
+export const APPLY_TEMPLATE_ARTIFACT_TOOL = 'apply-worksheet';
 export const REFINE_WORKSHEET_TOOL = 'refine-worksheet';
 
 /**
@@ -58,7 +60,8 @@ function isRefineGateShape(shape: AskShape): shape is 'refine-top-n' | 'refine-s
  * deflected (flag-independent):
  *   • route is neither bind-first nor refine-op → noop (only routed operations are enforced)
  *   • refine-op but not a supported refine shape → noop (no fast lane to steer toward)
- *   • already deflected this (session, ask)      → override (execute; one-shot invariant)
+ *   • bind-first                                 → deflect, including repeated scratch calls
+ *   • supported refine already deflected        → override (execute; one-shot invariant)
  *   • else                                        → deflect
  */
 export function decideRouteGate(args: {
@@ -69,7 +72,7 @@ export function decideRouteGate(args: {
   const { route, shape, alreadyDeflected } = args;
   if (route !== 'bind-first' && route !== 'refine-op') return 'noop';
   if (route === 'refine-op' && !isRefineGateShape(shape)) return 'noop';
-  if (alreadyDeflected) return 'override';
+  if (alreadyDeflected && route === 'refine-op') return 'override';
   return 'deflect';
 }
 
@@ -79,9 +82,28 @@ export function decideRouteGate(args: {
  */
 export function deflectionText(template: string): string {
   return (
-    `Route: bind-first. Template '${template}' matches this ask — call ${BIND_TEMPLATE_TOOL} ` +
-    'first; if it escalates or proposes, retry this call and it will proceed.'
+    `Template '${template}' may fit. Confirm it is a current eligible choice with ` +
+    `${LIST_TEMPLATES_TOOL} and load its exact slots. If the template, datasource, mapping, ` +
+    `and fresh unique worksheet title are unambiguous, call ${BUILD_TEMPLATE_ARTIFACT_TOOL} ` +
+    `and then ${APPLY_TEMPLATE_ARTIFACT_TOOL} exactly once in this turn. If anything is ` +
+    'ambiguous or the user asked to hold changes, clarify before building. If the title ' +
+    'already exists, choose a new one; this template path never replaces a worksheet or window. ' +
+    'Do not retry this scratch mutation or an uncertain apply.'
   );
+}
+
+function templateArtifactMarker(template: string): Record<string, unknown> {
+  return {
+    next_route: 'bind-first',
+    next_action: 'template-build-then-apply',
+    template,
+    discovery_tool: LIST_TEMPLATES_TOOL,
+    build_tool: BUILD_TEMPLATE_ARTIFACT_TOOL,
+    apply_tool: APPLY_TEMPLATE_ARTIFACT_TOOL,
+    target_policy: 'new-worksheet-only',
+    clarification_policy: 'before-build-if-ambiguous-held-or-title-conflicts',
+    apply_exactly_once: true,
+  };
 }
 
 export function refineDeflectionText(): string {
@@ -125,8 +147,8 @@ export type RouteGateResult = {
  *
  * A no-op (returns null) when: the flag is off; there is no session id; the ask does not
  * classify to an enforced route (bind-first, or a supported refine-op shape). On the
- * second-and-later call for the same (session, ask) it returns null AND records a
- * route_override (the one-shot invariant).
+ * second-and-later template-routed call for the same (session, ask), it returns the same
+ * deflection without adding duplicate state. Supported refinements keep the one-shot override.
  */
 export function checkRouteGate(input: RouteGateInput): RouteGateResult | null {
   if (!routeEnforcementEnabled(input.env)) return null;
@@ -202,11 +224,11 @@ export function checkRouteGate(input: RouteGateInput): RouteGateResult | null {
     next_route: 'bind-first',
     text,
   };
-  sessionRouteState.recordDeflection(input.sessionId, deflection);
+  if (!alreadyDeflected) sessionRouteState.recordDeflection(input.sessionId, deflection);
   return {
     content: [
       { type: 'text', text },
-      { type: 'text', text: JSON.stringify({ next_route: 'bind-first', template }) },
+      { type: 'text', text: JSON.stringify(templateArtifactMarker(template)) },
     ],
     isError: false,
   };
@@ -292,11 +314,12 @@ export function checkRouteGateForScratchEntry(
     next_route: 'bind-first',
     text,
   };
-  sessionRouteState.recordDeflection(sessionId, deflection);
+  const alreadyDeflected = sessionRouteState.hasDeflection(sessionId, currentAsk.ask);
+  if (!alreadyDeflected) sessionRouteState.recordDeflection(sessionId, deflection);
   return {
     content: [
       { type: 'text', text },
-      { type: 'text', text: JSON.stringify({ next_route: 'bind-first', template }) },
+      { type: 'text', text: JSON.stringify(templateArtifactMarker(template)) },
     ],
     isError: false,
   };

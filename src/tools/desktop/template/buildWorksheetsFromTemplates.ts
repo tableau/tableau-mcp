@@ -5,7 +5,10 @@ import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { bindExplicitTemplate } from '../../../desktop/binder/explicit-bind.js';
+import {
+  bindExplicitTemplate,
+  type ExplicitBindError,
+} from '../../../desktop/binder/explicit-bind.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { summarizeSchema } from '../../../desktop/binder/schema-summary.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
@@ -49,9 +52,11 @@ const paramsSchema = {
 
 const BUILD_RESPONSE_LIMIT_BYTES = 12_288;
 export const MAX_OFFLINE_WORKBOOK_BYTES = 64 * 1024 * 1024;
-const OFFLINE_WORKBOOK_READ_ERROR = `The saved workbook file could not be read safely. It must be a regular file no larger than ${MAX_OFFLINE_WORKBOOK_BYTES} bytes. No template artifact was created.`;
+const OFFLINE_WORKBOOK_READ_ERROR = `The saved workbook file could not be read safely. It must be a regular file no larger than ${MAX_OFFLINE_WORKBOOK_BYTES} bytes. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.`;
 const OFFLINE_WORKBOOK_XML_ERROR =
-  'The saved workbook could not be safely parsed or used to build a template artifact. No template artifact was created; inspect the workbook file and retry.';
+  'The saved workbook could not be safely parsed or used to build a template artifact. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.';
+const LIVE_WORKSHEET_CONSTRUCTION_ERROR =
+  'The template worksheet could not be safely constructed from the live workbook. No template artifact was created and the workbook was not changed. Stop and report this failure; do not retry automatically. Choose another pass-1-eligible template, or build only on a later explicit user request.';
 
 type OfflineWorkbookReadResult = { ok: true; text: string } | { ok: false };
 
@@ -127,6 +132,25 @@ interface BuildSuccess {
   guidance: string;
 }
 
+function formatArtifactBindErrors(templateName: string, errors: ExplicitBindError[]): string {
+  const rendered = errors
+    .map((error) => {
+      const slot = error.slot_id ? ` (slot '${error.slot_id}')` : '';
+      const candidates =
+        error.candidates && error.candidates.length > 0
+          ? `\n      candidates: ${error.candidates.join(', ')}`
+          : '';
+      return `  - [${error.code}]${slot} ${error.detail}${candidates}`;
+    })
+    .join('\n');
+  const causes = rendered.length > 0 ? `\n\n${rendered}` : '';
+
+  return (
+    `Template artifact binding BLOCKED for '${templateName}'.${causes}\n\n` +
+    'Stop here. No template artifact was created; ask the user to choose another pass-1-eligible template from list-templates.'
+  );
+}
+
 function inferSingleDatasourceFromFieldMapping(
   fieldMapping: Record<string, string>,
 ): string | null {
@@ -148,7 +172,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
     name: 'build-worksheets-from-templates',
     title: toolTitle,
     description:
-      'Build a template worksheet for confirmation without changing the workbook. Apply it with apply-worksheet.',
+      'Build without changing the workbook. For a resolved new sheet, call apply-worksheet once in the same turn.',
     paramsSchema,
     annotations: {
       title: toolTitle,
@@ -182,6 +206,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
           let repositoryRoot = workbookFile === undefined ? undefined : environmentRepositoryRoot;
           let resolvedLiveSession: string | undefined;
           let liveExecutor: Awaited<ReturnType<typeof extra.getExecutor>> | undefined;
+          let liveArtifactSessionIdentity: string | undefined;
           if (workbookFile === undefined) {
             const requestedSession = session?.trim();
             const explicitSession =
@@ -193,6 +218,11 @@ export const getBuildWorksheetsFromTemplatesTool = (
             const resolvedSession = sessionResult.value;
             resolvedLiveSession = resolvedSession;
             liveExecutor = await extra.getExecutor(resolvedSession);
+            liveArtifactSessionIdentity = templateArtifactSessionIdentity(
+              resolvedSession,
+              liveExecutor.desktopInstanceId,
+            );
+            artifactStore.invalidateAvailable(liveArtifactSessionIdentity);
             try {
               const appResult = await liveExecutor.getApp(extra.signal);
               if (appResult.isOk()) {
@@ -262,7 +292,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
             });
             if (workbookResult.isErr()) {
               return new ArgsValidationError(
-                'The live workbook could not be read. No template artifact was created; inspect Tableau and retry.',
+                'The live workbook could not be read. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.',
               ).toErr();
             }
             workbookXml = workbookResult.value;
@@ -289,7 +319,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
                   return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
                 }
                 return new ArgsValidationError(
-                  `Template binding failed for "${templateName}". No worksheet was produced; inspect the bounded slot contract from list-templates and retry the caller-supplied mapping.`,
+                  formatArtifactBindErrors(templateName, explicitBind.errors),
                 ).toErr();
               }
 
@@ -304,7 +334,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
                 return new ArgsValidationError(
                   `Template binding BLOCKED for "${templateName}". No worksheet was produced.\n\n` +
                     `  • [datasource-mismatch] caller datasource "${datasource}" does not match resolved mapping datasource "${resolvedDatasource}".\n` +
-                    `    FIX: Set datasource to "${resolvedDatasource}" and retry with the same fieldMapping.`,
+                    '    Stop and clarify the datasource choice before constructing another worksheet. No template artifact was created; do not change the datasource or retry automatically.',
                 ).toErr();
               }
 
@@ -313,46 +343,65 @@ export const getBuildWorksheetsFromTemplatesTool = (
               warnings.push(...explicitBind.warnings);
             }
 
-            const applyNonce = `${workbookFile ?? session ?? 'live'}:${Date.now()}:${randomUUID()}`;
-            const built = buildInjectedWorkbookXml({
-              workbookXml,
-              templateXml: templateArtifact.xml,
-              title,
-              sheetType: 'worksheet',
-              templateParameters: { DATASOURCE: datasource },
-              fieldMapping: appliedFieldMapping,
-              // Metadata-optional slots: the merged manifest (inferred + any curated overlay).
-              templateSlots: resolvedManifest?.manifest.slots,
-              insertPosition: 'end',
-              applyNonce,
-              optionalFieldPrunes,
-            });
+            let worksheetXml: string;
+            let worksheetWindowXml: string;
+            let expectedState: WorksheetApplyState;
+            try {
+              const applyNonce = `${workbookFile ?? session ?? 'live'}:${Date.now()}:${randomUUID()}`;
+              const built = buildInjectedWorkbookXml({
+                workbookXml,
+                templateXml: templateArtifact.xml,
+                title,
+                sheetType: 'worksheet',
+                templateParameters: { DATASOURCE: datasource },
+                fieldMapping: appliedFieldMapping,
+                // Metadata-optional slots: the merged manifest (inferred + any curated overlay).
+                templateSlots: resolvedManifest?.manifest.slots,
+                insertPosition: 'end',
+                applyNonce,
+                optionalFieldPrunes,
+              });
 
-            if (!built.ok) {
-              if (workbookFile !== undefined) {
-                return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
+              if (!built.ok) {
+                if (workbookFile !== undefined) {
+                  return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
+                }
+                return new ArgsValidationError(
+                  `Template "${templateName}" from ${templateProvenance} could not be safely constructed. No worksheet was produced; choose another template or repair the source outside MCP.`,
+                ).toErr();
               }
+
+              const artifact = extractLastWorksheetArtifact(built.xml, title);
+              if (!artifact) {
+                if (workbookFile !== undefined) {
+                  return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
+                }
+                return new XmlValidationError([
+                  `Built workbook did not contain a worksheet and worksheet window named "${title}".`,
+                ]).toErr();
+              }
+              ({ worksheetXml, worksheetWindowXml } = artifact);
+              expectedState = deriveWorksheetApplyState(
+                workbookXml,
+                title,
+                worksheetXml,
+                worksheetWindowXml,
+              );
+            } catch {
               return new ArgsValidationError(
-                `Template "${templateName}" from ${templateProvenance} could not be safely constructed. No worksheet was produced; choose another template or repair the source outside MCP.`,
+                workbookFile === undefined
+                  ? LIVE_WORKSHEET_CONSTRUCTION_ERROR
+                  : OFFLINE_WORKBOOK_XML_ERROR,
               ).toErr();
             }
-
-            const artifact = extractLastWorksheetArtifact(built.xml, title);
-            if (!artifact) {
-              if (workbookFile !== undefined) {
-                return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
-              }
-              return new XmlValidationError([
-                `Built workbook did not contain a worksheet and worksheet window named "${title}".`,
-              ]).toErr();
+            if (
+              expectedState.target.state === 'present' ||
+              expectedState.targetWindow.state === 'present'
+            ) {
+              return new ArgsValidationError(
+                'Template construction blocked because the requested title already names an existing worksheet or window. This template path creates new worksheets only. No template artifact was created; choose a fresh unique worksheet title before constructing another.',
+              ).toErr();
             }
-            const { worksheetXml, worksheetWindowXml } = artifact;
-            const expectedState = deriveWorksheetApplyState(
-              workbookXml,
-              title,
-              worksheetXml,
-              worksheetWindowXml,
-            );
             const metadataTrust: BuildSuccess['metadataTrust'] =
               templateProvenance === 'protected' || templateProvenance === 'dev-override'
                 ? 'trusted-protected-or-dev'
@@ -374,7 +423,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
               overridesLowerPrecedence,
               preview,
               guidance:
-                'The live workbook was not modified. The caller must confirm this bounded preview with the user before mutation, then call apply-worksheet with the returned artifactId. Do not request or reconstruct raw worksheet XML.',
+                'The live workbook was not modified. The preview object is a bounded artifact plan, not a visible preview. For this resolved new sheet, call apply-worksheet with this artifactId exactly once in the same turn. Do not request or reconstruct raw worksheet XML, and never retry an uncertain apply.',
             };
             const projectedResponse: BuildSuccess = {
               artifactId: '00000000-0000-4000-8000-000000000000',
@@ -386,7 +435,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
               BUILD_RESPONSE_LIMIT_BYTES
             ) {
               return new ArgsValidationError(
-                'The validated caller-supplied preview exceeds the artifact response limit. Reduce fieldMapping size or field-name length and rebuild.',
+                'The validated caller-supplied artifact plan exceeds the artifact response limit. No template artifact was created and the workbook was not changed. Stop and report this failure; build again only on a later explicit user request with resolved inputs.',
               ).toErr();
             }
 
@@ -397,6 +446,12 @@ export const getBuildWorksheetsFromTemplatesTool = (
                     resolvedLiveSession,
                     liveExecutor?.desktopInstanceId,
                   );
+            if (
+              artifactSessionIdentity !== null &&
+              artifactSessionIdentity !== liveArtifactSessionIdentity
+            ) {
+              artifactStore.invalidateAvailable(artifactSessionIdentity);
+            }
             const { artifactId, expiresAt } = artifactStore.put(artifactSessionIdentity, {
               worksheetName: title,
               worksheetXml,

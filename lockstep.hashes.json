@@ -1,8 +1,8 @@
 {
   "src/desktop/binder/calc-derivation.ts": "5105d466e3c31019affa91320edf3047259301ca5cd27aeb5883ba1faa251098",
-  "src/desktop/binder/classify.ts": "871936861366e41c73f86e41f82ee27b198e8985b1e79d542291fa3bec02807a",
+  "src/desktop/binder/classify.ts": "895f34e87507b84641091b269df2050caf57617c3315bdb9bd80fd9351d50d5d",
   "src/desktop/binder/escape.ts": "3c79bcf77c33fad64975e95ea57df5fb3e416008633e15dc7a585018fbc92d3f",
-  "src/desktop/binder/manifest-types.ts": "9ce310c1e294d3784084b854edf52ef4f7c4cf7a8e13ebba7071dc3957c6114d",
-  "src/desktop/binder/manifest-validation.ts": "e29ecfa9e10e57593a4f72e498f35ca8b1b28a1227fc0cb4aed057870566df60",
-  "src/desktop/templates/fieldReferenceRewriter.ts": "62c0ed0840d7a5a0cba49a972ce887e9e7f67f2137927b6a92e5507297a92005"
+  "src/desktop/binder/manifest-types.ts": "bdc917927aa1e513520df1a393b7b3b3c12c705715e15948ed590044287e7f59",
+  "src/desktop/binder/manifest-validation.ts": "fc46c7b874cb2bd5958a2ed40848d18f6b3654e2d8559cff90fb841ca8fdd8d6",
+  "src/desktop/templates/fieldReferenceRewriter.ts": "1b29ceef755264df076ef9f581ba90e3b709cfda2c6e05a49c38649824fe69df"
 }

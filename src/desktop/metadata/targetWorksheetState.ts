@@ -93,6 +93,12 @@ function relevantNamespaces(
   return namespaces;
 }
 
+function removeNamespaceDeclarations(element: Record<string, unknown>): void {
+  for (const key of Object.keys(element)) {
+    if (key === '@_xmlns' || key.startsWith('@_xmlns:')) delete element[key];
+  }
+}
+
 function removeInsignificantXmlWhitespace(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(removeInsignificantXmlWhitespace);
   if (value === null || typeof value !== 'object') return value;
@@ -149,12 +155,22 @@ function extractFingerprintWindowXml(workbookXml: string, worksheetName: string)
 
   return stableStringify(
     windows.map((window) => {
+      const fingerprintWindow = { ...window };
+      delete fingerprintWindow['@_active'];
+      delete fingerprintWindow['@_maximized'];
+      delete fingerprintWindow['simple-id'];
       const usedPrefixes = new Set<string>();
-      collectUsedNamespacePrefixes(window, usedPrefixes);
+      collectUsedNamespacePrefixes(fingerprintWindow, usedPrefixes);
+      const localNamespaces = relevantNamespaces(fingerprintWindow, usedPrefixes);
+      // Reinsert can leave unused declarations on the window; rebuild only its semantic namespace context.
+      removeNamespaceDeclarations(fingerprintWindow);
       const rootNamespaces = relevantNamespaces(workbook.workbook, usedPrefixes);
       const windowsNamespaces = relevantNamespaces(workbook.workbook?.windows, usedPrefixes);
-      carryNamespaceDeclarations({ ...rootNamespaces, ...windowsNamespaces }, window);
-      return removeInsignificantXmlWhitespace(window);
+      carryNamespaceDeclarations(
+        { ...rootNamespaces, ...windowsNamespaces, ...localNamespaces },
+        fingerprintWindow,
+      );
+      return removeInsignificantXmlWhitespace(fingerprintWindow);
     }),
   );
 }

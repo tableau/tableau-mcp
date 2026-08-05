@@ -65,6 +65,28 @@ type LoadWorksheetXmlResult = Result<
 >;
 
 const PRE_APPLY_STABILITY_ATTEMPTS = 3;
+const POST_APPLY_WINDOW_SETTLE_MS = 500;
+
+async function waitForDesktopSettle(ms: number, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) return false;
+
+  return await new Promise<boolean>((resolve) => {
+    const timeout = setTimeout(() => finish(true), ms);
+
+    function finish(settled: boolean): void {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', abort);
+      resolve(settled);
+    }
+
+    function abort(): void {
+      finish(false);
+    }
+
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+  });
+}
 
 /**
  * Post-apply readback verification. Re-reads the just-applied worksheet and compares
@@ -365,7 +387,8 @@ async function loadWorksheetXmlViaExternalApi({
       }
 
       const workbookDocValidation = runValidation(candidateWorkbookDoc, 'workbook');
-      const workbookBlockingIssues = blockingValidationIssues(workbookDocValidation.issues);
+      const workbookValidationIssues = workbookDocValidation.issues;
+      const workbookBlockingIssues = blockingValidationIssues(workbookValidationIssues);
       if (workbookBlockingIssues.length > 0) {
         log({
           level: 'error',
@@ -385,7 +408,7 @@ async function loadWorksheetXmlViaExternalApi({
         });
       }
 
-      const workbookWarningIssues = workbookDocValidation.issues.filter(
+      const workbookWarningIssues = workbookValidationIssues.filter(
         (issue) => issue.severity !== 'error',
       );
       if (workbookWarningIssues.length > 0) {
@@ -485,19 +508,42 @@ async function loadWorksheetXmlViaExternalApi({
       signal,
     );
     if (verification.ok && expectedState !== undefined && worksheetWindowXml !== undefined) {
-      const workbookReadback = await getWorkbookXml({ executor, signal });
-      if (workbookReadback.isErr()) {
-        return Err({ type: 'execute-command-error', error: workbookReadback.error });
-      }
-
       try {
         const intendedWindow = deriveTargetWorksheetWindowState(workbookDoc, worksheetName);
+        const settled = await waitForDesktopSettle(POST_APPLY_WINDOW_SETTLE_MS, signal);
+        if (!settled) {
+          return Err({
+            type: 'execute-command-error',
+            error: {
+              type: 'unknown',
+              error:
+                signal.reason ?? new Error('Post-apply worksheet window verification was aborted'),
+            },
+          });
+        }
+
+        const workbookReadback = await getWorkbookXml({ executor, signal });
+        if (workbookReadback.isErr()) {
+          return Err({ type: 'execute-command-error', error: workbookReadback.error });
+        }
         const liveWindow = deriveTargetWorksheetWindowState(workbookReadback.value, worksheetName);
         const windowsMatch =
           intendedWindow.state === liveWindow.state &&
           (intendedWindow.state === 'absent' ||
             (liveWindow.state === 'present' && intendedWindow.sha256 === liveWindow.sha256));
+
         if (!windowsMatch) {
+          log({
+            level: 'warning',
+            message: 'Post-apply worksheet window verification failed after Desktop settle',
+            logger: 'worksheetCommands',
+            data: sanitize({
+              worksheetName,
+              attemptCount: 1,
+              intendedWindow,
+              liveWindow,
+            }),
+          });
           verification.ok = false;
           verification.status = 'failed';
           verification.findings.push({

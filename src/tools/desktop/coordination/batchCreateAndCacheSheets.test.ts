@@ -327,14 +327,21 @@ describe('batchCreateAndCacheSheetsTool — route gate (ROUTE_ENFORCEMENT)', () 
     invariant(result.content[1].type === 'text');
     expect(JSON.parse(result.content[1].text)).toEqual({
       next_route: 'bind-first',
+      next_action: 'template-build-then-apply',
       template: 'ranking-ordered-bar',
+      discovery_tool: 'list-templates',
+      build_tool: 'build-worksheets-from-templates',
+      apply_tool: 'apply-worksheet',
+      target_policy: 'new-worksheet-only',
+      clarification_policy: 'before-build-if-ambiguous-held-or-title-conflicts',
+      apply_exactly_once: true,
     });
     expect(getWorkbookXml).not.toHaveBeenCalled();
     expect(loadWorkbookXml).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('flag on deflects once, then an identical second call executes normally', async () => {
+  it('flag on keeps an identical second template-routed call deflected', async () => {
     process.env[FLAG] = 'on';
     seedPendingBindFirst();
 
@@ -344,11 +351,11 @@ describe('batchCreateAndCacheSheetsTool — route gate (ROUTE_ENFORCEMENT)', () 
     expect(first.isError).toBe(false);
     invariant(first.content[0].type === 'text');
     expect(first.content[0].text).toBe(deflectionText('ranking-ordered-bar'));
-    expect(second.isError).toBeFalsy();
+    expect(second.isError).toBe(false);
     invariant(second.content[0].type === 'text');
-    expect(second.content[0].text).toContain('Ready for Phase 2');
-    expect(getWorkbookXml).toHaveBeenCalledTimes(1);
-    expect(writeFileSync).toHaveBeenCalled();
+    expect(second.content[0].text).toBe(deflectionText('ranking-ordered-bar'));
+    expect(getWorkbookXml).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
   });
 
   it('flag on with no current_ask executes normally', async () => {

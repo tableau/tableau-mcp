@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { bindExplicitTemplate, schemaSummaryFromAvailableFields } from '../binder/explicit-bind.js';
 import type { TemplateManifest } from '../binder/manifest-types.js';
+import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 
 // resolveTemplateSlots joins two sources — the inferred `.tbm` and an optional curated
 // manifest — so both are mocked. Inference itself (inferFromBookmark/synthesizeManifest)
@@ -55,6 +59,24 @@ const MODERN_BOOKMARK =
   '<rows>[federated.x].[none:Category:nk]</rows>' +
   '<cols>[federated.x].[sum:Sales:qk]</cols>' +
   '</table></bookmark>';
+
+const MODERN_CALC_BOOKMARK = readFileSync(
+  'src/desktop/data/templates/correlation-scatter-plot-chart.tbm',
+  'utf8',
+);
+const CURATED_CALC_MANIFEST = JSON.parse(
+  readFileSync(
+    'src/desktop/data/template-manifests/correlation-scatter-plot-chart.manifest.json',
+    'utf8',
+  ),
+) as TemplateManifest;
+const CONNECTED_SCATTER_BOOKMARK = readFileSync(
+  'src/desktop/data/templates/connected-scatterplot.tbm',
+  'utf8',
+);
+const CONNECTED_SCATTER_MANIFEST = JSON.parse(
+  readFileSync('src/desktop/data/template-manifests/connected-scatterplot.manifest.json', 'utf8'),
+) as TemplateManifest;
 
 function curatedManifest(overrides: Partial<TemplateManifest> = {}): TemplateManifest {
   return {
@@ -294,6 +316,24 @@ describe('resolveTemplateManifest — full-manifest resolver', () => {
     ]);
   });
 
+  it('keeps a modern bookmark calc aligned with its inferred slot ids', () => {
+    readBookmarkMock.mockReturnValue(MODERN_CALC_BOOKMARK);
+    getManifestMock.mockReturnValue(CURATED_CALC_MANIFEST);
+
+    const resolved = resolveTemplateManifest('correlation-scatter-plot-chart');
+    const calc = resolved!.manifest.calcs[0];
+    const slotIds = new Set(resolved!.manifest.slots.map((slot) => slot.slot_id));
+
+    expect(calc.depends_on_slots).toEqual(['profit_none', 'sales_none']);
+    expect(calc.depends_on_slots.every((slotId) => slotIds.has(slotId))).toBe(true);
+    expect(calc.inputs).toBeUndefined();
+    expect(calc.formula).toBe('SUM([Profit])/SUM([Sales])');
+    expect(calc.formula_refs).toEqual(['Profit', 'Sales']);
+    expect(calc.result_role).toBe('measure');
+    expect(calc.prereqs).toEqual(['raw-formula-refs']);
+    expect(resolved!.manifest.portability_evidence.render_verified).toBe('live-2026-07-06');
+  });
+
   it('does not overlay a bundled curated manifest onto a custom bookmark with the same name', () => {
     const entry = {
       template: 'my-template',
@@ -392,6 +432,109 @@ describe('resolveTemplateSnapshot — one source read', () => {
 
     expect(resolveTemplateSnapshot('my-template')).toBeNull();
     expect(getManifestMock).not.toHaveBeenCalled();
+  });
+
+  it('emits Profit divided by Sales from both runtime-canonical scatter bookmarks', () => {
+    const templates: Array<{
+      name: string;
+      bookmark: string;
+      manifest: TemplateManifest;
+      fieldMapping: Record<string, string>;
+    }> = [
+      {
+        name: 'correlation-scatter-plot-chart',
+        bookmark: MODERN_CALC_BOOKMARK,
+        manifest: CURATED_CALC_MANIFEST,
+        fieldMapping: {
+          sales_sum: 'Revenue',
+          profit_sum: 'Net Profit',
+          customer_name: 'Customer',
+          product_name: 'Product',
+          sales_none: 'Revenue',
+          profit_none: 'Net Profit',
+        },
+      },
+      {
+        name: 'connected-scatterplot',
+        bookmark: CONNECTED_SCATTER_BOOKMARK,
+        manifest: CONNECTED_SCATTER_MANIFEST,
+        fieldMapping: {
+          profit_sum: 'Net Profit',
+          customer_name: 'Customer',
+          product_name: 'Product',
+          sales: 'Revenue',
+          profit_none: 'Net Profit',
+        },
+      },
+    ];
+    const schema = schemaSummaryFromAvailableFields([
+      {
+        datasource: 'Target',
+        columnName: '[Revenue]',
+        role: 'measure',
+        type: 'quantitative',
+        datatype: 'real',
+        column_ref: '[Target].[sum:Revenue:qk]',
+      },
+      {
+        datasource: 'Target',
+        columnName: '[Net Profit]',
+        role: 'measure',
+        type: 'quantitative',
+        datatype: 'real',
+        column_ref: '[Target].[sum:Net Profit:qk]',
+      },
+      {
+        datasource: 'Target',
+        columnName: '[Customer]',
+        role: 'dimension',
+        type: 'nominal',
+        datatype: 'string',
+        column_ref: '[Target].[none:Customer:nk]',
+      },
+      {
+        datasource: 'Target',
+        columnName: '[Product]',
+        role: 'dimension',
+        type: 'nominal',
+        datatype: 'string',
+        column_ref: '[Target].[none:Product:nk]',
+      },
+    ]);
+
+    for (const template of templates) {
+      readBookmarkFromCatalogEntryMock.mockReturnValue(template.bookmark);
+      getManifestMock.mockReturnValue(template.manifest);
+      const snapshot = resolveTemplateSnapshot(template.name, {
+        catalogEntry: {
+          template: template.name,
+          provenance: 'protected',
+          overridesLowerPrecedence: false,
+          format: 'tbm',
+        },
+      });
+      expect(snapshot, template.name).not.toBeNull();
+
+      const manifest = snapshot!.resolvedManifest!.manifest;
+      const binding = bindExplicitTemplate(template.name, template.fieldMapping, schema, {
+        datasource: 'Target',
+        manifests: new Map([[template.name, manifest]]),
+      });
+      expect(binding.ok, template.name).toBe(true);
+      if (!binding.ok) throw new Error(`Binding failed for ${template.name}`);
+
+      const rewritten = rewriteFieldReferences(
+        snapshot!.artifact.xml,
+        binding.fieldMapping,
+        'Target',
+        binding.fieldMetadata,
+        { templateSlots: binding.templateSlots },
+      );
+      expect(rewritten, template.name).toMatch(
+        /formula=(['"])SUM\(\[Net Profit\]\)\/SUM\(\[Revenue\]\)\1/,
+      );
+      expect(rewritten, template.name).not.toMatch(/\{\{field_base_\d+\}\}/);
+    }
   });
 });
 

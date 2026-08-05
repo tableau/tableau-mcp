@@ -33,7 +33,7 @@
       </datasources>
       <datasource-dependencies datasource='Sample - Superstore'>
         <column caption='Profit Ratio' datatype='real' default-format='p0%' name='[Calculation_1368249927221915648]' role='measure' type='quantitative'>
-          <calculation class='tableau' formula='SUM([Sales])/SUM([Profit])' />
+          <calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' />
         </column>
         <column datatype='string' name='[Customer Name]' role='dimension' type='nominal' />
         <column datatype='real' name='[Sales]' role='measure' type='quantitative' />

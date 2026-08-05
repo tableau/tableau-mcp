@@ -338,19 +338,9 @@ export function bookmarkToTemplateWorkbook(
   body = body.replace(dropCaption, '$1');
   win = win.replace(dropCaption, '$1');
 
-  // ATTRIBUTES THAT MUST NOT BE TOKENIZED — they carry bracketed values that LOOK like
-  // field references but are not:
-  //   - semantic-role='[State].[Name]' — Tableau's fixed geo-hierarchy vocabulary. A
-  //     donor field literally named "State" would otherwise become
-  //     semantic-role='[N].[Name]', which the rewriter can't map, so the token survives
-  //     and the whole inject throws (the single largest failure cause in the corpus).
-  //   - table-calc@ordering-field AND the nested `<order field='…'>` / `<table-calc field='…'>`
-  //     compute-along directives — all emit the BARE `[ds].[base]` form the rewriter's
-  //     three-part regex can't match. They name an addressing/ordering field (Compute Using),
-  //     never a primary placement (those live in rows/cols text or an encoding `column=`), so
-  //     shielding `field='…'` wholesale is safe. Without this a bare `<order field='[ds].[Order
-  //     Date]'>` tokenized to `[{{DATASOURCE}}].[{{field_base_N}}]` with no slot/mapping key,
-  //     survived the rewrite, and threw "binding is incomplete" (deviation-gain-loss-chart).
+  // semantic-role values are fixed geo vocabulary, not field references. Table-calc
+  // addressing attrs are tokenized only when their base is a mapped slot; their bare shape is
+  // preserved and the bareRefs gate keeps them out of pass 1 until apply can rewrite them.
   //
   // calculation@formula is DELIBERATELY tokenized (NOT shielded — task #28). A donor calc's
   // BASE-INPUT refs are bare `[Field]` names in the SAME datasource (verified: no `.tbm` calc
@@ -363,12 +353,23 @@ export function bookmarkToTemplateWorkbook(
   // fields absent from the target and Tableau silently stripped it (the calc-guard failure
   // class). Nested `[Calculation_*]` refs are NOT base inputs (baseInputsOf skips them) and are
   // handled separately by per-apply calc namespacing (fieldReferenceRewriter.ts §0).
-  const PROTECTED_ATTRS = /\b(semantic-role|ordering-field|field)='[^']*'/g;
+  const PROTECTED_ATTRS = /\b(semantic-role|ordering-field|field)='([^']*)'/g;
   // Sentinel uses U+0001 (\u0001) delimited indices: control chars cannot appear in well-formed
   // XML, so the placeholder can never collide with real document content.
   const shield: string[] = [];
   const protectAttrs = (s: string): string =>
-    s.replace(PROTECTED_ATTRS, (whole) => `\u0001${shield.push(whole) - 1}\u0001`);
+    s.replace(PROTECTED_ATTRS, (whole, attrName: string, attrValue: string) => {
+      const hasMappedSlotRef =
+        attrName !== 'semantic-role' &&
+        inf.slots.some(({ sourceField }) => {
+          const escaped = sourceField.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          return (
+            parseInstanceRef(attrValue).base === sourceField ||
+            new RegExp(`:${escaped}(?=:)`).test(attrValue)
+          );
+        });
+      return hasMappedSlotRef ? whole : `\u0001${shield.push(whole) - 1}\u0001`;
+    });
   const restoreAttrs = (s: string): string =>
     // eslint-disable-next-line no-control-regex -- the U+0001 sentinel is intentional (see above).
     s.replace(/\u0001(\d+)\u0001/g, (_m, i: string) => shield[Number(i)]);

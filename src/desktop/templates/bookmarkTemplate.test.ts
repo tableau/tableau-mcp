@@ -8,6 +8,8 @@ import {
   normalizeBookmarkXml,
   parseInstanceRef,
 } from './bookmarkTemplate.js';
+import { inferFromBookmark } from './inferSlots.js';
+import { listBookmarkNames, readBookmark } from './templatePath.js';
 
 function slot(sourceField: string, extra: Partial<InferredSlot> = {}): InferredSlot {
   return {
@@ -217,6 +219,63 @@ describe('bookmarkToTemplateWorkbook', () => {
     const { xml } = bookmarkToTemplateWorkbook(raw, inf);
     expect(xml).toContain("semantic-role='[State].[Name]'"); // untouched
     expect(xml).toContain('[none:{{field_base_1}}:nk]'); // ref tokenized
+  });
+
+  it('tokenizes a qualified field reference in a format attribute', () => {
+    const inf = inference([slot('Profit')], ['federated.x']);
+    const raw =
+      "<?xml version='1.0'?><bookmark version='10.1'>" +
+      "<table><format attr='title' field='[federated.x].[sum:Profit:qk]'/>" +
+      '<cols>[federated.x].[sum:Profit:qk]</cols></table>' +
+      "<window class='worksheet' name='Sheet 1'/></bookmark>";
+    const { xml } = bookmarkToTemplateWorkbook(raw, inf);
+    expect(xml).toContain("field='[{{DATASOURCE}}].[sum:{{field_base_1}}:qk]'");
+    expect(xml).not.toContain('[sum:Profit:qk]');
+  });
+
+  it('tokenizes mapped bare table-calc addressing refs without changing their syntax', () => {
+    const inf = inference([slot('Profit', { templateField: '{{field_base_7}}' })], ['federated.x']);
+    const raw =
+      "<?xml version='1.0'?><bookmark version='10.1'>" +
+      "<table><table-calc field='[federated.x].[Profit]' ordering-field='[federated.x].[Profit]'>" +
+      "<order field='[federated.x].[Profit]'/></table-calc>" +
+      '<cols>[federated.x].[sum:Profit:qk]</cols></table>' +
+      "<window class='worksheet' name='Sheet 1'/></bookmark>";
+    const converted = bookmarkToTemplateWorkbook(raw, inf);
+    expect(converted.xml).toContain("<table-calc field='[{{DATASOURCE}}].[{{field_base_7}}]'");
+    expect(converted.xml).toContain("ordering-field='[{{DATASOURCE}}].[{{field_base_7}}]'");
+    expect(converted.xml).toContain("<order field='[{{DATASOURCE}}].[{{field_base_7}}]'");
+    expect(converted.xml).not.toContain('].[Profit]');
+    expect(converted.bareRefs).toEqual(['{{field_base_7}}']);
+    expect(deriveTemplatePass1Eligibility(converted)).toEqual({
+      pass1_eligible: false,
+      pass1_blockers: ['unresolved-table-calc-bareRefs: {{field_base_7}}'],
+    });
+  });
+
+  it('tokenizes derived field attributes across pass-1 eligible bundled bookmarks', () => {
+    const remainingDonorRefs: string[] = [];
+
+    for (const name of listBookmarkNames()) {
+      const bookmark = readBookmark(name);
+      if (bookmark === null) throw new Error(`bookmark could not be read: ${name}`);
+      const inf = inferFromBookmark(bookmark);
+      const converted = bookmarkToTemplateWorkbook(bookmark, inf);
+      if (!deriveTemplatePass1Eligibility(converted).pass1_eligible) continue;
+
+      const fieldAttrs = [...converted.xml.matchAll(/(?:^|\s)field='([^']*)'/g)].map(
+        (match) => match[1],
+      );
+      for (const { sourceField } of inf.slots) {
+        const escaped = sourceField.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const donorInstance = new RegExp(`:${escaped}(?=:)`);
+        if (fieldAttrs.some((value) => donorInstance.test(value))) {
+          remainingDonorRefs.push(`${name}: ${sourceField}`);
+        }
+      }
+    }
+
+    expect(remainingDonorRefs).toEqual([]);
   });
 
   it('tokenizes calc-formula base-input refs to {{field_base_N}} (formula is NOT shielded)', () => {

@@ -40,7 +40,7 @@ const serverVersion = pkg.version;
  * UNION the escalation path's legacy injector, template catalog, read-only worksheet
  * constructor, and guarded apply boundary (inject-template, list-templates,
  * build-worksheets-from-templates, apply-worksheet). The whole-workbook tools remain for
- * other full-document workflows while callers migrate to the confirmed template path.
+ * other full-document workflows while callers migrate to the caller-owned template path.
  */
 export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
   'bind-template',
@@ -89,21 +89,23 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * key signature, born at OPEN), author-action (parameter-change wiring), format-labels
  * (mark labels) — PLUS ask-user (ambiguity goes to the human, never to a guess) and
  * search-commands (how the singer discovers the execute-tableau-command dialect) — PLUS
- * bind-template, the deterministic fast-path (no LLM, ~0.3s) for plain chart shapes;
  * list-templates + build-worksheets-from-templates, the read-only catalog/construction
- * path that returns a guarded worksheet artifact for confirmation before apply-worksheet;
- * and refine-worksheet, the primitives-only top-N/sort editor that carries edit-in-place
- * now that the notional-spec loop is retired.
+ * path that returns a guarded worksheet artifact for one-shot apply-worksheet;
+ * execute-tableau-command + list-dashboards + get-workbook-inventory, the native dashboard
+ * composition and verification path after every supporting worksheet is applied; and
+ * refine-worksheet, the primitives-only top-N/sort editor that carries edit-in-place now
+ * that the notional-spec loop is retired. The full profile keeps the legacy template
+ * auto-apply and dashboard planner cluster; demo stays unchanged; both are outside this cutover.
  * PLUS the two knowledge doors — list-knowledge-resources + read-knowledge-resource —
  * without which the system prompt's "consult the expertise library BEFORE authoring"
  * instruction had no tool to route to: the singer could not read the curated corpus at
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
  * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Thirty-four tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
+ * Twenty-eight tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
  * and first-class workbook/data reads/navigation. Model-visible raw XML is limited to
  * get-worksheet-xml, the read leg the manual add-field/remove-field/apply-worksheet path needs;
- * template construction returns a bounded preview plus an opaque server-side artifact id — no
+ * template construction returns a bounded plan plus an opaque server-side artifact id — no
  * whole-workbook get/apply, no cache, no validation XML tools. This is the
  * "make it shorter" answer — a lean, semantically-named surface under the 46k tools/list cliff,
  * not a describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19 (CODA):
@@ -111,7 +113,6 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  */
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
-    'bind-template',
     'list-templates',
     'build-worksheets-from-templates',
     'refine-worksheet',
@@ -122,11 +123,6 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     // add-field/remove-field/apply-worksheet consume. Without it the manual path cannot start.
     'get-worksheet-xml',
     'apply-worksheet',
-    'build-and-apply-worksheet',
-    'dashboard-auto-apply',
-    'plan-dashboard-creation',
-    'batch-create-and-cache-sheets',
-    'build-and-apply-dashboard',
     'execute-tableau-command',
     'search-commands',
     // Atomic navigation fallback: switch the workbook active window without exposing the

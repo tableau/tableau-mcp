@@ -1,8 +1,8 @@
 // src/desktop/route/route-gate.test.ts
 //
-// The one-shot deflection gate. Fires ONLY when ROUTE_ENFORCEMENT is on, ONLY for an ask that
-// classifies to bind-first or a supported refine-op shape, ONLY once per (session, ask) — the
-// second call executes and records a route_override. Everything else is a no-op (fail-open).
+// The flag-gated route gate. Template-routed scratch calls stay deflected until the caller
+// uses the build + one-shot apply path. Supported refine operations retain their one-shot
+// fallback: the second call executes and records a route_override.
 //
 // FLAG-OFF INERTNESS (constraint 3) is pinned explicitly: with the flag unset, checkRouteGate
 // is a total no-op — it returns null, classifies nothing that matters, and records nothing —
@@ -15,11 +15,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { loadManifests } from '../binder/manifest.js';
 import type { TemplateManifest } from '../binder/manifest-types.js';
 import {
-  BIND_TEMPLATE_TOOL,
+  APPLY_TEMPLATE_ARTIFACT_TOOL,
+  BUILD_TEMPLATE_ARTIFACT_TOOL,
   checkRouteGate,
   checkRouteGateForScratchEntry,
   decideRouteGate,
   deflectionText,
+  LIST_TEMPLATES_TOOL,
   REFINE_WORKSHEET_TOOL,
   refineDeflectionText,
   routeEnforcementEnabled,
@@ -106,24 +108,36 @@ describe('decideRouteGate (pure decision, flag-independent)', () => {
       decideRouteGate({ route: 'refine-op', shape: 'refine-sort', alreadyDeflected: false }),
     ).toBe('deflect');
   });
-  it('overrides (executes) once this (session, ask) was already deflected', () => {
+  it('keeps a bind-first ask deflected after an earlier deflection', () => {
     expect(
       decideRouteGate({
         route: 'bind-first',
         shape: 'bind-first-template',
         alreadyDeflected: true,
       }),
+    ).toBe('deflect');
+  });
+  it('overrides a supported refine after an earlier deflection', () => {
+    expect(
+      decideRouteGate({
+        route: 'refine-op',
+        shape: 'refine-top-n',
+        alreadyDeflected: true,
+      }),
     ).toBe('override');
   });
 });
 
-describe('deflection text names the tmcp fast-lane tool on a single actionable line', () => {
-  it('bind-first wording names bind-template', () => {
+describe('deflection text names the safe next tools on a single actionable line', () => {
+  it('bind-first wording builds and applies one new worksheet in the same turn', () => {
     expect(deflectionText('ranking-ordered-bar')).toBe(
-      "Route: bind-first. Template 'ranking-ordered-bar' matches this ask — call bind-template first; if it escalates or proposes, retry this call and it will proceed.",
+      "Template 'ranking-ordered-bar' may fit. Confirm it is a current eligible choice with list-templates and load its exact slots. If the template, datasource, mapping, and fresh unique worksheet title are unambiguous, call build-worksheets-from-templates and then apply-worksheet exactly once in this turn. If anything is ambiguous or the user asked to hold changes, clarify before building. If the title already exists, choose a new one; this template path never replaces a worksheet or window. Do not retry this scratch mutation or an uncertain apply.",
     );
     expect(deflectionText('x').includes('\n')).toBe(false);
-    expect(BIND_TEMPLATE_TOOL).toBe('bind-template');
+    expect(deflectionText('x')).not.toContain('bind-template');
+    expect(LIST_TEMPLATES_TOOL).toBe('list-templates');
+    expect(BUILD_TEMPLATE_ARTIFACT_TOOL).toBe('build-worksheets-from-templates');
+    expect(APPLY_TEMPLATE_ARTIFACT_TOOL).toBe('apply-worksheet');
   });
   it('refine-op wording names refine-worksheet', () => {
     expect(refineDeflectionText()).toBe(
@@ -148,7 +162,7 @@ describe('checkRouteGate — flag OFF is a total no-op (inertness)', () => {
   });
 });
 
-describe('checkRouteGate — one-shot deflection then override (flag ON, real manifests)', () => {
+describe('checkRouteGate — persistent template deflection and one-shot refine override', () => {
   beforeEach(enable);
 
   it('first scratch-entry call for a bind-first ask is deflected (text + marker + recorded)', () => {
@@ -161,8 +175,17 @@ describe('checkRouteGate — one-shot deflection then override (flag ON, real ma
     expect(r).not.toBeNull();
     expect(r!.isError).toBe(false);
     expect(r!.content[0].text).toBe(deflectionText('ranking-ordered-bar'));
-    expect(marker(r!).next_route).toBe('bind-first');
-    expect(marker(r!).template).toBe('ranking-ordered-bar');
+    expect(marker(r!)).toEqual({
+      next_route: 'bind-first',
+      next_action: 'template-build-then-apply',
+      template: 'ranking-ordered-bar',
+      discovery_tool: 'list-templates',
+      build_tool: 'build-worksheets-from-templates',
+      apply_tool: 'apply-worksheet',
+      target_policy: 'new-worksheet-only',
+      clarification_policy: 'before-build-if-ambiguous-held-or-title-conflicts',
+      apply_exactly_once: true,
+    });
 
     const s = sessionRouteState.get('S1')!;
     expect(s.deflections).toHaveLength(1);
@@ -173,7 +196,7 @@ describe('checkRouteGate — one-shot deflection then override (flag ON, real ma
     expect(s.route_overrides).toEqual([]);
   });
 
-  it('second call for the same (session, ask) executes (null) and records ONE route_override', () => {
+  it('second call for the same bind-first ask stays deflected without an override', () => {
     const args = {
       toolName: 'build-and-apply-worksheet',
       sessionId: 'S1',
@@ -182,15 +205,14 @@ describe('checkRouteGate — one-shot deflection then override (flag ON, real ma
     };
     checkRouteGate(args);
     const second = checkRouteGate(args);
-    expect(second).toBeNull();
+    expect(second).not.toBeNull();
+    expect(second!.content[0].text).toBe(deflectionText('ranking-ordered-bar'));
     const s = sessionRouteState.get('S1')!;
     expect(s.deflections).toHaveLength(1);
-    expect(s.route_overrides).toHaveLength(1);
-    expect(s.route_overrides[0].tool).toBe('build-and-apply-worksheet');
-    expect(s.route_overrides[0].template).toBe('ranking-ordered-bar');
+    expect(s.route_overrides).toEqual([]);
   });
 
-  it('never loops: 3 consecutive calls → 1 deflection, 2 executions, 1 override', () => {
+  it('repeated bind-first calls stay deflected without growing state', () => {
     const args = {
       toolName: 'batch-create-and-cache-sheets',
       sessionId: 'S1',
@@ -198,11 +220,10 @@ describe('checkRouteGate — one-shot deflection then override (flag ON, real ma
       manifests,
     };
     const results = [1, 2, 3].map(() => checkRouteGate(args));
-    expect(results.filter((r) => r !== null)).toHaveLength(1);
-    expect(results.filter((r) => r === null)).toHaveLength(2);
+    expect(results.every((r) => r !== null)).toBe(true);
     const s = sessionRouteState.get('S1')!;
     expect(s.deflections).toHaveLength(1);
-    expect(s.route_overrides).toHaveLength(1);
+    expect(s.route_overrides).toEqual([]);
   });
 
   it('first refine-op ask is deflected with the refine tool marker and classified shape', () => {
@@ -360,7 +381,17 @@ describe('checkRouteGateForScratchEntry — session-state-driven gate', () => {
     expect(r).not.toBeNull();
     expect(r!.isError).toBe(false);
     expect(r!.content[0].text).toBe(deflectionText('ranking-ordered-bar'));
-    expect(marker(r!)).toEqual({ next_route: 'bind-first', template: 'ranking-ordered-bar' });
+    expect(marker(r!)).toEqual({
+      next_route: 'bind-first',
+      next_action: 'template-build-then-apply',
+      template: 'ranking-ordered-bar',
+      discovery_tool: 'list-templates',
+      build_tool: 'build-worksheets-from-templates',
+      apply_tool: 'apply-worksheet',
+      target_policy: 'new-worksheet-only',
+      clarification_policy: 'before-build-if-ambiguous-held-or-title-conflicts',
+      apply_exactly_once: true,
+    });
     const s = sessionRouteState.get('S1')!;
     expect(s.deflections).toHaveLength(1);
     expect(s.deflections[0]).toMatchObject({
@@ -372,7 +403,7 @@ describe('checkRouteGateForScratchEntry — session-state-driven gate', () => {
     });
   });
 
-  it('second identical scratch-entry call executes and records exactly one route_override', () => {
+  it('repeated bind-first scratch-entry calls stay deflected without an override', () => {
     enable();
     sessionRouteState.recordAskClassification('S1', pendingBindFirst);
 
@@ -380,16 +411,13 @@ describe('checkRouteGateForScratchEntry — session-state-driven gate', () => {
     const second = checkRouteGateForScratchEntry('build-and-apply-worksheet', 'S1');
     const third = checkRouteGateForScratchEntry('build-and-apply-worksheet', 'S1');
 
-    expect(second).toBeNull();
-    expect(third).toBeNull();
+    expect(second).not.toBeNull();
+    expect(third).not.toBeNull();
+    expect(second!.content[0].text).toBe(deflectionText('ranking-ordered-bar'));
+    expect(third!.content[0].text).toBe(deflectionText('ranking-ordered-bar'));
     const s = sessionRouteState.get('S1')!;
     expect(s.deflections).toHaveLength(1);
-    expect(s.route_overrides).toHaveLength(1);
-    expect(s.route_overrides[0]).toMatchObject({
-      tool: 'build-and-apply-worksheet',
-      ask: 'bar chart of sales by region',
-      template: 'ranking-ordered-bar',
-    });
+    expect(s.route_overrides).toEqual([]);
   });
 
   it.each(['bound', 'propose', 'escalate'] as const)(
@@ -433,7 +461,14 @@ describe('checkRouteGateForScratchEntry — session-state-driven gate', () => {
     expect(r.content[0].text.includes('\n')).toBe(false);
     expect(JSON.parse(r.content[1].text)).toEqual({
       next_route: 'bind-first',
+      next_action: 'template-build-then-apply',
       template: 'ranking-ordered-bar',
+      discovery_tool: 'list-templates',
+      build_tool: 'build-worksheets-from-templates',
+      apply_tool: 'apply-worksheet',
+      target_policy: 'new-worksheet-only',
+      clarification_policy: 'before-build-if-ambiguous-held-or-title-conflicts',
+      apply_exactly_once: true,
     });
   });
 });

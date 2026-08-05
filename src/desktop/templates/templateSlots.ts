@@ -15,7 +15,7 @@
 //
 // NOTHING here is chart-specific: it is a generic three-way merge over slot records.
 
-import type { SlotSpec, TemplateManifest } from '../binder/manifest-types.js';
+import type { CalcSlot, SlotSpec, TemplateManifest } from '../binder/manifest-types.js';
 import { bundledIntelligenceProvider } from '../intelligence/provider.js';
 import {
   bookmarkToTemplateWorkbook,
@@ -129,6 +129,37 @@ function mergeSlots(inferred: SlotSpec[], curated: SlotSpec[]): SlotSpec[] {
   return merged;
 }
 
+function overlayCalc(inferred: CalcSlot | undefined, curated: CalcSlot | undefined): CalcSlot {
+  if (!curated) return inferred as CalcSlot;
+  if (!inferred) return curated;
+
+  const merged: CalcSlot = {
+    ...curated,
+    ...inferred,
+    slot_id: curated.slot_id || inferred.slot_id,
+    purpose: curated.purpose ?? inferred.purpose,
+    examples: curated.examples ?? inferred.examples,
+    hint: curated.hint ?? inferred.hint,
+    notes: curated.notes ?? inferred.notes,
+    result_role: curated.result_role ?? inferred.result_role,
+    avoid_when: curated.avoid_when ?? inferred.avoid_when,
+    prereqs: curated.prereqs ?? inferred.prereqs,
+  };
+  // Curated inputs name legacy slot ids; only inference can supply inputs aligned to a .tbm.
+  if (inferred.inputs === undefined) delete merged.inputs;
+  return merged;
+}
+
+function mergeCalcs(inferred: CalcSlot[], curated: CalcSlot[]): CalcSlot[] {
+  const curatedByField = new Map(curated.map((calc) => [calc.template_field, calc]));
+  const merged = inferred.map((calc) => overlayCalc(calc, curatedByField.get(calc.template_field)));
+  const inferredFields = new Set(inferred.map((calc) => calc.template_field));
+  for (const calc of curated) {
+    if (!inferredFields.has(calc.template_field)) merged.push(calc);
+  }
+  return merged;
+}
+
 /**
  * Resolve the bindable slots for a template by name. Never throws for a missing
  * template — returns an empty slot set so callers can list gracefully.
@@ -218,7 +249,12 @@ function resolveTemplateManifestFromInference(
 
   if (inferred && curated) {
     return {
-      manifest: { ...inferred, ...curated, slots: mergeSlots(inferred.slots, curated.slots) },
+      manifest: {
+        ...inferred,
+        ...curated,
+        slots: mergeSlots(inferred.slots, curated.slots),
+        calcs: mergeCalcs(inferred.calcs, curated.calcs),
+      },
       source: curatedSource(curated),
       fromBookmark: true,
       eligibility,
