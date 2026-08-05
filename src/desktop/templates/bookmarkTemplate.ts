@@ -17,6 +17,8 @@
 // two unrelated datasources). Every behaviour below was empirically required — each
 // one, when absent, produced a silent wrong answer or a hard inject failure.
 
+import { createHash } from 'node:crypto';
+
 import { DOMParser } from '@xmldom/xmldom';
 
 import type {
@@ -25,6 +27,8 @@ import type {
   SlotKind,
   TableCalcFact,
 } from '../binder/manifest-types.js';
+import { runValidation } from '../validation/registry.js';
+import { ensureUserNamespace } from './injectTemplateCore.js';
 
 /**
  * Where a donor field reference appears in the sheet. `rows`/`cols`/`mark` are the axis/mark
@@ -145,17 +149,84 @@ export interface TemplatePass1Eligibility {
   pass1_blockers: string[];
 }
 
-/** Pass 1 excludes bookmark conversions that leave bare table-calc field tokens behind. */
+function sanitizeValidationRuleId(ruleId: string): string {
+  const sanitized = ruleId
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+  return sanitized || 'unknown-rule';
+}
+
+function isBindingResolvedPlaceholderError(ruleId: string, message: string): boolean {
+  return (
+    ruleId === 'unsubstituted-template-token' &&
+    /\{\{(?:DATASOURCE|field_base_[1-9]\d*)\}\}/.test(message)
+  );
+}
+
+const PASS1_ELIGIBILITY_VALIDATION_CACHE_MAX_ENTRIES = 256;
+
+export function createPass1EligibilityValidationMemo(
+  compute: (normalizedXml: string) => readonly string[],
+): (normalizedXml: string) => readonly string[] {
+  const entries = new Map<string, readonly string[]>();
+
+  return (normalizedXml) => {
+    const key = createHash('sha256').update(normalizedXml).digest('hex');
+    const cached = entries.get(key);
+    if (cached !== undefined) {
+      entries.delete(key);
+      entries.set(key, cached);
+      return cached;
+    }
+
+    const computed = [...compute(normalizedXml)];
+    entries.set(key, computed);
+    if (entries.size > PASS1_ELIGIBILITY_VALIDATION_CACHE_MAX_ENTRIES) {
+      const leastRecentlyUsed = entries.keys().next().value;
+      if (leastRecentlyUsed !== undefined) entries.delete(leastRecentlyUsed);
+    }
+    return computed;
+  };
+}
+
+const getPass1EligibilityValidationRuleIds = createPass1EligibilityValidationMemo((validationXml) =>
+  [
+    ...new Set(
+      runValidation(validationXml, 'workbook')
+        .issues.filter(
+          (issue) =>
+            issue.severity === 'error' &&
+            !isBindingResolvedPlaceholderError(issue.ruleId, issue.message),
+        )
+        .map((issue) => sanitizeValidationRuleId(issue.ruleId)),
+    ),
+  ].sort((a, b) => a.localeCompare(b)),
+);
+
+/** Pass 1 excludes bookmark conversions that cannot become valid through normal binding. */
 export function deriveTemplatePass1Eligibility(
-  converted: Pick<ReturnType<typeof bookmarkToTemplateWorkbook>, 'bareRefs'>,
+  converted: Pick<ReturnType<typeof bookmarkToTemplateWorkbook>, 'bareRefs' | 'xml'>,
 ): TemplatePass1Eligibility {
   const bareRefs = [...new Set(converted.bareRefs)].sort((a, b) => a.localeCompare(b));
-  return bareRefs.length === 0
-    ? { pass1_eligible: true, pass1_blockers: [] }
-    : {
-        pass1_eligible: false,
-        pass1_blockers: [`unresolved-table-calc-bareRefs: ${bareRefs.join(', ')}`],
-      };
+  const blockers: string[] = [];
+  if (bareRefs.length > 0) {
+    blockers.push(`unresolved-table-calc-bareRefs: ${bareRefs.join(', ')}`);
+  }
+
+  const validationXml = ensureUserNamespace(
+    converted.xml.replace(/\{\{TITLE\}\}/g, 'Pass 1 Eligibility Probe'),
+  );
+  const validationRuleIds = getPass1EligibilityValidationRuleIds(validationXml);
+  if (validationRuleIds.length > 0) {
+    blockers.push(`pre-bind-validation-errors: ${validationRuleIds.join(', ')}`);
+  }
+
+  return {
+    pass1_eligible: blockers.length === 0,
+    pass1_blockers: blockers,
+  };
 }
 
 /**

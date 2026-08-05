@@ -1315,13 +1315,15 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     }
   });
 
-  it('should return execute-command-error when the workbook fetch fails', async () => {
+  it('returns a pre-dispatch command error without POSTing when the workbook fetch fails', async () => {
     const error = {
       type: 'command-failed' as const,
       error: { code: 'ERROR', message: 'Failed', recoverable: false },
     };
+    const applyWorkbookDocument = vi.fn();
     const mockExecutor = {
       getWorkbookDocument: vi.fn().mockResolvedValue(Err(error)),
+      applyWorkbookDocument,
     } as unknown as ToolExecutor;
 
     const result = await loadWorksheetXml({
@@ -1335,6 +1337,41 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     if (result.isErr()) {
       invariant(result.error.type === 'execute-command-error');
       expect(result.error.error).toEqual(error);
+      expect(result.error.dispatchState).toBe('not-dispatched');
     }
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('keeps a failed POST classified as an uncertain command error', async () => {
+    const error = {
+      type: 'unknown' as const,
+      error: new Error('dispatch outcome unknown'),
+    };
+    const applyWorkbookDocument = vi.fn().mockResolvedValue(Err(error));
+    const mockExecutor = {
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: liveWorkbook([worksheetName]),
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      ),
+      applyWorkbookDocument,
+    } as unknown as ToolExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'execute-command-error');
+      expect(result.error.error).toEqual(error);
+      expect(result.error.dispatchState).toBe('possibly-dispatched');
+    }
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
   });
 });

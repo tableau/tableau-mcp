@@ -1,5 +1,7 @@
+import { runValidation } from '../validation/registry.js';
 import { bookmarkToTemplateWorkbook, deriveTemplatePass1Eligibility } from './bookmarkTemplate.js';
 import { inferFromBookmark } from './inferSlots.js';
+import { ensureUserNamespace } from './injectTemplateCore.js';
 import { listBookmarkNames, readBookmark } from './templatePath.js';
 
 const EXPECTED_EXCLUDED = [
@@ -20,9 +22,11 @@ const EXPECTED_EXCLUDED = [
   'part-to-whole__marimekko__encode-share-with-both-width-and-height',
   'part-to-whole__polar-area__compare-parts-on-a-radial-axis',
   'part-to-whole__proportional-stacked-bar__show-size-and-share-together',
+  'part-to-whole__venn__schematic-overlap-between-sets',
   'ranking__bump__track-rank-changes-across-many-periods',
   'ranking__slope-rank__show-rank-swaps-between-two-periods',
   'ranking-bump-chart',
+  'spatial__grid-heatmap__map-intensity-on-a-grid-not-admin-boundaries',
   'spatial__scaled-cartogram__distort-geography-so-area-encodes-value',
   'spatial__spike-map__show-magnitude-at-locations-with-height',
   'ww-ou-arrow',
@@ -30,11 +34,12 @@ const EXPECTED_EXCLUDED = [
 ];
 
 describe('bundled bookmark pass-1 eligibility', () => {
-  it('converts all 133 bookmarks and excludes only the 24 unresolved bare-ref templates', () => {
+  it('converts all 133 bookmarks and excludes only the 26 unsafe pass-1 templates', () => {
     const names = listBookmarkNames();
     const excluded: string[] = [];
     const conversionErrors: string[] = [];
     const retainedMappedSourceAttrs: string[] = [];
+    const unexpectedValidationErrors: string[] = [];
 
     for (const name of names) {
       try {
@@ -45,6 +50,20 @@ describe('bundled bookmark pass-1 eligibility', () => {
         if (!deriveTemplatePass1Eligibility(converted).pass1_eligible) {
           excluded.push(name);
           continue;
+        }
+        const validationXml = ensureUserNamespace(
+          converted.xml.replace(/\{\{TITLE\}\}/g, 'Pass 1 Corpus Probe'),
+        );
+        const errors = runValidation(validationXml, 'workbook').issues.filter(
+          (issue) =>
+            issue.severity === 'error' &&
+            !(
+              issue.ruleId === 'unsubstituted-template-token' &&
+              /\{\{(?:DATASOURCE|field_base_[1-9]\d*)\}\}/.test(issue.message)
+            ),
+        );
+        for (const issue of errors) {
+          unexpectedValidationErrors.push(`${name}: ${issue.ruleId}: ${issue.message}`);
         }
         const addressingAttrs = [
           ...converted.xml.matchAll(/\b(?:field|ordering-field)='([^']*)'/g),
@@ -64,7 +83,8 @@ describe('bundled bookmark pass-1 eligibility', () => {
     expect(names).toHaveLength(133);
     expect(conversionErrors).toEqual([]);
     expect(retainedMappedSourceAttrs).toEqual([]);
+    expect(unexpectedValidationErrors).toEqual([]);
     expect(excluded).toEqual(EXPECTED_EXCLUDED);
-    expect(names.length - excluded.length).toBe(109);
+    expect(names.length - excluded.length).toBe(107);
   });
 });

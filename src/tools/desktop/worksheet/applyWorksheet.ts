@@ -29,6 +29,7 @@ import {
   CacheSessionMismatchError,
   DesktopCommandExecutionError,
   FileReadError,
+  IncompleteOperationError,
   WorksheetNotFoundError,
   WorksheetXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
@@ -72,6 +73,16 @@ function formatArtifactValidationFailure(issues: ValidationIssue[]): string {
     'Resolve the reported workbook issue, then build a new artifact from the current workbook if the worksheet is still wanted.'
   );
 }
+
+type ArtifactMutationOutcome = 'not-dispatched' | 'possibly-dispatched';
+
+function artifactApplyError(
+  mutationOutcome: ArtifactMutationOutcome,
+  guidance: string,
+): ReturnType<IncompleteOperationError<object>['toErr']> {
+  return new IncompleteOperationError({ mutationOutcome, guidance }).toErr();
+}
+
 export const getApplyWorksheetTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -219,9 +230,10 @@ export const getApplyWorksheetTool = (
               expectedState.targetWindow.state === 'present'
             ) {
               artifactStore.commit(reserved.reservation);
-              return new ArgsValidationError(
+              return artifactApplyError(
+                'not-dispatched',
                 'This template artifact was discarded because it would replace an existing worksheet or window. The template path creates new worksheets only; choose a fresh unique worksheet title and construct a new artifact.',
-              ).toErr();
+              );
             }
           }
           let result: Awaited<ReturnType<typeof loadWorksheetXml>>;
@@ -235,39 +247,65 @@ export const getApplyWorksheetTool = (
               worksheetWindowXml,
             });
           } catch (error) {
-            if (artifactReservation !== undefined) artifactStore.commit(artifactReservation);
+            if (artifactReservation !== undefined) {
+              artifactStore.commit(artifactReservation);
+              return artifactApplyError(
+                'possibly-dispatched',
+                'Template artifact apply failed unexpectedly; the artifact was consumed. Do not replay it. Inspect Tableau and establish the current workbook state before any further change.',
+              );
+            }
             throw error;
           }
 
           if (result.isErr()) {
             if (artifactMode) {
+              if (
+                result.error.type === 'execute-command-error' &&
+                result.error.dispatchState === 'not-dispatched'
+              ) {
+                const canRetry =
+                  artifactReservation !== undefined && artifactStore.release(artifactReservation);
+                return artifactApplyError(
+                  'not-dispatched',
+                  canRetry
+                    ? 'Template artifact apply stopped before dispatch because the workbook could not be read. No workbook change was sent. Retry apply-worksheet with this artifactId, or build a fresh artifact from the current workbook.'
+                    : 'Template artifact apply stopped before dispatch because the workbook could not be read. No workbook change was sent. Build a fresh artifact from the current workbook before retrying.',
+                );
+              }
               if (artifactReservation !== undefined) {
                 artifactStore.commit(artifactReservation);
               }
               if (result.error.type === 'execute-command-error') {
-                return new ArgsValidationError(
+                return artifactApplyError(
+                  result.error.dispatchState === 'not-dispatched'
+                    ? 'not-dispatched'
+                    : 'possibly-dispatched',
                   `Template artifact apply outcome is uncertain (${result.error.error.type}); the artifact was consumed. Do not replay it. Inspect Tableau and establish the current workbook state before any further change.`,
-                ).toErr();
+                );
               }
               switch (result.error.error.type) {
                 case 'invalid-xml':
                 case 'name-mismatch':
                 case 'preview-state-changed':
-                  return new ArgsValidationError(
+                  return artifactApplyError(
+                    'not-dispatched',
                     'The template artifact was not applied because the workbook no longer matches its exact source state; the artifact was consumed. Read the current workbook and build a new artifact if the worksheet is still wanted.',
-                  ).toErr();
+                  );
                 case 'validation-failed':
-                  return new ArgsValidationError(
+                  return artifactApplyError(
+                    'not-dispatched',
                     formatArtifactValidationFailure(result.error.error.issues),
-                  ).toErr();
+                  );
                 case 'load-rejected':
-                  return new ArgsValidationError(
+                  return artifactApplyError(
+                    'possibly-dispatched',
                     'Tableau rejected the template artifact; no worksheet mutation was verified and the artifact was consumed. Inspect Tableau and establish the current workbook state before any further change.',
-                  ).toErr();
+                  );
                 case 'readback-failed':
-                  return new ArgsValidationError(
+                  return artifactApplyError(
+                    'possibly-dispatched',
                     'The template artifact MAY already be applied, but post-apply verification failed. The artifact was consumed; do not replay it. Inspect Tableau and establish the current workbook state before any further change.',
-                  ).toErr();
+                  );
               }
             }
             const { type, error } = result.error;
@@ -330,9 +368,10 @@ export const getApplyWorksheetTool = (
               promiseOutcome === 'failed'
                 ? 'The template artifact MAY already be applied, but host verification failed.'
                 : 'The template artifact MAY already be applied, but host verification is unavailable.';
-            return new ArgsValidationError(
+            return artifactApplyError(
+              'possibly-dispatched',
               `${verificationMessage} The artifact was consumed; do not replay it. Inspect Tableau and establish the current workbook state before any further change.`,
-            ).toErr();
+            );
           }
           const receipt = receiptInput
             ? artifactMode

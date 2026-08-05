@@ -1058,7 +1058,10 @@ describe('buildWorksheetsFromTemplatesTool', () => {
 
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text).artifactId).toMatch(/^[0-9a-f-]{36}$/);
+    const body = JSON.parse(result.content[0].text);
+    expect(body.artifactId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(body.preview.warningCount).toBe(1);
+    expect(result.content[0].text).not.toContain('redundant-color-encoding');
     expect(putArtifact).toHaveBeenCalledOnce();
   });
 

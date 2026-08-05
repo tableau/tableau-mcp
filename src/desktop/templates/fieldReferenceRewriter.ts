@@ -142,7 +142,7 @@ const DERIVATION_SHORT_TO_LONG: Readonly<Record<string, string>> = {
   ctd: 'CountD',
   countd: 'CountD',
   median: 'Median',
-  attr: 'Attr',
+  attr: 'Attribute',
   min: 'Min',
   max: 'Max',
   stdev: 'Stdev',

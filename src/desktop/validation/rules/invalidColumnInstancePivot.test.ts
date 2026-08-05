@@ -45,7 +45,44 @@ describe('invalid-column-instance-pivot rule', () => {
     expect(rule.validate('<worksheet/>')).toHaveLength(0);
   });
 
-  describe('bin exemption', () => {
+  it('does not flag a native declared quantitative none:...:qk instance', () => {
+    const xml = `<worksheet>
+      <datasource-dependencies datasource="ds">
+        <column datatype="real" name="[Measure Values]" role="measure" type="quantitative" />
+        <column-instance column="[Measure Values]" derivation="None"
+                         name="[none:Measure Values:qk]" pivot="key" type="quantitative" />
+      </datasource-dependencies>
+      <cols>[ds].[none:Measure Values:qk]</cols>
+    </worksheet>`;
+
+    expect(rule.validate(xml)).toHaveLength(0);
+  });
+
+  it('still flags a none:...:qk reference backed only by a non-quantitative declaration', () => {
+    const xml = `<worksheet>
+      <datasource-dependencies datasource="ds">
+        <column-instance column="[Measure Values]" derivation="None"
+                         name="[none:Measure Values:qk]" pivot="key" type="nominal" />
+      </datasource-dependencies>
+      <cols>[ds].[none:Measure Values:qk]</cols>
+    </worksheet>`;
+
+    expect(rule.validate(xml)).toHaveLength(1);
+  });
+
+  it('still flags a none:...:qk reference when the declaration points at another column', () => {
+    const xml = `<worksheet>
+      <datasource-dependencies datasource="ds">
+        <column-instance column="[Other Field]" derivation="None"
+                         name="[none:Measure Values:qk]" pivot="key" type="quantitative" />
+      </datasource-dependencies>
+      <cols>[ds].[none:Measure Values:qk]</cols>
+    </worksheet>`;
+
+    expect(rule.validate(xml)).toHaveLength(1);
+  });
+
+  describe('declared quantitative instance exemption', () => {
     const liveHistogram = `<worksheet name="A2TD Histogram">
   <table>
     <view>
@@ -72,7 +109,7 @@ describe('invalid-column-instance-pivot rule', () => {
 
     it('exempts a double-quoted bin column definition too', () => {
       const xml =
-        '<worksheet><datasource-dependencies>' +
+        '<worksheet><datasource-dependencies datasource="ds">' +
         '<column name="[Sales (bin)]" role="dimension" type="ordinal"><calculation class="bin" formula="[Sales]" size="100" /></column>' +
         '<column-instance column="[Sales (bin)]" derivation="None" name="[none:Sales (bin):qk]" pivot="key" type="quantitative" />' +
         '</datasource-dependencies><cols>[ds].[none:Sales (bin):qk]</cols></worksheet>';
@@ -90,7 +127,7 @@ describe('invalid-column-instance-pivot rule', () => {
       expect(issues[0].message).toMatch(/\[none:Order Date:qk\]/);
     });
 
-    it('still flags a field named like a bin with no bin calculation', () => {
+    it('still flags a field named like a bin with no instance declaration', () => {
       const xml =
         '<worksheet><datasource-dependencies>' +
         '<column datatype="string" name="[Region (bin)]" role="dimension" type="nominal" />' +
@@ -100,7 +137,7 @@ describe('invalid-column-instance-pivot rule', () => {
       expect(issues[0].message).toMatch(/\[none:Region \(bin\):qk\]/);
     });
 
-    it('does not exempt a differently-named field via a categorical-bin class', () => {
+    it('does not exempt a field via a categorical-bin calc without an instance declaration', () => {
       const xml =
         '<worksheet><datasource-dependencies>' +
         '<column name="[Grade (bin)]" role="dimension" type="ordinal"><calculation class="categorical-bin" formula="[Grade]" /></column>' +
@@ -109,7 +146,7 @@ describe('invalid-column-instance-pivot rule', () => {
     });
   });
 
-  describe('datasource scoping and calc adjacency', () => {
+  describe('datasource scoping and declaration placement', () => {
     it('a bin in datasource A does not exempt an impossible none:...:qk in datasource B', () => {
       const xml = `<worksheet name="cross-ds">
   <table>
@@ -122,7 +159,6 @@ describe('invalid-column-instance-pivot rule', () => {
       </datasource-dependencies>
       <datasource-dependencies datasource="B">
         <column datatype="real" name="[Sales]" role="measure" type="quantitative" />
-        <column-instance column="[Sales]" derivation="None" name="[none:Sales:qk]" pivot="key" type="quantitative" />
       </datasource-dependencies>
     </view>
     <cols>[A].[none:Sales:qk]</cols>
@@ -134,7 +170,26 @@ describe('invalid-column-instance-pivot rule', () => {
       expect(issues[0].message).toMatch(/\[none:Sales:qk\]/);
     });
 
-    it('same datasource instance pointing at a non-bin field is still flagged', () => {
+    it('a top-level declaration in datasource A does not exempt the same ref in datasource B', () => {
+      const xml = `<workbook>
+  <datasources>
+    <datasource name="A">
+      <column-instance column="[Sales]" derivation="None" name="[none:Sales:qk]"
+                       pivot="key" type="quantitative" />
+    </datasource>
+    <datasource name="B">
+      <column datatype="real" name="[Sales]" role="measure" type="quantitative" />
+    </datasource>
+  </datasources>
+  <worksheets><worksheet>
+    <table><cols>[A].[none:Sales:qk]</cols><filter column="[B].[none:Sales:qk]" /></table>
+  </worksheet></worksheets>
+</workbook>`;
+
+      expect(rule.validate(xml)).toHaveLength(1);
+    });
+
+    it('a bare column declaration does not establish a quantitative none:...:qk instance', () => {
       const xml = `<worksheet name="same-ds-mismatch">
   <table>
     <view>
@@ -143,7 +198,6 @@ describe('invalid-column-instance-pivot rule', () => {
           <calculation class="bin" decimals="2" formula="[Profit]" peg="0" size="100" />
         </column>
         <column datatype="real" name="[Sales]" role="measure" type="quantitative" />
-        <column-instance column="[Sales]" derivation="None" name="[none:Sales:qk]" pivot="key" type="quantitative" />
       </datasource-dependencies>
     </view>
     <cols>[Sample - Superstore].[none:Sales:qk]</cols>
@@ -154,7 +208,7 @@ describe('invalid-column-instance-pivot rule', () => {
       expect(issues[0].message).toMatch(/\[none:Sales:qk\]/);
     });
 
-    it('exempts a valid bin whose calculation is not the first child', () => {
+    it('recognizes the exact instance declaration when a bin calculation is not the first child', () => {
       const xml = `<worksheet name="aliased-bin">
   <table>
     <view>

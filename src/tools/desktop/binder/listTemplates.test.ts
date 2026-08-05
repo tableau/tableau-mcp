@@ -169,6 +169,44 @@ describe('listTemplatesTool', () => {
     }
   });
 
+  it('revalidates a custom bookmark after its content changes', async () => {
+    const originalRepositoryDir = process.env['TABLEAU_REPOSITORY_DIR'];
+    const originalTemplatesDir = process.env['TEMPLATES_DIR'];
+    const root = mkdtempSync(join(process.cwd(), 'tmp-list-content-change-'));
+    const bookmarks = join(root, 'Bookmarks');
+    const bookmarkPath = join(bookmarks, 'cache-invalidation-template.tbm');
+    mkdirSync(bookmarks, { recursive: true });
+    process.env['TABLEAU_REPOSITORY_DIR'] = root;
+    delete process.env['TEMPLATES_DIR'];
+
+    const bookmark = (instance: string): string =>
+      "<bookmark><datasources><datasource name='d'>" +
+      "<column name='[Metric]' datatype='real' role='measure' type='quantitative'/>" +
+      `</datasource></datasources><table><cols>[d].[${instance}:Metric:qk]</cols></table></bookmark>`;
+
+    try {
+      writeFileSync(bookmarkPath, bookmark('none'));
+      const before = await getBody({ query: 'cache invalidation template' });
+      expect(before.templates[0]).toMatchObject({
+        template: 'cache-invalidation-template',
+        pass1_eligible: false,
+      });
+
+      writeFileSync(bookmarkPath, bookmark('sum'));
+      const after = await getBody({ query: 'cache invalidation template' });
+      expect(after.templates[0]).toMatchObject({
+        template: 'cache-invalidation-template',
+        pass1_eligible: true,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      if (originalRepositoryDir === undefined) delete process.env['TABLEAU_REPOSITORY_DIR'];
+      else process.env['TABLEAU_REPOSITORY_DIR'] = originalRepositoryDir;
+      if (originalTemplatesDir === undefined) delete process.env['TEMPLATES_DIR'];
+      else process.env['TEMPLATES_DIR'] = originalTemplatesDir;
+    }
+  });
+
   it('surfaces computed pass-1 blockers for unresolved table-calc bare references', async () => {
     const body = await getBody({
       query: 'distribution beeswarm',

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   bookmarkToTemplateWorkbook,
+  createPass1EligibilityValidationMemo,
   deriveTemplatePass1Eligibility,
   type Inference,
   type InferredSlot,
@@ -327,10 +328,75 @@ describe('bookmarkToTemplateWorkbook', () => {
 });
 
 describe('deriveTemplatePass1Eligibility', () => {
+  it('reuses validation results for identical normalized XML', () => {
+    let calls = 0;
+    const memo = createPass1EligibilityValidationMemo((xml) => {
+      calls += 1;
+      return [xml];
+    });
+
+    expect(memo('<workbook id="same" />')).toEqual(['<workbook id="same" />']);
+    expect(memo('<workbook id="same" />')).toEqual(['<workbook id="same" />']);
+    expect(calls).toBe(1);
+  });
+
+  it('revalidates when normalized XML content changes', () => {
+    let calls = 0;
+    const memo = createPass1EligibilityValidationMemo(() => {
+      calls += 1;
+      return [];
+    });
+
+    memo('<workbook id="before" />');
+    memo('<workbook id="after" />');
+
+    expect(calls).toBe(2);
+  });
+
+  it('evicts the least-recently-used result after 256 entries', () => {
+    let calls = 0;
+    const memo = createPass1EligibilityValidationMemo(() => {
+      calls += 1;
+      return [];
+    });
+
+    for (let index = 0; index < 256; index += 1) {
+      memo(`<workbook id="${index}" />`);
+    }
+    memo('<workbook id="0" />');
+    memo('<workbook id="256" />');
+    memo('<workbook id="0" />');
+    memo('<workbook id="1" />');
+
+    expect(calls).toBe(258);
+  });
+
   it('allows converted bookmarks without unresolved bare field references', () => {
-    expect(deriveTemplatePass1Eligibility({ bareRefs: [] })).toEqual({
+    expect(deriveTemplatePass1Eligibility({ bareRefs: [], xml: '<workbook />' })).toEqual({
       pass1_eligible: true,
       pass1_blockers: [],
+    });
+  });
+
+  it('allows only the DATASOURCE and field placeholders resolved during binding', () => {
+    const xml = `<workbook><worksheets><worksheet name="{{TITLE}}">
+      <table><rows>[{{DATASOURCE}}].[none:{{field_base_1}}:nk]</rows></table>
+    </worksheet></worksheets><windows><window class="worksheet" name="{{TITLE}}" /></windows></workbook>`;
+
+    expect(deriveTemplatePass1Eligibility({ bareRefs: [], xml })).toEqual({
+      pass1_eligible: true,
+      pass1_blockers: [],
+    });
+  });
+
+  it('blocks a converted bookmark on sanitized pre-bind validation rule ids', () => {
+    const xml = `<workbook><worksheets><worksheet name="{{TITLE}}">
+      <table><filter column="[{{DATASOURCE}}].[none:DM:qk]" /></table>
+    </worksheet></worksheets><windows><window class="worksheet" name="{{TITLE}}" /></windows></workbook>`;
+
+    expect(deriveTemplatePass1Eligibility({ bareRefs: [], xml })).toEqual({
+      pass1_eligible: false,
+      pass1_blockers: ['pre-bind-validation-errors: invalid-column-instance-pivot'],
     });
   });
 
@@ -338,6 +404,7 @@ describe('deriveTemplatePass1Eligibility', () => {
     expect(
       deriveTemplatePass1Eligibility({
         bareRefs: ['{{field_base_4}}', '{{field_base_1}}', '{{field_base_4}}'],
+        xml: '<workbook />',
       }),
     ).toEqual({
       pass1_eligible: false,

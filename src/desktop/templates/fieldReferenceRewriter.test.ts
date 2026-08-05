@@ -45,6 +45,24 @@ describe('rewriteFieldReferences — raw-vs-escaped boundary (named contract)', 
   });
 });
 
+describe('rewriteFieldReferences — canonical derivation attributes', () => {
+  it("rewrites the attr short code to Tableau's Attribute long form", () => {
+    const xml =
+      '<worksheet><table><view>' +
+      "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+      "<column name='[Region]' role='dimension' type='nominal' />" +
+      "<column-instance column='[Region]' derivation='Attribute' name='[attr:Region:nk]' />" +
+      '</datasource-dependencies>' +
+      '</view><rows>[{{DATASOURCE}}].[attr:Region:nk]</rows></table></worksheet>';
+
+    const out = rewriteFieldReferences(xml, { Region: '[DS].[attr:Segment:nk]' }, 'DS');
+
+    expect(out).toContain('name="[attr:Segment:nk]"');
+    expect(out).toContain('derivation="Attribute"');
+    expect(out).not.toContain('derivation="Attr"');
+  });
+});
+
 describe('rewriteFieldReferences — explicit base-name placeholders', () => {
   const slots = [
     {

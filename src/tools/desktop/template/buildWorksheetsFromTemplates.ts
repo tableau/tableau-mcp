@@ -347,6 +347,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
             let worksheetXml: string;
             let worksheetWindowXml: string;
             let expectedState: WorksheetApplyState;
+            let worksheetValidationWarningCount = 0;
             try {
               const applyNonce = `${workbookFile ?? session ?? 'live'}:${Date.now()}:${randomUUID()}`;
               const built = buildInjectedWorkbookXml({
@@ -382,9 +383,8 @@ export const getBuildWorksheetsFromTemplatesTool = (
                 ]).toErr();
               }
               ({ worksheetXml, worksheetWindowXml } = artifact);
-              const blockingIssues = blockingValidationIssues(
-                runValidation(worksheetXml, 'worksheet').issues,
-              );
+              const worksheetValidationIssues = runValidation(worksheetXml, 'worksheet').issues;
+              const blockingIssues = blockingValidationIssues(worksheetValidationIssues);
               if (blockingIssues.length > 0) {
                 if (workbookFile !== undefined) {
                   return new ArgsValidationError(OFFLINE_WORKBOOK_XML_ERROR).toErr();
@@ -401,6 +401,9 @@ export const getBuildWorksheetsFromTemplatesTool = (
                   `Template construction blocked by worksheet validation${findings}. No template artifact was created and the workbook was not changed. Do not rebuild the same template with the same field mapping; choose a different pass-1-eligible template.`,
                 ).toErr();
               }
+              worksheetValidationWarningCount = worksheetValidationIssues.filter(
+                (issue) => issue.severity === 'warning',
+              ).length;
               expectedState = deriveWorksheetApplyState(
                 workbookXml,
                 title,
@@ -432,7 +435,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
               fieldMapping: appliedFieldMapping,
               targetState: expectedState.target.state,
               targetWindowState: expectedState.targetWindow.state,
-              warningCount: warnings.length,
+              warningCount: warnings.length + worksheetValidationWarningCount,
               artifactBytes:
                 Buffer.byteLength(worksheetXml) + Buffer.byteLength(worksheetWindowXml),
             };

@@ -60,7 +60,11 @@ interface PostApplyWorksheetReadbackVerification extends ReadbackVerificationRes
 
 type LoadWorksheetXmlResult = Result<
   LoadWorksheetXmlOk,
-  | { type: 'execute-command-error'; error: ExecuteCommandError }
+  | {
+      type: 'execute-command-error';
+      error: ExecuteCommandError;
+      dispatchState?: 'not-dispatched' | 'possibly-dispatched';
+    }
   | { type: 'load-worksheet-xml-error'; error: LoadWorksheetXmlError }
 >;
 
@@ -328,6 +332,7 @@ async function loadWorksheetXmlViaExternalApi({
   expectedState?: WorksheetApplyState;
   worksheetWindowXml?: string;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
+  let didDispatch = false;
   const apply = async (): Promise<LoadWorksheetXmlResult> => {
     if (
       expectedState !== undefined &&
@@ -346,7 +351,11 @@ async function loadWorksheetXmlViaExternalApi({
 
     const workbookResult = await getWorkbookXml({ executor, signal });
     if (workbookResult.isErr()) {
-      return Err({ type: 'execute-command-error', error: workbookResult.error });
+      return Err({
+        type: 'execute-command-error',
+        error: workbookResult.error,
+        dispatchState: 'not-dispatched',
+      });
     }
 
     let sourceWorkbookXml = workbookResult.value;
@@ -366,6 +375,7 @@ async function loadWorksheetXmlViaExternalApi({
           return Err({
             type: 'execute-command-error',
             error: { type: 'invalid-response', error },
+            dispatchState: 'not-dispatched',
           });
         }
 
@@ -383,7 +393,11 @@ async function loadWorksheetXmlViaExternalApi({
           worksheetWindowXml,
         );
       } catch (error) {
-        return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+        return Err({
+          type: 'execute-command-error',
+          error: { type: 'invalid-response', error },
+          dispatchState: 'not-dispatched',
+        });
       }
 
       const workbookDocValidation = runValidation(candidateWorkbookDoc, 'workbook');
@@ -438,7 +452,11 @@ async function loadWorksheetXmlViaExternalApi({
 
       const stabilityRead = await getWorkbookXml({ executor, signal });
       if (stabilityRead.isErr()) {
-        return Err({ type: 'execute-command-error', error: stabilityRead.error });
+        return Err({
+          type: 'execute-command-error',
+          error: stabilityRead.error,
+          dispatchState: 'not-dispatched',
+        });
       }
       if (stabilityRead.value === sourceWorkbookXml) {
         workbookDoc = candidateWorkbookDoc;
@@ -458,6 +476,7 @@ async function loadWorksheetXmlViaExternalApi({
           return Err({
             type: 'execute-command-error',
             error: { type: 'invalid-response', error },
+            dispatchState: 'not-dispatched',
           });
         }
         if (!worksheetApplyStatesEqual(latestState, expectedState)) {
@@ -489,9 +508,14 @@ async function loadWorksheetXmlViaExternalApi({
       });
     }
 
+    didDispatch = true;
     const applyResult = await applyWorkbookText({ xml: workbookDoc, executor, signal });
     if (applyResult.isErr()) {
-      return Err({ type: 'execute-command-error', error: applyResult.error });
+      return Err({
+        type: 'execute-command-error',
+        error: applyResult.error,
+        dispatchState: 'possibly-dispatched',
+      });
     }
 
     log({
@@ -519,12 +543,17 @@ async function loadWorksheetXmlViaExternalApi({
               error:
                 signal.reason ?? new Error('Post-apply worksheet window verification was aborted'),
             },
+            dispatchState: 'possibly-dispatched',
           });
         }
 
         const workbookReadback = await getWorkbookXml({ executor, signal });
         if (workbookReadback.isErr()) {
-          return Err({ type: 'execute-command-error', error: workbookReadback.error });
+          return Err({
+            type: 'execute-command-error',
+            error: workbookReadback.error,
+            dispatchState: 'possibly-dispatched',
+          });
         }
         const liveWindow = deriveTargetWorksheetWindowState(workbookReadback.value, worksheetName);
         const windowsMatch =
@@ -555,7 +584,11 @@ async function loadWorksheetXmlViaExternalApi({
           });
         }
       } catch (error) {
-        return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+        return Err({
+          type: 'execute-command-error',
+          error: { type: 'invalid-response', error },
+          dispatchState: 'possibly-dispatched',
+        });
       }
     }
     readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
@@ -576,7 +609,11 @@ async function loadWorksheetXmlViaExternalApi({
   try {
     return await withApplyLock(apply, lockKey === undefined ? undefined : { key: lockKey, signal });
   } catch (error) {
-    return Err({ type: 'execute-command-error', error: { type: 'unknown', error } });
+    return Err({
+      type: 'execute-command-error',
+      error: { type: 'unknown', error },
+      dispatchState: didDispatch ? 'possibly-dispatched' : 'not-dispatched',
+    });
   }
 }
 

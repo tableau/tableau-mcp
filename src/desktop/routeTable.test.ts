@@ -125,6 +125,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
         'Stop unless detail returns exactly one eligible entry with matching id and provenance',
         'Resolve datasource and field mapping ambiguity; choose a fresh unique worksheet title before construction',
         'If the title exists, choose another; templates never replace worksheets or windows',
+        'Stop if build templateName/templateProvenance differ from refreshed detail',
         'After a pre-dispatch construction failure, try at most one different selected candidate, even if earlier sheets succeeded',
         'If apply-worksheet reports no workbook change for a stale, expired, or unavailable artifact, never replay its id; read current state and build once more when intent remains clear',
         'If the apply outcome is uncertain or post-apply verification fails or is unavailable, stop the sequence; never replay or rebuild automatically',
@@ -168,6 +169,12 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     );
     expect(worksheetTemplate?.action).toContain(
       'If the title exists, choose another; templates never replace worksheets or windows',
+    );
+    expect(worksheetTemplate?.action).toContain(
+      'Stop if build templateName/templateProvenance differ from refreshed detail',
+    );
+    expect(generateDesktopInstructions(DESKTOP_ROUTE_TABLE)).toContain(
+      'Stop if build templateName/templateProvenance differ from refreshed detail',
     );
     expect(worksheetTemplate?.action).not.toContain('stop until the user selects');
     expect(worksheetTemplate?.action).not.toContain('do not ask again');

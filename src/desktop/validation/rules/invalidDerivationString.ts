@@ -74,6 +74,9 @@ export const CANONICAL_DERIVATIONS = new Set<string>([
   'VarP',
   // Table calc
   'User',
+  // Set/spatial collection instances authored natively by Desktop
+  'InOut',
+  'Collect',
 ]);
 
 /** Best-effort canonical suggestion for the most common invalid look-alikes. */
