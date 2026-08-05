@@ -10,45 +10,33 @@ import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
 
+const callToolResultSchema = z.object({
+  content: z.array(z.object({ type: z.literal('text'), text: z.string() })).nonempty(),
+});
+
 const urlSchema = z.object({
   url: z.string().url(),
 });
 
-const callToolResultSchema = z.object({
-  content: z
-    .array(
-      z.object({
-        type: z.literal('text'),
-        text: z.string(),
-      }),
-    )
-    .nonempty(),
-  isError: z.boolean().optional(),
-});
-
 /**
- * Extracts the view URL from tool result content
+ * Extracts the view URL from a tool-result payload, or returns undefined when the payload isn't
+ * a well-formed viz result. We still validate the expected shape with Zod, but fail silently
+ * rather than throwing: the host re-fires `tool-result` on every re-render/re-mount, and those
+ * deliveries are frequently empty, non-viz, or url-less. Those are not errors — just "nothing to
+ * render" — so the caller no-ops instead of surfacing an error.
  */
-export function extractUrlObjectFromResult(result: CallToolResult): string {
-  const validated = callToolResultSchema.parse(result);
-  const content = validated.content[0];
-
-  const data = JSON.parse(content.text);
-  const { url } = urlSchema.parse(data);
-  return url;
-}
-
-/**
- * Whether a delivery carries no usable payload (empty `content`, no `structuredContent`).
- * Empty `content` is protocol-legal (MCP defaults it to `[]`), so this is not a parse failure —
- * just nothing to render. Content that is present but unparseable is NOT empty and still surfaces
- * PARSE_ERROR downstream.
- */
-function isEmptyDelivery(result: CallToolResult): boolean {
-  const hasContent = Array.isArray(result.content) && result.content.length > 0;
-  const hasStructuredContent =
-    result.structuredContent != null && Object.keys(result.structuredContent).length > 0;
-  return !hasContent && !hasStructuredContent;
+export function extractViewUrl(result: CallToolResult): string | undefined {
+  try {
+    const { content } = callToolResultSchema.parse(result);
+    const data = JSON.parse(content[0].text);
+    return urlSchema.parse(data).url;
+  } catch {
+    // Any failure — wrong result shape, unparseable text, or a missing/invalid url — means there
+    // is no viz to render. Return undefined so the caller silently no-ops. We must NOT rethrow or
+    // surface an error here: the host re-fires tool-result on every re-render/re-mount, so raising
+    // an error on these url-less deliveries would flood telemetry and could clobber a good render.
+    return undefined;
+  }
 }
 
 /**
@@ -63,18 +51,11 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
     return;
   }
 
-  // Empty re-delivery: the host can re-fire tool-result with no payload on a re-render/re-mount.
-  // Nothing to embed, so no-op and keep the current render instead of overwriting it with an error.
-  if (isEmptyDelivery(result)) {
-    return;
-  }
-
-  // Parse failure
-  let viewUrl: string;
-  try {
-    viewUrl = extractUrlObjectFromResult(result);
-  } catch (e) {
-    showError('PARSE_ERROR', e, app);
+  // No usable view URL: empty re-delivery, a non-viz result, or an unparseable payload. The host
+  // re-fires tool-result on re-render/re-mount, so treating these as errors floods telemetry and
+  // can clobber a good render. Silently no-op and keep whatever is currently displayed.
+  const viewUrl = extractViewUrl(result);
+  if (!viewUrl) {
     return;
   }
 

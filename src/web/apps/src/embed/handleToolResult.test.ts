@@ -140,7 +140,10 @@ describe('handleToolResult', () => {
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
   });
 
-  it('should show error UI when tool result is malformed JSON', async () => {
+  it('silently no-ops on malformed JSON instead of showing PARSE_ERROR', async () => {
+    // The host re-fires tool-result on re-render/re-mount, and those deliveries can carry
+    // unparseable text. There is nothing to embed, so this must be a silent no-op — NOT an
+    // error (which previously flooded telemetry with raw ZodError text).
     const malformedResult: CallToolResult = {
       content: [
         {
@@ -155,26 +158,16 @@ describe('handleToolResult', () => {
 
     const container = document.getElementById('tableauVizContainer');
 
-    // NO tableau-viz rendered
+    // No viz, no error UI — nothing happened
     expect(container?.querySelector('tableau-viz')).toBeNull();
+    expect(container?.querySelector('.mcp-app-error')).toBeNull();
 
-    // error UI IS displayed
-    const errorElement = container?.querySelector('.mcp-app-error');
-    expect(errorElement).toBeTruthy();
-
-    // New two-line layout: heading + subtitle
-    expect(errorElement?.querySelector('.mcp-app-error-heading')?.textContent).toBe(
-      'Unable to load this Tableau view',
-    );
-    expect(errorElement?.querySelector('.mcp-app-error-message')?.textContent).toBe(
-      'The response was not in the expected format.',
-    );
-
-    // Assert embedTableauViz was NOT called
+    // No embedding attempted and no telemetry event recorded
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
+    expect(vi.mocked(recordEvent)).not.toHaveBeenCalled();
   });
 
-  it('should show error UI when tool result has valid JSON but missing url field', async () => {
+  it('silently no-ops when the payload has valid JSON but no url field', async () => {
     const missingUrlResult: CallToolResult = {
       content: [
         {
@@ -189,11 +182,34 @@ describe('handleToolResult', () => {
 
     const container = document.getElementById('tableauVizContainer');
 
-    // Assert NO tableau-viz rendered
+    // No viz, no error UI, no embedding, no telemetry
     expect(container?.querySelector('tableau-viz')).toBeNull();
+    expect(container?.querySelector('.mcp-app-error')).toBeNull();
+    expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
+    expect(vi.mocked(recordEvent)).not.toHaveBeenCalled();
+  });
 
-    // Assert error UI IS displayed
-    expect(container?.querySelector('.mcp-app-error')).toBeTruthy();
+  it('silently no-ops when the url is an empty string', async () => {
+    // The workbook path in render-interactive-viz falls back to url: '' when no default view
+    // URL is resolvable. An empty url is not embeddable, so treat it as nothing to render.
+    const emptyUrlResult: CallToolResult = {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ url: '' }),
+        },
+      ],
+    };
+
+    await handleToolResult(mockApp, emptyUrlResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const container = document.getElementById('tableauVizContainer');
+
+    expect(container?.querySelector('tableau-viz')).toBeNull();
+    expect(container?.querySelector('.mcp-app-error')).toBeNull();
+    expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
+    expect(vi.mocked(recordEvent)).not.toHaveBeenCalled();
   });
 
   it('should show error UI when embedding API script fails to load', async () => {
