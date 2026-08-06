@@ -10,37 +10,46 @@ import fs from 'fs';
 import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { loadRuntimeTemplateDescriptors } from '../templates/runtimeTemplateCatalog.js';
 import { selectEligible } from './ask-router.js';
 import { classifyNoLlm, summarizeSchema } from './binder.js';
-import { loadManifests } from './manifest.js';
-import type { TemplateManifest } from './manifest-types.js';
+import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 
-let manifests: TemplateManifest[];
+let manifestMap: Map<string, RuntimeTemplateDescriptor>;
+let manifests: RuntimeTemplateDescriptor[];
 beforeAll(() => {
-  manifests = [...loadManifests().values()];
+  manifestMap = loadRuntimeTemplateDescriptors({ automaticOnly: true, includeExternal: false });
+  manifests = [...manifestMap.values()];
 });
 
 /** A minimal, structurally-sufficient manifest for matcher/eligibility pinning. */
-function mkManifest(over: Partial<TemplateManifest> & { template: string }): TemplateManifest {
+function mkManifest(
+  over: Partial<RuntimeTemplateDescriptor> & { template: string },
+): RuntimeTemplateDescriptor {
   return {
     family: 'specialized',
-    readiness: 'GREEN',
     fast_path_eligible: true,
     fast_path_blockers: [],
     intent_keywords: [],
     description: 'synthetic test manifest',
-    placeholders: ['TITLE', 'DATASOURCE'],
     slots: [],
     calcs: [],
     ...over,
-  } as unknown as TemplateManifest;
+  };
 }
 
 describe('selectEligible — reuses the binder matcher, fail-closed on unproven/ambiguous supply', () => {
-  it('selects the decisive eligible template for a plain bar ask (real manifests)', () => {
-    const m = selectEligible('bar chart of sales by region', manifests);
+  it('selects the decisive eligible template for a plain bar ask', () => {
+    const supply = [
+      mkManifest({
+        template: 'ranking-ordered-bar',
+        family: 'ranking',
+        intent_keywords: ['bar', 'ranked'],
+      }),
+    ];
+    const m = selectEligible('bar chart of sales by region', supply);
     expect(m).not.toBeNull();
     expect(m!.template).toBe('ranking-ordered-bar');
   });
@@ -207,19 +216,41 @@ describe('ask-router — shared behavioral parity with classify.ts (selection ou
   </datasources>
 </workbook>`;
 
+  it.each(['bar chart of sales by region', 'gibberish asdf qwerty zxcv'])(
+    'classifyNoLlm and selectEligible pick the same template for: %s',
+    (ask) => {
+      const cls = classifyNoLlm(ask, manifestMap, summarizeSchema(COMBO_WORKBOOK_XML));
+      const routed = selectEligible(ask, manifests, ask);
+      expect(routed?.template ?? null).toBe(cls?.template ?? null);
+    },
+  );
+
   it.each([
-    'bar chart of sales by region',
-    'gibberish asdf qwerty zxcv',
     'Symbol map of Goals For by Country Code.',
     'Map the countries by Goals For — bigger, warmer dots',
     'Map the countries by Goals For with bigger warmer dots total',
     'Map the countries by Goals For with bigger, warmer circles',
-    'Choropleth map of Goals For by Country Code.',
-    'waterfall of Profit by Sub-Category',
-  ])('classifyNoLlm and selectEligible pick the same template for: %s', (ask) => {
-    const manifestsMap = loadManifests();
-    const cls = classifyNoLlm(ask, manifestsMap, summarizeSchema(COMBO_WORKBOOK_XML));
+  ])('keeps schema-free spatial shortlisting separate from schema-aware binding for: %s', (ask) => {
+    const cls = classifyNoLlm(ask, manifestMap, summarizeSchema(COMBO_WORKBOOK_XML));
     const routed = selectEligible(ask, manifests, ask);
-    expect(routed?.template ?? null).toBe(cls?.template ?? null);
+    expect(routed?.family).toBe('spatial');
+    expect(cls).toBeNull();
+  });
+
+  it('keeps routing and schema-aware binding aligned on the canonical choropleth', () => {
+    const ask = 'Choropleth map of Goals For by Country Code.';
+    const cls = classifyNoLlm(ask, manifestMap, summarizeSchema(COMBO_WORKBOOK_XML));
+    const routed = selectEligible(ask, manifests, ask);
+
+    expect(routed?.template).toBe('spatial-choropleth-map');
+    expect(cls?.template).toBe('spatial-choropleth-map');
+  });
+
+  it('keeps schema-free waterfall routing separate from schema-aware binding', () => {
+    const ask = 'waterfall of Profit by Sub-Category';
+    const cls = classifyNoLlm(ask, manifestMap, summarizeSchema(COMBO_WORKBOOK_XML));
+    const routed = selectEligible(ask, manifests, ask);
+    expect(routed?.template).toBe('part-to-whole-waterfall');
+    expect(cls).toBeNull();
   });
 });

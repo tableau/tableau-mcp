@@ -10,13 +10,10 @@ import { getPlanDashboardCreationTool } from './planDashboardCreation.js';
 vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
 vi.mock('../../../desktop/metadata/index.js');
 vi.mock('../../../desktop/templates/templatePath.js');
-vi.mock('fs');
-
-import { existsSync, readdirSync } from 'fs';
 
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { FieldResolution, resolveField } from '../../../desktop/metadata/index.js';
-import { getTemplatesDir } from '../../../desktop/templates/templatePath.js';
+import { listTemplateNames } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const SESSION = 'session-1';
@@ -33,9 +30,7 @@ function makeExtra(workbookXml: string = SAMPLE_WORKBOOK_XML): TableauDesktopReq
   const extra = getMockRequestHandlerExtra();
   extra.getExecutor = vi.fn().mockResolvedValue({});
   vi.mocked(getWorkbookXml).mockResolvedValue(new Ok(workbookXml));
-  vi.mocked(getTemplatesDir).mockReturnValue('/tmp/templates');
-  vi.mocked(existsSync).mockReturnValue(true);
-  vi.mocked(readdirSync).mockReturnValue(['ranking-ordered-bar.xml', 'kpi-text.xml'] as any);
+  vi.mocked(listTemplateNames).mockReturnValue(['ranking-ordered-bar', 'kpi-text']);
   return extra;
 }
 
@@ -260,10 +255,6 @@ describe('planDashboardCreationTool', () => {
         error: { code: 'E1', message: 'fail', recoverable: false },
       }),
     );
-    vi.mocked(getTemplatesDir).mockReturnValue('/tmp/templates');
-    vi.mocked(existsSync).mockReturnValue(false);
-    vi.mocked(readdirSync).mockReturnValue([]);
-
     const result = await getResult(
       { session: SESSION, dashboardName: 'DB', worksheets: [] },
       extra,

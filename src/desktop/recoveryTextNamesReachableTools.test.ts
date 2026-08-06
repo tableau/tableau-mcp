@@ -27,6 +27,10 @@ const ALLOWED: Readonly<Record<string, string>> = {
     'escalation guidance hedges on availability ("if the inject-template/apply-workbook tools are available"), so it does not present an off-profile tool as a live route. Owned by the binder branches — revisit there, not here',
   'desktop/binder/binder.ts':
     'APPLY_INSTRUCTION describes the tableau-* template chain for full-profile callers and is dropped on the served auto-apply path. Owned by the binder branches — revisit there, not here',
+  'desktop/route/route-state.ts':
+    'BindRecoveryProposalContext stores the legacy bind-template tool name as structured puppetry state; it is not rendered as recovery guidance',
+  'tools/desktop/tool.ts':
+    'AUTHORING_ATTEMPT_TOOLS is an internal classification set; its names are never rendered to the agent',
 };
 
 /**

@@ -4,7 +4,7 @@ import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparse
 
 // Minimal trend-line template shape: the [Order Date] date base column, its Month-Trunc
 // CI on <cols>, and the same CI referenced in a <format> node — mirrors
-// src/desktop/data/templates/trend-line-chart.xml.
+// the trend-line TBM runtime snapshot.
 const TREND_XML = `<workbook>
   <worksheets><worksheet name='{{TITLE}}'><table><view>
     <datasource-dependencies datasource='{{DATASOURCE}}'>

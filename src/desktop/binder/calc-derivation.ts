@@ -11,10 +11,7 @@
 // inputs declared, the propose/validate path can PROVE a calc's inputs bind against a
 // new dataset instead of discovering breakage at render.
 //
-// This is the single TS source of truth. scripts/build-template-manifests.js mirrors
-// the same logic in JS (it cannot import TS at runtime); calc-slots-contract.test.ts
-// asserts the generator-written manifests equal a fresh derivation from these helpers,
-// so the two can never silently drift (the same sync pattern as computeFixtureBind).
+// This is the single TS source of truth used when a runtime TBM is inspected.
 
 import type { CalcInput, CalcResultRole, CalcSlot, SlotKind, SlotSpec } from './manifest-types.js';
 

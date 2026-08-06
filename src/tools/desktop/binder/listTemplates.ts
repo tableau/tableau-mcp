@@ -2,111 +2,157 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { FAMILY_VALUES } from '../../../desktop/binder/manifest.js';
-import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
-import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
+import type { SlotSpec } from '../../../desktop/binder/manifest-types.js';
+import {
+  listTemplateCatalog,
+  readBookmarkFromCatalogEntry,
+  type TemplateCatalogEntry,
+  type TemplateDiscoveryIssue,
+} from '../../../desktop/templates/templatePath.js';
+import {
+  createTemplateRuntimeSnapshot,
+  type TemplateRuntimeSnapshot,
+} from '../../../desktop/templates/templateRuntimeSnapshot.js';
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 
-// list-templates is the FIRST consumer of the milestone-1 AuthoringIntelligenceProvider
-// seam. It serves the bundled snapshot THROUGH the provider
-// (`bundledIntelligenceProvider.listTemplateManifests()` / `getStatus()`), never raw
-// `loadManifests()`, so the moment milestone 2 swaps in a remote content-pack provider
-// this tool follows without edits. A pure reference-library tool: no session, no
-// command layer (AGENTS.md permits this for local/bundled reads).
-
-// WATCH-CLASS tightening (fail-open lens): the closed `Family` taxonomy is enforced at
-// the schema boundary via z.enum. A bare-string family filter would be LENIENT — a
-// typo like 'timeseries' would parse and silently return an empty list, masking the
-// mistake as "no such templates". Rejecting it at the schema layer fails closed instead.
 const paramsSchema = {
-  family: z.enum(FAMILY_VALUES).optional(),
-  fastPathOnly: z.boolean().optional(),
+  query: z.string().trim().min(1).max(256).optional().describe('Search template IDs.'),
+  cursor: z
+    .string()
+    .max(255)
+    .optional()
+    .describe('Continuation cursor returned by the previous page.'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(50)
+    .optional()
+    .describe('Maximum candidates examined per page; default 20, max 50.'),
+  includeSlots: z.boolean().optional().describe('Include structural slot facts for one template.'),
+  pass1EligibleOnly: z
+    .boolean()
+    .optional()
+    .describe('Return only templates that pass current worksheet-template validation.'),
 };
 
-/** One template's discovery summary: family / slots / fast-path status. */
+const COMPACT_RESPONSE_LIMIT_BYTES = 16_384;
+const DETAIL_RESPONSE_LIMIT_BYTES = 12_288;
+const MAX_DIAGNOSTICS = 20;
+
+type DiscoveryDiagnostic = {
+  template: string;
+  provenance: string;
+  issue: TemplateDiscoveryIssue | 'changed-or-unreadable';
+};
+
+type ResolvedTemplate = {
+  entry: TemplateCatalogEntry;
+  snapshot: TemplateRuntimeSnapshot;
+};
+
 interface SlotSummary {
   slot_id: string;
   kind: string;
   required: boolean;
   bindable: boolean;
+  derivation: string;
+  role: string[];
+  semantic_role?: string;
+  communicative_role?: string;
   purpose?: string;
-  examples?: string[];
 }
 
 interface TemplateSummary {
   template: string;
-  family: string;
-  readiness: string;
-  fast_path_eligible: boolean;
-  fast_path_blockers: string[];
-  description: string;
-  intent_keywords: string[];
-  avoid_when?: string[];
-  slots: SlotSummary[];
-  calc_count: number;
-}
-
-/**
- * HONEST DERIVATION (Finding 7): the shipped manifests carry `fast_path_blockers: []`
- * for every template — even GREEN ones with `fast_path_eligible: false` — so a caller
- * scanning for WHY a template is a dead end gets zero signal from the raw data. We do NOT
- * hand-edit the compiled manifests (that creates drift). Instead, when a template is
- * ineligible AND its explicit blocker list is empty, derive ONE honest blocker string
- * mechanically from a manifest field the repo already ships: `render_verified === 'none'`
- * means the template carries no live-render-verification stamp — the necessary-but-missing
- * portability proof that gates fast_path_eligible (see PortabilityEvidence). A manifest
- * that DOES carry explicit blockers passes them through untouched; an eligible template
- * has none. Traceable to a field, never fabricated.
- */
-export function deriveFastPathBlockers(
-  m: Pick<TemplateManifest, 'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'>,
-): string[] {
-  if (m.fast_path_eligible || m.fast_path_blockers.length > 0) {
-    return m.fast_path_blockers;
-  }
-  if (m.portability_evidence.render_verified === 'none') {
-    return ['not-live-render-verified: this template has no live render verification stamp'];
-  }
-  return [];
-}
-
-// Field names here mirror the manifest's serialized (snake_case) data contract —
-// the same fidelity rule bind-template follows for the binder's `args`. Only
-// tool-authored params/aggregates (fastPathOnly, fastPathCount) are camelCase per
-// AGENTS.md.
-function summarizeTemplate(m: TemplateManifest): TemplateSummary {
-  return {
-    template: m.template,
-    family: m.family,
-    readiness: m.readiness,
-    fast_path_eligible: m.fast_path_eligible,
-    fast_path_blockers: deriveFastPathBlockers(m),
-    description: m.description,
-    intent_keywords: m.intent_keywords,
-    ...(m.avoid_when ? { avoid_when: m.avoid_when } : {}),
-    slots: m.slots.map((s) => ({
-      slot_id: s.slot_id,
-      kind: s.kind,
-      required: s.required,
-      bindable: s.bindable,
-      ...(s.purpose ? { purpose: s.purpose } : {}),
-      ...(s.purpose && s.examples && s.examples.length > 0 ? { examples: s.examples } : {}),
-    })),
-    calc_count: m.calcs.length,
+  provenance: string;
+  overridesLowerPrecedence: boolean;
+  pass1_eligible: boolean;
+  pass1_blockers: string[];
+  slot_signature: {
+    total: number;
+    required: number;
+    kinds: string[];
   };
+  slots?: SlotSummary[];
+}
+
+function compareTemplateNames(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function summarizeSlot(slot: SlotSpec): SlotSummary {
+  return {
+    slot_id: slot.slot_id,
+    kind: slot.kind,
+    required: slot.required,
+    bindable: slot.bindable,
+    derivation: slot.derivation,
+    role: slot.role.slice(),
+    ...(slot.semantic_role ? { semantic_role: slot.semantic_role } : {}),
+    ...(slot.communicative_role ? { communicative_role: slot.communicative_role } : {}),
+    ...(slot.purpose ? { purpose: slot.purpose } : {}),
+  };
+}
+
+function summarizeTemplate(
+  { entry, snapshot }: ResolvedTemplate,
+  includeSlots: boolean,
+): TemplateSummary {
+  const slots = snapshot.descriptor.slots;
+  return {
+    template: entry.template,
+    provenance: entry.provenance,
+    overridesLowerPrecedence: entry.overridesLowerPrecedence,
+    pass1_eligible: snapshot.eligibility.pass1_eligible,
+    pass1_blockers: snapshot.eligibility.pass1_blockers.slice(),
+    slot_signature: {
+      total: slots.length,
+      required: slots.filter((slot) => slot.required).length,
+      kinds: [...new Set(slots.map((slot) => slot.kind))].sort(compareTemplateNames),
+    },
+    ...(includeSlots ? { slots: slots.map(summarizeSlot) } : {}),
+  };
+}
+
+function resolveTemplate(entry: TemplateCatalogEntry): TemplateRuntimeSnapshot | null {
+  const bookmark = readBookmarkFromCatalogEntry(entry);
+  if (bookmark === null) return null;
+  try {
+    return createTemplateRuntimeSnapshot(entry.template, bookmark);
+  } catch {
+    return null;
+  }
+}
+
+interface ListTemplatesDependencies {
+  listCatalog(): TemplateCatalogEntry[];
+  resolve(entry: TemplateCatalogEntry): TemplateRuntimeSnapshot | null;
+}
+
+const DEFAULT_DEPENDENCIES: ListTemplatesDependencies = {
+  listCatalog: () => listTemplateCatalog(),
+  resolve: resolveTemplate,
+};
+
+function payloadBytes(payload: Record<string, unknown>): number {
+  return Buffer.byteLength(JSON.stringify(payload), 'utf-8');
 }
 
 const title = 'Listing templates';
 
 export const getListTemplatesTool = (
   server: DesktopMcpServer,
+  dependencies: ListTemplatesDependencies = DEFAULT_DEPENDENCIES,
 ): DesktopTool<typeof paramsSchema> => {
   const listTemplatesTool = new DesktopTool({
     server,
     name: 'list-templates',
     title,
-    description: 'List chart templates.',
+    description: 'Search available worksheet templates.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -114,30 +160,119 @@ export const getListTemplatesTool = (
       destructiveHint: false,
       idempotentHint: true,
     },
-    callback: async ({ family, fastPathOnly }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { query, cursor, limit = 20, includeSlots = false, pass1EligibleOnly = false },
+      extra,
+    ): Promise<CallToolResult> => {
       return await listTemplatesTool.logAndExecute({
         extra,
-        args: { family, fastPathOnly },
+        args: { query, cursor, limit, includeSlots, pass1EligibleOnly },
+        getSuccessResult: (payload) => jsonToolResult(payload, { isError: false }),
         callback: async () => {
-          const status = bundledIntelligenceProvider.getStatus();
-          const all = bundledIntelligenceProvider.listTemplateManifests();
+          if (includeSlots && limit !== 1) {
+            return new ArgsValidationError(
+              'includeSlots requires limit=1 so one bounded structural descriptor is returned.',
+            ).toErr();
+          }
 
-          const templates = all
-            .filter(
-              (m) =>
-                (family === undefined || m.family === family) &&
-                (!fastPathOnly || m.fast_path_eligible),
-            )
-            .map(summarizeTemplate)
-            .sort((a, b) => a.template.localeCompare(b.template));
+          const catalog = dependencies.listCatalog();
+          const normalizedQuery = query?.toLowerCase();
+          const queryMatches = (entry: TemplateCatalogEntry): boolean =>
+            normalizedQuery === undefined || entry.template.toLowerCase().includes(normalizedQuery);
+          const discoveryDiagnostics: DiscoveryDiagnostic[] = catalog
+            .filter((entry) => entry.discoveryIssue !== undefined && queryMatches(entry))
+            .map((entry) => ({
+              template: entry.template,
+              provenance: entry.provenance,
+              issue: entry.discoveryIssue!,
+            }));
+          const candidates = catalog
+            .filter((entry) => entry.discoveryIssue === undefined && queryMatches(entry))
+            .sort((a, b) => compareTemplateNames(a.template, b.template));
 
-          return new Ok({
-            status,
-            total: all.length,
-            count: templates.length,
-            fastPathCount: templates.filter((t) => t.fast_path_eligible).length,
-            templates,
-          });
+          let start = 0;
+          if (cursor !== undefined) {
+            const cursorIndex = candidates.findIndex((entry) => entry.template === cursor);
+            if (cursorIndex < 0) {
+              return new ArgsValidationError(
+                `Invalid template cursor "${cursor}" for the current filters.`,
+              ).toErr();
+            }
+            start = cursorIndex + 1;
+          }
+
+          const selected = candidates.slice(start, start + limit);
+          const processed = selected.map((entry) => ({
+            entry,
+            snapshot: dependencies.resolve(entry),
+          }));
+          let processedCount = processed.length;
+
+          const diagnosticsPayload = (
+            runtimeDiagnostics: DiscoveryDiagnostic[],
+          ): Record<string, unknown> => {
+            const diagnostics = [...discoveryDiagnostics, ...runtimeDiagnostics];
+            return {
+              count: diagnostics.length,
+              returned: Math.min(diagnostics.length, MAX_DIAGNOSTICS),
+              truncated: diagnostics.length > MAX_DIAGNOSTICS,
+              templates: diagnostics
+                .slice()
+                .sort((a, b) => compareTemplateNames(a.template, b.template))
+                .slice(0, MAX_DIAGNOSTICS),
+            };
+          };
+          const buildPayload = (): Record<string, unknown> => {
+            const examined = processed.slice(0, processedCount);
+            const runtimeDiagnostics: DiscoveryDiagnostic[] = examined
+              .filter(
+                (resolved): resolved is { entry: TemplateCatalogEntry; snapshot: null } =>
+                  resolved.snapshot === null,
+              )
+              .map(({ entry }) => ({
+                template: entry.template,
+                provenance: entry.provenance,
+                issue: 'changed-or-unreadable',
+              }));
+            const page: ResolvedTemplate[] = examined.filter(
+              (
+                resolved,
+              ): resolved is { entry: TemplateCatalogEntry; snapshot: TemplateRuntimeSnapshot } =>
+                resolved.snapshot !== null &&
+                (!pass1EligibleOnly || resolved.snapshot.eligibility.pass1_eligible),
+            );
+            return {
+              total: catalog.length,
+              candidateCount: candidates.length,
+              scanned: processedCount,
+              count: page.length,
+              nextCursor:
+                start + processedCount < candidates.length
+                  ? (examined.at(-1)?.entry.template ?? null)
+                  : null,
+              diagnostics: diagnosticsPayload(runtimeDiagnostics),
+              templates: page.map((resolved) => summarizeTemplate(resolved, includeSlots)),
+            };
+          };
+
+          const responseLimit = includeSlots
+            ? DETAIL_RESPONSE_LIMIT_BYTES
+            : COMPACT_RESPONSE_LIMIT_BYTES;
+          let payload = buildPayload();
+          while (!includeSlots && processedCount > 0 && payloadBytes(payload) > responseLimit) {
+            processedCount -= 1;
+            payload = buildPayload();
+          }
+          if (
+            payloadBytes(payload) > responseLimit ||
+            (processedCount === 0 && selected.length > 0)
+          ) {
+            return new ArgsValidationError(
+              `Template catalog metadata exceeds the ${responseLimit}-byte response limit.`,
+            ).toErr();
+          }
+
+          return new Ok(payload);
         },
       });
     },

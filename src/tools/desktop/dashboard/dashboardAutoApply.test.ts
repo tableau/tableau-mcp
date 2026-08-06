@@ -4,18 +4,19 @@ import { z } from 'zod';
 
 import type { BinderResult } from '../../../desktop/binder/binder.js';
 import * as binderModule from '../../../desktop/binder/binder.js';
-import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
+import type { RuntimeTemplateDescriptor } from '../../../desktop/binder/manifest-types.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as injectViewpointsModule from '../../../desktop/commands/workbook/injectViewpoints.js';
 import * as loadDashboardXmlModule from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
-import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
 import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import type { ParsedWindow } from '../../../desktop/metadata/types.js';
 import * as injectTemplateModule from '../../../desktop/templates/injectTemplate.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
+import * as runtimeCatalogModule from '../../../desktop/templates/runtimeTemplateCatalog.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import type { TemplateRuntimeSnapshot } from '../../../desktop/templates/templateRuntimeSnapshot.js';
 import * as validationRegistry from '../../../desktop/validation/registry.js';
 import { NoDesktopInstancesFoundError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -44,6 +45,7 @@ vi.mock('../../../desktop/templates/injectTemplateCore.js', async (importOrigina
 vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('../../../desktop/libraries/workbook-serialization-converter/index.js');
 vi.mock('../../../desktop/templates/templatePath.js');
+vi.mock('../../../desktop/templates/runtimeTemplateCatalog.js');
 vi.mock('../../../desktop/validation/registry.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../desktop/validation/registry.js')>();
   return { ...actual, runValidation: vi.fn() };
@@ -61,6 +63,43 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 const XML = '<?xml version="1.0"?><workbook><windows></windows></workbook>';
+
+function runtimeDescriptor(template: string, fastPathEligible = true): RuntimeTemplateDescriptor {
+  return {
+    template,
+    family: 'specialized',
+    fast_path_eligible: fastPathEligible,
+    fast_path_blockers: fastPathEligible ? [] : ['test-ineligible'],
+    intent_keywords: [template],
+    description: `${template} runtime descriptor`,
+    slots: [],
+    calcs: [],
+  };
+}
+
+function setRuntimeCatalog(descriptors: RuntimeTemplateDescriptor[]): void {
+  vi.mocked(runtimeCatalogModule.loadRuntimeTemplateCatalogSnapshots).mockReturnValue(
+    new Map(
+      descriptors.map((descriptor) => {
+        const snapshot: TemplateRuntimeSnapshot = {
+          template: descriptor.template,
+          sourceHash: `test-${descriptor.template}`,
+          descriptor: {
+            template: descriptor.template,
+            slots: descriptor.slots,
+            calcs: descriptor.calcs,
+          },
+          xml: '<template/>',
+          eligibility: {
+            pass1_eligible: descriptor.fast_path_eligible,
+            pass1_blockers: descriptor.fast_path_blockers,
+          },
+        };
+        return [descriptor.template, { snapshot, descriptor }];
+      }),
+    ),
+  );
+}
 
 function boundResultFor(templateName: string, title: string): BinderResult {
   return {
@@ -196,12 +235,7 @@ function setupMocks({
   const templateNames = [
     ...new Set(binds.filter((b) => b.status === 'bound').map((b) => b.args.template_name)),
   ];
-  vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue(
-    templateNames.map(
-      (template) =>
-        ({ template, fast_path_eligible: fastPathEligible }) as unknown as TemplateManifest,
-    ),
-  );
+  setRuntimeCatalog(templateNames.map((template) => runtimeDescriptor(template, fastPathEligible)));
   vi.mocked(readTemplate).mockReturnValue('<template/>');
   vi.mocked(buildInjectedWorkbookXml).mockReturnValue(inject);
   vi.mocked(injectTemplateModule.injectTemplate).mockImplementation(
@@ -300,6 +334,9 @@ describe('dashboardAutoApplyTool happy path', () => {
     // is nothing to reissue.
     expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(2);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(runtimeCatalogModule.loadRuntimeTemplateCatalogSnapshots).toHaveBeenCalledWith({
+      automaticOnly: true,
+    });
   });
 
   it('activates the composed dashboard once through validated goto-sheet', async () => {
@@ -486,10 +523,8 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       ],
       guidance:
         'One or more asks did not deterministically bind (Call-1, no-LLM). Nothing was applied to ' +
-        'the live workbook. Each ask carries its own bind-template-shaped outcome below: for ' +
-        '"propose", fill its output_schema and call bind-template again; for "escalate", follow its ' +
-        'guidance. Once every ask binds, retry dashboard-auto-apply, or fall back to the per-viz ' +
-        'bind-template(auto_apply:true) flow using each already-bound ask.',
+        'the live workbook. Revise any proposed or failed ask, then retry dashboard-auto-apply; ' +
+        'or build each view with list-templates, build-worksheets-from-templates, and apply-worksheet.',
     };
     expect(result.content[0].text).toBe(JSON.stringify(expectedBody));
     // The refusal body rides in the structured block too — a client that prefers

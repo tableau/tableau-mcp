@@ -1,0 +1,435 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MapboxVectorStylesAndLayers />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SpatialFileLayer />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;&#10;</run>
+        <run fontname='Tableau Light' fontsize='9'>Stretching and shrinking a map so that each area is sized according to a particular value.</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <datasources>
+    <datasource caption='France Population' inline='true' name='federated.1xrkpt21i8djik111hfxv1st3v4d' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='france_population' name='ogrdirect.1p2vse80lbyykz10et4in1181s7m'>
+            <connection class='ogrdirect' directory='' ogr-grid-shift-folder='' tablename='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='ogrdirect.1p2vse80lbyykz10et4in1181s7m' name='france_population.shp' table='[france_population.shp]' type='table'>
+          <columns>
+            <column datatype='string' name='id' ordinal='0' />
+            <column datatype='string' name='name' ordinal='1' />
+            <column datatype='integer' name='tilegramVa' ordinal='2' />
+            <column datatype='spatial' name='Geometry' ordinal='3' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>id</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[id]</local-name>
+            <parent-name>[france_population.shp]</parent-name>
+            <remote-alias>id</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>name</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[name]</local-name>
+            <parent-name>[france_population.shp]</parent-name>
+            <remote-alias>name</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>tilegramVa</remote-name>
+            <remote-type>3</remote-type>
+            <local-name>[tilegramVa]</local-name>
+            <parent-name>[france_population.shp]</parent-name>
+            <remote-alias>tilegramVa</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='measure'>
+            <remote-name>Geometry</remote-name>
+            <remote-type>8</remote-type>
+            <local-name>[Geometry]</local-name>
+            <parent-name>[france_population.shp]</parent-name>
+            <remote-alias>Geometry</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>spatial</local-type>
+            <aggregation>Collect</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Rank' datatype='integer' name='[Calculation_5073656843848998948]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='RANK(SUM([tilegramVa]))'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column datatype='integer' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>
+        <calculation class='tableau' formula='1' />
+      </column>
+      <column caption='Migrated Data' datatype='table' name='[__tableau_internal_object_id__].[Migrated Data]' role='measure' type='quantitative' />
+      <column caption='Id' datatype='string' name='[id]' role='dimension' type='nominal' />
+      <column caption='Name' datatype='string' name='[name]' role='dimension' type='nominal' />
+      <column caption='Population' datatype='integer' name='[tilegramVa]' role='measure' type='quantitative' />
+      <column-instance column='[name]' derivation='None' name='[none:name:nk]' pivot='key' type='nominal' />
+      <extract count='-1' enabled='true' object-id='Migrated Data' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='07/14/2018 04:02:57 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='' increment-value='%null%' refresh-type='create' rows-inserted='13' timestamp-start='2018-07-14 16:02:57.060' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>id</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[id]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>id</remote-alias>
+              <ordinal>0</ordinal>
+              <family>france_population.shp</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>13</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>name</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[name]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>name</remote-alias>
+              <ordinal>1</ordinal>
+              <family>france_population.shp</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>13</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>tilegramVa</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[tilegramVa]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>tilegramVa</remote-alias>
+              <ordinal>2</ordinal>
+              <family>france_population.shp</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>13</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Geometry</remote-name>
+              <remote-type>128</remote-type>
+              <local-name>[Geometry]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Geometry</remote-alias>
+              <ordinal>3</ordinal>
+              <family>france_population.shp</family>
+              <local-type>spatial</local-type>
+              <aggregation>Collect</aggregation>
+              <approx-count>13</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[none:name:nk]' palette='FT Black' type='palette'>
+            <map to='#1a1817'>
+              <bucket>&quot;Provence-Alpes-Côte d&apos;Azur&quot;</bucket>
+            </map>
+            <map to='#2c2a28'>
+              <bucket>&quot;Pays-de-la-Loire&quot;</bucket>
+            </map>
+            <map to='#403c39'>
+              <bucket>&quot;Occitanie&quot;</bucket>
+            </map>
+            <map to='#534e4a'>
+              <bucket>&quot;Nouvelle-Aquitaine&quot;</bucket>
+            </map>
+            <map to='#66605c'>
+              <bucket>&quot;Normandie&quot;</bucket>
+            </map>
+            <map to='#79726d'>
+              <bucket>&quot;Île-de-France&quot;</bucket>
+            </map>
+            <map to='#8c857e'>
+              <bucket>&quot;Hauts-de-France&quot;</bucket>
+            </map>
+            <map to='#9f978e'>
+              <bucket>&quot;Grand-Est&quot;</bucket>
+            </map>
+            <map to='#b3a9a0'>
+              <bucket>&quot;Corse&quot;</bucket>
+            </map>
+            <map to='#c5bbb1'>
+              <bucket>&quot;Centre-Val de Loire&quot;</bucket>
+            </map>
+            <map to='#d9cdc2'>
+              <bucket>&quot;Bretagne&quot;</bucket>
+            </map>
+            <map to='#e9dcd1'>
+              <bucket>&quot;Bourgogne-Franche-Comté&quot;</bucket>
+            </map>
+            <map to='#f2e5da'>
+              <bucket>&quot;Auvergne-Rhône-Alpes&quot;</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;Reino Unido&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Migrated Data' id='Migrated Data'>
+            <properties context=''>
+              <relation connection='ogrdirect.1p2vse80lbyykz10et4in1181s7m' name='france_population.shp' table='[france_population.shp]' type='table'>
+                <columns>
+                  <column datatype='string' name='id' ordinal='0' />
+                  <column datatype='string' name='name' ordinal='1' />
+                  <column datatype='integer' name='tilegramVa' ordinal='2' />
+                  <column datatype='spatial' name='Geometry' ordinal='3' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <mapsources>
+    <mapsource name='Tableau' />
+  </mapsources>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='title' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <highlight>
+        <color-one-way>
+          <field>[Sample - EU Superstore].[none:Country:nk]</field>
+          <field>[Sample - EU Superstore].[sum:Sales:qk]</field>
+          <field>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[my:Date:ok]</field>
+          <field>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:Borough:nk]</field>
+          <field>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:Crime_type:nk]</field>
+          <field>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[none:GridName:nk]</field>
+          <field>[federated.1cil50k16r0j6o1feqp6r0ey3ij7].[yr:Date:ok]</field>
+          <field>[federated.1xrkpt21i8djik111hfxv1st3v4d].[none:id:nk]</field>
+          <field>[federated.1xrkpt21i8djik111hfxv1st3v4d].[none:name:nk]</field>
+          <field>[federated.1xrkpt21i8djik111hfxv1st3v4d].[usr:Calculation_5073656843848998948:qk:2]</field>
+        </color-one-way>
+      </highlight>
+      <default-map-tool-selection tool='2' />
+    </viewpoint>
+    <simple-id uuid='{80842818-6CBE-4209-8167-3023B1C7062F}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='France Population' name='federated.1xrkpt21i8djik111hfxv1st3v4d' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Tableau' />
+      </mapsources>
+      <datasource-dependencies datasource='federated.1xrkpt21i8djik111hfxv1st3v4d'>
+        <column caption='Rank' datatype='integer' name='[Calculation_5073656843848998948]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='RANK(SUM([tilegramVa]))'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column datatype='spatial' name='[Geometry]' role='measure' type='nominal' />
+        <column-instance column='[Geometry]' derivation='Collect' name='[clct:Geometry:nk]' pivot='key' type='nominal' />
+        <column caption='Name' datatype='string' name='[name]' role='dimension' type='nominal' />
+        <column-instance column='[name]' derivation='None' name='[none:name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[tilegramVa]' derivation='Sum' name='[sum:tilegramVa:qk]' pivot='key' type='quantitative' />
+        <column caption='Population' datatype='integer' name='[tilegramVa]' role='measure' type='quantitative' />
+        <column-instance column='[Calculation_5073656843848998948]' derivation='User' name='[usr:Calculation_5073656843848998948:qk:2]' pivot='key' type='quantitative'>
+          <table-calc ordering-field='[federated.1xrkpt21i8djik111hfxv1st3v4d].[name]' ordering-type='Field' />
+        </column-instance>
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[federated.1xrkpt21i8djik111hfxv1st3v4d].[usr:Calculation_5073656843848998948:qk:2]' type='custom-interpolated'>
+          <color-palette custom='true' name='' type='ordered-diverging'>
+            <color>#080a10</color>
+            <color>#141823</color>
+            <color>#232937</color>
+            <color>#373e4d</color>
+            <color>#4e5665</color>
+            <color>#6a7180</color>
+            <color>#dcbeb7</color>
+            <color>#dfa394</color>
+            <color>#e28870</color>
+            <color>#e56b4b</color>
+            <color>#e94e25</color>
+          </color-palette>
+        </encoding>
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='in-tooltip' field='[federated.1xrkpt21i8djik111hfxv1st3v4d].[usr:Calculation_5073656843848998948:qk:2]' value='false' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='line-visibility' scope='cols' value='off' />
+        <format attr='line-visibility' scope='rows' value='off' />
+      </style-rule>
+      <style-rule element='map-layer'>
+        <format attr='enabled' id='9-dash-line' value='false' />
+        <format attr='enabled' id='9-dash-line-casing' value='false' />
+        <format attr='enabled' id='admin-0-boundaries' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-bg' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-bg-sub' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-dispute' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-dispute-sub' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-sub' value='false' />
+        <format attr='enabled' id='admin-0-label-1st-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-2nd-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-3rd-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-4th-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-5th-tier' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-lg-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-lg-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-md-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-md-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-sm-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-sm-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-supress' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-supress-bg' value='false' />
+        <format attr='enabled' id='admin-1-label-1st-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-2nd-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-3rd-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-4th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-5th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-6th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-7th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-8th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-9th-tier' value='false' />
+        <format attr='enabled' id='admin1-water-lines-usa-tableau' value='false' />
+        <format attr='enabled' id='aeroway-polygon' value='false' />
+        <format attr='enabled' id='aeroway-runway' value='false' />
+        <format attr='enabled' id='aeroway-taxiway' value='false' />
+        <format attr='enabled' id='background' value='false' />
+        <format attr='enabled' id='barrier_line-land-line' value='false' />
+        <format attr='enabled' id='barrier_line-land-polygon' value='false' />
+        <format attr='enabled' id='built-up-area' value='false' />
+        <format attr='enabled' id='industrial' value='false' />
+        <format attr='enabled' id='landcover_crop' value='false' />
+        <format attr='enabled' id='landcover_grass' value='false' />
+        <format attr='enabled' id='landcover_scrub' value='false' />
+        <format attr='enabled' id='landcover_wood' value='false' />
+        <format attr='enabled' id='national_park' value='false' />
+        <format attr='enabled' id='national_park-stroke' value='false' />
+        <format attr='enabled' id='parks' value='false' />
+        <format attr='enabled' id='parks-stroke' value='false' />
+        <format attr='enabled' id='pitch' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-1st-tier' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-2nd-tier' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-3rd-tier' value='false' />
+        <format attr='enabled' id='water' value='false' />
+        <format attr='enabled' id='waterway-river-canal' value='false' />
+      </style-rule>
+      <style-rule element='map'>
+        <format attr='washout' value='0.0' />
+        <format attr='map-snap-zoom' value='true' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <lod column='[federated.1xrkpt21i8djik111hfxv1st3v4d].[clct:Geometry:nk]' />
+          <lod column='[federated.1xrkpt21i8djik111hfxv1st3v4d].[none:name:nk]' />
+          <color column='[federated.1xrkpt21i8djik111hfxv1st3v4d].[usr:Calculation_5073656843848998948:qk:2]' />
+          <tooltip column='[federated.1xrkpt21i8djik111hfxv1st3v4d].[sum:tilegramVa:qk]' />
+          <geometry column='[federated.1xrkpt21i8djik111hfxv1st3v4d].[clct:Geometry:nk]' />
+        </encodings>
+        <customized-tooltip show-buttons='false'>
+          <formatted-text>
+            <run bold='true' fontsize='12'>&lt;[federated.1xrkpt21i8djik111hfxv1st3v4d].[none:name:nk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontcolor='#787878'>Population:&#9;</run>
+            <run bold='true'>&lt;[federated.1xrkpt21i8djik111hfxv1st3v4d].[sum:tilegramVa:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-labels-show' value='false' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#000000' />
+            <format attr='mark-transparency' value='206' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.1xrkpt21i8djik111hfxv1st3v4d].[Latitude (generated)]</rows>
+    <cols>[federated.1xrkpt21i8djik111hfxv1st3v4d].[Longitude (generated)]</cols>
+  </table>
+</bookmark>

@@ -1,0 +1,255 @@
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { Ok } from 'ts-results-es';
+
+import { upsertSheetIntoWorkbook } from '../../../desktop/metadata/sheets.js';
+import { sessionRouteState } from '../../../desktop/route/route-state.js';
+import { TemplateArtifactStore } from '../../../desktop/templates/templateArtifactStore.js';
+import type { ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
+import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getApplyWorksheetTool } from '../worksheet/applyWorksheet.js';
+import { getBuildWorksheetsFromTemplatesTool } from './buildWorksheetsFromTemplates.js';
+
+const BOOKMARK =
+  "<?xml version='1.0'?><bookmark version='10.1'>" +
+  "<datasources><datasource name='donor.ds' caption='Donor Secret'>" +
+  "<column name='[Donor Measure]' datatype='real' role='measure' type='quantitative'/>" +
+  "<column name='[Donor Dimension]' datatype='string' role='dimension' type='nominal'/>" +
+  '</datasource></datasources>' +
+  '<table><rows>[donor.ds].[none:Donor Dimension:nk]</rows>' +
+  '<cols>[donor.ds].[sum:Donor Measure:qk]</cols></table></bookmark>';
+
+const LIVE_WORKBOOK = `<?xml version='1.0'?><workbook>
+  <datasources><datasource name='target.ds'>
+    <column name='[Revenue]' datatype='real' role='measure' type='quantitative'/>
+    <column name='[Segment]' datatype='string' role='dimension' type='nominal'/>
+    <connection class='federated'><named-connections>
+      <named-connection name='textscan.0123456789abcdef'><connection class='textscan' /></named-connection>
+    </named-connections></connection>
+  </datasource></datasources>
+  <worksheets><worksheet name='Existing'><table /></worksheet></worksheets>
+  <windows><window class='worksheet' name='Existing' /></windows>
+</workbook>`;
+
+const EXACT_ARGS = {
+  session: '12345',
+  templateName: 'pulse-bar',
+  title: 'Revenue by Segment',
+  datasource: 'target.ds',
+  fieldMapping: {
+    field_base_1: '[target.ds].[none:Segment:nk]',
+    field_base_2: '[target.ds].[sum:Revenue:qk]',
+  },
+};
+
+describe('build-worksheets-from-templates', () => {
+  const originalTemplatesDir = process.env['TEMPLATES_DIR'];
+  let templatesDir: string;
+
+  beforeEach(() => {
+    templatesDir = mkdtempSync(join(process.cwd(), 'tmp-build-template-'));
+    writeFileSync(join(templatesDir, 'pulse-bar.tbm'), BOOKMARK);
+    process.env['TEMPLATES_DIR'] = templatesDir;
+    sessionRouteState.clear();
+  });
+
+  afterEach(() => {
+    if (originalTemplatesDir === undefined) delete process.env['TEMPLATES_DIR'];
+    else process.env['TEMPLATES_DIR'] = originalTemplatesDir;
+    rmSync(templatesDir, { recursive: true, force: true });
+    sessionRouteState.clear();
+  });
+
+  it('has the singular live-only caller-neutral input contract', () => {
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer());
+    expect(tool.name).toBe('build-worksheets-from-templates');
+    expect(tool.paramsSchema).toMatchObject({
+      session: expect.any(Object),
+      templateName: expect.any(Object),
+      title: expect.any(Object),
+      datasource: expect.any(Object),
+      fieldMapping: expect.any(Object),
+    });
+    expect(tool.paramsSchema).not.toHaveProperty('templates');
+    expect(tool.paramsSchema).not.toHaveProperty('workbookFile');
+    expect(tool.paramsSchema).not.toHaveProperty('confirmation');
+    expect(tool.annotations).toMatchObject({ readOnlyHint: true });
+  });
+
+  it('builds directly from exact Pulse inputs without list, route state, LLM state, or Desktop writes', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const applyWorkbookDocument = vi.fn();
+    const executor = {
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: LIVE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument,
+    } as unknown as ToolExecutor;
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-A',
+    });
+
+    const result = await callTool(tool, EXACT_ARGS, executor);
+    expect(result.isError).toBe(false);
+    const body = bodyOf(result);
+    expect(body).toMatchObject({
+      artifactId: 'artifact-A',
+      templateName: 'pulse-bar',
+      title: 'Revenue by Segment',
+      datasource: 'target.ds',
+      provenance: 'dev-override',
+      bindings: [
+        { slotId: 'field_base_1', field: '[target.ds].[none:Segment:nk]' },
+        { slotId: 'field_base_2', field: '[target.ds].[sum:Revenue:qk]' },
+      ],
+    });
+    expect(JSON.stringify(body)).not.toMatch(/expiresAt|confirm|workflow|<worksheet|formula/i);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    expect(sessionRouteState.get('12345')).toBeUndefined();
+
+    const reserved = store.reserve('artifact-A', '12345');
+    expect(reserved.ok).toBe(true);
+    if (!reserved.ok) return;
+    expect(reserved.artifact.worksheetXml).toContain('target.ds');
+    expect(reserved.artifact.worksheetXml).toContain('Revenue');
+    expect(reserved.artifact.worksheetXml).toContain('Segment');
+    expect(reserved.artifact.worksheetXml).not.toMatch(
+      /donor\.ds|Donor Measure|Donor Dimension|\{\{/,
+    );
+    expect(reserved.artifact.windowXml).toContain('Revenue by Segment');
+    expect(reserved.artifact.instanceId).toBe('inst-build');
+  });
+
+  it('keeps two previews built from the same live workbook independently available', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const ids = ['artifact-A', 'artifact-B'];
+    const executor = {
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: LIVE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    } as unknown as ToolExecutor;
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => ids.shift()!,
+    });
+
+    expect((await callTool(tool, EXACT_ARGS, executor)).isError).toBe(false);
+    expect(
+      (await callTool(tool, { ...EXACT_ARGS, title: 'Revenue by Segment 2' }, executor)).isError,
+    ).toBe(false);
+
+    expect(store.reserve('artifact-A', '12345').ok).toBe(true);
+    expect(store.reserve('artifact-B', '12345').ok).toBe(true);
+  });
+
+  it('applies A, then preserves A and an unrelated live edit while applying B', async () => {
+    const server = new DesktopMcpServer();
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const ids = ['artifact-A', 'artifact-B'];
+    const posts: string[] = [];
+    let liveXml = LIVE_WORKBOOK;
+    const executor = {
+      getWorkbookDocument: vi.fn(async () =>
+        Ok({
+          xml: liveXml,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(async (xml: string) => {
+        posts.push(xml);
+        liveXml = xml;
+        return Ok({ command_id: 'apply', status: 'completed', submitted_at: '' });
+      }),
+      executeCommand: vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'focus', status: 'completed', submitted_at: '' })),
+    } as unknown as ToolExecutor;
+    const buildTool = getBuildWorksheetsFromTemplatesTool(server, {
+      store,
+      createId: () => ids.shift()!,
+    });
+
+    expect((await callTool(buildTool, EXACT_ARGS, executor)).isError).toBe(false);
+    expect(
+      (await callTool(buildTool, { ...EXACT_ARGS, title: 'Revenue by Segment 2' }, executor))
+        .isError,
+    ).toBe(false);
+
+    const applyTool = getApplyWorksheetTool(server, { store });
+    const apply = await Provider.from(applyTool.callback);
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue(executor),
+    };
+    const appliedA = await apply(
+      {
+        session: '12345',
+        artifactId: 'artifact-A',
+        worksheetName: undefined,
+        worksheetFile: undefined,
+      },
+      extra,
+    );
+    expect(appliedA).toMatchObject({ isError: false });
+
+    liveXml = upsertSheetIntoWorkbook(
+      liveXml,
+      'Existing',
+      '<worksheet name="Existing"><table><rows>external-live-edit</rows></table></worksheet>',
+    );
+
+    expect(
+      (
+        await apply(
+          {
+            session: '12345',
+            artifactId: 'artifact-B',
+            worksheetName: undefined,
+            worksheetFile: undefined,
+          },
+          extra,
+        )
+      ).isError,
+    ).toBe(false);
+
+    expect(posts).toHaveLength(2);
+    expect(posts[1]).toContain('name="Revenue by Segment"');
+    expect(posts[1]).toContain('name="Revenue by Segment 2"');
+    expect(posts[1]).toContain('external-live-edit');
+  });
+});
+
+async function callTool(
+  tool: ReturnType<typeof getBuildWorksheetsFromTemplatesTool>,
+  args: typeof EXACT_ARGS,
+  executor: ToolExecutor,
+): Promise<CallToolResult> {
+  const callback = await Provider.from(tool.callback);
+  return await callback(args, {
+    ...getMockRequestHandlerExtra(),
+    getExecutor: vi.fn().mockResolvedValue(executor),
+  });
+}
+
+function bodyOf(result: CallToolResult): any {
+  invariant(result.content[0].type === 'text');
+  return JSON.parse(result.content[0].text);
+}

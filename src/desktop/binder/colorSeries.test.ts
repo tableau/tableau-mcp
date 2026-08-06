@@ -1,11 +1,81 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { rewriteFieldReferences } from '../templates/fieldReferenceRewriter.js';
+import { getRuntimeTemplateSnapshot } from '../templates/runtimeTemplateCatalog.js';
 import { bindTemplate, classifyNoLlm, summarizeSchema } from './binder.js';
-import { loadManifests } from './manifest.js';
+import type { Family, RuntimeTemplateDescriptor, SlotKind, SlotSpec } from './manifest-types.js';
 
-const manifests = loadManifests();
+function slot(
+  slot_id: string,
+  template_field: string,
+  derivation: SlotSpec['derivation'],
+  role: string[],
+  kind: SlotKind,
+  required = true,
+): SlotSpec {
+  return { slot_id, template_field, derivation, role, kind, bindable: true, required };
+}
+
+function descriptor(
+  template: string,
+  family: Family,
+  intent_keywords: string[],
+  slots: SlotSpec[],
+): RuntimeTemplateDescriptor {
+  return {
+    template,
+    family,
+    fast_path_eligible: true,
+    fast_path_blockers: [],
+    intent_keywords,
+    description: `${family} test descriptor`,
+    slots,
+    calcs: [],
+  };
+}
+
+const trendLine = descriptor(
+  'trend-line-chart',
+  'time-series',
+  ['line', 'trend', 'over-time', 'monthly', 'active-users', 'last-12-months', 'mau'],
+  [
+    {
+      ...slot('order_date', '{{field_base_1}}', 'tmn', ['cols'], 'temporal'),
+      temporal_from_string: true,
+    },
+    slot('sales', '{{field_base_2}}', 'sum', ['rows'], 'quantitative'),
+    slot('facet_col', '{{field_base_3}}', 'none', ['cols'], 'categorical', false),
+    slot('color_series', '{{field_base_4}}', 'none', ['color'], 'categorical', false),
+  ],
+);
+const magnitudeBar = descriptor(
+  'magnitude-simple-bar',
+  'magnitude',
+  ['magnitude', 'absolute'],
+  [
+    slot('category', 'Category', 'none', ['rows'], 'categorical'),
+    slot('measure', 'Sales', 'sum', ['cols'], 'quantitative'),
+  ],
+);
+const waterfall = descriptor(
+  'part-to-whole-waterfall',
+  'part-to-whole',
+  ['waterfall', 'bridge'],
+  [
+    slot('profit', 'Profit', 'sum', ['rows'], 'quantitative'),
+    slot('sub_category', 'Sub-Category', 'none', ['cols'], 'categorical'),
+  ],
+);
+const symbolMap = descriptor(
+  'spatial-symbol-map',
+  'spatial',
+  ['symbol-map', 'map'],
+  [
+    slot('country', 'Country/Region', 'none', ['lod'], 'geo'),
+    slot('sales', 'Sales', 'sum', ['size'], 'quantitative'),
+  ],
+);
+const manifests = new Map(
+  [trendLine, magnitudeBar, waterfall, symbolMap].map((manifest) => [manifest.template, manifest]),
+);
 
 const workbookXml = (datasource: string, columns: string): string => `<?xml version='1.0'?>
 <workbook>
@@ -39,61 +109,6 @@ const activeUsersXml = (
       column('churned_users', 'measure', 'quantitative', 'integer'),
     ].join('\n'),
   );
-
-const PRE_SERIES_SPLIT_TREND_TEMPLATE = `<workbook>
-  <worksheets>
-    <worksheet name='{{TITLE}}'>
-  <table>
-    <view>
-      <datasources>
-        <datasource name='{{DATASOURCE}}' />
-      </datasources>
-      <datasource-dependencies datasource='{{DATASOURCE}}'>
-        <column datatype='date' name='[{{field_base_1}}]' role='dimension' type='ordinal' />
-        <column datatype='real' name='[{{field_base_2}}]' role='measure' type='quantitative' />
-        <column datatype='string' name='[{{field_base_3}}]' role='dimension' type='nominal' />
-        <column-instance column='[{{field_base_2}}]' derivation='Sum' name='[sum:{{field_base_2}}:qk]' pivot='key' type='quantitative' />
-        <column-instance column='[{{field_base_1}}]' derivation='Month-Trunc' name='[tmn:{{field_base_1}}:qk]' pivot='key' type='quantitative' />
-      </datasource-dependencies>
-      <aggregation value='true' />
-    </view>
-    <style>
-      <style-rule element='axis'>
-        <format attr='title' class='0' field='[{{DATASOURCE}}].[tmn:{{field_base_1}}:qk]' scope='cols' value='' />
-        <format attr='subtitle' class='0' field='[{{DATASOURCE}}].[tmn:{{field_base_1}}:qk]' scope='cols' value='' />
-        <format attr='auto-subtitle' class='0' field='[{{DATASOURCE}}].[tmn:{{field_base_1}}:qk]' scope='cols' value='true' />
-      </style-rule>
-    </style>
-    <panes>
-      <pane selection-relaxation-option='selection-relaxation-disallow'>
-        <view>
-          <breakdown value='auto' />
-        </view>
-        <mark class='Automatic' />
-        <mark-sizing mark-sizing-setting='marks-scaling-off' />
-        <style>
-          <style-rule element='mark'>
-            <format attr='size' value='1.3733149766921997' />
-          </style-rule>
-        </style>
-      </pane>
-    </panes>
-    <rows>[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]</rows>
-    <cols>[{{DATASOURCE}}].[tmn:{{field_base_1}}:qk]</cols>
-  </table>
-  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
-</worksheet>
-  </worksheets>
-  <windows>
-    <window class='worksheet' name='{{TITLE}}'>
-  <viewpoint>
-    <zoom type='entire-view' />
-  </viewpoint>
-  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
-</window>
-  </windows>
-</workbook>
-`;
 
 describe('classifyNoLlm — e4 trend color series', () => {
   it('auto-colors monthly active users by the sole spare categorical', () => {
@@ -153,25 +168,30 @@ describe('classifyNoLlm — e4 trend color series', () => {
     ]);
   });
 
-  it('renders an unbound color series byte-identically to the pre-series-split XML', () => {
-    const manifest = manifests.get('trend-line-chart')!;
-    expect(manifest.slots.some((slot) => slot.slot_id === 'color_series')).toBe(true);
-    const currentTemplate = readFileSync(
-      join(process.cwd(), 'src/desktop/data/templates/trend-line-chart.xml'),
-      'utf-8',
+  it('prunes an unbound color series from the runtime trend XML', () => {
+    const snapshot = getRuntimeTemplateSnapshot('trend-line-chart')!;
+    const colorSlot = snapshot.descriptor.slots.find((slot) => slot.role.includes('color'))!;
+    const temporalSlot = snapshot.descriptor.slots.find((slot) => slot.kind === 'temporal')!;
+    const measureSlot = snapshot.descriptor.slots.find(
+      (slot) => slot.kind === 'quantitative' && slot.role.includes('rows'),
+    )!;
+    const templateSlots = snapshot.descriptor.slots.map((slot) =>
+      slot === colorSlot ? { ...slot, required: false } : slot,
     );
-    const mapping = {
-      '{{field_base_1}}': '[Active Users].[tmn:month:qk]',
-      '{{field_base_2}}': '[Active Users].[sum:mau:qk]',
-    };
-    const rewrite = (template: string): string =>
-      rewriteFieldReferences(template, mapping, 'Active Users', undefined, {
-        templateSlots: manifest.slots,
-      });
+    const rendered = rewriteFieldReferences(
+      snapshot.xml,
+      {
+        [temporalSlot.template_field]: '[Active Users].[tmn:month:qk]',
+        [measureSlot.template_field]: '[Active Users].[sum:mau:qk]',
+      },
+      'Active Users',
+      undefined,
+      { templateSlots },
+    );
 
-    const rendered = rewrite(currentTemplate);
     expect(rendered).not.toContain('<color');
-    expect(rendered).toBe(rewrite(PRE_SERIES_SPLIT_TREND_TEMPLATE));
+    expect(rendered).toContain('[Active Users].[tmn:month:qk]');
+    expect(rendered).toContain('[Active Users].[sum:mau:qk]');
   });
 
   it('preserves e1, m1, s7, and a trend-line one-shot', async () => {

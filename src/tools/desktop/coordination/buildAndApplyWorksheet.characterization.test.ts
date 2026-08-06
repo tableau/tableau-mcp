@@ -20,8 +20,7 @@ import { getBuildAndApplyWorksheetTool } from './buildAndApplyWorksheet.js';
 vi.mock('../../../desktop/commands/workbook/loadWorksheetXml.js');
 vi.mock('../../../desktop/metadata/index.js');
 vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
-vi.mock('../../../desktop/templates/templateColumnRequirements.js');
-vi.mock('../../../desktop/templates/templatePath.js');
+vi.mock('../../../desktop/templates/runtimeTemplateCatalog.js');
 vi.mock('fs');
 
 import { existsSync, readFileSync } from 'fs';
@@ -29,8 +28,8 @@ import { existsSync, readFileSync } from 'fs';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { rewriteFieldReferencesWithDiagnostics } from '../../../desktop/templates/fieldReferenceRewriter.js';
-import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
-import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import { getRuntimeTemplateSnapshot } from '../../../desktop/templates/runtimeTemplateCatalog.js';
+import type { TemplateRuntimeSnapshot } from '../../../desktop/templates/templateRuntimeSnapshot.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const SESSION = 'session-1';
@@ -39,6 +38,49 @@ const SESSION = 'session-1';
 // and the (mocked) apply step succeed.
 const WORKSHEET_OUTPUT =
   '<workbook><worksheets><worksheet name="TEMPLATE"><table/></worksheet></worksheets></workbook>';
+
+function snapshot(
+  slots: TemplateRuntimeSnapshot['descriptor']['slots'],
+  xml = WORKSHEET_OUTPUT,
+): TemplateRuntimeSnapshot {
+  return {
+    template: 'chart',
+    sourceHash: 'characterization-runtime-snapshot',
+    descriptor: { template: 'chart', slots, calcs: [] },
+    xml,
+    eligibility: { pass1_eligible: true, pass1_blockers: [] },
+  };
+}
+
+const DEFAULT_RUNTIME_SNAPSHOT = snapshot([
+  {
+    slot_id: 'dimension_1',
+    template_field: 'Dim1',
+    derivation: 'none',
+    role: ['rows'],
+    kind: 'categorical',
+    bindable: true,
+    required: false,
+  },
+  {
+    slot_id: 'measure_1',
+    template_field: 'M1',
+    derivation: 'sum',
+    role: ['cols'],
+    kind: 'quantitative',
+    bindable: true,
+    required: false,
+  },
+  {
+    slot_id: 'measure_2',
+    template_field: 'M2',
+    derivation: 'sum',
+    role: ['cols'],
+    kind: 'quantitative',
+    bindable: true,
+    required: false,
+  },
+]);
 
 const WORKBOOK_WITH_CAPTION = `<?xml version="1.0"?>
 <workbook>
@@ -56,13 +98,15 @@ const FIELD_LIBRARY = [
 ];
 
 function field(columnRef: string, role: string, datatype: string, type: string): any {
+  const match = columnRef.match(/^\[([^\]]+)\]\.\[([^:]+):(.+):([^:\]]+)\]$/);
+  if (!match) throw new Error(`invalid test column_ref: ${columnRef}`);
   return {
     column_ref: columnRef,
     role,
-    datasource: columnRef.match(/^\[([^\]]+)\]\./)?.[1] ?? 'Sample Superstore',
-    columnName: columnRef,
-    columnInstanceName: columnRef,
-    derivation: 'None',
+    datasource: match[1],
+    columnName: `[${match[3]}]`,
+    columnInstanceName: `[${match[2]}:${match[3]}:${match[4]}]`,
+    derivation: match[2] === 'none' ? 'None' : 'Sum',
     type,
     datatype,
   };
@@ -73,14 +117,8 @@ function makeExtra(workbookXml = WORKBOOK_WITH_CAPTION): TableauDesktopRequestHa
   extra.getExecutor = vi.fn().mockResolvedValue({});
   vi.mocked(existsSync).mockReturnValue(true);
   vi.mocked(readFileSync).mockReturnValue(workbookXml as any);
-  vi.mocked(readTemplate).mockReturnValue('<template/>');
+  vi.mocked(getRuntimeTemplateSnapshot).mockReturnValue(DEFAULT_RUNTIME_SNAPSHOT);
   vi.mocked(listAvailableFields).mockReturnValue(FIELD_LIBRARY as any);
-  // Default: 1 dimension slot + 2 measure slots.
-  vi.mocked(getTemplateColumnRequirements).mockReturnValue([
-    { name: 'Dim1', role: 'dimension', datatype: 'string', type: 'nominal' },
-    { name: 'M1', role: 'measure', datatype: 'integer', type: 'quantitative' },
-    { name: 'M2', role: 'measure', datatype: 'real', type: 'quantitative' },
-  ]);
   vi.mocked(rewriteFieldReferencesWithDiagnostics).mockReturnValue({
     xml: WORKSHEET_OUTPUT,
     droppedOptionalElements: [],
@@ -225,19 +263,17 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
     });
   });
 
-  it('CHARACTERIZATION: omits fieldMetadata for a mapped field missing datatype or type', async () => {
-    // CHARACTERIZATION: current behavior — metadata is written only when BOTH
-    // datatype and type are truthy, but the field is still added to the mapping. So
-    // a field with blank metadata is mapped WITHOUT a corresponding metadata entry.
+  it('CHARACTERIZATION: preserves incomplete metadata for a mapped field', async () => {
+    // The TBM bind result owns metadata now. It preserves the schema values for every
+    // consumed field, including a blank datatype, rather than dropping the entry.
     const extra = makeExtra();
     vi.mocked(listAvailableFields).mockReturnValue([
       field('[DS].[none:Region:nk]', 'dimension', 'string', 'nominal'),
-      field('[DS].[sum:Sales:qk]', 'measure', '', ''),
+      field('[DS].[sum:Sales:qk]', 'measure', '', 'quantitative'),
     ] as any);
-    vi.mocked(getTemplateColumnRequirements).mockReturnValue([
-      { name: 'Dim1', role: 'dimension', datatype: 'string', type: 'nominal' },
-      { name: 'M1', role: 'measure', datatype: 'integer', type: 'quantitative' },
-    ]);
+    vi.mocked(getRuntimeTemplateSnapshot).mockReturnValue(
+      snapshot(DEFAULT_RUNTIME_SNAPSHOT.descriptor.slots.slice(0, 2)),
+    );
     const captured = captureCall();
 
     await getResult(
@@ -249,7 +285,10 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
     );
 
     expect(captured.mapping).toHaveProperty('M1', '[DS].[sum:Sales:qk]');
-    expect(captured.metadata).not.toHaveProperty('M1');
+    expect(captured.metadata).toHaveProperty('M1', {
+      datatype: '',
+      type: 'quantitative',
+    });
     expect(captured.metadata).toHaveProperty('Dim1');
   });
 
@@ -313,7 +352,7 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
 
     const extra = makeExtra();
     // Feed the calc-bearing template and drive the REAL rewriter.
-    vi.mocked(readTemplate).mockReturnValue(CALC_TEMPLATE);
+    vi.mocked(getRuntimeTemplateSnapshot).mockReturnValue(snapshot([], CALC_TEMPLATE));
     vi.mocked(readFileSync).mockReturnValue(WORKBOOK_WITH_CAPTION as any);
     vi.mocked(rewriteFieldReferencesWithDiagnostics).mockImplementation(
       actual.rewriteFieldReferencesWithDiagnostics,

@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildLlmInput } from './binder.js';
-import type { Family, SlotKind, TemplateManifest } from './manifest-types.js';
+import type { Family, RuntimeTemplateDescriptor, SlotKind } from './manifest-types.js';
 import type { SchemaField, SchemaSummary } from './schema-summary.js';
 
 // ── Budget justification ─────────────────────────────────────────────
@@ -49,16 +49,12 @@ function synthManifest(
   family: Family,
   keyword: string,
   slots: Array<{ slot_id: string; kind: SlotKind }>,
-): TemplateManifest {
+): RuntimeTemplateDescriptor {
   return {
     template,
     family,
-    readiness: 'GREEN',
     fast_path_eligible: true,
     fast_path_blockers: [],
-    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-    datasource_placeholder: true,
-    placeholders: ['TITLE', 'DATASOURCE'],
     intent_keywords: [keyword],
     description: `${family} chart`,
     slots: slots.map((s) => ({
@@ -71,12 +67,11 @@ function synthManifest(
       required: true,
     })),
     calcs: [],
-    hazards: [],
   };
 }
 
 /** A single ranking-family template requiring one categorical + one quantitative slot. */
-function barTemplate(): Map<string, TemplateManifest> {
+function barTemplate(): Map<string, RuntimeTemplateDescriptor> {
   return new Map([
     [
       'ranking-ordered-bar',
@@ -89,7 +84,7 @@ function barTemplate(): Map<string, TemplateManifest> {
 }
 
 /** A template requiring ONLY a quantitative slot (to isolate rank-2 kind compat). */
-function quantOnlyTemplate(): Map<string, TemplateManifest> {
+function quantOnlyTemplate(): Map<string, RuntimeTemplateDescriptor> {
   return new Map([
     [
       'magnitude-single-measure',

@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { bindExplicitTemplate, schemaSummaryFromAvailableFields } from './explicit-bind.js';
-import { loadManifests } from './manifest.js';
-import type { TemplateManifest } from './manifest-types.js';
+import type { RuntimeTemplateDescriptor, TemplateBindingContract } from './manifest-types.js';
 import type { SchemaField, SchemaSummary } from './schema-summary.js';
 
 function field(p: {
@@ -12,6 +11,8 @@ function field(p: {
   datatype: string;
   datasource?: string;
   refDerivation?: string;
+  semanticRole?: string;
+  isGroup?: boolean;
 }): SchemaField {
   const suffix = p.type === 'quantitative' ? 'qk' : p.type === 'ordinal' ? 'ok' : 'nk';
   const deriv = p.refDerivation ?? (p.role === 'measure' ? 'sum' : 'none');
@@ -22,8 +23,10 @@ function field(p: {
     role: p.role,
     type: p.type,
     datatype: p.datatype,
+    ...(p.semanticRole ? { semanticRole: p.semanticRole } : {}),
     datasource,
     isAggregated: false,
+    ...(p.isGroup ? { isGroup: true } : {}),
     column_ref: `[${datasource}].[${deriv}:${p.name}:${suffix}]`,
   };
 }
@@ -43,12 +46,8 @@ const SUMMARY: SchemaSummary = {
 const LATLON = {
   template: 'x-latlon',
   family: 'spatial',
-  readiness: 'YELLOW',
   fast_path_eligible: false,
   fast_path_blockers: [],
-  portability_evidence: { fixture_bind: true, render_verified: 'none' },
-  datasource_placeholder: true,
-  placeholders: ['TITLE', 'DATASOURCE'],
   intent_keywords: ['latlon'],
   description: 'test lat/lon map',
   slots: [
@@ -90,13 +89,198 @@ const LATLON = {
     },
   ],
   calcs: [],
-  hazards: [],
-} as unknown as TemplateManifest;
+} satisfies RuntimeTemplateDescriptor;
 
-const manifests = (m: TemplateManifest): Map<string, TemplateManifest> =>
+const manifests = (m: RuntimeTemplateDescriptor): Map<string, RuntimeTemplateDescriptor> =>
   new Map([[m.template, m]]);
 
+const SCATTER = {
+  template: 'correlation-scatter-plot-chart',
+  family: 'correlation',
+  fast_path_eligible: true,
+  fast_path_blockers: [],
+  intent_keywords: ['scatter', 'correlation', 'vs'],
+  description: 'two measures by a categorical detail grain',
+  slots: [
+    {
+      slot_id: 'sales',
+      template_field: 'Sales',
+      derivation: 'sum',
+      role: ['cols', 'formula-input'],
+      kind: 'quantitative',
+      bindable: true,
+      required: true,
+    },
+    {
+      slot_id: 'profit',
+      template_field: 'Profit',
+      derivation: 'sum',
+      role: ['rows', 'formula-input'],
+      kind: 'quantitative',
+      bindable: true,
+      required: true,
+    },
+    {
+      slot_id: 'customer_name',
+      template_field: 'Customer Name',
+      derivation: 'none',
+      role: ['detail'],
+      kind: 'categorical',
+      bindable: true,
+      required: false,
+    },
+    {
+      slot_id: 'region',
+      template_field: 'Region',
+      derivation: 'none',
+      role: ['detail'],
+      kind: 'categorical',
+      bindable: true,
+      required: true,
+    },
+  ],
+  calcs: [],
+} satisfies RuntimeTemplateDescriptor;
+const SCATTER_MANIFESTS = manifests(SCATTER);
+
 describe('bindExplicitTemplate', () => {
+  it('preserves an exact qualified ref when the same field name exists in two datasources', () => {
+    const contract: TemplateBindingContract = {
+      template: 'duplicate-region',
+      slots: [
+        {
+          slot_id: 'region',
+          template_field: 'Region',
+          derivation: 'none',
+          role: ['rows'],
+          kind: 'categorical',
+          bindable: true,
+          required: true,
+        },
+      ],
+      calcs: [],
+    };
+    const schema: SchemaSummary = {
+      datasource: 'DS_A',
+      fields: [
+        field({
+          name: 'Region',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          datasource: 'DS_A',
+        }),
+        field({
+          name: 'Region',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          datasource: 'DS_B',
+        }),
+      ],
+    };
+
+    const result = bindExplicitTemplate(
+      contract.template,
+      { region: '[DS_B].[none:Region:nk]' },
+      schema,
+      { contract, datasource: 'DS_A' },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.datasource).toBe('DS_B');
+    expect(result.fieldMapping).toEqual({ Region: '[DS_B].[none:Region:nk]' });
+
+    const orderedResult = bindExplicitTemplate(
+      contract.template,
+      ['[DS_B].[none:Region:nk]'],
+      schema,
+      { contract, datasource: 'DS_A' },
+    );
+    expect(orderedResult.ok).toBe(true);
+    if (!orderedResult.ok) return;
+    expect(orderedResult.datasource).toBe('DS_B');
+    expect(orderedResult.fieldMapping).toEqual({ Region: '[DS_B].[none:Region:nk]' });
+  });
+
+  it.each([
+    ['ctd', 'qk'],
+    ['ctd', 'ok'],
+    ['cnt', 'qk'],
+    ['attr', 'nk'],
+    ['attr', 'ok'],
+    ['attr', 'qk'],
+  ] as const)(
+    'allows %s over a string dimension and preserves the authored %s output role',
+    (derivation, instanceRole) => {
+      const contract: TemplateBindingContract = {
+        template: `string-${derivation}-${instanceRole}`,
+        slots: [
+          {
+            slot_id: 'field_base_1',
+            template_field: '{{field_base_1}}',
+            derivation,
+            instance_role: instanceRole,
+            role: ['rows'],
+            kind: 'categorical',
+            bindable: true,
+            required: true,
+          },
+        ],
+        calcs: [],
+      };
+      const schema: SchemaSummary = {
+        datasource: 'Superstore',
+        fields: [field({ name: 'Movie', role: 'dimension', type: 'nominal', datatype: 'string' })],
+      };
+
+      const result = bindExplicitTemplate(
+        contract.template,
+        { field_base_1: '[Superstore].[none:Movie:nk]' },
+        schema,
+        { contract, datasource: 'Superstore' },
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.fieldMapping).toEqual({
+        '{{field_base_1}}': `[Superstore].[${derivation}:Movie:${instanceRole}]`,
+      });
+    },
+  );
+
+  it('binds a neutral runtime contract without synthesizing manifest policy', () => {
+    const contract: TemplateBindingContract = {
+      template: LATLON.template,
+      slots: LATLON.slots,
+      calcs: [],
+    };
+    const result = bindExplicitTemplate(
+      contract.template,
+      {
+        longitude: '[Superstore].[sum:Longitude:qk]',
+        latitude: '[Superstore].[sum:Latitude:qk]',
+        detail: '[Superstore].[none:City:nk]',
+        measure: '[Superstore].[sum:Sales:qk]',
+      },
+      SUMMARY,
+      { contract, datasource: 'Superstore' },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.passthrough).toBe(false);
+      expect(result.warnings).toEqual([]);
+      expect(result.fieldMapping).toEqual({
+        Longitude: '[Superstore].[avg:Longitude:qk]',
+        Latitude: '[Superstore].[avg:Latitude:qk]',
+        Detail: '[Superstore].[none:City:nk]',
+        Measure: '[Superstore].[sum:Sales:qk]',
+      });
+    }
+  });
+
   it('emits manifest derivations over caller SUM refs', () => {
     const result = bindExplicitTemplate(
       'x-latlon',
@@ -120,46 +304,16 @@ describe('bindExplicitTemplate', () => {
     }
   });
 
-  it('passes through unchanged with warning when the template has no manifest', () => {
+  it('fails closed when no TBM-derived contract is supplied', () => {
     const mapping = { Sales: '[Superstore].[sum:Sales:qk]' };
     const result = bindExplicitTemplate('missing-template', mapping, SUMMARY, {
       manifests: new Map(),
       datasource: 'Superstore',
     });
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.passthrough).toBe(true);
-      expect(result.fieldMapping).toEqual(mapping);
-      expect(result.warnings.some((w) => w.includes('no-manifest'))).toBe(true);
-    }
-  });
-
-  it('surfaces ineligible render evidence and hazards as warnings', () => {
-    const hazardous = {
-      ...LATLON,
-      hazards: [{ code: 'coordinate-slot-affinity-unproven', detail: 'coordinate slots can swap' }],
-    } as unknown as TemplateManifest;
-
-    const result = bindExplicitTemplate(
-      'x-latlon',
-      [
-        '[Superstore].[sum:Longitude:qk]',
-        '[Superstore].[sum:Latitude:qk]',
-        '[Superstore].[none:City:nk]',
-        '[Superstore].[sum:Sales:qk]',
-      ],
-      SUMMARY,
-      { manifests: manifests(hazardous) },
-    );
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.warnings.some((w) => w.includes('fast_path_eligible:false'))).toBe(true);
-      expect(result.warnings.some((w) => w.includes('render_verified:none'))).toBe(true);
-      expect(
-        result.warnings.some((w) => w.includes('hazard:coordinate-slot-affinity-unproven')),
-      ).toBe(true);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.blockers).toEqual([expect.objectContaining({ code: 'template-not-found' })]);
     }
   });
 
@@ -178,6 +332,179 @@ describe('bindExplicitTemplate', () => {
     }
   });
 
+  it('does not auto-fill omitted slots from values under unknown fieldMapping keys', () => {
+    const result = bindExplicitTemplate(
+      'x-latlon',
+      {
+        Longitude: '[Superstore].[sum:Longitude:qk]',
+        notLatitude: '[Superstore].[sum:Latitude:qk]',
+        notDetail: '[Superstore].[none:City:nk]',
+        notMeasure: '[Superstore].[sum:Sales:qk]',
+      },
+      SUMMARY,
+      { manifests: manifests(LATLON) },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.blockers.filter((blocker) => blocker.code === 'missing-required-slot')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ slot_id: 'latitude' }),
+          expect.objectContaining({ slot_id: 'detail' }),
+          expect.objectContaining({ slot_id: 'measure' }),
+        ]),
+      );
+    }
+  });
+
+  it('ranks a matching semantic geo concept ahead of schema order for ordered input', () => {
+    const geoManifest = {
+      ...LATLON,
+      template: 'x-city-map',
+      slots: [
+        {
+          slot_id: 'city',
+          template_field: '{{field_base_1}}',
+          derivation: 'none',
+          role: ['lod'],
+          kind: 'geo',
+          bindable: true,
+          required: true,
+        },
+      ],
+    } as unknown as RuntimeTemplateDescriptor;
+    const geoSummary: SchemaSummary = {
+      datasource: 'Superstore',
+      fields: [
+        field({
+          name: 'Country',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          semanticRole: '[Country].[Name]',
+        }),
+        field({
+          name: 'City',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          semanticRole: '[City].[Name]',
+        }),
+      ],
+    };
+
+    const result = bindExplicitTemplate(
+      'x-city-map',
+      geoSummary.fields.map((candidate) => candidate.column_ref),
+      geoSummary,
+      { manifests: manifests(geoManifest) },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.fieldMapping['{{field_base_1}}']).toBe('[Superstore].[none:City:nk]');
+      expect(result.fieldMetadata['{{field_base_1}}']?.semanticRole).toBe('[City].[Name]');
+    }
+  });
+
+  it('skips dataset-specific groups during ordered auto-mapping', () => {
+    const oneCategory = {
+      ...LATLON,
+      template: 'x-category',
+      slots: [
+        {
+          slot_id: 'category',
+          template_field: '{{field_base_1}}',
+          derivation: 'none',
+          role: ['rows'],
+          kind: 'categorical',
+          bindable: true,
+          required: true,
+        },
+      ],
+    } as unknown as RuntimeTemplateDescriptor;
+    const group = field({
+      name: 'Region Group',
+      role: 'dimension',
+      type: 'nominal',
+      datatype: 'string',
+      isGroup: true,
+    });
+    const region = field({
+      name: 'Region',
+      role: 'dimension',
+      type: 'nominal',
+      datatype: 'string',
+    });
+    const schema = { datasource: 'Superstore', fields: [group, region] };
+
+    const result = bindExplicitTemplate(
+      'x-category',
+      [group.column_ref, region.column_ref],
+      schema,
+      { manifests: manifests(oneCategory) },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.fieldMapping['{{field_base_1}}']).toBe('[Superstore].[none:Region:nk]');
+    }
+  });
+
+  it('does not count groups when reserving the only usable category for a required slot', () => {
+    const optionalThenRequired = {
+      ...LATLON,
+      template: 'x-category-reservation',
+      slots: [
+        {
+          slot_id: 'optional_detail',
+          template_field: '{{field_base_1}}',
+          derivation: 'none',
+          role: ['detail'],
+          kind: 'categorical',
+          bindable: true,
+          required: false,
+        },
+        {
+          slot_id: 'required_axis',
+          template_field: '{{field_base_2}}',
+          derivation: 'none',
+          role: ['rows'],
+          kind: 'categorical',
+          bindable: true,
+          required: true,
+        },
+      ],
+    } as unknown as RuntimeTemplateDescriptor;
+    const group = field({
+      name: 'Region Group',
+      role: 'dimension',
+      type: 'nominal',
+      datatype: 'string',
+      isGroup: true,
+    });
+    const region = field({
+      name: 'Region',
+      role: 'dimension',
+      type: 'nominal',
+      datatype: 'string',
+    });
+    const schema = { datasource: 'Superstore', fields: [group, region] };
+
+    const result = bindExplicitTemplate(
+      'x-category-reservation',
+      [group.column_ref, region.column_ref],
+      schema,
+      { manifests: manifests(optionalThenRequired) },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.fieldMapping).not.toHaveProperty('{{field_base_1}}');
+      expect(result.fieldMapping['{{field_base_2}}']).toBe('[Superstore].[none:Region:nk]');
+    }
+  });
+
   it('warns which fields landed on swappable categorical slots', () => {
     const scatterSummary: SchemaSummary = {
       datasource: 'Superstore',
@@ -193,7 +520,7 @@ describe('bindExplicitTemplate', () => {
       'correlation-scatter-plot-chart',
       scatterSummary.fields.map((candidate) => candidate.column_ref),
       scatterSummary,
-      { manifests: loadManifests() },
+      { manifests: SCATTER_MANIFESTS },
     );
 
     expect(result.ok).toBe(true);
@@ -224,7 +551,7 @@ describe('bindExplicitTemplate', () => {
       'correlation-scatter-plot-chart',
       scatterSummary.fields.map((candidate) => candidate.column_ref),
       scatterSummary,
-      { manifests: loadManifests() },
+      { manifests: SCATTER_MANIFESTS },
     );
 
     expect(result.ok).toBe(true);
@@ -252,7 +579,7 @@ describe('bindExplicitTemplate', () => {
       'correlation-scatter-plot-chart',
       scatterSummary.fields.map((candidate) => candidate.column_ref),
       scatterSummary,
-      { manifests: loadManifests() },
+      { manifests: SCATTER_MANIFESTS },
     );
 
     expect(result.ok).toBe(true);
@@ -284,7 +611,7 @@ describe('bindExplicitTemplate', () => {
       'correlation-scatter-plot-chart',
       scatterSummary.fields.map((candidate) => candidate.column_ref),
       scatterSummary,
-      { manifests: loadManifests() },
+      { manifests: SCATTER_MANIFESTS },
     );
 
     expect(result.ok).toBe(true);
@@ -334,7 +661,7 @@ describe('bindExplicitTemplate', () => {
           qualified_key_required: true,
         },
       ],
-    } as unknown as TemplateManifest;
+    } as unknown as RuntimeTemplateDescriptor;
 
     const result = bindExplicitTemplate(
       'x-highlight',

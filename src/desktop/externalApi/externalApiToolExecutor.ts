@@ -4,10 +4,12 @@ import { z } from 'zod';
 import { log } from '../../logging/logger.js';
 import { desktopCallTimeoutMessage, isDesktopCallTimeout } from '../callDeadline.js';
 import {
+  ApplyWorkbookDocumentOptions,
   ExecuteCommandArgs,
   ExecuteCommandError,
   ExecuteCommandResult,
   ToolExecutor,
+  WorkbookDocument as ToolWorkbookDocument,
 } from '../toolExecutor/toolExecutor.js';
 import {
   noInstanceFoundMessage,
@@ -63,6 +65,7 @@ export type ExternalApiToolExecutorDeps = {
 };
 
 type NoInstance = { type: 'no-instance'; pinnedPid?: number };
+type InstanceMismatch = { type: 'instance-mismatch'; expected: string; actual: string };
 
 /** Normalized shape shared by document + invokeCommand responses. */
 type RawOutcome = {
@@ -204,17 +207,23 @@ export class ExternalApiToolExecutor extends ToolExecutor {
 
   async getWorkbookDocument(
     signal: AbortSignal,
-  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.getWorkbookDocument(signal));
+  ): Promise<Result<ToolWorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi(async (client) => {
+      const result = await client.getWorkbookDocument(signal);
+      if (result.isErr()) return result;
+      return Ok({ ...result.value, instanceId: client.instanceId });
+    });
   }
 
   async applyWorkbookDocument(
     xml: string,
     signal: AbortSignal,
+    options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
       (client) => client.applyWorkbookDocument(xml, signal),
       'apply-workbook-document',
+      options,
     );
   }
 
@@ -260,8 +269,20 @@ export class ExternalApiToolExecutor extends ToolExecutor {
   private async applyDocument(
     call: (client: ExternalApiClient) => Promise<Result<OperationEnvelope, ExternalApiError>>,
     command: string,
+    options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     const outcomeResult = await this.withRescan(async (client) => {
+      if (
+        options?.expectedInstanceId !== undefined &&
+        client.instanceId !== options.expectedInstanceId
+      ) {
+        return Err({
+          type: 'instance-mismatch' as const,
+          expected: options.expectedInstanceId,
+          actual: client.instanceId,
+        });
+      }
+      options?.onDispatch?.();
       const result = await call(client);
       if (result.isErr()) {
         return Err(result.error);
@@ -466,8 +487,10 @@ export class ExternalApiToolExecutor extends ToolExecutor {
   }
 
   private async withRescan(
-    op: (client: ExternalApiClient) => Promise<Result<RawOutcome, ExternalApiError>>,
-  ): Promise<Result<RawOutcome, ExternalApiError | NoInstance>> {
+    op: (
+      client: ExternalApiClient,
+    ) => Promise<Result<RawOutcome, ExternalApiError | InstanceMismatch>>,
+  ): Promise<Result<RawOutcome, ExternalApiError | NoInstance | InstanceMismatch>> {
     const first = await this.ensureClient();
     if (first.isErr()) {
       return Err(first.error);
@@ -622,10 +645,15 @@ function supportsOperationResult(apiVersion: string | undefined): boolean {
 }
 
 function mapClientError(
-  error: ExternalApiError | NoInstance,
+  error: ExternalApiError | NoInstance | InstanceMismatch,
   pinnedPid?: number,
 ): ExecuteCommandError {
   switch (error.type) {
+    case 'instance-mismatch':
+      return {
+        type: 'unknown',
+        error: `External Client API instance changed from ${error.expected} to ${error.actual}. Build a fresh artifact for the current Desktop instance.`,
+      };
     case 'problem':
       return {
         type: 'command-failed',

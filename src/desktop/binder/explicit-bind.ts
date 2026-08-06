@@ -2,12 +2,18 @@ import {
   parseColumnInstanceRef,
   parseDatasourceQualifiedColumnRef,
 } from '../metadata/field-resolver.js';
+import type { FieldMetadataOverride } from '../templates/fieldReferenceRewriter.js';
 import {
   optionalFieldPrunesFor,
   type OptionalFieldPruneSpec,
 } from '../templates/optionalFieldPrune.js';
-import { loadManifests } from './manifest.js';
-import type { Derivation, SlotSpec, TemplateManifest } from './manifest-types.js';
+import { geoConceptFromSemanticRole, geoConceptFromSlotId } from './geo-concept.js';
+import type {
+  Derivation,
+  RuntimeTemplateDescriptor,
+  SlotSpec,
+  TemplateBindingContract,
+} from './manifest-types.js';
 import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
 import { type BindingProposal, type Blocker, validateBinding } from './validate.js';
 
@@ -20,12 +26,17 @@ export interface AvailableFieldLike {
   type: string;
   datatype?: string;
   caption?: string;
+  semanticRole?: string;
+  approxCount?: number;
+  table?: string;
   isAggregated?: boolean;
+  isGroup?: boolean;
   column_ref: string;
 }
 
 export interface ExplicitBindOptions {
-  manifests?: Map<string, TemplateManifest>;
+  manifests?: Map<string, RuntimeTemplateDescriptor>;
+  contract?: TemplateBindingContract;
   title?: string;
   datasource?: string;
   passthroughFieldMapping?: Record<string, string>;
@@ -45,7 +56,7 @@ export type ExplicitBindResult =
       template: string;
       datasource: string;
       fieldMapping: Record<string, string>;
-      fieldMetadata: Record<string, { datatype: string; type: string }>;
+      fieldMetadata: Record<string, FieldMetadataOverride>;
       consumedFieldRefs: string[];
       templateSlots: SlotSpec[];
       optionalFieldPrunes: OptionalFieldPruneSpec[];
@@ -93,8 +104,12 @@ export function schemaSummaryFromAvailableFields(fields: AvailableFieldLike[]): 
       role: f.role === 'measure' ? 'measure' : 'dimension',
       type: f.type,
       datatype: f.datatype ?? '',
+      ...(f.semanticRole ? { semanticRole: f.semanticRole } : {}),
+      ...(f.approxCount !== undefined ? { approxCount: f.approxCount } : {}),
       datasource: f.datasource,
       isAggregated: !!f.isAggregated,
+      ...(f.isGroup ? { isGroup: true } : {}),
+      ...(f.table ? { table: f.table } : {}),
       column_ref: f.column_ref,
     };
   });
@@ -108,46 +123,34 @@ export function bindExplicitTemplate(
   schema: SchemaSummary,
   opts: ExplicitBindOptions = {},
 ): ExplicitBindResult {
-  // Fail-open when the manifest layer is unavailable (e.g. broken disk assets or
-  // heavily-mocked test envs): explicit applies degrade to legacy passthrough with
-  // a warning instead of crashing. SEA builds already fail closed inside
-  // loadManifests when the embedded supply is broken.
-  let manifest: TemplateManifest | undefined;
-  let manifestLayerUnavailable = false;
-  try {
-    const manifests = opts.manifests ?? loadManifests();
-    manifest = manifests.get(templateName);
-  } catch {
-    manifestLayerUnavailable = true;
+  let contract = opts.contract;
+  let descriptor: RuntimeTemplateDescriptor | undefined;
+  if (!contract) {
+    descriptor = opts.manifests?.get(templateName);
+    contract = descriptor;
   }
 
-  if (!manifest) {
-    const fieldMapping = Array.isArray(input) ? (opts.passthroughFieldMapping ?? {}) : input;
+  if (!contract) {
+    const blocker: Blocker = {
+      code: 'template-not-found',
+      detail: `No TBM-derived binding contract is available for template '${templateName}'.`,
+    };
     return {
-      ok: true,
+      ok: false,
       template: templateName,
-      datasource: opts.datasource ?? schema.datasource,
-      fieldMapping,
-      fieldMetadata: {},
-      consumedFieldRefs: Object.values(fieldMapping),
-      templateSlots: [],
-      optionalFieldPrunes: [],
-      warnings: [
-        manifestLayerUnavailable
-          ? `manifest-layer-unavailable: could not load template manifests; caller mapping for '${templateName}' applied without enforcement.`
-          : `no-manifest: template '${templateName}' has no manifest; caller mapping applied without enforcement.`,
-      ],
-      passthrough: true,
+      blockers: [blocker],
+      errors: [blockerToFixError(blocker)],
+      warnings: [],
     };
   }
 
-  const warnings = manifestWarnings(manifest);
+  const warnings: string[] = [];
   const built = Array.isArray(input)
-    ? buildProposalFromOrderedRefs(manifest, input, schema, opts.title)
-    : buildProposalFromFieldMapping(manifest, input, schema, opts.title);
+    ? buildProposalFromOrderedRefs(contract, input, schema, opts.title)
+    : buildProposalFromFieldMapping(contract, input, schema, opts.title);
   warnings.push(...built.warnings);
 
-  const validation = validateBinding(manifest, built.proposal, schema);
+  const validation = validateBinding(contract, built.proposal, schema);
   if (!validation.ok) {
     return {
       ok: false,
@@ -162,11 +165,11 @@ export function bindExplicitTemplate(
     ok: true,
     template: templateName,
     datasource: rawDatasourceFor(built.fieldBySlot, opts.datasource ?? schema.datasource),
-    fieldMapping: emitRawFieldMapping(manifest, built.fieldBySlot),
-    fieldMetadata: fieldMetadataFor(manifest, built.fieldBySlot),
-    consumedFieldRefs: consumedFieldRefsFor(manifest, built.fieldBySlot),
-    templateSlots: manifest.slots,
-    optionalFieldPrunes: optionalFieldPrunesFor(manifest, built.fieldBySlot),
+    fieldMapping: emitRawFieldMapping(contract, built.fieldBySlot),
+    fieldMetadata: fieldMetadataFor(contract, built.fieldBySlot),
+    consumedFieldRefs: consumedFieldRefsFor(contract, built.fieldBySlot),
+    templateSlots: contract.slots,
+    optionalFieldPrunes: optionalFieldPrunesFor(contract, built.fieldBySlot),
     warnings: [...warnings, ...(validation.warnings ?? [])],
     passthrough: false,
   };
@@ -191,7 +194,7 @@ export function formatExplicitBindErrors(
 }
 
 function buildProposalFromOrderedRefs(
-  manifest: TemplateManifest,
+  manifest: TemplateBindingContract,
   refs: string[],
   schema: SchemaSummary,
   title?: string,
@@ -221,7 +224,7 @@ function buildProposalFromOrderedRefs(
     const { source, affinityPlaced } = selection;
     reusableByTemplateField.set(slot.template_field, source);
     fieldBySlot.set(slot.slot_id, source.field);
-    bindings.push({ slot_id: slot.slot_id, field: source.field.name });
+    bindings.push({ slot_id: slot.slot_id, field: source.field.column_ref });
     greedyAssignments.push({ slot, field: source.field, affinityPlaced });
   }
   appendCategoricalSwapWarning(warnings, greedyAssignments);
@@ -241,7 +244,8 @@ function shouldReserveCategoricalSource(
 ): boolean {
   if (slot.required || slot.kind !== 'categorical') return false;
   const compatible = sources.filter(
-    (source) => !used.has(source.field) && kindCompatible(slot.kind, source.field),
+    (source) =>
+      !source.field.isGroup && !used.has(source.field) && kindCompatible(slot.kind, source.field),
   );
   const laterRequired = laterSlots.filter(
     (candidate) => candidate.required && candidate.kind === 'categorical',
@@ -250,17 +254,14 @@ function shouldReserveCategoricalSource(
 }
 
 function buildProposalFromFieldMapping(
-  manifest: TemplateManifest,
+  manifest: TemplateBindingContract,
   mapping: Record<string, string>,
   schema: SchemaSummary,
   title?: string,
 ): ProposalBuild {
   const warnings: string[] = [];
-  const usedKeys = new Set<string>();
-  const usedFields = new Set<SchemaField>();
   const fieldBySlot = new Map<string, SchemaField>();
   const bindings: BindingProposal['bindings'] = [];
-  const greedyAssignments: GreedyAssignment[] = [];
 
   for (const slot of manifest.slots) {
     if (!slot.bindable) continue;
@@ -273,30 +274,9 @@ function buildProposalFromFieldMapping(
       continue;
     }
 
-    usedKeys.add(key);
-    usedFields.add(resolved.field);
     fieldBySlot.set(slot.slot_id, resolved.field);
-    bindings.push({ slot_id: slot.slot_id, field: resolved.field.name });
+    bindings.push({ slot_id: slot.slot_id, field: resolved.field.column_ref });
   }
-
-  const remainingSources: ResolvedSource[] = [];
-  for (const [key, value] of Object.entries(mapping)) {
-    if (usedKeys.has(key)) continue;
-    const resolved = resolveSource(value, schema);
-    if ('field' in resolved) remainingSources.push(resolved);
-  }
-
-  for (const slot of manifest.slots) {
-    if (!slot.bindable || !slot.required || fieldBySlot.has(slot.slot_id)) continue;
-    const selection = takeCompatibleSource(slot, remainingSources, usedFields, new Map());
-    if (!selection) continue;
-    const { source, affinityPlaced } = selection;
-    usedFields.add(source.field);
-    fieldBySlot.set(slot.slot_id, source.field);
-    bindings.push({ slot_id: slot.slot_id, field: source.field.name });
-    greedyAssignments.push({ slot, field: source.field, affinityPlaced });
-  }
-  appendCategoricalSwapWarning(warnings, greedyAssignments);
 
   return {
     proposal: { template: manifest.template, title: title ?? manifest.template, bindings },
@@ -320,6 +300,7 @@ function takeCompatibleSource(
     const affine = sources.filter(
       (source) =>
         !used.has(source.field) &&
+        !source.field.isGroup &&
         kindCompatible(slot.kind, source.field) &&
         fieldNameMatchesSlot(source.field, slot),
     );
@@ -329,14 +310,31 @@ function takeCompatibleSource(
     }
   }
 
+  let best: ResolvedSource | null = null;
+  let bestScore = -Infinity;
   for (const source of sources) {
     if (used.has(source.field)) continue;
+    if (source.field.isGroup) continue;
     if (!kindCompatible(slot.kind, source.field)) continue;
-    used.add(source.field);
-    return { source, affinityPlaced: false };
+    const score = slotAffinity(slot, source.field);
+    if (score > bestScore) {
+      best = source;
+      bestScore = score;
+    }
   }
 
-  return null;
+  if (!best) return null;
+  used.add(best.field);
+  return { source: best, affinityPlaced: false };
+}
+
+function slotAffinity(slot: SlotSpec, field: SchemaField): number {
+  if (slot.kind !== 'geo') return 0;
+  const slotConcept =
+    geoConceptFromSemanticRole(slot.semantic_role) ?? geoConceptFromSlotId(slot.slot_id);
+  const fieldConcept = geoConceptFromSemanticRole(field.semanticRole);
+  if (slotConcept && fieldConcept) return slotConcept === fieldConcept ? 3 : -1;
+  return fieldConcept || field.semanticRole ? 1 : 0;
 }
 
 function fieldNameMatchesSlot(field: SchemaField, slot: SlotSpec): boolean {
@@ -354,7 +352,7 @@ function normalizeComparableName(name: string): string {
 
 function mappingKeyForSlot(
   slot: SlotSpec,
-  manifest: TemplateManifest,
+  manifest: TemplateBindingContract,
   mapping: Record<string, string>,
 ): string | null {
   const qualified = `${slot.template_field}@${slot.derivation}`;
@@ -472,7 +470,12 @@ function appendCategoricalSwapWarning(warnings: string[], assignments: GreedyAss
   );
 }
 
-function suffixFor(derivation: Derivation, type: string): string {
+function suffixFor(
+  derivation: Derivation,
+  type: string,
+  authoredRole?: 'nk' | 'ok' | 'qk',
+): string {
+  if (authoredRole) return authoredRole;
   if (TRUNCATION_DERIVATIONS.has(derivation)) return 'qk';
   if (type === 'quantitative') return 'qk';
   if (type === 'ordinal') return 'ok';
@@ -480,7 +483,7 @@ function suffixFor(derivation: Derivation, type: string): string {
 }
 
 function emitRawFieldMapping(
-  manifest: TemplateManifest,
+  manifest: TemplateBindingContract,
   fieldBySlot: Map<string, SchemaField>,
 ): Record<string, string> {
   const mapping: Record<string, string> = {};
@@ -497,29 +500,33 @@ function emitRawFieldMapping(
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
     mapping[key] =
-      `[${field.datasource}].[${deriv}:${bareName(field.columnName)}:${suffixFor(deriv, field.type)}]`;
+      `[${field.datasource}].[${deriv}:${bareName(field.columnName)}:${suffixFor(deriv, field.type, slot.instance_role)}]`;
   }
   return mapping;
 }
 
 function fieldMetadataFor(
-  manifest: TemplateManifest,
+  manifest: TemplateBindingContract,
   fieldBySlot: Map<string, SchemaField>,
-): Record<string, { datatype: string; type: string }> {
-  const metadata: Record<string, { datatype: string; type: string }> = {};
+): Record<string, FieldMetadataOverride> {
+  const metadata: Record<string, FieldMetadataOverride> = {};
   for (const slot of manifest.slots) {
     const field = fieldBySlot.get(slot.slot_id);
     if (!field) continue;
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
-    metadata[key] = { datatype: field.datatype, type: field.type };
+    metadata[key] = {
+      datatype: field.datatype,
+      type: field.type,
+      ...(field.semanticRole ? { semanticRole: field.semanticRole } : {}),
+    };
   }
   return metadata;
 }
 
 function consumedFieldRefsFor(
-  manifest: TemplateManifest,
+  manifest: TemplateBindingContract,
   fieldBySlot: Map<string, SchemaField>,
 ): string[] {
   const refs: string[] = [];
@@ -536,23 +543,6 @@ function consumedFieldRefsFor(
 
 function rawDatasourceFor(fieldBySlot: Map<string, SchemaField>, fallback: string): string {
   return fieldBySlot.values().next().value?.datasource ?? fallback;
-}
-
-function manifestWarnings(m: TemplateManifest): string[] {
-  const warnings: string[] = [];
-  if (!m.fast_path_eligible) {
-    warnings.push(
-      `fast_path_eligible:false: explicit template apply is proceeding outside the fast path (readiness=${m.readiness}).`,
-    );
-    for (const blocker of m.fast_path_blockers ?? []) warnings.push(`fast_path_blocker:${blocker}`);
-  }
-  if (m.portability_evidence.render_verified === 'none') {
-    warnings.push(`render_verified:none: template '${m.template}' has no live render stamp.`);
-  }
-  for (const hazard of m.hazards ?? []) {
-    warnings.push(`hazard:${hazard.code}: ${hazard.detail}`);
-  }
-  return warnings;
 }
 
 function blockerToFixError(b: Blocker): ExplicitBindError {
@@ -577,6 +567,8 @@ function fixForBlocker(b: Blocker): string {
       return 'Bind a field whose role/type/datatype matches the manifest slot kind.';
     case 'derivation-illegal':
       return 'Drop the illegal derivation override or bind a field whose datatype supports it.';
+    case 'aggregation-level-mismatch':
+      return 'Bind an unaggregated source field; an already aggregated field cannot feed this template calculation.';
     case 'base-column-conflict':
       return 'Use the same base column for all qualified derivations of one template field.';
     case 'cross-datasource-binding':

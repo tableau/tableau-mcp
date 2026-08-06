@@ -1,0 +1,85 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<bookmark version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user' source-platform='mac'>
+<window class='worksheet' name='spatial-symbol-map'>
+  <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='2147483647'>
+            <card type='columns' />
+          </strip>
+          <strip size='2147483647'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='{00000000-0000-0000-0000-000000000002}' />
+</window>
+<table>
+    <view>
+      <datasources>
+        <datasource name='Sample - Superstore' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Tableau' />
+      </mapsources>
+      <datasource-dependencies datasource='Sample - Superstore'>
+        <column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />
+        <column datatype='string' name='[Country/Region]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column datatype='string' name='[State/Province]' role='dimension' semantic-role='[State].[Name]' type='nominal' />
+        <column datatype='real' name='[Postal Code]' role='measure' type='quantitative' />
+        <column datatype='real' name='[Customer Name]' role='measure' type='quantitative' />
+        <column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Country/Region]' derivation='None' name='[none:Country/Region:nk]' pivot='key' type='nominal' />
+        <column-instance column='[State/Province]' derivation='None' name='[none:State/Province:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='map'>
+        <format attr='washout' value='0.0' />
+        <format attr='map-snap-zoom' value='true' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Circle' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <size column='[Sample - Superstore].[sum:Profit:qk]' />
+          <color column='[Sample - Superstore].[sum:Postal Code:qk]' />
+          <tooltip column='[Sample - Superstore].[sum:Customer Name:qk]' />
+          <lod column='[Sample - Superstore].[none:Country/Region:nk]' />
+          <lod column='[Sample - Superstore].[none:State/Province:nk]' />
+          <lod column='[Sample - Superstore].[none:City:nk]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-transparency' value='170' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#b4b4b4' />
+            <format attr='size' value='1.5932043790817261' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[Sample - Superstore].[Latitude (generated)]</rows>
+    <cols>[Sample - Superstore].[Longitude (generated)]</cols>
+  </table>
+</bookmark>

@@ -89,6 +89,24 @@ describe('findField', () => {
     const noWorksheets = '<workbook><datasources></datasources></workbook>';
     expect(findField(noWorksheets, 'Sales')).toBeNull();
   });
+
+  it('matches repeated encoded literals semantically without exposing parser markers', () => {
+    const workbook = `<workbook><worksheets><worksheet name="Sheet"><table><view>
+      <datasources><datasource name="DS &amp;#13;" /></datasources>
+      <datasource-dependencies datasource="DS &amp;#13;">
+        <column name="[Literal &amp;#13;]" datatype="string" role="dimension" type="nominal" />
+        <column-instance name="[none:Literal &amp;#13;:nk]" column="[Literal &amp;#13;]" derivation="None" />
+      </datasource-dependencies>
+    </view></table></worksheet></worksheets></workbook>`;
+
+    expect(findField(workbook, 'Literal &#13;')).toEqual(
+      expect.objectContaining({
+        datasource: 'DS &#13;',
+        columnName: '[Literal &#13;]',
+        columnInstanceName: '[none:Literal &#13;:nk]',
+      }),
+    );
+  });
 });
 
 describe('buildColumnRef', () => {
@@ -161,6 +179,34 @@ describe('listAvailableFields', () => {
     expect(profitRatio?.formula).toBeDefined();
   });
 
+  it('projects encoded numeric-entity literals as semantic formula text without markers', () => {
+    const xml = `<workbook><datasources><datasource name="DS">
+      <column name="[Literal]" role="dimension" type="nominal" datatype="string">
+        <calculation class="tableau" formula="&quot;literal &amp;#13;&quot;" />
+      </column>
+    </datasource></datasources></workbook>`;
+
+    const literal = listAvailableFields(xml).find((field) => field.columnName === '[Literal]');
+
+    expect(literal?.formula).toBe('"literal &#13;"');
+    expect(literal?.formula).not.toContain('TABLEAU_NUMERIC_ENTITY');
+  });
+
+  it('does not expose parser provenance markers in field metadata', () => {
+    const xml = `<workbook><datasources><datasource name="DS &amp;#13;">
+      <column name="[Literal &amp;#13;]" caption="Caption &amp;#13;" role="dimension" type="nominal" datatype="string" />
+    </datasource></datasources></workbook>`;
+
+    expect(listAvailableFields(xml)).toEqual([
+      expect.objectContaining({
+        datasource: 'DS &#13;',
+        columnName: '[Literal &#13;]',
+        caption: 'Caption &#13;',
+        column_ref: '[DS &#13;].[none:Literal &#13;:nk]',
+      }),
+    ]);
+  });
+
   it('should return an empty array when the workbook has no datasources', () => {
     const noDsXml = '<workbook></workbook>';
     expect(listAvailableFields(noDsXml)).toEqual([]);
@@ -193,6 +239,38 @@ describe('listAvailableFields', () => {
     expect(territory?.semanticRole).toBe('[State].[Name]');
     const mrr = availableFields.find((f) => f.columnName === '[MRR]');
     expect(mrr?.semanticRole).toBeUndefined();
+  });
+
+  it('projects measured distinct counts and group metadata without losing table metadata', () => {
+    const xml = `<?xml version='1.0'?>
+<workbook><datasources><datasource name='DS'>
+  <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+  <column name='[Region Group]' role='dimension' type='nominal' datatype='string'>
+    <calculation class='categorical-bin' column='[Region]' />
+  </column>
+  <connection><metadata-records>
+    <metadata-record class='column'>
+      <local-name>[Region]</local-name><local-type>string</local-type>
+      <parent-name>[Orders]</parent-name><approx-count> 17 </approx-count>
+    </metadata-record>
+  </metadata-records></connection>
+</datasource></datasources></workbook>`;
+
+    const fields = listAvailableFields(xml);
+    expect(fields.find((candidate) => candidate.columnName === '[Region]')).toMatchObject({
+      table: '[Orders]',
+      approxCount: 17,
+    });
+    expect(fields.find((candidate) => candidate.columnName === '[Region Group]')?.isGroup).toBe(
+      true,
+    );
+  });
+
+  it('ignores malformed distinct counts instead of guessing', () => {
+    const xml = `<workbook><datasources><datasource name='DS'><connection><metadata-records>
+      <metadata-record class='column'><local-name>[Bad]</local-name><local-type>string</local-type><approx-count>12.5</approx-count></metadata-record>
+    </metadata-records></connection></datasource></datasources></workbook>`;
+    expect(listAvailableFields(xml)[0]?.approxCount).toBeUndefined();
   });
 
   it('projects metadata-record parent-name onto top-level columns', () => {

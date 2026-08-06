@@ -28,15 +28,15 @@
  * SHELF ROLE (per the slot's role, inferred structurally): the facet is a
  * categorical dimension that partitions the panes, so it goes on the shelf that
  * already carries the chart's DIMENSION pill (the other shelf carries the
- * measure). This reproduces both facet manifests exactly — trend-line-chart's
+ * measure). This reproduces both facet slot contracts exactly — trend-line-chart's
  * facet_col (cols hold the truncated-date dimension) and ranking-ordered-bar's
- * facet_row (rows hold the ranked category) — without needing the manifest at
+ * facet_row (rows hold the ranked category) — without reading sidecar metadata at
  * apply time, so every apply path (inject-template and build-and-apply-worksheet,
  * which both funnel template XML + field_mapping into rewriteFieldReferences)
  * picks it up uniformly.
  */
 
-/** Minimal manifest slot shape needed to locate an optional facet generically. */
+/** Minimal runtime slot shape needed to locate an optional facet generically. */
 export interface FacetSlotReference {
   slot_id?: string;
   template_field: string;
@@ -97,7 +97,7 @@ function mappingValue(
   return null;
 }
 
-/** Resolve the bound optional categorical facet from manifest metadata. */
+/** Resolve the bound optional categorical facet from runtime slot metadata. */
 function resolveFacet(
   fieldMapping: Record<string, string>,
   slots?: readonly FacetSlotReference[],
@@ -127,10 +127,21 @@ function resolveFacet(
   }
   if (candidates.length === 1) return candidates[0];
 
-  // Manifest-less direct callers can still identify the migrated facet
+  // A non-empty runtime slot set is authoritative: zero optional-categorical facet
+  // candidates means the template has no facet, so we must NOT guess one structurally.
+  // The structural scan below exists ONLY for descriptor-less direct callers (no slots
+  // passed). Running it when slots WERE supplied spuriously matches REQUIRED dimension
+  // base columns that merely lack a column-instance — e.g. gantt-chart's size-shelf
+  // date, or ww-ou-arrow/ww-ou-diff's several required rows/cols dimensions — throwing
+  // "cannot resolve trellis shelf" / "multiple structural placeholder facet candidates
+  // are ambiguous" on charts that were never small-multiples faceted. Since inferSlots
+  // now always supplies runtime slots, both production apply chokepoints pass them.
+  const hasRuntimeSlots = (slots?.length ?? 0) > 0;
+
+  // Descriptor-less direct callers can still identify the migrated facet
   // structurally: it is the one mapped field placeholder declared as a
   // dimension base column with no authored column-instance.
-  if (templateXml) {
+  if (!hasRuntimeSlots && templateXml) {
     const structuralCandidates = Object.entries(fieldMapping)
       .map(([key, value]) => ({ key: key.replace(/@[A-Za-z][A-Za-z0-9-]*$/, ''), value }))
       .filter(({ key }) => /^\{\{field_base_[1-9]\d*\}\}$/.test(key))
@@ -159,7 +170,7 @@ function resolveFacet(
   }
 
   // Backward compatibility for unmigrated templates and direct callers that do
-  // not yet pass manifest slots.
+  // not yet pass runtime slots.
   const legacyValue = mappingValue(fieldMapping, 'Facet');
   return legacyValue ? { templateField: 'Facet', value: legacyValue } : null;
 }

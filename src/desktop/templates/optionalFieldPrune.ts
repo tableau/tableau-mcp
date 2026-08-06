@@ -1,6 +1,6 @@
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
-import type { TemplateManifest } from '../binder/manifest-types.js';
+import type { TemplateBindingContract } from '../binder/manifest-types.js';
 
 export interface OptionalFieldPruneSpec {
   templateField: string;
@@ -12,7 +12,7 @@ export interface OptionalFieldPruneSpec {
 const ELEMENT_NODE = 1;
 
 export function optionalFieldPrunesFor<T>(
-  manifest: TemplateManifest,
+  manifest: TemplateBindingContract,
   boundBySlot: ReadonlyMap<string, T>,
 ): OptionalFieldPruneSpec[] {
   return manifest.slots
@@ -51,7 +51,7 @@ function roles(spec: OptionalFieldPruneSpec): string[] {
 /**
  * Remove unbound optional template fields that are safe to omit structurally.
  *
- * This is intentionally narrow: callers pass only manifest-approved optional geo LOD
+ * This is intentionally narrow: callers pass only inferred optional geo LOD
  * or categorical detail slots, and this helper removes exactly their LOD pill, matching
  * column-instance, and base column declaration before normal field-reference rewriting.
  */

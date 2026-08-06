@@ -13,12 +13,36 @@
 // components the bind memo (memo.ts) keys on, so a caller can correlate a warmed
 // datasource with subsequent warm binds.
 
+import { loadRuntimeTemplateDescriptors } from '../templates/runtimeTemplateCatalog.js';
+import { listTemplateCatalog } from '../templates/templatePath.js';
 import type { SchemaField, SchemaSummary } from './binder.js';
-import { loadManifests } from './manifest.js';
-import type { Family, SlotKind, TemplateManifest } from './manifest-types.js';
+import type { Family, RuntimeTemplateDescriptor, SlotKind } from './manifest-types.js';
 import { getDefaultSchemaCache, hashManifests, hashSchemaSummary, SchemaCache } from './memo.js';
 
+type TemplateManifest = RuntimeTemplateDescriptor;
+
 const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
+let builtInRuntimeDescriptors: Map<string, RuntimeTemplateDescriptor> | undefined;
+
+function loadPrewarmRuntimeDescriptors(): Map<string, RuntimeTemplateDescriptor> {
+  if (process.env['TEMPLATES_DIR']) {
+    return loadRuntimeTemplateDescriptors({ automaticOnly: true });
+  }
+  builtInRuntimeDescriptors ??= loadRuntimeTemplateDescriptors({
+    automaticOnly: true,
+    includeExternal: false,
+  });
+  if (!process.env['TABLEAU_REPOSITORY_DIR']) return builtInRuntimeDescriptors;
+  const externalClaims = listTemplateCatalog({ includeProtected: false });
+  const external = loadRuntimeTemplateDescriptors({
+    automaticOnly: true,
+    includeProtected: false,
+  });
+  const merged = new Map(builtInRuntimeDescriptors);
+  for (const claim of externalClaims) merged.delete(claim.template);
+  for (const [template, descriptor] of external) merged.set(template, descriptor);
+  return merged;
+}
 
 /**
  * Does a schema field satisfy a bindable slot kind? Mirrors validate.ts's
@@ -95,7 +119,7 @@ export function prewarmForDatasource(
   schema: string | SchemaSummary,
   opts: PrewarmOptions = {},
 ): PrewarmResult {
-  const manifests = opts.manifests ?? loadManifests();
+  const manifests = opts.manifests ?? loadPrewarmRuntimeDescriptors();
 
   let summary: SchemaSummary;
   if (typeof schema === 'string') {

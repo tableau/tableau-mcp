@@ -102,6 +102,17 @@ describe('resolveField', () => {
     expect(r.datasource).toBe('ds2');
   });
 
+  it('matches a datasource caption without exposing parser provenance markers', () => {
+    const workbook = `<workbook><datasources><datasource name="ds" caption="Literal &amp;#13;">
+      <column name="[Profit]" datatype="real" role="measure" type="quantitative" />
+    </datasource></datasources></workbook>`;
+
+    const result = resolveField(workbook, 'Profit', { datasource: 'Literal &#13;' });
+
+    expect(result.kind).toBe('exact');
+    expect(result.datasource).toBe('ds');
+  });
+
   it('returns ambiguous when the datasource caption selector is not unique', () => {
     const r = resolveField(WB_DUPLICATE_DATASOURCE_CAPTIONS, 'Profit', {
       datasource: 'Shared Caption',

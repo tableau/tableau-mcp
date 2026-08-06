@@ -2,9 +2,7 @@
 //
 // Pure derivation of first-class CALC SLOTS from template XML (H3 flagship). These
 // helpers are the single TS source of truth for turning a template's <calculation>
-// formulas into declared, classified inputs. The generator
-// (scripts/build-template-manifests.js) mirrors this logic in JS; the contract test
-// asserts the two agree with the committed manifests (drift catch).
+// formulas into declared, classified inputs at runtime.
 
 import { describe, expect, it } from 'vitest';
 

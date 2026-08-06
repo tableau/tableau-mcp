@@ -21,7 +21,9 @@
 //   free             — the fail-open default (organic asks, no matched eligible supply).
 
 import { selectEligible } from './ask-router.js';
-import type { TemplateManifest } from './manifest-types.js';
+import type { RuntimeTemplateDescriptor } from './manifest-types.js';
+
+type TemplateManifest = RuntimeTemplateDescriptor;
 
 /** The route classes an ask-shape maps to. */
 export type RouteClass = 'bind-first' | 'scratch-pipeline' | 'refine-op' | 'free';

@@ -3,34 +3,41 @@ import { resolve } from 'path';
 
 import * as configModule from '../../../config.desktop.js';
 import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
-import { removeSameNamedWorksheet } from '../../../desktop/templates/injectTemplateCore.js';
+import {
+  buildInjectedWorkbookXml,
+  removeSameNamedWorksheet,
+} from '../../../desktop/templates/injectTemplateCore.js';
+import * as runtimeCatalogModule from '../../../desktop/templates/runtimeTemplateCatalog.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getInjectTemplateTool } from './injectTemplate.js';
 
-vi.mock('../../../desktop/templates/injectTemplate.js');
-vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
-vi.mock('../../../desktop/intelligence/provider.js', () => ({
-  bundledIntelligenceProvider: { getTemplateManifest: vi.fn() },
-}));
+vi.mock('../../../desktop/templates/runtimeTemplateCatalog.js');
+vi.mock('../../../desktop/templates/injectTemplateCore.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../desktop/templates/injectTemplateCore.js')>();
+  return { ...actual, buildInjectedWorkbookXml: vi.fn() };
+});
 vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('fs');
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 import * as discoveryModule from '../../../desktop/externalApi/discovery.js';
-import { rewriteFieldReferencesWithDiagnostics } from '../../../desktop/templates/fieldReferenceRewriter.js';
-import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
-import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
+import { listTemplateNames } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const WORKBOOK_FILE = resolve('/cache/workbook.xml');
 const SESSION = '12345';
-const WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets/></workbook>';
+const WORKBOOK_XML =
+  '<?xml version="1.0"?><workbook><datasources><datasource name="Sample Superstore">' +
+  '<column name="[Region]" role="dimension" type="nominal" datatype="string"/>' +
+  '<column name="[Sales]" role="measure" type="quantitative" datatype="integer"/>' +
+  '</datasource></datasources><worksheets/></workbook>';
 const TWO_DATASOURCE_WORKBOOK_XML =
   '<?xml version="1.0"?><workbook><datasources>' +
   '<datasource name="DS_A"><column name="[Region]" role="dimension" type="nominal" datatype="string"/></datasource>' +
@@ -41,6 +48,36 @@ const TEMPLATE_XML =
   '<windows><window class="worksheet" name="{{TITLE}}"/></windows></workbook>';
 const INJECTED_XML =
   '<?xml version="1.0"?><workbook><worksheets><worksheet name="Sheet1"/></worksheets></workbook>';
+const RUNTIME_SNAPSHOT = {
+  template: 'ranking-ordered-bar',
+  sourceHash: 'runtime-template-test',
+  descriptor: {
+    template: 'ranking-ordered-bar',
+    slots: [
+      {
+        slot_id: 'region',
+        template_field: 'Region',
+        derivation: 'none' as const,
+        role: ['rows'],
+        kind: 'categorical' as const,
+        bindable: true,
+        required: true,
+      },
+      {
+        slot_id: 'sales',
+        template_field: 'Sales',
+        derivation: 'sum' as const,
+        role: ['cols'],
+        kind: 'quantitative' as const,
+        bindable: true,
+        required: true,
+      },
+    ],
+    calcs: [],
+  },
+  xml: TEMPLATE_XML,
+  eligibility: { pass1_eligible: true, pass1_blockers: [] },
+};
 
 const BASE_PARAMS = {
   session: SESSION,
@@ -56,13 +93,9 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(existsSync).mockReturnValue(true);
   vi.mocked(readFileSync).mockReturnValue(WORKBOOK_XML);
   vi.mocked(writeFileSync).mockImplementation(() => {});
-  vi.mocked(readTemplate).mockReturnValue(TEMPLATE_XML);
+  vi.mocked(runtimeCatalogModule.getRuntimeTemplateSnapshot).mockReturnValue(RUNTIME_SNAPSHOT);
   vi.mocked(listTemplateNames).mockReturnValue(['kpi-text', 'ranking-ordered-bar']);
-  vi.mocked(rewriteFieldReferencesWithDiagnostics).mockReturnValue({
-    xml: TEMPLATE_XML,
-    droppedOptionalElements: [],
-  });
-  vi.mocked(injectTemplate).mockReturnValue(INJECTED_XML);
+  vi.mocked(buildInjectedWorkbookXml).mockReturnValue({ ok: true, xml: INJECTED_XML });
   return extra;
 }
 
@@ -159,7 +192,7 @@ describe('injectTemplateTool', () => {
 
   it('should return error listing available templates when template file does not exist', async () => {
     const extra = makeExtra();
-    vi.mocked(readTemplate).mockReturnValue(null);
+    vi.mocked(runtimeCatalogModule.getRuntimeTemplateSnapshot).mockReturnValue(null);
 
     const result = await getResult(BASE_PARAMS, extra);
 
@@ -169,57 +202,47 @@ describe('injectTemplateTool', () => {
     expect(result.content[0].text).toContain('kpi-text');
   });
 
-  it('should replace {{TITLE}} before injecting', async () => {
-    const extra = makeExtra();
-    let capturedTemplate = '';
-    vi.mocked(readTemplate).mockReturnValue('{{TITLE}} template');
-    vi.mocked(injectTemplate).mockImplementation((_wb, tmpl) => {
-      capturedTemplate = tmpl;
-      return INJECTED_XML;
-    });
+  it('passes the runtime TBM snapshot and title to the shared inject core', async () => {
+    await getResult(BASE_PARAMS);
 
-    await getResult(BASE_PARAMS, extra);
-
-    expect(capturedTemplate).toContain('Sheet1');
-    expect(capturedTemplate).not.toContain('{{TITLE}}');
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
+      expect.objectContaining({ templateXml: TEMPLATE_XML, title: 'Sheet1' }),
+    );
   });
 
-  it('should call rewriteFieldReferencesWithDiagnostics when DATASOURCE is in templateParameters', async () => {
+  it('passes a validated explicit mapping to the shared inject core', async () => {
     await getResult({
       ...BASE_PARAMS,
       templateParameters: { DATASOURCE: 'Sample Superstore' },
-      fieldMapping: { Sales: '[sum:Sales:qk]' },
+      fieldMapping: { Region: '[none:Region:nk]', Sales: '[sum:Sales:qk]' },
     });
 
-    // CONVERGENCE: inject-template now calls the shared core (rewriteFieldReferences)
-    // directly instead of the deleted replaceFieldReferences wrapper. The call gains
-    // two trailing args over the wrapper's 3-arg form: fieldMetadata (undefined here)
-    // and the per-apply options object that wires calc namespacing on with a nonce.
-    expect(rewriteFieldReferencesWithDiagnostics).toHaveBeenCalledWith(
-      expect.any(String),
-      { Sales: '[sum:Sales:qk]' },
-      'Sample Superstore',
-      undefined,
-      {
-        namespaceCalcs: true,
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateParameters: { DATASOURCE: 'Sample Superstore' },
+        fieldMapping: {
+          Region: '[Sample Superstore].[none:Region:nk]',
+          Sales: '[Sample Superstore].[sum:Sales:qk]',
+        },
+        templateSlots: RUNTIME_SNAPSHOT.descriptor.slots,
         applyNonce: expect.any(String),
-        templateSlots: undefined,
-      },
+      }),
     );
   });
 
   it('surfaces warnings returned by the shared inject core', async () => {
     const extra = makeExtra();
-    vi.mocked(rewriteFieldReferencesWithDiagnostics).mockReturnValue({
-      xml: TEMPLATE_XML,
-      droppedOptionalElements: ['computed-sort dropped: [DS].[sum:Missing:qk] did not resolve'],
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({
+      ok: true,
+      xml: INJECTED_XML,
+      warnings: ['computed-sort dropped: [DS].[sum:Missing:qk] did not resolve'],
     });
 
     const result = await getResult(
       {
         ...BASE_PARAMS,
         templateParameters: { DATASOURCE: 'Sample Superstore' },
-        fieldMapping: { Sales: '[sum:Sales:qk]' },
+        fieldMapping: { Region: '[none:Region:nk]', Sales: '[sum:Sales:qk]' },
       },
       extra,
     );
@@ -256,15 +279,9 @@ describe('injectTemplateTool', () => {
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('should not call rewriteFieldReferencesWithDiagnostics when no DATASOURCE is given', async () => {
-    await getResult(BASE_PARAMS);
-
-    expect(rewriteFieldReferencesWithDiagnostics).not.toHaveBeenCalled();
-  });
-
-  it('should return error when injectTemplate throws', async () => {
+  it('should return error when the shared inject core throws', async () => {
     const extra = makeExtra();
-    vi.mocked(injectTemplate).mockImplementation(() => {
+    vi.mocked(buildInjectedWorkbookXml).mockImplementation(() => {
       throw new Error('No <worksheets> container');
     });
 
@@ -275,9 +292,12 @@ describe('injectTemplateTool', () => {
     expect(result.content[0].text).toContain('No <worksheets> container');
   });
 
-  it('should return error and not write when injected XML is malformed', async () => {
+  it('should return error and not write when the shared inject core rejects the result', async () => {
     const extra = makeExtra();
-    vi.mocked(injectTemplate).mockReturnValue('<not valid xml <unclosed>');
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({
+      ok: false,
+      issues: ['malformed template result'],
+    });
 
     const result = await getResult(BASE_PARAMS, extra);
 
@@ -285,19 +305,12 @@ describe('injectTemplateTool', () => {
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('should replace custom {{PLACEHOLDER}} from templateParameters', async () => {
-    const extra = makeExtra();
-    let capturedTemplate = '';
-    vi.mocked(readTemplate).mockReturnValue('{{SUBTITLE}} content');
-    vi.mocked(injectTemplate).mockImplementation((_wb, tmpl) => {
-      capturedTemplate = tmpl;
-      return INJECTED_XML;
-    });
+  it('passes custom template parameters to the shared inject core', async () => {
+    await getResult({ ...BASE_PARAMS, templateParameters: { SUBTITLE: 'My Sub' } });
 
-    await getResult({ ...BASE_PARAMS, templateParameters: { SUBTITLE: 'My Sub' } }, extra);
-
-    expect(capturedTemplate).toContain('My Sub');
-    expect(capturedTemplate).not.toContain('{{SUBTITLE}}');
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
+      expect.objectContaining({ templateParameters: { SUBTITLE: 'My Sub' } }),
+    );
   });
 });
 

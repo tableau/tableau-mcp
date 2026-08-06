@@ -45,6 +45,18 @@ const WORKSHEET_XML = `<?xml version="1.0" encoding="UTF-8"?>
 </worksheet>`;
 
 describe('listFields', () => {
+  it('does not expose parser provenance markers in field references', () => {
+    const worksheet = `<worksheet><table>
+      <rows>[DS].[none:Literal &amp;#13;:nk]</rows>
+      <panes><pane><encodings><color column="[DS].[none:Literal &amp;#13;:nk]" /></encodings></pane></panes>
+    </table></worksheet>`;
+
+    expect(listFields(worksheet).map((field) => field.column)).toEqual([
+      '[DS].[none:Literal &#13;:nk]',
+      '[DS].[none:Literal &#13;:nk]',
+    ]);
+  });
+
   it('should return fields from all locations', () => {
     const fields = listFields(WORKSHEET_XML);
     expect(Array.isArray(fields)).toBe(true);

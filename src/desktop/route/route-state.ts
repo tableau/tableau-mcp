@@ -1,16 +1,10 @@
 // src/desktop/route/route-state.ts
 //
-// SESSION-KEYED route state (Slice B, adapted from a2td src/server/route-state.ts). tmcp has
-// NO episode subsystem, so the a2td per-EPISODE record is ported onto the resolved Desktop
-// SESSION id instead. The `recordBindAttempt` / `recordRefineAttempt` episode integration is
-// deliberately DROPPED (there is no begin-episode/end-episode lifecycle to hang it on); the
-// one-shot deflection invariant is enforced per (session, ask) by the deflection/override
-// records here rather than by attempt counters.
+// SESSION-KEYED bind recovery and route receipts.
 //
 // In-memory, per-server-process (a module singleton, same lifetime as SessionManager). The
-// gate (`route-gate.ts`) is the only writer; readers are tests and any future receipt surface.
-// `current_ask` additionally records the most recent bind-template ask classification for a
-// session so no-ask scratch-entry tools can fail-open or one-shot-deflect without reclassifying.
+// `current_ask` records the most recent bind-template classification and outcome for telemetry;
+// it never blocks an authoring tool.
 
 import type { AskShape, RouteClass } from '../binder/route-spec.js';
 

@@ -599,6 +599,7 @@ async function getApplyResult(params: {
   return await callback(
     {
       session,
+      artifactId: undefined,
       worksheetName: params.worksheetName,
       worksheetFile: params.worksheetFile,
     },

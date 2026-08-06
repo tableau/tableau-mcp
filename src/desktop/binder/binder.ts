@@ -18,6 +18,7 @@
 // in-process, so the eval harness can exercise the with-LLM path deterministically
 // without the two-call round trip. The MCP tool never passes `llmPropose`.
 
+import { CANONICAL_DERIVATION_SHORT_FORMS } from '../derivations.js';
 import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
 import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js';
 import {
@@ -32,7 +33,7 @@ import {
   resolveLooseFieldReference,
 } from './classify.js';
 import { escapeXml } from './escape.js';
-import type { BlockerCode, Derivation, TemplateManifest } from './manifest-types.js';
+import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 import { type SchemaField, type SchemaSummary, summarizeSchema } from './schema-summary.js';
 import {
   type BindingProposal,
@@ -42,11 +43,7 @@ import {
   resolveInSummary,
   validateBinding,
 } from './validate.js';
-import {
-  WATERFALL_ANCHOR_FIELD_RE,
-  WATERFALL_ORDER_FIELD_RE,
-  WATERFALL_TEMPLATE_NAME,
-} from './waterfall.js';
+import { WATERFALL_ORDER_FIELD_RE, WATERFALL_TEMPLATE_NAME } from './waterfall.js';
 
 // Re-exported as the binder's public surface. Bare (source-less) re-exports of the
 // locally-imported bindings — a single `export ... from './x.js'` alongside the
@@ -62,7 +59,6 @@ export {
   resolveLooseFieldReference,
   summarizeSchema,
   validateBinding,
-  WATERFALL_ANCHOR_FIELD_RE,
   WATERFALL_ORDER_FIELD_RE,
 };
 export type { BindingProposal, Blocker, EscalateReason, FilterSpec, SchemaField, SchemaSummary };
@@ -78,15 +74,6 @@ type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
 // that column ascending when one exists and no sort was proposed — one coherent bind, no
 // fragile follow-up. The shared constants live in waterfall.ts so classification and apply
 // use one definition without creating a classify ↔ binder cycle.
-// A P&L/bridge waterfall's running total double-counts subtotal/total rows unless they're
-// excluded via the anchor_category filter. Live m1 receipts: the singer lands the anchor only
-// ~half the runs (hedges or skips it), so — exactly like the sort default above — the confident
-// bind DEFAULTS anchor_category to a category/row-type dimension when one exists and none was
-// bound. slot_id is a real optional manifest slot; injecting the binding pre-validation routes
-// it through the normal resolve/escape path into field_mapping['Anchor Category'], which drives
-// spliceWaterfallAnchorFilter. Same field-name heuristic as bindTemplate.ts's discovery hint.
-export const WATERFALL_ANCHOR_SLOT_ID = 'anchor_category';
-
 export type LlmProposeInput = Omit<CoreLlmProposeInput, 'fields'> & {
   fields: ProposeField[];
 };
@@ -128,7 +115,7 @@ function enrichSemanticRoles(input: CoreLlmProposeInput, summary: SchemaSummary)
 
 export function buildLlmInput(
   ask: string,
-  manifests: Map<string, TemplateManifest>,
+  manifests: Map<string, RuntimeTemplateDescriptor>,
   summary: SchemaSummary,
   opts?: { maxFields?: number },
 ): LlmProposeInput {
@@ -208,30 +195,7 @@ export type BinderResult =
  * enum for the optional derivation override in both the strict output schema and
  * the `tableau-bind-template` proposal input schema.
  */
-export const DERIVATION_SHORT_FORMS = [
-  'none',
-  'sum',
-  'avg',
-  'cnt',
-  'cntd',
-  'median',
-  'min',
-  'max',
-  'attr',
-  'usr',
-  'yr',
-  'qr',
-  'mn',
-  'wk',
-  'dy',
-  'hr',
-  'mi',
-  'sc',
-  'tyr',
-  'tqr',
-  'tmn',
-  'tdy',
-] as const satisfies readonly Derivation[];
+export const DERIVATION_SHORT_FORMS = CANONICAL_DERIVATION_SHORT_FORMS;
 
 /** One-liner shown to the model so it overrides derivations sparingly. */
 export const DERIVATION_OVERRIDE_INSTRUCTION =
@@ -358,7 +322,7 @@ export function makeTitle(ask: string): string {
  */
 function validateAndBuild(
   proposal: BindingProposal,
-  manifests: Map<string, TemplateManifest>,
+  manifests: Map<string, RuntimeTemplateDescriptor>,
   summary: ReturnType<typeof summarizeSchema>,
   minConfidence: number,
   usedLlm: boolean,
@@ -379,78 +343,21 @@ function validateAndBuild(
     const blockers: Blocker[] = [
       {
         code: 'not-fast-path',
-        detail: `template '${m.template}' is not fast-path eligible (readiness=${m.readiness})`,
+        detail:
+          `template '${m.template}' is not structurally eligible` +
+          (m.fast_path_blockers.length > 0 ? `: ${m.fast_path_blockers.join('; ')}` : ''),
       },
     ];
-    for (const b of m.fast_path_blockers as BlockerCode[]) {
-      blockers.push({ code: b, detail: `fast-path blocker: ${b}` });
-    }
     return { status: 'escalate', reason: 'not-fast-path', blockers, proposal };
   }
 
-  // Waterfall anchor default (deterministic subtotal/total exclusion). If the schema has a
-  // category/row-type dimension and no anchor_category was bound, inject the binding BEFORE
-  // validation so it resolves through the normal path into field_mapping['Anchor Category']
-  // (→ spliceWaterfallAnchorFilter). Pick a category field NOT already bound to another slot
-  // (don't steal sub_category's dimension). Copy the proposal — never mutate the caller's.
-  let effectiveProposal = proposal;
-  let defaultedAnchorField: string | undefined;
-  if (m.template === WATERFALL_TEMPLATE_NAME) {
-    const anchorAlreadyBound = proposal.bindings.some(
-      (b) => b.slot_id === WATERFALL_ANCHOR_SLOT_ID,
-    );
-    if (!anchorAlreadyBound) {
-      const usedFields = new Set(proposal.bindings.map((b) => b.field));
-      const candidate = summary.fields.find(
-        (f) =>
-          f.role === 'dimension' &&
-          (f.datatype === 'string' || f.type === 'nominal') &&
-          WATERFALL_ANCHOR_FIELD_RE.test(f.name) &&
-          !usedFields.has(f.name),
-      );
-      if (candidate) {
-        effectiveProposal = {
-          ...proposal,
-          bindings: [
-            ...proposal.bindings,
-            { slot_id: WATERFALL_ANCHOR_SLOT_ID, field: candidate.name },
-          ],
-        };
-        defaultedAnchorField = candidate.name;
-      }
-    }
-  }
-
-  let v = validateBinding(m, effectiveProposal, summary, ask);
-  // The default must never turn a good bind into an escalation: if adding the anchor broke
-  // validation, drop it and validate the caller's original proposal.
-  let anchorDefaultFailed = false;
-  if (!v.ok && defaultedAnchorField !== undefined) {
-    const vBase = validateBinding(m, proposal, summary, ask);
-    if (vBase.ok) {
-      v = vBase;
-      effectiveProposal = proposal;
-      anchorDefaultFailed = true;
-      defaultedAnchorField = undefined;
-    }
-  }
+  const v = validateBinding(m, proposal, summary, ask);
   if (!v.ok) {
     const reason = (v.blockers[0]?.code as EscalateReason) ?? 'missing-required-slot';
     return { status: 'escalate', reason, blockers: v.blockers, proposal };
   }
 
   const warnings = [...(v.warnings ?? [])];
-  if (anchorDefaultFailed) {
-    warnings.push(
-      'waterfall anchor default did not validate; kept it unbound — subtotal/total rows may double-count, bind anchor_category explicitly if the data has them',
-    );
-  } else if (defaultedAnchorField !== undefined) {
-    // The splice excludes only members literally named "subtotal"/"total"; on a plain category
-    // with no such members it is inert, so describe what was ADDED, not an exclusion that happened.
-    warnings.push(
-      `waterfall auto-bound anchor_category="${defaultedAnchorField}" (auto-detected row-type column) to exclude any "subtotal"/"total" rows so the running total does not double-count. Bind anchor_category explicitly or omit to override.`,
-    );
-  }
   let sort = proposal.sort;
   if (proposal.sort) {
     const sortField = resolveInSummary(summary, proposal.sort.by);
@@ -574,7 +481,7 @@ function validateAndBuild(
 export async function bindTemplate(args: {
   ask: string;
   workbookXml: string;
-  manifests: Map<string, TemplateManifest>;
+  manifests: Map<string, RuntimeTemplateDescriptor>;
   proposal?: BindingProposal;
   llmPropose?: LlmProposeFn;
   minConfidence?: number;

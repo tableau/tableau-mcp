@@ -12,15 +12,23 @@
 // inject-template tool passes agent-supplied raw strings; bind-template passes the
 // binder's args as-is (matching what the manual inject-template call would receive).
 
-import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
+import { listAvailableFields } from '../metadata/field-builder.js';
+import {
+  normalizeArray,
+  parseXML,
+  parseXMLPreservingNumericEntities,
+  serializeXMLPreservingNumericEntities,
+} from '../metadata/parser.js';
 import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparseTemporalAxis.js';
 import { spliceBoundFacet } from './facetSplice.js';
 import {
+  type FieldMetadataOverride,
   rewriteFieldReferencesWithDiagnostics,
   type TemplateSlotReference,
 } from './fieldReferenceRewriter.js';
+import { spliceBoundGroupDefinitions } from './groupDefinitionSplice.js';
 import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
 import { type OptionalFieldPruneSpec, pruneUnboundOptionalFields } from './optionalFieldPrune.js';
 import { spliceWaterfallAnchorFilter } from './waterfallAnchorFilter.js';
@@ -50,6 +58,100 @@ export function escapeXml(str: string): string {
     .replace(/'/g, '&apos;');
 }
 
+/**
+ * Bare local field name out of a field_mapping VALUE. Values are
+ * `[datasource].[deriv:Field Name:suffix]` (or the unqualified `[deriv:Field:suffix]`),
+ * pre-escaped for XML attributes — so unescape before matching a schema name that
+ * carries an apostrophe or ampersand.
+ */
+function mappedFieldName(columnInstance: string): string | null {
+  const stripped = columnInstance.includes('].[')
+    ? columnInstance.substring(columnInstance.indexOf('].[') + 2)
+    : columnInstance;
+  const match = stripped.match(/\[([^:]+):(.+):([^:\]]+)\]$/);
+  if (!match) return null;
+  return match[2]
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+/**
+ * Fill in each bound field's TRUE `semantic-role` from the TARGET workbook, which is
+ * the only authority on what its own datasources geocode.
+ *
+ * Without this, `rewriteFieldReferences` renames a template's geo `<column>` but has
+ * nothing to reconcile its `semantic-role` against, so the donor's geography rides
+ * along onto whatever field was bound — a `[City].[Name]` asserted on a field the
+ * target never geocodes yields a map with zero marks (its rows/cols are the GENERATED
+ * Lat/Long that only materialize for a genuinely geocoded field).
+ *
+ * Reading the workbook here rather than making each caller thread metadata through
+ * means the inject-template tool and the dashboard path are covered too, not just the
+ * binder. A caller-supplied entry always wins — it came from the binder's own resolved
+ * schema. Fields absent from the workbook schema are left alone: an entry is added
+ * only to carry a role that genuinely exists.
+ */
+function withTargetSemanticRoles(
+  supplied: Record<string, FieldMetadataOverride> | undefined,
+  fieldMapping: Record<string, string> | undefined,
+  workbookXml: string,
+): Record<string, FieldMetadataOverride> | undefined {
+  if (!fieldMapping || Object.keys(fieldMapping).length === 0) return supplied;
+
+  const needed = new Map<string, string>(); // mapping key -> bare field name
+  for (const [key, value] of Object.entries(fieldMapping)) {
+    if (supplied?.[key]?.semanticRole) continue;
+    const name = mappedFieldName(value);
+    if (name) needed.set(key, name);
+  }
+  if (needed.size === 0) return supplied;
+
+  let roleByField: Map<string, string>;
+  try {
+    roleByField = semanticRolesByFieldName(workbookXml);
+  } catch {
+    // A workbook we cannot parse tells us nothing about geocoding. Returning the
+    // supplied metadata unchanged makes the rewriter DROP donor roles, which is the
+    // safe direction: a missing role renders a plain (non-geocoded) mark, while a
+    // fabricated one renders an empty map.
+    return supplied;
+  }
+  if (roleByField.size === 0) return supplied;
+
+  const merged: Record<string, FieldMetadataOverride> = { ...(supplied ?? {}) };
+  for (const [key, fieldName] of needed) {
+    const role = roleByField.get(fieldName);
+    if (!role) continue;
+    const existing = merged[key];
+    merged[key] = existing
+      ? { ...existing, semanticRole: role }
+      : // datatype/type are only written onto attributes the template already
+        // carries, and the rewriter re-reads them from the DOM when absent here;
+        // echoing the template's own values would be a guess, so leave them empty.
+        { datatype: '', type: '', semanticRole: role };
+  }
+  return merged;
+}
+
+/**
+ * Every `semantic-role` the workbook declares, keyed by bare field name. Built from
+ * the same `listAvailableFields` projection the binder's schema summary uses, so the
+ * two agree on which fields are geocodable.
+ */
+function semanticRolesByFieldName(workbookXml: string): Map<string, string> {
+  const roles = new Map<string, string>();
+  for (const f of listAvailableFields(workbookXml)) {
+    if (!f.semanticRole) continue;
+    const bare = f.columnName.replace(/^\[|\]$/g, '');
+    roles.set(bare, f.semanticRole);
+    if (f.caption) roles.set(f.caption, f.semanticRole);
+  }
+  return roles;
+}
+
 export interface InjectTemplateCoreParams {
   /** In-memory workbook XML the template is injected into. */
   workbookXml: string;
@@ -64,6 +166,15 @@ export interface InjectTemplateCoreParams {
   fieldMapping?: Record<string, string>;
   /** Manifest-declared bindable slots used to remove/guard literal template fields. */
   templateSlots?: readonly TemplateSlotReference[];
+  /**
+   * Per-bound-field datatype/type/semanticRole, keyed exactly like `fieldMapping`.
+   * Load-bearing for geo slots: without the bound field's own `semanticRole` the
+   * rewriter cannot tell "this field is geocodable as a city" from "the DONOR was",
+   * and a renamed column would keep asserting the donor's geography. Omit for a
+   * caller with no schema (the rewriter then drops donor roles rather than keeping
+   * a geography the target datasource never declared).
+   */
+  fieldMetadata?: Record<string, FieldMetadataOverride>;
   insertPosition?: InsertPosition;
   relativeSheetName?: string;
   /**
@@ -72,7 +183,7 @@ export interface InjectTemplateCoreParams {
    * per-apply identity (workbook file + timestamp, or session + timestamp).
    */
   applyNonce: string;
-  /** Optional manifest-approved field refs to remove before normal field rewriting. */
+  /** Optional runtime-approved field refs to remove before normal field rewriting. */
   optionalFieldPrunes?: OptionalFieldPruneSpec[];
   /**
    * temporal_axis_from_string: when the binder bound a date-like STRING to a temporal
@@ -157,7 +268,7 @@ export function classifyWorksheetReplaceTarget(
 export function removeSameNamedWorksheet(workbookXml: string, title: string): string {
   let workbook: ParsedWorkbook;
   try {
-    workbook = parseXML(workbookXml);
+    workbook = parseXMLPreservingNumericEntities(workbookXml);
   } catch {
     return workbookXml;
   }
@@ -183,7 +294,7 @@ export function removeSameNamedWorksheet(workbookXml: string, title: string): st
   if (wb.windows && keptWindows.length !== windows.length) {
     wb.windows.window = keptWindows.length === 1 ? keptWindows[0] : keptWindows;
   }
-  return serializeXML(workbook);
+  return serializeXMLPreservingNumericEntities(workbook);
 }
 
 /**
@@ -199,6 +310,7 @@ export function buildInjectedWorkbookXml({
   templateParameters,
   fieldMapping,
   templateSlots,
+  fieldMetadata,
   insertPosition,
   relativeSheetName,
   applyNonce,
@@ -215,7 +327,7 @@ export function buildInjectedWorkbookXml({
 
   if (templateParameters) {
     for (const [key, value] of Object.entries(templateParameters)) {
-      // Field placeholders are resolved only through manifest-backed
+      // Field placeholders are resolved only through runtime slot-backed
       // field_mapping. Generic parameter replacement would bypass derivation,
       // metadata, optional-prune, and survivor guards.
       if (key === 'DATASOURCE' || /^field_base_[1-9]\d*$/.test(key)) continue;
@@ -248,11 +360,12 @@ export function buildInjectedWorkbookXml({
       processed,
       fieldMapping ?? {},
       templateParameters['DATASOURCE'],
-      undefined,
+      withTargetSemanticRoles(fieldMetadata, fieldMapping, workbookXml),
       { namespaceCalcs: true, applyNonce, templateSlots },
     );
     processed = rewrite.xml;
     rewriteWarnings.push(...rewrite.droppedOptionalElements);
+    processed = spliceBoundGroupDefinitions(processed, fieldMapping, workbookXml);
     processed = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
   }
 

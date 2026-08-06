@@ -249,7 +249,7 @@ describe('live dialog policy refusals', () => {
     if (!result.ok) {
       expect(result.message).toContain('tabdoc:sort drives a UI dialog and blocks the screen');
       expect(result.message).toContain('refine-worksheet with operation sort_by_field');
-      expect(result.message).toContain('bind-template sort proposal/document round-trip');
+      expect(result.message).toContain('cached-document round-trip');
     }
   });
 

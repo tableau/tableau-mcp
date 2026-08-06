@@ -330,8 +330,8 @@ export const getPlanDashboardCreationTool = (
           if (canParallelize) {
             lines.push(
               `Spawn ${allTasks.length} subagents in parallel (${worksheetTasks.length} worksheets + 1 dashboard).`,
-              'Each subagent: reads cached file, builds the worksheet or dashboard, applies immediately.',
-              'Tool: build-and-apply-worksheet (worksheets), build-and-apply-dashboard (dashboard)',
+              'Each subagent: reads the cached file, builds the worksheet or dashboard, then applies it.',
+              'Tools: build-worksheets-from-templates then apply-worksheet (worksheets), build-and-apply-dashboard (dashboard)',
             );
           } else {
             lines.push('Build and apply tasks sequentially.');

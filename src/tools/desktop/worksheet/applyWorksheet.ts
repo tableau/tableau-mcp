@@ -1,12 +1,17 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync } from 'fs';
-import { Ok } from 'ts-results-es';
+import { Ok, type Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
+import {
+  getTemplateArtifactStore,
+  type TemplateArtifactStore,
+  type TemplateArtifactUnavailableReason,
+} from '../../../desktop/templates/templateArtifactStore.js';
 import {
   classifyWorksheetPromiseOutcome,
   formatWorksheetPromiseCheck,
@@ -17,6 +22,7 @@ import {
   CacheSessionMismatchError,
   DesktopCommandExecutionError,
   FileReadError,
+  McpToolError,
   WorksheetNotFoundError,
   WorksheetXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
@@ -25,20 +31,71 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
   session: z.string().optional(),
-  worksheetName: z.string(),
-  worksheetFile: z.string().optional(),
+  artifactId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(255)
+    .optional()
+    .describe('Template artifact ID; omit for cached-file apply.'),
+  worksheetName: z
+    .string()
+    .optional()
+    .describe('Existing worksheet name for cached-file apply; omit with artifactId.'),
+  worksheetFile: z
+    .string()
+    .optional()
+    .describe('Cached worksheet path for manual apply; omit with artifactId.'),
 };
 
+function artifactUnavailableMessage(
+  artifactId: string,
+  reason: TemplateArtifactUnavailableReason,
+): string {
+  switch (reason) {
+    case 'in-use':
+      return `Template artifact "${artifactId}" is already being applied.`;
+    case 'session-mismatch':
+      return `Template artifact "${artifactId}" belongs to a different Desktop session.`;
+    case 'consumed':
+      return `Template artifact "${artifactId}" was already consumed. Build a fresh artifact.`;
+    case 'evicted':
+      return `Template artifact "${artifactId}" was evicted. Build a fresh artifact.`;
+    case 'unknown':
+      return `Template artifact "${artifactId}" is not available.`;
+    default: {
+      const exhaustive: never = reason;
+      return exhaustive;
+    }
+  }
+}
+
 const title = 'Updating worksheet';
+
+type ApplyWorksheetResult =
+  | { message: string }
+  | {
+      artifactId: string;
+      title: string;
+      applied: true;
+      retrySafe: false;
+      verification: {
+        ok: boolean;
+        status: 'passed' | 'warning' | 'failed' | 'skipped';
+        message?: string;
+      };
+    };
+
 export const getApplyWorksheetTool = (
   server: DesktopMcpServer,
+  dependencies: { store?: TemplateArtifactStore } = {},
 ): DesktopTool<typeof paramsSchema> => {
+  const artifactStore = dependencies.store ?? getTemplateArtifactStore(server);
   const applyWorksheetTool = new DesktopTool({
     server,
     name: 'apply-worksheet',
     title,
-    description:
-      'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path.',
+    description: 'Apply a template artifact or a modified cached worksheet file to Desktop.',
     paramsSchema,
     annotations: {
       readOnlyHint: false, // updates worksheet in workbook
@@ -46,11 +103,92 @@ export const getApplyWorksheetTool = (
       destructiveHint: true, // updates active workbook
       idempotentHint: false,
     },
-    callback: async ({ session, worksheetName, worksheetFile }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { session, artifactId, worksheetName, worksheetFile },
+      extra,
+    ): Promise<CallToolResult> => {
       return await applyWorksheetTool.logAndExecute({
         extra,
-        args: { session, worksheetName, worksheetFile },
-        callback: async () => {
+        args: { session, artifactId, worksheetName, worksheetFile },
+        callback: async (): Promise<Result<ApplyWorksheetResult, McpToolError>> => {
+          if (artifactId) {
+            if (worksheetName !== undefined || worksheetFile !== undefined) {
+              return new ArgsValidationError(
+                'artifactId cannot be combined with worksheetName or worksheetFile.',
+              ).toErr();
+            }
+            const sessionResult = resolveSession(session);
+            if (sessionResult.isErr()) return sessionResult.error.toErr();
+            const resolvedSession = sessionResult.value;
+            const reservation = artifactStore.reserve(artifactId, resolvedSession);
+            if (!reservation.ok) {
+              return new McpToolError({
+                type: 'template-artifact-unavailable',
+                message: artifactUnavailableMessage(artifactId, reservation.reason),
+                statusCode: 409,
+              }).toErr();
+            }
+
+            const dispatchState = { attempted: false };
+            let finalized = false;
+            const finalize = (): void => {
+              if (finalized) return;
+              finalized = true;
+              if (dispatchState.attempted) artifactStore.consume(reservation.lease);
+              else artifactStore.release(reservation.lease);
+            };
+            try {
+              const executor = await extra.getExecutor(resolvedSession);
+              const result = await loadWorksheetXml({
+                worksheetName: reservation.artifact.title,
+                xml: reservation.artifact.worksheetXml,
+                focus: { navigate: 'artifact', sheetName: reservation.artifact.title },
+                executor,
+                signal: extra.signal,
+                artifactApply: {
+                  windowXml: reservation.artifact.windowXml,
+                  expectedTargetState: reservation.artifact.targetState,
+                  expectedInstanceId: reservation.artifact.instanceId,
+                  dispatchState,
+                },
+              });
+              finalize();
+
+              if (result.isErr()) {
+                const { type, error } = result.error;
+                if (type === 'execute-command-error') {
+                  return new DesktopCommandExecutionError(
+                    error,
+                    dispatchState.attempted
+                      ? 'The artifact may have reached Desktop and was consumed. Do not retry it; build a fresh artifact after inspecting the workbook.'
+                      : undefined,
+                  ).toErr();
+                }
+                return new WorksheetXmlLoadFailedError(error).toErr();
+              }
+
+              return Ok({
+                artifactId,
+                title: reservation.artifact.title,
+                applied: true,
+                retrySafe: false,
+                verification: result.value.readbackVerification ?? {
+                  ok: true,
+                  status: 'skipped',
+                  message: 'Post-apply workbook readback was unavailable.',
+                },
+              });
+            } catch (error) {
+              finalize();
+              throw error;
+            }
+          }
+
+          if (!worksheetName?.trim()) {
+            return new ArgsValidationError(
+              'A worksheetName is required when applying a cached worksheet file.',
+            ).toErr();
+          }
           // No inline document parameter: the cached file path IS the handle. Making the
           // model retype a document cost ~190s of pure emission across six asks, and
           // inline content carried no cache fingerprint, so it also skipped the

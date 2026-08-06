@@ -1,0 +1,364 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <datasources>
+    <datasource caption='Funnel Chart' inline='true' name='federated.0ycp03o15aqa4t1gd5b301henmz0' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Funnel' name='excel-direct.1m6ixpc1qhtb7l1h0b7rw1olo204'>
+            <connection class='excel-direct' cleaning='no' compat='no' dataRefreshTime='' interpretationMode='0' validate='no' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='excel-direct.1m6ixpc1qhtb7l1h0b7rw1olo204' name='Sheet1' table='[Sheet1$]' type='table'>
+          <columns gridOrigin='A1:B5:no:A1:B5:0' header='yes' outcome='6'>
+            <column datatype='string' name='Category' ordinal='0' />
+            <column datatype='integer' name='Value' ordinal='1' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='context'>0</attribute>
+              <attribute datatype='string' name='gridOrigin'>&quot;A1:B5:no:A1:B5:0&quot;</attribute>
+              <attribute datatype='boolean' name='header'>true</attribute>
+              <attribute datatype='integer' name='outcome'>6</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Category</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Category]</local-name>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias>Category</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_BCAA0043B4F2405EBA0EE46A436BF6CC]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Value</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Value]</local-name>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias>Value</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;I8&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_BCAA0043B4F2405EBA0EE46A436BF6CC]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column datatype='integer' name='[Value]' role='measure' type='quantitative' />
+      <column caption='Sheet1' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Sheet1_BCAA0043B4F2405EBA0EE46A436BF6CC]' role='measure' type='quantitative' />
+      <column-instance column='[Value]' derivation='Sum' name='[sum:Value:qk]' pivot='key' type='quantitative' />
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:12:18 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='Sheet1 (Funnel)' increment-value='%null%' refresh-type='create' rows-inserted='4' timestamp-start='2026-06-30 20:12:18.457' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Category</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Category]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Category</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Sheet1</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>4</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Sheet1_BCAA0043B4F2405EBA0EE46A436BF6CC]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Value</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Value]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Value</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Sheet1</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>4</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Sheet1_BCAA0043B4F2405EBA0EE46A436BF6CC]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[:Measure Names]' type='palette'>
+            <map to='#4e79a7'>
+              <bucket>&quot;[federated.0ycp03o15aqa4t1gd5b301henmz0].[usr:Calculation_1440926082236429:qk]&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;[federated.0ycp03o15aqa4t1gd5b301henmz0].[sum:Value:qk]&quot;</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;USA&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Sheet1' id='Sheet1_BCAA0043B4F2405EBA0EE46A436BF6CC'>
+            <properties context=''>
+              <relation connection='excel-direct.1m6ixpc1qhtb7l1h0b7rw1olo204' name='Sheet1' table='[Sheet1$]' type='table'>
+                <columns gridOrigin='A1:B5:no:A1:B5:0' header='yes' outcome='6'>
+                  <column datatype='string' name='Category' ordinal='0' />
+                  <column datatype='integer' name='Value' ordinal='1' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+          <card type='measures' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='39'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+      <highlight>
+        <color-one-way>
+          <field>[federated.0ycp03o15aqa4t1gd5b301henmz0].[none:Category:nk]</field>
+        </color-one-way>
+      </highlight>
+    </viewpoint>
+    <simple-id uuid='{CBA13DF2-0299-4C43-8C00-E7DBE2A89993}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Funnel Chart' name='federated.0ycp03o15aqa4t1gd5b301henmz0' />
+      </datasources>
+      <datasource-dependencies datasource='federated.0ycp03o15aqa4t1gd5b301henmz0'>
+        <column caption='-SUM([Value])' datatype='integer' name='[Calculation_1440926082236429]' role='measure' type='quantitative' user:unnamed='Funnel Chart'>
+          <calculation class='tableau' formula='-SUM([Value])' />
+        </column>
+        <column datatype='string' name='[Category]' role='dimension' type='nominal' />
+        <column datatype='integer' name='[Value]' role='measure' type='quantitative' />
+        <column caption='Sheet1' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Sheet1_BCAA0043B4F2405EBA0EE46A436BF6CC]' role='measure' type='quantitative' />
+        <column-instance column='[__tableau_internal_object_id__].[Sheet1_BCAA0043B4F2405EBA0EE46A436BF6CC]' derivation='Count' name='[__tableau_internal_object_id__].[cnt:Sheet1_BCAA0043B4F2405EBA0EE46A436BF6CC:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Value]' derivation='Sum' name='[sum:Value:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_1440926082236429]' derivation='User' name='[usr:Calculation_1440926082236429:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[federated.0ycp03o15aqa4t1gd5b301henmz0].[:Measure Names]'>
+        <groupfilter function='union' user:op='manual'>
+          <groupfilter function='member' level='[:Measure Names]' member='&quot;[federated.0ycp03o15aqa4t1gd5b301henmz0].[sum:Value:qk]&quot;' />
+          <groupfilter function='member' level='[:Measure Names]' member='&quot;[federated.0ycp03o15aqa4t1gd5b301henmz0].[usr:Calculation_1440926082236429:qk]&quot;' />
+        </groupfilter>
+      </filter>
+      <manual-sort column='[federated.0ycp03o15aqa4t1gd5b301henmz0].[:Measure Names]' direction='ASC'>
+        <dictionary>
+          <bucket>&quot;[federated.0ycp03o15aqa4t1gd5b301henmz0].[__tableau_internal_object_id__].[cnt:Sheet1_BCAA0043B4F2405EBA0EE46A436BF6CC:qk]&quot;</bucket>
+          <bucket>&quot;[federated.0ycp03o15aqa4t1gd5b301henmz0].[sum:Value:qk]&quot;</bucket>
+          <bucket>&quot;[federated.0ycp03o15aqa4t1gd5b301henmz0].[usr:Calculation_1440926082236429:qk]&quot;</bucket>
+        </dictionary>
+      </manual-sort>
+      <slices>
+        <column>[federated.0ycp03o15aqa4t1gd5b301henmz0].[:Measure Names]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <encoding attr='space' class='1' field='[federated.0ycp03o15aqa4t1gd5b301henmz0].[Multiple Values]' field-type='quantitative' fold='true' scope='cols' synchronized='true' type='space' />
+        <format attr='display' class='0' field='[federated.0ycp03o15aqa4t1gd5b301henmz0].[Multiple Values]' scope='cols' value='false' />
+        <format attr='display' class='1' field='[federated.0ycp03o15aqa4t1gd5b301henmz0].[Multiple Values]' scope='cols' value='false' />
+        <encoding attr='space' class='0' field='[federated.0ycp03o15aqa4t1gd5b301henmz0].[Multiple Values]' field-type='quantitative' max='185.0' min='-185.0' range-type='fixed' scope='cols' type='space' />
+        <format attr='tick-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='cell'>
+        <format attr='text-format' field='[federated.0ycp03o15aqa4t1gd5b301henmz0].[usr:Calculation_1440926082236429:qk]' value='*#,##0;#,##0' />
+      </style-rule>
+      <style-rule element='header'>
+        <format attr='width' field='[federated.0ycp03o15aqa4t1gd5b301henmz0].[none:Category:nk]' value='144' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='text-align' field='[federated.0ycp03o15aqa4t1gd5b301henmz0].[none:Category:nk]' value='left' />
+        <format attr='font-family' field='[federated.0ycp03o15aqa4t1gd5b301henmz0].[none:Category:nk]' value='Tableau Regular' />
+        <format attr='color' field='[federated.0ycp03o15aqa4t1gd5b301henmz0].[none:Category:nk]' value='#44485f' />
+      </style-rule>
+      <style-rule element='pane'>
+        <format attr='border-width' data-class='total' value='0' />
+        <format attr='border-style' data-class='total' value='none' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='3' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Area' />
+        <encodings>
+          <lod column='[federated.0ycp03o15aqa4t1gd5b301henmz0].[:Measure Names]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run fontname='Tableau Regular'>&lt;[federated.0ycp03o15aqa4t1gd5b301henmz0].[none:Category:nk]&gt;: </run>
+            <run bold='true' fontname='Tableau Regular'>&lt;[federated.0ycp03o15aqa4t1gd5b301henmz0].[Multiple Values]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-labels-show' value='false' />
+            <format attr='has-stroke' value='false' />
+            <format attr='mark-transparency' value='255' />
+          </style-rule>
+        </style>
+      </pane>
+      <pane id='4' selection-relaxation-option='selection-relaxation-allow' x-axis-name='[federated.0ycp03o15aqa4t1gd5b301henmz0].[Multiple Values]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Area' />
+        <encodings>
+          <lod column='[federated.0ycp03o15aqa4t1gd5b301henmz0].[:Measure Names]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run fontname='Tableau Regular'>&lt;[federated.0ycp03o15aqa4t1gd5b301henmz0].[none:Category:nk]&gt;: </run>
+            <run bold='true' fontname='Tableau Regular'>&lt;[federated.0ycp03o15aqa4t1gd5b301henmz0].[Multiple Values]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-labels-show' value='false' />
+            <format attr='mark-color' value='#dadce3' />
+            <format attr='mark-transparency' value='247' />
+            <format attr='has-stroke' value='false' />
+          </style-rule>
+        </style>
+      </pane>
+      <pane id='5' selection-relaxation-option='selection-relaxation-allow' x-axis-name='[federated.0ycp03o15aqa4t1gd5b301henmz0].[Multiple Values]' x-index='1'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Circle' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <lod column='[federated.0ycp03o15aqa4t1gd5b301henmz0].[:Measure Names]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run fontname='Tableau Regular'>&lt;[federated.0ycp03o15aqa4t1gd5b301henmz0].[none:Category:nk]&gt;: </run>
+            <run bold='true' fontname='Tableau Regular'>&lt;[federated.0ycp03o15aqa4t1gd5b301henmz0].[Multiple Values]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='cell'>
+            <format attr='text-align' value='left' />
+            <format attr='vertical-align' value='center' />
+          </style-rule>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='font-size' value='8' />
+            <format attr='font-family' value='Tableau Regular' />
+            <format attr='color' value='#44485f' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='size' value='0.53773480653762817' />
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-labels-cull' value='false' />
+            <format attr='mark-labels-mode' value='range' />
+            <format attr='mark-labels-range-max' value='false' />
+            <format attr='mark-labels-range-scope' value='cell' />
+            <format attr='mark-transparency' value='255' />
+            <format attr='mark-color' value='#87deca' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#72bcab' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.0ycp03o15aqa4t1gd5b301henmz0].[none:Category:nk]</rows>
+    <cols>([federated.0ycp03o15aqa4t1gd5b301henmz0].[Multiple Values] + [federated.0ycp03o15aqa4t1gd5b301henmz0].[Multiple Values])</cols>
+  </table>
+</bookmark>

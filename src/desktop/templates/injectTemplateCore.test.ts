@@ -5,16 +5,15 @@
 // P2-7 attribute-order) plus a reserialization round-trip. The strip is now
 // STRUCTURAL (parse → filter → serialize), so these pin behavior — quote style,
 // attribute order, multi-duplicate convergence (P2-8) — not string mechanics.
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
-import { loadManifests } from '../binder/manifest.js';
+import type { SlotSpec } from '../binder/manifest-types.js';
 import { injectTemplate } from './injectTemplate.js';
 import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
   removeSameNamedWorksheet,
 } from './injectTemplateCore.js';
+import { getRuntimeTemplateSnapshot } from './runtimeTemplateCatalog.js';
+import { readTemplate } from './templatePath.js';
 
 // Pre-existing pile-up fixture (P2-8): two stale "Sales" copies in MIXED quote
 // styles + attribute orders (what Desktop dedup left behind before the strip was
@@ -234,6 +233,30 @@ describe('injectTemplate — appended window focus flags', () => {
   });
 });
 
+describe('injectTemplate — real TBM numeric-entity fidelity', () => {
+  it('preserves tooltip control-character references from the shipped bubble template', () => {
+    const snapshot = getRuntimeTemplateSnapshot(
+      'correlation__bubble-scatter__relate-two-measures-and-encode-a-third-by-size',
+    );
+    expect(snapshot).not.toBeNull();
+    if (!snapshot) return;
+
+    const numericEntities = snapshot.xml.match(/&#(?:9|10|13);/g) ?? [];
+    expect(numericEntities.length).toBeGreaterThan(0);
+
+    const result = injectTemplate(
+      '<?xml version="1.0"?><workbook><worksheets/><windows/></workbook>',
+      snapshot.xml,
+      'worksheet',
+    );
+
+    expect((result.match(/&#(?:9|10|13);/g) ?? []).length).toBeGreaterThanOrEqual(
+      numericEntities.length,
+    );
+    expect(result).not.toMatch(/&amp;#(?:9|10|13);/);
+  });
+});
+
 describe('buildInjectedWorkbookXml — reserialization round-trip (adversary P0-3)', () => {
   const templateXml = [
     "<?xml version='1.0'?><workbook>",
@@ -285,47 +308,19 @@ describe('buildInjectedWorkbookXml — reserialization round-trip (adversary P0-
 });
 
 describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (real trend-line template)', () => {
-  // The REAL shipped template — the one the binder injects for a time-series ask.
-  const TREND_TEMPLATE = readFileSync(
-    join(__dirname, '../data/templates/trend-line-chart.xml'),
-    'utf-8',
-  );
+  const TREND_SNAPSHOT = getRuntimeTemplateSnapshot('trend-line-chart')!;
+  const TREND_TEMPLATE = TREND_SNAPSHOT.xml;
   // An empty workbook to inject into (bind-template's auto_apply passes the live one).
   const EMPTY_WORKBOOK = "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>";
-  const TREND_SLOTS = [
-    {
-      slot_id: 'order_date',
-      template_field: '{{field_base_1}}',
-      required: true,
-      bindable: true,
-      kind: 'temporal',
-      role: ['cols'],
-    },
-    {
-      slot_id: 'sales',
-      template_field: '{{field_base_2}}',
-      required: true,
-      bindable: true,
-      kind: 'quantitative',
-      role: ['rows'],
-    },
-    {
-      slot_id: 'facet_col',
-      template_field: '{{field_base_3}}',
-      required: false,
-      bindable: true,
-      kind: 'categorical',
-      role: ['cols'],
-    },
-    {
-      slot_id: 'color_series',
-      template_field: '{{field_base_4}}',
-      required: false,
-      bindable: true,
-      kind: 'categorical',
-      role: ['color'],
-    },
-  ];
+  const TREND_SLOTS = TREND_SNAPSHOT.descriptor.slots;
+  const TREND_DATE_SLOT = TREND_SLOTS.find((slot) => slot.kind === 'temporal')!;
+  const TREND_MEASURE_SLOT = TREND_SLOTS.find(
+    (slot) => slot.kind === 'quantitative' && slot.role.includes('rows'),
+  )!;
+  const TREND_COLOR_SLOT = TREND_SLOTS.find((slot) => slot.role.includes('color'))!;
+  const TREND_DATEPARSE_SLOTS = TREND_SLOTS.map((slot) =>
+    slot === TREND_COLOR_SLOT ? { ...slot, required: false } : slot,
+  );
 
   it('injects a DATEPARSE month axis when the temporal slot bound a string month (e4 shape)', () => {
     const result = buildInjectedWorkbookXml({
@@ -337,11 +332,11 @@ describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (rea
       // only the measure slot maps to the real field. This mirrors what validate.ts emits
       // when order_date accepts a string via temporal_from_string.
       templateParameters: { DATASOURCE: 'federated.mau' },
-      fieldMapping: { sales: '[federated.mau].[sum:mau:qk]' },
-      templateSlots: TREND_SLOTS,
+      fieldMapping: { [TREND_MEASURE_SLOT.template_field]: '[federated.mau].[sum:mau:qk]' },
+      templateSlots: TREND_DATEPARSE_SLOTS,
       applyNonce: 'e4-nonce',
       dateparseAxis: {
-        templateField: '{{field_base_1}}',
+        templateField: TREND_DATE_SLOT.template_field,
         sourceField: 'month',
         format: 'yyyy-MM',
       },
@@ -355,7 +350,7 @@ describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (rea
     // becomes [Order Date_tpl_<nonce-suffix>] consistently across the calc, its CI, and
     // the axis pill. Capture the namespaced calc name and assert the whole axis is coherent.
     const calcName = xml.match(
-      /name="(\[Calculation_field_base_1[^"]*\])"[^>]*>\s*<calculation/,
+      /name="(\[Calculation_field_base_\d+[^"]*\])"[^>]*>\s*<calculation/,
     )?.[1];
     expect(calcName).toBeTruthy();
 
@@ -386,8 +381,9 @@ describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (rea
       sheetType: 'worksheet' as const,
       templateParameters: { DATASOURCE: 'federated.sales' },
       fieldMapping: {
-        order_date: '[federated.sales].[tmn:order_date:qk]',
-        sales: '[federated.sales].[sum:sales:qk]',
+        [TREND_DATE_SLOT.template_field]: '[federated.sales].[tmn:order_date:qk]',
+        [TREND_MEASURE_SLOT.template_field]: '[federated.sales].[sum:sales:qk]',
+        [TREND_COLOR_SLOT.template_field]: '[federated.sales].[none:product:nk]',
       },
       templateSlots: TREND_SLOTS,
       applyNonce: 'normal-nonce',
@@ -409,15 +405,28 @@ describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (rea
 
 describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
   const EMPTY_WORKBOOK = "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>";
-  const CHOROPLETH_TEMPLATE = readFileSync(
-    join(__dirname, '../data/templates/spatial-choropleth-map.xml'),
-    'utf-8',
+  const CHOROPLETH_SNAPSHOT = getRuntimeTemplateSnapshot('spatial-choropleth-map')!;
+  const CHOROPLETH_TEMPLATE = CHOROPLETH_SNAPSHOT.xml;
+  const CHOROPLETH_GEO_SLOTS = CHOROPLETH_SNAPSHOT.descriptor.slots.filter(
+    (slot) => slot.kind === 'geo',
   );
-  const SYMBOL_TEMPLATE = readFileSync(
-    join(__dirname, '../data/templates/spatial-symbol-map.xml'),
-    'utf-8',
-  );
-  const SYMBOL_SLOTS = loadManifests().get('spatial-symbol-map')!.slots;
+  const CHOROPLETH_COLOR_SLOT = CHOROPLETH_SNAPSHOT.descriptor.slots.find((slot) =>
+    slot.role.includes('color'),
+  )!;
+  const CHOROPLETH_SLOTS = CHOROPLETH_SNAPSHOT.descriptor.slots.map((slot) => ({
+    ...slot,
+    required: slot === CHOROPLETH_GEO_SLOTS[0] || slot === CHOROPLETH_COLOR_SLOT,
+  }));
+  const SYMBOL_SNAPSHOT = getRuntimeTemplateSnapshot('spatial-symbol-map')!;
+  const SYMBOL_TEMPLATE = SYMBOL_SNAPSHOT.xml;
+  const SYMBOL_GEO_SLOTS = SYMBOL_SNAPSHOT.descriptor.slots.filter((slot) => slot.kind === 'geo');
+  const SYMBOL_SIZE_SLOT = SYMBOL_SNAPSHOT.descriptor.slots.find((slot) =>
+    slot.role.includes('size'),
+  )!;
+  const SYMBOL_SLOTS: SlotSpec[] = SYMBOL_SNAPSHOT.descriptor.slots.map((slot) => ({
+    ...slot,
+    required: slot === SYMBOL_GEO_SLOTS[0] || slot === SYMBOL_SIZE_SLOT,
+  }));
 
   it('removes an unbound optional state LOD from a country-only choropleth', () => {
     const result = buildInjectedWorkbookXml({
@@ -427,10 +436,17 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
       sheetType: 'worksheet',
       templateParameters: { DATASOURCE: 'Football' },
       fieldMapping: {
-        Country: '[Football].[none:Country:nk]',
-        Profit: '[Football].[sum:Goals For:qk]',
+        [CHOROPLETH_GEO_SLOTS[0].template_field]: '[Football].[none:Country:nk]',
+        [CHOROPLETH_COLOR_SLOT.template_field]: '[Football].[sum:Goals For:qk]',
       },
-      optionalFieldPrunes: [{ templateField: 'State', derivation: 'none', role: 'nk' }],
+      optionalFieldPrunes: [
+        {
+          templateField: CHOROPLETH_GEO_SLOTS[1].template_field,
+          derivation: 'none',
+          role: 'nk',
+        },
+      ],
+      templateSlots: CHOROPLETH_SLOTS,
       applyNonce: 'country-choropleth',
     });
 
@@ -451,12 +467,12 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
       sheetType: 'worksheet',
       templateParameters: { DATASOURCE: 'Football' },
       fieldMapping: {
-        'Country/Region': '[Football].[none:Country:nk]',
-        Sales: '[Football].[sum:Goals For:qk]',
+        [SYMBOL_GEO_SLOTS[0].template_field]: '[Football].[none:Country:nk]',
+        [SYMBOL_SIZE_SLOT.template_field]: '[Football].[sum:Goals For:qk]',
       },
       optionalFieldPrunes: [
-        { templateField: 'State/Province', derivation: 'none', role: 'nk' },
-        { templateField: 'City', derivation: 'none', role: 'nk' },
+        { templateField: SYMBOL_GEO_SLOTS[1].template_field, derivation: 'none', role: 'nk' },
+        { templateField: SYMBOL_GEO_SLOTS[2].template_field, derivation: 'none', role: 'nk' },
       ],
       templateSlots: SYMBOL_SLOTS,
       applyNonce: 'country-symbol',
@@ -480,10 +496,10 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
       sheetType: 'worksheet',
       templateParameters: { DATASOURCE: 'Football' },
       fieldMapping: {
-        'Country/Region': '[Football].[none:Country:nk]',
-        'State/Province': '[Football].[none:State:nk]',
-        City: '[Football].[none:City:nk]',
-        Sales: '[Football].[sum:Goals For:qk]',
+        [SYMBOL_GEO_SLOTS[0].template_field]: '[Football].[none:Country:nk]',
+        [SYMBOL_GEO_SLOTS[1].template_field]: '[Football].[none:State:nk]',
+        [SYMBOL_GEO_SLOTS[2].template_field]: '[Football].[none:City:nk]',
+        [SYMBOL_SIZE_SLOT.template_field]: '[Football].[sum:Goals For:qk]',
       },
       templateSlots: SYMBOL_SLOTS,
       applyNonce: 'full-symbol',
@@ -499,10 +515,7 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
 
 describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
   const EMPTY_WORKBOOK = "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>";
-  const RANKING_TEMPLATE = readFileSync(
-    join(__dirname, '../data/templates/ranking-ordered-bar.xml'),
-    'utf-8',
-  );
+  const RANKING_TEMPLATE = readTemplate('ranking-ordered-bar')!;
   const RANKING_SLOTS = [
     {
       slot_id: 'region',

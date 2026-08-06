@@ -40,6 +40,7 @@ describe('invalid-derivation-string rule', () => {
     ['CountD'],
     ['StdevP'],
     ['User'],
+    ['Collect'],
     ['ISO-Week'],
   ])('does not fire on the canonical derivation "%s"', (good) => {
     expect(invalidDerivationStringRule.validate(workbookWithDerivation(good))).toHaveLength(0);
@@ -117,6 +118,7 @@ describe('invalid-derivation-string rule', () => {
     expect(CANONICAL_DERIVATIONS.has('Year-Trunc')).toBe(true);
     expect(CANONICAL_DERIVATIONS.has('CountD')).toBe(true);
     expect(CANONICAL_DERIVATIONS.has('User')).toBe(true);
+    expect(CANONICAL_DERIVATIONS.has('Collect')).toBe(true);
     expect(CANONICAL_DERIVATIONS.has('Attr')).toBe(false);
     expect(CANONICAL_DERIVATIONS.has('TruncMonth')).toBe(false);
   });

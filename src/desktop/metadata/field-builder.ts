@@ -310,6 +310,21 @@ export function listAvailableFields(
     >();
     const tableByColumn = new Map<string, string>();
     const ambiguousTableColumns = new Set<string>();
+    const approxCountByName = new Map<string, number>();
+
+    if (datasource.connection?.['metadata-records']) {
+      const records = normalizeArray(datasource.connection['metadata-records']['metadata-record']);
+      for (const record of records) {
+        if (record['@_class'] !== 'column') continue;
+        const localName = record['local-name'];
+        const raw = typeof record['approx-count'] === 'string' ? record['approx-count'] : undefined;
+        if (!localName || raw === undefined) continue;
+        const count = Number(raw.trim());
+        if (!Number.isInteger(count) || count < 0) continue;
+        const bracketedName = localName.startsWith('[') ? localName : `[${localName}]`;
+        approxCountByName.set(bracketedName, count);
+      }
+    }
 
     // Build folder lookup: field name -> folder name
     const folderMap = new Map<string, string>();
@@ -399,6 +414,7 @@ export function listAvailableFields(
 
       let isAggregated = false;
       let formula: string | undefined;
+      let isGroup = false;
 
       if (source === 'top-level') {
         role = column['@_role'];
@@ -406,6 +422,8 @@ export function listAvailableFields(
         datatype = column['@_datatype'];
         caption = column['@_caption'];
         semanticRole = column['@_semantic-role'];
+
+        isGroup = column.calculation?.['@_class'] === 'categorical-bin';
 
         if (column.calculation && column.calculation['@_formula']) {
           formula = column.calculation['@_formula'];
@@ -477,9 +495,11 @@ export function listAvailableFields(
         datatype: datatype,
         caption: caption,
         semanticRole: semanticRole,
+        approxCount: approxCountByName.get(columnName),
         isAggregated: isAggregated,
         formula: formula,
         folder: folder,
+        isGroup: isGroup,
       };
 
       results.push({

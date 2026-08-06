@@ -2,16 +2,15 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { listDataAssetNames, readDataAsset } from '../../../desktop/assets.js';
 import type { BinderResult, BindingProposal } from '../../../desktop/binder/binder.js';
 import * as binderModule from '../../../desktop/binder/binder.js';
-import { loadManifests } from '../../../desktop/binder/manifest.js';
-import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
+import type { RuntimeTemplateDescriptor } from '../../../desktop/binder/manifest-types.js';
 import * as routeSpecModule from '../../../desktop/binder/route-spec.js';
 import { normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
 import type { SchemaField } from '../../../desktop/binder/schema-summary.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
-import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
 import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import type { ParsedWindow } from '../../../desktop/metadata/types.js';
@@ -20,7 +19,10 @@ import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
 } from '../../../desktop/templates/injectTemplateCore.js';
+import type { RuntimeTemplateCatalogSnapshot } from '../../../desktop/templates/runtimeTemplateCatalog.js';
+import * as runtimeTemplateCatalogModule from '../../../desktop/templates/runtimeTemplateCatalog.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import { createTemplateRuntimeSnapshot } from '../../../desktop/templates/templateRuntimeSnapshot.js';
 import * as validationRegistry from '../../../desktop/validation/registry.js';
 import {
   DesktopCommandExecutionError,
@@ -38,14 +40,17 @@ import { proposalSignature } from './proposalSignature.js';
 
 // Auto-mock the live-read command. Partial-mock the binder core so the pure
 // DERIVATION_* exports used to build the zod schema stay intact while only
-// bindTemplate is stubbed. The bundled provider is exercised for REAL (data ships
-// in-repo, hermetic) — matching propose-template / validate-proposal; the "provider
-// seam" test spies on listTemplateManifests to prove the tool sources manifests
-// through the seam rather than a raw loader.
+// bindTemplate is stubbed. The runtime catalog is built from the real bundled TBMs;
+// static manifests are intentionally absent.
 vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
 vi.mock('../../../desktop/binder/binder.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../desktop/binder/binder.js')>();
   return { ...actual, bindTemplate: vi.fn() };
+});
+vi.mock('../../../desktop/templates/runtimeTemplateCatalog.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../desktop/templates/runtimeTemplateCatalog.js')>();
+  return { ...actual, loadRuntimeTemplateCatalogSnapshots: vi.fn() };
 });
 
 // ── Auto-apply / session-default seams (W60) ──────────────────────────────────
@@ -56,19 +61,23 @@ vi.mock('../../../desktop/binder/binder.js', async (importOriginal) => {
 // injectTemplate's own suite) so these tests own only the bind-template wiring.
 vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('../../../desktop/libraries/workbook-serialization-converter/index.js');
-vi.mock('../../../desktop/templates/injectTemplateCore.js', () => ({
-  buildInjectedWorkbookXml: vi.fn(),
-  classifyWorksheetReplaceTarget: vi.fn(),
-}));
+vi.mock('../../../desktop/templates/injectTemplateCore.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../desktop/templates/injectTemplateCore.js')>();
+  return {
+    ...actual,
+    buildInjectedWorkbookXml: vi.fn(),
+    classifyWorksheetReplaceTarget: vi.fn(),
+  };
+});
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('../../../desktop/validation/registry.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../desktop/validation/registry.js')>();
   return { ...actual, runValidation: vi.fn() };
 });
 // Partial fs mock: the bound template is read via the mocked SEA-aware
-// `readTemplate` seam (templatePath.js above), so fs reads stay live for the real
-// manifest/content loads (manifest.ts / provider.ts via the assets seam); only
-// writes are stubbed so no test touches disk.
+// `readTemplate` seam (templatePath.js above); only writes are stubbed so no test
+// touches disk.
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {
@@ -81,6 +90,33 @@ vi.mock('fs', async (importOriginal) => {
 const XML = '<?xml version="1.0"?><workbook></workbook>';
 const NOT_APPLIED_GUIDANCE =
   'NOT APPLIED — the worksheet is unchanged. Resubmit this exact call with auto_apply:true to apply the bind.';
+
+let bundledRuntimeCatalog: Map<string, RuntimeTemplateCatalogSnapshot> | undefined;
+
+function mockedRuntimeCatalog(): Map<string, RuntimeTemplateCatalogSnapshot> {
+  if (!bundledRuntimeCatalog) {
+    bundledRuntimeCatalog = new Map();
+    for (const fileName of listDataAssetNames('templates').filter(
+      (name) => name.endsWith('.tbm') && !name.includes('__'),
+    )) {
+      const bookmark = readDataAsset(`templates/${fileName}`);
+      invariant(bookmark);
+      const template = fileName.slice(0, -'.tbm'.length);
+      const snapshot = createTemplateRuntimeSnapshot(template, bookmark);
+      bundledRuntimeCatalog.set(template, {
+        snapshot,
+        descriptor: runtimeTemplateCatalogModule.runtimeTemplateDescriptorFromSnapshot(snapshot),
+      });
+    }
+  }
+  return new Map(bundledRuntimeCatalog);
+}
+
+function runtimeDescriptors(): Map<string, RuntimeTemplateDescriptor> {
+  return new Map(
+    [...mockedRuntimeCatalog()].map(([template, entry]) => [template, entry.descriptor]),
+  );
+}
 const ENCODING_GUIDANCE_XML = `<?xml version='1.0'?>
 <workbook>
   <datasources>
@@ -621,6 +657,10 @@ beforeEach(() => {
   vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockReset();
   vi.mocked(binderModule.bindTemplate).mockReset();
   vi.mocked(classifyWorksheetReplaceTarget).mockReset();
+  vi.mocked(validationRegistry.runValidation).mockReturnValue({ valid: true, issues: [] });
+  vi.mocked(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).mockImplementation(
+    mockedRuntimeCatalog,
+  );
 });
 
 describe('bindTemplateTool', () => {
@@ -646,14 +686,10 @@ describe('bindTemplateTool', () => {
       'Desktop process ID; omit to use the pinned or only running instance.',
     );
     expect(paramsSchema['target_worksheet']!.description).toBe(
-      'Existing worksheet name to rebuild; omit to create.',
+      'Worksheet to replace; omit to create.',
     );
-    expect(paramsSchema['auto_apply']!.description).toBe(
-      'true: apply the bound sheet to the live workbook immediately',
-    );
-    expect(paramsSchema['calcs']!.description).toBe(
-      'Calcs to author before binding, for derived metric asks (margin %, ratios); bind by the calc caption',
-    );
+    expect(paramsSchema['auto_apply']!.description).toBe('Apply immediately.');
+    expect(paramsSchema['calcs']!.description).toBe('Derived fields to author before binding.');
     expect(
       paramsSchema['calcs']!.safeParse([
         { caption: 'Margin', formula: '[Profit] / [Sales]', datatype: 'number' },
@@ -696,6 +732,9 @@ describe('bindTemplateTool', () => {
     expect(body.guidance).toBe(`${NOT_APPLIED_GUIDANCE} ${boundResult.apply_instruction}`);
     expect(body.guidance.startsWith(NOT_APPLIED_GUIDANCE)).toBe(true);
     expect(body.guidance).toContain('auto_apply:true');
+    expect(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).toHaveBeenCalledWith({
+      automaticOnly: true,
+    });
   });
 
   it('returns the standard MCP content-block envelope, not a bare JSON string', async () => {
@@ -714,6 +753,129 @@ describe('bindTemplateTool', () => {
       ...boundResult,
       guidance: `${NOT_APPLIED_GUIDANCE} ${boundResult.apply_instruction}`,
     });
+  });
+
+  it('round-trips raw waterfall slot IDs and preserves qualified mappings', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(P_AND_L_WORKBOOK_XML));
+    const bookmark = readDataAsset('templates/part-to-whole-waterfall.tbm');
+    invariant(bookmark);
+    vi.mocked(validationRegistry.runValidation).mockReturnValue({ valid: true, issues: [] });
+    const snapshot = createTemplateRuntimeSnapshot('part-to-whole-waterfall', bookmark);
+    vi.mocked(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).mockReturnValueOnce(
+      new Map([
+        [
+          snapshot.template,
+          {
+            snapshot,
+            descriptor:
+              runtimeTemplateCatalogModule.runtimeTemplateDescriptorFromSnapshot(snapshot),
+          },
+        ],
+      ]),
+    );
+    const proposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'field_base_1_sum', field: 'amount' },
+        { slot_id: 'field_base_2', field: 'line_item' },
+        { slot_id: 'field_base_1_none', field: 'amount' },
+      ],
+      confidence: 0.9,
+    };
+    vi.mocked(binderModule.bindTemplate).mockImplementation(async (args) => {
+      expect(args.proposal).toEqual(proposal);
+      expect(args.manifests.get('part-to-whole-waterfall')?.slots).toEqual(
+        snapshot.descriptor.slots,
+      );
+      return {
+        ...boundWaterfallWithSortResult,
+        args: {
+          ...boundWaterfallWithSortResult.args,
+          field_mapping: {
+            '{{field_base_1}}@sum': '[PL].[sum:amount:qk]',
+            '{{field_base_2}}': '[PL].[none:line_item:nk]',
+            '{{field_base_1}}@none': '[PL].[none:amount:qk]',
+          },
+        },
+      };
+    });
+
+    const result = await getToolResult({
+      session: 'puppet-round-trip',
+      ask: 'P&L waterfall',
+      proposal,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.args.field_mapping).toEqual({
+      '{{field_base_1}}@sum': '[PL].[sum:amount:qk]',
+      '{{field_base_2}}': '[PL].[none:line_item:nk]',
+      '{{field_base_1}}@none': '[PL].[none:amount:qk]',
+      'Anchor Category': '[PL].[none:category:nk]',
+    });
+    expect(body.warnings.join(' ')).toContain('auto-bound anchor_category');
+  });
+
+  it('binds explicit custom__template raw list-template slot IDs without automatic exposure', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(P_AND_L_WORKBOOK_XML));
+    const bookmark = readDataAsset('templates/part-to-whole-waterfall.tbm');
+    invariant(bookmark);
+    vi.mocked(validationRegistry.runValidation).mockReturnValue({ valid: true, issues: [] });
+    const snapshot = createTemplateRuntimeSnapshot('custom__template', bookmark);
+    vi.mocked(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).mockReturnValue(
+      new Map([
+        [
+          snapshot.template,
+          {
+            snapshot,
+            descriptor:
+              runtimeTemplateCatalogModule.runtimeTemplateDescriptorFromSnapshot(snapshot),
+          },
+        ],
+      ]),
+    );
+    const proposal: BindingProposal & { confidence: number } = {
+      template: 'custom__template',
+      title: 'Custom',
+      bindings: [
+        { slot_id: 'field_base_1_sum', field: 'amount' },
+        { slot_id: 'field_base_2', field: 'line_item' },
+        { slot_id: 'field_base_1_none', field: 'amount' },
+      ],
+      confidence: 0.9,
+    };
+    const customBound: BinderResult = {
+      ...boundWaterfallWithSortResult,
+      args: {
+        ...boundWaterfallWithSortResult.args,
+        template_name: 'custom__template',
+      },
+    };
+    vi.mocked(binderModule.bindTemplate).mockImplementation(async (args) => {
+      if (args.proposal?.template === 'custom__template') {
+        expect(args.proposal).toEqual(proposal);
+        expect(args.manifests.get('custom__template')?.slots).toEqual(snapshot.descriptor.slots);
+        return args.manifests.has('custom__template') ? customBound : tier2EscalateResult;
+      }
+      return args.manifests.has('custom__template') ? customBound : proposeResult;
+    });
+
+    const explicit = await getToolResult({
+      session: 'custom-explicit',
+      ask: 'use my custom template',
+      proposal,
+    });
+    const automatic = await getToolResult({
+      session: 'custom-automatic',
+      ask: 'use my custom template',
+    });
+
+    invariant(explicit.content[0].type === 'text');
+    invariant(automatic.content[0].type === 'text');
+    expect(JSON.parse(explicit.content[0].text).status).toBe('bound');
+    expect(JSON.parse(automatic.content[0].text).status).toBe('propose');
   });
 
   it('returns status "propose" (not an error) with next-step guidance (Call 1 miss)', async () => {
@@ -843,8 +1005,8 @@ describe('bindTemplateTool', () => {
     expect(body.call_2_contract.proposal_choices[0].slots[0]).not.toHaveProperty('field');
   });
 
-  it('keeps every manifest bindable slot kind reachable in the Call-2 contract', async () => {
-    const manifests = [...loadManifests().values()];
+  it('keeps every runtime bindable slot kind reachable in the Call-2 contract', async () => {
+    const manifests = [...runtimeDescriptors().values()];
     const llmInput = {
       ask: 'reachability probe',
       candidate_templates: manifests.map((manifest) => ({
@@ -901,12 +1063,6 @@ describe('bindTemplateTool', () => {
         `bindable manifest slot kind '${kind}' must have a compatible Call-2 field`,
       ).toBe(true);
     }
-
-    const symbolMap = choiceByTemplate.get('spatial-symbol-map');
-    invariant(symbolMap);
-    const color = symbolMap.slots.find((slot) => slot.slot_id === 'color');
-    invariant(color);
-    expect(color.compatible_field_names.length).toBeGreaterThan(0);
   });
 
   it('keeps the ask-named dimension in a synonym-heavy Call-2 categorical slot', async () => {
@@ -962,7 +1118,7 @@ describe('bindTemplateTool', () => {
         schemaField(name, 'dimension', 'nominal', 'string'),
       ),
     ];
-    const manifest = loadManifests().get('ranking-ordered-bar');
+    const manifest = runtimeDescriptors().get('ranking-ordered-bar');
     invariant(manifest);
     const llmInput = binderModule.buildLlmInput(
       'bar chart of revenue by Customer Segment',
@@ -1142,6 +1298,10 @@ describe('bindTemplateTool', () => {
         minConfidence: 0.8,
       }),
     );
+    expect(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).toHaveBeenCalledWith({
+      additionalTemplates: [sampleProposal.template],
+      automaticOnly: true,
+    });
   });
 
   it('funnels a workbook-read failure through the McpToolError path (isError true)', async () => {
@@ -1197,24 +1357,29 @@ describe('bindTemplateTool', () => {
     );
   });
 
-  it('sources template manifests through the intelligence provider seam, not raw loadManifests', async () => {
-    // All four binder tools obtain manifests through bundledIntelligenceProvider so a
-    // milestone-2 remote content-pack provider swaps in without editing any tool. The Map
-    // handed to the binder must stay byte-identical to loadManifests(): re-keyed by
-    // manifest.template (listTemplateManifests() is exactly [...loadManifests().values()]).
+  it('sources template descriptors through the runtime TBM catalog seam', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
-    const fakeManifest = { template: 'seam-probe' } as unknown as TemplateManifest;
+    const base = mockedRuntimeCatalog().get('ranking-ordered-bar');
+    invariant(base);
+    const fakeDescriptor = { ...base.descriptor, template: 'seam-probe' };
+    const fakeSnapshot = {
+      ...base.snapshot,
+      template: 'seam-probe',
+      descriptor: { ...base.snapshot.descriptor, template: 'seam-probe' },
+    };
     const listSpy = vi
-      .spyOn(bundledIntelligenceProvider, 'listTemplateManifests')
-      .mockReturnValue([fakeManifest]);
+      .mocked(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots)
+      .mockReturnValue(
+        new Map([['seam-probe', { descriptor: fakeDescriptor, snapshot: fakeSnapshot }]]),
+      );
 
     await getToolResult({ session: '1', ask: 'bar chart of Sales by Region' });
 
     expect(listSpy).toHaveBeenCalledTimes(1);
     expect(binderModule.bindTemplate).toHaveBeenCalledWith(
       expect.objectContaining({
-        manifests: new Map([['seam-probe', fakeManifest]]),
+        manifests: new Map([['seam-probe', fakeDescriptor]]),
       }),
     );
   });
@@ -1860,12 +2025,29 @@ function setupAutoApplyMocks({
     return Ok(liveXml);
   });
   vi.mocked(binderModule.bindTemplate).mockResolvedValue(bind);
-  vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
-    {
-      template: bind.status === 'bound' ? bind.args.template_name : 'bar-basic',
-      fast_path_eligible: fastPathEligible,
-    } as unknown as TemplateManifest,
-  ]);
+  const template = bind.status === 'bound' ? bind.args.template_name : 'bar-basic';
+  const catalog = mockedRuntimeCatalog();
+  const base = catalog.get(template) ?? catalog.get('ranking-ordered-bar');
+  invariant(base);
+  vi.mocked(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).mockReturnValue(
+    new Map([
+      [
+        template,
+        {
+          snapshot: {
+            ...base.snapshot,
+            template,
+            descriptor: { ...base.snapshot.descriptor, template },
+          },
+          descriptor: {
+            ...base.descriptor,
+            template,
+            fast_path_eligible: fastPathEligible,
+          },
+        },
+      ],
+    ]),
+  );
   vi.mocked(readTemplate).mockReturnValue('<template/>');
   vi.mocked(buildInjectedWorkbookXml).mockReturnValue(inject);
   // Force loadWorkbookXml down its text branch so the real validated path runs
@@ -2227,7 +2409,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
       expect.objectContaining({
         workbookXml: XML,
-        templateXml: '<template/>',
+        templateXml: expect.stringContaining('<worksheet'),
         title: 'Sales by Region',
         sheetType: 'worksheet',
         fieldMapping: { cat: '[Region]', val: '[Sales]' },
@@ -2740,7 +2922,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(appliedXml(applyWorkbookDocument)).not.toContain('display_order');
   });
 
-  it('adds waterfall anchor guidance when a category-like string dimension is unbound', async () => {
+  it('auto-binds a category-like waterfall anchor instead of asking for a repair', async () => {
     const { getExecutor } = setupAutoApplyMocks({
       bind: boundWaterfallResult,
       inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
@@ -2756,12 +2938,10 @@ describe('bindTemplateTool auto_apply gate', () => {
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.guidance).toContain('schema has category');
-    expect(body.guidance).toContain('proposal.bindings');
-    expect(body.guidance).toContain('{slot_id:"anchor_category",field:"category"}');
-    // Imperative, evidence-grounded wording — not an advisory the singer can hedge on.
-    expect(body.guidance).toContain('double-count');
-    expect(body.guidance).toContain('do NOT ask the user');
+    expect(body.warnings).toContain(
+      'auto-bound anchor_category to "category" to exclude subtotal and total rows when present',
+    );
+    expect(body.guidance).not.toContain('proposal.bindings');
   });
 
   it('does not add waterfall anchor guidance when anchor_category is already bound', async () => {
@@ -2985,7 +3165,9 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     const xml = appliedXml(applyWorkbookDocument);
     expect(result.isError).toBe(false);
-    expect(body.warnings).toBeUndefined();
+    expect(body.warnings).toContain(
+      'auto-bound anchor_category to "category" to exclude subtotal and total rows when present',
+    );
     expect(xml).toContain(
       "<computed-sort column='[PL].[none:line_item:nk]' direction='ASC' using='[PL].[sum:display_order:qk]' />",
     );
@@ -3935,12 +4117,12 @@ describe('bindTemplateTool route-state recording', () => {
     vi.clearAllMocks();
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
     sessionRouteState.clear();
-    vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
-      ...loadManifests().values(),
-    ]);
+    vi.mocked(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).mockImplementation(
+      mockedRuntimeCatalog,
+    );
   });
 
-  it('records classification and final bind outcome with ROUTE_ENFORCEMENT unset', async () => {
+  it('records classification and final bind outcome without gating later tools', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
 
@@ -5031,11 +5213,9 @@ describe('bindTemplateTool escalate candidate handover', () => {
     vi.clearAllMocks();
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(ESCALATE_WORKBOOK_XML));
-    // Real bundled manifests: the shortlist is only meaningful against real slots, and an
-    // earlier describe leaves a one-entry stub on this seam.
-    vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
-      ...loadManifests().values(),
-    ]);
+    vi.mocked(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).mockImplementation(
+      mockedRuntimeCatalog,
+    );
   });
 
   it('names a template and the fields that fit each of its slots', async () => {

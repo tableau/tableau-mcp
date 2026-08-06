@@ -1,11 +1,12 @@
-import { DOMParser } from '@xmldom/xmldom';
 import * as fs from 'fs';
 import * as path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { pruneUnboundOptionalFields } from '../templates/optionalFieldPrune.js';
-import { loadManifests } from './manifest.js';
-import type { TemplateManifest } from './manifest-types.js';
+import {
+  getRuntimeTemplateSnapshot,
+  runtimeTemplateDescriptorFromSnapshot,
+} from '../templates/runtimeTemplateCatalog.js';
+import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 import type { SchemaField, SchemaSummary } from './schema-summary.js';
 import { type BindingProposal, validateBinding } from './validate.js';
 
@@ -18,6 +19,7 @@ function field(p: {
   caption?: string;
   isAggregated?: boolean;
   semanticRole?: string;
+  approxCount?: number;
   datasource?: string;
 }): SchemaField {
   const bare = p.columnName.replace(/^\[|\]$/g, '');
@@ -30,6 +32,7 @@ function field(p: {
     type: p.type,
     datatype: p.datatype,
     ...(p.semanticRole ? { semanticRole: p.semanticRole } : {}),
+    ...(p.approxCount !== undefined ? { approxCount: p.approxCount } : {}),
     datasource: ds,
     isAggregated: p.isAggregated ?? false,
     column_ref: `[${ds}].[none:${bare}:nk]`,
@@ -62,9 +65,22 @@ const SUMMARY: SchemaSummary = {
   ],
 };
 
-let manifests: Map<string, TemplateManifest>;
+let manifests: Map<string, RuntimeTemplateDescriptor>;
 beforeAll(() => {
-  manifests = loadManifests();
+  manifests = new Map(
+    [
+      'correlation-scatter-plot-chart',
+      'gantt-task-rollup-chart',
+      'kpi-text',
+      'ranking-ordered-bar',
+      'spatial-choropleth-map',
+      'trend-line-chart',
+    ].map((template) => {
+      const snapshot = getRuntimeTemplateSnapshot(template, { includeExternal: false });
+      if (snapshot === null) throw new Error(`Missing test template: ${template}`);
+      return [template, runtimeTemplateDescriptorFromSnapshot(snapshot)] as const;
+    }),
+  );
 });
 
 describe('binder/validate — gate 1: slot coverage', () => {
@@ -74,8 +90,8 @@ describe('binder/validate — gate 1: slot coverage', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Region' },
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, SUMMARY);
@@ -87,13 +103,13 @@ describe('binder/validate — gate 1: slot coverage', () => {
     const p: BindingProposal = {
       template: m.template,
       title: 't',
-      bindings: [{ slot_id: 'region', field: 'Region' }],
+      bindings: [{ slot_id: 'field_base_1', field: 'Region' }],
     };
     const r = validateBinding(m, p, SUMMARY);
     expect(r.ok).toBe(false);
     if (!r.ok)
       expect(
-        r.blockers.some((b) => b.code === 'missing-required-slot' && b.slot_id === 'sales'),
+        r.blockers.some((b) => b.code === 'missing-required-slot' && b.slot_id === 'field_base_2'),
       ).toBe(true);
   });
 
@@ -103,19 +119,15 @@ describe('binder/validate — gate 1: slot coverage', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'sales', field: 'Sales' },
-        { slot_id: 'profit', field: 'Profit' },
-        { slot_id: 'customer_name', field: 'Customer Name' },
-        { slot_id: 'region', field: 'Region' },
-        { slot_id: 'profit_ratio_calc', field: 'Profit' }, // illegal: calc is not bindable
+        { slot_id: 'calc_1', field: 'Profit' }, // illegal: calc is not bindable
       ],
     };
     const r = validateBinding(m, p, SUMMARY);
     expect(r.ok).toBe(false);
     if (!r.ok)
-      expect(
-        r.blockers.some((b) => b.code === 'kind-mismatch' && b.slot_id === 'profit_ratio_calc'),
-      ).toBe(true);
+      expect(r.blockers.some((b) => b.code === 'kind-mismatch' && b.slot_id === 'calc_1')).toBe(
+        true,
+      );
   });
 });
 
@@ -126,14 +138,14 @@ describe('binder/validate — gate 2: field resolution', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Nonexistent Field' },
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Nonexistent Field' },
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, SUMMARY);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      const b = r.blockers.find((x) => x.slot_id === 'region');
+      const b = r.blockers.find((x) => x.slot_id === 'field_base_1');
       expect(b?.code).toBe('field-not-found');
       expect(Array.isArray(b?.candidates)).toBe(true);
     }
@@ -165,8 +177,8 @@ describe('binder/validate — gate 2: field resolution', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Region' },
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, ambiguous);
@@ -210,8 +222,8 @@ describe('binder/validate — gate 2: field resolution', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Country' },
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Country' },
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, captionExact);
@@ -258,8 +270,8 @@ describe('binder/validate — gate 2: field resolution', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Country' },
-        { slot_id: 'sales', field: 'Goals For' },
+        { slot_id: 'field_base_1', field: 'Country' },
+        { slot_id: 'field_base_2', field: 'Goals For' },
       ],
     };
     const r = validateBinding(m, p, nearDuplicate);
@@ -319,8 +331,8 @@ describe('binder/validate — gate 2: field resolution', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: '[DS_B].[none:Region:nk]' },
-        { slot_id: 'sales', field: '[DS_B].[sum:Sales:qk]' },
+        { slot_id: 'field_base_1', field: '[DS_B].[none:Region:nk]' },
+        { slot_id: 'field_base_2', field: '[DS_B].[sum:Sales:qk]' },
       ],
     };
     const r = validateBinding(m, p, twoDs);
@@ -362,14 +374,14 @@ describe('binder/validate — gate 2: field resolution', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: '[DS_A].[none:Region:nk]' },
-        { slot_id: 'sales', field: '[DS_A].[sum:Sale:qk]' },
+        { slot_id: 'field_base_1', field: '[DS_A].[none:Region:nk]' },
+        { slot_id: 'field_base_2', field: '[DS_A].[sum:Sale:qk]' },
       ],
     };
     const r = validateBinding(m, p, s);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      const blocker = r.blockers.find((b) => b.slot_id === 'sales');
+      const blocker = r.blockers.find((b) => b.slot_id === 'field_base_2');
       expect(blocker?.code).toBe('field-not-found');
       expect(blocker?.candidates).toEqual([]);
     }
@@ -383,16 +395,16 @@ describe('binder/validate — gate 3: kind/role compatibility', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Sales' }, // categorical slot ← measure
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Sales' }, // categorical slot ← measure
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, SUMMARY);
     expect(r.ok).toBe(false);
     if (!r.ok)
-      expect(r.blockers.some((b) => b.code === 'kind-mismatch' && b.slot_id === 'region')).toBe(
-        true,
-      );
+      expect(
+        r.blockers.some((b) => b.code === 'kind-mismatch' && b.slot_id === 'field_base_1'),
+      ).toBe(true);
   });
 
   it('no-fire: a dimension in a categorical slot resolves cleanly', () => {
@@ -401,8 +413,8 @@ describe('binder/validate — gate 3: kind/role compatibility', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Category' },
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Category' },
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     expect(validateBinding(m, p, SUMMARY).ok).toBe(true);
@@ -430,8 +442,46 @@ describe('binder/validate — gate 3: kind/role compatibility', () => {
       field({ columnName: '[Profit]', role: 'measure', type: 'quantitative', datatype: 'real' }),
     ],
   });
-  const geoProposal = (m: TemplateManifest): BindingProposal => ({
-    template: m.template,
+  const geoDescriptor: RuntimeTemplateDescriptor = {
+    template: 'x-geo-concepts',
+    family: 'spatial',
+    fast_path_eligible: true,
+    fast_path_blockers: [],
+    intent_keywords: ['map'],
+    description: 'geo concept validation fixture',
+    slots: [
+      {
+        slot_id: 'country',
+        template_field: '{{field_base_1}}',
+        derivation: 'none',
+        role: ['lod'],
+        kind: 'geo',
+        bindable: true,
+        required: true,
+      },
+      {
+        slot_id: 'state',
+        template_field: '{{field_base_2}}',
+        derivation: 'none',
+        role: ['lod'],
+        kind: 'geo',
+        bindable: true,
+        required: true,
+      },
+      {
+        slot_id: 'profit',
+        template_field: '{{field_base_3}}',
+        derivation: 'sum',
+        role: ['color'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+    ],
+    calcs: [],
+  };
+  const geoProposal = (): BindingProposal => ({
+    template: geoDescriptor.template,
     title: 't',
     bindings: [
       { slot_id: 'country', field: 'Country' },
@@ -441,8 +491,7 @@ describe('binder/validate — gate 3: kind/role compatibility', () => {
   });
 
   it('fire: a City-tagged dimension cannot bind a state geo slot', () => {
-    const m = manifests.get('spatial-choropleth-map')!;
-    const r = validateBinding(m, geoProposal(m), geoSummary('[City].[Name]'));
+    const r = validateBinding(geoDescriptor, geoProposal(), geoSummary('[City].[Name]'));
     expect(r.ok).toBe(false);
     if (!r.ok) {
       const blocker = r.blockers.find((b) => b.code === 'kind-mismatch' && b.slot_id === 'state');
@@ -453,28 +502,24 @@ describe('binder/validate — gate 3: kind/role compatibility', () => {
   });
 
   it("no-fire: an untagged dimension keeps today's geo-slot acceptance", () => {
-    const m = manifests.get('spatial-choropleth-map')!;
-    expect(validateBinding(m, geoProposal(m), geoSummary(undefined)).ok).toBe(true);
+    expect(validateBinding(geoDescriptor, geoProposal(), geoSummary(undefined)).ok).toBe(true);
   });
 
   it('no-fire: a matching State-tagged dimension binds the state geo slot', () => {
-    const m = manifests.get('spatial-choropleth-map')!;
-    expect(validateBinding(m, geoProposal(m), geoSummary('[State].[Name]')).ok).toBe(true);
+    expect(validateBinding(geoDescriptor, geoProposal(), geoSummary('[State].[Name]')).ok).toBe(
+      true,
+    );
   });
 });
 
 describe('binder/validate — gate 4: derivation legality', () => {
   // A crafted manifest whose quantitative slot carries a TEMPORAL derivation.
   // gate 3 passes (measure), gate 4 must reject a temporal derivation on a numeric.
-  const tempOnMeasure: TemplateManifest = {
+  const tempOnMeasure: RuntimeTemplateDescriptor = {
     template: 'x-temporal-on-measure',
     family: 'specialized',
-    readiness: 'GREEN',
     fast_path_eligible: true,
     fast_path_blockers: [],
-    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-    datasource_placeholder: true,
-    placeholders: ['TITLE', 'DATASOURCE'],
     intent_keywords: ['x'],
     description: 'test',
     slots: [
@@ -489,7 +534,6 @@ describe('binder/validate — gate 4: derivation legality', () => {
       },
     ],
     calcs: [],
-    hazards: [],
   };
 
   it('fire: temporal derivation on a numeric measure → derivation-illegal', () => {
@@ -509,11 +553,189 @@ describe('binder/validate — gate 4: derivation legality', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Region' },
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     expect(validateBinding(m, p, SUMMARY).ok).toBe(true);
+  });
+});
+
+describe('binder/validate — aggregate calc-input compatibility', () => {
+  const manifest = {
+    template: 'x-calc-input',
+    family: 'specialized',
+    fast_path_eligible: true,
+    fast_path_blockers: [],
+    intent_keywords: ['calc'],
+    description: 'calc input',
+    slots: [
+      {
+        slot_id: 'input',
+        template_field: '{{field_base_1}}',
+        derivation: 'sum',
+        role: ['cols'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+    ],
+    calcs: [
+      {
+        slot_id: 'calc',
+        template_field: '[Calculation_1]',
+        derivation: 'usr',
+        role: ['color'],
+        kind: 'calc',
+        bindable: false,
+        required: true,
+        formula: 'SUM([{{field_base_1}}])',
+        formula_refs: ['{{field_base_1}}'],
+        depends_on_slots: ['input'],
+      },
+    ],
+  } as unknown as RuntimeTemplateDescriptor;
+
+  it('blocks an already aggregated source that feeds a template calculation', () => {
+    const result = validateBinding(
+      manifest,
+      {
+        template: manifest.template,
+        title: 't',
+        bindings: [{ slot_id: 'input', field: 'Profit Ratio' }],
+      },
+      SUMMARY,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.blockers).toContainEqual(
+        expect.objectContaining({ code: 'aggregation-level-mismatch', slot_id: 'input' }),
+      );
+    }
+  });
+});
+
+describe('binder/validate — cardinality advice', () => {
+  it('warns without blocking a legal high-cardinality bind', () => {
+    const manifest = manifests.get('ranking-ordered-bar')!;
+    const schema: SchemaSummary = {
+      ...SUMMARY,
+      fields: SUMMARY.fields.map((candidate) =>
+        candidate.name === 'Region' ? { ...candidate, approxCount: 397 } : candidate,
+      ),
+    };
+    const result = validateBinding(
+      manifest,
+      {
+        template: manifest.template,
+        title: 't',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Region' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+        ],
+      },
+      schema,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.warnings?.join('\n')).toContain('397 distinct values');
+  });
+
+  it('uses a member-collapsing override instead of the authored none derivation', () => {
+    const manifest = {
+      template: 'x-color-override',
+      family: 'specialized',
+      fast_path_eligible: true,
+      fast_path_blockers: [],
+      intent_keywords: ['color'],
+      description: 'color override',
+      slots: [
+        {
+          slot_id: 'color',
+          template_field: '{{field_base_1}}',
+          derivation: 'none',
+          role: ['color'],
+          kind: 'quantitative-or-categorical',
+          bindable: true,
+          required: true,
+        },
+      ],
+      calcs: [],
+    } as unknown as RuntimeTemplateDescriptor;
+    const schema: SchemaSummary = {
+      datasource: 'Superstore',
+      fields: [
+        field({
+          columnName: '[Sales]',
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'real',
+          approxCount: 397,
+        }),
+      ],
+    };
+
+    const result = validateBinding(
+      manifest,
+      {
+        template: manifest.template,
+        title: 't',
+        bindings: [{ slot_id: 'color', field: 'Sales', derivation: 'sum' }],
+      },
+      schema,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.warnings).toBeUndefined();
+  });
+
+  it('warns when a none override preserves members despite an authored sum', () => {
+    const base = {
+      template: 'x-color-override-none',
+      family: 'specialized',
+      fast_path_eligible: true,
+      fast_path_blockers: [],
+      intent_keywords: ['color'],
+      description: 'color override',
+      slots: [
+        {
+          slot_id: 'color',
+          template_field: '{{field_base_1}}',
+          derivation: 'sum',
+          role: ['color'],
+          kind: 'quantitative-or-categorical',
+          bindable: true,
+          required: true,
+        },
+      ],
+      calcs: [],
+    } as unknown as RuntimeTemplateDescriptor;
+    const schema: SchemaSummary = {
+      datasource: 'Superstore',
+      fields: [
+        field({
+          columnName: '[Sales]',
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'real',
+          approxCount: 397,
+        }),
+      ],
+    };
+
+    const result = validateBinding(
+      base,
+      {
+        template: base.template,
+        title: 't',
+        bindings: [{ slot_id: 'color', field: 'Sales', derivation: 'none' }],
+      },
+      schema,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.warnings?.join('\n')).toContain('397 distinct values');
   });
 });
 
@@ -558,14 +780,14 @@ describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 
     ],
   };
 
-  const ganttProposal = (m: TemplateManifest): BindingProposal => ({
+  const ganttProposal = (m: RuntimeTemplateDescriptor): BindingProposal => ({
     template: m.template,
     title: 'Task rollup',
     bindings: [
-      { slot_id: 'task', field: 'Task' },
-      { slot_id: 'start_date', field: 'Start Date' },
-      { slot_id: 'duration', field: 'Duration' },
-      { slot_id: 'phase', field: 'Phase' },
+      { slot_id: 'field_base_1', field: 'Task' },
+      { slot_id: 'field_base_2', field: 'Start Date' },
+      { slot_id: 'field_base_3', field: 'Phase' },
+      { slot_id: 'field_base_4', field: 'Duration' },
     ],
   });
 
@@ -591,15 +813,15 @@ describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Region', derivation: 'min' }, // Region is a string dim
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Region', derivation: 'min' },
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, SUMMARY);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(
-        r.blockers.some((b) => b.code === 'derivation-illegal' && b.slot_id === 'region'),
+        r.blockers.some((b) => b.code === 'derivation-illegal' && b.slot_id === 'field_base_1'),
       ).toBe(true);
     }
   });
@@ -611,11 +833,12 @@ describe('binder/validate — gate 4/7: aggregated calc forces usr', () => {
     const p: BindingProposal = {
       template: m.template,
       title: 'KPI',
-      bindings: [{ slot_id: 'value', field: 'Profit Ratio' }],
+      bindings: [{ slot_id: 'field_base_1', field: 'Profit Ratio' }],
     };
     const r = validateBinding(m, p, SUMMARY);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.field_mapping['Value']).toBe('[Superstore].[usr:Calculation_9999:qk]');
+    if (r.ok)
+      expect(r.field_mapping['{{field_base_1}}']).toBe('[Superstore].[usr:Calculation_9999:qk]');
   });
 
   it('an override on an aggregated calc is ignored — usr is still forced', () => {
@@ -623,11 +846,12 @@ describe('binder/validate — gate 4/7: aggregated calc forces usr', () => {
     const p: BindingProposal = {
       template: m.template,
       title: 'KPI',
-      bindings: [{ slot_id: 'value', field: 'Profit Ratio', derivation: 'avg' }],
+      bindings: [{ slot_id: 'field_base_1', field: 'Profit Ratio', derivation: 'avg' }],
     };
     const r = validateBinding(m, p, SUMMARY);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.field_mapping['Value']).toBe('[Superstore].[usr:Calculation_9999:qk]');
+    if (r.ok)
+      expect(r.field_mapping['{{field_base_1}}']).toBe('[Superstore].[usr:Calculation_9999:qk]');
   });
 });
 
@@ -639,11 +863,11 @@ describe('binder/validate — derivation override', () => {
     const p: BindingProposal = {
       template: m.template,
       title: 'KPI',
-      bindings: [{ slot_id: 'value', field: 'Sales', derivation: 'avg' }],
+      bindings: [{ slot_id: 'field_base_1', field: 'Sales', derivation: 'avg' }],
     };
     const r = validateBinding(m, p, SUMMARY);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.field_mapping['Value']).toBe('[Superstore].[avg:Sales:qk]');
+    if (r.ok) expect(r.field_mapping['{{field_base_1}}']).toBe('[Superstore].[avg:Sales:qk]');
   });
 
   it('illegal override (avg on a string dimension) escalates derivation-illegal', () => {
@@ -654,15 +878,15 @@ describe('binder/validate — derivation override', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Region', derivation: 'avg' },
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Region', derivation: 'avg' },
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, SUMMARY);
     expect(r.ok).toBe(false);
     if (!r.ok)
       expect(
-        r.blockers.some((b) => b.code === 'derivation-illegal' && b.slot_id === 'region'),
+        r.blockers.some((b) => b.code === 'derivation-illegal' && b.slot_id === 'field_base_1'),
       ).toBe(true);
   });
 
@@ -671,15 +895,11 @@ describe('binder/validate — derivation override', () => {
     // derivations (sum + avg). Overriding the sum slot to max must emit the
     // override in the VALUE while the qualified KEY stays 'Sales@sum' so the
     // injector still matches the template instance authored as sum.
-    const dualAgg: TemplateManifest = {
+    const dualAgg: RuntimeTemplateDescriptor = {
       template: 'x-dual-agg',
       family: 'specialized',
-      readiness: 'GREEN',
       fast_path_eligible: true,
       fast_path_blockers: [],
-      portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-      datasource_placeholder: true,
-      placeholders: ['TITLE', 'DATASOURCE'],
       intent_keywords: ['x'],
       description: 'test',
       slots: [
@@ -705,7 +925,6 @@ describe('binder/validate — derivation override', () => {
         },
       ],
       calcs: [],
-      hazards: [],
     };
     const p: BindingProposal = {
       template: dualAgg.template,
@@ -726,15 +945,11 @@ describe('binder/validate — derivation override', () => {
 
 describe('binder/validate — gate 5: base-column consistency + qualified keys', () => {
   // Two slots reuse one template_field at two derivations (yr + mn).
-  const heatmap: TemplateManifest = {
+  const heatmap: RuntimeTemplateDescriptor = {
     template: 'x-calendar',
     family: 'specialized',
-    readiness: 'GREEN',
     fast_path_eligible: true,
     fast_path_blockers: [],
-    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-    datasource_placeholder: true,
-    placeholders: ['TITLE', 'DATASOURCE'],
     intent_keywords: ['x'],
     description: 'test',
     slots: [
@@ -760,7 +975,6 @@ describe('binder/validate — gate 5: base-column consistency + qualified keys',
       },
     ],
     calcs: [],
-    hazards: [],
   };
 
   it('no-fire: both derivations bind the SAME base column → two qualified keys', () => {
@@ -825,8 +1039,8 @@ describe('binder/validate — cross-datasource binding gate', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Region' }, // resolves in DS_A
-        { slot_id: 'sales', field: 'Sales' }, // resolves in DS_B
+        { slot_id: 'field_base_1', field: 'Region' }, // resolves in DS_A
+        { slot_id: 'field_base_2', field: 'Sales' }, // resolves in DS_B
       ],
     };
     const r = validateBinding(m, p, mixed);
@@ -873,8 +1087,8 @@ describe('binder/validate — cross-datasource binding gate', () => {
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Region' },
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, twoDs);
@@ -884,15 +1098,11 @@ describe('binder/validate — cross-datasource binding gate', () => {
 });
 
 describe('binder/validate — gate 6: calc dependency closure', () => {
-  const calcDep: TemplateManifest = {
+  const calcDep: RuntimeTemplateDescriptor = {
     template: 'x-calc-dep',
     family: 'specialized',
-    readiness: 'GREEN',
     fast_path_eligible: true,
     fast_path_blockers: [],
-    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-    datasource_placeholder: true,
-    placeholders: ['TITLE', 'DATASOURCE'],
     intent_keywords: ['x'],
     description: 'test',
     slots: [
@@ -929,7 +1139,6 @@ describe('binder/validate — gate 6: calc dependency closure', () => {
         depends_on_slots: ['m1', 'm2'],
       },
     ],
-    hazards: [],
   };
 
   it('fire: an optional dependency left unbound → calc-dependency-unmet', () => {
@@ -964,15 +1173,11 @@ describe('binder/validate — gate 6: first-class calc inputs (H3)', () => {
   // A required calc whose first-class `inputs` reference m1 (required) and m2
   // (OPTIONAL). With m2 unbound the calc would dangle; the blocker must name the
   // offending formula REF, not just the slot id (ref-level diagnostics).
-  const calcInputs: TemplateManifest = {
+  const calcInputs: RuntimeTemplateDescriptor = {
     template: 'x-calc-inputs',
     family: 'specialized',
-    readiness: 'GREEN',
     fast_path_eligible: true,
     fast_path_blockers: [],
-    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-    datasource_placeholder: true,
-    placeholders: ['TITLE', 'DATASOURCE'],
     intent_keywords: ['x'],
     description: 'test',
     slots: [
@@ -1026,7 +1231,6 @@ describe('binder/validate — gate 6: first-class calc inputs (H3)', () => {
         ],
       },
     ],
-    hazards: [],
   };
 
   it('fire: a required calc input whose slot is unbound → calc-dependency-unmet naming the ref', () => {
@@ -1047,7 +1251,7 @@ describe('binder/validate — gate 6: first-class calc inputs (H3)', () => {
   it('no-fire: a required template-internal input is NOT treated as a missing binding', () => {
     // The calc references a field the template OWNS ([Const]); the binder must not
     // demand a binding for it. Only the real slot input (M1) must bind.
-    const internal: TemplateManifest = {
+    const internal: RuntimeTemplateDescriptor = {
       ...calcInputs,
       calcs: [
         {
@@ -1107,27 +1311,24 @@ describe('binder/validate — gate 7: temporal suffix', () => {
       template: m.template,
       title: 'Trend',
       bindings: [
-        { slot_id: 'order_date', field: 'Order Date' }, // type=ordinal in SUMMARY
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Sales' },
+        { slot_id: 'field_base_2', field: 'Order Date' }, // type=ordinal in SUMMARY
+        { slot_id: 'field_base_3', field: 'Region' },
       ],
     };
     const r = validateBinding(m, p, SUMMARY);
     expect(r.ok).toBe(true);
     // Canonical Month-Trunc short-form is 'tmn' (the real one Tableau writes);
     // the binder emits it verbatim (H3.2 tmn/tmo reconciliation).
-    if (r.ok) expect(r.field_mapping['{{field_base_1}}']).toBe('[Superstore].[tmn:Order Date:qk]');
+    if (r.ok) expect(r.field_mapping['{{field_base_2}}']).toBe('[Superstore].[tmn:Order Date:qk]');
   });
 
   it('date-part slot keeps the discrete suffix from the field type (ordinal -> :ok)', () => {
-    const datePart: TemplateManifest = {
+    const datePart: RuntimeTemplateDescriptor = {
       template: 'x-date-part',
       family: 'specialized',
-      readiness: 'GREEN',
       fast_path_eligible: true,
       fast_path_blockers: [],
-      portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-      datasource_placeholder: true,
-      placeholders: ['TITLE', 'DATASOURCE'],
       intent_keywords: ['x'],
       description: 'test',
       slots: [
@@ -1142,7 +1343,6 @@ describe('binder/validate — gate 7: temporal suffix', () => {
         },
       ],
       calcs: [],
-      hazards: [],
     };
     const p: BindingProposal = {
       template: datePart.template,
@@ -1155,189 +1355,19 @@ describe('binder/validate — gate 7: temporal suffix', () => {
   });
 });
 
-describe('binder/validate — avoid_when warnings (H3.2)', () => {
-  // A bound result carries matched avoid_when guidance as advisory WARNINGS when
-  // an `ask` is supplied — never as blockers.
-  it('attaches the matched avoid_when caution as a warning on a bound pie result', () => {
-    const m = manifests.get('part-to-whole-pie-chart')!;
-    const p: BindingProposal = {
-      template: m.template,
-      title: 't',
-      bindings: [
-        { slot_id: 'region', field: 'Region' },
-        { slot_id: 'sales', field: 'Sales' },
-      ],
-    };
-    const r = validateBinding(m, p, SUMMARY, 'pie chart for a precise comparison of Sales');
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.warnings && r.warnings.length > 0).toBe(true);
-      expect(r.warnings!.some((w) => /precise/i.test(w))).toBe(true);
-    }
-  });
-
-  it('no ask supplied → no warnings field (unchanged behavior for existing callers)', () => {
-    const m = manifests.get('part-to-whole-pie-chart')!;
-    const p: BindingProposal = {
-      template: m.template,
-      title: 't',
-      bindings: [
-        { slot_id: 'region', field: 'Region' },
-        { slot_id: 'sales', field: 'Sales' },
-      ],
-    };
-    const r = validateBinding(m, p, SUMMARY);
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.warnings).toBeUndefined();
-  });
-
-  it('clean pie ask (no caution terms) → bound with no warnings', () => {
-    const m = manifests.get('part-to-whole-pie-chart')!;
-    const p: BindingProposal = {
-      template: m.template,
-      title: 't',
-      bindings: [
-        { slot_id: 'region', field: 'Region' },
-        { slot_id: 'sales', field: 'Sales' },
-      ],
-    };
-    const r = validateBinding(m, p, SUMMARY, 'pie chart of Sales by Region');
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.warnings).toBeUndefined();
-  });
-});
-
-describe('binder/validate — field_mapping covers calc inputs (H3, item 4)', () => {
-  // The bare field-name part of a field_mapping KEY (strip a `@deriv` qualifier).
-  // This is exactly what templates.ts derives baseTarget from, so rewriteFormulaFieldRefs
-  // can resolve a bare [ref] token iff its ref appears here.
-  function keyFieldParts(fm: Record<string, string>): Set<string> {
-    const out = new Set<string>();
-    for (const k of Object.keys(fm)) {
-      const at = k.lastIndexOf('@');
-      out.add(at > 0 ? k.slice(0, at) : k);
-    }
-    return out;
-  }
-
-  it('scatter: every slot-referencing calc input ref is a field_mapping key (engine can rewrite the formula)', () => {
-    const m = manifests.get('correlation-scatter-plot-chart')!;
-    const p: BindingProposal = {
-      template: m.template,
-      title: 'Scatter',
-      bindings: [
-        { slot_id: 'sales', field: 'Sales' },
-        { slot_id: 'profit', field: 'Profit' },
-        { slot_id: 'customer_name', field: 'Customer Name' },
-        { slot_id: 'region', field: 'Region' },
-      ],
-    };
-    const r = validateBinding(m, p, SUMMARY);
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      const covered = keyFieldParts(r.field_mapping);
-      for (const calc of m.calcs) {
-        for (const input of calc.inputs ?? []) {
-          if (input.template_internal) continue;
-          expect(
-            covered.has(input.ref),
-            `calc '${calc.slot_id}' input [${input.ref}] must be a field_mapping key`,
-          ).toBe(true);
-        }
-      }
-    }
-  });
-
-  it('floating-bars: every slot-referencing calc input ref is covered by the emitted field_mapping', () => {
-    // W28-D byte-for-byte sync (re-baseline): ww-floating-bars now mirrors the factory
-    // THREE-calc variant verbatim — a SPLIT actual-score calc (Calculation_ActualScore),
-    // the span/size calc (Calculation_GanttSize), and a SIGN over/under COLOR calc
-    // (Calculation_OverUnder). Color is now a TEMPLATE-OWNED calc, NOT a bindable slot, so
-    // the factory-true bindable set is exactly THREE slots (row_dimension / line_measure /
-    // actual_input); the previously shipped rung-1+format variant's bound Segment
-    // `color_dimension` slot is GONE (binding it would name an unknown slot → gate-1 fail).
-    // The coverage LOGIC below is unchanged from the scatter sibling, but it now iterates the
-    // factory calcs' REAL inputs — actual_score_calc's bindable [Actual Input] and the
-    // bar_size/over_under calcs' bindable [Reference Value] (the template-internal
-    // [Calculation_ActualScore] ref is skipped) — so it now ACTIVELY proves every
-    // slot-referencing calc input ref lands in the emitted field_mapping (the strengthening
-    // the deferred sync promised), rather than iterating zero inputs.
-    const m = manifests.get('ww-floating-bars')!;
-    const p: BindingProposal = {
-      template: m.template,
-      title: 'Gantt',
-      bindings: [
-        { slot_id: 'row_dimension', field: 'Region' },
-        { slot_id: 'line_measure', field: 'Sales' },
-        { slot_id: 'actual_input', field: 'Category' },
-      ],
-    };
-    const r = validateBinding(m, p, SUMMARY);
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      const covered = keyFieldParts(r.field_mapping);
-      for (const calc of m.calcs) {
-        for (const input of calc.inputs ?? []) {
-          if (input.template_internal) continue;
-          expect(
-            covered.has(input.ref),
-            `calc '${calc.slot_id}' input [${input.ref}] covered`,
-          ).toBe(true);
-        }
-      }
-    }
-  });
-});
-
 describe('binder/validate — gate 7: full scatter emission', () => {
-  it('prunes every authored Customer Name node when the optional detail slot is unbound', () => {
+  it('emits the exact raw-slot field_mapping with the template-owned calc excluded', () => {
     const m = manifests.get('correlation-scatter-plot-chart')!;
     const p: BindingProposal = {
       template: m.template,
       title: 'Scatter',
       bindings: [
-        { slot_id: 'sales', field: 'Sales' },
-        { slot_id: 'profit', field: 'Profit' },
-        { slot_id: 'region', field: 'Region' },
-      ],
-    };
-    const r = validateBinding(m, p, SUMMARY);
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.optional_field_prunes).toEqual([
-      {
-        templateField: 'Customer Name',
-        derivation: 'none',
-        role: ['nk', 'ok'],
-      },
-    ]);
-
-    const template = fs.readFileSync(
-      path.join(__dirname, '../data/templates/correlation-scatter-plot-chart.xml'),
-      'utf8',
-    );
-    const pruned = pruneUnboundOptionalFields(template, r.optional_field_prunes);
-    expect(pruned).not.toContain('name="[Customer Name]"');
-    expect(pruned).not.toContain('column="[Customer Name]"');
-    expect(pruned).not.toContain('].[none:Customer Name:nk]');
-    const parsed = new DOMParser().parseFromString(pruned, 'text/xml');
-    expect(parsed.getElementsByTagName('parsererror')).toHaveLength(0);
-
-    const ordinalTemplate = template.replaceAll('none:Customer Name:nk', 'none:Customer Name:ok');
-    const prunedOrdinal = pruneUnboundOptionalFields(ordinalTemplate, r.optional_field_prunes);
-    expect(prunedOrdinal).not.toContain('Customer Name');
-  });
-
-  it('emits the exact 4-slot field_mapping (calc excluded)', () => {
-    const m = manifests.get('correlation-scatter-plot-chart')!;
-    const p: BindingProposal = {
-      template: m.template,
-      title: 'Scatter',
-      bindings: [
-        { slot_id: 'sales', field: 'Sales' },
-        { slot_id: 'profit', field: 'Profit' },
-        { slot_id: 'customer_name', field: 'Customer Name' },
-        { slot_id: 'region', field: 'Region' },
+        { slot_id: 'field_base_1_sum', field: 'Sales' },
+        { slot_id: 'field_base_2_sum', field: 'Profit' },
+        { slot_id: 'field_base_3', field: 'Customer Name' },
+        { slot_id: 'field_base_4', field: 'Region' },
+        { slot_id: 'field_base_2_none', field: 'Profit' },
+        { slot_id: 'field_base_1_none', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, SUMMARY);
@@ -1345,10 +1375,12 @@ describe('binder/validate — gate 7: full scatter emission', () => {
     if (r.ok) {
       expect(r.datasource).toBe('Superstore');
       expect(r.field_mapping).toEqual({
-        Sales: '[Superstore].[sum:Sales:qk]',
-        Profit: '[Superstore].[sum:Profit:qk]',
-        'Customer Name': '[Superstore].[none:Customer Name:nk]',
-        Region: '[Superstore].[none:Region:nk]',
+        '{{field_base_1}}@sum': '[Superstore].[sum:Sales:qk]',
+        '{{field_base_2}}@sum': '[Superstore].[sum:Profit:qk]',
+        '{{field_base_3}}': '[Superstore].[none:Customer Name:nk]',
+        '{{field_base_4}}': '[Superstore].[none:Region:nk]',
+        '{{field_base_2}}@none': '[Superstore].[none:Profit:qk]',
+        '{{field_base_1}}@none': '[Superstore].[none:Sales:qk]',
       });
     }
   });
@@ -1383,8 +1415,8 @@ describe('binder/validate — XML escaping in the emitted payload (M10 Finding 1
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Region' },
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, hostile);
@@ -1428,8 +1460,8 @@ describe('binder/validate — XML escaping in the emitted payload (M10 Finding 1
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Sub-Category' },
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'field_base_1', field: 'Sub-Category' },
+        { slot_id: 'field_base_2', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, clean);
@@ -1462,8 +1494,8 @@ describe('binder/validate — XML escaping in the emitted payload (M10 Finding 1
       template: m.template,
       title: 't',
       bindings: [
-        { slot_id: 'region', field: 'Region' },
-        { slot_id: 'sales', field: "O'Brien Sales" },
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: "O'Brien Sales" },
       ],
     };
     const r = validateBinding(m, p, s);

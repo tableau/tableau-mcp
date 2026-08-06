@@ -88,13 +88,14 @@ export const CANONICAL_DERIVATIONS: ReadonlySet<string> = new Set<string>([
   // derivation="InOut" appears in captured real workbooks (twb-example-index.json,
   // corpus.json) — so rejecting it would fail preflight on Tableau's own output.
   'InOut',
+  'Collect',
 ]);
 
 /**
  * The canonical short prefix Tableau itself writes for each derivation. This is the
  * form to EMIT; see `DERIVATION_SHORT_TO_LONG` for the (wider) set we accept.
  */
-export const DERIVATION_LONG_TO_SHORT: Readonly<Record<string, string>> = {
+export const DERIVATION_LONG_TO_SHORT = {
   None: 'none',
   Attribute: 'attr',
   Year: 'yr',
@@ -136,7 +137,15 @@ export const DERIVATION_LONG_TO_SHORT: Readonly<Record<string, string>> = {
   VarP: 'vrp',
   User: 'usr',
   InOut: 'io',
-};
+  Collect: 'clct',
+} as const satisfies Readonly<Record<string, string>>;
+
+export type CanonicalDerivationShort =
+  (typeof DERIVATION_LONG_TO_SHORT)[keyof typeof DERIVATION_LONG_TO_SHORT];
+
+export const CANONICAL_DERIVATION_SHORT_FORMS = Object.freeze(
+  Object.values(DERIVATION_LONG_TO_SHORT),
+) as readonly [CanonicalDerivationShort, ...CanonicalDerivationShort[]];
 
 /**
  * Non-canonical short prefixes we still accept on input. Tableau rewrites the CI
@@ -154,6 +163,7 @@ const DERIVATION_SHORT_ALIASES: Readonly<Record<string, string>> = {
   varp: 'VarP',
   user: 'User',
   tmo: 'Month-Trunc',
+  collect: 'Collect',
 };
 
 /**
@@ -161,9 +171,10 @@ const DERIVATION_SHORT_ALIASES: Readonly<Record<string, string>> = {
  * derivation — `[pcto:cum:sum:Sales:qk]` carries `derivation="Sum"` — so the wrapper
  * segments are stripped before lookup rather than resolved on their own.
  */
-const TABLE_CALC_WRAPPERS: ReadonlySet<string> = new Set<string>([
+export const COLUMN_INSTANCE_WRAPPER_PREFIXES: ReadonlySet<string> = new Set<string>([
   'cum',
   'diff',
+  'fval', // Desktop emits `[fVal:sum:Sales:qk]`; fVal wraps rather than replaces the binding derivation.
   'pcdf',
   'pcto',
   'rank',
@@ -202,7 +213,7 @@ function baseSegment(prefixChain: string): string {
     .split(':')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
-  while (segments.length > 1 && TABLE_CALC_WRAPPERS.has(segments[0])) {
+  while (segments.length > 1 && COLUMN_INSTANCE_WRAPPER_PREFIXES.has(segments[0])) {
     segments.shift();
   }
   return segments[0] ?? '';
@@ -216,6 +227,16 @@ function baseSegment(prefixChain: string): string {
  */
 export function tryResolveDerivation(prefixChain: string): string | undefined {
   return DERIVATION_SHORT_TO_LONG[baseSegment(prefixChain)];
+}
+
+/** Resolve an accepted prefix chain to the canonical short form Desktop emits. */
+export function canonicalShortDerivation(
+  prefixChain: string,
+): CanonicalDerivationShort | undefined {
+  const long = tryResolveDerivation(prefixChain);
+  return long === undefined
+    ? undefined
+    : DERIVATION_LONG_TO_SHORT[long as keyof typeof DERIVATION_LONG_TO_SHORT];
 }
 
 /**

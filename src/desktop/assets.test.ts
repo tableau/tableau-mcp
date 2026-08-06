@@ -35,7 +35,7 @@ describe('desktop SEA asset access', () => {
   it('fails closed when the SEA asset-manifest.json listing is missing', async () => {
     const { listDataAssetNames } = await importWithSeaAssets({});
 
-    expect(() => listDataAssetNames('template-manifests')).toThrow(/asset-manifest\.json/i);
+    expect(() => listDataAssetNames('templates')).toThrow(/asset-manifest\.json/i);
   });
 
   it('fails closed when the SEA asset-manifest.json listing is corrupt', async () => {
@@ -43,7 +43,7 @@ describe('desktop SEA asset access', () => {
       'asset-manifest.json': '{not json',
     });
 
-    expect(() => listDataAssetNames('template-manifests')).toThrow(/asset-manifest\.json/i);
+    expect(() => listDataAssetNames('templates')).toThrow(/asset-manifest\.json/i);
   });
 
   it('fails closed when the SEA asset-manifest.json listing is not the { key: entry } shape', async () => {
@@ -51,23 +51,23 @@ describe('desktop SEA asset access', () => {
       'asset-manifest.json': JSON.stringify(['desktop/data/x.json']),
     });
 
-    expect(() => listDataAssetNames('template-manifests')).toThrow(/asset-manifest\.json/i);
+    expect(() => listDataAssetNames('templates')).toThrow(/asset-manifest\.json/i);
   });
 
   it('verifies SEA asset bytes against the asset-manifest.json hash', async () => {
     const assetText = '{"template":"x"}';
     const { readDataAsset } = await importWithSeaAssets({
       'asset-manifest.json': JSON.stringify({
-        'desktop/data/template-manifests/example.manifest.json': {
+        'desktop/data/templates/example.tbm': {
           sha256: '0'.repeat(64),
           bytes: 16,
         },
       }),
-      'desktop/data/template-manifests/example.manifest.json': assetText,
+      'desktop/data/templates/example.tbm': assetText,
     });
 
-    expect(() => readDataAsset('template-manifests/example.manifest.json')).toThrow(
-      /template-manifests\/example\.manifest\.json.*sha256/i,
+    expect(() => readDataAsset('templates/example.tbm')).toThrow(
+      /templates\/example\.tbm.*sha256/i,
     );
   });
 
@@ -75,12 +75,12 @@ describe('desktop SEA asset access', () => {
     const assetText = '{"template":"x"}';
     const { readDataAsset } = await importWithSeaAssets({
       'asset-manifest.json': JSON.stringify({
-        'desktop/data/template-manifests/example.manifest.json': manifestEntry(assetText),
+        'desktop/data/templates/example.tbm': manifestEntry(assetText),
       }),
-      'desktop/data/template-manifests/example.manifest.json': assetText,
+      'desktop/data/templates/example.tbm': assetText,
     });
 
-    expect(readDataAsset('template-manifests/example.manifest.json')).toBe(assetText);
+    expect(readDataAsset('templates/example.tbm')).toBe(assetText);
   });
 
   it('returns null for a desktop/data asset that is not embedded (not in the manifest)', async () => {
@@ -88,7 +88,7 @@ describe('desktop SEA asset access', () => {
       'asset-manifest.json': JSON.stringify({}),
     });
 
-    expect(readDataAsset('template-manifests/absent.manifest.json')).toBeNull();
+    expect(readDataAsset('templates/absent.tbm')).toBeNull();
   });
 
   it('verifies resources/desktop assets through the same manifest', async () => {

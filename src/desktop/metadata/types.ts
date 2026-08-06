@@ -43,10 +43,12 @@ export interface FieldReference {
   role: string;
   datatype?: string;
   semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
+  approxCount?: number;
   caption?: string;
   isAggregated?: boolean;
   formula?: string;
   folder?: string;
+  isGroup?: boolean;
 }
 
 export interface ParsedWorkbook {
@@ -106,7 +108,9 @@ export interface ParsedColumn {
   '@_caption'?: string;
   calculation?: {
     '@_class': string;
-    '@_formula': string;
+    '@_formula'?: string;
+    '@_column'?: string;
+    [key: string]: any;
   };
   [key: string]: any;
 }

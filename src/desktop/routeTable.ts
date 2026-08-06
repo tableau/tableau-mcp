@@ -49,42 +49,42 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.)',
     action:
-      'FIRST use bind-template\'s two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user\'s message verbatim as `ask` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call get-worksheet-xml to orient before bind-template; list-available-fields is allowed but not needed to orient: bind-template reads schema; failed binds propose candidate fields. Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.',
+      'use the caller-neutral flow list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet. Built artifacts coexist. Direct requests may choose, build, and apply immediately. For open analytical intent, choose and build several distinct fresh worksheets. If the user explicitly says not to change anything, stop before apply-worksheet. Apply mutations sequentially. If an apply has a post-dispatch uncertain outcome, do not replay it.',
     toolSequence: [
-      'bind-template',
-      'get-worksheet-xml',
+      'list-templates',
       'list-available-fields',
-      'author-parameter',
-      'author-set',
-      'author-action',
-      'search-commands',
+      'build-worksheets-from-templates',
+      'apply-worksheet',
     ],
     stopConditions: [
-      'deterministic, ~0.3s',
-      'Do not use manual authoring tools between Call 1 and Call 2',
+      'stop before apply-worksheet',
+      'Apply mutations sequentially',
+      'do not replay it',
     ],
-    requiredEvidence: ['bind-template applied result (auto-apply receipt)'],
+    requiredEvidence: ['each applied worksheet returns a success receipt'],
   },
   {
     kind: 'route',
-    id: 'calc-then-bind',
+    id: 'derived-metric',
     trigger:
       'a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %)',
     action:
-      'FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.',
-    toolSequence: ['bind-template', 'search-knowledge'],
-    stopConditions: [
-      'ONE bind-template(auto_apply:true) call',
-      'Only after a formula/field-resolution failure',
-      'ONE corrective bind-template call',
+      'author the conventional calculation with author-calc, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+    toolSequence: [
+      'author-calc',
+      'list-templates',
+      'list-available-fields',
+      'build-worksheets-from-templates',
+      'apply-worksheet',
     ],
-    requiredEvidence: ['authored_calcs returned by successful bind-template'],
+    stopConditions: ['author the conventional calculation with author-calc'],
+    requiredEvidence: ['calculation readback and worksheet apply receipt'],
   },
   {
     kind: 'route',
     id: 'knowledge-consult',
     trigger:
-      'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult',
+      'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design)',
     action:
       'FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.',
     toolSequence: ['search-knowledge', 'read-knowledge-resource'],
@@ -96,15 +96,17 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard',
     trigger: 'a dashboard ask with 2-6 vizzes',
     action:
-      'build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.',
+      'build sheets with list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet, applying each worksheet sequentially; then compose with dashboard-auto-apply or plan-dashboard-creation -> build-and-apply-dashboard.',
     toolSequence: [
-      'bind-template',
+      'list-templates',
+      'list-available-fields',
+      'build-worksheets-from-templates',
+      'apply-worksheet',
       'dashboard-auto-apply',
       'plan-dashboard-creation',
       'build-and-apply-dashboard',
-      'search-commands',
     ],
-    stopConditions: ['search-commands only for commands the census does not list'],
+    stopConditions: ['applying each worksheet sequentially'],
     requiredEvidence: ['each sheet build returns a success envelope before dashboard composition'],
   },
   {
@@ -120,18 +122,21 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'dynamic-authoring',
     trigger:
-      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (a named ratio/margin/growth ask routes via calc-then-bind; examples here include running total and LOD)',
+      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total and LOD)',
     action:
-      'use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.',
+      'use author-parameter first, then author-set, author-calc, author-action, and format-labels as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
     toolSequence: [
       'author-parameter',
       'author-set',
       'author-calc',
       'author-action',
       'format-labels',
-      'bind-template',
+      'list-templates',
+      'list-available-fields',
+      'build-worksheets-from-templates',
+      'apply-worksheet',
     ],
-    stopConditions: ['on { reopened: true } continue immediately'],
+    stopConditions: ['use author-parameter first'],
     requiredEvidence: ["each author-* verb's readback-verified result object"],
   },
   {
@@ -144,7 +149,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'current/existing sheet/chart/view/dashboard',
     action:
-      'edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort ONLY, add-field + apply-worksheet for a color/size/detail or rows/cols field, or an author-* tool; a NEW chart here = bind-template with target_worksheet. Never create new sheets unless asked.',
+      'edit in place: resolve target with list-worksheets -> list-dashboards -> ask-user when ambiguous, then use refine-worksheet or add-field -> apply-worksheet for color, size, detail, Rows, or Columns. For a requested new chart, use list-templates -> list-available-fields -> build-worksheets-from-templates, then apply-worksheet. Never create new sheets unless asked.',
     toolSequence: [
       'list-worksheets',
       'list-dashboards',
@@ -152,7 +157,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'refine-worksheet',
       'add-field',
       'apply-worksheet',
-      'bind-template',
+      'list-templates',
+      'list-available-fields',
+      'build-worksheets-from-templates',
     ],
     stopConditions: ['Never create new sheets unless asked'],
     requiredEvidence: ['resolved worksheet/dashboard target before applying'],
@@ -187,12 +194,42 @@ export function generateDesktopInstructions(table: readonly DesktopInstructionEn
   return table.map(renderInstructionEntry).join('\n\n');
 }
 
+const DEMO_PROFILE_INSTRUCTIONS = [
+  'You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.',
+  "For a chart request, use bind-template with the user's ask. Use the returned fallback tools when it cannot apply.",
+] as const;
+
+const SPEC_LOOP_PROFILE_INSTRUCTIONS = [
+  'You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.',
+  'Use execute-tableau-command for supported authoring operations and the list tools for discovery and readback.',
+] as const;
+
 /**
  * Instructions for a given session-pinning state. When pinned, the session-resolution
  * prose switches to the pinned variant (pin is the default; the agent can still target
  * another open Desktop via list-instances) rather than being dropped.
  */
-export function buildDesktopInstructions({ sessionPinned }: { sessionPinned: boolean }): string {
+export function buildDesktopInstructions({
+  sessionPinned,
+  profile = '',
+}: {
+  sessionPinned: boolean;
+  profile?: string;
+}): string {
+  const normalizedProfile = profile.trim().toLowerCase();
+  if (normalizedProfile === 'demo') {
+    return [
+      ...DEMO_PROFILE_INSTRUCTIONS,
+      sessionPinned ? SESSION_RESOLUTION_TEXT_PINNED : SESSION_RESOLUTION_TEXT_UNPINNED,
+    ].join('\n\n');
+  }
+  if (normalizedProfile === 'spec-loop') {
+    return [
+      ...SPEC_LOOP_PROFILE_INSTRUCTIONS,
+      sessionPinned ? SESSION_RESOLUTION_TEXT_PINNED : SESSION_RESOLUTION_TEXT_UNPINNED,
+    ].join('\n\n');
+  }
+
   const table = sessionPinned
     ? DESKTOP_ROUTE_TABLE.map((entry) =>
         entry.id === SESSION_RESOLUTION_ID

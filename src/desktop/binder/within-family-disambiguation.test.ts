@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { classifyNoLlm } from './classify.js';
-import type { Family, SlotKind, SlotSpec, TemplateManifest } from './manifest-types.js';
+import type { Family, RuntimeTemplateDescriptor, SlotKind, SlotSpec } from './manifest-types.js';
 import type { SchemaField, SchemaSummary } from './schema-summary.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
@@ -76,25 +76,20 @@ function synth(
   family: Family,
   keywords: string[],
   slots: SlotSpec[],
-): TemplateManifest {
+): RuntimeTemplateDescriptor {
   return {
     template,
     family,
-    readiness: 'GREEN',
     fast_path_eligible: true,
     fast_path_blockers: [],
-    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-    datasource_placeholder: true,
-    placeholders: ['TITLE', 'DATASOURCE'],
     intent_keywords: keywords,
     description: `${family} template ${template}`,
     slots,
     calcs: [],
-    hazards: [],
   };
 }
 
-function mapOf(...ms: TemplateManifest[]): Map<string, TemplateManifest> {
+function mapOf(...ms: RuntimeTemplateDescriptor[]): Map<string, RuntimeTemplateDescriptor> {
   return new Map(ms.map((m) => [m.template, m]));
 }
 
@@ -420,7 +415,7 @@ describe('classifyNoLlm — plural chart-noun boundary', () => {
 // ── determinism ───────────────────────────────────────────────────────────────
 describe('classifyNoLlm — determinism', () => {
   it('same inputs produce identical selection + bindings', () => {
-    const build = (): Map<string, TemplateManifest> =>
+    const build = (): Map<string, RuntimeTemplateDescriptor> =>
       mapOf(
         synth('rank-a', 'ranking', ['bar'], catVal()),
         synth('rank-b', 'ranking', ['bar'], catVal()),

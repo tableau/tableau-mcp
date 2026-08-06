@@ -183,7 +183,7 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
             setName,
             caption,
             datasource: target.name,
-            hint: 'reference it by caption in a bind-template ask, or as a filter/color field',
+            hint: 'reference it by caption in a build-worksheets-from-templates fieldMapping, or as a filter/color field',
           });
         },
       });

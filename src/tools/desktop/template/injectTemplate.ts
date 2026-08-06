@@ -11,12 +11,11 @@ import {
 } from '../../../desktop/binder/explicit-bind.js';
 import { summarizeSchema } from '../../../desktop/binder/schema-summary.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
-import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
-import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import type { OptionalFieldPruneSpec } from '../../../desktop/templates/optionalFieldPrune.js';
-import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
+import { getRuntimeTemplateSnapshot } from '../../../desktop/templates/runtimeTemplateCatalog.js';
+import { listTemplateNames } from '../../../desktop/templates/templatePath.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
@@ -56,17 +55,6 @@ const paramsSchema = {
     .optional()
     .describe('Existing sheet name; omit when insertPosition defaults to end.'),
 };
-
-function inferSingleDatasourceFromFieldMapping(
-  fieldMapping?: Record<string, string>,
-): string | null {
-  const datasources = new Set<string>();
-  for (const ref of Object.values(fieldMapping ?? {})) {
-    const datasource = parseDatasourceQualifiedColumnRef(ref.trim())?.datasource;
-    if (datasource) datasources.add(datasource);
-  }
-  return datasources.size === 1 ? [...datasources][0] : null;
-}
 
 const toolTitle = 'Adding template';
 export const getInjectTemplateTool = (
@@ -122,8 +110,8 @@ export const getInjectTemplateTool = (
             return new FileNotFoundError(workbookFile).toErr();
           }
 
-          const templateXmlSource = readTemplate(templateName);
-          if (templateXmlSource === null) {
+          const runtimeSnapshot = getRuntimeTemplateSnapshot(templateName);
+          if (runtimeSnapshot === null) {
             const files = listTemplateNames();
             const available = files.length > 0 ? files.join(', ') : 'none';
             return new ArgsValidationError(
@@ -132,7 +120,7 @@ export const getInjectTemplateTool = (
           }
 
           try {
-            const templateXml = templateXmlSource;
+            const templateXml = runtimeSnapshot.xml;
             const workbookXml = readFileSync(resolve(workbookFile), 'utf-8');
 
             // Per-apply calc namespacing identity: the shared core defaults
@@ -140,9 +128,9 @@ export const getInjectTemplateTool = (
             // one. The sidecar uses session for cache fingerprinting; this nonce is
             // target workbook file + apply timestamp; a randomUUID guards against
             // same-millisecond collisions.
-            // Manifest enforcement (P0 W-23447710): a caller-supplied mapping for a
-            // manifest-backed template is validated/corrected through the binder
-            // contract — slot derivations come from the manifest, not the caller.
+            // Runtime descriptor enforcement (P0 W-23447710): a caller-supplied mapping
+            // is validated/corrected through the binder contract — slot derivations come
+            // from the inferred TBM structure, not the caller.
             let appliedFieldMapping = fieldMapping;
             let appliedTemplateParameters = templateParameters;
             let optionalFieldPrunes: OptionalFieldPruneSpec[] = [];
@@ -156,7 +144,11 @@ export const getInjectTemplateTool = (
                 templateName,
                 fieldMapping,
                 summarizeSchema(workbookXml),
-                { title, datasource: templateParameters.DATASOURCE },
+                {
+                  contract: runtimeSnapshot.descriptor,
+                  title,
+                  datasource: templateParameters.DATASOURCE,
+                },
               );
 
               if (!explicitBind.ok) {
@@ -165,10 +157,7 @@ export const getInjectTemplateTool = (
                 ).toErr();
               }
 
-              const resolvedDatasource =
-                explicitBind.passthrough && fieldMapping
-                  ? (inferSingleDatasourceFromFieldMapping(fieldMapping) ?? explicitBind.datasource)
-                  : explicitBind.datasource;
+              const resolvedDatasource = explicitBind.datasource;
 
               if (resolvedDatasource !== templateParameters.DATASOURCE) {
                 return new ArgsValidationError(
@@ -178,7 +167,7 @@ export const getInjectTemplateTool = (
                 ).toErr();
               }
 
-              if (!explicitBind.passthrough) appliedFieldMapping = explicitBind.fieldMapping;
+              appliedFieldMapping = explicitBind.fieldMapping;
               optionalFieldPrunes = explicitBind.optionalFieldPrunes;
               appliedTemplateParameters = {
                 ...templateParameters,
@@ -195,7 +184,7 @@ export const getInjectTemplateTool = (
               sheetType,
               templateParameters: appliedTemplateParameters,
               fieldMapping: appliedFieldMapping,
-              templateSlots: bundledIntelligenceProvider.getTemplateManifest(templateName)?.slots,
+              templateSlots: runtimeSnapshot.descriptor.slots,
               insertPosition,
               relativeSheetName,
               applyNonce,

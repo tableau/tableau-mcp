@@ -11,10 +11,6 @@ import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheet
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
 import { addDashboard, addSheet } from '../../../desktop/metadata/index.js';
-import {
-  checkRouteGateForScratchEntry,
-  type RouteGateResult,
-} from '../../../desktop/route/route-gate.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { formatWorkbookPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import {
@@ -26,17 +22,7 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { IncompleteOperationError } from '../incompleteOperationError.js';
 import { DesktopTool } from '../tool.js';
 
-function isRouteGateResult(result: unknown): result is RouteGateResult {
-  return (
-    typeof result === 'object' &&
-    result !== null &&
-    Array.isArray((result as { content?: unknown }).content) &&
-    typeof (result as { isError?: unknown }).isError === 'boolean'
-  );
-}
-
 function getSuccessResult(result: unknown): CallToolResult {
-  if (isRouteGateResult(result)) return result;
   return {
     isError: false,
     content: [{ type: 'text', text: JSON.stringify(result) }],
@@ -93,14 +79,6 @@ export const getBatchCreateAndCacheSheetsTool = (
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
-
-          const gateResult = checkRouteGateForScratchEntry(
-            'batch-create-and-cache-sheets',
-            resolvedSession,
-          );
-          if (gateResult) {
-            return new Ok(gateResult);
-          }
 
           const executor = await extra.getExecutor(resolvedSession);
           const signal = extra.signal;

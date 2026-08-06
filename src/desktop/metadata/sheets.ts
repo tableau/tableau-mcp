@@ -35,13 +35,14 @@ function createWorksheetWindow(sheetName: string): ParsedWindow {
   };
 }
 
-function isWorksheetWindowForSheet(window: ParsedWindow, sheetName: string): boolean {
+function isWorksheetWindow(window: ParsedWindow): boolean {
   return (
-    window['@_name'] === sheetName &&
-    (window['@_class'] === undefined ||
-      window['@_class'] === '' ||
-      window['@_class'] === 'worksheet')
+    window['@_class'] === undefined || window['@_class'] === '' || window['@_class'] === 'worksheet'
   );
+}
+
+function isWorksheetWindowForSheet(window: ParsedWindow, sheetName: string): boolean {
+  return window['@_name'] === sheetName && isWorksheetWindow(window);
 }
 
 function ensureWorksheetWindow(workbook: ParsedWorkbook, sheetName: string): void {
@@ -102,7 +103,6 @@ export function deleteSheet(workbookXml: string, sheetName: string): string {
   if (!findWorksheet(workbook, sheetName)) {
     throw new Error(`Worksheet "${sheetName}" does not exist`);
   }
-
   if (workbook.workbook?.worksheets) {
     const worksheets = normalizeArray(workbook.workbook.worksheets.worksheet);
     const filtered = worksheets.filter((ws) => ws['@_name'] !== sheetName);
@@ -149,6 +149,18 @@ export function extractSheetXml(workbookXml: string, sheetName: string): string 
   return serializeXML({ worksheet });
 }
 
+export function extractWorksheetWindowXml(workbookXml: string, sheetName: string): string | null {
+  const workbook = parseXML(workbookXml);
+  const worksheetWindows = normalizeArray(workbook.workbook?.windows?.window).filter(
+    isWorksheetWindow,
+  );
+  const window = worksheetWindows.find((candidate) => candidate['@_name'] === sheetName);
+  if (!window) return null;
+  carryNamespaceDeclarations(workbook.workbook?.windows, window);
+  carryNamespaceDeclarations(workbook.workbook, window);
+  return serializeXML({ window });
+}
+
 // The External Client API's whole-workbook POST route treats the posted document as authoritative
 // and replaces the open workbook with it. So the doc must carry the ENTIRE live workbook with only
 // this sheet swapped in; anything omitted (sibling sheets, dashboards) would be pruned. Upsert by
@@ -181,4 +193,29 @@ export function upsertSheetIntoWorkbook(
   ensureWorksheetWindow(workbook, sheetName);
 
   return serializeXML(workbook);
+}
+
+export function upsertWorksheetAndWindowIntoWorkbook(
+  workbookXml: string,
+  sheetName: string,
+  editedWorksheetXml: string,
+  editedWindowXml: string,
+): string {
+  const withWorksheet = parseXML(
+    upsertSheetIntoWorkbook(workbookXml, sheetName, editedWorksheetXml),
+  );
+  const parsedWindow = parseXML(editedWindowXml);
+  const editedWindow = normalizeArray(parsedWindow.window as ParsedWindow | undefined)[0];
+  if (!editedWindow || !isWorksheetWindow(editedWindow) || editedWindow['@_name'] !== sheetName) {
+    throw new Error(`Edited XML does not contain a worksheet <window name="${sheetName}">`);
+  }
+
+  if (!withWorksheet.workbook) withWorksheet.workbook = {};
+  if (!withWorksheet.workbook.windows) withWorksheet.workbook.windows = {};
+  const windows = normalizeArray(withWorksheet.workbook.windows.window);
+  const index = windows.findIndex((window) => isWorksheetWindowForSheet(window, sheetName));
+  if (index === -1) windows.push(editedWindow);
+  else windows[index] = editedWindow;
+  withWorksheet.workbook.windows.window = windows.length === 1 ? windows[0] : windows;
+  return serializeXML(withWorksheet);
 }

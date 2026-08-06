@@ -1,23 +1,23 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
   rewriteFieldReferences,
   rewriteFieldReferencesWithDiagnostics,
 } from './fieldReferenceRewriter.js';
+import { getRuntimeTemplateSnapshot } from './runtimeTemplateCatalog.js';
+import type { TemplateRuntimeSnapshot } from './templateRuntimeSnapshot.js';
 
-// Ports A's ref-class coverage (W10-E8) onto THIS repo's real shipped templates.
+// Ports A's ref-class coverage (W10-E8) onto this repo's TBM-derived runtime snapshots.
 // The shared DOM-structural rewriter must rewrite every reference CLASS a template
 // carries — bare column declarations, base-column-attr rewrites, plain and
 // COMPOUND (table-calc) column-instance names, datasource-qualified refs in text
 // nodes and attributes, and calc formula/caption bodies — with zero field-ref
 // residue, while leaving human labels and non-field bracket tokens intact.
 
-const TEMPLATES_DIR = join(process.cwd(), 'src', 'desktop', 'data', 'templates');
-
-function readTemplate(name: string): string {
-  return readFileSync(join(TEMPLATES_DIR, `${name}.xml`), 'utf-8');
+function runtimeSnapshot(name: string): TemplateRuntimeSnapshot {
+  const snapshot = getRuntimeTemplateSnapshot(name);
+  if (!snapshot) throw new Error(`missing runtime template snapshot: ${name}`);
+  return snapshot;
 }
 
 describe('rewriteFieldReferences — raw-vs-escaped boundary (named contract)', () => {
@@ -52,6 +52,63 @@ describe('rewriteFieldReferences — raw-vs-escaped boundary (named contract)', 
 
     expect(out).toContain('name="[Sales]"');
     expect(out).not.toContain('name="[qk]"');
+  });
+
+  it('rewrites an unqualified generated-instance source reference', () => {
+    const forecastXml = xml.replace(
+      "name='[none:Field:nk]'",
+      "forecast-column-base='[sum:Field:qk]' name='[fVal:sum:Field:qk]'",
+    );
+    const out = rewriteFieldReferences(forecastXml, { Field: '[DS].[avg:Revenue:qk]' }, 'DS');
+
+    expect(out).toContain('forecast-column-base="[avg:Revenue:qk]"');
+    expect(out).not.toContain('forecast-column-base="[sum:Field:qk]"');
+  });
+});
+
+describe('rewriteFieldReferences — fallback and error behavior', () => {
+  const concreteXml =
+    '<workbook><worksheets><worksheet><table><view>' +
+    "<column datatype='real' name='[Value]' role='measure' type='quantitative'/>" +
+    "<column-instance column='[Value]' derivation='Sum' name='[sum:Value:qk]'/>" +
+    '</view><rows>[{{DATASOURCE}}].[sum:Value:qk]</rows>' +
+    '</table></worksheet></worksheets></workbook>';
+
+  it('fills the datasource while leaving concrete fields unchanged for an empty mapping', () => {
+    const out = rewriteFieldReferences(concreteXml, {}, 'Sales Data');
+
+    expect(out).toContain('[Sales Data].[sum:Value:qk]');
+    expect(out).toContain('[Value]');
+    expect(out).not.toContain('{{DATASOURCE}}');
+  });
+
+  it('leaves concrete refs unchanged when the mapping names no authored field', () => {
+    const out = rewriteFieldReferences(
+      concreteXml,
+      { Nonexistent: '[DS].[sum:Foo:qk]' },
+      'Sales Data',
+    );
+
+    expect(out).toContain('[Sales Data].[sum:Value:qk]');
+    expect(out).toContain('[Value]');
+    expect(out).not.toContain('Foo');
+  });
+
+  it('skips a malformed mapping value without corrupting concrete refs', () => {
+    const out = rewriteFieldReferences(concreteXml, { Value: 'garbage-no-brackets' }, 'Sales Data');
+
+    expect(out).toContain('[Sales Data].[sum:Value:qk]');
+    expect(out).toContain('[Value]');
+  });
+
+  it('throws on template XML with no root element', () => {
+    expect(() => rewriteFieldReferences('', {}, 'X')).toThrow(/root element/);
+  });
+
+  it('returns serialized XML when the document contains no field refs', () => {
+    const out = rewriteFieldReferences('<workbook><table/></workbook>', {}, 'X');
+
+    expect(out).toContain('<workbook>');
   });
 });
 
@@ -134,7 +191,74 @@ describe('rewriteFieldReferences — explicit base-name placeholders', () => {
     expect(out).not.toContain('{{field_base_1}}');
   });
 
-  it('resolves positional field placeholders in a computed sort for concrete legacy slots', () => {
+  it.each([
+    ['bare', '{{field_base_1}}'],
+    ['qualified', '{{field_base_1}}@sum'],
+  ])(
+    'honors a legal %s authored-slot derivation override without clobbering secondary derivations',
+    (_mode, mappingKey) => {
+      const overrideXml =
+        '<workbook><worksheets><worksheet><table><view>' +
+        "<column datatype='real' name='[{{field_base_1}}]' role='measure' type='quantitative'/>" +
+        "<column-instance column='[{{field_base_1}}]' derivation='Sum' name='[sum:{{field_base_1}}:qk]'/>" +
+        '</view><rows>[{{DATASOURCE}}].[sum:{{field_base_1}}:qk]</rows>' +
+        '<cols>[{{DATASOURCE}}].[ctd:{{field_base_1}}:qk]</cols>' +
+        '</table></worksheet></worksheets></workbook>';
+
+      const out = rewriteFieldReferences(
+        overrideXml,
+        { [mappingKey]: '[DS].[avg:Revenue:qk]' },
+        'DS',
+        undefined,
+        {
+          templateSlots: [
+            {
+              slot_id: 'field_base_1',
+              template_field: '{{field_base_1}}',
+              derivation: 'sum',
+              required: true,
+              bindable: true,
+            },
+          ],
+        },
+      );
+
+      expect(out).toContain('name="[avg:Revenue:qk]"');
+      expect(out).toContain('<rows>[DS].[avg:Revenue:qk]</rows>');
+      expect(out).toContain('<cols>[DS].[ctd:Revenue:qk]</cols>');
+    },
+  );
+
+  it('rejects an authored slot derivation that has no primary instance in the template XML', () => {
+    const mismatchXml =
+      '<workbook><worksheets><worksheet><table><view>' +
+      "<column datatype='real' name='[{{field_base_1}}]' role='measure' type='quantitative'/>" +
+      "<column-instance column='[{{field_base_1}}]' derivation='Avg' name='[avg:{{field_base_1}}:qk]'/>" +
+      '</view><rows>[{{DATASOURCE}}].[avg:{{field_base_1}}:qk]</rows>' +
+      '</table></worksheet></worksheets></workbook>';
+
+    expect(() =>
+      rewriteFieldReferences(
+        mismatchXml,
+        { '{{field_base_1}}': '[DS].[max:Revenue:qk]' },
+        'DS',
+        undefined,
+        {
+          templateSlots: [
+            {
+              slot_id: 'field_base_1',
+              template_field: '{{field_base_1}}',
+              derivation: 'sum',
+              required: true,
+              bindable: true,
+            },
+          ],
+        },
+      ),
+    ).toThrow(/descriptor.*sum.*no authored primary instance/i);
+  });
+
+  it('rejects concrete legacy descriptors that do not own positional field tokens', () => {
     const legacySlots = [
       {
         slot_id: 'measure',
@@ -159,23 +283,21 @@ describe('rewriteFieldReferences — explicit base-name placeholders', () => {
       "using='[{{DATASOURCE}}].[sum:{{field_base_1}}:qk]' />" +
       '</view></table></worksheet></worksheets></workbook>';
 
-    const out = rewriteFieldReferences(
-      legacyXml,
-      {
-        Profit: '[DS].[sum:Margin:qk]',
-        'Sub-Category': '[DS].[none:Product:nk]',
-      },
-      'DS',
-      undefined,
-      { templateSlots: legacySlots },
-    );
-
-    expect(out).toContain('column="[DS].[none:Product:nk]"');
-    expect(out).toContain('using="[DS].[sum:Margin:qk]"');
-    expect(out).not.toMatch(/\{\{field_base_\d+\}\}/);
+    expect(() =>
+      rewriteFieldReferences(
+        legacyXml,
+        {
+          Profit: '[DS].[sum:Margin:qk]',
+          'Sub-Category': '[DS].[none:Product:nk]',
+        },
+        'DS',
+        undefined,
+        { templateSlots: legacySlots },
+      ),
+    ).toThrow(/Unresolved template field placeholder/);
   });
 
-  it('reports an optional computed sort removed for an unresolved positional slot', () => {
+  it('does not use slot position to hide a mismatched optional descriptor', () => {
     const optionalSlots = [
       {
         slot_id: 'category',
@@ -202,114 +324,106 @@ describe('rewriteFieldReferences — explicit base-name placeholders', () => {
       '</view><rows>[{{DATASOURCE}}].[none:Category:nk]</rows>' +
       '</table></worksheet></worksheets></workbook>';
 
-    const result = rewriteFieldReferencesWithDiagnostics(
-      optionalSortXml,
-      { Category: '[DS].[none:Product:nk]' },
-      'DS',
-      undefined,
-      { templateSlots: optionalSlots },
-    );
-
-    expect(result.xml).not.toContain('<computed-sort');
-    expect(result.droppedOptionalElements).toEqual([
-      'computed-sort dropped: [DS].[sum:{{field_base_2}}:qk] did not resolve',
-    ]);
+    expect(() =>
+      rewriteFieldReferencesWithDiagnostics(
+        optionalSortXml,
+        { Category: '[DS].[none:Product:nk]' },
+        'DS',
+        undefined,
+        { templateSlots: optionalSlots },
+      ),
+    ).toThrow(/Unresolved template field placeholder/);
   });
 });
 
 describe('rewriteFieldReferences — ref-class coverage: kpi-text (aggregated measure)', () => {
-  let kpiText: string;
-  const mapping = { Value: '[DS].[sum:Revenue:qk]' };
+  let snapshot: TemplateRuntimeSnapshot;
+  const mapping = { '{{field_base_1}}': '[DS].[sum:Revenue:qk]' };
   const datasource = 'Sales Data';
+  const run = (): string =>
+    rewriteFieldReferences(snapshot.xml, mapping, datasource, undefined, {
+      templateSlots: snapshot.descriptor.slots,
+    });
   beforeAll(() => {
-    kpiText = readTemplate('kpi-text');
+    snapshot = runtimeSnapshot('kpi-text');
   });
 
-  it('rewrites the bare base <column> declaration (Value→Revenue)', () => {
-    const r = rewriteFieldReferences(kpiText, mapping, datasource);
+  it('rewrites the raw placeholder base <column> declaration to Revenue', () => {
+    const r = run();
     expect(r).toMatch(/<column [^>]*name="\[Revenue\]"/);
-    expect(r).not.toContain('name="[Value]"');
+    expect(r).not.toContain('{{field_base_1}}');
   });
 
   it('rewrites the aggregated instance name with a LOWERCASE short code + capitalized derivation attr', () => {
-    const r = rewriteFieldReferences(kpiText, mapping, datasource);
+    const r = run();
     expect(r).toContain('name="[sum:Revenue:qk]"');
     expect(r).toContain('derivation="Sum"');
     expect(r).not.toContain('[Sum:Revenue:qk]'); // never capitalize the name itself
-    expect(r).not.toContain(':Value:');
   });
 
   it('rewrites the datasource-qualified encoding ref and fills {{DATASOURCE}}', () => {
-    const r = rewriteFieldReferences(kpiText, mapping, datasource);
+    const r = run();
     expect(r).toContain('column="[Sales Data].[sum:Revenue:qk]"');
     expect(r).not.toContain('{{DATASOURCE}}');
   });
 });
 
 describe('rewriteFieldReferences — ref-class coverage: ranking-ordered-bar (dimension + measure + computed-sort)', () => {
-  let ranking: string;
+  let snapshot: TemplateRuntimeSnapshot;
   const mapping = {
     '{{field_base_1}}': '[DS].[none:Segment:nk]',
     '{{field_base_2}}': '[DS].[sum:Profit:qk]',
-    '{{field_base_3}}': '[DS].[none:Group:nk]',
   };
   const datasource = 'Superstore';
+  const run = (): string =>
+    rewriteFieldReferences(snapshot.xml, mapping, datasource, undefined, {
+      templateSlots: snapshot.descriptor.slots,
+    });
   beforeAll(() => {
-    ranking = readTemplate('ranking-ordered-bar');
+    snapshot = runtimeSnapshot('ranking-ordered-bar');
   });
 
   it('rewrites both bare base <column> declarations', () => {
-    const r = rewriteFieldReferences(ranking, mapping, datasource);
+    const r = run();
     expect(r).toMatch(/<column [^>]*name="\[Segment\]"/);
     expect(r).toMatch(/<column [^>]*name="\[Profit\]"/);
-    expect(r).not.toContain('name="[Category]"');
-    expect(r).not.toContain('name="[Measure]"');
+    expect(r).not.toMatch(/\{\{field_base_\d+\}\}/);
   });
 
   it('rewrites plain instance names with lowercase short codes (none/sum)', () => {
-    const r = rewriteFieldReferences(ranking, mapping, datasource);
+    const r = run();
     expect(r).toContain('name="[none:Segment:nk]"');
     expect(r).toContain('name="[sum:Profit:qk]"');
   });
 
   it('rewrites the <computed-sort> column= and using= refs (dimension + measure)', () => {
-    const r = rewriteFieldReferences(ranking, mapping, datasource);
+    const r = run();
     expect(r).toContain('column="[Superstore].[none:Segment:nk]"');
     expect(r).toContain('using="[Superstore].[sum:Profit:qk]"');
   });
 
   it('rewrites the rows/cols text-node refs with ZERO old field-ref residue', () => {
-    const r = rewriteFieldReferences(ranking, mapping, datasource);
+    const r = run();
     expect(r).toContain('<rows>[Superstore].[none:Segment:nk]</rows>');
     expect(r).toContain('<cols>[Superstore].[sum:Profit:qk]</cols>');
     expect(r).not.toContain('{{DATASOURCE}}');
-    expect(r).not.toMatch(/:Category:|:Measure:/);
+    expect(r).not.toMatch(/\{\{field_base_\d+\}\}/);
   });
 });
 
 describe('rewriteFieldReferences — ref-class coverage: pareto-chart (compound derivation / Parameters / Measure Names)', () => {
-  let pareto: string;
+  let snapshot: TemplateRuntimeSnapshot;
   const mapping = {
-    Sales: '[DS].[sum:Profit:qk]',
-    'Sub-Category': '[DS].[none:Segment:nk]',
+    '{{field_base_1}}': '[DS].[sum:Profit:qk]',
+    '{{field_base_2}}': '[DS].[none:Segment:nk]',
   };
-  const slots = [
-    {
-      template_field: 'Sub-Category',
-      required: true,
-      bindable: true,
-    },
-    {
-      template_field: 'Sales',
-      required: true,
-      bindable: true,
-    },
-  ];
   const datasource = 'Superstore';
   const run = (): string =>
-    rewriteFieldReferences(pareto, mapping, datasource, undefined, { templateSlots: slots });
+    rewriteFieldReferences(snapshot.xml, mapping, datasource, undefined, {
+      templateSlots: snapshot.descriptor.slots,
+    });
   beforeAll(() => {
-    pareto = readTemplate('pareto-chart');
+    snapshot = runtimeSnapshot('pareto-chart');
   });
 
   it('remaps the COMPOUND (table-calc) derivation ref, preserving the pcto:cum wrapper', () => {
@@ -330,9 +444,10 @@ describe('rewriteFieldReferences — ref-class coverage: pareto-chart (compound 
     expect(r).toContain('[Superstore].[:Measure Names]');
   });
 
-  it('leaves the Parameters datasource + calc caption untouched (namespacing off by default)', () => {
+  it('leaves the Parameters datasource and calc caption untouched when namespacing is off', () => {
     const r = run();
     expect(r).toContain('[Parameters].[Parameter 3]');
+    expect(r).not.toContain('[Superstore].[Parameter 3]');
     expect(r).toContain('caption="80%"');
     expect(r).not.toMatch(/_tpl_/);
   });
@@ -340,66 +455,67 @@ describe('rewriteFieldReferences — ref-class coverage: pareto-chart (compound 
   it('leaves ZERO mapped-field-ref residue', () => {
     const r = run();
     expect(r).not.toContain('{{DATASOURCE}}');
-    expect(r).not.toMatch(/:Sales:|:Sub-Category:|\[Sub-Category\]|\[Sales\]/);
+    expect(r).not.toMatch(/\{\{field_base_\d+\}\}/);
   });
 });
 
-describe('rewriteFieldReferences — ref-class coverage: part-to-whole-waterfall-chart (W10-E8 port)', () => {
-  // Direct port of A's waterfall W10-E8 proof, run against THIS repo's real
-  // template with the same {Sub-Category→country, Profit→population} remap.
-  let waterfall: string;
+describe('rewriteFieldReferences — ref-class coverage: part-to-whole-waterfall (W10-E8 port)', () => {
+  let snapshot: TemplateRuntimeSnapshot;
   const DS = 'World Indicators';
   const mapping = {
-    'Sub-Category': `[${DS}].[none:country:nk]`,
-    Profit: `[${DS}].[sum:population:qk]`,
+    '{{field_base_1}}@sum': `[${DS}].[sum:population:qk]`,
+    '{{field_base_2}}': `[${DS}].[none:country:nk]`,
+    '{{field_base_1}}@none': `[${DS}].[none:population:qk]`,
   };
-  const run = (): string => rewriteFieldReferences(waterfall, mapping, DS);
+  const run = (): string =>
+    rewriteFieldReferences(snapshot.xml, mapping, DS, undefined, {
+      templateSlots: snapshot.descriptor.slots,
+    });
   beforeAll(() => {
-    waterfall = readTemplate('part-to-whole-waterfall-chart');
+    snapshot = runtimeSnapshot('part-to-whole-waterfall');
   });
 
   it('class 1: rewrites the nominal encoding instance (none)', () => {
     const r = run();
     expect(r).toContain('name="[none:country:nk]"');
     expect(r).toContain(`[${DS}].[none:country:nk]`);
-    expect(r).not.toContain('[none:Sub-Category:nk]');
+    expect(r).not.toContain('{{field_base_2}}');
   });
 
   it('class 2: rewrites the aggregated encoding instance (sum)', () => {
     const r = run();
     expect(r).toContain('name="[sum:population:qk]"');
     expect(r).toContain(`<color column="[${DS}].[sum:population:qk]"`);
-    expect(r).not.toContain('[sum:Profit:qk]');
+    expect(r).not.toContain('[sum:{{field_base_1}}:qk]');
   });
 
   it('class 3: rewrites the table-calc instance and preserves the cum wrapper', () => {
     const r = run();
     expect(r).toContain('name="[cum:sum:population:qk]"');
-    expect(r).toContain(`<rows total="true">[${DS}].[cum:sum:population:qk]</rows>`);
+    expect(r).toContain(`<rows>[${DS}].[cum:sum:population:qk]</rows>`);
     expect(r).toContain(`field="[${DS}].[cum:sum:population:qk]"`);
-    expect(r).not.toContain('[cum:sum:Profit:qk]');
+    expect(r).not.toContain('[cum:sum:{{field_base_1}}:qk]');
   });
 
-  it('class 4: rewrites the calc FORMULA field ref (-[Profit] → -[population])', () => {
+  it('class 4: rewrites the calc FORMULA placeholder ref to population', () => {
     const r = run();
-    expect(r).toContain('formula="-[population]"');
-    expect(r).not.toContain('formula="-[Profit]"');
+    expect(r).toContain('formula="-SUM([population])"');
+    expect(r).not.toContain('{{field_base_1}}');
   });
 
-  it('class 5/6: rewrites the bare Sub-Category and Profit column declarations', () => {
+  it('class 5/6: rewrites the bare category and measure placeholder declarations', () => {
     const r = run();
     expect(r).toMatch(/<column [^>]*name="\[country\]"/);
     expect(r).toMatch(/<column [^>]*name="\[population\]"/);
-    expect(r).not.toContain('name="[Sub-Category]"');
-    expect(r).not.toContain('name="[Profit]"');
+    expect(r).not.toMatch(/name="\[\{\{field_base_\d+\}\}\]"/);
   });
 
   it('leaves ZERO mapped-field-ref residue (human labels & unmapped calc CI untouched)', () => {
     const r = run();
     // No field-ref forms of the mapped fields survive.
-    expect(r).not.toMatch(/:Sub-Category:|:Profit:|\[Profit\]|\[Sub-Category\]/);
-    // The unmapped calc column instance is preserved verbatim.
-    expect(r).toContain('Calculation_84161057772498944');
+    expect(r).not.toMatch(/\{\{field_base_\d+\}\}/);
+    // The template-owned calc column instance is preserved.
+    expect(r).toMatch(/Calculation_\d+/);
     expect(r).not.toContain('{{DATASOURCE}}');
   });
 });
@@ -487,47 +603,77 @@ describe('rewriteFieldReferences — calc caption derivation when formula inputs
 describe('rewriteFieldReferences — per-apply calc namespacing (opt-in, deterministic)', () => {
   // Deviation from A: namespacing defaults OFF and never mints its own nonce; the
   // caller must pass `applyNonce`. This keeps the core pure/deterministic.
-  let waterfall: string;
+  let snapshot: TemplateRuntimeSnapshot;
+  const mapping = {
+    '{{field_base_1}}@sum': '[DS].[sum:Amount:qk]',
+    '{{field_base_2}}': '[DS].[none:Category:nk]',
+    '{{field_base_1}}@none': '[DS].[none:Amount:qk]',
+  };
   beforeAll(() => {
-    waterfall = readTemplate('part-to-whole-waterfall-chart');
+    snapshot = runtimeSnapshot('part-to-whole-waterfall');
   });
 
   it('is OFF by default — calc names are untouched', () => {
-    const off = rewriteFieldReferences(waterfall, {}, 'DS');
+    const off = rewriteFieldReferences(snapshot.xml, mapping, 'DS', undefined, {
+      templateSlots: snapshot.descriptor.slots,
+    });
     expect(off).not.toMatch(/_tpl_/);
-    expect(off).toContain('name="[Calculation_84161057772498944]"');
+    expect(off).toMatch(/name="\[Calculation_\d+\]"/);
   });
 
   it('is deterministic in the (template, nonce) pair and collision-free across nonces', () => {
-    const a1 = rewriteFieldReferences(waterfall, {}, 'DS', undefined, {
+    const a1 = rewriteFieldReferences(snapshot.xml, mapping, 'DS', undefined, {
       namespaceCalcs: true,
       applyNonce: 'nonce-1',
+      templateSlots: snapshot.descriptor.slots,
     });
-    const a2 = rewriteFieldReferences(waterfall, {}, 'DS', undefined, {
+    const a2 = rewriteFieldReferences(snapshot.xml, mapping, 'DS', undefined, {
       namespaceCalcs: true,
       applyNonce: 'nonce-1',
+      templateSlots: snapshot.descriptor.slots,
     });
-    const b = rewriteFieldReferences(waterfall, {}, 'DS', undefined, {
+    const b = rewriteFieldReferences(snapshot.xml, mapping, 'DS', undefined, {
       namespaceCalcs: true,
       applyNonce: 'nonce-2',
+      templateSlots: snapshot.descriptor.slots,
     });
     expect(a1).toMatch(/_tpl_[0-9a-f]{8}/);
     expect(a1).toBe(a2); // same nonce → identical output
     expect(a1).not.toBe(b); // different nonce → different suffix
   });
 
+  it('namespaces calc refs by the role marker across wrappers and trailing metadata', () => {
+    const xml =
+      "<workbook><column name='[Calc]'><calculation formula='1'/></column>" +
+      '<rows>[DS].[win:sum:Calc:qk:67]</rows>' +
+      '<cols>[DS].[cum:usr:Calc:qk]</cols></workbook>';
+
+    const out = rewriteFieldReferences(xml, {}, 'DS', undefined, {
+      namespaceCalcs: true,
+      applyNonce: 'role-anchored',
+    });
+
+    expect(out).toMatch(/\[DS\]\.\[win:sum:Calc_tpl_[0-9a-f]{8}:qk:67\]/);
+    expect(out).toMatch(/\[DS\]\.\[cum:usr:Calc_tpl_[0-9a-f]{8}:qk\]/);
+    expect(out).not.toContain(':Calc:');
+  });
+
   it('stripping the per-apply suffix reproduces the non-namespaced output byte-for-byte', () => {
-    const off = rewriteFieldReferences(waterfall, {}, 'DS');
-    const on = rewriteFieldReferences(waterfall, {}, 'DS', undefined, {
+    const off = rewriteFieldReferences(snapshot.xml, mapping, 'DS', undefined, {
+      templateSlots: snapshot.descriptor.slots,
+    });
+    const on = rewriteFieldReferences(snapshot.xml, mapping, 'DS', undefined, {
       namespaceCalcs: true,
       applyNonce: 'nonce-1',
+      templateSlots: snapshot.descriptor.slots,
     });
     expect(on.replace(/_tpl_[0-9a-f]+/g, '')).toBe(off);
   });
 
   it('requires an explicit nonce — namespaceCalcs:true alone is a no-op (pure core mints none)', () => {
-    const noNonce = rewriteFieldReferences(waterfall, {}, 'DS', undefined, {
+    const noNonce = rewriteFieldReferences(snapshot.xml, mapping, 'DS', undefined, {
       namespaceCalcs: true,
+      templateSlots: snapshot.descriptor.slots,
     });
     expect(noNonce).not.toMatch(/_tpl_/);
   });

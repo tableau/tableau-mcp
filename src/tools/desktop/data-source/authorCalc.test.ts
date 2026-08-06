@@ -50,7 +50,7 @@ describe('authorCalcTool', () => {
       calcName: '[Calculation_1700000000000]',
       caption: 'Profit & "Growth"',
       datasource: 'Superstore',
-      hint: 'reference it by caption in a bind-template ask (name the caption plus a chart shape), auto_apply: true',
+      hint: 'reference it by caption in a build-worksheets-from-templates fieldMapping (name the caption plus a chart shape)',
     });
 
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(

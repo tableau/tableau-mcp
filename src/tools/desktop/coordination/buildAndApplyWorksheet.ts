@@ -20,18 +20,13 @@ import {
   parseDatasourceQualifiedColumnRef,
 } from '../../../desktop/metadata/field-resolver.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
-import {
-  checkRouteGateForScratchEntry,
-  type RouteGateResult,
-} from '../../../desktop/route/route-gate.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferencesWithDiagnostics } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { pruneUnboundOptionalFields } from '../../../desktop/templates/optionalFieldPrune.js';
-import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
-import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
-import { spliceWaterfallAnchorFilter } from '../../../desktop/templates/waterfallAnchorFilter.js';
+import { getRuntimeTemplateSnapshot } from '../../../desktop/templates/runtimeTemplateCatalog.js';
+import { listTemplateNames } from '../../../desktop/templates/templatePath.js';
 import type { ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
 import {
   classifyWorksheetPromiseOutcome,
@@ -47,17 +42,7 @@ import {
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
-function isRouteGateResult(result: unknown): result is RouteGateResult {
-  return (
-    typeof result === 'object' &&
-    result !== null &&
-    Array.isArray((result as { content?: unknown }).content) &&
-    typeof (result as { isError?: unknown }).isError === 'boolean'
-  );
-}
-
 function getSuccessResult(result: unknown): CallToolResult {
-  if (isRouteGateResult(result)) return result;
   return {
     isError: false,
     content: [{ type: 'text', text: JSON.stringify(result) }],
@@ -198,41 +183,8 @@ function manifestRoleSlotCount(slots: readonly SlotSpec[], role: 'dimension' | '
   }).length;
 }
 
-function inferSingleDatasourceFromColumnRefs(
-  refs: string[],
-): { ok: true; datasource: string | null } | { ok: false; message: string } {
-  const refsByDatasource = new Map<string, string[]>();
-  for (const ref of refs) {
-    const datasource = parseDatasourceQualifiedColumnRef(ref.trim())?.datasource;
-    if (!datasource) continue;
-    refsByDatasource.set(datasource, [...(refsByDatasource.get(datasource) ?? []), ref]);
-  }
-  if (refsByDatasource.size <= 1) {
-    return { ok: true, datasource: [...refsByDatasource.keys()][0] ?? null };
-  }
-  const breakdown = [...refsByDatasource.entries()]
-    .map(([datasource, dsRefs]) => `${datasource} (${dsRefs.join(', ')})`)
-    .join('; ');
-  return {
-    ok: false,
-    message:
-      'BLOCKED: mixed-datasource field references — cannot build worksheet\n\n' +
-      `taskSpec.fields resolve to multiple datasources — ${breakdown}. The no-manifest passthrough ` +
-      'path substitutes a single {{DATASOURCE}} and would silently repoint fields to the wrong datasource.\n\n' +
-      'FIX: Provide refs from one datasource, or use a manifest-backed template/data-model relationship that binds within one datasource.',
-  };
-}
-
-// The template vocabulary is real and finite, so advertise it: a free string let the
-// agent invent ids (symbol_map, line-chart, bar_chart, ...) that no template answers to,
-// and the invention only surfaced after a full workbook fetch. An enum rejects it at the
-// schema layer with the valid names attached.
-//
-// SEA/manifest trap: listTemplateNames() is asset-backed and can either return nothing
-// or THROW (assets not embedded, a corrupt SEA manifest, TEMPLATES_DIR pointing at a
-// missing dir, the asset module mocked in a test). This runs at module load, where
-// z.enum([]) also throws — either failure would stop the binary from starting at all.
-// Degrade to a free string whenever the list is not usable.
+// Resolve membership at callback time so mounted/user templates work without rebuilding
+// the MCP schema, and so tools/list does not embed the whole catalog.
 function safeListTemplateNames(): string[] {
   try {
     const names = listTemplateNames();
@@ -242,9 +194,7 @@ function safeListTemplateNames(): string[] {
   }
 }
 
-const TEMPLATE_NAMES = safeListTemplateNames();
-const templateSchema =
-  TEMPLATE_NAMES.length > 0 ? z.enum(TEMPLATE_NAMES as [string, ...string[]]) : z.string();
+const templateSchema = z.string().min(1).max(160);
 
 const MAX_TEMPLATE_SUGGESTIONS = 3;
 
@@ -310,34 +260,24 @@ export const getBuildAndApplyWorksheetTool = (
             ).toErr();
           }
 
-          // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
-          // readTemplate rejects names outside its charset by throwing; treat that as
-          // "not found" so a bad id returns the same actionable message either way.
-          let templateXml: string | null;
+          let runtimeSnapshot: ReturnType<typeof getRuntimeTemplateSnapshot>;
           try {
-            templateXml = readTemplate(template);
+            runtimeSnapshot = getRuntimeTemplateSnapshot(template);
           } catch {
-            templateXml = null;
+            runtimeSnapshot = null;
           }
-          if (!templateXml) {
+          if (!runtimeSnapshot) {
             return new ArgsValidationError(
               `Template not found: "${template}".${suggestTemplateText(template)} Check available templates with the template list tool.`,
             ).toErr();
           }
+          let templateXml = runtimeSnapshot.xml;
 
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
-
-          const gateResult = checkRouteGateForScratchEntry(
-            'build-and-apply-worksheet',
-            resolvedSession,
-          );
-          if (gateResult) {
-            return new Ok(gateResult);
-          }
 
           let executor: ToolExecutor | undefined;
           let workbookXml: string;
@@ -378,18 +318,8 @@ export const getBuildAndApplyWorksheetTool = (
             }
           }
 
-          const templateRequirements = getTemplateColumnRequirements(templateXml);
-          const templateDimensions = templateRequirements.filter((c) => c.role === 'dimension');
-          const templateMeasures = templateRequirements.filter((c) => c.role === 'measure');
-
           // Group resolved fields by role. Role values outside the supported pair are
           // treated as unresolved rather than silently routed to dimension.
-          const dimensionFields = resolvedFields.filter(
-            (resolution) => resolution.field.role === 'dimension',
-          );
-          const measureFields = resolvedFields.filter(
-            (resolution) => resolution.field.role === 'measure',
-          );
           const unsupportedRoleFields = resolvedFields.filter(
             (resolution) =>
               resolution.field.role !== 'dimension' && resolution.field.role !== 'measure',
@@ -399,33 +329,6 @@ export const getBuildAndApplyWorksheetTool = (
             warnings.push(
               `Field "${dropped.requested}" was dropped: role "${dropped.field.role}" is not a supported dimension/measure role.`,
             );
-          }
-
-          // Legacy positional mapping — kept ONLY as the no-manifest passthrough.
-          // Manifest-backed templates get their mapping from bindExplicitTemplate below.
-          const passthroughFieldMapping: Record<string, string> = {};
-          const passthroughFieldMetadata: Record<string, { datatype: string; type: string }> = {};
-
-          for (let i = 0; i < templateDimensions.length && i < dimensionFields.length; i++) {
-            const { columnRef, field } = dimensionFields[i];
-            passthroughFieldMapping[templateDimensions[i].name] = columnRef;
-            if (field.datatype && field.type) {
-              passthroughFieldMetadata[templateDimensions[i].name] = {
-                datatype: field.datatype,
-                type: field.type,
-              };
-            }
-          }
-
-          for (let i = 0; i < templateMeasures.length && i < measureFields.length; i++) {
-            const { columnRef, field } = measureFields[i];
-            passthroughFieldMapping[templateMeasures[i].name] = columnRef;
-            if (field.datatype && field.type) {
-              passthroughFieldMetadata[templateMeasures[i].name] = {
-                datatype: field.datatype,
-                type: field.type,
-              };
-            }
           }
 
           const supportedResolvedFields = resolvedFields.filter(
@@ -440,17 +343,15 @@ export const getBuildAndApplyWorksheetTool = (
             ).toErr();
           }
 
-          // Manifest enforcement (P0 W-23447710): slot derivations/keys come from the
-          // manifest, never the caller's positional refs. Blockers stop the apply —
-          // stricter than the old behavior, which left sample fields in unmapped slots.
+          // The TBM-derived contract owns slot derivations and mapping keys.
           const explicitBind = bindExplicitTemplate(
             template,
             supportedResolvedFields.map((resolution) => resolution.columnRef),
             schemaSummary,
             {
+              contract: runtimeSnapshot.descriptor,
               title: worksheetName,
               datasource: schemaSummary.datasource,
-              passthroughFieldMapping,
             },
           );
 
@@ -462,61 +363,25 @@ export const getBuildAndApplyWorksheetTool = (
 
           warnings.push(...explicitBind.warnings);
 
-          if (explicitBind.passthrough) {
-            const overflowDimensionFields = dimensionFields.slice(templateDimensions.length);
-            const overflowMeasureFields = measureFields.slice(templateMeasures.length);
-            for (const dropped of overflowDimensionFields) {
-              droppedRequestedFields.push(dropped.requested);
+          const consumedFieldRefs = new Set(explicitBind.consumedFieldRefs);
+          const dimensionSlots = manifestRoleSlotCount(explicitBind.templateSlots, 'dimension');
+          const measureSlots = manifestRoleSlotCount(explicitBind.templateSlots, 'measure');
+          const unclaimedConsumedRefs = new Set(consumedFieldRefs);
+          appliedResolvedFields = supportedResolvedFields.filter((resolution) =>
+            unclaimedConsumedRefs.delete(resolution.columnRef),
+          );
+          const appliedResolutionSet = new Set(appliedResolvedFields);
+          for (const dropped of supportedResolvedFields) {
+            if (appliedResolutionSet.has(dropped)) continue;
+            droppedRequestedFields.push(dropped.requested);
+            if (dropped.field.role === 'dimension') {
               warnings.push(
-                `Dimension field "${dropped.requested}" was dropped: template "${template}" exposes only ${templateDimensions.length} dimension slot(s).`,
+                `Dimension field "${dropped.requested}" was dropped: template "${template}" exposes only ${dimensionSlots} dimension slot(s).`,
               );
-            }
-            for (const dropped of overflowMeasureFields) {
-              droppedRequestedFields.push(dropped.requested);
+            } else {
               warnings.push(
-                `Measure field "${dropped.requested}" was dropped: template "${template}" exposes only ${templateMeasures.length} measure slot(s).`,
+                `Measure field "${dropped.requested}" was dropped: template "${template}" exposes only ${measureSlots} measure slot(s).`,
               );
-            }
-            const legacyDroppedResolutions = new Set([
-              ...overflowDimensionFields,
-              ...overflowMeasureFields,
-            ]);
-            appliedResolvedFields = supportedResolvedFields.filter(
-              (resolution) => !legacyDroppedResolutions.has(resolution),
-            );
-          } else {
-            const consumedFieldRefs = new Set(explicitBind.consumedFieldRefs);
-            const manifestDimensionSlots = manifestRoleSlotCount(
-              explicitBind.templateSlots,
-              'dimension',
-            );
-            const manifestMeasureSlots = manifestRoleSlotCount(
-              explicitBind.templateSlots,
-              'measure',
-            );
-            // One consumed ref satisfies one request: claim each ref as it
-            // matches so a duplicated requested field can't double-report as
-            // applied when the binder consumed it once.
-            const unclaimedConsumedRefs = new Set(consumedFieldRefs);
-            appliedResolvedFields = supportedResolvedFields.filter((resolution) =>
-              unclaimedConsumedRefs.delete(resolution.columnRef),
-            );
-            const appliedResolutionSet = new Set(appliedResolvedFields);
-            for (const dropped of supportedResolvedFields) {
-              // Membership in the CLAIMED applied set, not the raw consumed-ref
-              // set — a duplicated request whose ref was consumed once must
-              // surface as dropped, not silently vanish.
-              if (appliedResolutionSet.has(dropped)) continue;
-              droppedRequestedFields.push(dropped.requested);
-              if (dropped.field.role === 'dimension') {
-                warnings.push(
-                  `Dimension field "${dropped.requested}" was dropped: template "${template}" exposes only ${manifestDimensionSlots} dimension slot(s).`,
-                );
-              } else {
-                warnings.push(
-                  `Measure field "${dropped.requested}" was dropped: template "${template}" exposes only ${manifestMeasureSlots} measure slot(s).`,
-                );
-              }
             }
           }
 
@@ -529,18 +394,8 @@ export const getBuildAndApplyWorksheetTool = (
           }
 
           const fieldMapping = explicitBind.fieldMapping;
-          let rewriteDatasource = explicitBind.datasource;
-          if (explicitBind.passthrough) {
-            const inferred = inferSingleDatasourceFromColumnRefs(bindFields);
-            if (!inferred.ok) {
-              return new ArgsValidationError(inferred.message).toErr();
-            }
-            rewriteDatasource = inferred.datasource ?? explicitBind.datasource;
-          }
-          const fieldMetadata =
-            Object.keys(explicitBind.fieldMetadata).length > 0
-              ? explicitBind.fieldMetadata
-              : passthroughFieldMetadata;
+          const rewriteDatasource = explicitBind.datasource;
+          const fieldMetadata = explicitBind.fieldMetadata;
 
           // Inject title and replace field references. Per-apply calc namespacing is
           // wired at this tool boundary: the shared core defaults namespacing OFF and
@@ -568,12 +423,6 @@ export const getBuildAndApplyWorksheetTool = (
           );
           templateXml = rewrite.xml;
           warnings.push(...rewrite.droppedOptionalElements);
-          // Parity with the binder auto-apply path (injectTemplateCore): a waterfall
-          // built through this fallback must also exclude subtotal/total rows, or the
-          // running total double-counts them. No-ops unless the XML is a waterfall with
-          // a bound anchor_category. Was missing here since #560 wired only the inject core.
-          templateXml = spliceWaterfallAnchorFilter(templateXml, fieldMapping);
-
           // Extract worksheet element
           const worksheetMatch = templateXml.match(/<worksheet(?!s)[^>]*>[\s\S]*?<\/worksheet>/);
           if (!worksheetMatch) {

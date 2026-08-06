@@ -1,4 +1,10 @@
-import { generateUUID, normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
+import {
+  carryNamespaceDeclarations,
+  generateUUID,
+  normalizeArray,
+  parseXMLPreservingNumericEntities,
+  serializeXMLPreservingNumericEntities,
+} from '../metadata/parser.js';
 
 export type SheetType = 'worksheet' | 'dashboard' | 'story';
 export type InsertPosition = 'end' | 'before_sheet' | 'after_sheet';
@@ -25,6 +31,15 @@ function assignFreshUuids(obj: unknown): void {
   }
 }
 
+// Bookmark-derived roots need a fresh simple-id before strict workbook validation.
+function ensureRootSimpleId(obj: unknown): void {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return;
+  const o = obj as Record<string, unknown>;
+  if (!o['simple-id'] || typeof o['simple-id'] !== 'object' || Array.isArray(o['simple-id'])) {
+    o['simple-id'] = { '@_uuid': generateUUID() };
+  }
+}
+
 function stripNavigationFlags(window: Record<string, unknown>): void {
   delete window['@_active'];
   delete window['@_maximized'];
@@ -39,11 +54,12 @@ export function injectTemplate(
 ): string {
   const { container, element, windowClass } = SHEET_CONFIG[sheetType];
 
-  const workbook = parseXML(workbookXml);
-  const template = parseXML(templateXml);
+  const workbook = parseXMLPreservingNumericEntities(workbookXml);
+  const template = parseXMLPreservingNumericEntities(templateXml);
 
   const wb = workbook.workbook;
   if (!wb) throw new Error('Workbook XML has no <workbook> root element');
+  carryNamespaceDeclarations(template.workbook as Record<string, unknown>, wb);
 
   const templateContainer = (template.workbook as Record<string, unknown>)?.[container] as
     | Record<string, unknown>
@@ -63,6 +79,8 @@ export function injectTemplate(
   if (!windowToInject)
     throw new Error(`Template does not contain a <window class="${windowClass}">`);
 
+  ensureRootSimpleId(sheetToInject);
+  ensureRootSimpleId(windowToInject);
   assignFreshUuids(sheetToInject);
   assignFreshUuids(windowToInject);
   stripNavigationFlags(windowToInject);
@@ -98,5 +116,5 @@ export function injectTemplate(
 
   wb.windows.window = (existingWindows.length === 1 ? existingWindows[0] : existingWindows) as any;
 
-  return serializeXML(workbook);
+  return serializeXMLPreservingNumericEntities(workbook);
 }

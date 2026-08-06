@@ -35,6 +35,12 @@ export type WorkbookDocument = {
   xml: string;
   applicationVersion: string | undefined;
   xsdPayloadVersion: string | undefined;
+  instanceId?: string;
+};
+
+export type ApplyWorkbookDocumentOptions = {
+  expectedInstanceId?: string;
+  onDispatch?: () => void;
 };
 
 export type ExecuteCommandResult<Z extends z.ZodTypeAny | undefined = undefined> =
@@ -58,5 +64,6 @@ export abstract class ToolExecutor {
   abstract applyWorkbookDocument(
     xml: string,
     signal: AbortSignal,
+    options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>>;
 }
