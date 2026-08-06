@@ -58,7 +58,7 @@ function carriersOf(noun: string): string[] {
 
 beforeAll(() => {
   manifests = createPuppetCompatibilityProjection(
-    loadRuntimeTemplateCatalogSnapshots(),
+    loadRuntimeTemplateCatalogSnapshots({ automaticOnly: true, includeExternal: false }),
   ).descriptors;
   eligible = [...manifests.values()].filter((m) => m.fast_path_eligible);
   nouns = extractChartNouns();

@@ -115,8 +115,13 @@ export function runtimeTemplateDescriptorFromSnapshot(
   };
 }
 
+export interface RuntimeTemplateCatalogOptions extends TemplateCatalogOptions {
+  additionalTemplates?: readonly string[];
+  automaticOnly?: boolean;
+}
+
 export function loadRuntimeTemplateDescriptors(
-  options: TemplateCatalogOptions = {},
+  options: RuntimeTemplateCatalogOptions = {},
 ): Map<string, RuntimeTemplateDescriptor> {
   return new Map(
     [...loadRuntimeTemplateCatalogSnapshots(options)].map(([template, value]) => [
@@ -143,10 +148,18 @@ function createSupportedRuntimeSnapshot(
 }
 
 export function loadRuntimeTemplateCatalogSnapshots(
-  options: TemplateCatalogOptions = {},
+  options: RuntimeTemplateCatalogOptions = {},
 ): Map<string, RuntimeTemplateCatalogSnapshot> {
   const snapshots = new Map<string, RuntimeTemplateCatalogSnapshot>();
+  const additionalTemplates = new Set(options.additionalTemplates);
   for (const entry of listTemplateCatalog(options)) {
+    if (
+      options.automaticOnly === true &&
+      entry.template.includes('__') &&
+      !additionalTemplates.has(entry.template)
+    ) {
+      continue;
+    }
     if (entry.discoveryIssue) continue;
     const bookmark = readBookmarkFromCatalogEntry(entry, options.operations);
     if (bookmark === null) continue;

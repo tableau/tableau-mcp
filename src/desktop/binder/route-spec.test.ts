@@ -20,7 +20,9 @@ import {
 
 let manifests: RuntimeTemplateDescriptor[];
 beforeAll(() => {
-  manifests = [...loadRuntimeTemplateDescriptors().values()];
+  manifests = [
+    ...loadRuntimeTemplateDescriptors({ automaticOnly: true, includeExternal: false }).values(),
+  ];
 });
 
 function mkManifest(

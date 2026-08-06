@@ -38,7 +38,7 @@ let manifests: Map<string, RuntimeTemplateDescriptor>;
 
 beforeAll(() => {
   manifests = createPuppetCompatibilityProjection(
-    loadRuntimeTemplateCatalogSnapshots(),
+    loadRuntimeTemplateCatalogSnapshots({ automaticOnly: true, includeExternal: false }),
   ).descriptors;
 });
 

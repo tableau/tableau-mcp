@@ -7,6 +7,7 @@ import {
   loadRuntimeTemplateDescriptors,
   runtimeTemplateDescriptorFromSnapshot,
 } from './runtimeTemplateCatalog.js';
+import * as templatePath from './templatePath.js';
 import { createTemplateRuntimeSnapshot } from './templateRuntimeSnapshot.js';
 
 const BOOKMARK =
@@ -74,6 +75,36 @@ describe('runtimeTemplateDescriptorFromSnapshot', () => {
 });
 
 describe('loadRuntimeTemplateCatalogSnapshots', () => {
+  it('resolves automatic templates before reading extended siblings and keeps exact lookup available', () => {
+    const read = vi.spyOn(templatePath, 'readBookmarkFromCatalogEntry');
+    const extended = 'ranking__ordered-bar__show-order-when-rank-matters-more-than-value';
+
+    const automatic = loadRuntimeTemplateCatalogSnapshots({
+      automaticOnly: true,
+      includeExternal: false,
+    });
+
+    expect([...automatic.keys()].some((template) => template.includes('__'))).toBe(false);
+    expect(
+      read.mock.calls.map(([entry]) => entry.template).some((template) => template.includes('__')),
+    ).toBe(false);
+
+    const automaticReadCount = read.mock.calls.length;
+    const selected = loadRuntimeTemplateCatalogSnapshots({
+      additionalTemplates: [extended],
+      automaticOnly: true,
+      includeExternal: false,
+    });
+
+    expect(selected.get(extended)?.snapshot.template).toBe(extended);
+    expect(
+      read.mock.calls
+        .slice(automaticReadCount)
+        .map(([entry]) => entry.template)
+        .filter((template) => template.includes('__')),
+    ).toEqual([extended]);
+  });
+
   it('pins descriptor and applied XML to the same TBM bytes when the source changes later', () => {
     const root = mkdtempSync(join(process.cwd(), 'tmp-runtime-template-'));
     const previous = process.env['TEMPLATES_DIR'];

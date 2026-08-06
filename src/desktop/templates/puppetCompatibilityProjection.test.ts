@@ -5,8 +5,9 @@ import { type BindingProposal, bindTemplate, summarizeSchema } from '../binder/b
 import { buildInjectedWorkbookXml } from './injectTemplateCore.js';
 import { createPuppetCompatibilityProjection } from './puppetCompatibilityProjection.js';
 import {
-  loadRuntimeTemplateCatalogSnapshots,
+  getRuntimeTemplateSnapshot,
   type RuntimeTemplateCatalogSnapshot,
+  runtimeTemplateDescriptorFromSnapshot,
 } from './runtimeTemplateCatalog.js';
 
 const PL_WORKBOOK = `<?xml version='1.0' encoding='utf-8'?>
@@ -24,8 +25,46 @@ const PL_WORKBOOK = `<?xml version='1.0' encoding='utf-8'?>
 let realRuntimeCatalog: Map<string, RuntimeTemplateCatalogSnapshot>;
 let superstoreWorkbook: string;
 
+const PROJECTION_PAIRS = [
+  ['ranking-ordered-bar', 'ranking__ordered-bar__show-order-when-rank-matters-more-than-value'],
+  [
+    'part-to-whole-waterfall',
+    'part-to-whole__waterfall__bridge-start-to-end-with-plus-minus-steps',
+  ],
+  ['correlation-scatter-plot-chart', 'correlation__scatter__relate-two-continuous-measures'],
+  [
+    'correlation-bubble-chart',
+    'correlation__bubble-scatter__relate-two-measures-and-encode-a-third-by-size',
+  ],
+  [
+    'part-to-whole-treemap-chart',
+    'part-to-whole__treemap__show-hierarchical-sizes-in-nested-rectangles',
+  ],
+  ['spatial-choropleth-map', 'spatial__choropleth__map-rates-or-ratios-by-region'],
+  ['trend-line-chart', 'change-over-time__line__default-time-series-trend'],
+] as const;
+
+function loadExactRuntimeCatalog(
+  templates: readonly string[],
+): Map<string, RuntimeTemplateCatalogSnapshot> {
+  return new Map(
+    templates.map((template) => {
+      const snapshot = getRuntimeTemplateSnapshot(template, { includeExternal: false });
+      if (snapshot === null) throw new Error(`Missing test template: ${template}`);
+      return [
+        template,
+        { snapshot, descriptor: runtimeTemplateDescriptorFromSnapshot(snapshot) },
+      ] as const;
+    }),
+  );
+}
+
 beforeAll(() => {
-  realRuntimeCatalog = loadRuntimeTemplateCatalogSnapshots();
+  realRuntimeCatalog = loadExactRuntimeCatalog([
+    ...new Set(PROJECTION_PAIRS.flat()),
+    'connected-scatterplot',
+    'spatial-symbol-map',
+  ]);
   superstoreWorkbook = readFileSync(
     join(process.cwd(), 'src', 'desktop', 'binder', 'fixtures', 'superstore-scratch-ref.xml'),
     'utf8',
@@ -34,28 +73,9 @@ beforeAll(() => {
 
 describe('createPuppetCompatibilityProjection', () => {
   it('filters automatic selection to canonical IDs without changing raw slot contracts', () => {
-    const pairs = [
-      ['ranking-ordered-bar', 'ranking__ordered-bar__show-order-when-rank-matters-more-than-value'],
-      [
-        'part-to-whole-waterfall',
-        'part-to-whole__waterfall__bridge-start-to-end-with-plus-minus-steps',
-      ],
-      ['correlation-scatter-plot-chart', 'correlation__scatter__relate-two-continuous-measures'],
-      [
-        'correlation-bubble-chart',
-        'correlation__bubble-scatter__relate-two-measures-and-encode-a-third-by-size',
-      ],
-      [
-        'part-to-whole-treemap-chart',
-        'part-to-whole__treemap__show-hierarchical-sizes-in-nested-rectangles',
-      ],
-      ['spatial-choropleth-map', 'spatial__choropleth__map-rates-or-ratios-by-region'],
-      ['trend-line-chart', 'change-over-time__line__default-time-series-trend'],
-    ] as const;
-
     const projection = createPuppetCompatibilityProjection(realRuntimeCatalog);
 
-    for (const [canonical, sibling] of pairs) {
+    for (const [canonical, sibling] of PROJECTION_PAIRS) {
       const rawCanonical = realRuntimeCatalog.get(canonical)?.descriptor;
       const rawSibling = realRuntimeCatalog.get(sibling)?.descriptor;
       expect(projection.descriptors.has(canonical), canonical).toBe(true);

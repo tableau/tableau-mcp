@@ -64,7 +64,7 @@ let descriptors: Map<string, RuntimeTemplateDescriptor>;
 
 beforeAll(() => {
   descriptors = createPuppetCompatibilityProjection(
-    loadRuntimeTemplateCatalogSnapshots(),
+    loadRuntimeTemplateCatalogSnapshots({ automaticOnly: true, includeExternal: false }),
   ).descriptors;
 });
 

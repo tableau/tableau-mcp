@@ -20,7 +20,7 @@ const repoRoot = path.resolve(__dirname, '..', '..', '..');
 let manifestMap: Map<string, RuntimeTemplateDescriptor>;
 let manifests: RuntimeTemplateDescriptor[];
 beforeAll(() => {
-  manifestMap = loadRuntimeTemplateDescriptors();
+  manifestMap = loadRuntimeTemplateDescriptors({ automaticOnly: true, includeExternal: false });
   manifests = [...manifestMap.values()];
 });
 
@@ -216,17 +216,17 @@ describe('ask-router — shared behavioral parity with classify.ts (selection ou
   </datasources>
 </workbook>`;
 
-  it.each([
-    'bar chart of sales by region',
-    'gibberish asdf qwerty zxcv',
-    'Symbol map of Goals For by Country Code.',
-  ])('classifyNoLlm and selectEligible pick the same template for: %s', (ask) => {
-    const cls = classifyNoLlm(ask, manifestMap, summarizeSchema(COMBO_WORKBOOK_XML));
-    const routed = selectEligible(ask, manifests, ask);
-    expect(routed?.template ?? null).toBe(cls?.template ?? null);
-  });
+  it.each(['bar chart of sales by region', 'gibberish asdf qwerty zxcv'])(
+    'classifyNoLlm and selectEligible pick the same template for: %s',
+    (ask) => {
+      const cls = classifyNoLlm(ask, manifestMap, summarizeSchema(COMBO_WORKBOOK_XML));
+      const routed = selectEligible(ask, manifests, ask);
+      expect(routed?.template ?? null).toBe(cls?.template ?? null);
+    },
+  );
 
   it.each([
+    'Symbol map of Goals For by Country Code.',
     'Map the countries by Goals For — bigger, warmer dots',
     'Map the countries by Goals For with bigger warmer dots total',
     'Map the countries by Goals For with bigger, warmer circles',
@@ -237,20 +237,20 @@ describe('ask-router — shared behavioral parity with classify.ts (selection ou
     expect(cls).toBeNull();
   });
 
-  it('lets schema-aware geo binding resolve a choropleth catalog choice that routing leaves open', () => {
+  it('keeps routing and schema-aware binding aligned on the canonical choropleth', () => {
     const ask = 'Choropleth map of Goals For by Country Code.';
     const cls = classifyNoLlm(ask, manifestMap, summarizeSchema(COMBO_WORKBOOK_XML));
     const routed = selectEligible(ask, manifests, ask);
 
-    expect(routed).toBeNull();
-    expect(cls?.template).toBe('spatial__choropleth__map-rates-or-ratios-by-region');
+    expect(routed?.template).toBe('spatial-choropleth-map');
+    expect(cls?.template).toBe('spatial-choropleth-map');
   });
 
-  it('allows schema-aware waterfall binding to resolve catalog ambiguity that routing cannot', () => {
+  it('keeps schema-free waterfall routing separate from schema-aware binding', () => {
     const ask = 'waterfall of Profit by Sub-Category';
     const cls = classifyNoLlm(ask, manifestMap, summarizeSchema(COMBO_WORKBOOK_XML));
     const routed = selectEligible(ask, manifests, ask);
-    expect(routed).toBeNull();
-    expect(cls?.template).toContain('waterfall');
+    expect(routed?.template).toBe('part-to-whole-waterfall');
+    expect(cls).toBeNull();
   });
 });

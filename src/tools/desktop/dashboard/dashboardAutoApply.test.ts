@@ -334,6 +334,9 @@ describe('dashboardAutoApplyTool happy path', () => {
     // is nothing to reissue.
     expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(2);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(runtimeCatalogModule.loadRuntimeTemplateCatalogSnapshots).toHaveBeenCalledWith({
+      automaticOnly: true,
+    });
   });
 
   it('activates the composed dashboard once through validated goto-sheet', async () => {

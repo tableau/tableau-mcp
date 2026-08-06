@@ -210,7 +210,7 @@ export const getDashboardAutoApplyTool = (
           const pristineXml = xmlResult.value;
           const readMs = Date.now() - readStart;
 
-          const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots();
+          const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots({ automaticOnly: true });
           const manifests = new Map(
             [...runtimeCatalog].map(([template, value]) => [template, value.descriptor]),
           );

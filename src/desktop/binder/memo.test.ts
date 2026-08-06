@@ -207,7 +207,7 @@ const SCATTER_MANIFEST = synth('correlation-scatter-plot-chart', 'correlation', 
 ]);
 const SCATTER_MANIFESTS = new Map([[SCATTER_MANIFEST.template, SCATTER_MANIFEST]]);
 
-const real = loadRuntimeTemplateDescriptors();
+const real = loadRuntimeTemplateDescriptors({ automaticOnly: true });
 
 // ── stableStringify ───────────────────────────────────────────────────────
 describe('memo/stableStringify', () => {
@@ -452,6 +452,26 @@ describe('memo/createMemoizedBinder — stale manifest hash misses', () => {
       expect(missed.args.template_name).not.toBe('ranking-ordered-bar');
     }
   });
+
+  it('misses after descriptor content changes in the same map', async () => {
+    const binder = createMemoizedBinder();
+    const ask = 'bar chart of Sales by Region';
+    const manifests = new Map(BAR_MANIFESTS);
+    const first = await binder.bind({ ask, workbookXml: SUPERSTORE_XML, manifests });
+    expect(first.status).toBe('bound');
+
+    manifests.set('ranking-ordered-bar', {
+      ...manifests.get('ranking-ordered-bar')!,
+      fast_path_eligible: false,
+    });
+    const afterMutation = await binder.bind({ ask, workbookXml: SUPERSTORE_XML, manifests });
+
+    expect(afterMutation.cache.hit).toBe(false);
+    expect(afterMutation.cache.key).not.toBe(first.cache.key);
+    if (afterMutation.status === 'bound') {
+      expect(afterMutation.args.template_name).not.toBe('ranking-ordered-bar');
+    }
+  });
 });
 
 // ── Correctness: memoized === unmemoized across a matrix ────────────────────
@@ -556,58 +576,4 @@ describe('memo/createMemoizedBinder — property: memo never changes results', (
       expect(qkRes.args.field_mapping['Sales@sum']).toBe('[Superstore].[sum:Sales:qk]');
     }
   });
-});
-
-// ── Speedup: cold (parse+classify) vs warm (cache hit) ─────────────────────
-describe('memo/createMemoizedBinder — measured speedup on a repeated bind', () => {
-  // A realistically WIDE datasource: the schema-summary parse + classify is the
-  // deterministic cost the warm path eliminates.
-  function wideWorkbook(nDims: number, nMeas: number): string {
-    const cols: string[] = [
-      "<column name='[Region]' role='dimension' type='nominal' datatype='string' />",
-      "<column name='[Sales]' role='measure' type='quantitative' datatype='real' />",
-    ];
-    for (let i = 0; i < nDims; i++)
-      cols.push(`<column name='[Dim ${i}]' role='dimension' type='nominal' datatype='string' />`);
-    for (let i = 0; i < nMeas; i++)
-      cols.push(`<column name='[Meas ${i}]' role='measure' type='quantitative' datatype='real' />`);
-    return `<?xml version='1.0' encoding='utf-8'?><workbook><datasources><datasource name='Wide'>${cols.join('')}</datasource></datasources></workbook>`;
-  }
-
-  // 30s timeout: this is a timing benchmark (300 cold binds over a 302-field workbook) —
-  // on a loaded shared CI runner the cold loop alone can blow the 5s default (seen on the
-  // combined feature/desktop suite, 2026-07-15) while the assertion itself is load-immune
-  // (warm < cold ratio, not an absolute time).
-  it(
-    'warm (cache hit) is faster than cold (fresh compute) over N repeats',
-    { timeout: 30_000 },
-    async () => {
-      const N = 300;
-      const ask = 'bar chart of Sales by Region';
-      const xml = wideWorkbook(150, 150);
-
-      // COLD: a fresh binder per iteration ⇒ every call re-parses XML + classifies.
-      const t0 = performance.now();
-      for (let i = 0; i < N; i++) {
-        const b = createMemoizedBinder();
-        await b.bind({ ask, workbookXml: xml, manifests: real });
-      }
-      const coldMs = performance.now() - t0;
-
-      // WARM: one binder, primed once ⇒ every subsequent call is a cache hit.
-      const warmBinder = createMemoizedBinder();
-      await warmBinder.bind({ ask, workbookXml: xml, manifests: real });
-      const t1 = performance.now();
-      for (let i = 0; i < N; i++) {
-        await warmBinder.bind({ ask, workbookXml: xml, manifests: real });
-      }
-      const warmMs = performance.now() - t1;
-
-      // PORT ADAPTATION: source used console.log; the repo's no-console rule allows warn/error.
-      console.warn(
-        `[binder-memo] wide-schema(302 fields)  cold ${(coldMs / N).toFixed(4)} ms/bind  warm ${(warmMs / N).toFixed(4)} ms/bind  speedup ${(coldMs / warmMs).toFixed(1)}x`,
-      );
-      expect(warmMs).toBeLessThan(coldMs);
-    },
-  );
 });

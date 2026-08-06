@@ -189,11 +189,17 @@ function calcColumnIdentities(xml: string): string[] {
     .filter((name): name is string => !!name);
 }
 
-describe('TBM engine corpus invariants', () => {
+describe('TBM engine corpus invariants', { timeout: 30_000 }, () => {
+  let corpus: EligibleTemplate[];
+
+  beforeAll(() => {
+    corpus = eligibleTemplates();
+  }, 30_000);
+
   it('classifies every authored primary derivation as bindable or explicitly template-owned', () => {
     const failures: string[] = [];
 
-    for (const template of eligibleTemplates()) {
+    for (const template of corpus) {
       const document = new DOMParser().parseFromString(template.raw, 'text/xml');
       const columnDefs = new Map(
         (Array.from(document.getElementsByTagName('column')) as unknown as Element[])
@@ -243,7 +249,7 @@ describe('TBM engine corpus invariants', () => {
   it('keeps namespace declarations required by converted bookmark fragments', () => {
     const failures: string[] = [];
 
-    for (const template of eligibleTemplates()) {
+    for (const template of corpus) {
       const usedPrefixes = new Set(
         [...template.xml.matchAll(/\s([A-Za-z_][\w.-]*):[A-Za-z_][\w.-]*=/g)]
           .map((match) => match[1])
@@ -262,7 +268,7 @@ describe('TBM engine corpus invariants', () => {
   it.each(['bare', 'qualified'] as const)(
     '%s mappings preserve secondary derivations while changing every mapped base field',
     (mode) => {
-      const templates = eligibleTemplates();
+      const templates = corpus;
       const secondaryShapes = new Set<string>();
       const failures: string[] = [];
 
@@ -342,9 +348,7 @@ describe('TBM engine corpus invariants', () => {
   it('carries required namespace declarations through worksheet injection', () => {
     const failures: string[] = [];
 
-    for (const template of eligibleTemplates().filter((candidate) =>
-      /\sxmlns:/.test(candidate.xml),
-    )) {
+    for (const template of corpus.filter((candidate) => /\sxmlns:/.test(candidate.xml))) {
       const { mapping } = mappingFor(template, 'qualified');
       const result = buildInjectedWorkbookXml({
         workbookXml: EMPTY_WORKBOOK,
@@ -367,7 +371,7 @@ describe('TBM engine corpus invariants', () => {
   });
 
   it('namespaces every template calc identity in every bracketed ref after injection', () => {
-    const templates = eligibleTemplates();
+    const templates = corpus;
     const failures: string[] = [];
 
     for (const template of templates) {

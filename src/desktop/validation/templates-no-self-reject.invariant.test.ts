@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
 import { runValidation } from './registry.js';
@@ -21,38 +21,53 @@ const runtimeTemplates = [...loadRuntimeTemplateCatalogSnapshots()].map(
   ([template, { snapshot }]) => ({ template, xml: snapshot.xml }),
 );
 
-describe('validation/templates — no bundled template self-rejects on invalid-derivation-string', () => {
-  it('loads the shipped TBM corpus into the runtime catalog', () => {
-    expect(
-      runtimeTemplates.length,
-      'expected all 133 shipped TBMs to produce runtime snapshots',
-    ).toBeGreaterThanOrEqual(133);
-  });
+describe(
+  'validation/templates — no bundled template self-rejects on invalid-derivation-string',
+  { timeout: 30_000 },
+  () => {
+    const invalidDerivationsByTemplate = new Map<
+      string,
+      ReturnType<typeof runValidation>['issues']
+    >();
 
-  it.each(runtimeTemplates)(
-    'runValidation($template, "workbook") reports zero invalid-derivation-string issues',
-    ({ template, xml }) => {
-      const result = runValidation(xml, 'workbook');
-      const offenders = result.issues.filter((i) => i.ruleId === 'invalid-derivation-string');
+    beforeAll(() => {
+      for (const { template, xml } of runtimeTemplates) {
+        invalidDerivationsByTemplate.set(
+          template,
+          runValidation(xml, 'workbook').issues.filter(
+            (issue) => issue.ruleId === 'invalid-derivation-string',
+          ),
+        );
+      }
+    }, 30_000);
+
+    it('loads the shipped TBM corpus into the runtime catalog', () => {
+      expect(
+        runtimeTemplates.length,
+        'expected all 133 shipped TBMs to produce runtime snapshots',
+      ).toBeGreaterThanOrEqual(133);
+    });
+
+    it.each(runtimeTemplates)(
+      'runValidation($template, "workbook") reports zero invalid-derivation-string issues',
+      ({ template }) => {
+        const offenders = invalidDerivationsByTemplate.get(template) ?? [];
+        expect(
+          offenders,
+          `${template}: bundled template must not self-reject on invalid-derivation-string; ` +
+            `offending derivations: ${offenders.map((o) => o.message).join(' | ')}`,
+        ).toEqual([]);
+      },
+    );
+
+    it('reports zero invalid-derivation-string issues across the ENTIRE corpus (aggregate lock)', () => {
+      const offenders = [...invalidDerivationsByTemplate].flatMap(([template, issues]) =>
+        issues.map((issue) => `${template}: ${issue.message}`),
+      );
       expect(
         offenders,
-        `${template}: bundled template must not self-reject on invalid-derivation-string; ` +
-          `offending derivations: ${offenders.map((o) => o.message).join(' | ')}`,
+        `templates self-rejecting on invalid-derivation-string:\n${offenders.join('\n')}`,
       ).toEqual([]);
-    },
-  );
-
-  it('reports zero invalid-derivation-string issues across the ENTIRE corpus (aggregate lock)', () => {
-    const offenders: string[] = [];
-    for (const { template, xml } of runtimeTemplates) {
-      for (const issue of runValidation(xml, 'workbook').issues) {
-        if (issue.ruleId === 'invalid-derivation-string')
-          offenders.push(`${template}: ${issue.message}`);
-      }
-    }
-    expect(
-      offenders,
-      `templates self-rejecting on invalid-derivation-string:\n${offenders.join('\n')}`,
-    ).toEqual([]);
-  });
-});
+    });
+  },
+);

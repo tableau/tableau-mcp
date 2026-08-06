@@ -2023,7 +2023,10 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             authoredCalcCaptions = authored.value.authoredCalcs.map((calc) => calc.caption);
           }
 
-          const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots();
+          const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots({
+            ...(proposal === undefined ? {} : { additionalTemplates: [proposal.template] }),
+            automaticOnly: true,
+          });
           const puppetCompatibility = createPuppetCompatibilityProjection(runtimeCatalog);
           const manifests =
             proposal === undefined

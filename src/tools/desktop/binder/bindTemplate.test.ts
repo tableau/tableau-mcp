@@ -732,6 +732,9 @@ describe('bindTemplateTool', () => {
     expect(body.guidance).toBe(`${NOT_APPLIED_GUIDANCE} ${boundResult.apply_instruction}`);
     expect(body.guidance.startsWith(NOT_APPLIED_GUIDANCE)).toBe(true);
     expect(body.guidance).toContain('auto_apply:true');
+    expect(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).toHaveBeenCalledWith({
+      automaticOnly: true,
+    });
   });
 
   it('returns the standard MCP content-block envelope, not a bare JSON string', async () => {
@@ -1295,6 +1298,10 @@ describe('bindTemplateTool', () => {
         minConfidence: 0.8,
       }),
     );
+    expect(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).toHaveBeenCalledWith({
+      additionalTemplates: [sampleProposal.template],
+      automaticOnly: true,
+    });
   });
 
   it('funnels a workbook-read failure through the McpToolError path (isError true)', async () => {

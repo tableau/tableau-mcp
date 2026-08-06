@@ -26,12 +26,18 @@ let builtInRuntimeDescriptors: Map<string, RuntimeTemplateDescriptor> | undefine
 
 function loadPrewarmRuntimeDescriptors(): Map<string, RuntimeTemplateDescriptor> {
   if (process.env['TEMPLATES_DIR']) {
-    return loadRuntimeTemplateDescriptors();
+    return loadRuntimeTemplateDescriptors({ automaticOnly: true });
   }
-  builtInRuntimeDescriptors ??= loadRuntimeTemplateDescriptors({ includeExternal: false });
+  builtInRuntimeDescriptors ??= loadRuntimeTemplateDescriptors({
+    automaticOnly: true,
+    includeExternal: false,
+  });
   if (!process.env['TABLEAU_REPOSITORY_DIR']) return builtInRuntimeDescriptors;
   const externalClaims = listTemplateCatalog({ includeProtected: false });
-  const external = loadRuntimeTemplateDescriptors({ includeProtected: false });
+  const external = loadRuntimeTemplateDescriptors({
+    automaticOnly: true,
+    includeProtected: false,
+  });
   const merged = new Map(builtInRuntimeDescriptors);
   for (const claim of externalClaims) merged.delete(claim.template);
   for (const [template, descriptor] of external) merged.set(template, descriptor);

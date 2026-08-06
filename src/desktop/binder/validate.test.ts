@@ -2,7 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { loadRuntimeTemplateDescriptors } from '../templates/runtimeTemplateCatalog.js';
+import {
+  getRuntimeTemplateSnapshot,
+  runtimeTemplateDescriptorFromSnapshot,
+} from '../templates/runtimeTemplateCatalog.js';
 import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 import type { SchemaField, SchemaSummary } from './schema-summary.js';
 import { type BindingProposal, validateBinding } from './validate.js';
@@ -64,7 +67,20 @@ const SUMMARY: SchemaSummary = {
 
 let manifests: Map<string, RuntimeTemplateDescriptor>;
 beforeAll(() => {
-  manifests = loadRuntimeTemplateDescriptors();
+  manifests = new Map(
+    [
+      'correlation-scatter-plot-chart',
+      'gantt-task-rollup-chart',
+      'kpi-text',
+      'ranking-ordered-bar',
+      'spatial-choropleth-map',
+      'trend-line-chart',
+    ].map((template) => {
+      const snapshot = getRuntimeTemplateSnapshot(template, { includeExternal: false });
+      if (snapshot === null) throw new Error(`Missing test template: ${template}`);
+      return [template, runtimeTemplateDescriptorFromSnapshot(snapshot)] as const;
+    }),
+  );
 });
 
 describe('binder/validate — gate 1: slot coverage', () => {

@@ -32,7 +32,7 @@ const SUPERSTORE_XML = `<?xml version='1.0' encoding='utf-8'?>
   </datasources>
 </workbook>`;
 
-const real = loadRuntimeTemplateDescriptors();
+const real = loadRuntimeTemplateDescriptors({ automaticOnly: true, includeExternal: false });
 
 const RUNTIME_BOOKMARK = `<?xml version='1.0'?>
 <bookmark version='10.1'>
@@ -134,9 +134,9 @@ describe('prewarm/prewarmForDatasource', () => {
       expect(secondTemplates).toContain('repository-second');
       expect(invalidOverrideTemplates).not.toContain('ranking-ordered-bar');
       expect(loader.mock.calls).toEqual([
-        [{ includeProtected: false }],
-        [{ includeProtected: false }],
-        [{ includeProtected: false }],
+        [{ automaticOnly: true, includeProtected: false }],
+        [{ automaticOnly: true, includeProtected: false }],
+        [{ automaticOnly: true, includeProtected: false }],
       ]);
     } finally {
       if (priorRepositoryDir === undefined) delete process.env['TABLEAU_REPOSITORY_DIR'];

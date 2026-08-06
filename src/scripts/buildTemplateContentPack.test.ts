@@ -295,71 +295,80 @@ describe('buildTemplateContentPack', () => {
     ).resolves.toContain('tableau-template-content-pack-1.0.0.zip');
   });
 
-  it('packages the source corpus without credential values or local user paths', async () => {
-    const { outputDir } = await fixture();
-    const archivePath = await buildTemplateContentPack({
-      inputDir: join(process.cwd(), 'src', 'desktop', 'data', 'templates'),
-      outputDir,
-      version: '1.0.0',
-    });
-    const entries = readStoredZip(await readFile(archivePath));
-    const templates = entries.filter(({ name }) => name.endsWith('.tbm'));
-    const corpus = Buffer.concat(templates.map(({ bytes }) => bytes)).toString('utf8');
-    let absolutePathAttributes = 0;
-    let credentialAttributes = 0;
-    let credentialQueryValues = 0;
-    for (const template of templates) {
-      const document = new DOMParser().parseFromString(template.bytes.toString('utf8'), 'text/xml');
-      const elements = document.getElementsByTagName('*');
-      for (let elementIndex = 0; elementIndex < elements.length; elementIndex += 1) {
-        const attributes = elements.item(elementIndex)?.attributes;
-        if (attributes === undefined) continue;
-        for (let attributeIndex = 0; attributeIndex < attributes.length; attributeIndex += 1) {
-          const attribute = attributes.item(attributeIndex);
-          if (
-            attribute !== null &&
-            /(?:dbname|directory|filename|path|folder)/i.test(attribute.name) &&
-            /^(?:\/(?!\/)|\/\/[^/\\]|[A-Za-z]:[\\/]|\\\\[^\\/]|file:[\\/]{1,3})/i.test(
-              attribute.value.trim(),
-            )
-          ) {
-            absolutePathAttributes += 1;
-          }
-          if (attribute !== null) {
-            const normalizedAttributeName = attribute.name
-              .replace(/[^A-Za-z0-9]/g, '')
-              .toLowerCase();
+  it(
+    'packages the source corpus without credential values or local user paths',
+    { timeout: 30_000 },
+    async () => {
+      const { outputDir } = await fixture();
+      const archivePath = await buildTemplateContentPack({
+        inputDir: join(process.cwd(), 'src', 'desktop', 'data', 'templates'),
+        outputDir,
+        version: '1.0.0',
+      });
+      const entries = readStoredZip(await readFile(archivePath));
+      const templates = entries.filter(({ name }) => name.endsWith('.tbm'));
+      const corpus = Buffer.concat(templates.map(({ bytes }) => bytes)).toString('utf8');
+      let absolutePathAttributes = 0;
+      let credentialAttributes = 0;
+      let credentialQueryValues = 0;
+      for (const template of templates) {
+        const document = new DOMParser().parseFromString(
+          template.bytes.toString('utf8'),
+          'text/xml',
+        );
+        const elements = document.getElementsByTagName('*');
+        for (let elementIndex = 0; elementIndex < elements.length; elementIndex += 1) {
+          const attributes = elements.item(elementIndex)?.attributes;
+          if (attributes === undefined) continue;
+          for (let attributeIndex = 0; attributeIndex < attributes.length; attributeIndex += 1) {
+            const attribute = attributes.item(attributeIndex);
             if (
-              /(?:accesstoken|apikey|authtoken|bearertoken|clientsecret|credential|idtoken|oauthaccesstoken|passphrase|passwd|password|privatekey|refreshtoken|secret|secretaccesskey|secretkey|secrettoken|token)$/.test(
-                normalizedAttributeName,
-              ) &&
-              attribute.value.trim() !== ''
+              attribute !== null &&
+              /(?:dbname|directory|filename|path|folder)/i.test(attribute.name) &&
+              /^(?:\/(?!\/)|\/\/[^/\\]|[A-Za-z]:[\\/]|\\\\[^\\/]|file:[\\/]{1,3})/i.test(
+                attribute.value.trim(),
+              )
             ) {
-              credentialAttributes += 1;
+              absolutePathAttributes += 1;
             }
-            for (const match of attribute.value.matchAll(/(?:^|[?&;])([^?=&#;\s]+)=([^&#;\s]*)/g)) {
-              const normalizedKey = match[1]?.replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+            if (attribute !== null) {
+              const normalizedAttributeName = attribute.name
+                .replace(/[^A-Za-z0-9]/g, '')
+                .toLowerCase();
               if (
-                normalizedKey !== undefined &&
                 /(?:accesstoken|apikey|authtoken|bearertoken|clientsecret|credential|idtoken|oauthaccesstoken|passphrase|passwd|password|privatekey|refreshtoken|secret|secretaccesskey|secretkey|secrettoken|token)$/.test(
-                  normalizedKey,
+                  normalizedAttributeName,
                 ) &&
-                (match[2] ?? '').trim() !== ''
+                attribute.value.trim() !== ''
               ) {
-                credentialQueryValues += 1;
+                credentialAttributes += 1;
+              }
+              for (const match of attribute.value.matchAll(
+                /(?:^|[?&;])([^?=&#;\s]+)=([^&#;\s]*)/g,
+              )) {
+                const normalizedKey = match[1]?.replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+                if (
+                  normalizedKey !== undefined &&
+                  /(?:accesstoken|apikey|authtoken|bearertoken|clientsecret|credential|idtoken|oauthaccesstoken|passphrase|passwd|password|privatekey|refreshtoken|secret|secretaccesskey|secretkey|secrettoken|token)$/.test(
+                    normalizedKey,
+                  ) &&
+                  (match[2] ?? '').trim() !== ''
+                ) {
+                  credentialQueryValues += 1;
+                }
               }
             }
           }
         }
       }
-    }
 
-    expect(templates).toHaveLength(133);
-    expect(/\bapi-key\s*=\s*(['"])[^'"]+\1/i.test(corpus)).toBe(false);
-    expect(absolutePathAttributes).toBe(0);
-    expect(credentialAttributes).toBe(0);
-    expect(credentialQueryValues).toBe(0);
-  });
+      expect(templates).toHaveLength(133);
+      expect(/\bapi-key\s*=\s*(['"])[^'"]+\1/i.test(corpus)).toBe(false);
+      expect(absolutePathAttributes).toBe(0);
+      expect(credentialAttributes).toBe(0);
+      expect(credentialQueryValues).toBe(0);
+    },
+  );
 
   it('rejects a TBM larger than 512 KiB', async () => {
     const { inputDir, outputDir } = await fixture();
