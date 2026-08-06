@@ -25,11 +25,11 @@ const TOOLS_WITHOUT_API_SCOPES_REVIEWED_FOR_PASSTHROUGH: ReadonlyArray<WebToolNa
   // structure/size/asset-references. It makes NO Tableau REST API call and performs no auth-dependent
   // work, so there is nothing for passthrough auth to reach — it is safe to invoke under any auth type.
   'validate-workbook-package',
-  // Data-app workspace authoring tools: they operate entirely on the scoped, server-local
-  // DataAppWorkspaceStore (src/dataApps/) via resolveScopeFromExtra, and make NO Tableau REST API
-  // call. There is no auth-dependent work for passthrough auth to reach — any authenticated (or
-  // single-user stdio) caller may scaffold/author/inspect their own workspace under any auth type.
-  'scaffold-data-app',
+  // Data-app file tools: they operate entirely on the scoped, server-local DataAppWorkspaceStore
+  // (src/dataApps/) via resolveScopeFromExtra. They make NO Tableau REST API call and perform no
+  // auth-dependent work, so there is nothing for passthrough auth to reach — they are safe to invoke
+  // under any auth type. (scaffold-data-app is deliberately not listed: it resolves datasource
+  // identity via REST + VizQL Data Service, so it declares content:read + viz_data_service:read.)
   'upsert-data-app-files',
   'patch-data-app-file',
   'search-data-app-file',

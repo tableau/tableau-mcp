@@ -22,7 +22,7 @@ export function resolveScopeFromExtra(
     // multi-tenant OAuth deployments.
     server: extra.tableauAuthInfo?.server || extra.config.server,
     siteId: extra.tableauAuthInfo?.siteId,
-    userId: extra.tableauAuthInfo?.userId,
+    userLuid: extra.tableauAuthInfo?.userId,
     sessionId: extra.sessionId,
   });
 }

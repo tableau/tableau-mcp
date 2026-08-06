@@ -368,7 +368,7 @@ describe('createAndPublishWorkbookTool', () => {
       transport: 'stdio',
       server: 'https://my-tableau-server.com',
       siteId: 'other-site',
-      userId: 'other-user',
+      userLuid: 'other-user',
     }).unwrap();
     const validationId = await saveReceipt({ scope: otherScope });
     const result = await getToolResult({ validationId });

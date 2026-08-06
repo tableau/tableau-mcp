@@ -55,17 +55,7 @@ export default [
     },
   },
   {
-    ignores: [
-      'node_modules/**',
-      'build/**',
-      'docs/.docusaurus/**',
-      'docs/build/**',
-      // Non-source, agent/tooling-generated scratch dirs. ESLint v9 flat config no longer ignores
-      // dot-directories by default, so exclude these explicitly (they hold vendored extension
-      // bundles, Salesforce-generated typings, etc. that must not be linted as project source).
-      '.cursor/**',
-      '.sfdx/**',
-    ],
+    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**', 'docs/build/**'],
   },
   {
     plugins: {

@@ -171,6 +171,29 @@ describe('Config', () => {
     expect(config.transport).toBe('http');
   });
 
+  it('should default dataApps.exposeLocalPath to false when DATA_APP_EXPOSE_LOCAL_PATH is not specified', () => {
+    const config = new Config();
+    expect(config.dataApps.exposeLocalPath).toBe(false);
+  });
+
+  it('should set dataApps.exposeLocalPath to true when DATA_APP_EXPOSE_LOCAL_PATH is "true" and transport is stdio', () => {
+    vi.stubEnv('DATA_APP_EXPOSE_LOCAL_PATH', 'true');
+
+    const config = new Config();
+    expect(config.transport).toBe('stdio');
+    expect(config.dataApps.exposeLocalPath).toBe(true);
+  });
+
+  it('should force dataApps.exposeLocalPath to false when DATA_APP_EXPOSE_LOCAL_PATH is "true" but transport is http', () => {
+    vi.stubEnv('DATA_APP_EXPOSE_LOCAL_PATH', 'true');
+    vi.stubEnv('TRANSPORT', 'http');
+    vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
+
+    const config = new Config();
+    expect(config.transport).toBe('http');
+    expect(config.dataApps.exposeLocalPath).toBe(false);
+  });
+
   it('should set tableauServerVersionCheckIntervalInHours to default when not specified', () => {
     const config = new Config();
     expect(config.tableauServerVersionCheckIntervalInHours).toBe(1);

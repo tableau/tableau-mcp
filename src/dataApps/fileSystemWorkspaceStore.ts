@@ -346,7 +346,8 @@ export class FileSystemWorkspaceStore implements DataAppWorkspaceStore {
       }
 
       const validationsDir = this.validationsDir(scopeHash);
-      for (const entry of safeReaddir(validationsDir)) {
+      const validationEntries = safeReaddir(validationsDir);
+      for (const entry of validationEntries) {
         if (!entry.endsWith('.json')) {
           continue;
         }
@@ -362,7 +363,33 @@ export class FileSystemWorkspaceStore implements DataAppWorkspaceStore {
             rmSync(this.validationBytesPath(scopeHash, validationId), { force: true });
           }
         } catch {
+          // Corrupt metadata: remove both sides defensively so the (potentially large) .bin
+          // payload is never orphaned — the .json loop is the only pass that revisits it.
           rmSync(metaPath, { force: true });
+          rmSync(this.validationBytesPath(scopeHash, validationId), { force: true });
+        }
+      }
+
+      // Reclaim orphaned .bin payloads whose .json sibling is gone (e.g. a crash between the
+      // bytes-write and the meta-write in storeValidation). Age-gate on validationTtlMs so a
+      // shared-volume deployment never races an in-flight write: a lone .bin younger than the
+      // TTL may still be mid-write in another process, while one older than the TTL is
+      // unambiguously past when its meta would have expired and is safe to reclaim.
+      for (const entry of validationEntries) {
+        if (!entry.endsWith('.bin')) {
+          continue;
+        }
+        const validationId = entry.slice(0, -'.bin'.length);
+        if (!isOpaqueId(validationId)) {
+          continue;
+        }
+        if (existsSync(this.validationMetaPath(scopeHash, validationId))) {
+          continue;
+        }
+        const bytesPath = this.validationBytesPath(scopeHash, validationId);
+        const stat = lstatSync(bytesPath, { throwIfNoEntry: false });
+        if (stat && now.getTime() - stat.mtimeMs > this.validationTtlMs) {
+          rmSync(bytesPath, { force: true });
         }
       }
     }

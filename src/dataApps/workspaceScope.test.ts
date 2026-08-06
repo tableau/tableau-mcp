@@ -21,7 +21,7 @@ describe('resolveWorkspaceScope', () => {
       transport: 'http',
       server,
       siteId: 'site-1',
-      userId: 'user-1',
+      userLuid: 'user-1',
       sessionId: 'session-abc',
     });
 
@@ -79,7 +79,7 @@ describe('resolveWorkspaceScope', () => {
   it('never derives the actor id from a caller-suppliable value alone', () => {
     // A user id present without a site id must not be trusted as a full scope on HTTP; it falls
     // through to session/rejection rather than fabricating a site.
-    const result = resolveWorkspaceScope({ transport: 'http', server, userId: 'user-1' });
+    const result = resolveWorkspaceScope({ transport: 'http', server, userLuid: 'user-1' });
     expect(result.isErr()).toBe(true);
   });
 });

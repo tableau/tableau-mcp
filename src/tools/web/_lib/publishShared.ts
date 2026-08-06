@@ -55,7 +55,7 @@ export type PublishTarget =
 export function checkUnder64Mb(sizeBytes: number): PublishWorkbookError | null {
   if (sizeBytes > MAX_SINGLE_REQUEST_BYTES) {
     return new PublishWorkbookError(
-      `File is ${Math.round(sizeBytes / (1024 * 1024))} MB, which exceeds the 64 MB single-request ` +
+      `File is ${Math.ceil(sizeBytes / (1024 * 1024))} MB, which exceeds the 64 MB single-request ` +
         'publish limit. Chunked upload is not yet supported.',
     );
   }

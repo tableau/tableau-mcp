@@ -5,6 +5,7 @@ import {
   readdirSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'fs';
 import { tmpdir } from 'os';
@@ -70,6 +71,18 @@ async function createApp(
     packageId: 'com.example.app',
     files: [{ path: 'index.html', content: '<html></html>' }],
   });
+}
+
+// Locate the on-disk validations directory (root/<scopeHash>/validations) without depending on
+// the store's private scope-hashing internals.
+function findValidationsDir(): string {
+  for (const scopeHash of readdirSync(root)) {
+    const dir = join(root, scopeHash, 'validations');
+    if (existsSync(dir)) {
+      return dir;
+    }
+  }
+  throw new Error('validations directory not found on disk');
 }
 
 beforeEach(() => {
@@ -204,8 +217,8 @@ describe('FileSystemWorkspaceStore', () => {
       const app = await createApp(store);
 
       const outsideDir = join(root, 'outside-dir');
-      writeFileSync(join(root, 'placeholder'), '');
-      symlinkSync(root, join(app.localPath!, 'link'));
+      mkdirSync(outsideDir, { recursive: true });
+      symlinkSync(outsideDir, join(app.localPath!, 'link'));
 
       await expect(
         store.upsertFiles(scopeA, app.appId, [{ path: 'link/pwned.txt', content: 'x' }]),
@@ -340,6 +353,77 @@ describe('FileSystemWorkspaceStore', () => {
       await expect(store.getValidation(scopeA, expiredValidationId)).rejects.toBeInstanceOf(
         DataAppValidationNotFoundError,
       );
+    });
+
+    it('removes both the metadata and the bytes when validation metadata is corrupt', async () => {
+      const store = makeStore();
+      const app = await createApp(store);
+      await store.saveValidation(scopeA, {
+        validationId,
+        appId: app.appId,
+        bytes: new Uint8Array([1, 2, 3]),
+        digest: '',
+        sourceDigest: 'src',
+      });
+      const validationsDir = findValidationsDir();
+      const metaPath = join(validationsDir, `${validationId}.json`);
+      const bytesPath = join(validationsDir, `${validationId}.bin`);
+
+      // Corrupt the metadata so JSON.parse throws during the sweep.
+      writeFileSync(metaPath, 'not json{');
+      await store.deleteExpired();
+
+      // Both sides are gone — the .bin is never orphaned by the corrupt-meta path.
+      expect(existsSync(metaPath)).toBe(false);
+      expect(existsSync(bytesPath)).toBe(false);
+    });
+
+    it('reclaims an orphaned .bin (crash between bytes-write and meta-write) once past the TTL', async () => {
+      const store = makeStore(); // validationTtlMs: 60_000
+      const app = await createApp(store);
+      // A healthy validation establishes the on-disk validations directory.
+      await store.saveValidation(scopeA, {
+        validationId,
+        appId: app.appId,
+        bytes: new Uint8Array([1, 2, 3]),
+        digest: '',
+        sourceDigest: 'src',
+      });
+      const validationsDir = findValidationsDir();
+
+      // A lone .bin with no .json sibling, aged well past the TTL.
+      const orphanBin = join(validationsDir, `${expiredValidationId}.bin`);
+      writeFileSync(orphanBin, Buffer.from([9]));
+      const old = new Date(Date.now() - 10 * 60_000);
+      utimesSync(orphanBin, old, old);
+
+      await store.deleteExpired();
+
+      expect(existsSync(orphanBin)).toBe(false);
+      // The healthy validation is untouched.
+      expect(existsSync(join(validationsDir, `${validationId}.bin`))).toBe(true);
+      expect(existsSync(join(validationsDir, `${validationId}.json`))).toBe(true);
+    });
+
+    it('keeps a freshly written orphaned .bin to avoid racing an in-flight write', async () => {
+      const store = makeStore(); // validationTtlMs: 60_000
+      const app = await createApp(store);
+      await store.saveValidation(scopeA, {
+        validationId,
+        appId: app.appId,
+        bytes: new Uint8Array([1]),
+        digest: '',
+        sourceDigest: 'src',
+      });
+      const validationsDir = findValidationsDir();
+
+      // A lone .bin younger than the TTL may still be mid-write by another process.
+      const freshBin = join(validationsDir, `${expiredValidationId}.bin`);
+      writeFileSync(freshBin, Buffer.from([9]));
+
+      await store.deleteExpired();
+
+      expect(existsSync(freshBin)).toBe(true);
     });
   });
 

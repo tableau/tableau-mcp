@@ -233,7 +233,7 @@ describe('searchDataAppFileTool', () => {
       transport: 'stdio',
       server: 'https://my-tableau-server.com',
       siteId: 'other-site',
-      userId: 'other-user',
+      userLuid: 'other-user',
     }).unwrap();
     const otherWorkspace = await store.create(otherScope, {
       appName: 'Other App',

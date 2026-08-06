@@ -7,7 +7,7 @@ import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasou
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
-import { WebToolName, webToolNames } from './tools/web/toolName.js';
+import { webToolGroups, WebToolName, webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
@@ -416,14 +416,9 @@ describe('server', () => {
 
   describe('data-app-workspaces rollout gate', () => {
     // The whole scaffold -> author -> validate -> publish workflow, gated as one unit.
-    const dataAppToolNames = [
-      'scaffold-data-app',
-      'upsert-data-app-files',
-      'read-data-app-file',
-      'list-data-app-files',
-      'validate-workbook-package',
-      'create-and-publish-workbook',
-    ] as const;
+    // Track the canonical group (same object server.web.ts gates on) so new data-app
+    // tools are covered automatically instead of silently escaping these assertions.
+    const dataAppToolNames = webToolGroups['data-app'];
 
     it('registers every data-app tool and both workflow resources when the gate is enabled', async () => {
       mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(dataAppsOnly);

@@ -247,7 +247,7 @@ report the workbook \`name\` and \`id\` instead.
                     failureCode = 'personal-space-not-available';
                     const landedProject = published.project?.name ?? published.location?.name;
                     return new PublishWorkbookError(
-                      'This Tableau server published the workbook to ' +
+                      'This Tableau site published the workbook to ' +
                         (landedProject ? `the "${landedProject}" project` : 'a project') +
                         ' instead of your personal space — its REST API does not support ' +
                         'personal-space publishing. Delete it there if unwanted, or publish to a ' +

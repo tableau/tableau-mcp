@@ -383,15 +383,13 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  // Most data-app workspace authoring tools operate entirely on the scoped, server-local
-  // DataAppWorkspaceStore — they make no Tableau REST API call, so both scope sets are empty. Any
-  // authenticated (or single-user stdio) caller may author/inspect their own workspace regardless of
-  // granted MCP scopes.
+  // Most data-app authoring tools touch only the server-local DataAppWorkspaceStore (no REST call),
+  // so both scope sets are empty: any authenticated (or single-user stdio) caller may author/inspect
+  // their own workspace regardless of granted MCP scopes.
   //
-  // scaffold-data-app is the exception: to wire the workbook to the target published datasource(s) it
-  // resolves each datasource's identity (contentUrl/name via REST) and one field for the host sheet
-  // (via VizQL Data Service read-metadata), so it needs content:read + viz_data_service:read. It
-  // still needs no MCP scope — any authenticated caller may scaffold their own workspace.
+  // scaffold-data-app is the exception: to wire the workbook to its published datasource(s) it
+  // resolves each datasource's identity (via REST) and reads one field (via VizQL Data Service), so
+  // it needs content:read + viz_data_service:read — but still no MCP scope.
   'scaffold-data-app': {
     mcp: [],
     api: new Set<TableauApiScope>(['tableau:content:read', 'tableau:viz_data_service:read']),

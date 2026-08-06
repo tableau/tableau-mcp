@@ -32,8 +32,8 @@ export type WorkspaceScopeInput = {
   server: string;
   /** Authenticated Tableau site id, when available. */
   siteId?: string;
-  /** Authenticated Tableau user id/LUID, when available. */
-  userId?: string;
+  /** Authenticated Tableau user LUID, when available. */
+  userLuid?: string;
   /** MCP transport session id (`mcp-session-id`), when session management is active. */
   sessionId?: string;
 };
@@ -54,11 +54,11 @@ export function resolveWorkspaceScope(
   }
 
   // 1. Authenticated Tableau identity (site + user) — the canonical cross-session scope.
-  if (input.userId && input.siteId) {
+  if (input.userLuid && input.siteId) {
     return new Ok({
       server,
       siteId: input.siteId,
-      actorId: `user:${input.userId}`,
+      actorId: `user:${input.userLuid}`,
     });
   }
 

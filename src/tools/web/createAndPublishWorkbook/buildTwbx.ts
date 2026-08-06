@@ -29,11 +29,11 @@
 import { strToU8, zipSync } from 'fflate';
 
 import { BuildTwbxError } from '../../../errors/mcpToolError.js';
+import { getTableauExtensionsLibBytes } from '../dataApps/assets/tableauExtensionsLib.js';
 
 // Fixed archive entry timestamp so zip output is byte-stable across runs (fflate defaults to Date.now()).
 // Mid-range UTC instant: safe from any local-timezone shift out of fflate's 1980–2099 range.
 const FIXED_MTIME = new Date(Date.UTC(2020, 0, 1, 12, 0, 0));
-import { getTableauExtensionsLibBytes } from '../dataApps/assets/tableauExtensionsLib.js';
 
 /** The content-relative path the injected Extensions API library is packaged at. index.html in the
  *  live scaffold references exactly this path, and the asset-reference check treats it as always

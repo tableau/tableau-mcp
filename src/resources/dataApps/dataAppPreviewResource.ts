@@ -73,7 +73,7 @@ function resolveScopeFromResourceExtra(
     transport: config.transport,
     server: authInfo?.server || config.server,
     siteId: authInfo?.siteId,
-    userId: authInfo?.userId,
+    userLuid: authInfo?.userId,
     sessionId: extra.sessionId,
   });
 }

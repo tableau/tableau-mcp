@@ -60,7 +60,6 @@ describe('OverridableConfig', () => {
         'query-datasource',
         'list-workbooks',
         'get-workbook',
-        'delete-workbook',
         'create-and-publish-workbook',
         'validate-workbook-package',
       ]);
@@ -81,7 +80,6 @@ describe('OverridableConfig', () => {
         'query-datasource',
         'list-workbooks',
         'get-workbook',
-        'delete-workbook',
         'create-and-publish-workbook',
         'validate-workbook-package',
       ]);
@@ -96,6 +94,7 @@ describe('OverridableConfig', () => {
       expect([...config.excludeTools].sort()).toEqual(
         [
           'scaffold-data-app',
+          'edit-data-app',
           'upsert-data-app-files',
           'patch-data-app-file',
           'search-data-app-file',
@@ -114,6 +113,7 @@ describe('OverridableConfig', () => {
       expect([...config.includeTools].sort()).toEqual(
         [
           'scaffold-data-app',
+          'edit-data-app',
           'upsert-data-app-files',
           'patch-data-app-file',
           'search-data-app-file',

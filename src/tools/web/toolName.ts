@@ -111,11 +111,10 @@ export const webToolGroups = {
   'token-management': ['revoke-access-token', 'reset-consent'],
   'mcp-apps': ['get-embed-token', 'record-event', 'render-interactive-viz'],
   'admin-insights': ['query-admin-insights'],
-  // File-only workspace authoring tools plus the existing validation/publication tools that
-  // consume a data-app workspace. Membership here is additive: validate-workbook-package and
-  // create-and-publish-workbook remain in the `workbook` group too (a tool may belong to more
-  // than one group), so INCLUDE_TOOLS/EXCLUDE_TOOLS='data-app' can gate or keep the whole
-  // scaffold -> author -> validate -> publish workflow together.
+  // File-only workspace authoring tools plus validate-workbook-package and
+  // create-and-publish-workbook, which also stay in the `workbook` group (membership is
+  // additive). Grouping them here lets INCLUDE_TOOLS/EXCLUDE_TOOLS='data-app' gate the whole
+  // scaffold -> author -> validate -> publish workflow as a unit.
   'data-app': [
     'scaffold-data-app',
     'edit-data-app',
