@@ -19,13 +19,15 @@
 import Fuse from 'fuse.js';
 
 import { calcForcedSlotIds } from './calc-derivation.js';
-import type { Derivation, SlotKind, TemplateManifest } from './manifest-types.js';
+import type { Derivation, RuntimeTemplateDescriptor, SlotKind } from './manifest-types.js';
 import { inferStringTemporal } from './stringTemporal.js';
 import {
   WATERFALL_ANCHOR_FIELD_RE,
   WATERFALL_ORDER_FIELD_RE,
   WATERFALL_TEMPLATE_NAME,
 } from './waterfall.js';
+
+type TemplateManifest = RuntimeTemplateDescriptor;
 
 /**
  * SCHEMA SHAPES + `bareName`, inlined so this file stays import-pure — it severs the
@@ -142,11 +144,11 @@ export const MAX_CLASSIFIABLE_FIELDS = 5000;
  * and conservative: only words that unambiguously name an aggregation.
  */
 const AGGREGATION_WORDS: ReadonlyArray<{ phrase: string; deriv: Derivation }> = [
-  { phrase: 'distinct count', deriv: 'cntd' },
-  { phrase: 'count distinct', deriv: 'cntd' },
+  { phrase: 'distinct count', deriv: 'ctd' },
+  { phrase: 'count distinct', deriv: 'ctd' },
   { phrase: 'average', deriv: 'avg' },
   { phrase: 'avg', deriv: 'avg' },
-  { phrase: 'median', deriv: 'median' },
+  { phrase: 'median', deriv: 'med' },
   { phrase: 'minimum', deriv: 'min' },
   { phrase: 'min', deriv: 'min' },
   { phrase: 'maximum', deriv: 'max' },
@@ -157,7 +159,7 @@ const AGGREGATION_WORDS: ReadonlyArray<{ phrase: string; deriv: Derivation }> = 
 /**
  * Detect a single explicit aggregation word in the ask → its short form, else
  * null. The earliest-occurring phrase wins; ties keep the more specific phrase
- * (listed first), so "distinct count" resolves to cntd rather than cnt. Fails
+ * (listed first), so "distinct count" resolves to ctd rather than cnt. Fails
  * closed: no recognized word → null (no override).
  */
 function detectAggregationOverride(ask: string): Derivation | null {
@@ -388,13 +390,9 @@ export function matchAvoidWhen(
  * the template stays fully bindable via the propose leg, where the model sees the
  * hazard detail and judges the actual schema against it.
  */
-const DETERMINISTIC_PATH_BLOCKING_HAZARDS: ReadonlySet<string> = new Set(['compound-string-parse']);
-
-/** True when the manifest carries a hazard the no-LLM path must not bind through. */
-export function hasDeterministicPathBlockingHazard(
-  manifest: Pick<TemplateManifest, 'hazards'>,
-): boolean {
-  return (manifest.hazards ?? []).some((h) => DETERMINISTIC_PATH_BLOCKING_HAZARDS.has(h.code));
+/** Ineligible TBM structure never takes the deterministic apply path. */
+export function hasDeterministicPathBlockingHazard(manifest: TemplateManifest): boolean {
+  return manifest.fast_path_blockers.length > 0;
 }
 
 /** The intent_keywords (original case) that appear as whole tokens in `ask`. */
@@ -948,13 +946,22 @@ function resolveLatLonSymbolMap(
     detailDims = [best];
   }
 
-  // Map by SLOT ROLE/ID, not slot order: longitude→the cols slot, latitude→the rows slot,
-  // and the non-coordinate dims → the detail slots in order. Guards against a manifest
-  // slot reorder and makes the coordinate name→axis contract explicit (axis-swap-proof).
-  const lonSlot = m.slots.find((s) => s.slot_id === 'longitude' && s.role.includes('cols'));
-  const latSlot = m.slots.find((s) => s.slot_id === 'latitude' && s.role.includes('rows'));
+  // Axis placement is the TBM-authored contract: longitude is the quantitative cols
+  // pill and latitude is the quantitative rows pill. Neutral runtime slot ids carry no
+  // donor semantics and must never participate in this decision.
+  const lonSlot = m.slots.find(
+    (s) => s.bindable && s.kind === 'quantitative' && s.role.includes('cols'),
+  );
+  const latSlot = m.slots.find(
+    (s) => s.bindable && s.kind === 'quantitative' && s.role.includes('rows'),
+  );
   const detailSlots = m.slots
-    .filter((s) => s.slot_id.startsWith('detail') && s.role.includes('lod'))
+    .filter(
+      (s) =>
+        s.bindable &&
+        s.kind === 'categorical' &&
+        (s.role.includes('lod') || s.role.includes('detail')),
+    )
     .sort((a, b) => a.slot_id.localeCompare(b.slot_id));
   if (!lonSlot || !latSlot || detailSlots.length < detailDims.length) return null; // manifest shape changed → fail closed
 
@@ -1950,6 +1957,12 @@ function geoConceptFromSlotId(slotId: string): GeoConcept | null {
   return null;
 }
 
+function geoConceptFromSlot(slot: TemplateManifest['slots'][number]): GeoConcept | null {
+  return (
+    geoConceptFromSemanticRole(slot.semantic_role) ?? geoConceptFromSlotId(slot.slot_id)
+  );
+}
+
 /** Split a name/slot_id into lowercased whole tokens (non-alphanumeric boundaries). */
 function nameTokens(s: string): string[] {
   return s
@@ -1964,10 +1977,10 @@ function nameTokens(s: string): string[] {
  * exotic geo slot still matches fields sharing its name). "country_region" → the
  * country synonyms {country,nation}; "state_province" → {state,province,region,admin}.
  */
-function geoAffinityTokens(slotId: string): Set<string> {
-  const concept = geoConceptFromSlotId(slotId);
+function geoAffinityTokens(slot: TemplateManifest['slots'][number]): Set<string> {
+  const concept = geoConceptFromSlot(slot);
   if (concept) return new Set(GEO_CONCEPT_SYNONYMS[concept]);
-  return new Set(nameTokens(slotId));
+  return new Set(nameTokens(slot.slot_id));
 }
 
 /** Count of a geo slot's affinity tokens that appear as whole tokens in the field's names. */
@@ -2015,8 +2028,11 @@ function pickUniqueMaxAffinity(pool: SchemaField[], aff: Set<string>): GeoPick {
  * any field whose semantic role names a DIFFERENT geo concept — a "Region" tagged
  * [City].[Name] must not win the state slot on its name.
  */
-function pickGeoField(pool: SchemaField[], slotId: string): GeoPick {
-  const concept = geoConceptFromSlotId(slotId);
+function pickGeoField(
+  pool: SchemaField[],
+  slot: TemplateManifest['slots'][number],
+): GeoPick {
+  const concept = geoConceptFromSlot(slot);
   if (concept) {
     const semanticMatches = pool.filter(
       (f) => geoConceptFromSemanticRole(f.semanticRole) === concept,
@@ -2031,7 +2047,7 @@ function pickGeoField(pool: SchemaField[], slotId: string): GeoPick {
         return fieldConcept === null || fieldConcept === concept;
       })
     : pool;
-  return pickUniqueMaxAffinity(fallbackPool, geoAffinityTokens(slotId));
+  return pickUniqueMaxAffinity(fallbackPool, geoAffinityTokens(slot));
 }
 
 /**
@@ -2058,13 +2074,13 @@ function augmentGeoConceptMatches(
 
   for (const slot of geoSlots) {
     const askNamedPool = augmented.filter((field) => field.role === 'dimension');
-    if (pickGeoField(askNamedPool, slot.slot_id).kind !== 'none') continue;
-    const conceptNamed = [...geoAffinityTokens(slot.slot_id)].some(
+    if (pickGeoField(askNamedPool, slot).kind !== 'none') continue;
+    const conceptNamed = [...geoAffinityTokens(slot)].some(
       (token) => fieldNameMatchInAsk(maskedAsk, token, new Set()) >= 0,
     );
     if (!conceptNamed) continue;
 
-    const schemaPick = pickGeoField(schemaDims, slot.slot_id);
+    const schemaPick = pickGeoField(schemaDims, slot);
     if (schemaPick.kind === 'ok' && !augmented.includes(schemaPick.field)) {
       augmented.push(schemaPick.field);
     }
@@ -2105,7 +2121,7 @@ function resolveGeoSlots(
 
   // Phase 1 — resolve from the ASK-NAMED pool. A tie fails closed immediately.
   for (const slot of geoSlots) {
-    const pick = pickGeoField(pool, slot.slot_id);
+    const pick = pickGeoField(pool, slot);
     if (pick.kind === 'tie') return null; // ask named 2+ tied candidates → fail closed
     if (pick.kind === 'ok') {
       picks.set(slot.slot_id, pick.field);
@@ -2121,7 +2137,7 @@ function resolveGeoSlots(
   if (zeroSlots.length > 0) {
     if (!anyAskNamed) return null;
     for (const slot of zeroSlots) {
-      const widened = pickGeoField(schemaDims, slot.slot_id);
+      const widened = pickGeoField(schemaDims, slot);
       if (widened.kind !== 'ok') return null; // still zero, or now ambiguous → fail closed
       picks.set(slot.slot_id, widened.field);
       autoCompleted.set(slot.slot_id, widened.field);
@@ -2252,7 +2268,7 @@ function roleGreedyBind(
     if (!slot.bindable || slot.required || forced.has(slot.slot_id) || slot.kind !== 'geo') {
       continue;
     }
-    const pick = pickGeoField(initialGeoPool, slot.slot_id);
+    const pick = pickGeoField(initialGeoPool, slot);
     if (pick.kind === 'tie') return null;
     if (pick.kind === 'ok') optionalAskNamedGeoSlots.add(slot.slot_id);
   }
@@ -2647,7 +2663,7 @@ function askImpliesFacet(maskedAsk: string): boolean {
 
 /**
  * A manifest's OPTIONAL trellis facet slot: bindable + optional + categorical, on
- * rows or cols, with a `facet*` slot_id (facet / facet_row / facet_col). This is the
+ * rows or cols. This is the
  * single dimension placed AHEAD of the existing pill for a simple one-dim trellis.
  */
 function isFacetSlot(s: TemplateManifest['slots'][number]): boolean {
@@ -2655,7 +2671,6 @@ function isFacetSlot(s: TemplateManifest['slots'][number]): boolean {
     s.bindable &&
     !s.required &&
     s.kind === 'categorical' &&
-    s.slot_id.startsWith('facet') &&
     (s.role.includes('rows') || s.role.includes('cols'))
   );
 }
@@ -2699,7 +2714,7 @@ function colorSeriesBinding(
   const boundIds = new Set(bound.map((binding) => binding.slot_id));
   const colorSlot = m.slots.find(
     (slot) =>
-      slot.slot_id === 'color_series' &&
+      slot.role.includes('color') &&
       slot.kind === 'categorical' &&
       !slot.required &&
       !boundIds.has(slot.slot_id),
@@ -3522,14 +3537,7 @@ export function buildLlmInput(
   opts?: { maxFields?: number },
 ): LlmProposeInput {
   const maxFields = opts?.maxFields ?? DEFAULT_MAX_FIELDS;
-  // ROUTABLE pool = fast-path-eligible templates PLUS side-loaded LOCAL templates
-  // (W2-C1). Local templates arrive UNSTAMPED (fast_path_eligible false), so they
-  // never enter classifyNoLlm's auto-bind, but they MUST be visible to the propose
-  // shortlist by family/keyword so the model can route to them. When no local set
-  // is side-loaded this is byte-identical to the eligible-only pool.
-  const routable = [...manifests.values()].filter(
-    (m) => m.fast_path_eligible || m.source === 'local',
-  );
+  const routable = [...manifests.values()].filter((m) => m.fast_path_eligible);
 
   // Mask field names before scoring, in lockstep with classifyNoLlm (RT finding
   // CLS-001): the propose shortlist must not let a field literally named "Pie"

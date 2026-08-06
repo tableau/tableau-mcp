@@ -1,11 +1,74 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { rewriteFieldReferences } from '../templates/fieldReferenceRewriter.js';
+import { getRuntimeTemplateSnapshot } from '../templates/runtimeTemplateCatalog.js';
 import { bindTemplate, classifyNoLlm, summarizeSchema } from './binder.js';
-import { loadManifests } from './manifest.js';
+import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
-const manifests = loadManifests();
+const symbolMap: RuntimeTemplateDescriptor = {
+  template: 'spatial-symbol-map',
+  family: 'spatial',
+  fast_path_eligible: true,
+  fast_path_blockers: [],
+  intent_keywords: ['symbol-map', 'map', 'spatial'],
+  description: 'point map sized by a measure',
+  slots: [
+    {
+      slot_id: 'country',
+      template_field: 'Country/Region',
+      derivation: 'none',
+      role: ['lod'],
+      kind: 'geo',
+      bindable: true,
+      required: true,
+    },
+    {
+      slot_id: 'state',
+      template_field: 'State/Province',
+      derivation: 'none',
+      role: ['lod'],
+      kind: 'geo',
+      bindable: true,
+      required: false,
+    },
+    {
+      slot_id: 'city',
+      template_field: 'City',
+      derivation: 'none',
+      role: ['lod'],
+      kind: 'geo',
+      bindable: true,
+      required: false,
+    },
+    {
+      slot_id: 'sales',
+      template_field: 'Sales',
+      derivation: 'sum',
+      role: ['size'],
+      kind: 'quantitative',
+      bindable: true,
+      required: true,
+    },
+    {
+      slot_id: 'color',
+      template_field: '{{field_base_1}}',
+      derivation: 'sum',
+      role: ['color'],
+      kind: 'quantitative-or-categorical',
+      bindable: true,
+      required: false,
+    },
+    {
+      slot_id: 'tooltip',
+      template_field: '{{field_base_2}}',
+      derivation: 'sum',
+      role: ['tooltip'],
+      kind: 'quantitative-or-categorical',
+      bindable: true,
+      required: false,
+    },
+  ],
+  calcs: [],
+};
+const manifests = new Map([[symbolMap.template, symbolMap]]);
 
 /** The live-shaped World Cup schema Matt hit the flat-blue symbol map against. */
 const worldCupXml = `<workbook><datasources><datasource name='federated.wc' caption='teams+'>
@@ -83,22 +146,41 @@ describe('binder encoding honesty — requested vs filled', () => {
 
   it('the unfilled list matches what actually reached the workbook XML', async () => {
     const manifest = manifests.get('spatial-symbol-map')!;
-    const template = readFileSync(
-      join(process.cwd(), 'src/desktop/data/templates/spatial-symbol-map.xml'),
-      'utf-8',
-    );
+    const snapshot = getRuntimeTemplateSnapshot('spatial-symbol-map')!;
+    const geoSlots = snapshot.descriptor.slots.filter((slot) => slot.kind === 'geo');
+    const runtimeSlots = snapshot.descriptor.slots.map((slot) => ({
+      ...slot,
+      required: slot === geoSlots[0] || slot.role.includes('size'),
+    }));
     const render = async (
       ask: string,
     ): Promise<{ xml: string; reportsColorUnfilled: boolean; reportsColorFilled: boolean }> => {
       const bound = await bindTemplate({ ask, workbookXml: worldCupXml, manifests });
       if (bound.status !== 'bound') throw new Error(`expected bound, got ${bound.status}`);
+      const boundValue = (slotId: string): string | undefined => {
+        const sourceSlot = manifest.slots.find((slot) => slot.slot_id === slotId);
+        return sourceSlot ? bound.args.field_mapping[sourceSlot.template_field] : undefined;
+      };
+      const runtimeMapping: Record<string, string> = {};
+      const assign = (runtimeRole: string, sourceSlotId: string): void => {
+        const runtimeSlot = runtimeSlots.find((slot) => slot.role.includes(runtimeRole));
+        const value = boundValue(sourceSlotId);
+        if (runtimeSlot && value) runtimeMapping[runtimeSlot.template_field] = value;
+      };
+      if (geoSlots[0]) {
+        const countryValue = boundValue('country');
+        if (countryValue) runtimeMapping[geoSlots[0].template_field] = countryValue;
+      }
+      assign('size', 'sales');
+      assign('color', 'color');
+      assign('tooltip', 'tooltip');
       return {
         xml: rewriteFieldReferences(
-          template,
-          bound.args.field_mapping,
+          snapshot.xml,
+          runtimeMapping,
           bound.args.template_parameters.DATASOURCE,
           undefined,
-          { templateSlots: manifest.slots },
+          { templateSlots: runtimeSlots },
         ),
         reportsColorUnfilled: bound.encodings?.unfilled.includes('color') === true,
         reportsColorFilled: bound.encodings?.filled.includes('color') === true,

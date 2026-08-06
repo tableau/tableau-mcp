@@ -38,6 +38,13 @@ describe('derivations — one table, and every entry lands inside the validator'
     expect(CANONICAL_DERIVATIONS.has('Attr')).toBe(false);
   });
 
+  it('maps spatial collect derivations in both directions', () => {
+    expect(resolveDerivation('clct')).toBe('Collect');
+    expect(resolveDerivation('collect')).toBe('Collect');
+    expect(DERIVATION_LONG_TO_SHORT.Collect).toBe('clct');
+    expect(CANONICAL_DERIVATIONS.has('Collect')).toBe(true);
+  });
+
   it('resolves the prefixes the old maps dropped', () => {
     expect(resolveDerivation('cnt')).toBe('Count');
     expect(resolveDerivation('ctd')).toBe('CountD');
@@ -55,6 +62,10 @@ describe('derivations — one table, and every entry lands inside the validator'
     expect(resolveDerivation('cum:sum')).toBe('Sum');
     expect(resolveDerivation('pcto:cum:sum')).toBe('Sum');
     expect(resolveDerivation('rank:ctd')).toBe('CountD');
+  });
+
+  it('strips the Desktop forecast-value wrapper to its base aggregation', () => {
+    expect(resolveDerivation('fVal:sum')).toBe('Sum');
   });
 
   it('throws on an unknown prefix instead of echoing it onward', () => {

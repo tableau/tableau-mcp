@@ -1,0 +1,427 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run fontcolor='#40414c' fontname='Tableau Semibold' fontsize='12'>&lt;Sheet Name&gt; (vertical)</run>
+        <run>Æ&#10;</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <datasources>
+    <datasource caption='Waterfall Chart' inline='true' name='federated.1h2onm80d10fnc0zqfka50nszgpx' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Waterfall' name='excel-direct.10siue91bv55wg11gn2xj0w0xu8l'>
+            <connection class='excel-direct' cleaning='no' compat='no' dataRefreshTime='' interpretationMode='0' validate='no' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation name='Pivot' type='pivot'>
+          <columns>
+            <column datatype='string' name='Pivot Field Names' />
+            <column datatype='integer' name='Pivot Field Values' />
+          </columns>
+          <tag name='Pivot Field Names'>
+            <value name='[Cost]' />
+            <value name='[Expenses]' />
+            <value name='[Profit]' />
+            <value name='[Sales]' />
+          </tag>
+          <groups>
+            <group name='Pivot Field Values'>
+              <field name='[Sheet1].[Cost]' />
+              <field name='[Sheet1].[Expenses]' />
+              <field name='[Sheet1].[Profit]' />
+              <field name='[Sheet1].[Sales]' />
+            </group>
+          </groups>
+          <relation connection='excel-direct.10siue91bv55wg11gn2xj0w0xu8l' name='Sheet1' table='[Sheet1$]' type='table'>
+            <columns gridOrigin='A1:E2:no:A1:E2:0' header='yes' outcome='6'>
+              <column datatype='string' name='Region' ordinal='0' />
+              <column datatype='integer' name='Sales' ordinal='1' />
+              <column datatype='integer' name='Cost' ordinal='2' />
+              <column datatype='integer' name='Expenses' ordinal='3' />
+              <column datatype='integer' name='Profit' ordinal='4' />
+            </columns>
+          </relation>
+        </relation>
+        <metadata-records>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='context'>0</attribute>
+              <attribute datatype='string' name='gridOrigin'>&quot;A1:E2:no:A1:E2:0&quot;</attribute>
+              <attribute datatype='boolean' name='header'>true</attribute>
+              <attribute datatype='integer' name='outcome'>6</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Region</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Region]</local-name>
+            <parent-name>[Sheet1]</parent-name>
+            <remote-alias>Region</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_18377676AB764F25A15F8865E5C0EB30]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Pivot Field Names</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Pivot Field Names]</local-name>
+            <parent-name>[Pivot]</parent-name>
+            <remote-alias>Pivot Field Names</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Sheet1_18377676AB764F25A15F8865E5C0EB30]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Pivot Field Values</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Pivot Field Values]</local-name>
+            <parent-name>[Pivot]</parent-name>
+            <remote-alias>Pivot Field Values</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Sheet1_18377676AB764F25A15F8865E5C0EB30]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Sizing' datatype='integer' name='[Calculation_3900961764665905157]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='SUM(&#13;&#10;        IF [Pivot Field Names]=&quot;Sales&quot; THEN [Pivot Field Values]&#13;&#10;            ELSE - [Pivot Field Values] END&#13;&#10;)' />
+      </column>
+      <column caption='Measures' datatype='string' name='[Pivot Field Names]' role='dimension' type='nominal'>
+        <aliases>
+          <alias key='&quot;Cost&quot;' value='Costs' />
+        </aliases>
+      </column>
+      <column caption='Values' datatype='integer' name='[Pivot Field Values]' role='measure' type='quantitative' />
+      <column datatype='string' hidden='true' name='[Region]' role='dimension' type='nominal' />
+      <column caption='Sheet1' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Sheet1_18377676AB764F25A15F8865E5C0EB30]' role='measure' type='quantitative' />
+      <column-instance column='[Pivot Field Names]' derivation='None' name='[none:Pivot Field Names:nk]' pivot='key' type='nominal' />
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:12:48 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='Sheet1 (Waterfall)' increment-value='%null%' refresh-type='create' rows-inserted='4' timestamp-start='2026-06-30 20:12:48.215' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Pivot Field Names</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Pivot Field Names]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Pivot Field Names</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Pivot</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>4</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[Sheet1_18377676AB764F25A15F8865E5C0EB30]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Pivot Field Values</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Pivot Field Values]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Pivot Field Values</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Pivot</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>4</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Sheet1_18377676AB764F25A15F8865E5C0EB30]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[none:Pivot Field Names:nk]' type='palette'>
+            <map to='#4fadff'>
+              <bucket>&quot;Sales&quot;</bucket>
+            </map>
+            <map to='#87deca'>
+              <bucket>&quot;Profit&quot;</bucket>
+            </map>
+            <map to='#f07cef'>
+              <bucket>&quot;Expenses&quot;</bucket>
+            </map>
+            <map to='#ff5e5e'>
+              <bucket>&quot;Cost&quot;</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United Kingdom&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Sheet1' id='Sheet1_18377676AB764F25A15F8865E5C0EB30'>
+            <properties context=''>
+              <relation name='Pivot' type='pivot'>
+                <columns>
+                  <column datatype='string' name='Pivot Field Names' />
+                  <column datatype='integer' name='Pivot Field Values' />
+                </columns>
+                <tag name='Pivot Field Names'>
+                  <value name='[Cost]' />
+                  <value name='[Expenses]' />
+                  <value name='[Profit]' />
+                  <value name='[Sales]' />
+                </tag>
+                <groups>
+                  <group name='Pivot Field Values'>
+                    <field name='[Sheet1].[Cost]' />
+                    <field name='[Sheet1].[Expenses]' />
+                    <field name='[Sheet1].[Profit]' />
+                    <field name='[Sheet1].[Sales]' />
+                  </group>
+                </groups>
+                <relation connection='excel-direct.10siue91bv55wg11gn2xj0w0xu8l' name='Sheet1' table='[Sheet1$]' type='table'>
+                  <columns gridOrigin='A1:E2:no:A1:E2:0' header='yes' outcome='6'>
+                    <column datatype='string' name='Region' ordinal='0' />
+                    <column datatype='integer' name='Sales' ordinal='1' />
+                    <column datatype='integer' name='Cost' ordinal='2' />
+                    <column datatype='integer' name='Expenses' ordinal='3' />
+                    <column datatype='integer' name='Profit' ordinal='4' />
+                  </columns>
+                </relation>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <window tab-color='#4f779a'>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='5' param='[federated.1h2onm80d10fnc0zqfka50nszgpx].[none:Pivot Field Names:nk]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+    </viewpoint>
+    <simple-id uuid='{7B69FAE4-34E2-4044-930B-7A4570A7148C}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Waterfall Chart' name='federated.1h2onm80d10fnc0zqfka50nszgpx' />
+      </datasources>
+      <datasource-dependencies datasource='federated.1h2onm80d10fnc0zqfka50nszgpx'>
+        <column caption='Sizing' datatype='integer' name='[Calculation_3900961764665905157]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='SUM(&#13;&#10;        IF [Pivot Field Names]=&quot;Sales&quot; THEN [Pivot Field Values]&#13;&#10;            ELSE - [Pivot Field Values] END&#13;&#10;)' />
+        </column>
+        <column caption='-[Sizing]' datatype='integer' name='[Calculation_3900961764669181963]' role='measure' type='quantitative' user:unnamed='Venn (2)'>
+          <calculation class='tableau' formula='-[Calculation_3900961764665905157]' />
+        </column>
+        <column caption='Measures' datatype='string' name='[Pivot Field Names]' role='dimension' type='nominal'>
+          <aliases>
+            <alias key='&quot;Cost&quot;' value='Costs' />
+          </aliases>
+        </column>
+        <column caption='Values' datatype='integer' name='[Pivot Field Values]' role='measure' type='quantitative' />
+        <column-instance column='[Calculation_3900961764665905157]' derivation='User' name='[cum:usr:Calculation_3900961764665905157:qk]' pivot='key' type='quantitative'>
+          <table-calc aggregation='Sum' ordering-type='Rows' type='CumTotal' />
+        </column-instance>
+        <column-instance column='[Pivot Field Names]' derivation='None' name='[none:Pivot Field Names:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Pivot Field Values]' derivation='Sum' name='[sum:Pivot Field Values:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_3900961764669181963]' derivation='User' name='[usr:Calculation_3900961764669181963:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <manual-sort column='[federated.1h2onm80d10fnc0zqfka50nszgpx].[none:Pivot Field Names:nk]' direction='ASC'>
+        <dictionary>
+          <bucket>&quot;Sales&quot;</bucket>
+          <bucket>&quot;Cost&quot;</bucket>
+          <bucket>&quot;Expenses&quot;</bucket>
+          <bucket>&quot;Profit&quot;</bucket>
+        </dictionary>
+      </manual-sort>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='title' class='0' field='[federated.1h2onm80d10fnc0zqfka50nszgpx].[cum:usr:Calculation_3900961764665905157:qk]' scope='rows' value='' />
+        <format attr='height' field='[federated.1h2onm80d10fnc0zqfka50nszgpx].[none:Pivot Field Names:nk]' value='26' />
+        <format attr='tick-color' value='#00000000' />
+        <format attr='stroke-size' value='1' />
+        <format attr='line-visibility' value='on' />
+        <format attr='line-pattern-only' value='dotted' />
+        <format attr='stroke-color' value='#e6e6e6aa' />
+        <format attr='stroke-size' scope='cols' value='1' />
+        <format attr='line-visibility' scope='cols' value='on' />
+        <format attr='line-pattern-only' scope='cols' value='dotted' />
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+      </style-rule>
+      <style-rule element='cell'>
+        <format attr='text-format' field='[federated.1h2onm80d10fnc0zqfka50nszgpx].[sum:Pivot Field Values:qk]' value='c&quot;£&quot;#,##0;-&quot;£&quot;#,##0' />
+        <format attr='text-format' field='[federated.1h2onm80d10fnc0zqfka50nszgpx].[cum:usr:Calculation_3900961764665905157:qk]' value='c&quot;£&quot;#,##0;-&quot;£&quot;#,##0' />
+      </style-rule>
+      <style-rule element='header'>
+        <format attr='band-color' scope='rows' value='#00000000' />
+        <format attr='band-color' scope='cols' value='#00000000' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='text-format' field='[federated.1h2onm80d10fnc0zqfka50nszgpx].[cum:usr:Calculation_3900961764665905157:qk]' value='c&quot;£&quot;#,##0,K;-&quot;£&quot;#,##0,K' />
+        <format attr='font-family' field='[federated.1h2onm80d10fnc0zqfka50nszgpx].[none:Pivot Field Names:nk]' value='Tableau Regular' />
+        <format attr='font-size' field='[federated.1h2onm80d10fnc0zqfka50nszgpx].[none:Pivot Field Names:nk]' value='9' />
+        <format attr='color' field='[federated.1h2onm80d10fnc0zqfka50nszgpx].[none:Pivot Field Names:nk]' value='#282b38' />
+        <format attr='font-size' field='[federated.1h2onm80d10fnc0zqfka50nszgpx].[cum:usr:Calculation_3900961764665905157:qk]' value='8' />
+      </style-rule>
+      <style-rule element='pane'>
+        <format attr='band-color' scope='rows' value='#00000000' />
+        <format attr='band-color' scope='cols' value='#00000000' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+        <format attr='band-level' scope='cols' value='1' />
+        <format attr='band-size' scope='rows' value='1' />
+        <format attr='band-size' scope='cols' value='1' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+      <style-rule element='dropline'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='line-pattern-only' value='solid' />
+        <format attr='stroke-color' value='#e6e6e6' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+        <format attr='line-pattern-only' scope='cols' value='solid' />
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+        <format attr='stroke-color' scope='rows' value='#6e738313' />
+        <format attr='line-visibility' scope='rows' value='on' />
+        <format attr='line-pattern-only' scope='rows' value='dotted' />
+        <format attr='stroke-size' scope='rows' value='1' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='stroke-color' value='#d4d4d4' />
+        <format attr='line-pattern-only' value='dotted' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-color' scope='rows' value='#b7b9cd' />
+        <format attr='line-pattern-only' scope='rows' value='solid' />
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='line-pattern-only' scope='cols' value='solid' />
+        <format attr='stroke-color' scope='cols' value='#f5f5f5' />
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='5' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='GanttBar' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[federated.1h2onm80d10fnc0zqfka50nszgpx].[none:Pivot Field Names:nk]' />
+          <size column='[federated.1h2onm80d10fnc0zqfka50nszgpx].[usr:Calculation_3900961764669181963:qk]' />
+          <tooltip column='[federated.1h2onm80d10fnc0zqfka50nszgpx].[sum:Pivot Field Values:qk]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run fontname='Tableau Regular'>&lt;[federated.1h2onm80d10fnc0zqfka50nszgpx].[none:Pivot Field Names:nk]&gt;</run>
+            <run bold='true' fontname='Tableau Regular'>: &lt;[federated.1h2onm80d10fnc0zqfka50nszgpx].[sum:Pivot Field Values:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='cell'>
+            <format attr='text-align' value='center' />
+            <format attr='vertical-align' value='center' />
+          </style-rule>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='font-weight' value='bold' />
+            <format attr='color' value='#333333' />
+            <format attr='font-size' value='10' />
+            <format attr='font-family' value='Tableau Regular' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='size' value='1.7361326217651367' />
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-labels-show' value='false' />
+            <format attr='mark-color' value='#1b1b1b' />
+            <format attr='has-stroke' value='false' />
+            <format attr='mark-transparency' value='206' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.1h2onm80d10fnc0zqfka50nszgpx].[cum:usr:Calculation_3900961764665905157:qk]</rows>
+    <cols>[federated.1h2onm80d10fnc0zqfka50nszgpx].[none:Pivot Field Names:nk]</cols>
+  </table>
+</bookmark>

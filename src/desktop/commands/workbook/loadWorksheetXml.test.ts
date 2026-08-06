@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 import * as loggerModule from '../../../logging/logger.js';
 import invariant from '../../../utils/invariant.js';
 import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import { captureTargetWorksheetState } from '../../metadata/targetWorksheetState.js';
 import type { ParsedWindow } from '../../metadata/types.js';
 import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
@@ -212,15 +213,14 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     ).toEqual([worksheetName]);
   });
 
-  it('navigates with the decoded canonical worksheet name', async () => {
-    const callerName = 'Sales &amp; Profit';
+  it('navigates with the semantic canonical worksheet name parsed from XML', async () => {
     const canonicalName = 'Sales & Profit';
-    const { executor, calls } = dispatchingExecutor(liveWorkbook([callerName, 'Other']));
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sales &amp; Profit', 'Other']));
 
     const result = await loadWorksheetXml({
-      worksheetName: callerName,
-      xml: `<worksheet name='${callerName}'><table><rows /></table></worksheet>`,
-      focus: { navigate: 'artifact', sheetName: callerName },
+      worksheetName: canonicalName,
+      xml: '<worksheet name="Sales &amp; Profit"><table><rows /></table></worksheet>',
+      focus: { navigate: 'artifact', sheetName: canonicalName },
       executor,
       signal: mockSignal,
     });
@@ -230,7 +230,6 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       .filter((call) => call.command === 'goto-sheet')
       .map((call) => call.args?.Sheet);
     expect(gotoTargets.length).toBeGreaterThan(0);
-    expect(gotoTargets).not.toContain(callerName);
     expect(gotoTargets.every((target) => target === canonicalName)).toBe(true);
   });
 
@@ -508,6 +507,147 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     if (result.isErr()) {
       invariant(result.error.type === 'execute-command-error');
       expect(result.error.error).toEqual(error);
+    }
+  });
+
+  it('applies an artifact against the latest workbook and preserves unrelated live edits', async () => {
+    const baseline = liveWorkbook(['Sheet 1', 'Other'], ['Dashboard 1']);
+    const latest = baseline.replace(
+      "<worksheet name='Other'><table /></worksheet>",
+      "<worksheet name='Other'><table><rows>[live].[edit]</rows></table></worksheet>",
+    );
+    const artifactWindow =
+      "<window class='worksheet' name='Sheet 1'><cards><edge name='left'/></cards></window>";
+    const dispatchState = { attempted: false };
+    let liveXml = latest;
+    const applyWorkbookDocument = vi.fn(
+      async (
+        xml: string,
+        _signal: AbortSignal,
+        options?: { expectedInstanceId?: string; onDispatch?: () => void },
+      ) => {
+        expect(dispatchState.attempted).toBe(false);
+        expect(options?.expectedInstanceId).toBe('inst-build');
+        options?.onDispatch?.();
+        liveXml = xml;
+        return Ok({ command_id: 'apply-artifact', status: 'completed', submitted_at: '' });
+      },
+    );
+    const executor = {
+      getWorkbookDocument: vi.fn(async () =>
+        Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      ),
+      applyWorkbookDocument,
+    } as unknown as ToolExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      artifactApply: {
+        windowXml: artifactWindow,
+        expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, validXml),
+        expectedInstanceId: 'inst-build',
+        dispatchState,
+      },
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(dispatchState.attempted).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    const posted = applyWorkbookDocument.mock.calls[0][0];
+    expect(posted).toContain('[live].[edit]');
+    expect(posted).toContain('name="Dashboard 1"');
+    expect(posted).toContain('name="left"');
+    if (result.isOk()) expect(result.value.readbackVerification?.status).toBe('passed');
+  });
+
+  it('rejects scoped target drift before dispatch', async () => {
+    const baseline = liveWorkbook(['Sheet 1', 'Other']);
+    const latest = baseline.replace(
+      "<worksheet name='Sheet 1'><table /></worksheet>",
+      "<worksheet name='Sheet 1'><table><rows>[changed]</rows></table></worksheet>",
+    );
+    const dispatchState = { attempted: false };
+    const applyWorkbookDocument = vi.fn();
+    const executor = {
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ xml: latest, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        ),
+      applyWorkbookDocument,
+    } as unknown as ToolExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      artifactApply: {
+        windowXml: `<window class='worksheet' name='${worksheetName}' />`,
+        expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, validXml),
+        expectedInstanceId: 'inst-build',
+        dispatchState,
+      },
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error.type).toBe('artifact-drift');
+    }
+    expect(dispatchState.attempted).toBe(false);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('reports post-dispatch artifact verification failure without making the apply retryable', async () => {
+    vi.useFakeTimers();
+    try {
+      const baseline = liveWorkbook(['Sheet 1']);
+      const intendedXml =
+        "<worksheet name='Sheet 1'><table><rows>[DS].[sum:Profit:qk]</rows></table></worksheet>";
+      const dispatchState = { attempted: false };
+      const executor = {
+        getWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(
+            Ok({ xml: baseline, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+          ),
+        applyWorkbookDocument: vi.fn(
+          async (_xml: string, _signal: AbortSignal, options?: { onDispatch?: () => void }) => {
+            options?.onDispatch?.();
+            return Ok({ command_id: 'apply-artifact', status: 'completed', submitted_at: '' });
+          },
+        ),
+      } as unknown as ToolExecutor;
+
+      const pending = loadWorksheetXml({
+        worksheetName,
+        xml: intendedXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        artifactApply: {
+          windowXml: `<window class='worksheet' name='${worksheetName}' />`,
+          expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, intendedXml),
+          expectedInstanceId: 'inst-build',
+          dispatchState,
+        },
+      });
+      await vi.runAllTimersAsync();
+      const result = await pending;
+
+      expect(dispatchState.attempted).toBe(true);
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) {
+        expect(result.value.readbackVerification).toMatchObject({ ok: false, status: 'failed' });
+      }
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

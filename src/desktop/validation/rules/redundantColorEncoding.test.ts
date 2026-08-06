@@ -19,7 +19,7 @@ describe('redundant-color-encoding rule', () => {
     const issues = redundantColorEncodingRule.validate(ws('[DS].[sum:Profit:qk]'));
     expect(issues).toHaveLength(1);
     expect(issues[0].ruleId).toBe('redundant-color-encoding');
-    expect(issues[0].severity).toBe('error');
+    expect(issues[0].severity).toBe('warning');
     expect(issues[0].message).toMatch(/\[DS\]\.\[sum:Profit:qk\]/);
     expect((issues[0].suggestion ?? '').toLowerCase()).toMatch(/discrete|group|tier/);
   });

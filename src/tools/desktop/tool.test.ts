@@ -3,11 +3,12 @@ import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
 import { beginEpisode, resetEpisodeEventsForTests } from '../../desktop/episode-events.js';
+import * as externalDiscovery from '../../desktop/externalApi/discovery.js';
 import { sessionRouteState } from '../../desktop/route/route-state.js';
 import { ArgsValidationError } from '../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { Provider } from '../../utils/provider.js';
-import { BIND_FIRST_ORIENTATION_REDIRECT, DesktopTool } from './tool.js';
+import { DesktopTool } from './tool.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
 import { DesktopToolName } from './toolName.js';
 
@@ -103,8 +104,21 @@ describe('DesktopTool episode telemetry', () => {
   });
 });
 
-describe('DesktopTool bind-first orientation gate', () => {
-  it('records a gated call as refused in the episode stream', async () => {
+describe('DesktopTool authoring attempt telemetry', () => {
+  it('executes get-worksheet-xml before any authoring attempt', async () => {
+    const callback = vi.fn(async () => new Ok({ worksheetXml: '<worksheet/>' }));
+
+    const result = await makeTool('get-worksheet-xml').logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: 'S1' },
+      callback,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(callback).toHaveBeenCalledOnce();
+  });
+
+  it('records an initial worksheet read as succeeded in the episode stream', async () => {
     const dir = tmpDir();
     const extra = {
       ...getMockRequestHandlerExtra(),
@@ -129,7 +143,7 @@ describe('DesktopTool bind-first orientation gate', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(gatedCallback).not.toHaveBeenCalled();
+    expect(gatedCallback).toHaveBeenCalledOnce();
     expect(readEvents(dir)).toMatchObject([
       { type: 'episode_begin', episode_id: begin.episode_id },
       {
@@ -143,15 +157,15 @@ describe('DesktopTool bind-first orientation gate', () => {
         session_id: 'S1',
         episode_id: begin.episode_id,
         tool: 'get-worksheet-xml',
-        success: false,
-        outcome: 'refused_by_gate',
+        success: true,
+        outcome: 'succeeded',
       },
       { type: 'tool_start', tool: 'ask-user' },
       { type: 'tool_end', tool: 'ask-user', success: true, outcome: 'succeeded' },
     ]);
   });
 
-  it('redirects a pre-bind orientation call without invoking the executor seam', async () => {
+  it('invokes the executor seam for an initial worksheet read', async () => {
     const getExecutor = vi.fn();
     const extra = { ...getMockRequestHandlerExtra(), getExecutor };
     const tool = makeTool('get-worksheet-xml');
@@ -165,18 +179,8 @@ describe('DesktopTool bind-first orientation gate', () => {
       },
     });
 
-    expect(result).toMatchObject({
-      isError: false,
-      content: [{ type: 'text', text: BIND_FIRST_ORIENTATION_REDIRECT }],
-      structuredContent: {
-        message: BIND_FIRST_ORIENTATION_REDIRECT,
-        nextAction: {
-          kind: 'prefill',
-          label: "Call bind-template with the user's verbatim ask",
-        },
-      },
-    });
-    expect(getExecutor).not.toHaveBeenCalled();
+    expect(result.isError).toBe(false);
+    expect(getExecutor).toHaveBeenCalledWith('S1');
   });
 
   it('executes orientation after a failed bind-template attempt', async () => {
@@ -217,7 +221,7 @@ describe('DesktopTool bind-first orientation gate', () => {
     expect(orientationCallback).toHaveBeenCalledOnce();
   });
 
-  it("does not inherit another session's unlock", async () => {
+  it('does not require another session to unlock worksheet reads', async () => {
     const extra = getMockRequestHandlerExtra();
     await makeTool('author-set').logAndExecute({
       extra,
@@ -233,8 +237,7 @@ describe('DesktopTool bind-first orientation gate', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(result.content).toEqual([{ type: 'text', text: BIND_FIRST_ORIENTATION_REDIRECT }]);
-    expect(orientationCallback).not.toHaveBeenCalled();
+    expect(orientationCallback).toHaveBeenCalledOnce();
   });
 
   it('allows list-available-fields before an authoring attempt', async () => {
@@ -270,6 +273,22 @@ describe('DesktopTool bind-first orientation gate', () => {
 
     expect(sessionRouteState.hasAuthoringAttempt('S1')).toBe(true);
     expect(sessionRouteState.get('S1')?.firstAuthoringAttempt?.tool).toBe(name);
+  });
+
+  it('records an omitted session against the resolved single Desktop session', async () => {
+    vi.spyOn(externalDiscovery, 'discoverInstances').mockReturnValue([
+      { pid: 4242 } as ReturnType<typeof externalDiscovery.discoverInstances>[number],
+    ]);
+
+    await makeTool('author-calc').logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: {} as any,
+      callback: async () => new Ok({ calculationName: '[Profit Ratio]' }),
+    });
+
+    expect(sessionRouteState.hasAuthoringAttempt('4242')).toBe(true);
+    expect(sessionRouteState.get('4242')?.firstAuthoringAttempt?.tool).toBe('author-calc');
+    expect(sessionRouteState.get(undefined)).toBeUndefined();
   });
 });
 

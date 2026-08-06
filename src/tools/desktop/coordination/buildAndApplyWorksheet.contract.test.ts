@@ -73,7 +73,7 @@ describe('build-and-apply-worksheet taskSpec contract', () => {
 });
 
 describe('build-and-apply-worksheet template contract', () => {
-  it('advertises the real template vocabulary as an enum on the served tools/list surface', async () => {
+  it('serves a bounded string instead of embedding the runtime catalog', async () => {
     const tool = getBuildAndApplyWorksheetTool(new DesktopMcpServer());
     const paramsSchema = await Provider.from(tool.paramsSchema);
     const obj = normalizeObjectSchema(paramsSchema as never);
@@ -81,14 +81,15 @@ describe('build-and-apply-worksheet template contract', () => {
       strictUnions: true,
       pipeStrategy: 'input',
     } as never) as {
-      properties: { taskSpec: { properties: { template?: { enum?: string[] } } } };
+      properties: {
+        taskSpec: { properties: { template?: { enum?: string[]; maxLength?: number } } };
+      };
     };
-    const names = listTemplateNames();
-    expect(names.length).toBeGreaterThan(0);
-    expect(json.properties.taskSpec.properties.template?.enum).toEqual(names);
+    expect(json.properties.taskSpec.properties.template?.enum).toBeUndefined();
+    expect(json.properties.taskSpec.properties.template?.maxLength).toBe(160);
   });
 
-  it('rejects the template ids the agent invented', async () => {
+  it('defers catalog membership to runtime lookup', async () => {
     const schema = await getTaskSpecSchema();
     for (const invented of [
       'symbol_map',
@@ -102,7 +103,7 @@ describe('build-and-apply-worksheet template contract', () => {
       'pie',
     ]) {
       const result = schema.safeParse({ ...MINIMAL_SPEC, template: invented });
-      expect(result.success, `expected "${invented}" to be rejected`).toBe(false);
+      expect(result.success, `expected "${invented}" to reach runtime validation`).toBe(true);
     }
   });
 

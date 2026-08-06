@@ -3,7 +3,15 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { log } from '../../../logging/logger.js';
 import { sanitizeValue } from '../../../logging/sanitize.js';
 import { normalizeArray, parseXML } from '../../metadata/parser.js';
-import { upsertSheetIntoWorkbook } from '../../metadata/sheets.js';
+import {
+  extractSheetXml,
+  upsertSheetIntoWorkbook,
+  upsertWorksheetAndWindowIntoWorkbook,
+} from '../../metadata/sheets.js';
+import {
+  compareTargetWorksheetState,
+  type TargetWorksheetState,
+} from '../../metadata/targetWorksheetState.js';
 import type { ParsedWorksheet } from '../../metadata/types.js';
 import {
   ExecuteCommandError,
@@ -44,7 +52,8 @@ export type LoadWorksheetXmlError =
   | { type: 'readback-failed'; findings: ReadbackFinding[]; message: string }
   // Only surfaced when a caller opts in with `requireExistingSheet` (apply-worksheet);
   // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
-  | { type: 'sheet-absent'; message: string };
+  | { type: 'sheet-absent'; message: string }
+  | { type: 'artifact-drift'; message: string };
 
 /** Non-fatal readback warnings surfaced on a successful apply (sort drops/changes). */
 export interface LoadWorksheetXmlOk {
@@ -55,6 +64,13 @@ export interface LoadWorksheetXmlOk {
 
 export interface PostApplyWorksheetReadbackVerification extends ReadbackVerificationResult {
   findings: ReadbackFinding[];
+}
+
+export interface ArtifactWorksheetApplyOptions {
+  windowXml: string;
+  expectedTargetState: TargetWorksheetState;
+  expectedInstanceId: string;
+  dispatchState: { attempted: boolean };
 }
 
 type LoadWorksheetXmlResult = Result<
@@ -130,6 +146,62 @@ export async function verifyPostApplyWorksheetReadback(
       data: { worksheetName, status: 'skipped', error: message },
     });
     return { ok: true, status: 'skipped', findings: [], message };
+  }
+}
+
+async function verifyPostApplyArtifactReadback(
+  worksheetName: string,
+  intendedXml: string,
+  executor: WithExecutorAndAbortSignal['executor'],
+  signal: WithExecutorAndAbortSignal['signal'],
+): Promise<PostApplyWorksheetReadbackVerification> {
+  try {
+    const polled = await pollReadback({
+      read: () => getWorkbookXml({ executor, signal }),
+      settled: (workbookXml) => {
+        const fragment = extractSheetXml(workbookXml, worksheetName);
+        return (
+          fragment !== null &&
+          !verifyWorksheetReadback(intendedXml, fragment).some(
+            (finding) => finding.severity === 'error',
+          )
+        );
+      },
+      signal,
+    });
+    if (!polled.ok) {
+      return {
+        ok: true,
+        status: 'skipped',
+        findings: [],
+        message: 'could not re-read the latest workbook after apply',
+      };
+    }
+
+    const fragment = extractSheetXml(polled.value, worksheetName);
+    if (fragment === null) {
+      return {
+        ok: false,
+        status: 'failed',
+        findings: [],
+        message: `Worksheet "${worksheetName}" was absent from the post-apply workbook readback.`,
+      };
+    }
+    const findings = verifyWorksheetReadback(intendedXml, fragment);
+    if (findings.some((finding) => finding.severity === 'error')) {
+      return { ok: false, status: 'failed', findings };
+    }
+    if (findings.some((finding) => finding.severity === 'warning')) {
+      return { ok: true, status: 'warning', findings };
+    }
+    return { ok: true, status: 'passed', findings: [] };
+  } catch (error) {
+    return {
+      ok: true,
+      status: 'skipped',
+      findings: [],
+      message: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -220,7 +292,7 @@ function worksheetAbsentMessage(canonicalName: string): string {
   return (
     `No worksheet named "${canonicalName}" is open to update. This updates an existing worksheet ` +
     'in place and does not create one. FIX: check the name with list-worksheets, or create a new ' +
-    'worksheet with build-and-apply-worksheet.'
+    'worksheet with build-worksheets-from-templates and apply-worksheet.'
   );
 }
 
@@ -232,6 +304,7 @@ export async function loadWorksheetXml({
   signal,
   readbackVerificationOut,
   requireExistingSheet = false,
+  artifactApply,
 }: {
   worksheetName: string;
   xml: string;
@@ -241,9 +314,10 @@ export async function loadWorksheetXml({
   // On (apply-worksheet): replace an existing worksheet by id via the per-sheet `/document` route,
   // leaving other sheets untouched. That route is replace-only, so a name that resolves to no live
   // worksheet surfaces a `sheet-absent` error instead of creating one.
-  // Off (build-and-apply-worksheet, refine-worksheet): the worksheet may be net-new, so the
+  // Off (legacy whole-workbook builders, refine-worksheet): the worksheet may be net-new, so the
   // whole-workbook re-post upserts it (appending when absent). That is the create path.
   requireExistingSheet?: boolean;
+  artifactApply?: ArtifactWorksheetApplyOptions;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -298,6 +372,80 @@ export async function loadWorksheetXml({
   const canonicalName = canonicalNameResult.value;
   const canonicalFocus: ApplyFocus =
     focus.navigate === 'artifact' ? { ...focus, sheetName: canonicalName } : focus;
+
+  if (artifactApply) {
+    return withApplyLock(async (): Promise<LoadWorksheetXmlResult> => {
+      const workbookResult = await getWorkbookXml({ executor, signal });
+      if (workbookResult.isErr()) {
+        return Err({ type: 'execute-command-error', error: workbookResult.error });
+      }
+
+      const drift = compareTargetWorksheetState(
+        artifactApply.expectedTargetState,
+        workbookResult.value,
+        xml,
+      );
+      if (!drift.ok) {
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: {
+            type: 'artifact-drift',
+            message: `The target changed after this artifact was built (${drift.reasons.join(', ')}). Build a fresh artifact from the current workbook.`,
+          },
+        });
+      }
+
+      let workbookDoc: string;
+      try {
+        workbookDoc = upsertWorksheetAndWindowIntoWorkbook(
+          workbookResult.value,
+          canonicalName,
+          xml,
+          artifactApply.windowXml,
+        );
+      } catch (error) {
+        return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+      }
+
+      const workbookValidation = runValidation(workbookDoc, 'workbook');
+      const workbookBlockingIssues = blockingValidationIssues(workbookValidation.issues);
+      if (workbookBlockingIssues.length > 0) {
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: { type: 'validation-failed', issues: workbookBlockingIssues },
+        });
+      }
+
+      const applyResult = await applyWorkbookText({
+        xml: workbookDoc,
+        focus: canonicalFocus,
+        executor,
+        signal,
+        applyOptions: {
+          expectedInstanceId: artifactApply.expectedInstanceId,
+          onDispatch: () => {
+            artifactApply.dispatchState.attempted = true;
+          },
+        },
+      });
+      if (applyResult.isErr()) {
+        return Err({ type: 'execute-command-error', error: applyResult.error });
+      }
+
+      const verification = await verifyPostApplyArtifactReadback(
+        canonicalName,
+        xml,
+        executor,
+        signal,
+      );
+      readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
+      return Ok({
+        readbackWarnings: verification.findings,
+        readbackVerification: publicReadbackVerificationResult(verification),
+        validationWarnings: [...validation.issues, ...workbookValidation.issues],
+      });
+    });
+  }
 
   if (requireExistingSheet) {
     return withApplyLock(async (): Promise<LoadWorksheetXmlResult> => {

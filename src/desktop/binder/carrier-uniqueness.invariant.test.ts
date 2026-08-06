@@ -2,8 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { loadManifests } from './manifest.js';
-import type { TemplateManifest } from './manifest-types.js';
+import { createPuppetCompatibilityProjection } from '../templates/puppetCompatibilityProjection.js';
+import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
+import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
 // W60-INVARIANT-TESTS suite 1 — CARRIER-UNIQUENESS.
 //
@@ -21,16 +22,9 @@ import type { TemplateManifest } from './manifest-types.js';
 // class the CHART_NOUN_KEYWORDS table exists to prevent (an ambiguous noun would
 // silently bind to whichever carrier wins the name tiebreak).
 //
-// PORT NOTE on the task's phrasing ("EXACTLY ONE"): the true invariant is AT MOST ONE
-// (<= 1) carrier — the factory locks `carriers.length > 1` as the collision. It is NOT
-// "exactly one" universally: several nouns in the table name templates that are NOT yet
-// fast_path_eligible, so they are carried by ZERO eligible manifests today (see the
-// pinned zero-carrier set below — pie/donut/histogram/slope*). Asserting a blanket
-// `=== 1` would FALSE-FAIL on those. So this suite locks <= 1 for every noun (the real
-// regression), and pins the exact single-carrier / zero-carrier split as
-// pinned-current-behavior. The task's regression-context claims (waterfall / choropleth
-// / filled-map / region-map are single-carrier; 'map' is deliberately absent as a
-// dual-carrier) are asserted explicitly.
+// The invariant is AT MOST ONE carrier. A structurally ineligible template may retain a
+// curated alias while contributing zero eligible carriers; what must never happen is a
+// second automatic owner for the same deterministic chart noun.
 
 const CLASSIFY_TS_PATH = path.join(process.cwd(), 'src', 'desktop', 'binder', 'classify.ts');
 
@@ -50,8 +44,8 @@ function extractChartNouns(): string[] {
   return [...body.matchAll(/['"]([^'"]+)['"]/g)].map((x) => x[1].toLowerCase());
 }
 
-let manifests: Map<string, TemplateManifest>;
-let eligible: TemplateManifest[];
+let manifests: Map<string, RuntimeTemplateDescriptor>;
+let eligible: RuntimeTemplateDescriptor[];
 let nouns: string[];
 
 /** Fast_path_eligible manifests whose (lowercased) intent_keywords include `noun`. */
@@ -63,7 +57,9 @@ function carriersOf(noun: string): string[] {
 }
 
 beforeAll(() => {
-  manifests = loadManifests();
+  manifests = createPuppetCompatibilityProjection(
+    loadRuntimeTemplateCatalogSnapshots(),
+  ).descriptors;
   eligible = [...manifests.values()].filter((m) => m.fast_path_eligible);
   nouns = extractChartNouns();
 });
@@ -88,8 +84,7 @@ describe('binder/carrier-uniqueness — CHART_NOUN_KEYWORDS ↔ eligible manifes
     ).toEqual([]);
   });
 
-  // ── Task regression context: tonight's additions are single-carrier ──────────
-  it("tonight's additions (waterfall/choropleth/filled-map/region-map) are each single-carrier", () => {
+  it('the curated waterfall and choropleth compatibility aliases are single-carrier', () => {
     expect(nouns).toContain('waterfall');
     expect(nouns).toContain('choropleth');
     expect(nouns).toContain('filled-map');
@@ -101,48 +96,32 @@ describe('binder/carrier-uniqueness — CHART_NOUN_KEYWORDS ↔ eligible manifes
     expect(carriersOf('region-map')).toEqual(['spatial-choropleth-map']);
   });
 
-  it("the deviation/distribution incumbents' nouns (arrow-chart/over-under-arrow, bar-code/strip-plot/dot-strip) stay single-carrier", () => {
-    // ww-ou-arrow regression provenance (fix b1490be5) + the distribution-bar-code
-    // sibling-scaling event both live in this table; pin their carriers.
-    expect(carriersOf('arrow-chart')).toEqual(['ww-ou-arrow']);
-    expect(carriersOf('over-under-arrow')).toEqual(['ww-ou-arrow']);
+  it('the bar-code compatibility aliases stay on the canonical distribution template', () => {
     expect(carriersOf('bar-code')).toEqual(['distribution-bar-code-chart']);
     expect(carriersOf('strip-plot')).toEqual(['distribution-bar-code-chart']);
     expect(carriersOf('dot-strip')).toEqual(['distribution-bar-code-chart']);
   });
 
-  it('the newly stamped pie nouns (pie/donut) are each single-carrier', () => {
+  it('the pie compatibility aliases are each single-carrier', () => {
     expect(carriersOf('pie')).toEqual(['part-to-whole-pie-chart']);
     expect(carriersOf('donut')).toEqual(['part-to-whole-pie-chart']);
   });
 
   it("the generic 'map' is DELIBERATELY absent from CHART_NOUN_KEYWORDS (dual-carrier hazard)", () => {
     // 'map' is an intent_keyword of BOTH spatial-choropleth-map and spatial-symbol-map,
-    // so admitting it would make the lone-winner exemption ambiguous the moment
-    // spatial-symbol-map is stamped. classify.ts keeps it OUT on purpose.
+    // so admitting it would make the lone-winner exemption ambiguous. classify.ts keeps
+    // it OUT on purpose.
     expect(nouns).not.toContain('map');
-    // Corroborate the dual-carrier reason from the manifest data (across ALL bundled
-    // manifests, not just eligible ones): 'map' is carried by >=2 templates.
+    // Corroborate the dual-carrier reason from the automatic runtime descriptors.
     const mapCarriers = [...manifests.values()]
       .filter((m) => m.intent_keywords.map((k) => k.toLowerCase()).includes('map'))
       .map((m) => m.template);
     expect(mapCarriers.length).toBeGreaterThanOrEqual(2);
   });
 
-  // ── Pinned-current-behavior: the exact single-carrier / zero-carrier split ───
-  // Documents (and locks) the reality that "exactly one carrier" is NOT universal:
-  // nouns whose template is not yet fast_path_eligible carry ZERO eligible carriers.
-  // If a future stamp (e.g. distribution-histogram) moves a noun from zero → one
-  // carrier, this pin fails and forces a deliberate re-review — which is the intended
-  // tripwire, not a false alarm.
-  // W63: slope/slope-chart/slope-graph moved zero → one carrier (slope-chart stamped
-  // live-2026-07-13, fast-path eligible). connected-scatterplot dropped its bare 'scatter'
-  // alias on the same stamp (canonical scatter = correlation-scatter-plot-chart), so
-  // 'scatter' stays single-carrier; ranking-dot-strip-plot dropped bare 'strip-plot'
-  // (canonical = distribution-bar-code-chart). Only 'histogram' remains zero-carrier.
-  it('pins the zero-carrier nouns (templates present but not yet stamped eligible)', () => {
+  it('keeps arrow aliases off the automatic path while the TBM is structurally ineligible', () => {
     const zeroCarrier = [...new Set(nouns)].filter((n) => carriersOf(n).length === 0).sort();
-    expect(zeroCarrier).toEqual(['histogram'].sort());
+    expect(zeroCarrier).toEqual(['arrow-chart', 'over-under-arrow']);
   });
 
   it('every non-zero-carrier noun has exactly one carrier (no >1 slips past the split)', () => {

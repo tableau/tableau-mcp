@@ -1,0 +1,378 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run fontcolor='#40414c' fontname='Tableau Semibold' fontsize='12'>&lt;Sheet Name&gt; </run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <datasources>
+    <datasource caption='Population: Ages' inline='true' name='federated.11xs2hw1547p7c12z6rii15tk9xk' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='AGE data' name='textscan.10afg49154vmp019nb50l0h1xnoy'>
+            <connection class='textscan' directory='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation name='Pivot' type='pivot'>
+          <columns>
+            <column datatype='string' name='Pivot Field Names' />
+            <column datatype='integer' name='Pivot Field Values' />
+          </columns>
+          <tag name='Pivot Field Names'>
+            <value name='[Female]' />
+            <value name='[Male]' />
+          </tag>
+          <groups>
+            <group name='Pivot Field Values'>
+              <field name='[AGE data.csv].[Female]' />
+              <field name='[AGE data.csv].[Male]' />
+            </group>
+          </groups>
+          <relation connection='textscan.10afg49154vmp019nb50l0h1xnoy' name='AGE data.csv' table='[AGE data#csv]' type='table'>
+            <columns character-set='UTF-8' header='yes' locale='en_GB' separator=','>
+              <column datatype='integer' name='Age' ordinal='0' />
+              <column datatype='integer' name='Male' ordinal='1' />
+              <column datatype='integer' name='Female' ordinal='2' />
+              <column datatype='integer' name='Total' ordinal='3' />
+            </columns>
+          </relation>
+        </relation>
+        <metadata-records>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[AGE data.csv]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='character-set'>&quot;UTF-8&quot;</attribute>
+              <attribute datatype='string' name='collation'>&quot;en_GB&quot;</attribute>
+              <attribute datatype='string' name='currency'>&quot;£&quot;</attribute>
+              <attribute datatype='string' name='field-delimiter'>&quot;,&quot;</attribute>
+              <attribute datatype='string' name='header-row'>&quot;true&quot;</attribute>
+              <attribute datatype='string' name='locale'>&quot;en_GB&quot;</attribute>
+              <attribute datatype='string' name='single-char'>&quot;&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Age</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Age]</local-name>
+            <parent-name>[AGE data.csv]</parent-name>
+            <remote-alias>Age</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[AGE data.csv_83DDB57C1E42458C86FBA2A0B16D8F07]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Total</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Total]</local-name>
+            <parent-name>[AGE data.csv]</parent-name>
+            <remote-alias>Total</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[AGE data.csv_83DDB57C1E42458C86FBA2A0B16D8F07]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Pivot Field Names</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Pivot Field Names]</local-name>
+            <parent-name>[Pivot]</parent-name>
+            <remote-alias>Pivot Field Names</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[AGE data.csv_83DDB57C1E42458C86FBA2A0B16D8F07]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Pivot Field Values</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Pivot Field Values]</local-name>
+            <parent-name>[Pivot]</parent-name>
+            <remote-alias>Pivot Field Values</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[AGE data.csv_83DDB57C1E42458C86FBA2A0B16D8F07]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column aggregation='None' caption='Age (bin) (continuous)' datatype='integer' hidden='true' name='[Age (bin) (copy)_1915437258864693253]' role='dimension' type='quantitative'>
+        <calculation class='bin' decimals='0' formula='[Age]' peg='0' size='5' />
+      </column>
+      <column aggregation='None' caption='Age (bin)' datatype='integer' name='[Age (bin)]' role='dimension' type='ordinal'>
+        <calculation class='bin' decimals='0' formula='[Age]' peg='0' size='8' />
+      </column>
+      <column datatype='integer' name='[Age]' role='measure' type='quantitative' />
+      <column caption='M' datatype='integer' hidden='true' name='[Calculation_95983007992406016]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='If [Pivot Field Names]=&quot;Male&quot; THEN [Pivot Field Values] END' />
+      </column>
+      <column caption='F' datatype='integer' name='[M (copy)_95983007992475649]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='If [Pivot Field Names]=&quot;Female&quot; THEN -[Pivot Field Values] &#13;&#10;ELSE [Pivot Field Values]&#13;&#10;END' />
+      </column>
+      <column caption='Gender' datatype='string' name='[Pivot Field Names]' role='dimension' type='nominal' />
+      <column caption='Population' datatype='integer' name='[Pivot Field Values]' role='measure' type='quantitative' />
+      <column datatype='integer' hidden='true' name='[Total]' role='measure' type='quantitative' />
+      <column caption='AGE data.csv' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[AGE data.csv_83DDB57C1E42458C86FBA2A0B16D8F07]' role='measure' type='quantitative' />
+      <column-instance column='[Pivot Field Names]' derivation='None' name='[none:Pivot Field Names:nk]' pivot='key' type='nominal' />
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:11:02 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='AGE data' increment-value='%null%' refresh-type='create' rows-inserted='202' timestamp-start='2026-06-30 20:11:02.284' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Age</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Age]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Age</remote-alias>
+              <ordinal>0</ordinal>
+              <family>AGE data.csv</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>101</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[AGE data.csv_83DDB57C1E42458C86FBA2A0B16D8F07]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Pivot Field Names</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Pivot Field Names]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Pivot Field Names</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Pivot</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>2</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[AGE data.csv_83DDB57C1E42458C86FBA2A0B16D8F07]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Pivot Field Values</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Pivot Field Values]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Pivot Field Values</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Pivot</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>202</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[AGE data.csv_83DDB57C1E42458C86FBA2A0B16D8F07]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout common-percentage='0.769231' dim-ordering='alphabetic' measure-ordering='alphabetic' parameter-percentage='0.230769' show-structure='true' user-set-layout-v2='true' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[none:Pivot Field Names:nk]' type='palette'>
+            <map to='#83cfb2'>
+              <bucket>&quot;Female&quot;</bucket>
+            </map>
+            <map to='#908cff'>
+              <bucket>&quot;Male&quot;</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United Kingdom&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='AGE data.csv' id='AGE data.csv_83DDB57C1E42458C86FBA2A0B16D8F07'>
+            <properties context=''>
+              <relation name='Pivot' type='pivot'>
+                <columns>
+                  <column datatype='string' name='Pivot Field Names' />
+                  <column datatype='integer' name='Pivot Field Values' />
+                </columns>
+                <tag name='Pivot Field Names'>
+                  <value name='[Female]' />
+                  <value name='[Male]' />
+                </tag>
+                <groups>
+                  <group name='Pivot Field Values'>
+                    <field name='[AGE data.csv].[Female]' />
+                    <field name='[AGE data.csv].[Male]' />
+                  </group>
+                </groups>
+                <relation connection='textscan.10afg49154vmp019nb50l0h1xnoy' name='AGE data.csv' table='[AGE data#csv]' type='table'>
+                  <columns character-set='UTF-8' header='yes' locale='en_GB' separator=','>
+                    <column datatype='integer' name='Age' ordinal='0' />
+                    <column datatype='integer' name='Male' ordinal='1' />
+                    <column datatype='integer' name='Female' ordinal='2' />
+                    <column datatype='integer' name='Total' ordinal='3' />
+                  </columns>
+                </relation>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <window tab-color='#a65200'>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+    </viewpoint>
+    <simple-id uuid='{C6848D0B-BAE3-4D9E-9CAA-A782BED1F755}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Population: Ages' name='federated.11xs2hw1547p7c12z6rii15tk9xk' />
+      </datasources>
+      <datasource-dependencies datasource='federated.11xs2hw1547p7c12z6rii15tk9xk'>
+        <column aggregation='None' caption='Age (bin)' datatype='integer' name='[Age (bin)]' role='dimension' type='ordinal'>
+          <calculation class='bin' decimals='0' formula='[Age]' peg='0' size='8' />
+        </column>
+        <column datatype='integer' name='[Age]' role='measure' type='quantitative' />
+        <column caption='Population' datatype='integer' name='[Pivot Field Values]' role='measure' type='quantitative' />
+        <column-instance column='[Age (bin)]' derivation='None' name='[none:Age (bin):ok]' pivot='key' type='ordinal' />
+        <column-instance column='[Pivot Field Values]' derivation='Sum' name='[sum:Pivot Field Values:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='height' field='[federated.11xs2hw1547p7c12z6rii15tk9xk].[none:Age (bin):ok]' value='30' />
+        <format attr='tick-color' value='#00000000' />
+        <format attr='stroke-color' scope='cols' value='#333333' />
+        <format attr='line-pattern-only' value='solid' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='vertical-align' field='[federated.11xs2hw1547p7c12z6rii15tk9xk].[none:Age (bin):ok]' value='center' />
+        <format attr='font-family' field='[federated.11xs2hw1547p7c12z6rii15tk9xk].[none:Age (bin):ok]' value='Tableau Regular' />
+        <format attr='text-orientation' field='[federated.11xs2hw1547p7c12z6rii15tk9xk].[none:Age (bin):ok]' value='0' />
+        <format attr='font-size' field='[federated.11xs2hw1547p7c12z6rii15tk9xk].[none:Age (bin):ok]' value='8' />
+        <format attr='font-size' field='[federated.11xs2hw1547p7c12z6rii15tk9xk].[sum:Pivot Field Values:qk]' value='8' />
+        <format attr='color' field='[federated.11xs2hw1547p7c12z6rii15tk9xk].[none:Age (bin):ok]' value='#727583' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+      <style-rule element='dropline'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+        <format attr='stroke-color' scope='rows' value='#f2f2f2a2' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='stroke-color' value='#d4d4d4' />
+        <format attr='line-visibility' value='on' />
+        <format attr='line-pattern-only' value='dotted' />
+        <format attr='stroke-size' value='1' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='2' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <customized-tooltip>
+          <formatted-text>
+            <run fontcolor='#1b1b1b'>&lt;[federated.11xs2hw1547p7c12z6rii15tk9xk].[none:Age (bin):ok]&gt; Age Bin</run>
+            <run>Æ&#10;</run>
+            <run bold='true' fontsize='11'>Total Population:&#9;</run>
+            <run bold='true' fontname='Tableau Semibold' fontsize='11'>&lt;[federated.11xs2hw1547p7c12z6rii15tk9xk].[sum:Pivot Field Values:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='font-weight' value='bold' />
+            <format attr='color' value='#333333' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='size' value='1.5052486658096313' />
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-labels-show' value='false' />
+            <format attr='mark-color' value='#44485f' />
+            <format attr='mark-transparency' value='216' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.11xs2hw1547p7c12z6rii15tk9xk].[sum:Pivot Field Values:qk]</rows>
+    <cols>[federated.11xs2hw1547p7c12z6rii15tk9xk].[none:Age (bin):ok]</cols>
+    <show-full-range>
+      <column>[Sample - EU Superstore].[Sales (bin)]</column>
+      <column>[federated.11xs2hw1547p7c12z6rii15tk9xk].[Age (bin)]</column>
+    </show-full-range>
+  </table>
+</bookmark>

@@ -1,9 +1,8 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
 import invariant from '../../../utils/invariant.js';
 import { buildInjectedWorkbookXml } from '../../templates/injectTemplateCore.js';
+import { readTemplate } from '../../templates/templatePath.js';
 import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import { loadWorkbookXml } from './loadWorkbookXml.js';
 
@@ -102,10 +101,7 @@ describe('loadWorkbookXml validation preflight', () => {
   </worksheets>
   <windows><window class='worksheet' name='Sheet 6' /></windows>
 </workbook>`;
-    const templateXml = readFileSync(
-      join(process.cwd(), 'src/desktop/data/templates/ranking-ordered-bar.xml'),
-      'utf8',
-    );
+    const templateXml = readTemplate('ranking-ordered-bar')!;
     const injected = buildInjectedWorkbookXml({
       workbookXml,
       templateXml,

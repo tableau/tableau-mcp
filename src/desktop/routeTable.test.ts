@@ -62,7 +62,9 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'refine-worksheet',
       'add-field',
       'apply-worksheet',
-      'bind-template',
+      'list-templates',
+      'list-available-fields',
+      'build-worksheets-from-templates',
     ]);
   });
 
@@ -73,32 +75,26 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('add-field + apply-worksheet change encodings.');
   });
 
-  it('carves named derived metrics out of the dynamic-authoring route', () => {
+  it('routes unnamed derived metrics through semantic authoring before the modern flow', () => {
     const dynamicAuthoring = routes.find((route) => route.id === 'dynamic-authoring');
 
-    expect(dynamicAuthoring?.trigger).toBe(
-      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (a named ratio/margin/growth ask routes via calc-then-bind; examples here include running total and LOD)',
-    );
+    expect(dynamicAuthoring?.trigger).toContain('WITHOUT a conventional name');
     expect(dynamicAuthoring?.action).toContain('author-calc');
+    expect(dynamicAuthoring?.action).toContain('build-worksheets-from-templates');
   });
 
-  it('passes a noun-less derived metric through bind-template calcs in one call', () => {
-    const calcThenBind = routes.find((route) => route.id === 'calc-then-bind');
+  it('authors a conventional derived metric before the modern flow', () => {
+    const derivedMetric = routes.find((route) => route.id === 'derived-metric');
 
-    expect(calcThenBind?.trigger).toContain('no named chart type');
-    expect(calcThenBind?.action).toBe(
-      'FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.',
-    );
-    expect(calcThenBind?.action).not.toContain('opex');
-    expect(calcThenBind?.toolSequence).toEqual(['bind-template', 'search-knowledge']);
-    expect(calcThenBind?.stopConditions).toEqual([
-      'ONE bind-template(auto_apply:true) call',
-      'Only after a formula/field-resolution failure',
-      'ONE corrective bind-template call',
+    expect(derivedMetric?.trigger).toContain('no named chart type');
+    expect(derivedMetric?.toolSequence).toEqual([
+      'author-calc',
+      'list-templates',
+      'list-available-fields',
+      'build-worksheets-from-templates',
+      'apply-worksheet',
     ]);
-    expect(calcThenBind?.requiredEvidence).toEqual([
-      'authored_calcs returned by successful bind-template',
-    ]);
+    expect(derivedMetric?.action).not.toContain('bind-template');
   });
 
   it('is self-contained and does not require skill loading', () => {
@@ -112,7 +108,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(knowledge).toMatchObject({
       trigger:
-        'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult',
+        'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design)',
       toolSequence: ['search-knowledge', 'read-knowledge-resource'],
       stopConditions: ['read the top hit once, then proceed'],
     });
@@ -124,30 +120,18 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(routeIds.indexOf('plain-chart')).toBeLessThan(routeIds.indexOf('knowledge-consult'));
   });
 
-  it('names the full two-call bind sequence without manual authoring between calls', () => {
+  it('allows direct and open-intent modern template choices', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
-    expect(plainChart?.action).toContain('Call 1');
-    expect(plainChart?.action).toContain('Call 2');
-    expect(plainChart?.action).toContain('same ask/target');
-    expect(plainChart?.action).toContain('auto_apply:true');
     expect(plainChart?.action).toContain(
-      'Do not use manual authoring tools between Call 1 and Call 2',
+      'Direct requests may choose, build, and apply immediately.',
     );
-    expect(plainChart?.action).toContain('proposals may carry sort and top_n.');
+    expect(plainChart?.action).toContain('several distinct fresh worksheets');
   });
 
-  it('forbids orientation reads before the first bind attempt', () => {
+  it('does not impose a bind-first or confirmation ceremony', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
-
-    expect(plainChart?.action).toContain(
-      'Never call get-worksheet-xml to orient before bind-template',
-    );
-    expect(plainChart?.action).toContain('reads schema');
-    expect(plainChart?.action).toContain('failed binds propose candidate fields');
-    expect(plainChart?.action).toContain(
-      'list-available-fields is allowed but not needed to orient',
-    );
-    expect(plainChart?.action).not.toContain('Never call list-available-fields');
+    expect(plainChart?.action).not.toContain('bind-template');
+    expect(plainChart?.action).not.toMatch(/confirm|expire|same.session|re-list/i);
   });
 
   it('asks only when ambiguity changes written workbook content', () => {
@@ -180,15 +164,14 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
   it('routes dashboard composition through visible dashboard tools before command search', () => {
     const dashboard = routes.find((route) => route.id === 'dashboard');
-    expect(dashboard?.action).toBe(
-      'build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.',
-    );
     expect(dashboard?.toolSequence).toEqual([
-      'bind-template',
+      'list-templates',
+      'list-available-fields',
+      'build-worksheets-from-templates',
+      'apply-worksheet',
       'dashboard-auto-apply',
       'plan-dashboard-creation',
       'build-and-apply-dashboard',
-      'search-commands',
     ]);
   });
 
@@ -247,4 +230,40 @@ describe('buildDesktopInstructions', () => {
     // The other routes must survive untouched.
     expect(pinned).toContain('You control Tableau Desktop.');
   });
+
+  it('uses the caller-neutral template artifact flow for the default profile', () => {
+    const instructions = buildDesktopInstructions({ sessionPinned: false, profile: '' });
+
+    expect(instructions).toContain(
+      'list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet',
+    );
+    expect(instructions).toContain('Direct requests may choose, build, and apply immediately.');
+    expect(instructions).toContain('Built artifacts coexist.');
+    expect(instructions).toContain('several distinct fresh worksheets');
+    expect(instructions).toContain('stop before apply-worksheet');
+    expect(instructions).toContain('Apply mutations sequentially.');
+    expect(instructions).toContain('do not replay it');
+    expect(instructions).not.toContain('bind-template');
+    expect(instructions).not.toMatch(
+      /re-list|turn gate|forced confirmation|build-one-then-apply|expiry|same-session invalidation/i,
+    );
+  });
+
+  it('keeps legacy template guidance only for demo and makes spec-loop no template claims', () => {
+    const demo = buildDesktopInstructions({ sessionPinned: false, profile: 'demo' });
+    const specLoop = buildDesktopInstructions({ sessionPinned: false, profile: 'spec-loop' });
+
+    expect(demo).toContain('bind-template');
+    expect(demo).not.toContain('build-worksheets-from-templates');
+    expect(specLoop).not.toMatch(/template/i);
+  });
+
+  it.each(['dynamic-authoring', 'full', 'combined-lean'])(
+    'prefers the modern template flow for profile %s',
+    (profile) => {
+      const instructions = buildDesktopInstructions({ sessionPinned: false, profile });
+      expect(instructions).toContain('build-worksheets-from-templates');
+      expect(instructions).not.toContain('bind-template');
+    },
+  );
 });

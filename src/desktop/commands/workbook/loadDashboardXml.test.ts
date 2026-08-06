@@ -474,6 +474,10 @@ describe('loadDashboardXml (External Client API transport)', () => {
       focus: NO_FOCUS,
     });
 
-    expect(executor.applyWorkbookDocument).toHaveBeenCalledWith(expect.any(String), customSignal);
+    expect(executor.applyWorkbookDocument).toHaveBeenCalledWith(
+      expect.any(String),
+      customSignal,
+      undefined,
+    );
   });
 });

@@ -1,12 +1,8 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
-import { loadManifests } from '../binder/manifest.js';
 import type { SlotSpec } from '../binder/manifest-types.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { spliceBoundFacet } from './facetSplice.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
-import { getTemplatePath } from './templatePath.js';
+import { getRuntimeTemplateSnapshot } from './runtimeTemplateCatalog.js';
 
 // W28-C — apply-path facet splice ported from a2td (server/tools/facet-splice.test.ts):
 // a BOUND optional facet slot must RENDER (land a pill on the trellis shelf), while
@@ -17,28 +13,122 @@ import { getTemplatePath } from './templatePath.js';
 //     path (inject-template, build-and-apply-worksheet) now composes the splice with the
 //     frozen core inline. `apply()` below reproduces that exact two-stage pipeline
 //     (splice BEFORE rewrite) so the integration pins run the shipped composition.
-//   - The facet-armed shipped XML lives in the binder's reference library
-//     (src/desktop/data/data-visualization-templates-xml, = TEMPLATE_XML_DIR), armed by
-//     W27-B; read from there (a2td read the same-named dir).
+//   - The product-path check uses the runtime XML and descriptor derived from the shipped
+//     TBM. Focused splice cases use minimal XML fixtures so they can exercise an optional
+//     facet contract independently of any one shipped chart.
 //   - a2td's validateXmlWellFormed(x).valid === true maps to
 //     wellFormedXmlRule.validate(x).length === 0.
 
-const XML_DIR = join(process.cwd(), 'src', 'desktop', 'data', 'data-visualization-templates-xml');
-const read = (name: string): string => readFileSync(join(XML_DIR, `${name}.xml`), 'utf-8');
+const trendXml = `<workbook><worksheets><worksheet name="{{TITLE}}"><table><view>
+  <datasources><datasource name="{{DATASOURCE}}" /></datasources>
+  <datasource-dependencies datasource="{{DATASOURCE}}">
+    <column datatype="date" name="[{{field_base_1}}]" role="dimension" type="ordinal" />
+    <column datatype="real" name="[{{field_base_2}}]" role="measure" type="quantitative" />
+    <column datatype="string" name="[{{field_base_3}}]" role="dimension" type="nominal" />
+    <column-instance column="[{{field_base_1}}]" derivation="Month-Trunc" name="[tmn:{{field_base_1}}:qk]" pivot="key" type="quantitative" />
+    <column-instance column="[{{field_base_2}}]" derivation="Sum" name="[sum:{{field_base_2}}:qk]" pivot="key" type="quantitative" />
+  </datasource-dependencies></view>
+  <rows>[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]</rows>
+  <cols>[{{DATASOURCE}}].[tmn:{{field_base_1}}:qk]</cols>
+</table></worksheet></worksheets></workbook>`;
 
-// The apply tools resolve template XML via getTemplatePath → getTemplatesDir, which honors
-// the TEMPLATES_DIR override. Under vitest getDirname()/DATA_ROOT does NOT resolve to the
-// source tree (see src/testSetup.ts), so point TEMPLATES_DIR at the committed apply-copy dir
-// and load through the SAME getTemplatePath the tools call — exercising the real loader on the
-// real shipped file, not a fixture and not the reference library above.
-process.env['TEMPLATES_DIR'] = join(process.cwd(), 'src', 'desktop', 'data', 'templates');
+const rankingXml = `<workbook><worksheets><worksheet name="{{TITLE}}"><table><view>
+  <datasources><datasource name="{{DATASOURCE}}" /></datasources>
+  <datasource-dependencies datasource="{{DATASOURCE}}">
+    <column datatype="string" name="[{{field_base_1}}]" role="dimension" type="nominal" />
+    <column datatype="real" name="[{{field_base_2}}]" role="measure" type="quantitative" />
+    <column datatype="string" name="[{{field_base_3}}]" role="dimension" type="nominal" />
+    <column-instance column="[{{field_base_1}}]" derivation="None" name="[none:{{field_base_1}}:nk]" pivot="key" type="nominal" />
+    <column-instance column="[{{field_base_2}}]" derivation="Sum" name="[sum:{{field_base_2}}:qk]" pivot="key" type="quantitative" />
+  </datasource-dependencies></view>
+  <rows>[{{DATASOURCE}}].[none:{{field_base_1}}:nk]</rows>
+  <cols>[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]</cols>
+</table></worksheet></worksheets></workbook>`;
 
-const trendXml = read('trend-line-chart');
-const rankingXml = read('ranking-ordered-bar');
-const boxPlotXml = read('box-plot-chart');
+const boxPlotXml = `<workbook><worksheets><worksheet name="{{TITLE}}"><table><view>
+  <datasources><datasource name="{{DATASOURCE}}" /></datasources>
+  <datasource-dependencies datasource="{{DATASOURCE}}">
+    <column datatype="real" name="[Measure]" role="measure" type="quantitative" />
+    <column datatype="string" name="[Level]" role="dimension" type="nominal" />
+    <column datatype="string" name="[Facet]" role="dimension" type="nominal" />
+    <column-instance column="[Measure]" derivation="Sum" name="[sum:Measure:qk]" pivot="key" type="quantitative" />
+    <column-instance column="[Level]" derivation="None" name="[none:Level:nk]" pivot="key" type="nominal" />
+    <column-instance column="[Facet]" derivation="None" name="[none:Facet:nk]" pivot="key" type="nominal" />
+  </datasource-dependencies></view>
+  <rows>[{{DATASOURCE}}].[sum:Measure:qk]</rows>
+  <cols>[{{DATASOURCE}}].[none:Facet:nk]</cols>
+</table></worksheet></worksheets></workbook>`;
+
+const runtimeTrend = getRuntimeTemplateSnapshot('trend-line-chart')!;
 
 const DS = 'Superstore';
-const manifests = loadManifests();
+const trendSlots: SlotSpec[] = [
+  {
+    slot_id: 'order_date',
+    template_field: '{{field_base_1}}',
+    derivation: 'tmn',
+    role: ['cols'],
+    kind: 'temporal',
+    bindable: true,
+    required: true,
+  },
+  {
+    slot_id: 'sales',
+    template_field: '{{field_base_2}}',
+    derivation: 'sum',
+    role: ['rows'],
+    kind: 'quantitative',
+    bindable: true,
+    required: true,
+  },
+  {
+    slot_id: 'facet_col',
+    template_field: '{{field_base_3}}',
+    derivation: 'none',
+    role: ['cols'],
+    kind: 'categorical',
+    bindable: true,
+    required: false,
+  },
+  {
+    slot_id: 'color_series',
+    template_field: '{{field_base_4}}',
+    derivation: 'none',
+    role: ['color'],
+    kind: 'categorical',
+    bindable: true,
+    required: false,
+  },
+];
+const rankingSlots: SlotSpec[] = [
+  {
+    slot_id: 'category',
+    template_field: '{{field_base_1}}',
+    derivation: 'none',
+    role: ['rows', 'sort-dimension'],
+    kind: 'categorical',
+    bindable: true,
+    required: true,
+  },
+  {
+    slot_id: 'measure',
+    template_field: '{{field_base_2}}',
+    derivation: 'sum',
+    role: ['cols'],
+    kind: 'quantitative',
+    bindable: true,
+    required: true,
+  },
+  {
+    slot_id: 'facet_row',
+    template_field: '{{field_base_3}}',
+    derivation: 'none',
+    role: ['rows'],
+    kind: 'categorical',
+    bindable: true,
+    required: false,
+  },
+];
 
 const placeholderizePilotMapping = (
   xml: string,
@@ -58,16 +148,9 @@ const placeholderizePilotMapping = (
 };
 
 const slotsForPilot = (xml: string): SlotSpec[] | undefined => {
-  if (xml.includes('Month-Trunc')) return manifests.get('trend-line-chart')?.slots;
-  if (xml.includes('{{field_base_1}}')) return manifests.get('ranking-ordered-bar')?.slots;
+  if (xml.includes('Month-Trunc')) return trendSlots;
+  if (xml.includes('{{field_base_1}}')) return rankingSlots;
   return undefined;
-};
-
-const rewritePilot = (xml: string, mapping: Record<string, string>, ds: string): string => {
-  const normalized = placeholderizePilotMapping(xml, mapping);
-  return rewriteFieldReferences(xml, normalized, ds, undefined, {
-    templateSlots: slotsForPilot(xml),
-  });
 };
 
 /**
@@ -266,111 +349,33 @@ describe('desktop/templates/facetSplice', () => {
     });
   });
 
-  // ── product path: the SHIPPED trend-line-chart XML (W28-C step 4) ──────────
-  describe('product path — SHIPPED trend-line-chart XML', () => {
-    it('a bound facet lands on <cols> ahead of the date pill (shipped XML renders the facet)', () => {
-      const out = apply(
-        trendXml,
-        {
-          'Order Date': `[${DS}].[tmn:Order Date:qk]`,
-          Sales: `[${DS}].[sum:Sales:qk]`,
-          Facet: `[${DS}].[none:Region:nk]`,
-        },
-        DS,
+  // ── product path: the runtime trend-line-chart snapshot ────────────────────
+  describe('product path — runtime trend-line-chart snapshot', () => {
+    const mapping = Object.fromEntries(
+      runtimeTrend.descriptor.slots.map((slot, index) => {
+        const field =
+          slot.kind === 'temporal'
+            ? 'Order Date'
+            : slot.kind === 'quantitative'
+              ? 'Sales'
+              : `Series ${index}`;
+        const role = slot.kind === 'categorical' || slot.kind === 'geo' ? 'nk' : 'qk';
+        return [slot.template_field, `[${DS}].[${slot.derivation}:${field}:${role}]`];
+      }),
+    );
+
+    it('treats the TBM-derived slot set as authoritative and does not invent a facet', () => {
+      expect(spliceBoundFacet(runtimeTrend.xml, mapping, runtimeTrend.descriptor.slots)).toBe(
+        runtimeTrend.xml,
       );
-      expect(out).toContain(`<cols>[${DS}].[none:Region:nk] / [${DS}].[tmn:Order Date:qk]</cols>`);
     });
 
-    it('an un-faceted apply of the same shipped template is byte-identical to pre-change (core alone)', () => {
-      const mapping = {
-        'Order Date': `[${DS}].[tmn:Order Date:qk]`,
-        Sales: `[${DS}].[sum:Sales:qk]`,
-      };
-      // Splicing then rewriting an un-faceted apply must equal rewriting WITHOUT the
-      // splice — the glue adds zero bytes when nothing is faceted.
-      expect(apply(trendXml, mapping, DS)).toBe(rewritePilot(trendXml, mapping, DS));
-    });
-  });
-
-  // ── END-TO-END product apply-path: the REAL apply copies the TOOLS load ────
-  // The blocks above read the binder's reference library (TEMPLATE_XML_DIR =
-  // data-visualization-templates-xml). But inject-template and build-and-apply-worksheet
-  // load a SEPARATE copy set — src/desktop/data/templates/*.xml — via getTemplatePath →
-  // getTemplatesDir → DATA_ROOT/templates. That is the only XML the apply chokepoints ever
-  // splice+rewrite, so it is the only place a bound facet actually renders in the product.
-  // W29-C arms those apply copies with the [Facet] base column; this suite pins the
-  // end-to-end render through the SAME loader path the tools use (not a fixture, not the
-  // reference dir), for BOTH facet templates, plus the un-faceted identity-by-reference pin.
-  describe('product apply-path — REAL apply copies loaded via getTemplatePath', () => {
-    // Same loader the tools call: readFileSync(getTemplatePath(name)).
-    const readApplyCopy = (name: string): string => readFileSync(getTemplatePath(name), 'utf-8');
-    const trendApplyXml = readApplyCopy('trend-line-chart');
-    const rankingApplyXml = readApplyCopy('ranking-ordered-bar');
-
-    describe('trend-line-chart apply copy — facet_col (cols shelf)', () => {
-      const faceted = {
-        'Order Date': `[${DS}].[tmn:Order Date:qk]`,
-        Sales: `[${DS}].[sum:Sales:qk]`,
-        Facet: `[${DS}].[none:Region:nk]`,
-      };
-
-      it('lands the facet pill on <cols> ahead of the date pill (renders in the shipped apply XML)', () => {
-        const out = apply(trendApplyXml, faceted, DS);
-        expect(out).toContain(
-          `<cols>[${DS}].[none:Region:nk] / [${DS}].[tmn:Order Date:qk]</cols>`,
-        );
+    it('rewrites the TBM-derived XML with its paired descriptor without placeholder residue', () => {
+      const out = rewriteFieldReferences(runtimeTrend.xml, mapping, DS, undefined, {
+        templateSlots: runtimeTrend.descriptor.slots,
       });
-
-      it('adds the facet column-instance declaration mapped to the bound field and leaves <rows> untouched', () => {
-        const out = apply(trendApplyXml, faceted, DS);
-        expect(out).toMatch(
-          /<column-instance[^>]*column="\[Region\]"[^>]*name="\[none:Region:nk\]"/,
-        );
-        expect(out).toContain(`<rows>[${DS}].[sum:Sales:qk]</rows>`);
-      });
-    });
-
-    describe('ranking-ordered-bar apply copy — facet_row (rows shelf)', () => {
-      const faceted = {
-        Category: `[${DS}].[none:Region:nk]`,
-        Measure: `[${DS}].[sum:Sales:qk]`,
-        Facet: `[${DS}].[none:Category:nk]`,
-      };
-
-      it('lands the facet pill on <rows> ahead of the ranked category pill (renders in the shipped apply XML)', () => {
-        const out = apply(rankingApplyXml, faceted, DS);
-        expect(out).toContain(`<rows>[${DS}].[none:Category:nk] / [${DS}].[none:Region:nk]</rows>`);
-      });
-
-      it('adds the facet column-instance declaration mapped to the bound field and leaves <cols> untouched', () => {
-        const out = apply(rankingApplyXml, faceted, DS);
-        expect(out).toMatch(
-          /<column-instance[^>]*column="\[Category\]"[^>]*name="\[none:Category:nk\]"/,
-        );
-        expect(out).toContain(`<cols>[${DS}].[sum:Sales:qk]</cols>`);
-      });
-    });
-
-    describe('un-faceted apply of the REAL apply copies stays identity-by-reference (unarmed behavior)', () => {
-      it('trend-line-chart: no facet → splice returns the SAME reference; apply == core alone', () => {
-        const mapping = {
-          'Order Date': `[${DS}].[tmn:Order Date:qk]`,
-          Sales: `[${DS}].[sum:Sales:qk]`,
-        };
-        expect(spliceBoundFacet(trendApplyXml, mapping)).toBe(trendApplyXml);
-        expect(apply(trendApplyXml, mapping, DS)).toBe(rewritePilot(trendApplyXml, mapping, DS));
-      });
-
-      it('ranking-ordered-bar: no facet → splice returns the SAME reference; apply == core alone', () => {
-        const mapping = {
-          Category: `[${DS}].[none:Region:nk]`,
-          Measure: `[${DS}].[sum:Sales:qk]`,
-        };
-        expect(spliceBoundFacet(rankingApplyXml, mapping)).toBe(rankingApplyXml);
-        expect(apply(rankingApplyXml, mapping, DS)).toBe(
-          rewritePilot(rankingApplyXml, mapping, DS),
-        );
-      });
+      expect(out).not.toMatch(/\{\{field_base_\d+\}\}/);
+      expect(wellFormedXmlRule.validate(out.replace(/\{\{TITLE\}\}/g, 'Trend'))).toEqual([]);
     });
   });
 });

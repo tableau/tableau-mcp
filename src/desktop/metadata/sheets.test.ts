@@ -1,11 +1,14 @@
 import { runValidation } from '../validation/registry.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
+import { parseXML } from './parser.js';
 import {
   addSheet,
   deleteSheet,
   extractSheetXml,
+  extractWorksheetWindowXml,
   listSheets,
   upsertSheetIntoWorkbook,
+  upsertWorksheetAndWindowIntoWorkbook,
 } from './sheets.js';
 
 // Real-world shape: the <workbook> root declares xmlns:user, and a worksheet's level-members
@@ -153,6 +156,51 @@ describe('upsertSheetIntoWorkbook', () => {
 
     expect(doc).toContain('<run>Sales: </run>');
     expect(doc).toContain('<run>  $1.2M</run>');
+  });
+});
+
+describe('worksheet plus window artifacts', () => {
+  const LIVE = `<?xml version='1.0'?><workbook>
+    <worksheets>
+      <worksheet name='A'><table><old /></table></worksheet>
+      <worksheet name='Sibling'><table><keep /></table></worksheet>
+    </worksheets>
+    <windows>
+      <window class='worksheet' name='A'><cards><old /></cards></window>
+      <window class='worksheet' name='Sibling' active='true'><cards /></window>
+    </windows>
+  </workbook>`;
+
+  it('extracts the matching worksheet window as a standalone fragment', () => {
+    expect(extractWorksheetWindowXml(LIVE, 'A')).toContain('<window class="worksheet" name="A">');
+    expect(extractWorksheetWindowXml(LIVE, 'Missing')).toBeNull();
+  });
+
+  it('carries inherited namespaces onto an extracted worksheet window', () => {
+    const workbook = `<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <worksheets><worksheet name='A'><table /></worksheet></worksheets>
+      <windows><window class='worksheet' name='A' user:ui-state='shown'><cards /></window></windows>
+    </workbook>`;
+    const window = extractWorksheetWindowXml(workbook, 'A');
+
+    expect(window).toContain('user:ui-state="shown"');
+    expect(window).toContain('xmlns:user="http://www.tableausoftware.com/xml/user"');
+    expect(() => parseXML(window!)).not.toThrow();
+  });
+
+  it('upserts the target worksheet and its window while preserving unrelated live edits', () => {
+    const latest = LIVE.replace('<keep />', '<unrelated-live-edit />');
+    const applied = upsertWorksheetAndWindowIntoWorkbook(
+      latest,
+      'A',
+      '<worksheet name="A"><table><new /></table></worksheet>',
+      '<window class="worksheet" name="A"><cards><new /></cards></window>',
+    );
+
+    expect(applied).toContain('<unrelated-live-edit');
+    expect(applied).toMatch(/<worksheet name="A">\s*<table>\s*<new/);
+    expect(applied).toMatch(/<window class="worksheet" name="A">\s*<cards>\s*<new/);
+    expect(applied).toContain('name="Sibling" active="true"');
   });
 });
 

@@ -1,8 +1,6 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { rewriteFieldReferences } from '../templates/fieldReferenceRewriter.js';
 import { ensureUserNamespace } from '../templates/injectTemplateCore.js';
+import { readTemplate } from '../templates/templatePath.js';
 import { spliceWaterfallAnchorFilter } from '../templates/waterfallAnchorFilter.js';
 import { runValidation } from '../validation/registry.js';
 import { parseXml } from '../validation/rules/parseXml.js';
@@ -808,16 +806,15 @@ describe('planSortByFieldOnCategoricalAxis — anchor_category coexistence (wate
   // tripped "more than one categorical axis is present; sort is ambiguous." — so a waterfall
   // could never carry both an anchor AND a proposal sort. The DS name is `P&L Data` (ampersand)
   // to prove the shelf-membership check works against XML-escaped refs, not just clean names.
-  const WATERFALL_XML = readFileSync(
-    join(process.cwd(), 'src', 'desktop', 'data', 'templates', 'part-to-whole-waterfall.xml'),
-    'utf8',
-  );
+  const WATERFALL_XML = readTemplate('part-to-whole-waterfall')!;
   const DS = 'P&L Data';
   const anchoredWaterfall = (): string => {
     const mapping = {
       Profit: `[${DS}].[sum:amount:qk]`,
       'Sub-Category': `[${DS}].[none:line_item:nk]`,
       'Anchor Category': `[${DS}].[none:category:nk]`,
+      '{{field_base_1}}': `[${DS}].[sum:amount:qk]`,
+      '{{field_base_2}}': `[${DS}].[none:line_item:nk]`,
     };
     const rewritten = rewriteFieldReferences(
       ensureUserNamespace(WATERFALL_XML),

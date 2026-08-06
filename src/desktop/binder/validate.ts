@@ -37,6 +37,7 @@ import {
   optionalFieldPrunesFor,
   type OptionalFieldPruneSpec,
 } from '../templates/optionalFieldPrune.js';
+import { cardinalityAdvice } from './cardinality.js';
 import { matchAvoidWhen } from './classify.js';
 import { escapeXml } from './escape.js';
 import type {
@@ -44,7 +45,7 @@ import type {
   CalcSlot,
   Derivation,
   SlotSpec,
-  TemplateManifest,
+  TemplateBindingContract,
 } from './manifest-types.js';
 import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
 import { inferStringTemporal } from './stringTemporal.js';
@@ -94,6 +95,7 @@ export type EscalateReason =
   | 'field-not-found'
   | 'kind-mismatch'
   | 'derivation-illegal'
+  | 'aggregation-level-mismatch'
   | 'base-column-conflict'
   | 'cross-datasource-binding'
   | 'calc-dependency-unmet'
@@ -147,16 +149,17 @@ const TEMPORAL_DERIVATIONS: ReadonlySet<string> = new Set([
 // Month-Trunc is 'tmn' (the real short-form Tableau writes), not the legacy 'tmo'.
 const TRUNCATION_DERIVATIONS: ReadonlySet<string> = new Set(['tyr', 'tqr', 'tmn', 'tdy']);
 
-// Derivation short-forms that aggregate a numeric measure.
-const AGGREGATION_DERIVATIONS: ReadonlySet<string> = new Set([
+// Derivation short-forms whose operations require a numeric measure.
+const NUMERIC_AGGREGATION_DERIVATIONS: ReadonlySet<string> = new Set([
   'sum',
   'avg',
-  'cnt',
-  'cntd',
-  'median',
+  'med',
   'min',
   'max',
-  'attr',
+  'std',
+  'stp',
+  'var',
+  'vrp',
 ]);
 
 const NUMERIC_DATATYPES: ReadonlySet<string> = new Set(['integer', 'real']);
@@ -228,7 +231,8 @@ function geoConceptMismatch(
   f: SchemaField,
 ): { slotConcept: GeoConcept; fieldConcept: GeoConcept } | null {
   if (slot.kind !== 'geo') return null;
-  const slotConcept = geoConceptFromSlotId(slot.slot_id);
+  const slotConcept =
+    geoConceptFromSemanticRole(slot.semantic_role) ?? geoConceptFromSlotId(slot.slot_id);
   const fieldConcept = geoConceptFromSemanticRole(f.semanticRole);
   if (!slotConcept || !fieldConcept || slotConcept === fieldConcept) return null;
   return { slotConcept, fieldConcept };
@@ -249,7 +253,8 @@ function typeSuffixFor(type: string): string {
  * Every other derivation (aggregations, dimensions, discrete date parts) keeps
  * the field-type rule.
  */
-function suffixFor(derivation: string, type: string): string {
+function suffixFor(derivation: string, type: string, authoredRole?: 'nk' | 'ok' | 'qk'): string {
+  if (authoredRole) return authoredRole;
   if (TRUNCATION_DERIVATIONS.has(derivation)) return 'qk';
   return typeSuffixFor(type);
 }
@@ -419,7 +424,7 @@ function effectiveSlotDerivation(
  * every existing caller keeps its exact behavior.
  */
 export function validateBinding(
-  m: TemplateManifest,
+  m: TemplateBindingContract,
   p: BindingProposal,
   s: SchemaSummary,
   ask?: string,
@@ -573,7 +578,7 @@ export function validateBinding(
       const temporalMinMaxOk =
         TEMPORAL_MINMAX_DERIVATIONS.has(effDeriv) && TEMPORAL_DATATYPES.has(f.datatype);
       if (
-        AGGREGATION_DERIVATIONS.has(effDeriv) &&
+        NUMERIC_AGGREGATION_DERIVATIONS.has(effDeriv) &&
         !(NUMERIC_DATATYPES.has(f.datatype) || f.role === 'measure') &&
         !temporalMinMaxOk
       ) {
@@ -582,9 +587,29 @@ export function validateBinding(
           slot_id: slotId,
           detail:
             `aggregation ${src} '${effDeriv}' requires a numeric measure, but "${fieldQuery}" is ` +
-            `role=${f.role}, datatype=${f.datatype}. Aggregations (sum/avg/median/count) apply only ` +
-            'to numeric measures (min/max also apply to date/datetime fields) — bind a numeric ' +
+            `role=${f.role}, datatype=${f.datatype}. Numeric aggregations (sum/avg/median/etc.) apply only ` +
+            'to numeric measures (min/max also apply to date/datetime fields; count/count-distinct/ATTR apply to dimensions) — bind a numeric ' +
             'measure or drop the derivation override.',
+        });
+        continue;
+      }
+    }
+
+    if (f.isAggregated && effDeriv !== 'usr') {
+      const feedsCalc = m.calcs.some(
+        (calc) =>
+          calc.depends_on_slots.includes(slotId) ||
+          (calc.inputs ?? []).some(
+            (input) => input.slot_id === slotId && input.required && !input.template_internal,
+          ),
+      );
+      if (feedsCalc) {
+        blockers.push({
+          code: 'aggregation-level-mismatch',
+          slot_id: slotId,
+          detail:
+            `slot '${slotId}' feeds a template calculation, but "${fieldQuery}" is already aggregated. ` +
+            'Bind a row-level measure or dimension so the template does not re-aggregate it or mix aggregation levels.',
         });
         continue;
       }
@@ -691,7 +716,7 @@ export function validateBinding(
     const deriv = f.isAggregated ? 'usr' : effectiveSlotDerivation(slot, f, override);
     // Suffix follows the EFFECTIVE derivation, not the field type alone: a date
     // truncation is continuous (':qk') even on an ordinal date field (P1-3).
-    const suffix = suffixFor(deriv, f.type);
+    const suffix = suffixFor(deriv, f.type, slot.instance_role);
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
@@ -715,6 +740,16 @@ export function validateBinding(
   // warning rides along so the caller sees the anti-pattern it chose.
   const warnings = [
     ...resolutionNotes,
+    ...m.slots.flatMap((slot) => {
+      const entry = resolved.get(slot.slot_id);
+      const effectiveDerivation = entry
+        ? entry.field.isAggregated
+          ? 'usr'
+          : effectiveSlotDerivation(slot, entry.field, overrideBySlot.get(slot.slot_id))
+        : undefined;
+      const advice = entry ? cardinalityAdvice(slot, entry.field, effectiveDerivation) : undefined;
+      return advice ? [advice] : [];
+    }),
     ...(ask ? matchAvoidWhen(ask, m.avoid_when, m.intent_keywords) : []),
   ];
   // The datasource is workbook-controlled and flows verbatim into {{DATASOURCE}} (an XML

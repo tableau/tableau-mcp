@@ -26,16 +26,16 @@ import { fetchWorksheetSummaryData } from './summaryDataCore.js';
 const DEFAULT_MAX_ROWS = 200;
 const MAX_ROWS_CAP = 1000;
 const EMPTY_SHEET_GUIDANCE =
-  'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — bind a chart first (bind-template) or name a populated sheet.';
+  'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — choose with list-templates, build with build-worksheets-from-templates, apply with apply-worksheet, or name a populated sheet.';
 const NO_ROWS_GUIDANCE =
   "The summary query returned no rows. Do NOT call get-summary-data again for this ask — the answer is 'no data'; say so.";
 const SUMMARY_DATA_DONE_LABEL = 'Data retrieval complete — no further calls needed';
-const EMPTY_SHEET_BIND_LABEL = 'Build the requested chart with bind-template';
+const EMPTY_SHEET_BUILD_LABEL = 'List templates, build a chart, then apply it';
 const SUMMARY_DATA_FAILURE_DONE_LABEL = 'Data retrieval failed — report outcome';
 const WORKSHEET_AMBIGUOUS_GUIDANCE =
   'Choose one worksheet by exact id or name, then call get-summary-data again.';
 const WORKSHEET_NOT_FOUND_GUIDANCE =
-  'The requested worksheet was not found. Choose an available populated worksheet, correct the worksheet name/id, or bind a chart first; then call get-summary-data again.';
+  'The requested worksheet was not found. Choose an available populated worksheet, correct the worksheet name/id, or use list-templates, build-worksheets-from-templates, and apply-worksheet before calling get-summary-data again.';
 const TRANSIENT_FAILURE_GUIDANCE =
   'The request may be transient — one retry is reasonable. If it fails again, report the failure.';
 const REPEATED_TRANSIENT_FAILURE_GUIDANCE =
@@ -332,7 +332,7 @@ function emptySheetResult(worksheet: WorksheetItem, maxRows: number): SummaryDat
       summaryData: { columns: [], rows: [] },
       guidance: EMPTY_SHEET_GUIDANCE,
     },
-    prefillNextAction(EMPTY_SHEET_BIND_LABEL),
+    prefillNextAction(EMPTY_SHEET_BUILD_LABEL),
   );
 }
 

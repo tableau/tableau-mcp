@@ -4,7 +4,9 @@ import {
   generateUUID,
   normalizeArray,
   parseXML,
+  parseXMLPreservingNumericEntities,
   serializeXML,
+  serializeXMLPreservingNumericEntities,
 } from './parser.js';
 
 const WORKBOOK_TWO_SHEETS = `<?xml version="1.0" encoding="UTF-8"?>
@@ -116,5 +118,100 @@ describe('serializeXML', () => {
     const output = serializeXML(workbook);
     expect(output).toContain('Sheet 1');
     expect(output).toContain('Sheet 2');
+  });
+
+  it('keeps feature/desktop numeric-entity behavior in the default parser', () => {
+    const parsed = parseXML('<column formula="real:&#13; literal:&amp;#13;" />') as any;
+
+    expect(parsed.column[0]['@_formula']).toBe('real:&#13; literal:&#13;');
+    expect(serializeXML(parsed)).toContain('formula="real:&amp;#13; literal:&amp;#13;"');
+  });
+
+  describe('numeric-entity-preserving template round-trip', () => {
+    const calc = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook><datasources><datasource name="DS">
+  <column caption="Order Profitable?" name="[Order Profitable?]">
+    <calculation class="tableau" formula="{fixed [Order ID]:sum([Profit])}&gt;0&#13;&#10;// calculates the profit at the order level" />
+  </column>
+</datasource></datasources></workbook>`;
+
+    it('preserves numeric newline entities instead of double-escaping them', () => {
+      const output = serializeXMLPreservingNumericEntities(parseXMLPreservingNumericEntities(calc));
+      expect(output).toContain('&gt;0&#13;&#10;// calculates the profit at the order level');
+      expect(output).not.toContain('&amp;#13;');
+      expect(output).not.toContain('&amp;#10;');
+    });
+
+    it('does not progressively escape the formula on a second round-trip', () => {
+      const once = serializeXMLPreservingNumericEntities(parseXMLPreservingNumericEntities(calc));
+      const twice = serializeXMLPreservingNumericEntities(parseXMLPreservingNumericEntities(once));
+      const formula = /formula="([^"]*)"/;
+      expect(twice.match(formula)?.[1]).toBe(once.match(formula)?.[1]);
+    });
+
+    it('keeps encoded literal numeric-entity text inert while preserving real newlines', () => {
+      const source =
+        '<column formula="literal &amp;#0; text, then a real newline: &#13;&#10;next" />';
+      const once = serializeXMLPreservingNumericEntities(parseXMLPreservingNumericEntities(source));
+      const twice = serializeXMLPreservingNumericEntities(parseXMLPreservingNumericEntities(once));
+
+      expect(once).toContain('literal &amp;#0; text, then a real newline: &#13;&#10;next');
+      expect(once).not.toContain('literal &#0; text');
+      expect(twice).toBe(once);
+    });
+
+    it('does not treat sentinel-shaped user text as protected parser state', () => {
+      const sentinelText = '\uE000TABLEAU_NUMERIC_ENTITY_user_text_13\uE001';
+      const once = serializeXMLPreservingNumericEntities(
+        parseXMLPreservingNumericEntities(`<r>${sentinelText}</r>`),
+      );
+
+      expect(once).toBe(`<r>${sentinelText}</r>`);
+      expect(once).not.toContain('&#13;');
+    });
+
+    it('does not reinterpret encoded entity text inside CDATA', () => {
+      const once = serializeXMLPreservingNumericEntities(
+        parseXMLPreservingNumericEntities('<r><![CDATA[&amp;#13;]]></r>'),
+      );
+      const twice = serializeXMLPreservingNumericEntities(parseXMLPreservingNumericEntities(once));
+
+      expect(once).toBe('<r>&amp;amp;#13;</r>');
+      expect(twice).toBe(once);
+    });
+
+    it('parses identical source into deeply equal values across calls', () => {
+      const source = '<column formula="literal &amp;#13; text" />';
+
+      expect(parseXMLPreservingNumericEntities(source)).toEqual(
+        parseXMLPreservingNumericEntities(source),
+      );
+    });
+
+    it('returns semantic control characters and no parser sentinels', () => {
+      const parsed = parseXMLPreservingNumericEntities(
+        '<column formula="real:&#13;&#10;&#9; literal:&amp;#13;" />',
+      ) as any;
+
+      expect(parsed.column[0]['@_formula']).toBe('real:\r\n\t literal:&#13;');
+      expect(JSON.stringify(parsed)).not.toContain('TABLEAU_NUMERIC_ENTITY');
+    });
+
+    it('serializes semantic CR, LF, and tab separately from literal numeric-entity text', () => {
+      const parsed = parseXMLPreservingNumericEntities(
+        '<column formula="real:&#13;&#10;&#9; literal:&amp;#13;" />',
+      );
+
+      expect(serializeXMLPreservingNumericEntities(parsed)).toContain(
+        'formula="real:&#13;&#10;&#9; literal:&amp;#13;"',
+      );
+    });
+
+    it('does not place numeric-entity sentinels inside CDATA', () => {
+      const parsed = parseXMLPreservingNumericEntities('<r><![CDATA[&#13;&amp;#13;]]></r>') as any;
+
+      expect(parsed.r).toBe('&#13;&amp;#13;');
+      expect(JSON.stringify(parsed)).not.toContain('TABLEAU_NUMERIC_ENTITY');
+    });
   });
 });

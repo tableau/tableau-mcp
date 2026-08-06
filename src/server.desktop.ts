@@ -43,8 +43,8 @@ const serverVersion = pkg.version;
  * list-worksheets, apply-workbook, batch-create-and-cache-sheets, build-and-apply-dashboard)
  * UNION the preamble-hunt's escalation-fallback chain it insists must stay
  * (get-workbook-xml, inject-template, apply-worksheet — apply-workbook/list-instances/
- * list-worksheets already overlap). Without the fallback chain the propose/escalate paths
- * (per DESKTOP_INSTRUCTIONS) would have no tools to route to.
+ * list-worksheets already overlap). Demo retains the legacy binder path because it does not
+ * include the modern artifact builder.
  */
 export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
   'bind-template',
@@ -69,9 +69,9 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
  * API — is sufficient with no XML authoring tools, templates, or bind-template.
  * Everything a chart/calc/dashboard ask needs routes through execute-tableau-command;
  * the rest is discovery + readback (on apiVersion <=0.1.0 the /v0 generic route was
- * write-blind, so the list-* tools were how the model observed state). The gated
- * get-worksheet-xml repair read is retained across every profile but cannot run before
- * an authoring attempt. Proven by hand 2026-07-19: a full analytics workbook (calcs +
+ * write-blind, so the list-* tools were how the model observed state). The
+ * get-worksheet-xml read is retained across every profile and is available before authoring.
+ * Proven by hand 2026-07-19: a full analytics workbook (calcs +
  * charts + dashboard) authored live in seconds, zero agent-authored XML.
  * The known-command guard (from #542) makes the single execute-tableau-command tool
  * safe against hallucinated verbs.
@@ -94,8 +94,8 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * key signature, born at OPEN), author-action (parameter-change wiring), format-labels
  * (mark labels) — PLUS ask-user (ambiguity goes to the human, never to a guess) and
  * search-commands (how the singer discovers the execute-tableau-command dialect) — PLUS
- * bind-template, the deterministic fast-path (no LLM, ~0.3s) for plain chart shapes,
- * and refine-worksheet, the primitives-only top-N/sort editor that carries
+ * the list/build/apply template artifact flow and refine-worksheet, the primitives-only
+ * top-N/sort editor that carries
  * edit-in-place now that the notional-spec loop is retired.
  * PLUS the two knowledge doors — search-knowledge + read-knowledge-resource —
  * without which the system prompt's "consult the expertise library BEFORE authoring"
@@ -113,7 +113,8 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  */
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
-    'bind-template',
+    'list-templates',
+    'build-worksheets-from-templates',
     'refine-worksheet',
     'add-field',
     'remove-field',
@@ -128,7 +129,6 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'read-cached-xml',
     'write-cached-xml',
     'apply-worksheet',
-    'build-and-apply-worksheet',
     'dashboard-auto-apply',
     'plan-dashboard-creation',
     'batch-create-and-cache-sheets',
@@ -214,6 +214,7 @@ export class DesktopMcpServer extends Server {
       serverVersion,
       instructions: buildDesktopInstructions({
         sessionPinned: getDesktopConfig().desktopSessionId !== undefined,
+        profile: getDesktopConfig().toolProfile,
       }),
     });
   }

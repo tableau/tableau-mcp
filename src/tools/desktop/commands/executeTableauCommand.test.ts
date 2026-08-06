@@ -16,7 +16,7 @@ vi.mock('../../../desktop/externalApi/discovery.js');
 
 const SESSION = 'session-1';
 const SORT_NESTED_LIVE_500_FIX =
-  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the cached-document round-trip (get-worksheet-xml → read-cached-xml/write-cached-xml to edit the computed-sort → apply-worksheet).';
+  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the cached-document round-trip (get-worksheet-xml → read-cached-xml/write-cached-xml to edit the computed-sort → apply-worksheet).';
 const TEST_REGISTRY_DIRS: string[] = [];
 
 function makeExtra(
@@ -435,7 +435,7 @@ describe('executeTableauCommandTool', () => {
         'tabdoc:sort drives a UI dialog and blocks the screen',
       );
       expect(result.content[0].text).toContain('refine-worksheet with operation sort_by_field');
-      expect(result.content[0].text).toContain('bind-template sort proposal/document round-trip');
+      expect(result.content[0].text).toContain('cached-document round-trip');
       expect(extra.getExecutor).not.toHaveBeenCalled();
     });
 

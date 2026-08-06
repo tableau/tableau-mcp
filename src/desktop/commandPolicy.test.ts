@@ -10,7 +10,7 @@ describe('commandPolicy', () => {
     });
     expect(policy?.fix).toContain('known to fail');
     expect(policy?.fix).toContain('do not retry');
-    expect(policy?.fix).toContain('bind-template sort proposal');
+    expect(policy?.fix).toContain('cached-document round-trip');
     expect(policy?.params?.required).toEqual(
       new Set(['DimensionToSort', 'Worksheet', 'MeasureName', 'ShelfType']),
     );

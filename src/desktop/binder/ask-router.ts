@@ -15,7 +15,9 @@
 // regex-extracts BOTH CHART_NOUN_KEYWORDS tables and asserts SET EQUALITY, so any growth in
 // classify.ts must be mirrored here or the parity test goes RED.
 
-import type { TemplateManifest } from './manifest-types.js';
+import type { RuntimeTemplateDescriptor } from './manifest-types.js';
+
+type TemplateManifest = RuntimeTemplateDescriptor;
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

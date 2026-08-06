@@ -46,7 +46,9 @@ import {
   type SchemaSummary,
   summarizeSchema,
 } from './binder.js';
-import type { TemplateManifest } from './manifest-types.js';
+import type { RuntimeTemplateDescriptor } from './manifest-types.js';
+
+type TemplateManifest = RuntimeTemplateDescriptor;
 
 // PORT ADAPTATION (source ESM → tableau-mcp CommonJS): the source resolved this from
 // `fileURLToPath(import.meta.url)`, which is unavailable under the target's
@@ -103,12 +105,8 @@ export function hashSchemaSummary(summary: SchemaSummary): string {
 }
 
 /**
- * Content hash of the ENTIRE manifest set — every manifest's full content, sorted
- * by template name so map insertion order is irrelevant. The in-memory
- * `Map<string,TemplateManifest>` carries the same full per-template content that
- * `data/template-manifests.index.json` serializes (its `templates[]` entries hold
- * slots/calcs/portability_evidence/avoid_when/hazards), so hashing the map
- * incorporates every manifest file's content.
+ * Content hash of the entire runtime descriptor set, sorted by template name so
+ * map insertion order is irrelevant.
  */
 export function hashManifests(manifests: Map<string, TemplateManifest>): string {
   const entries = [...manifests.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));

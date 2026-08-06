@@ -21,11 +21,8 @@ import {
   type SchemaField,
   type SchemaSummary,
   summarizeSchema,
-  WATERFALL_ANCHOR_FIELD_RE,
-  WATERFALL_ANCHOR_SLOT_ID,
   WATERFALL_ORDER_FIELD_RE,
 } from '../../../desktop/binder/binder.js';
-import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import {
@@ -39,7 +36,6 @@ import {
 import { resolveDerivation } from '../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
 import type { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
-import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { parseCanonicalColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { addFieldToEncoding } from '../../../desktop/metadata/fields.js';
 import { extractSheetXml, upsertSheetIntoWorkbook } from '../../../desktop/metadata/sheets.js';
@@ -61,7 +57,9 @@ import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
 } from '../../../desktop/templates/injectTemplateCore.js';
-import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import { createPuppetCompatibilityProjection } from '../../../desktop/templates/puppetCompatibilityProjection.js';
+import { loadRuntimeTemplateCatalogSnapshots } from '../../../desktop/templates/runtimeTemplateCatalog.js';
+import type { TemplateRuntimeSnapshot } from '../../../desktop/templates/templateRuntimeSnapshot.js';
 import { ExecuteCommandError } from '../../../desktop/toolExecutor/toolExecutor.js';
 import {
   classifyWorksheetPromiseOutcome,
@@ -111,17 +109,11 @@ const paramsSchema = {
   ask: z.string().describe('Verbatim ask.'),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
-  auto_apply: z
-    .boolean()
-    .optional()
-    .describe('true: apply the bound sheet to the live workbook immediately'),
+  auto_apply: z.boolean().optional().describe('Apply immediately.'),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
-  target_worksheet: z
-    .string()
-    .optional()
-    .describe('Existing worksheet name to rebuild; omit to create.'),
+  target_worksheet: z.string().optional().describe('Worksheet to replace; omit to create.'),
   calcs: z
     .array(
       z.object({
@@ -132,9 +124,7 @@ const paramsSchema = {
       }),
     )
     .optional()
-    .describe(
-      'Calcs to author before binding, for derived metric asks (margin %, ratios); bind by the calc caption',
-    ),
+    .describe('Derived fields to author before binding.'),
 };
 
 /**
@@ -239,10 +229,7 @@ const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
 const NOT_APPLIED_GUIDANCE =
   'NOT APPLIED — the worksheet is unchanged. Resubmit this exact call with auto_apply:true to apply the bind.';
 const WATERFALL_TEMPLATE = 'part-to-whole-waterfall';
-const WATERFALL_ANCHOR_MAPPING_KEY = 'Anchor Category';
-// WATERFALL_ANCHOR_SLOT_ID / WATERFALL_ANCHOR_FIELD_RE and WATERFALL_ORDER_FIELD_RE are all
-// imported from binder.ts — ONE definition each, shared with the binder's deterministic
-// anchor- and sort-defaults so the hint side and the apply side can never drift. A P&L/bridge running total is order-dependent and its intended
+// A P&L/bridge running total is order-dependent and its intended
 // order is usually a non-displayed sequence field; the hint names it so the singer carries it
 // in the ORIGINAL bind (proposal.sort) instead of giving up on refine or falling to XML surgery.
 const WATERFALL_SORT_HINT =
@@ -250,7 +237,7 @@ const WATERFALL_SORT_HINT =
 // Terminal stop-clause appended to the applied:true receipt when NO re-bind slot is unfilled
 // (Blake's spiral): the model reads guidance verbatim, so this directly contradicts the
 // bundled skill's "adapt fields/formatting" + the ambient "search-commands available" pulls.
-// Paired with structuredContent.nextAction{kind:'done'} for a future route-gate/host.
+// Paired with structuredContent.nextAction{kind:'done'} for host orchestration.
 const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
 // When the confident bind already applied a top-N limit and/or an interactive filter, the
 // singer must NOT hand-author another one. These clauses are appended only for splices the
@@ -669,38 +656,11 @@ function isWaterfallResult(res: BinderResult): boolean {
   return false;
 }
 
-function hasAnchorCategoryBinding(res: BinderResult, proposal?: BindingProposal): boolean {
-  if (res.status === 'bound') {
-    return Object.prototype.hasOwnProperty.call(
-      res.args.field_mapping,
-      WATERFALL_ANCHOR_MAPPING_KEY,
-    );
-  }
-  return (
-    proposal?.bindings.some((binding) => binding.slot_id === WATERFALL_ANCHOR_SLOT_ID) ?? false
-  );
-}
-
 function hasSortOverride(res: BinderResult, proposal?: BindingProposal): boolean {
   if (res.status === 'bound') {
     return res.args.sort !== undefined;
   }
   return proposal?.sort !== undefined;
-}
-
-function waterfallAnchorCandidates(schemaSummary?: SchemaSummary): string[] {
-  if (!schemaSummary) {
-    return [];
-  }
-  const candidates = schemaSummary.fields
-    .filter(
-      (field) =>
-        field.role === 'dimension' &&
-        (field.datatype === 'string' || field.type === 'nominal') &&
-        WATERFALL_ANCHOR_FIELD_RE.test(field.name),
-    )
-    .map((field) => field.name);
-  return [...new Set(candidates)];
 }
 
 /** Explicit sequence/order columns (display_order, sort_order, …) usable as the step order. */
@@ -723,22 +683,6 @@ function buildWaterfallDiscoveryGuidance(
     return [];
   }
   const sentences: string[] = [];
-  if (!hasAnchorCategoryBinding(res, proposal)) {
-    const candidates = waterfallAnchorCandidates(schemaSummary);
-    if (candidates.length > 0) {
-      // Imperative, evidence-grounded: a category/row-type column means the P&L data almost
-      // certainly carries subtotal/total rows, which a running total WILL double-count. Do
-      // not offer this as an option or ask the user — a hedged "let me know if…" leaves the
-      // bridge wrong (m1 recurring miss). Bind it now; unbinding is trivial if the data is flat.
-      sentences.push(
-        `Waterfall: schema has ${candidates.join(', ')} — a row-type column means this P&L data ` +
-          'almost certainly has subtotal/total rows that the running total WILL double-count. ' +
-          `Re-bind NOW with proposal.bindings += {slot_id:"${WATERFALL_ANCHOR_SLOT_ID}",field:${JSON.stringify(
-            candidates[0],
-          )}} to exclude them; do NOT ask the user or leave it unbound.`,
-      );
-    }
-  }
   if (!hasSortOverride(res, proposal)) {
     const orderCandidates = waterfallOrderCandidates(schemaSummary);
     if (orderCandidates.length > 0) {
@@ -957,10 +901,8 @@ function waterfallReBindSlotUnfilled(res: BinderResult, schemaSummary?: SchemaSu
   if (!isWaterfallResult(res)) {
     return false;
   }
-  const anchorUnfilled =
-    !hasAnchorCategoryBinding(res) && waterfallAnchorCandidates(schemaSummary).length > 0;
   const orderUnfilled = !hasSortOverride(res) && waterfallOrderCandidates(schemaSummary).length > 0;
-  return anchorUnfilled || orderUnfilled;
+  return orderUnfilled;
 }
 
 function buildGuidance(
@@ -1474,7 +1416,7 @@ async function performAutoApply({
   signal,
   bindMs,
   schemaSummary,
-  manifest,
+  templateSnapshot,
   appliedDefault,
 }: {
   res: BoundResult;
@@ -1487,7 +1429,7 @@ async function performAutoApply({
   signal: AbortSignal;
   bindMs: number;
   schemaSummary: SchemaSummary;
-  manifest: TemplateManifest;
+  templateSnapshot: TemplateRuntimeSnapshot;
   appliedDefault?: AppliedDefault;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
@@ -1504,10 +1446,7 @@ async function performAutoApply({
   let injected: ReturnType<typeof buildInjectedWorkbookXml>;
   try {
     // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
-    const templateXml = readTemplate(args.template_name);
-    if (!templateXml) {
-      throw new Error(`template "${args.template_name}" not found in template assets`);
-    }
+    const templateXml = templateSnapshot.xml;
     // Per-apply calc-namespacing identity: session + apply timestamp (randomUUID
     // guards same-millisecond applies), mirroring the inject-template tool's nonce.
     const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
@@ -1518,7 +1457,7 @@ async function performAutoApply({
       sheetType: args.sheet_type,
       templateParameters: args.template_parameters,
       fieldMapping: args.field_mapping,
-      templateSlots: manifest.slots,
+      templateSlots: templateSnapshot.descriptor.slots,
       applyNonce,
       optionalFieldPrunes: args.optional_field_prunes,
       dateparseAxis: args.dateparse_axis,
@@ -2084,18 +2023,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             authoredCalcCaptions = authored.value.authoredCalcs.map((calc) => calc.caption);
           }
 
-          // SEAM: source manifests through bundledIntelligenceProvider (never raw
-          // loadManifests) so a milestone-2 remote content-pack provider swaps in without
-          // editing this tool — matching propose-template / validate-proposal, so all four
-          // binder tools follow the same seam. The reconstructed Map is byte-identical to
-          // loadManifests(): it keys by manifest.template (== filename, enforced there) and
-          // listTemplateManifests() is exactly [...loadManifests().values()], so re-keying
-          // by m.template reproduces it.
-          const manifests = new Map(
-            bundledIntelligenceProvider
-              .listTemplateManifests()
-              .map((m): [string, TemplateManifest] => [m.template, m]),
-          );
+          const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots();
+          const puppetCompatibility = createPuppetCompatibilityProjection(runtimeCatalog);
+          const manifests =
+            proposal === undefined
+              ? puppetCompatibility.descriptors
+              : puppetCompatibility.allDescriptors;
           // Route-state recording is OBSERVATIONAL — a route-layer fault must never break a
           // bind (fail-open, the gate's own discipline): a swallowed classification simply
           // leaves the ask unrecorded and the gate later fail-opens on absent state.
@@ -2212,6 +2145,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           const bindMs = Date.now() - bindStart;
           const schemaSummary = summarizeSchema(workbookXml);
+          res = puppetCompatibility.expandBinderResult(res, schemaSummary);
 
           // ── Candidate handover on a RECOVERABLE escalation ────────────────
           // Only `propose` used to carry the candidate list, so an agent told to re-propose
@@ -2317,16 +2251,18 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           // freehand-building the same chart with FEWER guards. Applying a validated bind is
           // the safer branch. The defense-in-depth guard is now binder validation plus the
           // events anchor, not Call-1/Call-2 parity.
-          const manifest =
-            res.status === 'bound' ? manifests.get(res.args.template_name) : undefined;
+          const selectedTemplate =
+            res.status === 'bound' ? runtimeCatalog.get(res.args.template_name) : undefined;
           const canAutoApply =
-            auto_apply === true && res.status === 'bound' && manifest?.fast_path_eligible === true;
+            auto_apply === true &&
+            res.status === 'bound' &&
+            selectedTemplate?.descriptor.fast_path_eligible === true;
 
           if (res.status !== 'bound') {
             return new Ok(base);
           }
 
-          if (!canAutoApply || manifest === undefined) {
+          if (!canAutoApply || selectedTemplate === undefined) {
             recordBindRecoveryAttemptFailOpen({
               session: resolvedSession,
               askKey,
@@ -2368,7 +2304,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             signal: extra.signal,
             bindMs,
             schemaSummary,
-            manifest,
+            templateSnapshot: selectedTemplate.snapshot,
             appliedDefault,
           });
           const appliedResult = autoApplyResult.result;

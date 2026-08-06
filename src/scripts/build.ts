@@ -105,14 +105,12 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   // only — these files are read at runtime via fs, so a published / npm-installed
   // server has no data unless we copy them. The target `build/desktop/data` is the
   // path server.desktop.ts resolves package-relative as DATA_ROOT (`__dirname/desktop/data`,
-  // where __dirname === build/ in the bundle); the binder, the BundledIntelligenceProvider,
-  // and the search library all read their inputs through it.
+  // where __dirname === build/ in the bundle); the search library reads its inputs through it.
   //
   // AUTHORITATIVE ALLOWLIST, not a blanket copy (Lane M5 tarball scoping + TR1 fix): stage
   // ONLY the entries below, so a large asset can never silently ride into the npm tarball.
   // The earlier blanket `copyDirectory('./src/desktop/data', ...)` defeated this list and was
-  // removed. Every entry is resolved package-relative via DATA_ROOT and feeds either the
-  // binder core / BundledIntelligenceProvider (bind-template / list-templates) or a shipped
+  // removed. Every entry is resolved package-relative via DATA_ROOT and feeds a shipped
   // search tool: tableau-desktop-commands-reference.json (search-commands),
   // workbook-schema-reference.json (lookup-workbook-schema), corpus.json + examples/
   // (search-examples / search-workbook-examples), and twb-example-index.json — the committed
@@ -127,19 +125,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     console.log('🏗️ Staging desktop data (allowlist)...');
     const desktopDataSrc = './src/desktop/data';
     const desktopDataOut = './build/desktop/data';
-    // LOCKSTEP: this allowlist is mirrored in
-    // src/desktop/intelligence/content-manifest-staging.test.ts (STAGED_DESKTOP_DATA).
-    // build.ts runs an IIFE at import (can't be imported without side effects), so the
-    // test parses this array out of build.ts and fails if the two diverge. That test also
-    // PROVES every content-manifest.json resource lands under one of these roots and that
-    // the src/desktop/data-source/ trim source can never be staged.
     const stagedDesktopData = [
-      'template-manifests', // MANIFESTS_DIR — loadManifests() (binder + provider)
-      'template-manifests.index.json', // MANIFEST_INDEX_PATH — loadManifests()
-      'template-manifests.fixture.json', // BINDER_FIXTURE_PATH — eligibility gate
-      'content-manifest.json', // CONTENT_MANIFEST_PATH — provider.getStatus/getContentManifest
-      'data-visualization-templates-xml', // TEMPLATE_XML_DIR — provider.getTemplateXmlFragment + content-manifest hashes
-      'templates', // legacy XML templates read via DATA_ROOT
       'tableau-desktop-commands-reference.json', // searchLibrary COMMANDS_REFERENCE_PATH — search-commands
       'workbook-schema-reference.json', // searchLibrary SCHEMA_REFERENCE_PATH — lookup-workbook-schema
       'corpus.json', // searchExamples/searchWorkbookExamples CORPUS_PATH

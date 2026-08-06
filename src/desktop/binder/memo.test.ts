@@ -4,14 +4,14 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { loadRuntimeTemplateDescriptors } from '../templates/runtimeTemplateCatalog.js';
 import {
   type BinderResult,
   type BindingProposal,
   bindTemplate,
   summarizeSchema,
 } from './binder.js';
-import { loadManifests } from './manifest.js';
-import type { Family, TemplateManifest } from './manifest-types.js';
+import type { Family, RuntimeTemplateDescriptor } from './manifest-types.js';
 import {
   createMemoizedBinder,
   DEFAULT_SCHEMA_SIDECAR_PATH,
@@ -56,23 +56,18 @@ function synth(
   template: string,
   family: Family,
   keyword: string,
-  slots: TemplateManifest['slots'],
-  calcs: TemplateManifest['calcs'] = [],
-): TemplateManifest {
+  slots: RuntimeTemplateDescriptor['slots'],
+  calcs: RuntimeTemplateDescriptor['calcs'] = [],
+): RuntimeTemplateDescriptor {
   return {
     template,
     family,
-    readiness: 'GREEN',
     fast_path_eligible: true,
     fast_path_blockers: [],
-    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-    datasource_placeholder: true,
-    placeholders: ['TITLE', 'DATASOURCE'],
     intent_keywords: [keyword],
     description: `${family} synthetic`,
     slots,
     calcs,
-    hazards: [],
   };
 }
 
@@ -150,7 +145,69 @@ const QUALKEY_MANIFEST = synth('x-qualkey', 'magnitude', 'qualkey', [
 ]);
 const QUALKEY_MANIFESTS = new Map([[QUALKEY_MANIFEST.template, QUALKEY_MANIFEST]]);
 
-const real = loadManifests();
+const BAR_MANIFEST = synth('ranking-ordered-bar', 'ranking', 'bar', [
+  {
+    slot_id: 'region',
+    template_field: 'Region',
+    derivation: 'none',
+    role: ['rows'],
+    kind: 'categorical',
+    bindable: true,
+    required: true,
+  },
+  {
+    slot_id: 'sales',
+    template_field: 'Sales',
+    derivation: 'sum',
+    role: ['cols'],
+    kind: 'quantitative',
+    bindable: true,
+    required: true,
+  },
+]);
+const BAR_MANIFESTS = new Map([[BAR_MANIFEST.template, BAR_MANIFEST]]);
+
+const SCATTER_MANIFEST = synth('correlation-scatter-plot-chart', 'correlation', 'proposal-only', [
+  {
+    slot_id: 'sales',
+    template_field: 'Sales',
+    derivation: 'sum',
+    role: ['cols'],
+    kind: 'quantitative',
+    bindable: true,
+    required: true,
+  },
+  {
+    slot_id: 'profit',
+    template_field: 'Profit',
+    derivation: 'sum',
+    role: ['rows'],
+    kind: 'quantitative',
+    bindable: true,
+    required: true,
+  },
+  {
+    slot_id: 'customer_name',
+    template_field: 'Customer Name',
+    derivation: 'none',
+    role: ['detail'],
+    kind: 'categorical',
+    bindable: true,
+    required: true,
+  },
+  {
+    slot_id: 'region',
+    template_field: 'Region',
+    derivation: 'none',
+    role: ['color'],
+    kind: 'categorical',
+    bindable: true,
+    required: false,
+  },
+]);
+const SCATTER_MANIFESTS = new Map([[SCATTER_MANIFEST.template, SCATTER_MANIFEST]]);
+
+const real = loadRuntimeTemplateDescriptors();
 
 // ── stableStringify ───────────────────────────────────────────────────────
 describe('memo/stableStringify', () => {
@@ -264,7 +321,7 @@ describe('memo/createMemoizedBinder — no-LLM bound', () => {
     const args = {
       ask: 'bar chart of Sales by Region',
       workbookXml: SUPERSTORE_XML,
-      manifests: real,
+      manifests: BAR_MANIFESTS,
     };
     const unmemoized = await bindTemplate(args);
 
@@ -282,7 +339,7 @@ describe('memo/createMemoizedBinder — no-LLM bound', () => {
 
   it('normalization: whitespace-only variance shares a cache entry (a hit), case variance does not', async () => {
     const binder = createMemoizedBinder();
-    const base = { workbookXml: SUPERSTORE_XML, manifests: real };
+    const base = { workbookXml: SUPERSTORE_XML, manifests: BAR_MANIFESTS };
     const a = await binder.bind({ ...base, ask: 'bar chart of Sales by Region' });
     expect(a.cache.hit).toBe(false);
     const b = await binder.bind({ ...base, ask: 'bar   chart  of Sales by Region  ' });
@@ -312,13 +369,7 @@ describe('memo/createMemoizedBinder — propose leg is never cached', () => {
 describe('memo/createMemoizedBinder — validated proposals cached (seconds forever)', () => {
   it('an LLM-legged bind (injected llmPropose) is cached; a later plain ask hits with the identical bound', async () => {
     const binder = createMemoizedBinder();
-    const forced = new Map(real);
-    const scat = real.get('correlation-scatter-plot-chart')!;
-    forced.set('correlation-scatter-plot-chart', {
-      ...scat,
-      fast_path_eligible: true,
-      portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-    });
+    const forced = SCATTER_MANIFESTS;
     const proposal: BindingProposal = {
       template: 'correlation-scatter-plot-chart',
       title: 'Profit vs Sales',
@@ -353,13 +404,7 @@ describe('memo/createMemoizedBinder — validated proposals cached (seconds fore
 
   it('a validated Call-2 proposal is cached and served to a subsequent plain ask', async () => {
     const binder = createMemoizedBinder();
-    const forced = new Map(real);
-    const scat = real.get('correlation-scatter-plot-chart')!;
-    forced.set('correlation-scatter-plot-chart', {
-      ...scat,
-      fast_path_eligible: true,
-      portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-    });
+    const forced = SCATTER_MANIFESTS;
     const proposal: BindingProposal = {
       template: 'correlation-scatter-plot-chart',
       title: 'Profit vs Sales',
@@ -390,15 +435,15 @@ describe('memo/createMemoizedBinder — stale manifest hash misses', () => {
   it('a cache entry keyed on old manifests is not served after manifest content changes', async () => {
     const binder = createMemoizedBinder();
     const ask = 'bar chart of Sales by Region';
-    const warmA = await binder.bind({ ask, workbookXml: SUPERSTORE_XML, manifests: real });
+    const warmA = await binder.bind({ ask, workbookXml: SUPERSTORE_XML, manifests: BAR_MANIFESTS });
     expect(warmA.status).toBe('bound');
     expect(
-      (await binder.bind({ ask, workbookXml: SUPERSTORE_XML, manifests: real })).cache.hit,
+      (await binder.bind({ ask, workbookXml: SUPERSTORE_XML, manifests: BAR_MANIFESTS })).cache.hit,
     ).toBe(true);
 
     // Same ask, same schema, DIFFERENT manifest content ⇒ different key ⇒ miss.
-    const stale = new Map(real);
-    const bar = real.get('ranking-ordered-bar')!;
+    const stale = new Map(BAR_MANIFESTS);
+    const bar = BAR_MANIFESTS.get('ranking-ordered-bar')!;
     stale.set('ranking-ordered-bar', { ...bar, fast_path_eligible: false });
     const missed = await binder.bind({ ask, workbookXml: SUPERSTORE_XML, manifests: stale });
     expect(missed.cache.hit).toBe(false);
@@ -415,7 +460,7 @@ describe('memo/createMemoizedBinder — property: memo never changes results', (
     name: string;
     ask: string;
     workbookXml: string;
-    manifests: Map<string, TemplateManifest>;
+    manifests: Map<string, RuntimeTemplateDescriptor>;
     proposal?: BindingProposal;
   };
   const cases: Case[] = [

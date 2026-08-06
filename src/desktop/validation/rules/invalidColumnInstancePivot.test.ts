@@ -30,6 +30,54 @@ describe('invalid-column-instance-pivot rule', () => {
     expect(rule.validate(xml)).toHaveLength(0);
   });
 
+  it('accepts a Desktop-declared quantitative None instance in the same datasource scope', () => {
+    const xml = `<worksheet><table><view>
+      <datasource-dependencies datasource="DS">
+        <column-instance column="[Measure Names]" derivation="None" name="[none:Measure Names:qk]" pivot="key" type="quantitative" />
+      </datasource-dependencies>
+    </view><cols>[DS].[none:Measure Names:qk]</cols></table></worksheet>`;
+    expect(rule.validate(xml)).toHaveLength(0);
+  });
+
+  it('accepts an unqualified ref when the document has one matching declaration', () => {
+    const xml = `<worksheet>
+      <datasource-dependencies datasource="DS">
+        <column-instance column="[Measure Names]" derivation="None" name="[none:Measure Names:qk]" pivot="key" type="quantitative" />
+      </datasource-dependencies>
+      <cols>[none:Measure Names:qk]</cols>
+    </worksheet>`;
+    expect(rule.validate(xml)).toHaveLength(0);
+  });
+
+  it('does not let a declaration in Sheet A exempt the same fabricated ref in Sheet B', () => {
+    const xml = `<workbook><worksheets>
+      <worksheet name="Sheet A"><table><view>
+        <datasource-dependencies datasource="DS">
+          <column-instance column="[Measure Names]" derivation="None" name="[none:Measure Names:qk]" pivot="key" type="quantitative" />
+        </datasource-dependencies>
+      </view><cols>[DS].[none:Measure Names:qk]</cols></table></worksheet>
+      <worksheet name="Sheet B"><table><view>
+        <datasource-dependencies datasource="DS" />
+      </view><cols>[DS].[none:Measure Names:qk]</cols></table></worksheet>
+    </worksheets></workbook>`;
+
+    expect(rule.validate(xml)).toHaveLength(1);
+  });
+
+  it('does not let an orphan declaration under Sheet A become document-global for Sheet B', () => {
+    const xml = `<workbook><worksheets>
+      <worksheet name="Sheet A"><table>
+        <column-instance column="[Measure Names]" derivation="None" name="[none:Measure Names:qk]" pivot="key" type="quantitative" />
+        <cols>[none:Measure Names:qk]</cols>
+      </table></worksheet>
+      <worksheet name="Sheet B"><table>
+        <cols>[none:Measure Names:qk]</cols>
+      </table></worksheet>
+    </worksheets></workbook>`;
+
+    expect(rule.validate(xml)).toHaveLength(1);
+  });
+
   it('is case-insensitive on the none prefix and dedupes repeats', () => {
     const xml = '<x a="[ds].[NONE:Order Date:qk]" b="[ds].[none:Order Date:qk]"/>';
     expect(rule.validate(xml)).toHaveLength(1);
@@ -72,7 +120,7 @@ describe('invalid-column-instance-pivot rule', () => {
 
     it('exempts a double-quoted bin column definition too', () => {
       const xml =
-        '<worksheet><datasource-dependencies>' +
+        '<worksheet><datasource-dependencies datasource="ds">' +
         '<column name="[Sales (bin)]" role="dimension" type="ordinal"><calculation class="bin" formula="[Sales]" size="100" /></column>' +
         '<column-instance column="[Sales (bin)]" derivation="None" name="[none:Sales (bin):qk]" pivot="key" type="quantitative" />' +
         '</datasource-dependencies><cols>[ds].[none:Sales (bin):qk]</cols></worksheet>';
@@ -122,7 +170,6 @@ describe('invalid-column-instance-pivot rule', () => {
       </datasource-dependencies>
       <datasource-dependencies datasource="B">
         <column datatype="real" name="[Sales]" role="measure" type="quantitative" />
-        <column-instance column="[Sales]" derivation="None" name="[none:Sales:qk]" pivot="key" type="quantitative" />
       </datasource-dependencies>
     </view>
     <cols>[A].[none:Sales:qk]</cols>
@@ -134,7 +181,7 @@ describe('invalid-column-instance-pivot rule', () => {
       expect(issues[0].message).toMatch(/\[none:Sales:qk\]/);
     });
 
-    it('same datasource instance pointing at a non-bin field is still flagged', () => {
+    it('a bare column declaration does not establish a quantitative instance', () => {
       const xml = `<worksheet name="same-ds-mismatch">
   <table>
     <view>
@@ -143,7 +190,6 @@ describe('invalid-column-instance-pivot rule', () => {
           <calculation class="bin" decimals="2" formula="[Profit]" peg="0" size="100" />
         </column>
         <column datatype="real" name="[Sales]" role="measure" type="quantitative" />
-        <column-instance column="[Sales]" derivation="None" name="[none:Sales:qk]" pivot="key" type="quantitative" />
       </datasource-dependencies>
     </view>
     <cols>[Sample - Superstore].[none:Sales:qk]</cols>

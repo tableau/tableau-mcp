@@ -1,4 +1,4 @@
-import { resolveDerivation } from '../derivations.js';
+import { canonicalShortDerivation, resolveDerivation } from '../derivations.js';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createHash } from 'crypto';
 import * as xpath from 'xpath';
@@ -94,16 +94,32 @@ export interface RewriteFieldReferencesResult {
   droppedOptionalElements: string[];
 }
 
-/** Minimal, repo-agnostic manifest slot shape needed by the rewrite guard. */
+/** Metadata from the bound target field, keyed like the field mapping. */
+export interface FieldMetadataOverride {
+  datatype?: string;
+  type?: string;
+  semanticRole?: string;
+}
+
+/** Minimal runtime slot-descriptor shape needed by the rewrite guard. */
 export interface TemplateSlotReference {
-  /** Stable manifest/proposal identity; accepted as a field-mapping alias. */
+  /** Stable runtime slot identity; accepted as a field-mapping alias. */
   slot_id?: string;
   template_field: string;
   required: boolean;
   bindable?: boolean;
   kind?: string;
+  /** Authored binding derivation used to distinguish a slot instance from secondary references. */
+  derivation?: string;
   role?: readonly string[];
   purpose?: string;
+  /**
+   * SUGGESTION metadata only: the original donor field name/caption this slot was inferred
+   * from, carried through to help an agent pick an analogous field and to enrich unresolved-
+   * slot error text. Never a slot IDENTITY (that is `slot_id`/`template_field`) and never
+   * consumed by the rewrite/bind logic.
+   */
+  hint?: string;
 }
 
 /**
@@ -125,6 +141,8 @@ export interface TemplateSlotReference {
  *   whose template derivation matches, letting one base field carry several derivations independently. Values are RAW.
  * @param datasourceName - Actual (RAW) datasource name to substitute for `{{DATASOURCE}}`.
  * @param fieldMetadata - Optional datatype/type overrides applied to renamed base `<column>` definitions.
+ *   `semanticRole` is the BOUND field's own Tableau geo role (absent when it has none); see the
+ *   semantic-role reconciliation in step 1.
  * @param options - Per-apply options; see {@link RewriteFieldReferencesOptions}.
  * @returns Modified XML with datasource and field references replaced (escaped once via serialization).
  */
@@ -132,7 +150,7 @@ export function rewriteFieldReferences(
   templateXml: string,
   fieldMapping: Record<string, string>,
   datasourceName: string,
-  fieldMetadata?: Record<string, { datatype: string; type: string }>,
+  fieldMetadata?: Record<string, FieldMetadataOverride>,
   options?: RewriteFieldReferencesOptions,
 ): string {
   return rewriteFieldReferencesWithDiagnostics(
@@ -148,7 +166,7 @@ export function rewriteFieldReferencesWithDiagnostics(
   templateXml: string,
   fieldMapping: Record<string, string>,
   datasourceName: string,
-  fieldMetadata?: Record<string, { datatype: string; type: string }>,
+  fieldMetadata?: Record<string, FieldMetadataOverride>,
   options?: RewriteFieldReferencesOptions,
 ): RewriteFieldReferencesResult {
   // Parse with a silent error handler — the upstream caller validates the
@@ -209,6 +227,28 @@ export function rewriteFieldReferencesWithDiagnostics(
   for (const k of Object.keys(bareKeyInfo)) mappedFields.add(k);
   for (const k of Object.keys(qualifiedKeyInfo))
     mappedFields.add(k.substring(0, k.lastIndexOf('@')));
+  const structurallyDescribedFields = new Set(
+    options?.templateSlots
+      ?.filter((slot) => slot.bindable !== false)
+      .map((slot) => slot.template_field) ?? [],
+  );
+  const authoredDerivationsByField = new Map<string, Set<string>>();
+  for (const slot of options?.templateSlots ?? []) {
+    if (slot.bindable === false || !slot.derivation) continue;
+    const derivations = authoredDerivationsByField.get(slot.template_field) ?? new Set<string>();
+    derivations.add(canonicalShortDerivation(slot.derivation) ?? slot.derivation.toLowerCase());
+    authoredDerivationsByField.set(slot.template_field, derivations);
+  }
+
+  const primaryDerivationsByField = collectPrimaryAuthoredDerivations(doc);
+  for (const field of mappedFields) {
+    for (const derivation of authoredDerivationsByField.get(field) ?? []) {
+      if (primaryDerivationsByField.get(field)?.has(derivation)) continue;
+      throw new Error(
+        `Template binding descriptor derivation '${derivation}' for field '${field}' has no authored primary instance in the template XML.`,
+      );
+    }
+  }
 
   // Remove optional placeholders while the DOM still carries template names.
   // Doing this before mapped fields are renamed avoids confusing an actual user
@@ -231,10 +271,47 @@ export function rewriteFieldReferencesWithDiagnostics(
   // derivation wins; otherwise the bare key is the fallback.
   const resolveFieldInfo = (field: string, templateDeriv?: string): FieldInfo | undefined => {
     if (templateDeriv) {
-      const q = qualifiedKeyInfo[`${field}@${templateDeriv.toLowerCase()}`];
+      const bindingDerivation = canonicalShortDerivation(templateDeriv);
+      const q = bindingDerivation
+        ? qualifiedKeyInfo[`${field}@${bindingDerivation}`]
+        : undefined;
       if (q) return q;
     }
     return bareKeyInfo[field];
+  };
+  const isSecondaryDerivation = (field: string, templateDeriv: string): boolean => {
+    const authored = authoredDerivationsByField.get(field);
+    if (!authored || authored.size === 0) return false;
+    const bindingDerivation = canonicalShortDerivation(templateDeriv);
+    return !bindingDerivation || !authored.has(bindingDerivation);
+  };
+  const mappedInstanceShape = (
+    templateDeriv: string,
+    templateTrailing: string,
+    info: FieldInfo,
+  ): { derivation: string; trailing: string } => {
+    const derivationParts = templateDeriv.split(':');
+    derivationParts[derivationParts.length - 1] = info.derivation;
+    // The mapping chooses the target base and binding derivation. The role marker belongs
+    // to each authored reference: one logical field can be qk on an axis and ok inside a
+    // rank wrapper, so copying one mapping suffix onto every reference corrupts the view.
+    return { derivation: derivationParts.join(':'), trailing: templateTrailing };
+  };
+
+  // Metadata lookup mirroring resolveFieldInfo's key handling: the binder keys
+  // fieldMetadata by `template_field` OR `template_field@derivation` (whichever the
+  // field_mapping used), so a qualified-key slot must still find its own metadata.
+  // All derivations of one template field resolve to one base column (enforced
+  // below), so any qualified entry for that field describes the same column.
+  const resolveFieldMetadata = (field: string): FieldMetadataOverride | undefined => {
+    if (!fieldMetadata) return undefined;
+    const bare = fieldMetadata[field];
+    if (bare) return bare;
+    for (const [key, value] of Object.entries(fieldMetadata)) {
+      const atIdx = key.lastIndexOf('@');
+      if (atIdx > 0 && key.substring(0, atIdx) === field) return value;
+    }
+    return undefined;
   };
 
   // Single target BASE column name per mapped template field. All derivations of
@@ -284,10 +361,29 @@ export function rewriteFieldReferencesWithDiagnostics(
         col.setAttribute('datatype', isDimension ? 'string' : 'real');
       }
 
-      if (fieldMetadata && fieldMetadata[templateFieldName]) {
-        const meta = fieldMetadata[templateFieldName];
-        if (col.hasAttribute('datatype')) col.setAttribute('datatype', meta.datatype);
-        if (col.hasAttribute('type')) col.setAttribute('type', meta.type);
+      const meta = resolveFieldMetadata(templateFieldName);
+      if (meta) {
+        if (meta.datatype && col.hasAttribute('datatype'))
+          col.setAttribute('datatype', meta.datatype);
+        if (meta.type && col.hasAttribute('type')) col.setAttribute('type', meta.type);
+      }
+
+      // SEMANTIC-ROLE RECONCILIATION. `semantic-role` asserts that Tableau's geocoder
+      // recognizes this column, and a map template's rows/cols are the GENERATED
+      // Latitude/Longitude those roles produce. Renaming the column without
+      // reconciling the role transplants the donor's geography onto the bound field:
+      // a `[City]` slot bound to a plain string measure-like dimension emits
+      // `semantic-role='[City].[Name]'` for a field the target datasource never
+      // geocodes, and the sheet renders an empty map with populated legends.
+      //
+      // The target datasource is the authority, so the donor attribute is REPLACED
+      // when the bound field has its own role and REMOVED when it has none. Removing
+      // is safe: Desktop mirrors the datasource-level declaration onto the sheet, so
+      // a genuinely geocodable field keeps working via its datasource role. Absence
+      // of metadata therefore means "assert nothing", never "keep the donor's".
+      if (col.hasAttribute('semantic-role')) {
+        if (meta?.semanticRole) col.setAttribute('semantic-role', meta.semanticRole);
+        else col.removeAttribute('semantic-role');
       }
     }
   }
@@ -315,14 +411,20 @@ export function rewriteFieldReferencesWithDiagnostics(
     const { deriv: tDeriv, field: tField, trailing: tTrailing } = parsed;
     const fieldInfo = resolveFieldInfo(tField, tDeriv);
 
+    if (isSecondaryDerivation(tField, tDeriv)) {
+      colInst.setAttribute('name', `[${tDeriv}:${baseTarget[tField]}:${tTrailing}]`);
+      continue;
+    }
+
     if (tDeriv.includes(':')) {
       // COMPOUND (table-calc) derivation: preserve the wrapper + role, swap only
       // the base-aggregation segment (the last one) + the field name.
-      const derivParts = tDeriv.split(':');
       const newField = fieldInfo ? fieldInfo.name : baseTarget[tField];
       if (!newField) continue;
-      if (fieldInfo) derivParts[derivParts.length - 1] = fieldInfo.derivation;
-      colInst.setAttribute('name', `[${derivParts.join(':')}:${newField}:${tTrailing}]`);
+      const shape = fieldInfo
+        ? mappedInstanceShape(tDeriv, tTrailing, fieldInfo)
+        : { derivation: tDeriv, trailing: tTrailing };
+      colInst.setAttribute('name', `[${shape.derivation}:${newField}:${shape.trailing}]`);
       if (fieldInfo && colInst.hasAttribute('derivation')) {
         colInst.setAttribute('derivation', fieldInfo.derivationAttr);
       }
@@ -330,7 +432,8 @@ export function rewriteFieldReferencesWithDiagnostics(
     }
 
     if (fieldInfo) {
-      colInst.setAttribute('name', `[${fieldInfo.derivation}:${fieldInfo.name}:${fieldInfo.role}]`);
+      const shape = mappedInstanceShape(tDeriv, tTrailing, fieldInfo);
+      colInst.setAttribute('name', `[${shape.derivation}:${fieldInfo.name}:${shape.trailing}]`);
       if (colInst.hasAttribute('derivation')) {
         colInst.setAttribute('derivation', fieldInfo.derivationAttr);
       }
@@ -364,6 +467,31 @@ export function rewriteFieldReferencesWithDiagnostics(
     }
   }
 
+  // 3b-i. Rewrite a calc's SOURCE-FIELD attribute: <calculation column='[State]'>.
+  //   A `categorical-bin` (group) calc names its source field on `@column` rather
+  //   than in a formula, so §3b's formula rewrite never sees it. When that source
+  //   field is the bound field, the donor name — or a live `{{field_base_N}}` token —
+  //   survives into the emitted sheet and the residue guard throws.
+  //
+  //   The XPath is deliberately `//column/calculation`, not `//calculation`:
+  //   `<connection><calculations>` entries declare columns in the donor connection's namespace.
+  //   A template never injects a connection, so rewriting that second form would rename
+  //   a declaration nothing in the sheet points at. Only the field-reference form is
+  //   in scope.
+  //
+  //   Only the simple `[Name]` spelling is matched — same shape §2 uses for
+  //   `column-instance@column` — so a qualified or derived value is left verbatim.
+  const calcSourceRefs = selectElements('//column/calculation[@column]', doc);
+  for (const calc of calcSourceRefs) {
+    const columnValue = calc.getAttribute('column');
+    if (!columnValue) continue;
+    const simpleMatch = columnValue.match(/^\[([^\]:]+)\]$/);
+    if (simpleMatch && mappedFields.has(simpleMatch[1])) {
+      const target = baseTarget[simpleMatch[1]];
+      if (target) calc.setAttribute('column', `[${target}]`);
+    }
+  }
+
   // 3b-ii. Rewrite bare [FieldName] refs inside a calc COLUMN's caption (an
   //   auto-named calc's caption mirrors its formula). Only bracket-bearing
   //   captions are touched, so a purely human caption is left verbatim.
@@ -390,8 +518,9 @@ export function rewriteFieldReferencesWithDiagnostics(
 
     const info = resolveFieldInfo(tField, tDeriv);
     const baseName = baseTarget[tField];
-    const deriv = info ? info.derivation : tDeriv;
-    const role = info ? info.role : tRole;
+    const preserveTemplateShape = isSecondaryDerivation(tField, tDeriv);
+    const deriv = !preserveTemplateShape && info ? info.derivation : tDeriv;
+    const role = tRole;
 
     if (baseName === tField && deriv === tDeriv) continue;
 
@@ -416,21 +545,49 @@ export function rewriteFieldReferencesWithDiagnostics(
       // The pre-field derivation segment may be COMPOUND (colons allowed) for
       // table-calc refs; escapeRegex guards the user-derived field token.
       const regex = new RegExp(
-        `\\[\\{\\{DATASOURCE\\}\\}\\]\\.\\[([^\\[\\]]+?):${escapeRegex(field)}:([^\\[\\]]+)\\]`,
+        `\\[[^\\[\\]]+\\]\\.\\[([^\\[\\]]+?):${escapeRegex(field)}:([^\\[\\]]+)\\]`,
         'g',
       );
       out = out.replace(regex, (whole, templateDeriv: string, templateTrailing: string) => {
         const info = resolveFieldInfo(field, templateDeriv);
+        if (isSecondaryDerivation(field, templateDeriv)) {
+          const target = baseTarget[field];
+          return target
+            ? `[${datasourceName}].[${templateDeriv}:${target}:${templateTrailing}]`
+            : whole;
+        }
         if (templateDeriv.includes(':')) {
           const newField = info ? info.name : baseTarget[field];
           if (!newField) return whole;
-          const derivParts = templateDeriv.split(':');
-          if (info) derivParts[derivParts.length - 1] = info.derivation;
-          return `[${datasourceName}].[${derivParts.join(':')}:${newField}:${templateTrailing}]`;
+          const shape = info
+            ? mappedInstanceShape(templateDeriv, templateTrailing, info)
+            : { derivation: templateDeriv, trailing: templateTrailing };
+          return `[${datasourceName}].[${shape.derivation}:${newField}:${shape.trailing}]`;
         }
         if (!info) return whole;
-        return `[${datasourceName}].[${info.derivation}:${info.name}:${info.role}]`;
+        const shape = mappedInstanceShape(templateDeriv, templateTrailing, info);
+        return `[${datasourceName}].[${shape.derivation}:${info.name}:${shape.trailing}]`;
       });
+      const unqualifiedRegex = new RegExp(
+        `\\[([^\\[\\]]+?):${escapeRegex(field)}:([^\\[\\]]+)\\]`,
+        'g',
+      );
+      out = out.replace(
+        unqualifiedRegex,
+        (whole, templateDeriv: string, templateTrailing: string) => {
+          const info = resolveFieldInfo(field, templateDeriv);
+          if (isSecondaryDerivation(field, templateDeriv)) {
+            const target = baseTarget[field];
+            return target ? `[${templateDeriv}:${target}:${templateTrailing}]` : whole;
+          }
+          const newField = info ? info.name : baseTarget[field];
+          if (!newField) return whole;
+          const shape = info
+            ? mappedInstanceShape(templateDeriv, templateTrailing, info)
+            : { derivation: templateDeriv, trailing: templateTrailing };
+          return `[${shape.derivation}:${newField}:${shape.trailing}]`;
+        },
+      );
     }
     return out;
   };
@@ -452,6 +609,21 @@ export function rewriteFieldReferencesWithDiagnostics(
     }
   }
 
+  // Explicit field tokens are structural identities, so exact bare references may occur in any XML class.
+  for (const field of structurallyDescribedFields) {
+    const target = baseTarget[field];
+    if (!target) continue;
+    const barePattern = new RegExp(`\\[${escapeRegex(field)}\\]`, 'g');
+    for (const textNode of allText) {
+      textNode.data = textNode.data.replace(barePattern, () => `[${target}]`);
+    }
+    for (const elem of allElements) {
+      for (const attr of Array.from(elem.attributes) as Attr[]) {
+        attr.value = attr.value.replace(barePattern, () => `[${target}]`);
+      }
+    }
+  }
+
   // Fill remaining {{DATASOURCE}} placeholders in text nodes and attribute
   // values. Replacer FUNCTIONS keep `$`-sequences in the datasource name literal.
   const allNodes = xpath.select('//text() | //*/@*', doc as unknown as Node) as Node[];
@@ -466,6 +638,17 @@ export function rewriteFieldReferencesWithDiagnostics(
       if (newValue !== attrNode.value) attrNode.value = newValue;
     }
   }
+
+  // 6. Synthesize any <column-instance> DECLARATION a shelf/encoding references
+  //    but that the donor never declared. A bookmark commonly declares instances
+  //    only for its rows/cols/lod pills and leaves an aggregation placed on a mark
+  //    ENCODING (color/size/tooltip) undeclared — native Desktop lazily materializes
+  //    such an instance against the live base column, but the External-API apply
+  //    path validates dependencies, cannot resolve the undeclared instance, and
+  //    rejects the sheet with "no field named '<base>'" plus a blocking modal (the
+  //    base column IS present; only its instance declaration is missing). Runs after
+  //    the rename + {{DATASOURCE}} passes so every reference carries its final name.
+  synthesizeReferencedColumnInstances(doc, datasourceName);
 
   // Defense in depth after every substitution pass: a required template field
   // that was not successfully mapped must never reach Desktop as a literal
@@ -567,18 +750,6 @@ function normalizeFieldMapping(
       .map((slot) => [slot.slot_id, slot]),
   );
   const byTemplateField = new Map(slots.map((slot) => [slot.template_field, slot]));
-  const bindableSlots = slots.filter((slot) => slot.bindable !== false);
-  const positionalAlias = new Map<TemplateSlotReference, string>();
-  for (const [index, slot] of bindableSlots.entries()) {
-    const alias = `{{field_base_${index + 1}}}`;
-    const declaredOwner = byTemplateField.get(alias);
-    // Legacy concrete-field manifests use positional placeholders in computed
-    // sorts. Mixed manifests instead declare those placeholders as real slots;
-    // never let an earlier concrete slot steal an explicitly owned token.
-    if (!declaredOwner || declaredOwner === slot) {
-      positionalAlias.set(slot, alias);
-    }
-  }
   const normalized: Record<string, string> = {};
 
   for (const [rawKey, value] of Object.entries(fieldMapping)) {
@@ -588,10 +759,6 @@ function normalizeFieldMapping(
       ? `${slot.template_field}${derivation ? `@${derivation}` : ''}`
       : rawKey;
     addNormalizedMapping(normalized, canonical, value);
-    const alias = slot ? positionalAlias.get(slot) : undefined;
-    if (alias && alias !== slot?.template_field) {
-      addNormalizedMapping(normalized, `${alias}${derivation ? `@${derivation}` : ''}`, value);
-    }
   }
 
   return normalized;
@@ -714,8 +881,6 @@ function pruneUnusedOptionalTemplateSlots(
   if (!slots || slots.length === 0) return;
   const rawMappedFields = rawMappingFields(fieldMapping);
   const pruned = new Set<string>();
-  const bindableSlots = slots.filter((slot) => slot.bindable !== false);
-  const declaredTemplateFields = new Set(slots.map((slot) => slot.template_field));
   for (const slot of slots) {
     if (
       slot.bindable === false ||
@@ -726,22 +891,8 @@ function pruneUnusedOptionalTemplateSlots(
     ) {
       continue;
     }
-    const position = bindableSlots.indexOf(slot);
-    const positionalReference =
-      position >= 0 ? `{{field_base_${position + 1}}}` : undefined;
-    const references = [
-      slot.template_field,
-      ...(positionalReference &&
-      (!declaredTemplateFields.has(positionalReference) ||
-        positionalReference === slot.template_field)
-        ? [positionalReference]
-        : []),
-    ];
-    for (const reference of new Set(references)) {
-      if (pruned.has(reference)) continue;
-      pruneOptionalTemplateField(doc, reference, droppedOptionalElements);
-      pruned.add(reference);
-    }
+    pruneOptionalTemplateField(doc, slot.template_field, droppedOptionalElements);
+    pruned.add(slot.template_field);
   }
 }
 
@@ -761,20 +912,25 @@ function documentReferencesTemplateField(doc: Document, templateField: string): 
 }
 
 function userFacingFieldDescription(slot: TemplateSlotReference): string {
-  switch (slot.kind) {
-    case 'quantitative':
-      return 'a quantitative value field';
-    case 'categorical':
-      return 'a categorical field';
-    case 'quantitative-or-categorical':
-      return 'a quantitative or categorical field';
-    case 'temporal':
-      return 'a date field';
-    case 'geo':
-      return 'a geographic field';
-    default:
-      return 'a field';
-  }
+  const base = ((): string => {
+    switch (slot.kind) {
+      case 'quantitative':
+        return 'a quantitative value field';
+      case 'categorical':
+        return 'a categorical field';
+      case 'quantitative-or-categorical':
+        return 'a quantitative or categorical field';
+      case 'temporal':
+        return 'a date field';
+      case 'geo':
+        return 'a geographic field';
+      default:
+        return 'a field';
+    }
+  })();
+  // The hint is suggestion metadata (the original donor field), so surface it as
+  // "like <hint>" to orient the agent toward an analogous field on the new dataset.
+  return slot.hint ? `${base} (like ${JSON.stringify(slot.hint)})` : base;
 }
 
 function assertNoUnresolvedTemplateSlots(
@@ -834,6 +990,68 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Binding derivations that the template actually authors on a primary placement. */
+function collectPrimaryAuthoredDerivations(doc: Document): Map<string, Set<string>> {
+  const byField = new Map<string, Set<string>>();
+  const recordInstance = (instanceName: string): void => {
+    const parsed = parseInstanceName(instanceName);
+    if (!parsed) return;
+    const derivation = canonicalShortDerivation(parsed.deriv);
+    if (!derivation) return;
+    const values = byField.get(parsed.field) ?? new Set<string>();
+    values.add(derivation);
+    byField.set(parsed.field, values);
+  };
+  const recordQualifiedRefs = (value: string | null): void => {
+    if (!value) return;
+    let qualified = false;
+    for (const match of value.matchAll(/\[[^\[\]]+\]\.\[([^\[\]]+)\]/g)) {
+      qualified = true;
+      recordInstance(`[${match[1]}]`);
+    }
+    if (!qualified && /^\[[^\[\]]+\]$/.test(value)) recordInstance(value);
+  };
+
+  for (const tag of ['rows', 'cols', 'mark']) {
+    for (const element of selectElements(`//${tag}`, doc)) {
+      recordQualifiedRefs(element.textContent);
+    }
+  }
+  for (const encodings of selectElements('//encodings', doc)) {
+    for (const child of Array.from(encodings.getElementsByTagName('*')) as unknown as Element[]) {
+      recordQualifiedRefs(child.getAttribute('column'));
+    }
+  }
+  for (const filter of selectElements('//filter', doc)) {
+    recordQualifiedRefs(filter.getAttribute('column'));
+  }
+  for (const slices of selectElements('//slices', doc)) {
+    for (const column of Array.from(slices.getElementsByTagName('column')) as unknown as Element[]) {
+      recordQualifiedRefs(column.textContent);
+    }
+  }
+  for (const line of selectElements('//reference-line', doc)) {
+    recordQualifiedRefs(line.getAttribute('axis-column'));
+    recordQualifiedRefs(line.getAttribute('value-column'));
+  }
+  for (const tag of ['title', 'customized-label']) {
+    for (const element of selectElements(`//${tag}`, doc)) {
+      recordQualifiedRefs(element.textContent);
+    }
+  }
+
+  // Placed calc leaves are authored as bare formula refs and therefore bind at `none`.
+  for (const calculation of selectElements('//column/calculation[@formula]', doc)) {
+    for (const match of (calculation.getAttribute('formula') ?? '').matchAll(/\[([^\]:]+)\]/g)) {
+      const values = byField.get(match[1]) ?? new Set<string>();
+      values.add('none');
+      byField.set(match[1], values);
+    }
+  }
+
+  return byField;
+}
+
 /**
  * Parse a column-instance NAME (`[<deriv>:<field>:<role>]`) into its derivation,
  * base field name, and trailing role segment — colon-tolerantly, so COMPOUND
@@ -861,6 +1079,96 @@ function parseInstanceName(
   const trailing = parts.slice(roleIdx).join(':');
   if (!deriv || !field) return null;
   return { deriv, field, trailing };
+}
+
+/** Instance `type` attribute implied by a simple role marker. */
+function instanceTypeFromRole(role: string): string {
+  switch (role) {
+    case 'nk':
+      return 'nominal';
+    case 'ok':
+      return 'ordinal';
+    case 'qk':
+    default:
+      return 'quantitative';
+  }
+}
+
+/**
+ * Collect every datasource-qualified column-instance REFERENCE in the document,
+ * keyed by the datasource it is qualified against. A reference is any
+ * `[<datasource>].[<deriv>:<field>:<role>]` (2+ colons inside the second bracket)
+ * appearing in an attribute value or text node — i.e. a shelf/encoding/filter
+ * pill. The unqualified `<column-instance name='[...]'>` DECLARATIONS carry a
+ * single bracket and are therefore not matched, so declarations never masquerade
+ * as references.
+ */
+function collectQualifiedInstanceRefs(doc: Document): Map<string, Set<string>> {
+  const byDatasource = new Map<string, Set<string>>();
+  const pattern = /\[([^\[\]]+)\]\.\[([^\[\]]+:[^\[\]]+:[^\[\]]+)\]/g;
+  const record = (value: string): void => {
+    for (const m of value.matchAll(pattern)) {
+      const set = byDatasource.get(m[1]) ?? new Set<string>();
+      set.add(`[${m[2]}]`);
+      byDatasource.set(m[1], set);
+    }
+  };
+  for (const element of selectElements('//*[@*]', doc)) {
+    for (const attribute of Array.from(element.attributes) as Attr[]) record(attribute.value);
+  }
+  for (const text of selectTexts('//text()', doc)) record(text.data);
+  return byDatasource;
+}
+
+/**
+ * Synthesize a `<column-instance>` declaration inside each
+ * `<datasource-dependencies>` block for every instance the sheet REFERENCES but
+ * does not DECLARE — the encoding-shelf dangling-instance defect (task #30). A
+ * declaration is added only when the referenced instance's BASE `<column>` is
+ * already declared in the same block: the diagnosed case is an undeclared
+ * aggregation over a present base column, and gating on the column keeps this
+ * from fabricating declarations for generated/special fields whose columns the
+ * block never carries. Compound (table-calc) instances are left alone — they
+ * declare differently and were never the dangling case.
+ */
+function synthesizeReferencedColumnInstances(doc: Document, datasourceName: string): void {
+  const depsBlocks = selectElements('//datasource-dependencies', doc);
+  if (depsBlocks.length === 0) return;
+  const referencedByDatasource = collectQualifiedInstanceRefs(doc);
+
+  for (const deps of depsBlocks) {
+    const dsName = deps.getAttribute('datasource') || datasourceName;
+    const referenced = referencedByDatasource.get(dsName);
+    if (!referenced || referenced.size === 0) continue;
+
+    const declaredInstances = new Set<string>();
+    for (const ci of Array.from(deps.getElementsByTagName('column-instance'))) {
+      const n = ci.getAttribute('name');
+      if (n) declaredInstances.add(n);
+    }
+    const declaredColumns = new Set<string>();
+    for (const col of Array.from(deps.getElementsByTagName('column'))) {
+      const n = col.getAttribute('name');
+      if (n) declaredColumns.add(n);
+    }
+
+    for (const instName of referenced) {
+      if (declaredInstances.has(instName)) continue;
+      const parsed = parseInstanceName(instName);
+      if (!parsed) continue;
+      const { deriv, field, trailing } = parsed;
+      if (deriv.includes(':')) continue; // compound table-calc — out of scope
+      if (!declaredColumns.has(`[${field}]`)) continue; // base column absent — don't fabricate
+      const decl = doc.createElement('column-instance');
+      decl.setAttribute('column', `[${field}]`);
+      decl.setAttribute('derivation', resolveDerivation(deriv));
+      decl.setAttribute('name', instName);
+      decl.setAttribute('pivot', 'key');
+      decl.setAttribute('type', instanceTypeFromRole(trailing));
+      deps.appendChild(decl);
+      declaredInstances.add(instName);
+    }
+  }
 }
 
 /**
@@ -930,11 +1238,9 @@ function rewriteCalcRefs(input: string, renameMap: Map<string, string>): string 
   return input.replace(/\[([^\]]+)\]/g, (whole, inner: string) => {
     const bare = renameMap.get(inner);
     if (bare) return `[${bare}]`;
-    const parts = inner.split(':');
-    if (parts.length === 3) {
-      const renamed = renameMap.get(parts[1]);
-      if (renamed) return `[${parts[0]}:${renamed}:${parts[2]}]`;
-    }
+    const parsed = parseInstanceName(whole);
+    const renamed = parsed ? renameMap.get(parsed.field) : undefined;
+    if (parsed && renamed) return `[${parsed.deriv}:${renamed}:${parsed.trailing}]`;
     return whole;
   });
 }

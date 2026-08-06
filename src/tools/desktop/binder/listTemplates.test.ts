@@ -1,229 +1,371 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
-import { loadManifests } from '../../../desktop/binder/manifest.js';
-import type { Family, TemplateManifest } from '../../../desktop/binder/manifest-types.js';
+import {
+  listTemplateCatalog,
+  readBookmarkFromCatalogEntry,
+} from '../../../desktop/templates/templatePath.js';
+import { createTemplateRuntimeSnapshot } from '../../../desktop/templates/templateRuntimeSnapshot.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { deriveFastPathBlockers, getListTemplatesTool } from './listTemplates.js';
+import { getListTemplatesTool } from './listTemplates.js';
 
-// Exercises the tool against the REAL bundled provider (the data ships in-repo, so this
-// stays hermetic) — proving list-templates is a genuine consumer of the milestone-1
-// AuthoringIntelligenceProvider seam, not a raw loadManifests() reader.
+const BOOKMARK =
+  "<?xml version='1.0'?><bookmark version='10.1'>" +
+  '<datasources>' +
+  "<datasource name='federated.secret' caption='Donor Datasource Secret'>" +
+  "<column name='[Donor Measure Secret]' datatype='real' role='measure' type='quantitative'/>" +
+  "<column name='[Donor Dimension Secret]' datatype='string' role='dimension' type='nominal'/>" +
+  '</datasource>' +
+  '</datasources>' +
+  '<table>' +
+  '<rows>[federated.secret].[none:Donor Dimension Secret:nk]</rows>' +
+  '<cols>[federated.secret].[sum:Donor Measure Secret:qk]</cols>' +
+  '</table>' +
+  '</bookmark>';
 
-const allManifests = [...loadManifests().values()];
+const PASS1_BLOCKED_BOOKMARK = BOOKMARK.replace(
+  '</table>',
+  "<column-instance column='[Donor Measure Secret]' derivation='Sum' " +
+    "name='[sum:Donor Measure Secret:qk]' pivot='key' type='quantitative'>" +
+    "<table-calc ordering-type='Field' ordering-field='[federated.secret].[Donor Dimension Secret]'/>" +
+    '</column-instance></table>',
+);
 
-describe('listTemplatesTool', () => {
-  it('should create a tool instance with correct properties', () => {
+describe('list-templates', () => {
+  const originalTemplatesDir = process.env['TEMPLATES_DIR'];
+  const temporaryRoots: string[] = [];
+
+  afterEach(() => {
+    if (originalTemplatesDir === undefined) delete process.env['TEMPLATES_DIR'];
+    else process.env['TEMPLATES_DIR'] = originalTemplatesDir;
+    for (const root of temporaryRoots.splice(0)) {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  function catalog(names: string[]): void {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-list-templates-'));
+    temporaryRoots.push(root);
+    for (const name of names) writeFileSync(join(root, `${name}.tbm`), BOOKMARK);
+    process.env['TEMPLATES_DIR'] = root;
+  }
+
+  it('is a read-only, caller-neutral catalog tool', () => {
     const tool = getListTemplatesTool(new DesktopMcpServer());
     expect(tool.name).toBe('list-templates');
-    expect(tool.description).toBe('List chart templates.');
+    expect(tool.description).toBe('Search available worksheet templates.');
     expect(tool.paramsSchema).toMatchObject({
-      family: expect.any(Object),
-      fastPathOnly: expect.any(Object),
+      query: expect.any(Object),
+      cursor: expect.any(Object),
+      limit: expect.any(Object),
+      includeSlots: expect.any(Object),
+      pass1EligibleOnly: expect.any(Object),
     });
+    expect(tool.paramsSchema).not.toHaveProperty('family');
+    expect(tool.paramsSchema).not.toHaveProperty('fastPathOnly');
     expect(tool.annotations).toMatchObject({
       readOnlyHint: true,
-      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
     });
   });
 
-  it('lists the full bundled set with an HONEST bundled-snapshot status', async () => {
-    const body = await getBody({});
-    expect(body.total).toBe(allManifests.length);
-    expect(body.count).toBe(allManifests.length);
-    expect(body.templates).toHaveLength(allManifests.length);
-    // Freshness is surfaced honestly through the provider seam.
-    expect(body.status.kind).toBe('bundled');
-    expect(body.status.freshness).toBe('bundled-snapshot');
-    expect(body.status.satisfies_exec_freshness).toBe(false);
-    expect(body.status.content_version).toMatch(/^\d+\.\d+\.\d+\+content\.\d{4}-\d{2}-\d{2}$/);
+  it('searches template IDs and paginates in deterministic ID order', async () => {
+    catalog(['zeta-chart', 'beta-chart', 'alpha-chart']);
+
+    const first = await getBody({ limit: 2 });
+    expect(first.total).toBe(3);
+    expect(first.candidateCount).toBe(3);
+    expect(first.scanned).toBe(2);
+    expect(first.templates.map((template: { template: string }) => template.template)).toEqual([
+      'alpha-chart',
+      'beta-chart',
+    ]);
+    expect(first.nextCursor).toBe('beta-chart');
+
+    const second = await getBody({ limit: 2, cursor: first.nextCursor });
+    expect(second.templates.map((template: { template: string }) => template.template)).toEqual([
+      'zeta-chart',
+    ]);
+    expect(second.nextCursor).toBeNull();
+
+    const searched = await getBody({ query: 'BETA', limit: 10 });
+    expect(searched.templates.map((template: { template: string }) => template.template)).toEqual([
+      'beta-chart',
+    ]);
   });
 
-  it('summarizes each template with family / slots / fast-path status', async () => {
+  it('returns factual compact provenance and computed eligibility without structural internals', async () => {
+    catalog(['safe-bar']);
+
     const body = await getBody({});
-    for (const t of body.templates) {
-      expect(typeof t.family).toBe('string');
-      expect(typeof t.fast_path_eligible).toBe('boolean');
-      expect(Array.isArray(t.slots)).toBe(true);
-      for (const s of t.slots) {
-        expect(typeof s.slot_id).toBe('string');
-        expect(typeof s.kind).toBe('string');
-        expect(typeof s.required).toBe('boolean');
-        expect(typeof s.bindable).toBe('boolean');
-      }
-    }
-    // Templates come back sorted by name for a stable listing.
-    const names = body.templates.map((t) => t.template);
-    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+    expect(body.templates).toEqual([
+      {
+        template: 'safe-bar',
+        provenance: 'dev-override',
+        overridesLowerPrecedence: false,
+        pass1_eligible: true,
+        pass1_blockers: [],
+        slot_signature: {
+          total: 2,
+          required: 2,
+          kinds: ['categorical', 'quantitative'],
+        },
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toMatch(
+      /Donor Measure Secret|Donor Dimension Secret|Donor Datasource Secret|<bookmark|<worksheet|formula/i,
+    );
   });
 
-  it('exposes slot purpose and examples together in template summaries', async () => {
-    const body = await getBody({});
-    const ranking = body.templates.find((t) => t.template === 'ranking-ordered-bar');
-    expect(ranking).toBeDefined();
+  it('returns bounded structural slot facts for one requested detail row', async () => {
+    catalog(['safe-bar']);
 
-    expect(ranking!.slots).toEqual(
+    const result = await getToolResult({ includeSlots: true, limit: 1 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(Buffer.byteLength(result.content[0].text, 'utf-8')).toBeLessThanOrEqual(12_288);
+    const body = JSON.parse(result.content[0].text);
+    expect(body.templates[0].slots).toEqual([
+      expect.objectContaining({
+        slot_id: 'field_base_1',
+        kind: 'categorical',
+        derivation: 'none',
+        required: true,
+        role: ['rows'],
+      }),
+      expect.objectContaining({
+        slot_id: 'field_base_2',
+        kind: 'quantitative',
+        derivation: 'sum',
+        required: true,
+        role: ['cols'],
+      }),
+    ]);
+    expect(result.content[0].text).not.toMatch(
+      /Donor Measure Secret|Donor Dimension Secret|Donor Datasource Secret|template_field|hint|formula|<bookmark|<worksheet/i,
+    );
+  });
+
+  it('returns semantic roles for neutral geo slots from a real choropleth TBM', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const body = await getBody({
+      query: 'spatial-choropleth-map',
+      includeSlots: true,
+      limit: 1,
+    });
+
+    expect(body.templates).toHaveLength(1);
+    expect(body.templates[0].slots).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          slot_id: 'region',
-          purpose: expect.stringContaining('ranked horizontal bar'),
-          examples: expect.arrayContaining(['Country', 'Product Line']),
+          slot_id: 'field_base_2',
+          kind: 'geo',
+          semantic_role: '[Country].[ISO3166_2]',
         }),
         expect.objectContaining({
-          slot_id: 'sales',
-          purpose: expect.stringContaining('bar length'),
-          examples: expect.arrayContaining(['Points', 'Revenue']),
+          slot_id: 'field_base_3',
+          kind: 'geo',
+          semantic_role: '[State].[Name]',
         }),
       ]),
     );
   });
 
-  it('filters to a single family when family is provided', async () => {
-    const expected = allManifests.filter((m) => m.family === 'ranking').map((m) => m.template);
-    expect(expected.length).toBeGreaterThan(0); // guard the fixture assumption
+  it('filters on eligibility computed from the TBM instead of catalog policy', async () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-list-templates-eligibility-'));
+    temporaryRoots.push(root);
+    writeFileSync(join(root, 'eligible.tbm'), BOOKMARK);
+    writeFileSync(join(root, 'blocked.tbm'), PASS1_BLOCKED_BOOKMARK);
+    process.env['TEMPLATES_DIR'] = root;
 
-    const body = await getBody({ family: 'ranking' });
-    expect(body.count).toBe(expected.length);
-    expect(body.templates.every((t) => t.family === 'ranking')).toBe(true);
-    expect(body.count).toBeLessThan(body.total);
-  });
-
-  it('filters to fast-path-eligible templates when fastPathOnly is true', async () => {
-    const expectedFastPath = allManifests.filter((m) => m.fast_path_eligible).length;
-    expect(expectedFastPath).toBeGreaterThan(0); // guard the fixture assumption
-
-    const body = await getBody({ fastPathOnly: true });
-    expect(body.count).toBe(expectedFastPath);
-    expect(body.fastPathCount).toBe(expectedFastPath);
-    expect(body.templates.every((t) => t.fast_path_eligible)).toBe(true);
-  });
-
-  it('derives an honest fast_path_blocker for ineligible templates the manifest left empty', async () => {
-    // A GREEN template that is fast_path_eligible: false with an EMPTY explicit blocker
-    // list would otherwise report `[]` — no signal. render_verified 'none' yields the
-    // single derived, manifest-traceable blocker (Finding 7).
-    const ineligibleEmpty: Pick<
-      TemplateManifest,
-      'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
-    > = {
-      fast_path_eligible: false,
-      fast_path_blockers: [],
-      portability_evidence: { fixture_bind: true, render_verified: 'none' },
-    };
-    expect(deriveFastPathBlockers(ineligibleEmpty)).toEqual([
-      'not-live-render-verified: this template has no live render verification stamp',
+    const all = await getBody({ limit: 10 });
+    expect(all.templates.map((template: { template: string }) => template.template)).toEqual([
+      'blocked',
+      'eligible',
     ]);
+    expect(
+      all.templates.find((template: { template: string }) => template.template === 'blocked'),
+    ).toMatchObject({
+      pass1_eligible: false,
+      pass1_blockers: [expect.stringContaining('unresolved-table-calc-bareRefs')],
+    });
+
+    const eligibleOnly = await getBody({ limit: 10, pass1EligibleOnly: true });
+    expect(
+      eligibleOnly.templates.map((template: { template: string }) => template.template),
+    ).toEqual(['eligible']);
   });
 
-  it('passes explicit manifest blockers through untouched (no derivation)', () => {
-    const withBlockers: Pick<
-      TemplateManifest,
-      'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
-    > = {
-      fast_path_eligible: false,
-      fast_path_blockers: ['GENERATED_GEO_REQUIRED', 'PARAMETER_REQUIRED'],
-      portability_evidence: { fixture_bind: false, render_verified: 'none' },
-    };
-    expect(deriveFastPathBlockers(withBlockers)).toEqual([
-      'GENERATED_GEO_REQUIRED',
-      'PARAMETER_REQUIRED',
+  it('examines only the requested candidate page when filtering for pass-1 eligibility', async () => {
+    catalog(Array.from({ length: 51 }, (_, index) => `chart-${String(index).padStart(2, '0')}`));
+    let resolutions = 0;
+    const tool = getListTemplatesTool(new DesktopMcpServer(), {
+      listCatalog: () => listTemplateCatalog(),
+      resolve: (entry) => {
+        resolutions += 1;
+        const bookmark = readBookmarkFromCatalogEntry(entry);
+        return bookmark === null ? null : createTemplateRuntimeSnapshot(entry.template, bookmark);
+      },
+    });
+
+    const first = await getBodyFromTool(tool, { limit: 1, pass1EligibleOnly: true });
+    expect(resolutions).toBe(1);
+    expect(first).toMatchObject({ candidateCount: 51, scanned: 1, count: 1 });
+    expect(first.nextCursor).toBe('chart-00');
+
+    const second = await getBodyFromTool(tool, {
+      limit: 1,
+      cursor: first.nextCursor,
+      pass1EligibleOnly: true,
+    });
+    expect(resolutions).toBe(2);
+    expect(second).toMatchObject({ candidateCount: 51, scanned: 1, count: 1 });
+    expect(second.nextCursor).toBe('chart-01');
+  });
+
+  it('advances an eligibility-filtered page even when its examined candidate is ineligible', async () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-list-templates-filtered-page-'));
+    temporaryRoots.push(root);
+    writeFileSync(join(root, 'blocked.tbm'), PASS1_BLOCKED_BOOKMARK);
+    writeFileSync(join(root, 'eligible.tbm'), BOOKMARK);
+    process.env['TEMPLATES_DIR'] = root;
+
+    const first = await getBody({ limit: 1, pass1EligibleOnly: true });
+    expect(first).toMatchObject({ candidateCount: 2, scanned: 1, count: 0 });
+    expect(first.templates).toEqual([]);
+    expect(first.nextCursor).toBe('blocked');
+
+    const second = await getBody({
+      limit: 1,
+      cursor: first.nextCursor,
+      pass1EligibleOnly: true,
+    });
+    expect(second).toMatchObject({ candidateCount: 2, scanned: 1, count: 1 });
+    expect(second.templates.map((template: { template: string }) => template.template)).toEqual([
+      'eligible',
     ]);
+    expect(second.nextCursor).toBeNull();
   });
 
-  it('derives no blocker for a fast-path-eligible template', () => {
-    const eligible: Pick<
-      TemplateManifest,
-      'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
-    > = {
-      fast_path_eligible: true,
-      fast_path_blockers: [],
-      portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-06' },
-    };
-    expect(deriveFastPathBlockers(eligible)).toEqual([]);
+  it('rejects unbounded detail and a cursor outside the filtered result', async () => {
+    catalog(['alpha-chart', 'beta-chart']);
+
+    const unbounded = await getToolResult({ includeSlots: true, limit: 2 });
+    expect(unbounded.isError).toBe(true);
+    expect(unbounded.content[0]).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('includeSlots requires limit=1'),
+    });
+
+    const badCursor = await getToolResult({ cursor: 'missing-chart' });
+    expect(badCursor.isError).toBe(true);
+    expect(badCursor.content[0]).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('Invalid template cursor'),
+    });
   });
 
-  it('every bundled ineligible template surfaces a non-empty honest blocker (W26-B re-snapshot set)', () => {
-    // W26-B closed the 17 → 39 gap. Every one of the 29 ineligible templates must surface a
-    // non-empty, honest fast_path_blocker through the EXISTING deriveFastPathBlockers mechanism —
-    // no ineligible template may be a zero-signal dead end. Two honest branches, both covered:
-    //   - render_verified 'none' with no explicit factory blocker → the derived not-live-render-
-    //     verified string (the bulk of the newly-added propose-only templates), and
-    //   - explicit factory BlockerCodes (e.g. HARDCODED_FILTER_MEMBERS, PARAMETER_REQUIRED) →
-    //     passed through untouched.
-    const ineligible = allManifests.filter((m) => !m.fast_path_eligible);
-    expect(ineligible.length).toBeGreaterThan(0);
-    for (const m of ineligible) {
-      const blockers = deriveFastPathBlockers(m);
-      expect(blockers.length, `${m.template} must surface a blocker`).toBeGreaterThan(0);
-      if (m.fast_path_blockers.length === 0) {
-        // The derived blocker is only honest when the manifest truly carries no live stamp.
-        expect(m.portability_evidence.render_verified, `${m.template} render_verified`).toBe(
-          'none',
-        );
-        expect(blockers, `${m.template} derived blocker`).toEqual([
-          'not-live-render-verified: this template has no live render verification stamp',
-        ]);
-      } else {
-        // Explicit factory blocker codes travel through unchanged (no derivation).
-        expect(blockers, `${m.template} explicit blockers`).toEqual(m.fast_path_blockers);
-      }
+  it('keeps compact pages under the response byte limit', async () => {
+    catalog(
+      Array.from(
+        { length: 50 },
+        (_, index) => `chart-${String(index).padStart(2, '0')}-${'x'.repeat(140)}`,
+      ),
+    );
+
+    const result = await getToolResult({ limit: 50 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(Buffer.byteLength(result.content[0].text, 'utf-8')).toBeLessThanOrEqual(16_384);
+    const body = JSON.parse(result.content[0].text);
+    expect(body.count).toBeGreaterThan(0);
+    expect(body.nextCursor).not.toBeNull();
+  });
+
+  it('reports invalid winning entries without exposing a lower-tier fallback', async () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-list-templates-repository-'));
+    temporaryRoots.push(root);
+    mkdirSync(join(root, 'Tableau Agent', 'templates', '.vendored', 'overridable'), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(root, 'Tableau Agent', 'templates', '.vendored', 'overridable', 'shared.tbm'),
+      BOOKMARK,
+    );
+    writeFileSync(join(root, 'Tableau Agent', 'templates', 'shared.tbm'), '<broken/>');
+    delete process.env['TEMPLATES_DIR'];
+    const originalRepositoryDir = process.env['TABLEAU_REPOSITORY_DIR'];
+    process.env['TABLEAU_REPOSITORY_DIR'] = root;
+    try {
+      const body = await getBody({ query: 'shared' });
+      expect(body.templates).toEqual([]);
+      expect(body.diagnostics.templates).toEqual([
+        {
+          template: 'shared',
+          provenance: 'custom',
+          issue: 'invalid-or-unreadable',
+        },
+      ]);
+    } finally {
+      if (originalRepositoryDir === undefined) delete process.env['TABLEAU_REPOSITORY_DIR'];
+      else process.env['TABLEAU_REPOSITORY_DIR'] = originalRepositoryDir;
     }
   });
 
-  it('rejects an out-of-taxonomy family at the schema layer (fail-open watch-class guard)', async () => {
-    // A bare-string family filter would parse a typo and silently return an empty
-    // list; the closed z.enum(FAMILY_VALUES) rejects it so the mistake fails closed.
-    const tool = getListTemplatesTool(new DesktopMcpServer());
-    const schema = z.object(await Provider.from(tool.paramsSchema));
-    expect(schema.safeParse({ family: 'timeseries' }).success).toBe(false);
-    expect(schema.safeParse({ family: 'time-series' }).success).toBe(true);
-    // Both filters are optional — an empty payload lists everything.
-    expect(schema.safeParse({}).success).toBe(true);
+  it('bounds malformed-name diagnostics without hiding valid templates', async () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-list-templates-malformed-names-'));
+    temporaryRoots.push(root);
+    writeFileSync(join(root, '.tbm'), BOOKMARK);
+    for (let index = 0; index < 24; index += 1) {
+      writeFileSync(join(root, `bad\\name-${String(index).padStart(2, '0')}.tbm`), BOOKMARK);
+    }
+    writeFileSync(join(root, 'valid.tbm'), BOOKMARK);
+    process.env['TEMPLATES_DIR'] = root;
+
+    const body = await getBody({ limit: 1 });
+    expect(body.templates.map((template: { template: string }) => template.template)).toEqual([
+      'valid',
+    ]);
+    expect(body.diagnostics).toMatchObject({ count: 25, returned: 20, truncated: true });
+    expect(body.diagnostics.templates).toHaveLength(20);
+    expect(body.diagnostics.templates[0]).toMatchObject({ issue: 'invalid-name' });
   });
 });
 
-async function getBody(args: { family?: Family; fastPathOnly?: boolean }): Promise<{
-  status: {
-    kind: string;
-    freshness: string;
-    satisfies_exec_freshness: boolean;
-    content_version: string;
-  };
-  total: number;
-  count: number;
-  fastPathCount: number;
-  templates: Array<{
-    template: string;
-    family: string;
-    fast_path_eligible: boolean;
-    slots: Array<{
-      slot_id: string;
-      kind: string;
-      required: boolean;
-      bindable: boolean;
-      purpose?: string;
-      examples?: string[];
-    }>;
-  }>;
-}> {
+type ListArgs = {
+  query?: string;
+  cursor?: string;
+  limit?: number;
+  includeSlots?: boolean;
+  pass1EligibleOnly?: boolean;
+};
+
+async function getBody(args: ListArgs): Promise<any> {
   const result = await getToolResult(args);
   expect(result.isError).toBe(false);
   invariant(result.content[0].type === 'text');
   return JSON.parse(result.content[0].text);
 }
 
-async function getToolResult(args: {
-  family?: Family;
-  fastPathOnly?: boolean;
-}): Promise<CallToolResult> {
+async function getBodyFromTool(
+  tool: ReturnType<typeof getListTemplatesTool>,
+  args: ListArgs,
+): Promise<any> {
+  const callback = await Provider.from(tool.callback);
+  const result = await callback(args as never, getMockRequestHandlerExtra());
+  expect(result.isError).toBe(false);
+  invariant(result.content[0].type === 'text');
+  return JSON.parse(result.content[0].text);
+}
+
+async function getToolResult(args: ListArgs): Promise<CallToolResult> {
   const tool = getListTemplatesTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
-  // ShapeOutput requires every key present (values may be undefined), so pass both.
-  return await callback(
-    { family: args.family, fastPathOnly: args.fastPathOnly },
-    getMockRequestHandlerExtra(),
-  );
+  return await callback(args as never, getMockRequestHandlerExtra());
 }

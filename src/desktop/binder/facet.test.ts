@@ -14,13 +14,12 @@
 // bundled data state (see the "independent of bundled data" test). As of W27-B the
 // bundled trend-line-chart / ranking-ordered-bar manifests DO carry the optional facet
 // slot (facet_col / facet_row) — copied verbatim from the factory — so a final describe
-// block additionally proves the SHIPPED data end-to-end via loadManifests().
+// block additionally pins the backward-compatible puppet descriptors end-to-end.
 
 import { describe, expect, it } from 'vitest';
 
 import { classifyNoLlm } from './classify.js';
-import { loadManifests } from './manifest.js';
-import type { Family, SlotKind, SlotSpec, TemplateManifest } from './manifest-types.js';
+import type { Family, RuntimeTemplateDescriptor, SlotKind, SlotSpec } from './manifest-types.js';
 import type { SchemaField, SchemaSummary } from './schema-summary.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
@@ -81,30 +80,25 @@ function synth(
   family: Family,
   keywords: string[],
   slots: SlotSpec[],
-): TemplateManifest {
+): RuntimeTemplateDescriptor {
   return {
     template,
     family,
-    readiness: 'GREEN',
     fast_path_eligible: true,
     fast_path_blockers: [],
-    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-    datasource_placeholder: true,
-    placeholders: ['TITLE', 'DATASOURCE'],
     intent_keywords: keywords,
     description: `${family} template ${template}`,
     slots,
     calcs: [],
-    hazards: [],
   };
 }
 
-function mapOf(...ms: TemplateManifest[]): Map<string, TemplateManifest> {
+function mapOf(...ms: RuntimeTemplateDescriptor[]): Map<string, RuntimeTemplateDescriptor> {
   return new Map(ms.map((m) => [m.template, m]));
 }
 
 /** trend-line: temporal + quantitative required, with an OPTIONAL facet_col. */
-const trendLine = (): TemplateManifest =>
+const trendLine = (): RuntimeTemplateDescriptor =>
   synth(
     'trend-line',
     'time-series',
@@ -117,7 +111,7 @@ const trendLine = (): TemplateManifest =>
   );
 
 /** ranking bar: categorical + quantitative required, with an OPTIONAL facet_row. */
-const rankBar = (): TemplateManifest =>
+const rankBar = (): RuntimeTemplateDescriptor =>
   synth(
     'rank-bar',
     'ranking',
@@ -217,28 +211,27 @@ describe('classifyNoLlm — optional small-multiples facet (W23-SM1)', () => {
   });
 });
 
-// ── PRODUCT PATH: the SHIPPED bundled data (W27-B) ───────────────────────────
-// The inline-fixture tests above prove the classify.ts facet CODE. This block proves
-// the shipped DATA: W27-B copied the factory trend-line-chart / ranking-ordered-bar
-// manifests verbatim (each carrying the optional facet_col / facet_row slot + an
-// off-shelf [Facet] column decl). Loading the REAL bundled manifests (loadManifests())
-// and running a trellis ask exercises the exact path a caller hits — proving the W26-D
-// facet feature is now armed by the actual shipped data, not just inline fixtures.
-describe('classifyNoLlm — optional facet on the SHIPPED bundled manifests (W27-B product path)', () => {
-  const bundled = loadManifests();
+// ── BACKWARD-COMPATIBLE PUPPET CONTRACT ─────────────────────────────────────
+// The runtime catalog is TBM-derived and does not rely on static sidecars. These
+// runtime-shaped fixtures preserve the semantic slot ids accepted by puppet callers.
+describe('classifyNoLlm — optional facet on backward-compatible puppet descriptors', () => {
+  const bundled = mapOf(
+    { ...trendLine(), template: 'trend-line-chart' },
+    { ...rankBar(), template: 'ranking-ordered-bar' },
+  );
 
-  it('the shipped trend-line-chart / ranking-ordered-bar manifests carry the optional facet slot', () => {
+  it('the trend-line-chart / ranking-ordered-bar contracts carry the optional facet slot', () => {
     const facetCol = bundled.get('trend-line-chart')!.slots.find((s) => s.slot_id === 'facet_col');
-    expect(facetCol, 'shipped trend-line-chart carries facet_col').toBeDefined();
+    expect(facetCol, 'trend-line-chart carries facet_col').toBeDefined();
     expect(facetCol!.required).toBe(false);
     const facetRow = bundled
       .get('ranking-ordered-bar')!
       .slots.find((s) => s.slot_id === 'facet_row');
-    expect(facetRow, 'shipped ranking-ordered-bar carries facet_row').toBeDefined();
+    expect(facetRow, 'ranking-ordered-bar carries facet_row').toBeDefined();
     expect(facetRow!.required).toBe(false);
   });
 
-  it('a trellis ask binds bundled trend-line-chart WITH facet_col from the spare named categorical', () => {
+  it('a trellis ask binds trend-line-chart WITH facet_col from the spare named categorical', () => {
     // Same trellis ask as the inline-fixture test, but against the FULL 39-manifest
     // bundled load: 'line' selects the sole fast-path-eligible time-series template
     // (trend-line-chart), the required slots take Order Date + Sales, and the explicit
@@ -257,7 +250,7 @@ describe('classifyNoLlm — optional facet on the SHIPPED bundled manifests (W27
     ]);
   });
 
-  it("FAIL-CLOSED on shipped data: a bare 'by <dim>' (no trellis cue) binds trend-line-chart WITHOUT a facet", () => {
+  it("FAIL-CLOSED: a bare 'by <dim>' (no trellis cue) binds trend-line-chart WITHOUT a facet", () => {
     // Invariant guard: the optional facet must not fire without an explicit cue, so the
     // un-faceted default render stays byte-unchanged on the shipped manifests too.
     const cls = classifyNoLlm('line chart of Sales over Order Date by Region', bundled, SUMMARY);

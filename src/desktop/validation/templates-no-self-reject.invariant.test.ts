@@ -1,7 +1,6 @@
-import fs from 'fs';
-import path from 'path';
 import { describe, expect, it } from 'vitest';
 
+import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
 import { runValidation } from './registry.js';
 
 // W60-INVARIANT-TESTS suite 2 — VALIDATOR NEVER SELF-REJECTS A BUNDLED TEMPLATE.
@@ -9,53 +8,35 @@ import { runValidation } from './registry.js';
 // The invalid-derivation-string rule (src/desktop/validation/rules/invalidDerivationString.ts)
 // is an ERROR-severity preflight: it fires when a <column-instance derivation="..."> uses a
 // non-canonical string that Tableau would silently rewrite to None. Every worksheet-fragment
-// XML we SHIP is applied through runValidation(..., 'workbook') on the apply path, so a
-// bundled template that itself trips the rule would be permanently un-appliable — the
-// validator rejecting our own golden content.
+// runtime XML derived from each TBM is applied through runValidation(..., 'workbook') on the
+// apply path, so a template that itself trips the rule would be permanently un-appliable.
 //
 // Tonight this was verified by hand (40/40 templates clean). This suite makes that
-// permanent: for EVERY shipped template XML, runValidation(xml, 'workbook') must report ZERO
+// permanent: for EVERY shipped runtime template, runValidation(xml, 'workbook') must report ZERO
 // invalid-derivation-string issues. (Other rules — well-formed-xml, calc-field-names — are
 // out of scope for this invariant; a template legitimately may or may not carry those, and
 // the derivation self-reject is the specific regression being locked.)
 
-const XML_DIR = path.join(
-  process.cwd(),
-  'src',
-  'desktop',
-  'data',
-  'data-visualization-templates-xml',
+const runtimeTemplates = [...loadRuntimeTemplateCatalogSnapshots()].map(
+  ([template, { snapshot }]) => ({ template, xml: snapshot.xml }),
 );
 
-const xmlFiles = fs
-  .readdirSync(XML_DIR)
-  .filter((f) => f.endsWith('.xml'))
-  .sort();
-
 describe('validation/templates — no bundled template self-rejects on invalid-derivation-string', () => {
-  it('discovers the shipped template XML corpus (47: 44 day-1 sync + spatial-symbol-map-latlon + deviation-arrow + magnitude-simple-bar)', () => {
+  it('loads the shipped TBM corpus into the runtime catalog', () => {
     expect(
-      xmlFiles.length,
-      'expected the shipped template XML corpus to be non-empty',
-    ).toBeGreaterThan(0);
-    // Pin the count verified by hand tonight so a template added/removed without re-running
-    // this invariant is caught (adjust deliberately when the corpus grows).
-    // parity-port: +1 for spatial-symbol-map-latlon.xml (the per-file it.each below still
-    // proves it does not self-reject on invalid-derivation-string).
-    // classifier-lockstep-port: +2 for deviation-arrow.xml + magnitude-simple-bar.xml
-    // (a2td template parity sync; both render_verified 'none' → fast_path_eligible false).
-    expect(xmlFiles.length).toBe(47);
+      runtimeTemplates.length,
+      'expected all 133 shipped TBMs to produce runtime snapshots',
+    ).toBeGreaterThanOrEqual(133);
   });
 
-  it.each(xmlFiles)(
-    'runValidation(%s, "workbook") reports zero invalid-derivation-string issues',
-    (file) => {
-      const xml = fs.readFileSync(path.join(XML_DIR, file), 'utf8');
+  it.each(runtimeTemplates)(
+    'runValidation($template, "workbook") reports zero invalid-derivation-string issues',
+    ({ template, xml }) => {
       const result = runValidation(xml, 'workbook');
       const offenders = result.issues.filter((i) => i.ruleId === 'invalid-derivation-string');
       expect(
         offenders,
-        `${file}: bundled template must not self-reject on invalid-derivation-string; ` +
+        `${template}: bundled template must not self-reject on invalid-derivation-string; ` +
           `offending derivations: ${offenders.map((o) => o.message).join(' | ')}`,
       ).toEqual([]);
     },
@@ -63,11 +44,10 @@ describe('validation/templates — no bundled template self-rejects on invalid-d
 
   it('reports zero invalid-derivation-string issues across the ENTIRE corpus (aggregate lock)', () => {
     const offenders: string[] = [];
-    for (const file of xmlFiles) {
-      const xml = fs.readFileSync(path.join(XML_DIR, file), 'utf8');
+    for (const { template, xml } of runtimeTemplates) {
       for (const issue of runValidation(xml, 'workbook').issues) {
         if (issue.ruleId === 'invalid-derivation-string')
-          offenders.push(`${file}: ${issue.message}`);
+          offenders.push(`${template}: ${issue.message}`);
       }
     }
     expect(

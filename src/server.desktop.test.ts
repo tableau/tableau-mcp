@@ -4,7 +4,6 @@ import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-sc
 import { CallToolResult, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import * as configModule from './config.desktop.js';
-import { sessionRouteState } from './desktop/route/route-state.js';
 import {
   buildDesktopInstructions,
   SESSION_RESOLUTION_TEXT_PINNED,
@@ -119,37 +118,12 @@ describe('DesktopMcpServer', () => {
 });
 
 describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
-  // Snapshot-style pin: any route-table edit must surface here as a reviewable diff.
-  it('matches the pinned instructions string', () => {
+  it('serves the modern instructions for the default profile', () => {
     expect(DESKTOP_INSTRUCTIONS).toBe(
-      `You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.
-
-Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.
-
-For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST use bind-template's two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user's message verbatim as \`ask\` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call get-worksheet-xml to orient before bind-template; list-available-fields is allowed but not needed to orient: bind-template reads schema; failed binds propose candidate fields. Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.
-
-For a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %), FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.
-
-For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult, FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.
-
-For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.
-
-For a data-value question, on a populated worksheet, call get-summary-data; answer only from returned rows.
-
-For a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (a named ratio/margin/growth ask routes via calc-then-bind; examples here include running total and LOD), use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.
-
-If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.
-
-For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort ONLY, add-field + apply-worksheet for a color/size/detail or rows/cols field, or an author-* tool; a NEW chart here = bind-template with target_worksheet. Never create new sheets unless asked.
-
-Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.
-
-Omit session for one Desktop; use list-instances when multiple are open.
-
-If preflight rejects apply, fix per FIX lines. Prefer file mode
-
-If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. get-worksheet-xml -> add-field -> apply-worksheet is sanctioned. Whole-workbook XML surgery is behind TOOL_PROFILE=full, which the user can enable.`,
+      buildDesktopInstructions({ sessionPinned: false, profile: '' }),
     );
+    expect(DESKTOP_INSTRUCTIONS).toContain('build-worksheets-from-templates');
+    expect(DESKTOP_INSTRUCTIONS).not.toContain('bind-template');
   });
 
   it('tells agents to narrate with Tableau vocabulary', () => {
@@ -271,12 +245,6 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['refine-worksheet', 1466], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
-    ['validate-proposal', 1512], // raised with sign-off (2026-08-05): agreed UI-label title 'Validating template'; ratcheted down earlier with compact shared proposal descriptions; 46k stays green
-    // The template parameter is a z.enum over the real template vocabulary, so its cost
-    // is the vocabulary itself, not prose. Agents invented 13 template ids against 47
-    // real ones and burned 188s discovering it; the enum makes that unrepresentable.
-    // Trim by retiring templates, not by re-opening the parameter to a free string.
-    ['build-and-apply-worksheet', 1779],
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
@@ -352,7 +320,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     desktopToolFactories.map((toolFactory) => toolFactory(new DesktopMcpServer()));
 
   it.each(['', 'dynamic-authoring', 'demo', 'spec-loop', 'full', 'combined-lean'])(
-    'keeps field listing and the gated repair read registered in profile "%s"',
+    'keeps field listing and the repair read registered in profile "%s"',
     (profile) => {
       const names = selectToolsForProfile(allTools(), profile).map((tool) => tool.name);
 
@@ -361,8 +329,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     },
   );
 
-  it('gates the full-profile repair read identically to the default profile', async () => {
-    sessionRouteState.clear();
+  it('makes the repair read available before authoring in full and default profiles', async () => {
     const tools = allTools();
     const defaultTool = selectToolsForProfile(tools, '').find(
       (tool) => tool.name === 'get-worksheet-xml',
@@ -383,9 +350,9 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     const defaultResult = await defaultCallback({ session: 'S1' }, extra);
     const fullResult = await fullCallback({ session: 'S1' }, extra);
 
-    expect(fullResult).toEqual(defaultResult);
-    expect(fullResult.isError).toBe(false);
-    expect(extra.getExecutor).not.toHaveBeenCalled();
+    expect(fullResult.isError).toBe(true);
+    expect(defaultResult.isError).toBe(true);
+    expect(extra.getExecutor).toHaveBeenCalledTimes(2);
   });
 
   it('every slim-profile name is a real desktop tool name', () => {
@@ -434,10 +401,13 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 35-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation + undo/redo + the manual path read/edit legs, no workbook round-trip/validation XML tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 35-tool modern surface without legacy binder wrappers', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
     expect(selected).toHaveLength(35);
+    expect(selected.map((tool) => tool.name)).not.toEqual(
+      expect.arrayContaining(['bind-template', 'build-and-apply-worksheet']),
+    );
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -449,13 +419,13 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'format-labels',
       'ask-user',
       'search-commands',
-      'bind-template',
+      'list-templates',
+      'build-worksheets-from-templates',
       'refine-worksheet',
       'add-field',
       'remove-field',
       'resolve-field',
       'apply-worksheet',
-      'build-and-apply-worksheet',
       'dashboard-auto-apply',
       'plan-dashboard-creation',
       'batch-create-and-cache-sheets',
@@ -486,7 +456,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'validate-workbook-xml',
       'validate-worksheet-xml',
       'inject-template',
-      'list-templates',
       'list-site-workbooks',
       'get-app-info',
       'get-health',

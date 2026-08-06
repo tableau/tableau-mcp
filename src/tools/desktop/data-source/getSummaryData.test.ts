@@ -133,10 +133,10 @@ describe('getSummaryDataTool', () => {
         shape: '0 rows x 0 columns',
         summaryData: { columns: [], rows: [] },
         guidance:
-          'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — bind a chart first (bind-template) or name a populated sheet.',
+          'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — choose with list-templates, build with build-worksheets-from-templates, apply with apply-worksheet, or name a populated sheet.',
       });
       expectStructuredBlock(result, {
-        label: 'Build the requested chart with bind-template',
+        label: 'List templates, build a chart, then apply it',
         kind: 'prefill',
       });
       expect(harness.server.requests.some((request) => request.path.endsWith('/summaryData'))).toBe(
@@ -166,11 +166,11 @@ describe('getSummaryDataTool', () => {
         shape: '0 rows x 0 columns',
         summaryData: { columns: [], rows: [] },
         guidance:
-          'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — bind a chart first (bind-template) or name a populated sheet.',
+          'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — choose with list-templates, build with build-worksheets-from-templates, apply with apply-worksheet, or name a populated sheet.',
       });
       expect(result.structuredContent).toMatchObject({
         nextAction: {
-          label: 'Build the requested chart with bind-template',
+          label: 'List templates, build a chart, then apply it',
           kind: 'prefill',
         },
       });
@@ -263,7 +263,7 @@ describe('getSummaryDataTool', () => {
       expect(parseJsonResult(repeated)).toEqual({
         ...firstBody,
         guidance:
-          'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — bind a chart first (bind-template) or name a populated sheet.',
+          'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — choose with list-templates, build with build-worksheets-from-templates, apply with apply-worksheet, or name a populated sheet.',
       });
       expect(repeated.structuredContent).toEqual(first.structuredContent);
       expect(harness.server.requests.some((request) => request.path.endsWith('/summaryData'))).toBe(
@@ -659,7 +659,7 @@ describe('getSummaryDataTool', () => {
         status: 'action-required',
         reason: 'worksheet-not-found',
         guidance:
-          'The requested worksheet was not found. Choose an available populated worksheet, correct the worksheet name/id, or bind a chart first; then call get-summary-data again.',
+          'The requested worksheet was not found. Choose an available populated worksheet, correct the worksheet name/id, or use list-templates, build-worksheets-from-templates, and apply-worksheet before calling get-summary-data again.',
         error: {
           message: expect.stringMatching(
             /Worksheet "Missing Sheet" was not found.*Sales by Region.*Profit by Category/,

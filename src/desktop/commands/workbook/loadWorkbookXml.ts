@@ -2,6 +2,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../../logging/logger.js';
 import {
+  ApplyWorkbookDocumentOptions,
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
@@ -90,10 +91,13 @@ export async function applyWorkbookText({
   focus,
   executor,
   signal,
-}: { xml: string; focus: ApplyFocus } & WithExecutorAndAbortSignal): Promise<
-  Result<void, ExecuteCommandError>
-> {
-  const result = await executor.applyWorkbookDocument(xml, signal);
+  applyOptions,
+}: {
+  xml: string;
+  focus: ApplyFocus;
+  applyOptions?: ApplyWorkbookDocumentOptions;
+} & WithExecutorAndAbortSignal): Promise<Result<void, ExecuteCommandError>> {
+  const result = await executor.applyWorkbookDocument(xml, signal, applyOptions);
 
   if (result.isErr()) {
     log({

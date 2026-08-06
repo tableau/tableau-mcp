@@ -7,9 +7,9 @@
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { loadRuntimeTemplateDescriptors } from '../templates/runtimeTemplateCatalog.js';
 import { selectEligible } from './ask-router.js';
-import { loadManifests } from './manifest.js';
-import type { TemplateManifest } from './manifest-types.js';
+import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 import {
   classifyAskRoute,
   detectCalcFirst,
@@ -18,25 +18,33 @@ import {
   SHAPE_ROUTE,
 } from './route-spec.js';
 
-let manifests: TemplateManifest[];
+let manifests: RuntimeTemplateDescriptor[];
 beforeAll(() => {
-  manifests = [...loadManifests().values()];
+  manifests = [...loadRuntimeTemplateDescriptors().values()];
 });
 
-function mkManifest(over: Partial<TemplateManifest> & { template: string }): TemplateManifest {
+function mkManifest(
+  over: Partial<RuntimeTemplateDescriptor> & { template: string },
+): RuntimeTemplateDescriptor {
   return {
     family: 'specialized',
-    readiness: 'GREEN',
     fast_path_eligible: true,
     fast_path_blockers: [],
     intent_keywords: [],
     description: 'synthetic test manifest',
-    placeholders: ['TITLE', 'DATASOURCE'],
     slots: [],
     calcs: [],
     ...over,
-  } as unknown as TemplateManifest;
+  };
 }
+
+const BAR_MANIFESTS = [
+  mkManifest({
+    template: 'ranking-ordered-bar',
+    family: 'ranking',
+    intent_keywords: ['bar', 'horizontal', 'ranked', 'highest', 'lowest'],
+  }),
+];
 
 describe('SHAPE_ROUTE — the typed ask-shape → route table', () => {
   it('maps every shape to a valid route class', () => {
@@ -95,7 +103,7 @@ describe('classifyAskRoute — calc-first derived metrics', () => {
 
 describe('classifyAskRoute — bind-first (plain chart with eligible supply)', () => {
   it('routes a plain bar ask to bind-first, naming the eligible template', () => {
-    const d = classifyAskRoute('bar chart of Sales by Region', manifests);
+    const d = classifyAskRoute('bar chart of Sales by Region', BAR_MANIFESTS);
     expect(d.route).toBe('bind-first');
     expect(d.shape).toBe('bind-first-template');
     expect(d.template).toBe('ranking-ordered-bar');
@@ -168,7 +176,7 @@ describe('classifyAskRoute — refine detection is EDIT-CONTEXT gated', () => {
       'Create a horizontal bar chart of total Profit by Sub-Category, calling out the ' +
       "few highest-profit Sub-Categories (the 'top performers') and the few lowest-profit ones " +
       "(the 'bottom performers'); do not replace or delete existing worksheets.";
-    const d = classifyAskRoute(ask, manifests);
+    const d = classifyAskRoute(ask, BAR_MANIFESTS);
     expect(d.route, 'a new bar chart that only mentions top/bottom must route bind-first').toBe(
       'bind-first',
     );
@@ -180,7 +188,7 @@ describe('classifyAskRoute — refine detection is EDIT-CONTEXT gated', () => {
     const paraphrase =
       'Please build a sorted horizontal bar chart of Profit per Sub-Category, ranked from ' +
       'highest to lowest, with the top and bottom performers standing out as their own groups.';
-    const d = classifyAskRoute(paraphrase, manifests);
+    const d = classifyAskRoute(paraphrase, BAR_MANIFESTS);
     expect(d.route).toBe('bind-first');
     expect(d.template).toBe('ranking-ordered-bar');
   });
@@ -190,7 +198,7 @@ describe('classifyAskRoute — refine detection is EDIT-CONTEXT gated', () => {
     expect(normalizeAskForMatch(messy)).toBe(
       'ranked bar-chart highest lowest of profit by sub-category',
     );
-    expect(classifyAskRoute(messy, manifests).route).toBe('bind-first');
+    expect(classifyAskRoute(messy, BAR_MANIFESTS).route).toBe('bind-first');
   });
 
   it("'just the top five sub-categories' (bare refine, no chart noun) classifies refine-top-n", () => {

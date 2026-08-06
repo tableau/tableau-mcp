@@ -20,7 +20,10 @@ import ts from 'typescript';
  */
 const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
   'src/desktop/commands/workbook/loadWorkbookXml.ts': ['applyWorkbookText:forward'],
-  'src/desktop/commands/workbook/loadWorksheetXml.ts': ['applyWorkbookText:forward'],
+  'src/desktop/commands/workbook/loadWorksheetXml.ts': [
+    'applyWorkbookText:forward',
+    'applyWorkbookText:forward',
+  ],
   // loadStoryboardXml forwards its caller's verdict straight into loadDashboardXml (storyboards
   // reuse the dashboard per-sheet path), so this file has two forward seams in source order.
   'src/desktop/commands/workbook/loadDashboardXml.ts': [
@@ -48,7 +51,10 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
   'src/tools/desktop/data-source/authorSet.ts': ['applyWorkbookText:restore'],
   'src/tools/desktop/data-source/formatLabels.ts': ['applyWorkbookText:artifact'],
   'src/tools/desktop/workbook/applyWorkbook.ts': ['loadWorkbookXml:restore'],
-  'src/tools/desktop/worksheet/applyWorksheet.ts': ['loadWorksheetXml:artifact'],
+  'src/tools/desktop/worksheet/applyWorksheet.ts': [
+    'loadWorksheetXml:artifact',
+    'loadWorksheetXml:artifact',
+  ],
   'src/tools/desktop/worksheet/deleteWorksheet.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/worksheet/refineWorksheet.ts': ['loadWorksheetXml:artifact'],
 };

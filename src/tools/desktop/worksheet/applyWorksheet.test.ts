@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import * as loadWorksheetXmlModule from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import * as episodeEvents from '../../../desktop/episode-events.js';
+import { TemplateArtifactStore } from '../../../desktop/templates/templateArtifactStore.js';
 import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
 import {
   DesktopCommandExecutionError,
@@ -51,12 +52,13 @@ describe('applyWorksheetTool', () => {
     const tool = getApplyWorksheetTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-worksheet');
     expect(tool.description).toBe(
-      'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path.',
+      'Apply a template artifact or a modified cached worksheet file to Desktop.',
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
       worksheetFile: expect.any(Object),
+      artifactId: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
@@ -347,7 +349,155 @@ describe('applyWorksheetTool', () => {
       }),
     );
   });
+
+  it('consumes a successfully dispatched artifact and reports failed verification as non-retryable', async () => {
+    const store = artifactStore();
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      expect(args.artifactApply?.dispatchState.attempted).toBe(false);
+      expect(args.artifactApply?.expectedInstanceId).toBe('inst-build');
+      args.artifactApply!.dispatchState.attempted = true;
+      return Ok({
+        readbackWarnings: [],
+        readbackVerification: { ok: false, status: 'failed' },
+      });
+    });
+
+    const result = await getArtifactToolResult(store, 'artifact-1', '12345');
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      artifactId: 'artifact-1',
+      title: 'Artifact Sheet',
+      applied: true,
+      retrySafe: false,
+      verification: { ok: false, status: 'failed' },
+    });
+    expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
+  });
+
+  it('keeps a same-pid/new-instance mismatch usable for the correct instance', async () => {
+    const store = artifactStore();
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockImplementationOnce(async (args) => {
+        expect(args.artifactApply?.expectedInstanceId).toBe('inst-build');
+        expect(args.artifactApply?.dispatchState.attempted).toBe(false);
+        return Err({
+          type: 'execute-command-error',
+          error: { type: 'unknown', error: 'instance changed from inst-build to inst-restarted' },
+        });
+      })
+      .mockImplementationOnce(async (args) => {
+        expect(args.artifactApply?.expectedInstanceId).toBe('inst-build');
+        args.artifactApply!.dispatchState.attempted = true;
+        return Ok({
+          readbackWarnings: [],
+          readbackVerification: { ok: true, status: 'passed' },
+        });
+      });
+
+    const mismatch = await getArtifactToolResult(store, 'artifact-1', '12345');
+    expect(mismatch.isError).toBe(true);
+
+    const stillUsable = store.reserve('artifact-1', '12345');
+    expect(stillUsable.ok).toBe(true);
+    if (!stillUsable.ok) return;
+    store.release(stillUsable.lease);
+
+    const correctInstance = await getArtifactToolResult(store, 'artifact-1', '12345');
+    expect(correctInstance.isError).toBe(false);
+    expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
+  });
+
+  it('consumes an artifact after any possibly dispatched failure', async () => {
+    const store = artifactStore();
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      return Err({
+        type: 'execute-command-error',
+        error: { type: 'unknown', error: new Error('connection lost after POST') },
+      });
+    });
+
+    const result = await getArtifactToolResult(store, 'artifact-1', '12345');
+
+    expect(result.isError).toBe(true);
+    expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
+  });
+
+  it('does not consume an artifact for the wrong Desktop session', async () => {
+    const store = artifactStore();
+
+    const result = await getArtifactToolResult(store, 'artifact-1', '99999');
+
+    expect(result.isError).toBe(true);
+    expect(store.reserve('artifact-1', '12345').ok).toBe(true);
+    expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
+  });
+
+  it('allows only one concurrent apply for an artifact', async () => {
+    const store = artifactStore();
+    let finish!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      await blocked;
+      args.artifactApply!.dispatchState.attempted = true;
+      return Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } });
+    });
+
+    const first = getArtifactToolResult(store, 'artifact-1', '12345');
+    await vi.waitFor(() =>
+      expect(loadWorksheetXmlModule.loadWorksheetXml).toHaveBeenCalledTimes(1),
+    );
+    const second = await getArtifactToolResult(store, 'artifact-1', '12345');
+    expect(second.isError).toBe(true);
+    invariant(second.content[0].type === 'text');
+    expect(second.content[0].text).toContain('already being applied');
+    finish();
+    expect((await first).isError).toBe(false);
+  });
 });
+
+function artifactStore(): TemplateArtifactStore {
+  const store = new TemplateArtifactStore();
+  store.put({
+    id: 'artifact-1',
+    sessionId: '12345',
+    instanceId: 'inst-build',
+    templateName: 'pulse-bar',
+    templateSourceHash: 'source-hash',
+    title: 'Artifact Sheet',
+    datasource: 'target.ds',
+    fieldMapping: { '{{field_base_1}}': '[target.ds].[sum:Revenue:qk]' },
+    worksheetXml: '<worksheet name="Artifact Sheet"><table /></worksheet>',
+    windowXml: '<window class="worksheet" name="Artifact Sheet" />',
+    targetState: {
+      worksheetName: 'Artifact Sheet',
+      target: { state: 'absent' },
+      targetWindow: { state: 'absent' },
+      dependenciesSha256: 'dependencies',
+    },
+  });
+  return store;
+}
+
+async function getArtifactToolResult(
+  store: TemplateArtifactStore,
+  artifactId: string,
+  session: string,
+): Promise<CallToolResult> {
+  const tool = getApplyWorksheetTool(new DesktopMcpServer(), { store });
+  const callback = await Provider.from(tool.callback);
+  return await callback(
+    { session, artifactId, worksheetName: undefined, worksheetFile: undefined },
+    {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue({}),
+    },
+  );
+}
 
 async function getToolResult({
   session,
@@ -384,5 +534,5 @@ async function getToolResult({
   };
   extra.config = { ...extra.config, ...configOverrides };
 
-  return await callback({ session, worksheetName, worksheetFile }, extra);
+  return await callback({ session, artifactId: undefined, worksheetName, worksheetFile }, extra);
 }

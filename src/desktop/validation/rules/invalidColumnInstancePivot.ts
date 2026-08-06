@@ -4,172 +4,169 @@ const INVALID_NONE_QK = /\[none:([^:\]]+):qk\]/gi;
 const NAME_ATTR = /\bname=(?:'([^']*)'|"([^"]*)")/;
 const COLUMN_ATTR = /\bcolumn=(?:'([^']*)'|"([^"]*)")/;
 const DATASOURCE_ATTR = /\bdatasource=(?:'([^']*)'|"([^"]*)")/;
-const BIN_CALC = /<calculation\b[^>]*\bclass=(?:'bin'|"bin")/i;
+const DERIVATION_ATTR = /\bderivation=(?:'([^']*)'|"([^"]*)")/;
+const TYPE_ATTR = /\btype=(?:'([^']*)'|"([^"]*)")/;
 const NONE_QK_NAME = /^\[none:([^:\]]+):qk\]$/i;
-const DEP_OPEN = '<datasource-dependencies';
-const DEP_CLOSE = '</datasource-dependencies>';
 const COLUMN_INSTANCE_TAG = /<column-instance\b[^>]*>/gi;
+
+interface ScopeBlock {
+  start: number;
+  end: number;
+  datasource?: string;
+  declaredQuantitativeInstances: Set<string>;
+}
 
 function stripOuterBrackets(name: string): string {
   return name.replace(/^\[/, '').replace(/\]$/, '');
 }
 
-interface DepBlock {
-  start: number;
-  end: number;
-  ds?: string;
-  binCols: Set<string>;
-  exempt: Set<string>;
-}
+function findBlocks(
+  xml: string,
+  tag: 'datasource-dependencies' | 'datasource' | 'worksheet',
+): ScopeBlock[] {
+  const blocks: ScopeBlock[] = [];
+  const openNeedle = `<${tag}`;
+  const closeNeedle = `</${tag}>`;
+  let cursor = 0;
 
-function findDependencyBlocks(s: string): DepBlock[] {
-  const blocks: DepBlock[] = [];
-  let i = 0;
-  while (i < s.length) {
-    const open = s.indexOf(DEP_OPEN, i);
-    if (open === -1) break;
-    const tagEnd = s.indexOf('>', open);
-    if (tagEnd === -1) break;
-    const openTag = s.slice(open, tagEnd + 1);
-    const dm = DATASOURCE_ATTR.exec(openTag);
-    const ds = dm ? (dm[1] ?? dm[2]) : undefined;
-    if (s[tagEnd - 1] === '/') {
-      blocks.push({ start: open, end: tagEnd + 1, ds, binCols: new Set(), exempt: new Set() });
-      i = tagEnd + 1;
+  while (cursor < xml.length) {
+    const start = xml.indexOf(openNeedle, cursor);
+    if (start === -1) break;
+    const following = xml[start + openNeedle.length];
+    if (![' ', '\t', '\n', '\r', '>', '/'].includes(following ?? '')) {
+      cursor = start + openNeedle.length;
       continue;
     }
-    const close = s.indexOf(DEP_CLOSE, tagEnd);
+    const tagEnd = xml.indexOf('>', start);
+    if (tagEnd === -1) break;
+    const openTag = xml.slice(start, tagEnd + 1);
+    const attribute =
+      tag === 'datasource'
+        ? NAME_ATTR
+        : tag === 'datasource-dependencies'
+          ? DATASOURCE_ATTR
+          : undefined;
+    const match = attribute?.exec(openTag);
+    const datasource = match ? (match[1] ?? match[2]) : undefined;
+    const selfClosing = xml[tagEnd - 1] === '/';
+    const close = selfClosing ? tagEnd + 1 : xml.indexOf(closeNeedle, tagEnd);
     if (close === -1) break;
-    blocks.push({
-      start: open,
-      end: close + DEP_CLOSE.length,
-      ds,
-      binCols: new Set(),
-      exempt: new Set(),
-    });
-    i = close + DEP_CLOSE.length;
+    const end = selfClosing ? tagEnd + 1 : close + closeNeedle.length;
+    blocks.push({ start, end, datasource, declaredQuantitativeInstances: new Set() });
+    cursor = end;
   }
+
   return blocks;
 }
 
-function blockAt(blocks: DepBlock[], idx: number): DepBlock | undefined {
-  for (const block of blocks) {
-    if (idx < block.start) return undefined;
-    if (idx < block.end) return block;
-  }
-  return undefined;
-}
-
-function collectBinColumns(s: string, blocks: DepBlock[], topBinCols: Set<string>): void {
-  let i = 0;
-  while (i < s.length) {
-    i = s.indexOf('<column', i);
-    if (i === -1) break;
-    const after = s[i + '<column'.length];
-    if (
-      after !== ' ' &&
-      after !== '\t' &&
-      after !== '\n' &&
-      after !== '\r' &&
-      after !== '>' &&
-      after !== '/'
-    ) {
-      i += '<column'.length;
-      continue;
-    }
-    const tagEnd = s.indexOf('>', i);
-    if (tagEnd === -1) break;
-    if (s[tagEnd - 1] === '/') {
-      i = tagEnd + 1;
-      continue;
-    }
-    const close = s.indexOf('</column>', tagEnd);
-    if (close === -1) break;
-    const openTag = s.slice(i, tagEnd + 1);
-    const inner = s.slice(tagEnd + 1, close);
-    const nm = NAME_ATTR.exec(openTag);
-    const name = nm ? (nm[1] ?? nm[2]) : '';
-    if (name && BIN_CALC.test(inner)) {
-      const owner = blockAt(blocks, i);
-      (owner ? owner.binCols : topBinCols).add(stripOuterBrackets(name).trim());
-    }
-    i = close + '</column>'.length;
-  }
+function blockAt(blocks: ScopeBlock[], index: number): ScopeBlock | undefined {
+  return blocks.find((block) => index >= block.start && index < block.end);
 }
 
 export const invalidColumnInstancePivotRule: ValidationRule = {
   id: 'invalid-column-instance-pivot',
   description:
-    'Errors when a column-instance reference pairs a dimension derivation (none:) with a quantitative-key ' +
-    'pivot (:qk) — an impossible instance (e.g. [none:Order Date:qk]) that Tableau rejects on load and that ' +
-    'can destabilize Desktop when re-applied repeatedly.',
+    'Errors when a none:...:qk reference has no exact quantitative column-instance declaration in the same datasource scope.',
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const s = String(xml ?? '');
-    const issues: ValidationIssue[] = [];
-    const blocks = findDependencyBlocks(s);
-    const topBinCols = new Set<string>();
-    const topExempt = new Set<string>();
+    const source = String(xml ?? '');
+    const worksheetBlocks = findBlocks(source, 'worksheet');
+    const dependencyBlocks = findBlocks(source, 'datasource-dependencies');
+    const datasourceBlocks = findBlocks(source, 'datasource');
+    const topLevelDeclarations = new Set<string>();
 
-    collectBinColumns(s, blocks, topBinCols);
-
-    for (const m of s.matchAll(COLUMN_INSTANCE_TAG)) {
-      const tag = m[0];
-      const nm = NAME_ATTR.exec(tag);
-      const name = nm ? (nm[1] ?? nm[2]) : '';
+    for (const match of source.matchAll(COLUMN_INSTANCE_TAG)) {
+      const tag = match[0];
+      const nameAttribute = NAME_ATTR.exec(tag);
+      const name = nameAttribute ? (nameAttribute[1] ?? nameAttribute[2]) : '';
       const nameMatch = name ? NONE_QK_NAME.exec(name) : null;
       if (!nameMatch) continue;
-      const cm = COLUMN_ATTR.exec(tag);
-      const linkedCol = cm ? stripOuterBrackets(cm[1] ?? cm[2]).trim() : '';
-      if (!linkedCol) continue;
+      const columnAttribute = COLUMN_ATTR.exec(tag);
+      const linkedColumn = columnAttribute
+        ? stripOuterBrackets(columnAttribute[1] ?? columnAttribute[2]).trim()
+        : '';
       const field = nameMatch[1].trim();
-      const owner = blockAt(blocks, m.index ?? 0);
-      const scopeBinCols = owner ? owner.binCols : topBinCols;
-      const scopeExempt = owner ? owner.exempt : topExempt;
-      if (scopeBinCols.has(linkedCol)) scopeExempt.add(field);
+      const derivationAttribute = DERIVATION_ATTR.exec(tag);
+      const derivation = derivationAttribute
+        ? (derivationAttribute[1] ?? derivationAttribute[2])
+        : '';
+      const typeAttribute = TYPE_ATTR.exec(tag);
+      const type = typeAttribute ? (typeAttribute[1] ?? typeAttribute[2]) : '';
+      if (linkedColumn !== field || derivation !== 'None' || type !== 'quantitative') continue;
+
+      const index = match.index ?? 0;
+      const owner = blockAt(dependencyBlocks, index) ?? blockAt(datasourceBlocks, index);
+      const worksheet = blockAt(worksheetBlocks, index);
+      (
+        owner?.declaredQuantitativeInstances ??
+        worksheet?.declaredQuantitativeInstances ??
+        topLevelDeclarations
+      ).add(field);
     }
 
-    const refDatasource = (idx: number): string | undefined => {
-      if (s[idx - 1] !== '.' || s[idx - 2] !== ']') return undefined;
-      let j = idx - 3;
-      while (j >= 0 && s[j] !== '[' && s[j] !== ']' && s[j] !== '>') j -= 1;
-      if (j < 0 || s[j] !== '[') return undefined;
-      return s.slice(j + 1, idx - 2);
-    };
-
-    const exemptForRef = (field: string, ds: string | undefined): boolean => {
-      if (topExempt.has(field)) return true;
-      if (ds !== undefined) {
-        const matching = blocks.filter((b) => b.ds === ds);
-        if (matching.length > 0) return matching.some((b) => b.exempt.has(field));
+    const datasourceForRef = (index: number): string | undefined => {
+      if (source[index - 1] !== '.' || source[index - 2] !== ']') return undefined;
+      let cursor = index - 3;
+      while (
+        cursor >= 0 &&
+        source[cursor] !== '[' &&
+        source[cursor] !== ']' &&
+        source[cursor] !== '>'
+      ) {
+        cursor -= 1;
       }
-      return blocks.some((b) => b.exempt.has(field));
+      return cursor >= 0 && source[cursor] === '['
+        ? source.slice(cursor + 1, index - 2)
+        : undefined;
     };
 
+    const declarationExists = (
+      field: string,
+      datasource: string | undefined,
+      referenceIndex: number,
+    ): boolean => {
+      const referenceWorksheet = blockAt(worksheetBlocks, referenceIndex);
+      const candidates = [...dependencyBlocks, ...datasourceBlocks].filter((block) => {
+        if (datasource !== undefined && block.datasource !== datasource) return false;
+        const declarationWorksheet = blockAt(worksheetBlocks, block.start);
+        return referenceWorksheet
+          ? !declarationWorksheet || declarationWorksheet === referenceWorksheet
+          : !declarationWorksheet;
+      });
+      return (
+        referenceWorksheet?.declaredQuantitativeInstances.has(field) === true ||
+        topLevelDeclarations.has(field) ||
+        candidates.some((block) => block.declaredQuantitativeInstances.has(field))
+      );
+    };
+
+    const issues: ValidationIssue[] = [];
     const issued = new Set<string>();
-    for (const m of s.matchAll(INVALID_NONE_QK)) {
-      const field = m[1].trim();
+    for (const match of source.matchAll(INVALID_NONE_QK)) {
+      const field = match[1].trim();
       if (issued.has(field)) continue;
-      const idx = m.index ?? 0;
-      const owner = blockAt(blocks, idx);
-      const isExempt = owner ? owner.exempt.has(field) : exemptForRef(field, refDatasource(idx));
-      if (isExempt) continue;
+      const index = match.index ?? 0;
+      const owner = blockAt(dependencyBlocks, index) ?? blockAt(datasourceBlocks, index);
+      const declared = owner
+        ? owner.declaredQuantitativeInstances.has(field)
+        : declarationExists(field, datasourceForRef(index), index);
+      if (declared) continue;
+
       issued.add(field);
       const ref = `[none:${field}:qk]`;
       issues.push({
         ruleId: 'invalid-column-instance-pivot',
         severity: 'error',
         message:
-          `Invalid column-instance reference ${ref}: a dimension instance (none: / derivation="None") cannot have a ` +
-          'quantitative-key pivot (:qk). No such instance exists — Tableau rejects it on load ("field … does not exist"), ' +
-          'and repeated re-applies of the invalid XML can destabilize Desktop.',
+          `Invalid or undeclared column-instance reference ${ref}: no matching quantitative ` +
+          '<column-instance derivation="None" type="quantitative"> exists in the same datasource scope. ' +
+          'Tableau rejects fabricated references on load ("field … does not exist").',
         xpath: `//*[contains(text(),'${ref}')] | //@*[contains(.,'${ref}')]`,
         suggestion:
-          `Use a valid pivot for the field's role: a discrete dimension is [none:${field}:nk] (nominal) or ` +
-          `[none:${field}:ok] (ordinal); a date part/trunc is e.g. [tmn:${field}:ok] / [tyr:${field}:ok]; a measure ` +
-          `aggregate is [sum:${field}:qk] etc. Build the reference from a real field instance (tableau-list-available-fields), ` +
-          'not by pairing none: with :qk.',
+          `Use an instance declared by Desktop. If no quantitative ${ref} declaration exists, use ` +
+          `[none:${field}:nk] or [none:${field}:ok] for a dimension, a date derivation for dates, ` +
+          'or an aggregate such as sum: for a measure.',
       });
     }
 

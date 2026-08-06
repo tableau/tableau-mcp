@@ -1,0 +1,118 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<bookmark version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user' source-platform='mac'>
+<window class='worksheet' name='gantt-chart'>
+  <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='2147483647'>
+            <card type='columns' />
+          </strip>
+          <strip size='2147483647'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='{00000000-0000-0000-0000-000000000002}' />
+</window>
+<table>
+    <view>
+      <datasources>
+        <datasource name='Sample - Superstore' />
+      </datasources>
+      <datasource-dependencies datasource='Sample - Superstore'>
+        <column caption='Ship Lag' datatype='integer' name='[Calculation_291608117815463936]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='DATEDIFF(&apos;day&apos;,[Order Date],[Ship Date])' />
+        </column>
+        <column caption='Ship Lag Indicator' datatype='string' name='[Calculation_291608117815988225]' role='dimension' type='nominal'>
+          <calculation class='tableau' formula='If [Calculation_291608117815463936] &gt;= 5 then "Late"
+ElseIf [Calculation_291608117815463936] &gt;=2 Then "On-Time"
+Else "Early"
+END' />
+        </column>
+        <column datatype='string' name='[Customer Name]' role='dimension' type='nominal' />
+        <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
+        <column datatype='string' name='[Region]' role='dimension' type='nominal' />
+        <column datatype='string' name='[Profit (bin)]' role='dimension' type='nominal' />
+        <column datatype='date' name='[Ship Date]' role='dimension' type='ordinal' />
+        <column datatype='string' name='[Product Name]' role='dimension' type='nominal' />
+        <column-instance column='[Order Date]' derivation='Month' name='[mn:Order Date:ok]' pivot='key' type='ordinal' />
+        <column-instance column='[Calculation_291608117815988225]' derivation='None' name='[none:Calculation_291608117815988225:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Customer Name]' derivation='None' name='[none:Customer Name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Profit (bin)]' derivation='None' name='[none:Profit (bin):nk]' pivot='key' type='nominal' />
+        <column-instance column='[Product Name]' derivation='None' name='[none:Product Name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_291608117815463936]' derivation='Sum' name='[sum:Calculation_291608117815463936:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Order Date]' derivation='Year' name='[yr:Order Date:ok]' pivot='key' type='ordinal' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[Sample - Superstore].[none:Profit (bin):nk]'>
+        <groupfilter function='level-members' level='[none:Profit (bin):nk]' />
+      </filter>
+      <filter class='categorical' column='[Sample - Superstore].[none:Product Name:nk]'>
+        <groupfilter function='level-members' level='[none:Product Name:nk]' />
+      </filter>
+      <filter class='categorical' column='[Sample - Superstore].[yr:Order Date:ok]'>
+        <groupfilter function='level-members' level='[yr:Order Date:ok]' />
+      </filter>
+      <slices>
+        <column>[Sample - Superstore].[yr:Order Date:ok]</column>
+        <column>[Sample - Superstore].[none:Product Name:nk]</column>
+        <column>[Sample - Superstore].[none:Profit (bin):nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='cell'>
+        <format attr='height' field='[Sample - Superstore].[none:Profit (bin):nk]' value='21' />
+        <format attr='height' field='[Sample - Superstore].[none:Region:nk]' value='27' />
+        <format attr='width' field='[Sample - Superstore].[mn:Order Date:ok]' value='59' />
+      </style-rule>
+      <style-rule element='header'>
+        <format attr='width' field='[Sample - Superstore].[none:Profit (bin):nk]' value='212' />
+        <format attr='width' field='[Sample - Superstore].[none:Region:nk]' value='160' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='display' field='[Sample - Superstore].[none:Product Name:nk]' value='false' />
+        <format attr='display' field='[Sample - Superstore].[none:Customer Name:nk]' value='false' />
+        <format attr='text-format' field='[Sample - Superstore].[mn:Order Date:ok]' value='iLLL' />
+        <format attr='display' field='[Sample - Superstore].[none:Region:nk]' value='false' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='GanttBar' />
+        <encodings>
+          <color column='[Sample - Superstore].[none:Calculation_291608117815988225:nk]' />
+          <size column='[Sample - Superstore].[sum:Calculation_291608117815463936:qk]' />
+        </encodings>
+        <style>
+          <style-rule element='pane'>
+            <format attr='minheight' value='-1' />
+            <format attr='maxheight' value='-1' />
+            <format attr='minwidth' value='-1' />
+            <format attr='maxwidth' value='-1' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>([Sample - Superstore].[none:Customer Name:nk] / ([Sample - Superstore].[none:Product Name:nk] / ([Sample - Superstore].[none:Profit (bin):nk] / [Sample - Superstore].[none:Region:nk])))</rows>
+    <cols>([Sample - Superstore].[yr:Order Date:ok] / [Sample - Superstore].[mn:Order Date:ok])</cols>
+  </table>
+</bookmark>

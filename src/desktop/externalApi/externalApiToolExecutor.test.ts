@@ -1,4 +1,7 @@
+import { Err, Ok } from 'ts-results-es';
+
 import * as logger from '../../logging/logger.js';
+import type { ExternalApiClient } from './externalApiClient.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
@@ -119,6 +122,34 @@ describe('ExternalApiToolExecutor', () => {
       expect(last?.method).toBe('POST');
       expect(last?.path).toBe('/v0/workbook/document');
       expect(last?.body).toBe(xml);
+    });
+
+    it('rejects a different expected instance before the workbook POST', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [{ ...instanceFor(server), instanceId: 'inst-new' }],
+      });
+      await executor.start();
+      const onDispatch = vi.fn();
+
+      const result = await executor.applyWorkbookDocument('<workbook />', signal, {
+        expectedInstanceId: 'inst-old',
+        onDispatch,
+      });
+
+      expect(result.isErr()).toBe(true);
+      expect(onDispatch).not.toHaveBeenCalled();
+      expect(server.requests.filter((request) => request.method === 'POST')).toHaveLength(0);
+    });
+
+    it('reports the instance that served a successful workbook read', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [{ ...instanceFor(server), instanceId: 'inst-read' }],
+      });
+      await executor.start();
+
+      const result = await executor.getWorkbookDocument(signal);
+
+      expect(result.unwrap().instanceId).toBe('inst-read');
     });
   });
 
@@ -572,6 +603,32 @@ describe('ExternalApiToolExecutor', () => {
       // start() + one rescan = 2 discover calls, no infinite loop.
       expect(discover).toHaveBeenCalledTimes(2);
     });
+
+    it('does not retry a workbook POST when a 401 rescan finds a new instance with the same pid', async () => {
+      const discover = vi
+        .fn()
+        .mockReturnValueOnce([
+          { ...instanceFor(server, 'stale-token'), instanceId: 'inst-expected' },
+        ])
+        .mockReturnValue([{ ...instanceFor(server, 'valid-token'), instanceId: 'inst-restarted' }]);
+      const executor = new ExternalApiToolExecutor({ pid: 999, discover });
+      await executor.start();
+      const onDispatch = vi.fn();
+
+      const result = await executor.applyWorkbookDocument('<workbook />', signal, {
+        expectedInstanceId: 'inst-expected',
+        onDispatch,
+      });
+
+      expect(result.isErr()).toBe(true);
+      expect(onDispatch).toHaveBeenCalledTimes(1);
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/workbook/document',
+        ),
+      ).toHaveLength(1);
+      expect(discover).toHaveBeenCalledTimes(2);
+    });
   });
   describe('async dispatch (202) terminal handling', () => {
     const accepted202 = (operationId: string): MockOverride => ({
@@ -692,5 +749,91 @@ describe('ExternalApiToolExecutor', () => {
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().xml).toBe('<workbook version="18.1"><worksheets /></workbook>');
     });
+  });
+});
+
+describe('ExternalApiToolExecutor artifact instance identity', () => {
+  const signal = new AbortController().signal;
+  const instance = (instanceId: string, token = 'token'): ExternalApiInstance => ({
+    baseUrl: 'http://127.0.0.1:1',
+    token,
+    pid: 999,
+    instanceId,
+    apiVersion: '0.1.1',
+  });
+
+  it('returns the instance identity from the client that served the workbook read', async () => {
+    const executor = new ExternalApiToolExecutor({
+      discover: () => [instance('inst-read')],
+      createClient: (resolved) =>
+        ({
+          instanceId: resolved.instanceId,
+          getWorkbookDocument: vi
+            .fn()
+            .mockResolvedValue(
+              Ok({ xml: '<workbook />', applicationVersion: '2026.1', xsdPayloadVersion: '1' }),
+            ),
+        }) as unknown as ExternalApiClient,
+    });
+
+    const result = await executor.getWorkbookDocument(signal);
+
+    expect(result.unwrap().instanceId).toBe('inst-read');
+  });
+
+  it('rejects an expected-instance mismatch before dispatch', async () => {
+    const applyWorkbookDocument = vi.fn();
+    const executor = new ExternalApiToolExecutor({
+      discover: () => [instance('inst-new')],
+      createClient: (resolved) =>
+        ({
+          instanceId: resolved.instanceId,
+          applyWorkbookDocument,
+        }) as unknown as ExternalApiClient,
+    });
+    const onDispatch = vi.fn();
+
+    const result = await executor.applyWorkbookDocument('<workbook />', signal, {
+      expectedInstanceId: 'inst-old',
+      onDispatch,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(onDispatch).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('does not retry after a 401 rescan changes instance identity at the same pid', async () => {
+    const instances = [instance('inst-expected', 'stale'), instance('inst-restarted', 'fresh')];
+    const discover = vi
+      .fn()
+      .mockReturnValueOnce([instances[0]])
+      .mockReturnValueOnce([instances[1]]);
+    const firstPost = vi.fn().mockResolvedValue(Err({ type: 'unauthorized', status: 401 }));
+    const retryPost = vi
+      .fn()
+      .mockResolvedValue(
+        Ok({ id: 'unexpected', kind: 'workbook.document.apply', state: 'SUCCEEDED' }),
+      );
+    const executor = new ExternalApiToolExecutor({
+      pid: 999,
+      discover,
+      createClient: (resolved) =>
+        ({
+          instanceId: resolved.instanceId,
+          applyWorkbookDocument: resolved.instanceId === 'inst-expected' ? firstPost : retryPost,
+        }) as unknown as ExternalApiClient,
+    });
+    const onDispatch = vi.fn();
+
+    const result = await executor.applyWorkbookDocument('<workbook />', signal, {
+      expectedInstanceId: 'inst-expected',
+      onDispatch,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(firstPost).toHaveBeenCalledTimes(1);
+    expect(retryPost).not.toHaveBeenCalled();
+    expect(onDispatch).toHaveBeenCalledTimes(1);
   });
 });

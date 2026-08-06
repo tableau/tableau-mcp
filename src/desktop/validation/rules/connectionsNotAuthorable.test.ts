@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { describe, expect, it } from 'vitest';
 
+import { loadRuntimeTemplateCatalogSnapshots } from '../../templates/runtimeTemplateCatalog.js';
 import { runValidation } from '../registry.js';
 import { connectionsNotAuthorableRule } from './connectionsNotAuthorable.js';
 
@@ -175,28 +176,22 @@ describe('connections-not-authorable rule', () => {
 });
 
 describe('connections-not-authorable — bundled template corpus never self-rejects', () => {
-  const XML_DIR = path.join(
-    process.cwd(),
-    'src',
-    'desktop',
-    'data',
-    'data-visualization-templates-xml',
+  const runtimeTemplates = [...loadRuntimeTemplateCatalogSnapshots()].map(
+    ([template, { snapshot }]) => ({ template, xml: snapshot.xml }),
   );
-  const xmlFiles = fs.readdirSync(XML_DIR).filter((f) => f.endsWith('.xml'));
 
-  it('discovers a non-empty shipped template corpus', () => {
-    expect(xmlFiles.length).toBeGreaterThan(0);
+  it('loads the shipped TBM corpus into the runtime catalog', () => {
+    expect(runtimeTemplates.length).toBeGreaterThanOrEqual(133);
   });
 
-  it.each(xmlFiles)(
-    'runValidation(%s, "workbook") reports zero connections-not-authorable issues',
-    (file) => {
-      const xml = fs.readFileSync(path.join(XML_DIR, file), 'utf8');
+  it.each(runtimeTemplates)(
+    'runValidation($template, "workbook") reports zero connections-not-authorable issues',
+    ({ template, xml }) => {
       const result = runValidation(xml, 'workbook');
       const offenders = result.issues.filter((i) => i.ruleId === 'connections-not-authorable');
       expect(
         offenders,
-        `${file}: template must not self-reject on connections-not-authorable`,
+        `${template}: template must not self-reject on connections-not-authorable`,
       ).toEqual([]);
     },
   );

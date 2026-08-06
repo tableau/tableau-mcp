@@ -29,9 +29,11 @@ export interface SchemaField {
   type: string; // "quantitative" | "nominal" | "ordinal" | ...
   datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
   semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
+  approxCount?: number;
   datasource: string;
   table?: string; // metadata-record parent-name for federated grain disambiguation
   isAggregated: boolean;
+  isGroup?: boolean;
   column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
 }
 
@@ -66,9 +68,11 @@ export function summarizeSchema(workbookXml: string): SchemaSummary {
       type: f.type,
       datatype: f.datatype ?? '',
       semanticRole: f.semanticRole,
+      ...(f.approxCount !== undefined ? { approxCount: f.approxCount } : {}),
       datasource: f.datasource,
       ...(f.table ? { table: f.table } : {}),
       isAggregated: !!f.isAggregated,
+      ...(f.isGroup ? { isGroup: true } : {}),
       column_ref: f.column_ref,
     };
   });

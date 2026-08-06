@@ -18,6 +18,7 @@ const CONDITIONAL_TOOLS = ['inject-template', 'apply-workbook', 'apply-dashboard
 const NON_TOOL_VOCABULARY = [
   'all-or-nothing',
   'already-bound',
+  'aggregation-level-mismatch',
   'ambiguous-field',
   'auto-apply',
   'auto-grid',
@@ -82,7 +83,6 @@ const NON_TOOL_VOCABULARY = [
   're-propose',
   're-run',
   're-applying',
-  'route-gate',
   'route-spec',
   'route-state',
   'row-type',
@@ -149,6 +149,12 @@ function formatLiteral(literal: string): string {
 }
 
 describe('Desktop emitted tool references', () => {
+  it('does not register retired template wrappers', () => {
+    expect(desktopToolNames).not.toEqual(
+      expect.arrayContaining(['propose-template', 'validate-proposal', 'list-xml-templates']),
+    );
+  });
+
   it('keeps guidance tool-name tokens aligned with the Desktop registry', () => {
     const registered = new Set<string>(desktopToolNames);
     const conditional = new Set<string>(CONDITIONAL_TOOLS);

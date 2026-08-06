@@ -14,7 +14,8 @@ describe('unsubstituted-template-token rule', () => {
     expect(issues[0].ruleId).toBe('unsubstituted-template-token');
     expect(issues[0].severity).toBe('error');
     expect(issues[0].message).toMatch(/\{\{DATASOURCE\}\}/);
-    expect(issues[0].suggestion).toMatch(/inject-template|build-and-apply/);
+    expect(issues[0].suggestion).toContain('build-worksheets-from-templates');
+    expect(issues[0].suggestion).toContain('apply-worksheet');
   });
 
   it('dedupes repeats of the same token', () => {
@@ -50,6 +51,20 @@ describe('unsubstituted-template-token rule', () => {
       '<calc formula="IF {x} > 0 THEN &quot;a&quot; END" /><x note="{not a token}" y="{{lower_case}}"/>';
 
     expect(unsubstitutedTemplateTokenRule.validate(xml)).toHaveLength(0);
+  });
+
+  it('errors on unresolved lowercase field_base placeholders but not the symbolic marker', () => {
+    const issues = unsubstitutedTemplateTokenRule.validate(
+      '<worksheet><rows>[{{DATASOURCE}}].[{{field_base_2}}]</rows><x note="{{field_base_N}}"/></worksheet>',
+    );
+
+    expect(issues.map((issue) => issue.message)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('{{DATASOURCE}}'),
+        expect.stringContaining('{{field_base_2}}'),
+      ]),
+    );
+    expect(issues.some((issue) => issue.message.includes('{{field_base_N}}'))).toBe(false);
   });
 
   it('returns nothing for empty XML', () => {

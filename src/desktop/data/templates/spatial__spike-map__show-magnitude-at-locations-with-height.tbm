@@ -1,0 +1,1023 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <LayerControlWidget />
+    <Layers />
+    <MapboxVectorStylesAndLayers />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <datasources>
+    <datasource caption='Spike Chart' inline='true' name='federated.1c4k6r40hod0qv1b98nix0a4vlle' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='2021' name='excel-direct.16id9n91njdebi1bvffm70xc7und'>
+            <connection class='excel-direct' cleaning='no' compat='no' dataRefreshTime='' interpretationMode='0' validate='no' workgroup-auth-mode='as-is' />
+          </named-connection>
+          <named-connection caption='ALTERXY Clean countries' name='excel-direct.0gmjyva0j3y2cr18hj0xf129cig1'>
+            <connection class='excel-direct' cleaning='no' compat='no' dataRefreshTime='' interpretationMode='0' validate='no' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation join='inner' type='join'>
+          <clause type='join'>
+            <expression op='='>
+              <expression op='[Sheet1+].[Code]' />
+              <expression op='[Sheet12].[alpha-3]' />
+            </expression>
+          </clause>
+          <relation all='true' name='Sheet1+' type='union'>
+            <columns header='yes'>
+              <column datatype='string' name='Entity' />
+              <column datatype='string' name='Code' />
+              <column datatype='string' name='Year' />
+              <column datatype='real' name='Gender Inequality Index' />
+              <column datatype='string' name='Sheet' />
+              <column datatype='string' name='Table Name' />
+            </columns>
+            <relation connection='excel-direct.16id9n91njdebi1bvffm70xc7und' name='Sheet1' table='[Sheet1$]' type='table'>
+              <columns gridOrigin='A1:D182:no:A1:D182:0' header='yes' outcome='2'>
+                <column datatype='string' name='Entity' ordinal='0' />
+                <column datatype='string' name='Code' ordinal='1' />
+                <column datatype='string' name='Year' ordinal='2' />
+                <column datatype='string' name='Gender Inequality Index' ordinal='3' />
+              </columns>
+            </relation>
+            <relation connection='excel-direct.16id9n91njdebi1bvffm70xc7und' name='Sheet11' table='[Sheet1$]' type='table'>
+              <columns gridOrigin='A1:D182:no:A1:D182:0' header='yes' outcome='2'>
+                <column datatype='string' name='Entity' ordinal='0' />
+                <column datatype='string' name='Code' ordinal='1' />
+                <column datatype='string' name='Year' ordinal='2' />
+                <column datatype='string' name='Gender Inequality Index' ordinal='3' />
+              </columns>
+            </relation>
+          </relation>
+          <relation connection='excel-direct.0gmjyva0j3y2cr18hj0xf129cig1' name='Sheet12' table='[Sheet1$]' type='table'>
+            <columns gridOrigin='A1:S191:no:A1:S191:0' header='yes' outcome='2'>
+              <column datatype='integer' name='1' ordinal='0' />
+              <column datatype='string' name='name' ordinal='1' />
+              <column datatype='string' name='alpha-2' ordinal='2' />
+              <column datatype='string' name='alpha-3' ordinal='3' />
+              <column datatype='string' name='country-code' ordinal='4' />
+              <column datatype='string' name='iso_3166-2' ordinal='5' />
+              <column datatype='string' name='region' ordinal='6' />
+              <column datatype='string' name='sub-region' ordinal='7' />
+              <column datatype='string' name='intermediate-region' ordinal='8' />
+              <column datatype='string' name='region-code' ordinal='9' />
+              <column datatype='string' name='sub-region-code' ordinal='10' />
+              <column datatype='string' name='intermediate-region-code' ordinal='11' />
+              <column datatype='string' name='country code' ordinal='12' />
+              <column datatype='real' name='Latitude' ordinal='13' />
+              <column datatype='real' name='Longitude' ordinal='14' />
+              <column datatype='string' name='Country Name' ordinal='15' />
+              <column datatype='string' name='coordinates_0' ordinal='16' />
+              <column datatype='string' name='coordinates_1' ordinal='17' />
+              <column datatype='string' name='country_code' ordinal='18' />
+            </columns>
+          </relation>
+        </relation>
+        <metadata-records>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Sheet1+]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+          </metadata-record>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='context'>0</attribute>
+              <attribute datatype='string' name='gridOrigin'>&quot;A1:S191:no:A1:S191:0&quot;</attribute>
+              <attribute datatype='boolean' name='header'>true</attribute>
+              <attribute datatype='integer' name='outcome'>2</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Entity</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Entity]</local-name>
+            <parent-name>[Sheet1+]</parent-name>
+            <remote-alias>Entity</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Code</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Code]</local-name>
+            <parent-name>[Sheet1+]</parent-name>
+            <remote-alias>Code</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Year</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Year]</local-name>
+            <parent-name>[Sheet1+]</parent-name>
+            <remote-alias>Year</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Gender Inequality Index</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Gender Inequality Index]</local-name>
+            <parent-name>[Sheet1+]</parent-name>
+            <remote-alias>Gender Inequality Index</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Sheet</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Sheet]</local-name>
+            <parent-name>[Sheet1+]</parent-name>
+            <remote-alias>Sheet</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Table Name</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Table Name]</local-name>
+            <parent-name>[Sheet1+]</parent-name>
+            <remote-alias>Table Name</remote-alias>
+            <ordinal>5</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>1</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[1]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>1</remote-alias>
+            <ordinal>6</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;I8&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>name</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[name]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>name</remote-alias>
+            <ordinal>7</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>alpha-2</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[alpha-2]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>alpha-2</remote-alias>
+            <ordinal>8</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>alpha-3</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[alpha-3]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>alpha-3</remote-alias>
+            <ordinal>9</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>country-code</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[country-code]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>country-code</remote-alias>
+            <ordinal>10</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>iso_3166-2</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[iso_3166-2]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>iso_3166-2</remote-alias>
+            <ordinal>11</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>region</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[region]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>region</remote-alias>
+            <ordinal>12</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>sub-region</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[sub-region]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>sub-region</remote-alias>
+            <ordinal>13</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>intermediate-region</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[intermediate-region]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>intermediate-region</remote-alias>
+            <ordinal>14</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>region-code</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[region-code]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>region-code</remote-alias>
+            <ordinal>15</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>sub-region-code</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[sub-region-code]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>sub-region-code</remote-alias>
+            <ordinal>16</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>intermediate-region-code</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[intermediate-region-code]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>intermediate-region-code</remote-alias>
+            <ordinal>17</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>country code</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[country code]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>country code</remote-alias>
+            <ordinal>18</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Latitude</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Latitude]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>Latitude</remote-alias>
+            <ordinal>19</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Longitude</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Longitude]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>Longitude</remote-alias>
+            <ordinal>20</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Country Name</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Country Name]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>Country Name</remote-alias>
+            <ordinal>21</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>coordinates_0</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[coordinates_0]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>coordinates_0</remote-alias>
+            <ordinal>22</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>coordinates_1</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[coordinates_1]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>coordinates_1</remote-alias>
+            <ordinal>23</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>country_code</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[country_code]</local-name>
+            <parent-name>[Sheet12]</parent-name>
+            <remote-alias>country_code</remote-alias>
+            <ordinal>24</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column datatype='integer' hidden='true' name='[1]' role='measure' type='quantitative' />
+      <column caption='Path ID' datatype='integer' name='[Calculation_0070936783224837]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='IF [Table Name] = &quot;Sheet1&quot; THEN 0 ELSE 1 END' />
+      </column>
+      <column aggregation='Avg' caption='New Lat' datatype='real' name='[Calculation_0070936784482313]' role='measure' semantic-role='[Geographical].[Latitude]' type='quantitative'>
+        <calculation class='tableau' formula='IF [Calculation_0070936783224837]=0 THEN [Latitude]&#13;&#10;ELSE [Latitude]+([Parameters].[Parameter 0070936783925254]*[Gender Inequality Index])&#13;&#10;END' />
+      </column>
+      <column datatype='string' hidden='true' name='[Code]' role='dimension' type='nominal' />
+      <column datatype='string' name='[Country Name]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+      <column datatype='string' hidden='true' name='[Entity]' role='dimension' semantic-role='[Country].[Name]' type='nominal' />
+      <column aggregation='Avg' datatype='real' name='[Latitude]' role='measure' semantic-role='[Geographical].[Latitude]' type='quantitative' />
+      <column aggregation='Avg' datatype='real' name='[Longitude]' role='measure' semantic-role='[Geographical].[Longitude]' type='quantitative' />
+      <column datatype='string' hidden='true' name='[Sheet]' role='dimension' type='nominal' />
+      <column datatype='string' hidden='true' name='[Year]' role='dimension' type='nominal' />
+      <column caption='Sheet1' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Sheet1_0377C3D97A1B40318670C951F650A809]' role='measure' type='quantitative' />
+      <column caption='Alpha-2' datatype='string' hidden='true' name='[alpha-2]' role='dimension' type='nominal' />
+      <column caption='Alpha-3' datatype='string' hidden='true' name='[alpha-3]' role='dimension' type='nominal' />
+      <column caption='Coordinates 0' datatype='string' hidden='true' name='[coordinates_0]' role='dimension' type='nominal' />
+      <column caption='Coordinates 1' datatype='string' hidden='true' name='[coordinates_1]' role='dimension' type='nominal' />
+      <column caption='Country Code' datatype='string' hidden='true' name='[country code]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+      <column caption='Country-Code' datatype='string' name='[country-code]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+      <column caption='Country Code1' datatype='string' hidden='true' name='[country_code]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+      <column caption='Intermediate-Region-Code' datatype='string' hidden='true' name='[intermediate-region-code]' role='dimension' type='nominal' />
+      <column caption='Intermediate-Region' datatype='string' hidden='true' name='[intermediate-region]' role='dimension' type='nominal' />
+      <column caption='Iso 3166-2' datatype='string' hidden='true' name='[iso_3166-2]' role='dimension' type='nominal' />
+      <column caption='Name' datatype='string' name='[name]' role='dimension' type='nominal' />
+      <column caption='Region-Code' datatype='string' hidden='true' name='[region-code]' role='dimension' type='nominal' />
+      <column caption='Region' datatype='string' name='[region]' role='dimension' type='nominal' />
+      <column caption='Sub-Region-Code' datatype='string' hidden='true' name='[sub-region-code]' role='dimension' type='nominal' />
+      <column caption='Sub-Region' datatype='string' name='[sub-region]' role='dimension' type='nominal' />
+      <column-instance column='[Calculation_0070936783224837]' derivation='None' name='[none:Calculation_0070936783224837:qk]' pivot='key' type='quantitative' />
+      <column-instance column='[Calculation_0070936784482313]' derivation='None' name='[none:Calculation_0070936784482313:qk]' pivot='key' type='quantitative' />
+      <column-instance column='[Longitude]' derivation='None' name='[none:Longitude:qk]' pivot='key' type='quantitative' />
+      <column-instance column='[country-code]' derivation='None' name='[none:country-code:nk]' pivot='key' type='nominal' />
+      <group hidden='true' name='[Exclusions (Country-Code,Longitude,New Lat,Path ID)]' name-style='unqualified' user:auto-column='exclude'>
+        <groupfilter function='crossjoin'>
+          <groupfilter function='level-members' level='[none:country-code:nk]' />
+          <groupfilter function='level-members' level='[none:Longitude:qk]' />
+          <groupfilter function='level-members' level='[none:Calculation_0070936784482313:qk]' />
+          <groupfilter function='level-members' level='[none:Calculation_0070936783224837:qk]' />
+        </groupfilter>
+      </group>
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:12:58 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='Sheet1+ (2021)' increment-value='%null%' refresh-type='create' rows-inserted='338' timestamp-start='2026-06-30 20:12:58.243' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Gender Inequality Index</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Gender Inequality Index]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Gender Inequality Index</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Sheet1+</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>151</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Table Name</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Table Name]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Table Name</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Sheet1+</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>2</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>name</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[name]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>name</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Sheet12</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>169</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>country-code</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[country-code]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>country-code</remote-alias>
+              <ordinal>3</ordinal>
+              <family>Sheet12</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>169</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>region</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[region]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>region</remote-alias>
+              <ordinal>4</ordinal>
+              <family>Sheet12</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>5</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>sub-region</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[sub-region]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>sub-region</remote-alias>
+              <ordinal>5</ordinal>
+              <family>Sheet12</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>16</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Latitude</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Latitude]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Latitude</remote-alias>
+              <ordinal>6</ordinal>
+              <family>Sheet12</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>169</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Longitude</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Longitude]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Longitude</remote-alias>
+              <ordinal>7</ordinal>
+              <family>Sheet12</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>169</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Country Name</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Country Name]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Country Name</remote-alias>
+              <ordinal>8</ordinal>
+              <family>Sheet12</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>169</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Sheet1_0377C3D97A1B40318670C951F650A809]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout common-percentage='0.641026' dim-ordering='alphabetic' measure-ordering='alphabetic' parameter-percentage='0.358974' show-structure='false' user-set-layout-v2='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;USA&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <datasource-dependencies datasource='Parameters'>
+        <column caption='Spike Modifier' datatype='real' name='[Parameter 0070936783925254]' param-domain-type='any' role='measure' type='quantitative' value='40.'>
+          <calculation class='tableau' formula='40.' />
+        </column>
+      </datasource-dependencies>
+      <object-graph>
+        <objects>
+          <object caption='Sheet1' id='Sheet1_0377C3D97A1B40318670C951F650A809'>
+            <properties context=''>
+              <relation join='inner' type='join'>
+                <clause type='join'>
+                  <expression op='='>
+                    <expression op='[Sheet1+].[Code]' />
+                    <expression op='[Sheet12].[alpha-3]' />
+                  </expression>
+                </clause>
+                <relation all='true' name='Sheet1+' type='union'>
+                  <columns header='yes'>
+                    <column datatype='string' name='Entity' />
+                    <column datatype='string' name='Code' />
+                    <column datatype='string' name='Year' />
+                    <column datatype='real' name='Gender Inequality Index' />
+                    <column datatype='string' name='Sheet' />
+                    <column datatype='string' name='Table Name' />
+                  </columns>
+                  <relation connection='excel-direct.16id9n91njdebi1bvffm70xc7und' name='Sheet1' table='[Sheet1$]' type='table'>
+                    <columns gridOrigin='A1:D182:no:A1:D182:0' header='yes' outcome='2'>
+                      <column datatype='string' name='Entity' ordinal='0' />
+                      <column datatype='string' name='Code' ordinal='1' />
+                      <column datatype='string' name='Year' ordinal='2' />
+                      <column datatype='string' name='Gender Inequality Index' ordinal='3' />
+                    </columns>
+                  </relation>
+                  <relation connection='excel-direct.16id9n91njdebi1bvffm70xc7und' name='Sheet11' table='[Sheet1$]' type='table'>
+                    <columns gridOrigin='A1:D182:no:A1:D182:0' header='yes' outcome='2'>
+                      <column datatype='string' name='Entity' ordinal='0' />
+                      <column datatype='string' name='Code' ordinal='1' />
+                      <column datatype='string' name='Year' ordinal='2' />
+                      <column datatype='string' name='Gender Inequality Index' ordinal='3' />
+                    </columns>
+                  </relation>
+                </relation>
+                <relation connection='excel-direct.0gmjyva0j3y2cr18hj0xf129cig1' name='Sheet12' table='[Sheet1$]' type='table'>
+                  <columns gridOrigin='A1:S191:no:A1:S191:0' header='yes' outcome='2'>
+                    <column datatype='integer' name='1' ordinal='0' />
+                    <column datatype='string' name='name' ordinal='1' />
+                    <column datatype='string' name='alpha-2' ordinal='2' />
+                    <column datatype='string' name='alpha-3' ordinal='3' />
+                    <column datatype='string' name='country-code' ordinal='4' />
+                    <column datatype='string' name='iso_3166-2' ordinal='5' />
+                    <column datatype='string' name='region' ordinal='6' />
+                    <column datatype='string' name='sub-region' ordinal='7' />
+                    <column datatype='string' name='intermediate-region' ordinal='8' />
+                    <column datatype='string' name='region-code' ordinal='9' />
+                    <column datatype='string' name='sub-region-code' ordinal='10' />
+                    <column datatype='string' name='intermediate-region-code' ordinal='11' />
+                    <column datatype='string' name='country code' ordinal='12' />
+                    <column datatype='real' name='Latitude' ordinal='13' />
+                    <column datatype='real' name='Longitude' ordinal='14' />
+                    <column datatype='string' name='Country Name' ordinal='15' />
+                    <column datatype='string' name='coordinates_0' ordinal='16' />
+                    <column datatype='string' name='coordinates_1' ordinal='17' />
+                    <column datatype='string' name='country_code' ordinal='18' />
+                  </columns>
+                </relation>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <mapsources>
+    <mapsource name='Tableau' />
+  </mapsources>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card mode='type_in' param='[Parameters].[Parameter 0070936783925254]' type='parameter' />
+          <card pane-specification-id='0' param='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[avg:Gender Inequality Index:qk]' type='size' />
+          <card pane-specification-id='0' param='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[avg:Gender Inequality Index:qk]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <highlight>
+        <color-one-way>
+          <field>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[avg:Gender Inequality Index:qk]</field>
+          <field>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Code:nk]</field>
+          <field>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Country Name:nk]</field>
+          <field>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Entity:nk]</field>
+          <field>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Gender Inequality Index:nk]</field>
+          <field>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Table Name:nk]</field>
+          <field>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:alpha-2:nk]</field>
+          <field>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:country-code:nk]</field>
+          <field>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:name:nk]</field>
+          <field>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:region:nk]</field>
+          <field>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:sub-region:nk]</field>
+        </color-one-way>
+      </highlight>
+      <floating-toolbar-visibility value='2' />
+      <geo-search-visibility value='1' />
+      <map-navigation value='1' />
+      <layer-control toolbar-button-enabled='false' />
+    </viewpoint>
+    <simple-id uuid='{3A33C46E-3EA6-4916-9794-39A7787E25CA}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Spike Chart' name='federated.1c4k6r40hod0qv1b98nix0a4vlle' />
+        <datasource name='Parameters' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Tableau' />
+      </mapsources>
+      <datasource-dependencies datasource='Parameters'>
+        <column caption='Spike Modifier' datatype='real' name='[Parameter 0070936783925254]' param-domain-type='any' role='measure' type='quantitative' value='40.'>
+          <calculation class='tableau' formula='40.' />
+        </column>
+      </datasource-dependencies>
+      <datasource-dependencies datasource='federated.1c4k6r40hod0qv1b98nix0a4vlle'>
+        <column caption='Path ID' datatype='integer' name='[Calculation_0070936783224837]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='IF [Table Name] = &quot;Sheet1&quot; THEN 0 ELSE 1 END' />
+        </column>
+        <column aggregation='Avg' caption='New Lat' datatype='real' name='[Calculation_0070936784482313]' role='measure' semantic-role='[Geographical].[Latitude]' type='quantitative'>
+          <calculation class='tableau' formula='IF [Calculation_0070936783224837]=0 THEN [Latitude]&#13;&#10;ELSE [Latitude]+([Parameters].[Parameter 0070936783925254]*[Gender Inequality Index])&#13;&#10;END' />
+        </column>
+        <column datatype='string' name='[Country Name]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+        <column datatype='real' name='[Gender Inequality Index]' role='measure' type='quantitative' />
+        <column aggregation='Avg' datatype='real' name='[Latitude]' role='measure' semantic-role='[Geographical].[Latitude]' type='quantitative' />
+        <column aggregation='Avg' datatype='real' name='[Longitude]' role='measure' semantic-role='[Geographical].[Longitude]' type='quantitative' />
+        <column datatype='string' name='[Table Name]' role='dimension' type='nominal' />
+        <column-instance column='[name]' derivation='Attribute' name='[attr:name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_0070936784482313]' derivation='Avg' name='[avg:Calculation_0070936784482313:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Gender Inequality Index]' derivation='Avg' name='[avg:Gender Inequality Index:qk]' pivot='key' type='quantitative' />
+        <column caption='Country-Code' datatype='string' name='[country-code]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+        <column caption='Name' datatype='string' name='[name]' role='dimension' type='nominal' />
+        <column-instance column='[Calculation_0070936783224837]' derivation='None' name='[none:Calculation_0070936783224837:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_0070936784482313]' derivation='None' name='[none:Calculation_0070936784482313:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Country Name]' derivation='None' name='[none:Country Name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Longitude]' derivation='None' name='[none:Longitude:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[country-code]' derivation='None' name='[none:country-code:nk]' pivot='key' type='nominal' />
+        <column-instance column='[region]' derivation='None' name='[none:region:nk]' pivot='key' type='nominal' />
+        <column-instance column='[sub-region]' derivation='None' name='[none:sub-region:nk]' pivot='key' type='nominal' />
+        <column caption='Region' datatype='string' name='[region]' role='dimension' type='nominal' />
+        <column caption='Sub-Region' datatype='string' name='[sub-region]' role='dimension' type='nominal' />
+      </datasource-dependencies>
+      <computed-sort column='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:country-code:nk]' direction='ASC' using='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[avg:Calculation_0070936784482313:qk]' />
+      <filter class='categorical' column='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:region:nk]'>
+        <groupfilter function='member' level='[none:region:nk]' member='&quot;Europe&quot;' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+      </filter>
+      <filter class='categorical' column='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:sub-region:nk]'>
+        <groupfilter function='union' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>
+          <groupfilter function='member' level='[none:sub-region:nk]' member='&quot;Southern Europe&quot;' />
+          <groupfilter function='member' level='[none:sub-region:nk]' member='&quot;Western Europe&quot;' />
+        </groupfilter>
+      </filter>
+      <slices>
+        <column>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:region:nk]</column>
+        <column>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:sub-region:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <encoding attr='space' class='0' field='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Longitude:qk]' field-type='quantitative' max='3251984.506962535' min='-1863584.5979245845' projection='EPSG:3857' range-type='fixed' scope='cols' type='space' />
+        <encoding attr='space' class='0' field='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Calculation_0070936784482313:qk]' field-type='quantitative' max='7755612.4945632257' min='3829710.5808249698' projection='EPSG:3857' range-type='fixed' scope='rows' type='space' />
+      </style-rule>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[avg:Gender Inequality Index:qk]' min='-0.20000000000000001' type='custom-interpolated'>
+          <color-palette custom='true' name='' type='ordered-sequential'>
+            <color>#f1f1f1</color>
+            <color>#e3e3f1</color>
+            <color>#d5d6f1</color>
+            <color>#c7c8f1</color>
+            <color>#babbf1</color>
+            <color>#acadf1</color>
+            <color>#9e9ff1</color>
+            <color>#9192f1</color>
+            <color>#8385f1</color>
+            <color>#7577f1</color>
+            <color>#686af1</color>
+          </color-palette>
+        </encoding>
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+      </style-rule>
+      <style-rule element='map-layer'>
+        <format attr='enabled' id='background' value='false' />
+        <format attr='enabled' id='barrier_line-land-polygon' value='false' />
+        <format attr='enabled' id='barrier_line-land-line' value='false' />
+        <format attr='enabled' id='national_park' value='false' />
+        <format attr='enabled' id='pitch' value='false' />
+        <format attr='enabled' id='industrial' value='false' />
+        <format attr='enabled' id='built-up-area' value='false' />
+        <format attr='enabled' id='water' value='false' />
+        <format attr='enabled' id='waterway-river-canal' value='false' />
+        <format attr='enabled' id='aeroway-polygon' value='false' />
+        <format attr='enabled' id='aeroway-runway' value='false' />
+        <format attr='enabled' id='aeroway-taxiway' value='false' />
+        <format attr='enabled' id='parks' value='false' />
+        <format attr='enabled' id='landcover_wood' value='false' />
+        <format attr='enabled' id='landcover_scrub' value='false' />
+        <format attr='enabled' id='landcover_grass' value='false' />
+        <format attr='enabled' id='landcover_crop' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-bg' value='false' />
+        <format attr='enabled' id='admin-0-boundaries' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-dispute' value='false' />
+        <format attr='enabled' id='admin-0-label-5th-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-4th-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-3rd-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-2nd-tier' value='false' />
+        <format attr='enabled' id='admin-0-label-1st-tier' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-bg-sub' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-supress-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-sm-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-md-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-lg-parents-bg' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-dispute-sub' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-sub' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-supress' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-sm-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-md-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-lg-parents' value='false' />
+        <format attr='enabled' id='admin1-water-lines-usa-tableau' value='false' />
+        <format attr='enabled' id='9-dash-line-casing' value='false' />
+        <format attr='enabled' id='9-dash-line' value='false' />
+        <format attr='enabled' id='admin-1-label-9th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-8th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-7th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-6th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-5th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-4th-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-3rd-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-2nd-tier' value='false' />
+        <format attr='enabled' id='admin-1-label-1st-tier' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-3rd-tier' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-2nd-tier' value='false' />
+        <format attr='enabled' id='us-admin-1-label-abbr-1st-tier' value='false' />
+      </style-rule>
+      <style-rule element='map'>
+        <format attr='washout' value='0.0' />
+      </style-rule>
+    </style>
+    <panes customization-axis='layer'>
+      <pane id='1' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+      </pane>
+      <pane generated-title='Country Name' id='2' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Multipolygon' />
+        <encodings>
+          <lod column='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Country Name:nk]' />
+          <geometry column='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[Geometry (generated)]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run bold='true'>&lt;[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Country Name:nk]&gt;</run>
+            <run>Æ&#10;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-color' value='#c7cad5' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#ffffff' />
+            <format attr='mark-transparency' value='183' />
+          </style-rule>
+        </style>
+      </pane>
+      <pane generated-title='Country-Code' id='0' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Line' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <lod column='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:country-code:nk]' />
+          <color column='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[avg:Gender Inequality Index:qk]' />
+          <size column='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[avg:Gender Inequality Index:qk]' />
+          <path column='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Calculation_0070936783224837:qk]' />
+          <tooltip column='[federated.1c4k6r40hod0qv1b98nix0a4vlle].[attr:name:nk]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run bold='true' fontname='Tableau Regular' fontsize='11'>&lt;[federated.1c4k6r40hod0qv1b98nix0a4vlle].[attr:name:nk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontcolor='#757575' fontname='Tableau Regular'>Gender Inequality Index: </run>
+            <run bold='true' fontname='Tableau Regular'>&lt;[federated.1c4k6r40hod0qv1b98nix0a4vlle].[avg:Gender Inequality Index:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='mark'>
+            <format attr='size' value='1.2853591442108154' />
+            <format attr='mark-markers-mode' value='none' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Calculation_0070936784482313:qk]</rows>
+    <cols>[federated.1c4k6r40hod0qv1b98nix0a4vlle].[none:Longitude:qk]</cols>
+  </table>
+</bookmark>

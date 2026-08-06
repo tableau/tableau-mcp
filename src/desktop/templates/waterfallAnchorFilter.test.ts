@@ -1,20 +1,17 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 import { ensureUserNamespace } from './injectTemplateCore.js';
+import { readTemplate } from './templatePath.js';
 import { spliceWaterfallAnchorFilter } from './waterfallAnchorFilter.js';
 
-const WATERFALL_XML = readFileSync(
-  join(process.cwd(), 'src', 'desktop', 'data', 'templates', 'part-to-whole-waterfall.xml'),
-  'utf8',
-);
+const WATERFALL_XML = readTemplate('part-to-whole-waterfall')!;
 const DS = 'P&L Data';
 
 const baseMapping = {
   Profit: `[${DS}].[sum:amount:qk]`,
   'Sub-Category': `[${DS}].[none:line_item:nk]`,
+  '{{field_base_1}}': `[${DS}].[sum:amount:qk]`,
+  '{{field_base_2}}': `[${DS}].[none:line_item:nk]`,
 };
 const slots = [
   { template_field: 'Profit', required: true, bindable: true },

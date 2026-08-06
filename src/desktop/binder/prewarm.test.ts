@@ -1,10 +1,22 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
+import { loadRuntimeTemplateDescriptors } from '../templates/runtimeTemplateCatalog.js';
 import { summarizeSchema } from './binder.js';
-import { loadManifests } from './manifest.js';
-import type { Family, TemplateManifest } from './manifest-types.js';
+import type { Family, RuntimeTemplateDescriptor } from './manifest-types.js';
 import { hashManifests, hashSchemaSummary, SchemaCache } from './memo.js';
 import { type FamilyShortlist, prewarmForDatasource, type TemplateShortlist } from './prewarm.js';
+
+vi.mock('../templates/runtimeTemplateCatalog.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../templates/runtimeTemplateCatalog.js')>();
+  return {
+    ...actual,
+    loadRuntimeTemplateDescriptors: vi.fn(actual.loadRuntimeTemplateDescriptors),
+  };
+});
 
 const SUPERSTORE_XML = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>
@@ -20,7 +32,21 @@ const SUPERSTORE_XML = `<?xml version='1.0' encoding='utf-8'?>
   </datasources>
 </workbook>`;
 
-const real = loadManifests();
+const real = loadRuntimeTemplateDescriptors();
+
+const RUNTIME_BOOKMARK = `<?xml version='1.0'?>
+<bookmark version='10.1'>
+  <datasources>
+    <datasource name='runtime.ds'>
+      <column name='[Category]' datatype='string' role='dimension' type='nominal'/>
+      <column name='[Value]' datatype='real' role='measure' type='quantitative'/>
+    </datasource>
+  </datasources>
+  <table>
+    <rows>[runtime.ds].[none:Category:nk]</rows>
+    <cols>[runtime.ds].[sum:Value:qk]</cols>
+  </table>
+</bookmark>`;
 
 function findFamily(
   r: ReturnType<typeof prewarmForDatasource>,
@@ -37,6 +63,90 @@ function findTemplate(
 }
 
 describe('prewarm/prewarmForDatasource', () => {
+  it('discovers immutable built-in runtime descriptors only once', () => {
+    const loader = vi.mocked(loadRuntimeTemplateDescriptors);
+    loader.mockClear();
+
+    prewarmForDatasource(SUPERSTORE_XML);
+    prewarmForDatasource(SUPERSTORE_XML);
+
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it('rediscovers external runtime templates on every call', () => {
+    const priorTemplatesDir = process.env['TEMPLATES_DIR'];
+    const root = mkdtempSync(join(tmpdir(), 'prewarm-runtime-'));
+    try {
+      process.env['TEMPLATES_DIR'] = root;
+      writeFileSync(join(root, 'runtime-first.tbm'), RUNTIME_BOOKMARK);
+      const first = prewarmForDatasource(SUPERSTORE_XML);
+      writeFileSync(join(root, 'runtime-second.tbm'), RUNTIME_BOOKMARK);
+      const second = prewarmForDatasource(SUPERSTORE_XML);
+
+      const firstTemplates = first.families.flatMap((family) =>
+        family.templates.map((template) => template.template),
+      );
+      const secondTemplates = second.families.flatMap((family) =>
+        family.templates.map((template) => template.template),
+      );
+      expect(firstTemplates).toContain('runtime-first');
+      expect(firstTemplates).not.toContain('runtime-second');
+      expect(secondTemplates).toContain('runtime-second');
+    } finally {
+      if (priorTemplatesDir === undefined) delete process.env['TEMPLATES_DIR'];
+      else process.env['TEMPLATES_DIR'] = priorTemplatesDir;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('refreshes repository templates without reloading protected descriptors', () => {
+    const priorRepositoryDir = process.env['TABLEAU_REPOSITORY_DIR'];
+    const priorTemplatesDir = process.env['TEMPLATES_DIR'];
+    const root = mkdtempSync(join(tmpdir(), 'prewarm-repository-'));
+    const custom = join(root, 'Tableau Agent', 'templates');
+    mkdirSync(join(custom, '.vendored', 'overridable'), { recursive: true });
+    const loader = vi.mocked(loadRuntimeTemplateDescriptors);
+    try {
+      delete process.env['TABLEAU_REPOSITORY_DIR'];
+      delete process.env['TEMPLATES_DIR'];
+      prewarmForDatasource(SUPERSTORE_XML);
+      loader.mockClear();
+      process.env['TABLEAU_REPOSITORY_DIR'] = root;
+      writeFileSync(join(custom, 'repository-first.tbm'), RUNTIME_BOOKMARK);
+      const first = prewarmForDatasource(SUPERSTORE_XML);
+      writeFileSync(join(custom, 'repository-second.tbm'), RUNTIME_BOOKMARK);
+      const second = prewarmForDatasource(SUPERSTORE_XML);
+      writeFileSync(join(custom, 'ranking-ordered-bar.tbm'), '<not-a-bookmark/>');
+      const withInvalidOverride = prewarmForDatasource(SUPERSTORE_XML);
+
+      const firstTemplates = first.families.flatMap((family) =>
+        family.templates.map((template) => template.template),
+      );
+      const secondTemplates = second.families.flatMap((family) =>
+        family.templates.map((template) => template.template),
+      );
+      const invalidOverrideTemplates = withInvalidOverride.families.flatMap((family) =>
+        family.templates.map((template) => template.template),
+      );
+      expect(firstTemplates).toContain('ranking-ordered-bar');
+      expect(firstTemplates).toContain('repository-first');
+      expect(firstTemplates).not.toContain('repository-second');
+      expect(secondTemplates).toContain('repository-second');
+      expect(invalidOverrideTemplates).not.toContain('ranking-ordered-bar');
+      expect(loader.mock.calls).toEqual([
+        [{ includeProtected: false }],
+        [{ includeProtected: false }],
+        [{ includeProtected: false }],
+      ]);
+    } finally {
+      if (priorRepositoryDir === undefined) delete process.env['TABLEAU_REPOSITORY_DIR'];
+      else process.env['TABLEAU_REPOSITORY_DIR'] = priorRepositoryDir;
+      if (priorTemplatesDir === undefined) delete process.env['TEMPLATES_DIR'];
+      else process.env['TEMPLATES_DIR'] = priorTemplatesDir;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('computes the summary identity (datasource, field count, content hashes)', () => {
     const r = prewarmForDatasource(SUPERSTORE_XML);
     const summary = summarizeSchema(SUPERSTORE_XML);
@@ -48,28 +158,27 @@ describe('prewarm/prewarmForDatasource', () => {
 
   it('shortlists ONLY fast-path-eligible templates, grouped per family and sorted', () => {
     const r = prewarmForDatasource(SUPERSTORE_XML);
-    // Default manifests: eligible = kpi-text, treemap, ranking-ordered-bar, trend-line-chart.
     const fams = r.families.map((f) => f.family);
     expect(fams).toEqual([...fams].sort());
     expect(fams).toContain('ranking');
     expect(fams).toContain('kpi');
-    // A render-unverified template must not appear anywhere. (W60 used connected-scatterplot
-    // as the negative; W63's live-2026-07-13 stamp made it eligible, so the negative example
-    // moved to its still-unverified sibling pareto-chart. connected-scatterplot is now
-    // asserted PRESENT below.)
     const allTemplates = r.families.flatMap((f) => f.templates.map((t) => t.template));
     expect(allTemplates).toContain('ranking-ordered-bar');
     expect(allTemplates).toContain('correlation-scatter-plot-chart');
     expect(allTemplates).toContain('connected-scatterplot');
-    expect(allTemplates).not.toContain('pareto-chart');
+    for (const template of allTemplates) {
+      expect(real.get(template)?.fast_path_eligible, template).toBe(true);
+    }
   });
 
   it('precomputes per-slot candidate field shortlists by kind', () => {
     const r = prewarmForDatasource(SUPERSTORE_XML);
     const bar = findTemplate(r, 'ranking', 'ranking-ordered-bar');
     expect(bar).toBeDefined();
-    const cat = bar!.bindable_slots.find((s) => s.slot_id === 'region');
-    const quant = bar!.bindable_slots.find((s) => s.slot_id === 'sales');
+    const cat = bar!.bindable_slots.find((s) => s.kind === 'categorical');
+    const quant = bar!.bindable_slots.find((s) => s.kind === 'quantitative');
+    expect(cat).toBeDefined();
+    expect(quant).toBeDefined();
     expect(cat!.kind).toBe('categorical');
     expect(cat!.candidate_fields).toContain('Region');
     expect(cat!.candidate_fields).toContain('Category');
@@ -100,15 +209,11 @@ describe('prewarm/prewarmForDatasource', () => {
   });
 
   it('honors an injected manifest set (custom eligible templates only)', () => {
-    const synth: TemplateManifest = {
+    const synth: RuntimeTemplateDescriptor = {
       template: 'only-me',
       family: 'distribution',
-      readiness: 'GREEN',
       fast_path_eligible: true,
       fast_path_blockers: [],
-      portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
-      datasource_placeholder: true,
-      placeholders: ['TITLE', 'DATASOURCE'],
       intent_keywords: ['onlyme'],
       description: 'only eligible template',
       slots: [
@@ -132,9 +237,8 @@ describe('prewarm/prewarmForDatasource', () => {
         },
       ],
       calcs: [],
-      hazards: [],
     };
-    const ineligible: TemplateManifest = {
+    const ineligible: RuntimeTemplateDescriptor = {
       ...synth,
       template: 'not-me',
       fast_path_eligible: false,

@@ -15,7 +15,6 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { type BinderResult, bindTemplate } from '../../../desktop/binder/binder.js';
-import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
@@ -23,7 +22,6 @@ import {
   loadWorkbookXml,
   type LoadWorkbookXmlError,
 } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
-import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { deleteDashboard, listWorkbookDashboards } from '../../../desktop/metadata/dashboards.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
@@ -31,7 +29,7 @@ import {
   buildInjectedWorkbookXml,
   escapeXml,
 } from '../../../desktop/templates/injectTemplateCore.js';
-import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import { loadRuntimeTemplateCatalogSnapshots } from '../../../desktop/templates/runtimeTemplateCatalog.js';
 import { ExecuteCommandError } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -212,11 +210,9 @@ export const getDashboardAutoApplyTool = (
           const pristineXml = xmlResult.value;
           const readMs = Date.now() - readStart;
 
-          // SEAM: same provider as bind-template / propose-template / validate-proposal.
+          const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots();
           const manifests = new Map(
-            bundledIntelligenceProvider
-              .listTemplateManifests()
-              .map((m): [string, TemplateManifest] => [m.template, m]),
+            [...runtimeCatalog].map(([template, value]) => [template, value.descriptor]),
           );
 
           // ── Bind ALL N against the SAME pristine XML (never a bind-mutated copy —
@@ -241,10 +237,8 @@ export const getDashboardAutoApplyTool = (
             return refusal(
               outcomes,
               'One or more asks did not deterministically bind (Call-1, no-LLM). Nothing was applied to ' +
-                'the live workbook. Each ask carries its own bind-template-shaped outcome below: for ' +
-                '"propose", fill its output_schema and call bind-template again; for "escalate", follow its ' +
-                'guidance. Once every ask binds, retry dashboard-auto-apply, or fall back to the per-viz ' +
-                'bind-template(auto_apply:true) flow using each already-bound ask.',
+                'the live workbook. Revise any proposed or failed ask, then retry dashboard-auto-apply; ' +
+                'or build each view with list-templates, build-worksheets-from-templates, and apply-worksheet.',
               undefined,
               prefillNextAction('Resolve each ask before retrying'),
             );
@@ -333,22 +327,16 @@ export const getDashboardAutoApplyTool = (
             if (hasWorksheetNamed(currentXml, resolvedTitle)) {
               replaced.sheets.push(resolvedTitle);
             }
-            let templateXml: string;
-            try {
-              // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
-              const xml = readTemplate(bound.args.template_name);
-              if (!xml) {
-                throw new Error('template not found in template assets');
-              }
-              templateXml = xml;
-            } catch (err) {
+            const selectedTemplate = runtimeCatalog.get(bound.args.template_name);
+            if (!selectedTemplate) {
               return refusal(
                 outcomes,
-                `Could not read template "${bound.args.template_name}" for ask index ${i}: ` +
-                  `${getExceptionMessage(err)}. Nothing was applied.`,
-                `template read failed: ${getExceptionMessage(err)}`,
+                `Could not read template "${bound.args.template_name}" for ask index ${i}. ` +
+                  'Nothing was applied.',
+                'template read failed',
               );
             }
+            const templateXml = selectedTemplate.snapshot.xml;
             const applyNonce = `${resolvedSession}:${Date.now()}:${randomUUID()}`;
             let injected: ReturnType<typeof buildInjectedWorkbookXml>;
             try {
@@ -359,7 +347,7 @@ export const getDashboardAutoApplyTool = (
                 sheetType: 'worksheet',
                 templateParameters: bound.args.template_parameters,
                 fieldMapping: bound.args.field_mapping,
-                templateSlots: manifests.get(bound.args.template_name)?.slots,
+                templateSlots: selectedTemplate.snapshot.descriptor.slots,
                 applyNonce,
                 optionalFieldPrunes: bound.args.optional_field_prunes,
               });
@@ -424,8 +412,8 @@ export const getDashboardAutoApplyTool = (
             return refusal(
               outcomes,
               `Server-side auto-apply did not complete (${describeApplyError(applyResult.error)}). Nothing ` +
-                'was applied — fall back to the per-viz bind-template(auto_apply:true) flow using each ' +
-                "ask's bound args.",
+                'was applied — fall back to the per-viz list-templates, build-worksheets-from-templates, ' +
+                "and apply-worksheet flow using each ask's fields.",
               describeApplyError(applyResult.error),
               prefillNextAction('Fall back to per-viz auto-apply'),
             );
