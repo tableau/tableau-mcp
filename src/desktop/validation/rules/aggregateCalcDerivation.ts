@@ -104,20 +104,23 @@ export const aggregateCalcDerivationRule: ValidationRule = {
     }
     if (aggregateCalcNames.size === 0) return [];
 
-    const issues: ValidationIssue[] = [];
-    const seen = new Set<string>();
+    const issuesByInstance = new Map<string, ValidationIssue>();
     const cis = xpath.select('//column-instance[@column]', doc as unknown as Node) as Element[];
     for (const ci of cis) {
       const colRef = ci.getAttribute('column') ?? '';
       if (!aggregateCalcNames.has(colRef) || !isNoneDerivation(ci)) continue;
 
       const ciName = ci.getAttribute('name') ?? '';
-      if (seen.has(ciName)) continue;
-      seen.add(ciName);
+      const existing = issuesByInstance.get(ciName);
+      if (existing) {
+        existing.occurrenceCount = (existing.occurrenceCount ?? 1) + 1;
+        continue;
+      }
 
-      issues.push({
+      issuesByInstance.set(ciName, {
         ruleId: 'aggregate-calc-derivation',
         severity: 'error',
+        occurrenceCount: 1,
         message:
           `Aggregate/table-calc calculated field ${colRef} is referenced by a none:/derivation="None" ` +
           `column-instance (${ciName || '(unnamed)'}). An aggregate or table-calc calc must use derivation="User" ` +
@@ -130,6 +133,6 @@ export const aggregateCalcDerivationRule: ValidationRule = {
       });
     }
 
-    return issues;
+    return [...issuesByInstance.values()];
   },
 };

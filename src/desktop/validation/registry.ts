@@ -17,6 +17,30 @@ export function blockingValidationIssues(issues: ValidationIssue[]): ValidationI
   return issues.filter((issue) => issue.severity === 'error');
 }
 
+export function introducedBlockingValidationIssues(
+  baselineIssues: ValidationIssue[],
+  candidateIssues: ValidationIssue[],
+): ValidationIssue[] {
+  const baselineCounts = new Map<string, number>();
+  for (const issue of blockingValidationIssues(baselineIssues)) {
+    const key = validationIssueKey(issue);
+    baselineCounts.set(key, (baselineCounts.get(key) ?? 0) + (issue.occurrenceCount ?? 1));
+  }
+
+  return blockingValidationIssues(candidateIssues).filter((issue) => {
+    const key = validationIssueKey(issue);
+    const remaining = baselineCounts.get(key) ?? 0;
+    const candidateCount = issue.occurrenceCount ?? 1;
+    if (remaining < candidateCount) return true;
+    baselineCounts.set(key, remaining - candidateCount);
+    return false;
+  });
+}
+
+function validationIssueKey(issue: ValidationIssue): string {
+  return JSON.stringify([issue.ruleId, issue.message, issue.xpath ?? null]);
+}
+
 export function runValidation(
   xml: string,
   context: ValidationContext,

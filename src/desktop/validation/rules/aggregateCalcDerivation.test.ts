@@ -48,6 +48,18 @@ describe('aggregate-calc-derivation rule', () => {
     expect(issues).toHaveLength(0);
   });
 
+  it('counts equivalent invalid instances so a new duplicate remains detectable', () => {
+    const xml = calcWithCi('SUM([Sales])', 'None', '[none:Calculation_1:qk]').replace(
+      '</datasource-dependencies>',
+      '<column-instance name="[none:Calculation_1:qk]" column="[Calculation_1]" derivation="None" pivot="key" type="quantitative" /></datasource-dependencies>',
+    );
+
+    const issues = aggregateCalcDerivationRule.validate(xml);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].occurrenceCount).toBe(2);
+  });
+
   it('does not fire on a row-level calc used as none:', () => {
     const issues = aggregateCalcDerivationRule.validate(
       calcWithCi('[Sales] * 2', 'None', '[none:Calculation_1:qk]'),

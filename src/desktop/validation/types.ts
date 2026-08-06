@@ -12,6 +12,8 @@ export interface ValidationIssue {
   ruleId: string;
   severity: ValidationSeverity;
   message: string;
+  /** Number of equivalent defects represented when a rule intentionally aggregates them. */
+  occurrenceCount?: number;
   /** XPath-like location hint within the XML, if available */
   xpath?: string;
   /** Suggested remediation shown in logs / error messages */

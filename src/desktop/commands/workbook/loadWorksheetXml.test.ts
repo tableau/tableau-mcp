@@ -564,6 +564,150 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     if (result.isOk()) expect(result.value.readbackVerification?.status).toBe('passed');
   });
 
+  it('does not let an unchanged pre-existing workbook error veto an artifact apply', async () => {
+    vi.mocked(validationRegistry.runValidation).mockRestore();
+    const baseline = liveWorkbook(['Sheet 1', 'Existing']).replace(
+      "<window class='worksheet' name='Existing' />",
+      '',
+    );
+    const dispatchState = { attempted: false };
+    let liveXml = baseline;
+    const applyWorkbookDocument = vi.fn(
+      async (
+        xml: string,
+        _signal: AbortSignal,
+        options?: { expectedInstanceId?: string; onDispatch?: () => void },
+      ) => {
+        options?.onDispatch?.();
+        liveXml = xml;
+        return Ok({ command_id: 'apply-artifact', status: 'completed', submitted_at: '' });
+      },
+    );
+    const executor = {
+      getWorkbookDocument: vi.fn(async () =>
+        Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      ),
+      applyWorkbookDocument,
+    } as unknown as ToolExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      artifactApply: {
+        windowXml: `<window class='worksheet' name='${worksheetName}' />`,
+        expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, validXml),
+        expectedInstanceId: 'inst-build',
+        dispatchState,
+      },
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(dispatchState.attempted).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('still rejects a workbook-only error introduced by artifact assembly', async () => {
+    vi.mocked(validationRegistry.runValidation).mockRestore();
+    const baseline = liveWorkbook(['Sheet 1']);
+    const xmlWithMissingSet = `<worksheet name='${worksheetName}'><table>
+      <datasource-dependencies datasource='DS'>
+        <column name='[Calculation_1]'>
+          <calculation class='tableau' formula='IF [Missing Set] THEN &quot;yes&quot; ELSE &quot;no&quot; END'/>
+        </column>
+      </datasource-dependencies>
+    </table></worksheet>`;
+    const dispatchState = { attempted: false };
+    const applyWorkbookDocument = vi.fn();
+    const executor = {
+      getWorkbookDocument: vi.fn(async () =>
+        Ok({ xml: baseline, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      ),
+      applyWorkbookDocument,
+    } as unknown as ToolExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: xmlWithMissingSet,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      artifactApply: {
+        windowXml: `<window class='worksheet' name='${worksheetName}' />`,
+        expectedTargetState: captureTargetWorksheetState(
+          baseline,
+          worksheetName,
+          xmlWithMissingSet,
+        ),
+        expectedInstanceId: 'inst-build',
+        dispatchState,
+      },
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ ruleId: 'undeclared-set-reference', severity: 'error' }),
+        ]),
+      );
+    }
+    expect(dispatchState.attempted).toBe(false);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a new copy of a workbook error already present on a sibling sheet', async () => {
+    vi.mocked(validationRegistry.runValidation).mockRestore();
+    const missingSetCalculation =
+      "<column name='[Calculation_1]'><calculation class='tableau' formula='IF [Missing Set] THEN &quot;yes&quot; ELSE &quot;no&quot; END'/></column>";
+    const baseline = liveWorkbook(['Sheet 1', 'Existing']).replace(
+      "<worksheet name='Existing'><table /></worksheet>",
+      `<worksheet name='Existing'><table><datasource-dependencies datasource='DS'>${missingSetCalculation}</datasource-dependencies></table></worksheet>`,
+    );
+    const targetXml = `<worksheet name='${worksheetName}'><table><datasource-dependencies datasource='DS'>${missingSetCalculation}</datasource-dependencies></table></worksheet>`;
+    const dispatchState = { attempted: false };
+    const applyWorkbookDocument = vi.fn(async () =>
+      Ok({ command_id: 'unexpected-apply', status: 'completed', submitted_at: '' }),
+    );
+    const executor = {
+      getWorkbookDocument: vi.fn(async () =>
+        Ok({ xml: baseline, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      ),
+      applyWorkbookDocument,
+    } as unknown as ToolExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: targetXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      artifactApply: {
+        windowXml: `<window class='worksheet' name='${worksheetName}' />`,
+        expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, targetXml),
+        expectedInstanceId: 'inst-build',
+        dispatchState,
+      },
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ ruleId: 'undeclared-set-reference', severity: 'error' }),
+        ]),
+      );
+    }
+    expect(dispatchState.attempted).toBe(false);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('rejects scoped target drift before dispatch', async () => {
     const baseline = liveWorkbook(['Sheet 1', 'Other']);
     const latest = baseline.replace(
