@@ -456,6 +456,56 @@ describe('ExternalApiToolExecutor', () => {
       expect(result.unwrap().build).toBe('20261.26.0701.1234');
       expect(server.requests.at(-1)?.path).toBe('/v0/app');
     });
+
+    it('creates a blank worksheet and returns the CreatedSheets body', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.createBlankWorksheet(undefined, signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().createdSheets[0]?.id).toBe('worksheet-new-1');
+      expect(server.requests.at(-1)?.method).toBe('POST');
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets:new');
+    });
+
+    it('forwards the index tab position to the blank dashboard create route', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.createBlankDashboard(1, signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/dashboards:new');
+      expect(server.requests.at(-1)?.searchParams).toEqual({ index: '1' });
+    });
+
+    it('surfaces a route-missing (older Desktop) blank-storyboard create as command-failed not-found', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+      // No override: the mock only serves the three known :new routes; an unknown one 404s with
+      // "No route matches", which isRouteMissing() recognizes so the tool can degrade gracefully.
+      server.setOverride('POST /v0/workbook/storyboards:new', {
+        status: 404,
+        body: JSON.stringify({
+          code: 'not-found',
+          status: 404,
+          instance: '/v0/mock',
+          title: 'No route matches POST /v0/workbook/storyboards:new',
+          detail: 'No route matches POST /v0/workbook/storyboards:new',
+        }),
+      });
+
+      const result = await executor.createBlankStoryboard(undefined, signal);
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('not-found');
+      } else {
+        throw new Error(`expected command-failed, got ${error.type}`);
+      }
+    });
   });
 
   describe('request deadline errors', () => {

@@ -14,6 +14,9 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { DesktopTool } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getCreateDashboardBlankTool } from './createDashboardBlank.js';
+import { getCreateStoryboardBlankTool } from './createStoryboardBlank.js';
+import { getCreateWorksheetBlankTool } from './createWorksheetBlank.js';
 import { getApiRootTool } from './getApiRoot.js';
 import { getDashboardInfoTool } from './getDashboardInfo.js';
 import { getHealthTool } from './getHealth.js';
@@ -263,6 +266,61 @@ describe('External API coverage tools', () => {
 
   it.each([
     {
+      makeTool: getCreateWorksheetBlankTool,
+      newPath: '/v0/workbook/worksheets:new',
+      expectedName: 'Worksheet 1',
+    },
+    {
+      makeTool: getCreateDashboardBlankTool,
+      newPath: '/v0/workbook/dashboards:new',
+      expectedName: 'Dashboard 1',
+    },
+    {
+      makeTool: getCreateStoryboardBlankTool,
+      newPath: '/v0/workbook/storyboards:new',
+      expectedName: 'Storyboard 1',
+    },
+  ])(
+    '$newPath creates a blank sheet and returns its id/name',
+    async ({ makeTool, newPath, expectedName }) => {
+      const harness = await startHarness(makeTool);
+      try {
+        const result = await harness.callTool({});
+
+        expect(result.isError).toBe(false);
+        const parsed = z
+          .object({ createdSheet: z.object({ id: z.string(), name: z.string() }) })
+          .parse(parseResult(result));
+        expect(parsed.createdSheet.name).toBe(expectedName);
+        const last = harness.server.requests.at(-1);
+        expect(last?.method).toBe('POST');
+        expect(last?.path).toBe(newPath);
+        // No index arg -> bare route so the server appends at the end.
+        expect(last?.searchParams).toEqual({});
+        // No request body — the :new routes reject a non-empty body with 400.
+        expect(last?.body).toBe('');
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
+  it('forwards the index arg to the blank worksheet create route', async () => {
+    const harness = await startHarness(getCreateWorksheetBlankTool);
+    try {
+      const result = await harness.callTool({ index: 0 });
+
+      expect(result.isError).toBe(false);
+      const last = harness.server.requests.at(-1);
+      expect(last?.path).toBe('/v0/workbook/worksheets:new');
+      expect(last?.searchParams).toEqual({ index: '0' });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it.each([
+    {
       makeTool: getApiRootTool,
       args: {},
       overrideKey: 'GET /v0/',
@@ -297,6 +355,24 @@ describe('External API coverage tools', () => {
       args: { storyboard: 'story-qbr' },
       overrideKey: 'GET /v0/workbook/storyboards/story-qbr/document',
       expectedMessage: 'does not serve the storyboard document endpoint',
+    },
+    {
+      makeTool: getCreateWorksheetBlankTool,
+      args: {},
+      overrideKey: 'POST /v0/workbook/worksheets:new',
+      expectedMessage: 'does not serve the create-worksheet-blank endpoint',
+    },
+    {
+      makeTool: getCreateDashboardBlankTool,
+      args: {},
+      overrideKey: 'POST /v0/workbook/dashboards:new',
+      expectedMessage: 'does not serve the create-dashboard-blank endpoint',
+    },
+    {
+      makeTool: getCreateStoryboardBlankTool,
+      args: {},
+      overrideKey: 'POST /v0/workbook/storyboards:new',
+      expectedMessage: 'does not serve the create-storyboard-blank endpoint',
     },
   ])(
     '$toolName reports an honest too-new endpoint 404',

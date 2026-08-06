@@ -22,6 +22,9 @@ export const EXTERNAL_API_ROUTES = {
   workbookDocumentValidate: '/v0/workbook/document:validate',
   workbookStoryboards: '/v0/workbook/storyboards',
   workbookWorksheets: '/v0/workbook/worksheets',
+  workbookWorksheetsNew: '/v0/workbook/worksheets:new',
+  workbookDashboardsNew: '/v0/workbook/dashboards:new',
+  workbookStoryboardsNew: '/v0/workbook/storyboards:new',
   workbookUndo: '/v0/workbook:undo',
   workbookRedo: '/v0/workbook:redo',
   dashboardById: '/v0/workbook/dashboards/{id}',
@@ -373,6 +376,24 @@ export const validationResultSchema = z
   })
   .passthrough();
 export type ValidationResult = z.infer<typeof validationResultSchema>;
+
+/**
+ * Body returned by the `POST /v0/workbook/{worksheets,dashboards,storyboards}:new` routes: the
+ * stable id and (possibly auto-generated) name of each created sheet.
+ */
+export const createdSheetsSchema = z
+  .object({
+    createdSheets: z.array(
+      z
+        .object({
+          id: z.string(),
+          name: z.string(),
+        })
+        .passthrough(),
+    ),
+  })
+  .passthrough();
+export type CreatedSheets = z.infer<typeof createdSheetsSchema>;
 
 /**
  * Image export result returned by `GET /v0/workbook/worksheets/{id}/image` and
