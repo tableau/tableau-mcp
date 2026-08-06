@@ -4,7 +4,13 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./recordEventClient.js');
+// Mock only recordEvent (telemetry side effect); keep the real toMessage so
+// showError's cause-rendering logic (which imports toMessage from this module)
+// is exercised as written.
+vi.mock('./recordEventClient.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  recordEvent: vi.fn(),
+}));
 import { recordEvent } from './recordEventClient.js';
 import { showError } from './showError.js';
 
@@ -49,7 +55,7 @@ describe('showError', () => {
     expect(errorElement?.querySelector('.mcp-app-error-icon')).toBeTruthy();
   });
 
-  it('should display PARSE_ERROR scenario with user-facing message', () => {
+  it('should display PARSE_ERROR scenario with user-facing message and cause line', () => {
     const cause = new Error('JSON parse failed');
 
     showError('PARSE_ERROR', cause);
@@ -58,6 +64,7 @@ describe('showError', () => {
     const errorElement = container?.querySelector('.mcp-app-error');
     const headingElement = errorElement?.querySelector('.mcp-app-error-heading');
     const messageElement = errorElement?.querySelector('.mcp-app-error-message');
+    const causeElement = errorElement?.querySelector('.mcp-app-error-cause');
 
     // tableau-viz removed, error UI displayed
     expect(container?.querySelector('tableau-viz')).toBeNull();
@@ -67,7 +74,38 @@ describe('showError', () => {
     expect(headingElement?.textContent).toBe('Unable to load this Tableau view');
     expect(messageElement?.textContent).toBe('The response was not in the expected format.');
 
+    // Cause (an Error) renders as a secondary line using its message
+    expect(causeElement?.textContent).toBe('JSON parse failed');
+
     expect(errorElement?.querySelector('.mcp-app-error-icon')).toBeTruthy();
+  });
+
+  it('should display the cause as a secondary line when cause is a plain string', () => {
+    showError('AUTH_ERROR', 'token expired at 12:00');
+
+    const container = document.getElementById('tableauVizContainer');
+    const errorElement = container?.querySelector('.mcp-app-error');
+    const causeElement = errorElement?.querySelector('.mcp-app-error-cause');
+
+    expect(causeElement?.textContent).toBe('token expired at 12:00');
+  });
+
+  it('should not display a cause line when cause is undefined', () => {
+    showError('AUTH_ERROR');
+
+    const container = document.getElementById('tableauVizContainer');
+    const errorElement = container?.querySelector('.mcp-app-error');
+
+    expect(errorElement?.querySelector('.mcp-app-error-cause')).toBeNull();
+  });
+
+  it('should not display a cause line when cause is an empty or whitespace-only string', () => {
+    showError('AUTH_ERROR', '   ');
+
+    const container = document.getElementById('tableauVizContainer');
+    const errorElement = container?.querySelector('.mcp-app-error');
+
+    expect(errorElement?.querySelector('.mcp-app-error-cause')).toBeNull();
   });
 
   it('should display AUTH_ERROR scenario with user-facing message', () => {
