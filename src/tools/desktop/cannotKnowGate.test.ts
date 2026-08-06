@@ -22,14 +22,12 @@ type Violation = {
 const RECEIPT_ALLOWLIST: Readonly<Record<string, string>> = {
   // WHY safe: this receipt describes a local retry-policy decision, not an external effect;
   // `reason` is the observed branch input and `unverified` disclaims permanence.
-  [receiptExemptionKey(
-    'src/tools/desktop/data-source/getSummaryData.ts',
-    'nextActionForSummaryError',
-    ['stopped get-summary-data on a terminal " " failure'],
-  )]: 'Local terminal-policy receipt with no external mutation claim.',
+  [receiptExemptionKey('src/tools/desktop/api/getSummaryData.ts', 'nextActionForSummaryError', [
+    'stopped get-summary-data on a terminal " " failure',
+  ])]: 'Local terminal-policy receipt with no external mutation claim.',
   // WHY safe: callers pass this record only after rememberedSheetStillPresent re-read the live
   // workbook; the receipt limits its claim to name presence and disclaims field/content checks.
-  [receiptExemptionKey('src/tools/desktop/binder/bindTemplate.ts', 'reusedSheetResult', [
+  [receiptExemptionKey('src/tools/desktop/authoring/binder/bindTemplate.ts', 'reusedSheetResult', [
     'matched this ask to the sheet " " this session already applied (template  )',
     'authored calcs:  ',
   ])]: 'Live name presence is checked immediately before this result is constructed.',
@@ -39,14 +37,14 @@ const BOOLEAN_FLAG_ALLOWLIST: Readonly<Record<string, string>> = {
   // WHY safe: `true` requires both an actual encoding report and zero reported gaps. Undefined
   // can only produce false, and the receipt separately reports that analysis as unverified.
   [booleanExemptionKey(
-    'src/tools/desktop/binder/bindTemplate.ts',
+    'src/tools/desktop/authoring/binder/bindTemplate.ts',
     `encodingAnalysisComplete =
     res.encodings !== undefined && res.encodings.unfilled.length === 0`,
   )]: 'Undefined cannot produce a completed claim; it is explicitly disclosed as unverified.',
   // WHY safe: this flag means a known non-empty unfilled report exists. Undefined can only
   // contribute false and does not by itself assert that the overall bind is complete.
   [booleanExemptionKey(
-    'src/tools/desktop/binder/bindTemplate.ts',
+    'src/tools/desktop/authoring/binder/bindTemplate.ts',
     `incomplete =
     waterfallReBindSlotUnfilled(res, schemaSummary) ||
     unfilledEncodings !== undefined ||
@@ -582,7 +580,7 @@ describe('cannot-know hunter gate', () => {
   });
 
   it('does not exempt a new receipt in an allowlisted function', () => {
-    const file = join(DESKTOP_ROOT, 'data-source/getSummaryData.ts');
+    const file = join(DESKTOP_ROOT, 'api/getSummaryData.ts');
     const source = readFileSync(file, 'utf-8');
     const mutated = source.replace(
       `function nextActionForSummaryError(
@@ -607,7 +605,7 @@ describe('cannot-know hunter gate', () => {
   });
 
   it('does not exempt a new same-named flag in an allowlisted file', () => {
-    const file = join(DESKTOP_ROOT, 'data-source/formatLabels.ts');
+    const file = join(DESKTOP_ROOT, 'authoring/datasource/formatLabels.ts');
     const source = `${readFileSync(file, 'utf-8')}
       function syntheticFlag(optionalResult?: object) {
         const applied = optionalResult !== undefined;
@@ -620,6 +618,35 @@ describe('cannot-know hunter gate', () => {
     );
     expect(violations).toHaveLength(1);
     expect(violations[0].message).toContain('"applied"');
+  });
+
+  it('keeps every receipt() call site inside the walked DESKTOP_ROOT', () => {
+    // The gate above walks ONLY src/tools/desktop — a file that moves out of that root
+    // silently exits the audit. This src-wide sweep (cheap readdirSync + one regex per
+    // file, same shape as applyFocusDispositions' derivation test) makes that exit loud:
+    // any receipt() call site outside DESKTOP_ROOT must either move back or extend the
+    // gate's walk. The receipt() definition site itself is the one legitimate mention
+    // outside a tool callback and is excluded by path. The regex is the literal call
+    // shape (no whitespace before the paren — prettier normalizes calls to that), so
+    // prose like "verification receipt (W-...)" in comments does not trip it.
+    const RECEIPT_CALL_RE = /\breceipt\(/;
+    const RECEIPT_DEFINITION_SITES = new Set(['src/tools/desktop/structuredContent.ts']);
+    const walkedPrefix = `${normalizedRelative(DESKTOP_ROOT)}/`;
+
+    const offenders = readdirSync(join(REPO_ROOT, 'src'), { recursive: true })
+      .map(String)
+      .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+      .map((file) => join(REPO_ROOT, 'src', file))
+      .map(normalizedRelative)
+      .filter((file) => !RECEIPT_DEFINITION_SITES.has(file))
+      .filter((file) => RECEIPT_CALL_RE.test(readFileSync(join(REPO_ROOT, file), 'utf-8')))
+      .filter((file) => !file.startsWith(walkedPrefix));
+
+    expect(
+      offenders,
+      `receipt() call sites outside the cannot-know gate's walk root (${walkedPrefix}) — ` +
+        `move them back under it or extend the gate's walk:\n${offenders.join('\n')}`,
+    ).toEqual([]);
   });
 
   it('rejects a conditional alternative to doneNextAction for terminal status', () => {

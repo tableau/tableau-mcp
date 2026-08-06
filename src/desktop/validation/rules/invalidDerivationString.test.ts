@@ -42,6 +42,7 @@ describe('invalid-derivation-string rule', () => {
     ['User'],
     ['Collect'],
     ['ISO-Week'],
+    ['Collect'],
   ])('does not fire on the canonical derivation "%s"', (good) => {
     expect(invalidDerivationStringRule.validate(workbookWithDerivation(good))).toHaveLength(0);
   });

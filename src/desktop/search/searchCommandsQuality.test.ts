@@ -9,7 +9,7 @@
 // MCP at all. Every surplus call costs ~8.6s in production.
 
 import { readDataAsset } from '../assets.js';
-import { checkCommandPolicy } from '../commandPolicy.js';
+import { checkCommandPolicy } from '../guards/commandPolicy.js';
 import { searchCommandsByKeywords } from './searchLibrary.js';
 
 type ReferenceParameter = {

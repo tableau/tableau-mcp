@@ -34,6 +34,28 @@ export default [
     },
   },
   {
+    // Test-only helpers living in src/ (mocks, mock servers, fixtures, shared test
+    // utilities) must never be imported from production code — they are excluded from
+    // coverage and never shipped. Test files, the helpers themselves, and the vitest
+    // setup file are exempt.
+    files: ['src/**/*.ts'],
+    ignores: ['**/*.test.ts', '**/*.mock.ts', '**/mock*.ts', '**/*Fixtures.ts', 'src/testSetup.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/*.mock.js', '**/mock*.js', '**/*Fixtures.js', '**/testShared.js'],
+              message:
+                'Test-only helper — import it from a *.test.ts file (or another test helper), never from production code.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['tests/**/*.ts'],
     rules: {
       'no-console': 'off',

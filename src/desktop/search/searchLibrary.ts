@@ -3,33 +3,24 @@ import Fuse from 'fuse.js';
 import { join } from 'path';
 
 import { listDataAssetNames, readDataAsset } from '../assets.js';
-import { checkCommandPolicy } from '../commandPolicy.js';
+import { checkCommandPolicy } from '../guards/commandPolicy.js';
+import {
+  COMMANDS_REFERENCE_ASSET,
+  loadCommandsReferenceDocument,
+} from '../guards/commandsReference.js';
 
 // --- Commands reference ---
 
-let _commandsReferenceCache: any = null;
 let _commandsSearchIndex: any = null;
 let _commandsFuse: Fuse<any> | null = null;
 
+// Unlike the guards (which fail open on a missing reference), search THROWS: a search
+// tool with no corpus should error loudly, not silently return nothing.
 function loadCommandsReference(): any {
-  if (_commandsReferenceCache) return _commandsReferenceCache;
-  const assetName = 'tableau-desktop-commands-reference.json';
-  const raw = readDataAsset(assetName);
-  if (raw === null) {
-    throw new Error(`Commands reference not available: ${assetName}`);
+  const ref = loadCommandsReferenceDocument();
+  if (ref === null) {
+    throw new Error(`Commands reference not available: ${COMMANDS_REFERENCE_ASSET}`);
   }
-  let ref: any;
-  try {
-    ref = JSON.parse(raw);
-  } catch (e: any) {
-    throw new Error(
-      `Commands reference file is not valid JSON (${assetName}): ${e?.message ?? String(e)}`,
-    );
-  }
-  if (!ref || typeof ref !== 'object') {
-    throw new Error(`Commands reference did not contain an object (${assetName})`);
-  }
-  _commandsReferenceCache = ref;
   return ref;
 }
 

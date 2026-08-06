@@ -1,7 +1,7 @@
 import { Err, Ok } from 'ts-results-es';
 
 import * as logger from '../../logging/logger.js';
-import type { ExternalApiClient } from './externalApiClient.js';
+import type { ExternalApiHttp as ExternalApiClient } from './externalApiHttp.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
@@ -52,6 +52,17 @@ describe('ExternalApiToolExecutor', () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
       expect(executor.isAvailable()).toBe(true);
+    });
+
+    it('exposes the active Desktop instance ID', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      expect(executor.desktopInstanceId).toBeUndefined();
+
+      await executor.start();
+      expect(executor.desktopInstanceId).toBe('inst-exec');
+
+      executor.stop();
+      expect(executor.desktopInstanceId).toBeUndefined();
     });
 
     it('is not available when no instance is discovered', async () => {
@@ -768,7 +779,7 @@ describe('ExternalApiToolExecutor artifact instance identity', () => {
       createClient: (resolved) =>
         ({
           instanceId: resolved.instanceId,
-          getWorkbookDocument: vi
+          getXml: vi
             .fn()
             .mockResolvedValue(
               Ok({ xml: '<workbook />', applicationVersion: '2026.1', xsdPayloadVersion: '1' }),
@@ -782,13 +793,13 @@ describe('ExternalApiToolExecutor artifact instance identity', () => {
   });
 
   it('rejects an expected-instance mismatch before dispatch', async () => {
-    const applyWorkbookDocument = vi.fn();
+    const postXmlEnvelope = vi.fn();
     const executor = new ExternalApiToolExecutor({
       discover: () => [instance('inst-new')],
       createClient: (resolved) =>
         ({
           instanceId: resolved.instanceId,
-          applyWorkbookDocument,
+          postXmlEnvelope,
         }) as unknown as ExternalApiClient,
     });
     const onDispatch = vi.fn();
@@ -800,7 +811,7 @@ describe('ExternalApiToolExecutor artifact instance identity', () => {
 
     expect(result.isErr()).toBe(true);
     expect(onDispatch).not.toHaveBeenCalled();
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    expect(postXmlEnvelope).not.toHaveBeenCalled();
   });
 
   it('does not retry after a 401 rescan changes instance identity at the same pid', async () => {
@@ -821,7 +832,7 @@ describe('ExternalApiToolExecutor artifact instance identity', () => {
       createClient: (resolved) =>
         ({
           instanceId: resolved.instanceId,
-          applyWorkbookDocument: resolved.instanceId === 'inst-expected' ? firstPost : retryPost,
+          postXmlEnvelope: resolved.instanceId === 'inst-expected' ? firstPost : retryPost,
         }) as unknown as ExternalApiClient,
     });
     const onDispatch = vi.fn();

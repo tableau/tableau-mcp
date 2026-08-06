@@ -6,8 +6,9 @@ import {
 import {
   DEFAULT_IMAGE_EXPORT_TIMEOUT_MS,
   DEFAULT_INLINE_IMAGE_MAX_BYTES,
-} from './desktop/inlineImageCap.js';
-import { DEFAULT_INLINE_XML_MAX_BYTES } from './desktop/inlineXmlCap.js';
+} from './desktop/limits/inlineImageCap.js';
+import { DEFAULT_INLINE_XML_MAX_BYTES } from './desktop/limits/inlineXmlCap.js';
+import { parseSessionPid } from './desktop/session/parseSessionPid.js';
 import { parseNumber } from './utils/parseNumber.js';
 
 export class Config extends BaseConfig {
@@ -72,7 +73,9 @@ export class Config extends BaseConfig {
 
     this.externalApiDiscoveryDir = externalApiDiscoveryDir || undefined;
     this.desktopSessionId =
-      desktopSessionId && /^\d+$/.test(desktopSessionId) ? desktopSessionId : undefined;
+      desktopSessionId && parseSessionPid(desktopSessionId) !== undefined
+        ? desktopSessionId
+        : undefined;
 
     this.inlineXmlMaxBytes = parseNumber(inlineXmlMaxBytes, {
       defaultValue: DEFAULT_INLINE_XML_MAX_BYTES,

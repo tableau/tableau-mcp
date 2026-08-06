@@ -55,21 +55,22 @@ else
 fi
 
 # ---- Unit tests (vitest RUN mode — never bare `npm test`/watch) --------------
+# Per-test timeout lives in configShared.ts (30s — asset-heavy suites need it).
+# AGENT_CHECK_MAX_WORKERS: cap vitest workers on slow/shared machines, where full
+# parallelism starves the main process and trips the worker-RPC watchdog.
 if have npx; then
-  run "unit tests" npx --no-install vitest run --config ./vitest.config.ts
+  if [ -n "${AGENT_CHECK_MAX_WORKERS:-}" ]; then
+    run "unit tests" npx --no-install vitest run --config ./vitest.config.ts \
+      --maxWorkers="$AGENT_CHECK_MAX_WORKERS"
+  else
+    run "unit tests" npx --no-install vitest run --config ./vitest.config.ts
+  fi
 else
   skip "unit tests (npx unavailable)"
 fi
 
 # ---- Desktop build (authoring variant; esbuild plus providers type build) -----
 run "desktop build" npm run build:desktop
-
-# ---- Desktop unit tests (focused authoring surface) ---------------------------
-if have npx; then
-  run "desktop unit tests" npx --no-install vitest run --config ./vitest.config.ts src/desktop src/tools/desktop
-else
-  skip "desktop unit tests (npx unavailable)"
-fi
 
 # ---- Lockstep-core hash gate (W14-LS1 mirror; see scripts/check-lockstep.mjs) --
 if have node; then

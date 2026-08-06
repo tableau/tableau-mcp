@@ -8,25 +8,24 @@ templates, and bind fields into worksheets — over MCP (stdio).
 This document is a from-source quickstart. The desktop variant is **not** yet built by the
 publish pipeline (see [Known gaps](#known-gaps)); build it from a clone.
 
-## The binder tool surface
+## The template tool surface
 
-Alongside the workbook/worksheet/dashboard/field tools, four tools drive the fast-path
-chart binder:
+Alongside the workbook/worksheet/dashboard/field tools, the primary chart-authoring flow
+is caller-neutral and template-driven:
 
-- **`list-templates`** — list the bundled chart templates with each one's chart-intent
-  family, slot contract, and `fast_path_eligible` status. Works **headless** (no Desktop
-  needed) — it reads the in-package snapshot.
-- **`propose-template`** — Call 1: given a natural-language ask and the live workbook,
-  return candidate templates + a strict `output_schema` for the caller to fill into a
-  binding proposal (slot_id → field), or a deterministic no-LLM match when one is found.
-- **`validate-proposal`** — Call 2 (dry run): run a filled proposal through the binder's
-  deterministic gate (slot coverage, field/kind/role, derivation legality, confidence
-  floor) and report valid/invalid **without** creating or applying a worksheet.
-- **`bind-template`** — the full two-call flow: validate a filled proposal and, when valid,
-  return the injector-ready args plus the apply instruction.
+- **`list-templates`** — list the bundled chart templates (TBM bookmarks) with each one's
+  chart-intent family and slot contract.
+- **`list-available-fields`** — the live workbook's bindable fields, for filling slots.
+- **`build-worksheets-from-templates`** — compile one or more chosen templates against
+  chosen fields into built worksheet artifacts (they coexist until applied).
+- **`apply-worksheet`** — apply a built artifact (or an edited cache file) to the live
+  workbook; applies are sequential, and an artifact built against a Desktop instance that
+  has since restarted is refused rather than replayed.
 
-Typical flow: `propose-template` → fill the proposal → `validate-proposal` (dry run) →
-`bind-template` to get the apply instruction.
+Typical flow: `list-templates` → `list-available-fields` →
+`build-worksheets-from-templates` → `apply-worksheet`. `bind-template` remains for
+proposal-driven binding of a single template when a caller wants the binder's
+deterministic gate.
 
 ## Build & run from source
 
@@ -58,23 +57,19 @@ Point an MCP client at the entry over stdio:
 ## Requirements
 
 - **`list-templates`** works headless against the bundled snapshot.
-- **`propose-template`**, **`validate-proposal`**, and **`bind-template`** read/drive a
-  **running Tableau Desktop** instance. Discover the instance with **`list-instances`** and
-  pass its session id (the Tableau Desktop PID) as the `session` argument to those tools.
+- **`list-available-fields`**, **`build-worksheets-from-templates`**, **`apply-worksheet`**,
+  and **`bind-template`** read/drive a **running Tableau Desktop** instance. Discover the
+  instance with **`list-instances`** and pass its session id (the Tableau Desktop PID) as
+  the `session` argument to those tools.
 
 ## Template content
 
-- Templates ship as a **bundled snapshot** inside the package, hash-verified against a
-  generated `content-manifest.json` (every resource carries a sha256 + byte count).
-- **17** chart templates are bundled today.
-- **`fast_path_eligible`** marks a template that is portable across the committed schema
-  fixture **and** carries a live render-verification stamp — the templates the binder can
-  one-shot. Ineligible templates report a `fast_path_blockers` entry explaining why (an
-  explicit blocker code, or a derived note such as "no live render verification stamp").
-- **Remote content packs** (fetching a signed, versioned pack instead of the bundled
-  snapshot) are a **documented milestone-2 skeleton only** — the verification/cache/fallback
-  contract exists behind the provider seam, but no transport is wired, so the server always
-  serves the bundled snapshot. Its status honestly reports `satisfies_exec_freshness: false`.
+- Templates ship as **TBM bookmark files** bundled inside the package
+  (`src/desktop/data/templates/`, staged into the build) — **133** templates today. File
+  names include descriptive `<family>__<chart>__<intent>.tbm` forms and shorter stable IDs
+  such as `box-plot-chart.tbm`.
+- Template slot contracts are **inferred from the TBM content** at load time; a rewritten
+  bookmark re-infers on its changed bytes.
 
 ## Known gaps
 

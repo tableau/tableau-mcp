@@ -91,8 +91,10 @@ const column = (
   role: 'dimension' | 'measure',
   type: 'nominal' | 'ordinal' | 'quantitative',
   datatype: 'string' | 'date' | 'integer' | 'real',
+  semanticRole?: string,
 ): string =>
-  `      <column name='[${name}]' role='${role}' type='${type}' datatype='${datatype}' />`;
+  `      <column name='[${name}]' role='${role}' type='${type}' datatype='${datatype}'` +
+  `${semanticRole ? ` semantic-role='${semanticRole}'` : ''} />`;
 
 const activeUsersXml = (
   categoricals: string[] = ['product'],
@@ -207,7 +209,9 @@ describe('classifyNoLlm — e4 trend color series', () => {
     const countryXml = workbookXml(
       'Football',
       [
-        column('Country', 'dimension', 'nominal', 'string'),
+        // semantic-role is required for the symbol map: it plots generated Lat/Long,
+        // which Tableau materializes only for a geocoded field (gate 3c).
+        column('Country', 'dimension', 'nominal', 'string', '[Country].[Name]'),
         column('Goals For', 'measure', 'quantitative', 'integer'),
       ].join('\n'),
     );

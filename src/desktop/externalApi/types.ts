@@ -43,14 +43,101 @@ export const EXTERNAL_API_ROUTES = {
   oauthProtectedResource: '/.well-known/oauth-protected-resource',
 } as const;
 
-/** Builds the concrete poll URL for one operation id. */
-export function buildOperationByIdRoute(operationId: string): string {
-  return `${EXTERNAL_API_ROUTES.operations}/${encodeURIComponent(operationId)}`;
-}
-
 /** Response headers on `GET /v0/workbook/document`. Matched case-insensitively. */
 export const HEADER_APPLICATION_VERSION = 'x-tableau-application-version';
 export const HEADER_XSD_PAYLOAD_VERSION = 'x-tableau-xsd-payload-version';
+
+/** Query accepted by {@link worksheetSummaryDataRoute}. */
+export type WorksheetSummaryDataQuery = {
+  maxRows?: number;
+  ignoreAliases?: boolean;
+  ignoreSelection?: boolean;
+  columnsToIncludeByFieldName?: string;
+};
+
+/** Query accepted by {@link worksheetImageRoute} and {@link dashboardImageRoute}. */
+export type ImageExportQuery = {
+  /**
+   * Absolute path the Desktop host should persist the image to. When set, the response
+   * projects `filePath` instead of `imageBase64`. Desktop rejects a relative path or one
+   * containing `..` with a 400 before dispatching.
+   */
+  filePath?: string;
+  /** Image MIME type. Desktop defaults to `image/png`; `image/svg+xml` and raster formats accepted. */
+  mimeType?: string;
+};
+
+// Concrete `{id}` routes are built here, next to the constants, so the HTTP layer never
+// mentions an endpoint. Ids ride the path segment and must be percent-encoded.
+
+export function worksheetRoute(worksheetId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
+}
+
+export function dashboardRoute(dashboardId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookDashboards}/${encodeURIComponent(dashboardId)}`;
+}
+
+export function storyboardRoute(storyboardId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookStoryboards}/${encodeURIComponent(storyboardId)}`;
+}
+
+export function worksheetDocumentRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}/document`;
+}
+
+export function dashboardDocumentRoute(dashboardId: string): string {
+  return `${dashboardRoute(dashboardId)}/document`;
+}
+
+export function storyboardDocumentRoute(storyboardId: string): string {
+  return `${storyboardRoute(storyboardId)}/document`;
+}
+
+export function worksheetSummaryDataRoute(
+  worksheetId: string,
+  query: WorksheetSummaryDataQuery,
+): string {
+  const search = new URLSearchParams();
+  if (query.maxRows !== undefined) {
+    search.set('maxRows', String(query.maxRows));
+  }
+  if (query.ignoreAliases !== undefined) {
+    search.set('ignoreAliases', String(query.ignoreAliases));
+  }
+  if (query.ignoreSelection !== undefined) {
+    search.set('ignoreSelection', String(query.ignoreSelection));
+  }
+  if (query.columnsToIncludeByFieldName !== undefined) {
+    search.set('columnsToIncludeByFieldName', query.columnsToIncludeByFieldName);
+  }
+
+  const suffix = search.size > 0 ? `?${search.toString()}` : '';
+  return `${worksheetRoute(worksheetId)}/summaryData${suffix}`;
+}
+
+// Builds the `?filePath=…&mimeType=…` suffix with encodeURIComponent (percent-encoding),
+// NOT URLSearchParams: URLSearchParams encodes a space as '+', which some servers decode
+// back to a space only for form bodies — for a path a stray '+' is ambiguous. Percent-encoding
+// (`%20`) round-trips a space unambiguously through the host's query decoder.
+function imageQuerySuffix(query: ImageExportQuery): string {
+  const parts: string[] = [];
+  if (query.filePath !== undefined) {
+    parts.push(`filePath=${encodeURIComponent(query.filePath)}`);
+  }
+  if (query.mimeType !== undefined) {
+    parts.push(`mimeType=${encodeURIComponent(query.mimeType)}`);
+  }
+  return parts.length > 0 ? `?${parts.join('&')}` : '';
+}
+
+export function worksheetImageRoute(worksheetId: string, query: ImageExportQuery): string {
+  return `${worksheetRoute(worksheetId)}/image${imageQuerySuffix(query)}`;
+}
+
+export function dashboardImageRoute(dashboardId: string, query: ImageExportQuery): string {
+  return `${dashboardRoute(dashboardId)}/image${imageQuerySuffix(query)}`;
+}
 
 /**
  * Discovery file written by Desktop to `<OS app-local-data>/ExternalApi/<pid>.json`.
@@ -68,7 +155,6 @@ export const discoveryFileSchema = z.object({
   apiVersion: z.string().optional(),
   startedAt: z.string().optional(),
 });
-export type DiscoveryFile = z.infer<typeof discoveryFileSchema>;
 
 /** API versions and link map returned by `GET /v0/`. */
 export const apiRootSchema = z
@@ -86,7 +172,6 @@ export const healthSchema = z
     status: z.string().optional(),
   })
   .passthrough();
-export type Health = z.infer<typeof healthSchema>;
 
 /** Connected Tableau site returned by `GET /v0/site`. */
 export const siteSchema = z
@@ -200,14 +285,6 @@ export const operationEnvelopeSchema = z
   })
   .passthrough();
 export type OperationEnvelope = z.infer<typeof operationEnvelopeSchema>;
-
-/** Operation list returned by `GET /v0/operations`, most-recent-first. */
-export const operationListSchema = z
-  .object({
-    operations: z.array(operationEnvelopeSchema).optional(),
-  })
-  .passthrough();
-export type OperationList = z.infer<typeof operationListSchema>;
 
 /** Worksheet item returned by `GET /v0/workbook/worksheets`. */
 export const worksheetItemSchema = z
@@ -418,7 +495,7 @@ export const appInfoSchema = z
 export type AppInfo = z.infer<typeof appInfoSchema>;
 
 /**
- * Typed error surfaced by {@link ExternalApiClient} methods. The internal
+ * Typed error surfaced by {@link ExternalApiHttp} methods. The internal
  * `'unauthorized'` variant corresponds to the wire code `'unauthenticated'` —
  * mapped at the 401 boundary; the internal name is kept (many refs).
  */

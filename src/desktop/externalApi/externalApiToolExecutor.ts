@@ -4,64 +4,89 @@ import { z } from 'zod';
 import { log } from '../../logging/logger.js';
 import { desktopCallTimeoutMessage, isDesktopCallTimeout } from '../callDeadline.js';
 import {
+  noInstanceFoundMessage,
+  unknownInstanceUnreachableMessage,
+  unreachableInstanceMessage,
+} from '../session/unreachableInstance.js';
+import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandArgs,
   ExecuteCommandError,
   ExecuteCommandResult,
-  ToolExecutor,
-  WorkbookDocument as ToolWorkbookDocument,
-} from '../toolExecutor/toolExecutor.js';
-import {
-  noInstanceFoundMessage,
-  unknownInstanceUnreachableMessage,
-  unreachableInstanceMessage,
-} from '../unreachableInstance.js';
-import { GetCommandStatusResponse } from './executorResponseTypes.js';
-import {
-  ExternalApiClient,
-  ExternalApiClientOptions,
-  ImageExportQuery,
+  GetCommandStatusResponse,
   WorkbookDocument,
-  WorksheetSummaryDataQuery,
-} from './externalApiClient.js';
+} from './executorTypes.js';
+import { ExternalApiHttp, ExternalApiHttpOptions } from './externalApiHttp.js';
 import {
   ApiRoot,
+  apiRootSchema,
   AppInfo,
+  appInfoSchema,
+  dashboardDocumentRoute,
+  dashboardImageRoute,
   DashboardItem,
+  dashboardItemSchema,
   DashboardList,
+  dashboardListSchema,
+  dashboardRoute,
   DatasourceList,
+  datasourceListSchema,
+  EXTERNAL_API_ROUTES,
   ExternalApiError,
   ExternalApiInstance,
+  ImageExportQuery,
   ImageResult,
+  imageResultSchema,
   OperationEnvelope,
   OperationError,
   OperationWarning,
   Site,
   SiteDatasourceList,
+  siteDatasourceListSchema,
+  siteSchema,
   SiteWorkbookList,
+  siteWorkbookListSchema,
+  storyboardDocumentRoute,
   StoryboardItem,
+  storyboardItemSchema,
   StoryboardList,
+  storyboardListSchema,
+  storyboardRoute,
   SummaryData,
+  summaryDataSchema,
   ValidationResult,
+  validationResultSchema,
   WorkbookInventory,
+  workbookInventorySchema,
+  worksheetDocumentRoute,
+  worksheetImageRoute,
   WorksheetItem,
+  worksheetItemSchema,
   WorksheetList,
+  worksheetListSchema,
+  worksheetRoute,
+  WorksheetSummaryDataQuery,
+  worksheetSummaryDataRoute,
 } from './types.js';
 
 const LOGGER = 'ExternalApiToolExecutor';
+
+// Liveness must fail fast: the health probe runs on a shorter budget than the global
+// request ceiling (the HTTP layer only ever tightens, so a smaller global still wins).
+const HEALTH_TIMEOUT_MS = 10_000;
 
 export type ExternalApiToolExecutorDeps = {
   /** Returns candidate live instances, newest-first. Re-invoked on rescan. */
   discover: () => Array<ExternalApiInstance> | Promise<Array<ExternalApiInstance>>;
   /** Preferred instance pid (e.g. the MCP session id). Falls back to newest. */
   pid?: number;
-  /** Options forwarded to each {@link ExternalApiClient}. */
-  clientOptions?: ExternalApiClientOptions;
-  /** Client factory — injectable for tests. Defaults to a real client. */
+  /** Options forwarded to each {@link ExternalApiHttp}. */
+  clientOptions?: ExternalApiHttpOptions;
+  /** HTTP-layer factory — injectable for tests. Defaults to a real {@link ExternalApiHttp}. */
   createClient?: (
     instance: ExternalApiInstance,
-    options?: ExternalApiClientOptions,
-  ) => ExternalApiClient;
+    options?: ExternalApiHttpOptions,
+  ) => ExternalApiHttp;
 };
 
 type NoInstance = { type: 'no-instance'; pinnedPid?: number };
@@ -80,21 +105,22 @@ type RawOutcome = {
 };
 
 /**
- * {@link ToolExecutor} implementation that speaks the Tableau Desktop External Client
- * API ("Athena V0") instead of the legacy Agent API.
+ * The one executor for Tableau Desktop: every tool call reaches Desktop through the
+ * External Client API ("Athena V0") it wraps.
  *
- * Command execution uses POST /v0/app:invokeCommand. Workbook document round-trips use
- * the dedicated GET/POST /v0/workbook/document methods below.
+ * This class is the single home of the endpoint surface — each endpoint method is one
+ * route (from types.ts) + schema call through the generic {@link ExternalApiHttp}.
+ * Command execution uses POST /v0/app:invokeCommand; workbook document round-trips use
+ * the dedicated GET/POST document routes.
  *
  * On a 401 (stale discovery file) the executor rescans discovery exactly once and
  * retries with the fresh instance/token.
  */
-export class ExternalApiToolExecutor extends ToolExecutor {
+export class ExternalApiToolExecutor {
   private readonly deps: ExternalApiToolExecutorDeps;
-  private client: ExternalApiClient | undefined;
+  private http: ExternalApiHttp | undefined;
 
   constructor(deps: ExternalApiToolExecutorDeps) {
-    super();
     this.deps = deps;
   }
 
@@ -107,7 +133,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
       data: { pid: this.deps.pid },
     });
 
-    const resolved = await this.resolveClient();
+    const resolved = await this.resolveHttp();
     if (resolved.isErr()) {
       log({
         message: 'No External Client API instance discovered yet',
@@ -128,11 +154,15 @@ export class ExternalApiToolExecutor extends ToolExecutor {
 
   stop(): void {
     log({ message: 'ExternalApiToolExecutor stopped', level: 'info', logger: LOGGER });
-    this.client = undefined;
+    this.http = undefined;
   }
 
   isAvailable(): boolean {
-    return this.client !== undefined;
+    return this.http !== undefined;
+  }
+
+  get desktopInstanceId(): string | undefined {
+    return this.http?.instanceId;
   }
 
   async executeCommand(
@@ -155,9 +185,17 @@ export class ExternalApiToolExecutor extends ToolExecutor {
   > {
     const resolvedArgs = args ?? {};
 
-    const outcomeResult = await this.withRescan((client) =>
-      this.callEndpoint(client, { namespace, command, args: resolvedArgs, signal }),
-    );
+    const outcomeResult = await this.withRescan(async (http) => {
+      const result = await http.postJsonEnvelope(
+        EXTERNAL_API_ROUTES.invokeCommand,
+        { namespace, command, parameters: resolvedArgs },
+        signal,
+      );
+      if (result.isErr()) {
+        return Err(result.error);
+      }
+      return Ok(normalizeEnvelope(result.value, http.apiVersion));
+    });
 
     if (outcomeResult.isErr()) {
       const mapped = mapClientError(outcomeResult.error, this.deps.pid);
@@ -201,18 +239,183 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return Ok({ ...commandResult, parsedResult: safeParsedResult.data });
   }
 
+  async health(signal: AbortSignal): Promise<Result<{ healthy: boolean }, ExecuteCommandError>> {
+    return this.readExternalApi(async (http) => {
+      const probe = await http.getOk(EXTERNAL_API_ROUTES.health, signal, {
+        timeoutMs: HEALTH_TIMEOUT_MS,
+      });
+      return probe.map(({ ok }) => ({ healthy: ok }));
+    });
+  }
+
+  async getRoot(signal: AbortSignal): Promise<Result<ApiRoot, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.root, apiRootSchema, signal),
+    );
+  }
+
+  async getApp(signal: AbortSignal): Promise<Result<AppInfo, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.app, appInfoSchema, signal),
+    );
+  }
+
+  async getSite(signal: AbortSignal): Promise<Result<Site, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.site, siteSchema, signal),
+    );
+  }
+
+  async listSiteWorkbooks(
+    signal: AbortSignal,
+  ): Promise<Result<SiteWorkbookList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.siteWorkbooks, siteWorkbookListSchema, signal),
+    );
+  }
+
+  async listSiteDatasources(
+    signal: AbortSignal,
+  ): Promise<Result<SiteDatasourceList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.siteDatasources, siteDatasourceListSchema, signal),
+    );
+  }
+
+  async getWorkbook(signal: AbortSignal): Promise<Result<WorkbookInventory, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.workbook, workbookInventorySchema, signal),
+    );
+  }
+
   async listWorksheets(signal: AbortSignal): Promise<Result<WorksheetList, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.listWorksheets(signal));
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.workbookWorksheets, worksheetListSchema, signal),
+    );
+  }
+
+  async listDashboards(signal: AbortSignal): Promise<Result<DashboardList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.workbookDashboards, dashboardListSchema, signal),
+    );
+  }
+
+  async listStoryboards(signal: AbortSignal): Promise<Result<StoryboardList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.workbookStoryboards, storyboardListSchema, signal),
+    );
+  }
+
+  async listWorkbookDatasources(
+    signal: AbortSignal,
+  ): Promise<Result<DatasourceList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.workbookDatasources, datasourceListSchema, signal),
+    );
+  }
+
+  async getWorksheet(
+    worksheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorksheetItem, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(worksheetRoute(worksheetId), worksheetItemSchema, signal),
+    );
+  }
+
+  async getDashboard(
+    dashboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<DashboardItem, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(dashboardRoute(dashboardId), dashboardItemSchema, signal),
+    );
+  }
+
+  async getStoryboard(
+    storyboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<StoryboardItem, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(storyboardRoute(storyboardId), storyboardItemSchema, signal),
+    );
   }
 
   async getWorkbookDocument(
     signal: AbortSignal,
-  ): Promise<Result<ToolWorkbookDocument, ExecuteCommandError>> {
-    return this.readExternalApi(async (client) => {
-      const result = await client.getWorkbookDocument(signal);
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi(async (http) => {
+      const result = await http.getXml(EXTERNAL_API_ROUTES.workbookDocument, signal);
       if (result.isErr()) return result;
-      return Ok({ ...result.value, instanceId: client.instanceId });
+      return Ok({ ...result.value, instanceId: http.instanceId });
     });
+  }
+
+  async getWorksheetDocument(
+    worksheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi((http) => http.getXml(worksheetDocumentRoute(worksheetId), signal));
+  }
+
+  async getDashboardDocument(
+    dashboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi((http) => http.getXml(dashboardDocumentRoute(dashboardId), signal));
+  }
+
+  async getStoryboardDocument(
+    storyboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getXml(storyboardDocumentRoute(storyboardId), signal),
+    );
+  }
+
+  async getWorksheetSummaryData(
+    worksheetId: string,
+    query: WorksheetSummaryDataQuery,
+    signal: AbortSignal,
+  ): Promise<Result<SummaryData, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(worksheetSummaryDataRoute(worksheetId, query), summaryDataSchema, signal),
+    );
+  }
+
+  async exportWorksheetImage(
+    worksheetId: string,
+    query: ImageExportQuery,
+    signal: AbortSignal,
+  ): Promise<Result<ImageResult, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(worksheetImageRoute(worksheetId, query), imageResultSchema, signal),
+    );
+  }
+
+  async exportDashboardImage(
+    dashboardId: string,
+    query: ImageExportQuery,
+    signal: AbortSignal,
+  ): Promise<Result<ImageResult, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(dashboardImageRoute(dashboardId, query), imageResultSchema, signal),
+    );
+  }
+
+  async validateWorkbookDocument(
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<ValidationResult, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.postXmlForBody(
+        EXTERNAL_API_ROUTES.workbookDocumentValidate,
+        xml,
+        validationResultSchema,
+        signal,
+      ),
+    );
   }
 
   async applyWorkbookDocument(
@@ -221,7 +424,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
-      (client) => client.applyWorkbookDocument(xml, signal),
+      (http) => http.postXmlEnvelope(EXTERNAL_API_ROUTES.workbookDocument, xml, signal),
       'apply-workbook-document',
       options,
     );
@@ -233,7 +436,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     signal: AbortSignal,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
-      (client) => client.applyWorksheetDocument(worksheetId, xml, signal),
+      (http) => http.postXmlEnvelope(worksheetDocumentRoute(worksheetId), xml, signal),
       'apply-worksheet-document',
     );
   }
@@ -244,7 +447,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     signal: AbortSignal,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
-      (client) => client.applyDashboardDocument(dashboardId, xml, signal),
+      (http) => http.postXmlEnvelope(dashboardDocumentRoute(dashboardId), xml, signal),
       'apply-dashboard-document',
     );
   }
@@ -255,39 +458,57 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     signal: AbortSignal,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
-      (client) => client.applyStoryboardDocument(storyboardId, xml, signal),
+      (http) => http.postXmlEnvelope(storyboardDocumentRoute(storyboardId), xml, signal),
       'apply-storyboard-document',
+    );
+  }
+
+  async undo(
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(EXTERNAL_API_ROUTES.workbookUndo, signal),
+      'undo',
+    );
+  }
+
+  async redo(
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(EXTERNAL_API_ROUTES.workbookRedo, signal),
+      'redo',
     );
   }
 
   /**
    * Shared document-apply pipeline for the whole-workbook and per-sheet POST routes: run the
-   * client call through withRescan, normalize the operation envelope, then fold it into a
+   * HTTP call through withRescan, normalize the operation envelope, then fold it into a
    * command-status result (envelope FAILED / Tableau error → command-failed). `command` labels
    * the operation for logs and the synthetic command id.
    */
   private async applyDocument(
-    call: (client: ExternalApiClient) => Promise<Result<OperationEnvelope, ExternalApiError>>,
+    call: (http: ExternalApiHttp) => Promise<Result<OperationEnvelope, ExternalApiError>>,
     command: string,
     options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
-    const outcomeResult = await this.withRescan(async (client) => {
+    const outcomeResult = await this.withRescan(async (http) => {
       if (
         options?.expectedInstanceId !== undefined &&
-        client.instanceId !== options.expectedInstanceId
+        http.instanceId !== options.expectedInstanceId
       ) {
         return Err({
           type: 'instance-mismatch' as const,
           expected: options.expectedInstanceId,
-          actual: client.instanceId,
+          actual: http.instanceId,
         });
       }
       options?.onDispatch?.();
-      const result = await call(client);
+      const result = await call(http);
       if (result.isErr()) {
         return Err(result.error);
       }
-      return Ok(normalizeEnvelope(result.value, client.apiVersion));
+      return Ok(normalizeEnvelope(result.value, http.apiVersion));
     });
 
     if (outcomeResult.isErr()) {
@@ -316,152 +537,15 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return statusResult;
   }
 
-  async undo(
-    signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
-    return this.applyDocument((client) => client.undo(signal), 'undo');
-  }
-
-  async redo(
-    signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
-    return this.applyDocument((client) => client.redo(signal), 'redo');
-  }
-
-  async health(signal: AbortSignal): Promise<Result<{ healthy: boolean }, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.health(signal));
-  }
-
-  async getRoot(signal: AbortSignal): Promise<Result<ApiRoot, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.getRoot(signal));
-  }
-
-  async listDashboards(signal: AbortSignal): Promise<Result<DashboardList, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.listDashboards(signal));
-  }
-
-  async listStoryboards(signal: AbortSignal): Promise<Result<StoryboardList, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.listStoryboards(signal));
-  }
-
-  async getWorkbook(signal: AbortSignal): Promise<Result<WorkbookInventory, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.getWorkbook(signal));
-  }
-
-  async listWorkbookDatasources(
-    signal: AbortSignal,
-  ): Promise<Result<DatasourceList, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.listWorkbookDatasources(signal));
-  }
-
-  async listSiteWorkbooks(
-    signal: AbortSignal,
-  ): Promise<Result<SiteWorkbookList, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.listSiteWorkbooks(signal));
-  }
-
-  async getSite(signal: AbortSignal): Promise<Result<Site, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.getSite(signal));
-  }
-
-  async getWorksheet(
-    worksheetId: string,
-    signal: AbortSignal,
-  ): Promise<Result<WorksheetItem, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.getWorksheet(worksheetId, signal));
-  }
-
-  async getDashboard(
-    dashboardId: string,
-    signal: AbortSignal,
-  ): Promise<Result<DashboardItem, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.getDashboard(dashboardId, signal));
-  }
-
-  async getStoryboard(
-    storyboardId: string,
-    signal: AbortSignal,
-  ): Promise<Result<StoryboardItem, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.getStoryboard(storyboardId, signal));
-  }
-
-  async getWorksheetDocument(
-    worksheetId: string,
-    signal: AbortSignal,
-  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.getWorksheetDocument(worksheetId, signal));
-  }
-
-  async getDashboardDocument(
-    dashboardId: string,
-    signal: AbortSignal,
-  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.getDashboardDocument(dashboardId, signal));
-  }
-
-  async getStoryboardDocument(
-    storyboardId: string,
-    signal: AbortSignal,
-  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.getStoryboardDocument(storyboardId, signal));
-  }
-
-  async getApp(signal: AbortSignal): Promise<Result<AppInfo, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.getApp(signal));
-  }
-
-  async getWorksheetSummaryData(
-    worksheetId: string,
-    query: WorksheetSummaryDataQuery,
-    signal: AbortSignal,
-  ): Promise<Result<SummaryData, ExecuteCommandError>> {
-    return this.readExternalApi((client) =>
-      client.getWorksheetSummaryData(worksheetId, query, signal),
-    );
-  }
-
-  async exportWorksheetImage(
-    worksheetId: string,
-    query: ImageExportQuery,
-    signal: AbortSignal,
-  ): Promise<Result<ImageResult, ExecuteCommandError>> {
-    return this.readExternalApi((client) =>
-      client.exportWorksheetImage(worksheetId, query, signal),
-    );
-  }
-
-  async exportDashboardImage(
-    dashboardId: string,
-    query: ImageExportQuery,
-    signal: AbortSignal,
-  ): Promise<Result<ImageResult, ExecuteCommandError>> {
-    return this.readExternalApi((client) =>
-      client.exportDashboardImage(dashboardId, query, signal),
-    );
-  }
-
-  async validateWorkbookDocument(
-    xml: string,
-    signal: AbortSignal,
-  ): Promise<Result<ValidationResult, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.validateWorkbookDocument(xml, signal));
-  }
-
-  async listSiteDatasources(
-    signal: AbortSignal,
-  ): Promise<Result<SiteDatasourceList, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.listSiteDatasources(signal));
-  }
-
-  private createClient(instance: ExternalApiInstance): ExternalApiClient {
+  private createHttp(instance: ExternalApiInstance): ExternalApiHttp {
     const factory =
       this.deps.createClient ??
-      ((i: ExternalApiInstance, o?: ExternalApiClientOptions): ExternalApiClient =>
-        new ExternalApiClient(i, o));
+      ((i: ExternalApiInstance, o?: ExternalApiHttpOptions): ExternalApiHttp =>
+        new ExternalApiHttp(i, o));
     return factory(instance, this.deps.clientOptions);
   }
 
-  private async resolveClient(): Promise<Result<ExternalApiClient, NoInstance>> {
+  private async resolveHttp(): Promise<Result<ExternalApiHttp, NoInstance>> {
     const instances = await this.deps.discover();
     // A pinned pid must match exactly. Falling back to instances[0] here would silently
     // retarget a different Desktop, which is the split-brain this pin exists to prevent.
@@ -471,27 +555,25 @@ export class ExternalApiToolExecutor extends ToolExecutor {
         : instances[0];
 
     if (!chosen) {
-      this.client = undefined;
+      this.http = undefined;
       return Err({ type: 'no-instance', pinnedPid: this.deps.pid });
     }
 
-    this.client = this.createClient(chosen);
-    return Ok(this.client);
+    this.http = this.createHttp(chosen);
+    return Ok(this.http);
   }
 
-  private async ensureClient(): Promise<Result<ExternalApiClient, NoInstance>> {
-    if (this.client) {
-      return Ok(this.client);
+  private async ensureHttp(): Promise<Result<ExternalApiHttp, NoInstance>> {
+    if (this.http) {
+      return Ok(this.http);
     }
-    return this.resolveClient();
+    return this.resolveHttp();
   }
 
-  private async withRescan(
-    op: (
-      client: ExternalApiClient,
-    ) => Promise<Result<RawOutcome, ExternalApiError | InstanceMismatch>>,
-  ): Promise<Result<RawOutcome, ExternalApiError | NoInstance | InstanceMismatch>> {
-    const first = await this.ensureClient();
+  private async withRescan<T>(
+    op: (http: ExternalApiHttp) => Promise<Result<T, ExternalApiError | InstanceMismatch>>,
+  ): Promise<Result<T, ExternalApiError | NoInstance | InstanceMismatch>> {
+    const first = await this.ensureHttp();
     if (first.isErr()) {
       return Err(first.error);
     }
@@ -503,8 +585,8 @@ export class ExternalApiToolExecutor extends ToolExecutor {
         level: 'warning',
         logger: LOGGER,
       });
-      this.client = undefined;
-      const rescanned = await this.resolveClient();
+      this.http = undefined;
+      const rescanned = await this.resolveHttp();
       if (rescanned.isErr()) {
         return Err(rescanned.error);
       }
@@ -515,60 +597,13 @@ export class ExternalApiToolExecutor extends ToolExecutor {
   }
 
   private async readExternalApi<T>(
-    op: (client: ExternalApiClient) => Promise<Result<T, ExternalApiError>>,
+    op: (http: ExternalApiHttp) => Promise<Result<T, ExternalApiError>>,
   ): Promise<Result<T, ExecuteCommandError>> {
-    const result = await this.withClientRescan(op);
+    const result = await this.withRescan(op);
     if (result.isErr()) {
       return Err(mapClientError(result.error, this.deps.pid));
     }
     return Ok(result.value);
-  }
-
-  private async withClientRescan<T>(
-    op: (client: ExternalApiClient) => Promise<Result<T, ExternalApiError>>,
-  ): Promise<Result<T, ExternalApiError | NoInstance>> {
-    const first = await this.ensureClient();
-    if (first.isErr()) {
-      return Err(first.error);
-    }
-
-    let result = await op(first.value);
-    if (result.isErr() && result.error.type === 'unauthorized') {
-      log({
-        message: 'External Client API returned 401 — rescanning discovery once',
-        level: 'warning',
-        logger: LOGGER,
-      });
-      this.client = undefined;
-      const rescanned = await this.resolveClient();
-      if (rescanned.isErr()) {
-        return Err(rescanned.error);
-      }
-      result = await op(rescanned.value);
-    }
-
-    return result;
-  }
-
-  private async callEndpoint(
-    client: ExternalApiClient,
-    {
-      namespace,
-      command,
-      args,
-      signal,
-    }: {
-      namespace: 'tabui' | 'tabdoc';
-      command: string;
-      args: Record<string, unknown>;
-      signal: AbortSignal;
-    },
-  ): Promise<Result<RawOutcome, ExternalApiError>> {
-    const result = await client.invokeCommand(namespace, command, args, signal);
-    if (result.isErr()) {
-      return Err(result.error);
-    }
-    return Ok(normalizeEnvelope(result.value, client.apiVersion));
   }
 }
 
@@ -605,8 +640,8 @@ function buildCommandStatus(
     });
   }
 
-  // A non-terminal state reaching here means the client's poll did not resolve it — report it as
-  // still running, never as completed (the guard against the old false-success-on-202 bug).
+  // A non-terminal state reaching here means the HTTP layer's poll did not resolve it — report it
+  // as still running, never as completed (the guard against the old false-success-on-202 bug).
   if (state !== 'SUCCEEDED') {
     return Ok({
       command_id: outcome.operationId ?? `ext_${namespace}:${command}_${Date.now()}`,

@@ -2,16 +2,16 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
+import { ExecuteCommandError } from '../desktop/externalApi/executorTypes.js';
 import {
   BARE_COMMAND_FAILURE_GUIDANCE,
   isBareCommandFailure,
-} from '../desktop/commands/workbook/applyFailureClassifier.js';
-import type { GetDashboardXmlError } from '../desktop/commands/workbook/getDashboardXml.js';
-import type { GetWorksheetXmlError } from '../desktop/commands/workbook/getWorksheetXml.js';
-import type { LoadDashboardXmlError } from '../desktop/commands/workbook/loadDashboardXml.js';
-import type { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
-import type { LoadWorksheetXmlError } from '../desktop/commands/workbook/loadWorksheetXml.js';
-import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
+} from '../desktop/wrappers/applyFailureClassifier.js';
+import type { GetDashboardXmlError } from '../desktop/wrappers/getDashboardXml.js';
+import type { GetWorksheetXmlError } from '../desktop/wrappers/getWorksheetXml.js';
+import type { LoadDashboardXmlError } from '../desktop/wrappers/loadDashboardXml.js';
+import type { LoadWorkbookXmlError } from '../desktop/wrappers/loadWorkbookXml.js';
+import type { LoadWorksheetXmlError } from '../desktop/wrappers/loadWorksheetXml.js';
 import {
   type StructuredResult,
   type WireStructuredContent,

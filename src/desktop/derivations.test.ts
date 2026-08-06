@@ -56,6 +56,7 @@ describe('derivations — one table, and every entry lands inside the validator'
     expect(resolveDerivation('my')).toBe('MY');
     expect(resolveDerivation('md')).toBe('MDY');
     expect(resolveDerivation('iqr')).toBe('ISO-Qtr');
+    expect(resolveDerivation('clct')).toBe('Collect');
   });
 
   it('strips table-calc wrappers to the base aggregation', () => {

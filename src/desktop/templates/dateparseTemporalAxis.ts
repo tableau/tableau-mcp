@@ -35,19 +35,8 @@
  * the render MUST be verified live before a template enables the opt-in.
  */
 
-/** Escape a value for use inside a single- or double-quoted XML attribute. */
-function escapeXmlAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+import { escapeXml as escapeXmlAttr } from '../binder/escape.js';
+import { escapeRegExp as escapeRegex } from '../xmlElement.js';
 
 /** The signal the binder emits when it accepts a string field for a temporal slot. */
 export interface DateparseAxisSpec {

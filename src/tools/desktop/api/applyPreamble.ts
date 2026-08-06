@@ -1,0 +1,75 @@
+import { existsSync, readFileSync } from 'fs';
+import { Ok, Result } from 'ts-results-es';
+
+import { resolveSession } from '../../../desktop/session/sessionResolution.js';
+import { CacheArtifactKind, checkSidecar } from '../../../desktop/wrappers/cacheFingerprint.js';
+import {
+  ArgsValidationError,
+  CacheSessionMismatchError,
+  FileReadError,
+  McpToolError,
+  WorkbookNotFoundError,
+  WorksheetNotFoundError,
+} from '../../../errors/mcpToolError.js';
+
+/**
+ * Shared preamble for the apply-* tools' cached-file path: empty-path validation,
+ * file existence, file read, session resolution, and the cache sidecar check.
+ * Per-kind differences (focus mode, load thunk, success prose) stay in the tools.
+ */
+export function runApplyPreamble({
+  kind,
+  file,
+  session,
+  emptyPathGuidance,
+  notFoundGuidance,
+}: {
+  kind: CacheArtifactKind;
+  file: string | undefined;
+  session: string | undefined;
+  /** Where to get a path, appended to the empty-path validation error. */
+  emptyPathGuidance: string;
+  /** Where to get a path, appended to the missing-file error. */
+  notFoundGuidance: string;
+}): Result<{ xml: string; resolvedSession: string }, McpToolError> {
+  // No inline document parameter: the cached file path IS the handle. Making the
+  // model retype a document cost ~190s of pure emission across six asks, and
+  // inline content carried no cache fingerprint, so it also skipped the
+  // cross-instance bleed guard below.
+  if (!file?.trim()) {
+    return new ArgsValidationError(
+      `A non-empty ${kind} file path is required. ${emptyPathGuidance}`,
+    ).toErr();
+  }
+
+  if (!existsSync(file)) {
+    // Dashboard/storyboard have no kind-specific NotFound error class; the
+    // 'workbook-not-found' type string may be load-bearing, so keep the class
+    // and name the right artifact kind in the message instead.
+    const NotFoundError = kind === 'worksheet' ? WorksheetNotFoundError : WorkbookNotFoundError;
+    return new NotFoundError(`Cached ${kind} file not found: ${file} ${notFoundGuidance}`).toErr();
+  }
+
+  let xml: string;
+  try {
+    xml = readFileSync(file, 'utf-8');
+  } catch (error) {
+    return new FileReadError(error).toErr();
+  }
+
+  const sessionResult = resolveSession(session);
+  if (sessionResult.isErr()) {
+    return sessionResult.error.toErr();
+  }
+  const resolvedSession = sessionResult.value;
+
+  // Cross-instance cache-bleed guard (W9): refuse a cache file produced by a
+  // different (or restarted) Desktop session before applying it. Now that every
+  // apply goes through a cache file, no payload can skip this check.
+  const sidecar = checkSidecar(file, resolvedSession, kind);
+  if (!sidecar.ok) {
+    return new CacheSessionMismatchError(sidecar.message!).toErr();
+  }
+
+  return new Ok({ xml, resolvedSession });
+}

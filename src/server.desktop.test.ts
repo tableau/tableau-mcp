@@ -8,7 +8,7 @@ import {
   buildDesktopInstructions,
   SESSION_RESOLUTION_TEXT_PINNED,
   SESSION_RESOLUTION_TEXT_UNPINNED,
-} from './desktop/routeTable.js';
+} from './desktop/instructions.js';
 import * as loggerModule from './logging/logger.js';
 import {
   DEMO_TOOL_PROFILE,
@@ -147,17 +147,24 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
   return JSON.stringify(await getDesktopToolListEntry(tool));
 }
 
+// Re-pinned 2026-08-06 (tool-surface unification wave): uniform session/mode/file
+// param describes via src/tools/desktop/params.ts replaced undescribed, empty, and
+// drifted variants across the surface. The bytes bought described opaque params;
+// tools at a grandfathered per-tool cap were left untouched rather than grown.
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 30_356;
+const FULL_TOOL_SURFACE_BUDGET = 47_312;
+
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
     const server = new DesktopMcpServer();
     const tools = desktopToolFactories.map((toolFactory) => toolFactory(server));
     const dynamicAuthoringTools = selectToolsForProfile(tools, 'dynamic-authoring');
     let dynamicAuthoringTotal = DESKTOP_INSTRUCTIONS.length;
-    let fullSurfaceTotal = DESKTOP_INSTRUCTIONS.length;
+    let fullToolSurfaceTotal = 0;
 
     for (const tool of tools) {
       const bytes = (await serializeDesktopToolSurface(tool)).length;
-      fullSurfaceTotal += bytes;
+      fullToolSurfaceTotal += bytes;
       if (DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name)) {
         dynamicAuthoringTotal += bytes;
       }
@@ -166,17 +173,13 @@ describe('desktop tools/list serialized surface', () => {
       DYNAMIC_AUTHORING_TOOL_PROFILE,
     );
 
-    // Dynamic authoring is the serving surface, so this is the real budget gate, and it
-    // stays well under the 46k tools/list cliff (the dedicated served-surface test below
-    // guards that invariant). The full desktop surface is opt-in (TOOL_PROFILE=full), not
-    // what clients see by default; its looser cap only catches runaway growth without
-    // forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 30,480 bytes dynamic and 47,889 bytes full: both surfaces
-    // carry the undo-workbook / redo-workbook command tools, and the full surface additionally
-    // carries the full-profile-only get-storyboard-xml and apply-storyboard tools. The dynamic
-    // surface stays well under the 46k tools/list cliff. Keep only a few bytes of ratchet headroom.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(30_480);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(47_889);
+    // The default served surface includes instructions. Full-profile tool schemas are
+    // pinned separately so intentional route prose does not fund schema growth.
+    // Re-pinned 2026-08-06 (merge of upstream #720 titles + #723 template flow): the
+    // merged default route prose measures 3,099 bytes (was 7,042 pre-merge).
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_099);
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
+    expect(fullToolSurfaceTotal).toBeLessThanOrEqual(FULL_TOOL_SURFACE_BUDGET);
   });
 });
 
@@ -241,7 +244,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // measured size; the ratchet is unchanged, so trim rather than raise.
     ['bind-template', 2467], // raised with sign-off (2026-08-05): agreed UI-label title 'Matching template' costs a few bytes over 'Bind Template'; earlier raise (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
     ['add-field', 1438], // raised with sign-off (2026-08-05): agreed UI-label title 'Adding field'; provenance-style describes (from field resolution, never invented)
-    ['inject-template', 1404], // provenance-style describes; session also made optional
+    ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['refine-worksheet', 1466], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
@@ -439,6 +442,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'activate-sheet',
       'undo-workbook',
       'redo-workbook',
+      'list-instances',
+      'list-available-fields',
+      'list-worksheets',
+      'list-dashboards',
       // The manual field-edit path's read leg — mints the worksheetFile add-field/
       // remove-field/apply-worksheet consume.
       'get-worksheet-xml',
@@ -482,10 +489,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     for (const tool of selected) {
       total += (await serializeDesktopToolSurface(tool)).length;
     }
-    // A lean surface must have generous headroom — this is a structural win, not a
-    // describe-stub squeeze. If this ever approaches 46k something is very wrong.
-    // list-available-fields serves both full exploration and slim headless field selection.
-    expect(total).toBeLessThanOrEqual(30_481);
+    expect(total).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {

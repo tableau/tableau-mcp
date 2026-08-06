@@ -5,7 +5,8 @@
 // nest another element of the same tag, so a lazy "opening tag → next matching close
 // tag" scan is unambiguous for them.
 
-function escapeRegExp(value: string): string {
+/** Escape a string for safe use as a literal inside a RegExp. */
+export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 

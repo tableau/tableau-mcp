@@ -1,3 +1,6 @@
+import { escapeXml as escapeXmlAttr } from '../binder/escape.js';
+import { escapeRegExp as escapeRegex } from '../xmlElement.js';
+
 const ANCHOR_FIELD = 'Anchor Category';
 const ANCHOR_MEMBERS = ['subtotal', 'total'] as const;
 
@@ -6,19 +9,6 @@ interface ParsedInstanceValue {
   deriv: string;
   field: string;
   role: string;
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function escapeXmlAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
 }
 
 function typeForRole(role: string): string {
