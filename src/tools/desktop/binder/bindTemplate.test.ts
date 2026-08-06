@@ -96,8 +96,8 @@ let bundledRuntimeCatalog: Map<string, RuntimeTemplateCatalogSnapshot> | undefin
 function mockedRuntimeCatalog(): Map<string, RuntimeTemplateCatalogSnapshot> {
   if (!bundledRuntimeCatalog) {
     bundledRuntimeCatalog = new Map();
-    for (const fileName of listDataAssetNames('templates').filter((name) =>
-      name.endsWith('.tbm'),
+    for (const fileName of listDataAssetNames('templates').filter(
+      (name) => name.endsWith('.tbm') && !name.includes('__'),
     )) {
       const bookmark = readDataAsset(`templates/${fileName}`);
       invariant(bookmark);
