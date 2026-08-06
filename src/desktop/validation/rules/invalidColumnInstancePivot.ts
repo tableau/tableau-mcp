@@ -4,10 +4,13 @@ const INVALID_NONE_QK = /\[none:([^:\]]+):qk\]/gi;
 const NAME_ATTR = /\bname=(?:'([^']*)'|"([^"]*)")/;
 const COLUMN_ATTR = /\bcolumn=(?:'([^']*)'|"([^"]*)")/;
 const DATASOURCE_ATTR = /\bdatasource=(?:'([^']*)'|"([^"]*)")/;
+const CLASS_ATTR = /\bclass=(?:'([^']*)'|"([^"]*)")/;
 const DERIVATION_ATTR = /\bderivation=(?:'([^']*)'|"([^"]*)")/;
 const TYPE_ATTR = /\btype=(?:'([^']*)'|"([^"]*)")/;
 const NONE_QK_NAME = /^\[none:([^:\]]+):qk\]$/i;
 const COLUMN_INSTANCE_TAG = /<column-instance\b[^>]*>/gi;
+const FILTER_TAG = /<filter\b[^>]*>/gi;
+const RELATIVE_NONE_QK_COLUMN = /^(?:\[(.*)\]\.)?\[none:([^:\]]+):qk\]$/i;
 
 interface ScopeBlock {
   start: number;
@@ -22,7 +25,7 @@ function stripOuterBrackets(name: string): string {
 
 function findBlocks(
   xml: string,
-  tag: 'datasource-dependencies' | 'datasource' | 'worksheet',
+  tag: 'datasource-dependencies' | 'datasource' | 'worksheet' | 'slices',
 ): ScopeBlock[] {
   const blocks: ScopeBlock[] = [];
   const openNeedle = `<${tag}`;
@@ -74,6 +77,7 @@ export const invalidColumnInstancePivotRule: ValidationRule = {
     const worksheetBlocks = findBlocks(source, 'worksheet');
     const dependencyBlocks = findBlocks(source, 'datasource-dependencies');
     const datasourceBlocks = findBlocks(source, 'datasource');
+    const sliceBlocks = findBlocks(source, 'slices');
     const topLevelDeclarations = new Set<string>();
 
     for (const match of source.matchAll(COLUMN_INSTANCE_TAG)) {
@@ -121,6 +125,43 @@ export const invalidColumnInstancePivotRule: ValidationRule = {
         : undefined;
     };
 
+    const relativeDateKeysByWorksheet = new Map<ScopeBlock | undefined, Set<string>>();
+    const relativeDateFilterRanges: Array<{ start: number; end: number }> = [];
+    const instanceKey = (field: string, datasource: string | undefined): string =>
+      JSON.stringify([datasource ?? null, field]);
+
+    for (const match of source.matchAll(FILTER_TAG)) {
+      const tag = match[0];
+      const classAttribute = CLASS_ATTR.exec(tag);
+      const filterClass = classAttribute ? (classAttribute[1] ?? classAttribute[2]) : '';
+      if (filterClass.toLowerCase() !== 'relative-date') continue;
+      const columnAttribute = COLUMN_ATTR.exec(tag);
+      const column = columnAttribute ? (columnAttribute[1] ?? columnAttribute[2]) : '';
+      const relativeColumn = RELATIVE_NONE_QK_COLUMN.exec(column);
+      if (!relativeColumn) continue;
+
+      const index = match.index ?? 0;
+      const worksheet = blockAt(worksheetBlocks, index);
+      const keys = relativeDateKeysByWorksheet.get(worksheet) ?? new Set<string>();
+      keys.add(instanceKey(relativeColumn[2].trim(), relativeColumn[1]));
+      relativeDateKeysByWorksheet.set(worksheet, keys);
+      relativeDateFilterRanges.push({ start: index, end: index + tag.length });
+    }
+
+    const isAllowedRelativeDateReference = (
+      field: string,
+      datasource: string | undefined,
+      index: number,
+    ): boolean => {
+      const worksheet = blockAt(worksheetBlocks, index);
+      const keys = relativeDateKeysByWorksheet.get(worksheet);
+      if (!keys?.has(instanceKey(field, datasource))) return false;
+      if (relativeDateFilterRanges.some((range) => index >= range.start && index < range.end)) {
+        return true;
+      }
+      return blockAt(sliceBlocks, index) !== undefined;
+    };
+
     const declarationExists = (
       field: string,
       datasource: string | undefined,
@@ -147,10 +188,12 @@ export const invalidColumnInstancePivotRule: ValidationRule = {
       const field = match[1].trim();
       if (issued.has(field)) continue;
       const index = match.index ?? 0;
+      const datasource = datasourceForRef(index);
+      if (isAllowedRelativeDateReference(field, datasource, index)) continue;
       const owner = blockAt(dependencyBlocks, index) ?? blockAt(datasourceBlocks, index);
       const declared = owner
         ? owner.declaredQuantitativeInstances.has(field)
-        : declarationExists(field, datasourceForRef(index), index);
+        : declarationExists(field, datasource, index);
       if (declared) continue;
 
       issued.add(field);

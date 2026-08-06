@@ -30,6 +30,30 @@ describe('invalid-column-instance-pivot rule', () => {
     expect(rule.validate(xml)).toHaveLength(0);
   });
 
+  it('accepts a relative-date filter and its matching slice without a column-instance declaration', () => {
+    const xml = `<worksheet name="Relative Date">
+      <table><view>
+        <filter class="relative-date" column="[DS].[none:Close Date:qk]" first-period="-30" last-period="0" period-type-v2="day" />
+        <slices><column>[DS].[none:Close Date:qk]</column></slices>
+      </view></table>
+    </worksheet>`;
+
+    expect(rule.validate(xml)).toHaveLength(0);
+  });
+
+  it('does not let a relative-date filter exempt the same none:qk reference on a shelf', () => {
+    const xml = `<worksheet name="Relative Date">
+      <table><view>
+        <filter class="relative-date" column="[DS].[none:Close Date:qk]" first-period="-30" last-period="0" period-type-v2="day" />
+        <slices><column>[DS].[none:Close Date:qk]</column></slices>
+      </view><rows>[DS].[none:Close Date:qk]</rows></table>
+    </worksheet>`;
+
+    const issues = rule.validate(xml);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toMatch(/\[none:Close Date:qk\]/);
+  });
+
   it('accepts a Desktop-declared quantitative None instance in the same datasource scope', () => {
     const xml = `<worksheet><table><view>
       <datasource-dependencies datasource="DS">
