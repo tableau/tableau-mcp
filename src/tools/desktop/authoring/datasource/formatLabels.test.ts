@@ -41,7 +41,7 @@ describe('formatLabelsTool', () => {
 
   it('turns mark labels ON by inserting a pane style rule and verifies readback', async () => {
     const { result, applyWorkbookDocument } = await getToolResult({
-      args: { worksheet: 'Profit', showLabels: true },
+      args: { worksheetName: 'Profit', showLabels: true },
       readbackXml: labelsShown(BASE_XML, 'true'),
     });
 
@@ -87,9 +87,35 @@ describe('formatLabelsTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('worksheet empty');
   });
+
+  it('errors when both worksheetName and its alias are absent', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({ args: { showLabels: true } });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'worksheetName is required (worksheet is a deprecated alias).',
+    );
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('errors when worksheetName and its alias disagree', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { worksheetName: 'Profit', worksheet: 'Sales', showLabels: true },
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('worksheetName ("Profit")');
+    expect(result.content[0].text).toContain('Pass one of them.');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
 });
 
-type FormatLabelsArgs = { session?: string; worksheet: string; showLabels?: boolean };
+type FormatLabelsArgs = {
+  session?: string;
+  worksheetName?: string;
+  worksheet?: string;
+  showLabels?: boolean;
+};
 
 async function getToolResult({
   args,
@@ -130,7 +156,12 @@ async function getToolResult({
   const callback = await Provider.from(tool.callback);
 
   const result = await callback(
-    { session: '12345', ...args, showLabels: args.showLabels ?? true },
+    {
+      session: '12345',
+      worksheetName: args.worksheetName,
+      worksheet: args.worksheet,
+      showLabels: args.showLabels ?? true,
+    },
     extra,
   );
 

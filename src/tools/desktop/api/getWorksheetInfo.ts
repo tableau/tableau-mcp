@@ -4,11 +4,17 @@ import { z } from 'zod';
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import {
+  artifactNameParam,
+  deprecatedArtifactAliasParam,
+  resolveArtifactNameArg,
+} from '../params.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  worksheet: z.string().describe('Worksheet name/id.'),
+  worksheetName: artifactNameParam('worksheet').optional(),
+  worksheet: deprecatedArtifactAliasParam('worksheet'),
 };
 const title = 'Get Worksheet Info';
 
@@ -27,11 +33,16 @@ export const getWorksheetInfoTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ session, worksheet }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, worksheetName, worksheet }, extra): Promise<CallToolResult> => {
       return await getWorksheetInfo.logAndExecute({
         extra,
-        args: { session, worksheet },
+        args: { session, worksheetName, worksheet },
         callback: async () => {
+          const nameResult = resolveArtifactNameArg('worksheet', worksheetName, worksheet);
+          if (nameResult.isErr()) {
+            return nameResult;
+          }
+          const resolvedWorksheetName = nameResult.value;
           return await runExternalApiReadTool({
             session,
             extra,
@@ -46,7 +57,7 @@ export const getWorksheetInfoTool = (
 
               const worksheetResult = resolveItemByNameOrId(
                 'Worksheet',
-                worksheet,
+                resolvedWorksheetName,
                 listResult.value.worksheets ?? [],
               );
               if (worksheetResult.isErr()) {
