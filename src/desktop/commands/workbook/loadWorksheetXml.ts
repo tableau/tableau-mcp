@@ -23,7 +23,11 @@ import {
   type ReadbackVerificationResult,
   verifyWorksheetReadback,
 } from '../../validation/readback-verify.js';
-import { blockingValidationIssues, runValidation } from '../../validation/registry.js';
+import {
+  blockingValidationIssues,
+  introducedBlockingValidationIssues,
+  runValidation,
+} from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { xmlNamesEqual } from '../../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
@@ -395,6 +399,8 @@ export async function loadWorksheetXml({
         });
       }
 
+      const baselineValidation = runValidation(workbookResult.value, 'workbook');
+
       let workbookDoc: string;
       try {
         workbookDoc = upsertWorksheetAndWindowIntoWorkbook(
@@ -408,7 +414,10 @@ export async function loadWorksheetXml({
       }
 
       const workbookValidation = runValidation(workbookDoc, 'workbook');
-      const workbookBlockingIssues = blockingValidationIssues(workbookValidation.issues);
+      const workbookBlockingIssues = introducedBlockingValidationIssues(
+        baselineValidation.issues,
+        workbookValidation.issues,
+      );
       if (workbookBlockingIssues.length > 0) {
         return Err({
           type: 'load-worksheet-xml-error',

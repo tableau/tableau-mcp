@@ -50,6 +50,18 @@ describe('undeclared-set-reference rule', () => {
     expect(issues[0].suggestion).toMatch(/groupfilter/);
   });
 
+  it('reports the number of references so a new duplicate remains detectable', () => {
+    const xml = `<workbook><datasources><datasource name="Sample - Superstore">
+      <column name="[C1]"><calculation class="tableau" formula="IF [Missing Set] THEN &quot;yes&quot; ELSE &quot;no&quot; END"/></column>
+      <column name="[C2]"><calculation class="tableau" formula="IF [Missing Set] THEN &quot;yes&quot; ELSE &quot;no&quot; END"/></column>
+    </datasource></datasources></workbook>`;
+
+    const issues = undeclaredSetReferenceRule.validate(xml);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].occurrenceCount).toBe(2);
+  });
+
   it('does not flag sets declared as groups', () => {
     expect(undeclaredSetReferenceRule.validate(safeDefined)).toHaveLength(0);
   });

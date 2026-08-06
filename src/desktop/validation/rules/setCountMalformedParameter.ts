@@ -17,11 +17,12 @@ export const setCountMalformedParameterRule = {
     const doc = parseXml(s);
     if (!doc?.documentElement) return [];
 
-    const countRefs = new Set<string>();
+    const countRefs = new Map<string, number>();
     for (const match of s.matchAll(
       /<groupfilter\b[^>]*\bcount=(['"])\[Parameters\]\.\[([^\]]+)\]\1/gi,
     )) {
-      countRefs.add(match[2]);
+      const paramName = match[2];
+      countRefs.set(paramName, (countRefs.get(paramName) ?? 0) + 1);
     }
     if (countRefs.size === 0) return [];
 
@@ -39,14 +40,16 @@ export const setCountMalformedParameterRule = {
       .filter(Boolean);
 
     const issues: ValidationIssue[] = [];
-    for (const paramName of countRefs) {
+    for (const [paramName, occurrenceCount] of countRefs) {
       const cols = xpath.select(
         `//column[@name="[${paramName}]"]`,
         doc as unknown as Node,
       ) as Element[];
       if (cols.length === 0) {
         if (suppressUndeclared) continue;
-        issues.push(malformedIssue(paramName, 'not declared anywhere', wellFormedParams));
+        issues.push(
+          malformedIssue(paramName, 'not declared anywhere', wellFormedParams, occurrenceCount),
+        );
         continue;
       }
 
@@ -56,6 +59,7 @@ export const setCountMalformedParameterRule = {
             paramName,
             'declared as a bare <column> (no param-domain-type / no value / no <calculation>)',
             wellFormedParams,
+            occurrenceCount,
           ),
         );
       }
@@ -76,6 +80,7 @@ function malformedIssue(
   paramName: string,
   why: string,
   wellFormedParams: string[] = [],
+  occurrenceCount = 1,
 ): ValidationIssue {
   const others = wellFormedParams.filter((name) => name !== `[${paramName}]`);
   const repointHint =
@@ -95,6 +100,7 @@ function malformedIssue(
   return {
     ruleId: 'set-count-malformed-parameter',
     severity: 'error',
+    occurrenceCount,
     message:
       `A set's <groupfilter count='[Parameters].[${paramName}]'> references a parameter that is ${why}. ` +
       'The set applies but CANNOT compute at query time — Tableau throws "The filter limit expression is invalid" ' +

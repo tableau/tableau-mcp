@@ -130,8 +130,7 @@ export const dateFieldBoundAsStringRule: ValidationRule = {
     }
     if (allDateFields.size === 0) return [];
 
-    const issues: ValidationIssue[] = [];
-    const issued = new Set<string>();
+    const issuesByBinding = new Map<string, ValidationIssue>();
     const shelves = xpath.select('//rows | //cols', doc as unknown as Node) as Element[];
 
     for (const shelf of shelves) {
@@ -140,15 +139,19 @@ export const dateFieldBoundAsStringRule: ValidationRule = {
         if (!isDatasourceDeclaredDate(ref, dateFieldsByDatasource, allDateFields)) continue;
 
         const key = `${shelf.nodeName}:${ref.datasource ?? ''}:${ref.field}:${ref.pivot}`;
-        if (issued.has(key)) continue;
-        issued.add(key);
+        const existing = issuesByBinding.get(key);
+        if (existing) {
+          existing.occurrenceCount = (existing.occurrenceCount ?? 1) + 1;
+          continue;
+        }
 
         const fieldLabel = ref.datasource
           ? `[${ref.datasource}].[${ref.instance}]`
           : `[${ref.instance}]`;
-        issues.push({
+        issuesByBinding.set(key, {
           ruleId: 'date-field-bound-as-string',
           severity: 'error',
+          occurrenceCount: 1,
           message:
             `Date field "${ref.field}" is bound on ${shelf.nodeName} as raw string pill ${fieldLabel}. ` +
             'It renders as a flat categorical axis, not a time axis, so a line or trend over time is analytically wrong.',
@@ -161,6 +164,6 @@ export const dateFieldBoundAsStringRule: ValidationRule = {
       }
     }
 
-    return issues;
+    return [...issuesByBinding.values()];
   },
 };

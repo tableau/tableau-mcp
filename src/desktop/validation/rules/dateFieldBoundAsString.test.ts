@@ -75,6 +75,18 @@ describe('date-field-bound-as-string rule', () => {
     expect(dateFieldBoundAsStringRule.validate(xml)).toHaveLength(0);
   });
 
+  it('counts equivalent invalid bindings so a new duplicate remains detectable', () => {
+    const issues = dateFieldBoundAsStringRule.validate(
+      workbook(`
+        <cols>[ds].[none:month:nk]</cols>
+        <cols>[ds].[none:month:nk]</cols>
+      `),
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].occurrenceCount).toBe(2);
+  });
+
   it('stays silent when a date field is used on filters or encodings instead of rows/cols', () => {
     const xml = workbook(`
       <cols>[ds].[sum:mau:qk]</cols>

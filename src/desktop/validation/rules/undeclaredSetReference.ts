@@ -12,16 +12,19 @@ export const undeclaredSetReferenceRule: ValidationRule = {
 
   validate(xml: string): ValidationIssue[] {
     const s = String(xml ?? '');
-    const referenced = new Set<string>();
+    const referenceCounts = new Map<string, number>();
 
     for (const calc of s.matchAll(/<calculation\b[^>]*\bformula=(['"])((?:(?!\1).)*)\1/gi)) {
       const formula = stripStringLiterals(calc[2] ?? '');
-      for (const match of formula.matchAll(SET_LIKE)) referenced.add(match[0]);
+      for (const match of formula.matchAll(SET_LIKE)) {
+        const token = match[0];
+        referenceCounts.set(token, (referenceCounts.get(token) ?? 0) + 1);
+      }
     }
-    if (referenced.size === 0) return [];
+    if (referenceCounts.size === 0) return [];
 
     const issues: ValidationIssue[] = [];
-    for (const token of referenced) {
+    for (const [token, referenceCount] of referenceCounts) {
       const name = token.slice(1, -1);
       const groupRe = new RegExp(`<group\\b[^>]*\\bname=(['"])\\[${escapeRe(name)}\\]\\1`, 'i');
       if (groupRe.test(s)) continue;
@@ -32,6 +35,7 @@ export const undeclaredSetReferenceRule: ValidationRule = {
       issues.push({
         ruleId: 'undeclared-set-reference',
         severity: 'error',
+        occurrenceCount: referenceCount,
         message:
           `The set "${token}" is referenced in a calc formula but never declared as a <group name='${token}'> with a ` +
           `<groupfilter>. The XML applies, but on reload Tableau reports "Error parsing set '${token}', deleting set" and ` +

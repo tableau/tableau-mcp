@@ -38,6 +38,15 @@ describe('set-count-malformed-parameter rule', () => {
     );
   });
 
+  it('counts equivalent malformed references so a new duplicate remains detectable', () => {
+    const issues = setCountMalformedParameterRule.validate(
+      workbook(bareStub, `${set('HN')}${set('HN')}`),
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].occurrenceCount).toBe(2);
+  });
+
   it('errors when the count parameter is not declared in workbook context', () => {
     const issues = setCountMalformedParameterRule.validate(workbook('', set('Nonexistent')));
 
