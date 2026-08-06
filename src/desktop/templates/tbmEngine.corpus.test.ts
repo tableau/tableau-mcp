@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { DOMParser } from '@xmldom/xmldom';
 
 import { canonicalShortDerivation } from '../derivations.js';
+import { blockingValidationIssues, runValidation } from '../validation/registry.js';
 import { bookmarkToTemplateWorkbook, deriveTemplatePass1Eligibility } from './bookmarkTemplate.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 import { inferBindingDescriptor, inferFromBookmark } from './inferSlots.js';
@@ -411,5 +412,41 @@ describe('TBM engine corpus invariants', { timeout: 30_000 }, () => {
     }
 
     expect(failures, `eligible=${templates.length}`).toEqual([]);
+  });
+
+  it('passes every blocking validation rule after binding and worksheet injection', () => {
+    const failures: string[] = [];
+
+    for (const template of corpus) {
+      const { mapping } = mappingFor(template, 'qualified');
+      try {
+        const result = buildInjectedWorkbookXml({
+          workbookXml: EMPTY_WORKBOOK,
+          templateXml: template.xml,
+          title: `Validation ${template.name}`,
+          sheetType: 'worksheet',
+          templateParameters: { DATASOURCE: 'Unrelated DS' },
+          fieldMapping: mapping,
+          templateSlots: template.slots,
+          applyNonce: `validation-${template.name}`,
+        });
+        if (!result.ok) {
+          failures.push(`${template.name}: injection failed: ${result.issues.join('; ')}`);
+          continue;
+        }
+
+        for (const issue of blockingValidationIssues(
+          runValidation(result.xml, 'workbook').issues,
+        )) {
+          failures.push(`${template.name}: ${issue.ruleId}: ${issue.message}`);
+        }
+      } catch (error) {
+        failures.push(
+          `${template.name}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    expect(failures, `eligible=${corpus.length}`).toEqual([]);
   });
 });
