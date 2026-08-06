@@ -62,7 +62,7 @@
     "test:eval": "vitest --config ./vitest.config.eval.ts",
     "test:oauth:embedded": "vitest --config ./vitest.config.oauth.embedded.ts",
     "test:oauth:tableau": "npx playwright test",
-    "coverage": "vitest run --config ./vitest.config.ts --coverage",
+    "coverage": "vitest run --config ./vitest.config.ts --coverage --maxWorkers=2",
     "version:major": "npm version major --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
     "version:patch": "npm version patch --no-git-tag-version",
