@@ -409,6 +409,91 @@ describe('ExternalApiClient', () => {
     expect(last?.path).toBe('/v0/workbook/storyboards/story-qbr/document');
   });
 
+  it('creates a blank worksheet via POST /v0/workbook/worksheets:new with no body and no index', async () => {
+    const result = await client.createBlankWorksheet(undefined);
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().createdSheets).toEqual([
+      expect.objectContaining({ id: 'worksheet-new-1', name: 'Worksheet 1' }),
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('POST');
+    // Omitting index sends a bare route so the server appends at the end.
+    expect(last?.path).toBe('/v0/workbook/worksheets:new');
+    expect(last?.searchParams).toEqual({});
+    // No request body — a non-empty body would be a 400 on the live route.
+    expect(last?.body).toBe('');
+    expect(last?.contentType).toBeUndefined();
+  });
+
+  it('forwards index=0 as ?index=0 (distinct from omitted) on a blank worksheet create', async () => {
+    const result = await client.createBlankWorksheet(0);
+
+    expect(result.isOk()).toBe(true);
+    const last = server.requests.at(-1);
+    expect(last?.path).toBe('/v0/workbook/worksheets:new');
+    expect(last?.searchParams).toEqual({ index: '0' });
+  });
+
+  it('forwards a positive index as ?index=k on a blank dashboard create', async () => {
+    const result = await client.createBlankDashboard(2);
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().createdSheets[0]).toEqual(
+      expect.objectContaining({ id: 'dashboard-new-1', name: 'Dashboard 1' }),
+    );
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('POST');
+    expect(last?.path).toBe('/v0/workbook/dashboards:new');
+    expect(last?.searchParams).toEqual({ index: '2' });
+  });
+
+  it('creates a blank storyboard via POST /v0/workbook/storyboards:new', async () => {
+    const result = await client.createBlankStoryboard(undefined);
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().createdSheets[0]).toEqual(
+      expect.objectContaining({ id: 'storyboard-new-1', name: 'Storyboard 1' }),
+    );
+    const last = server.requests.at(-1);
+    expect(last?.path).toBe('/v0/workbook/storyboards:new');
+  });
+
+  it('maps a 400 invalid-request-body when a blank create route receives a body', async () => {
+    server.setOverride('POST /v0/workbook/worksheets:new', {
+      status: 400,
+      body: JSON.stringify({ code: 'invalid-request-body', title: 'invalid-request-body' }),
+    });
+
+    const result = await client.createBlankWorksheet(undefined);
+    expect(result.isErr()).toBe(true);
+    const error = result.unwrapErr();
+    if (error.type === 'problem') {
+      expect(error.status).toBe(400);
+      expect(error.code).toBe('invalid-request-body');
+    } else {
+      throw new Error(`expected problem error, got ${error.type}`);
+    }
+  });
+
+  it('maps a 400 invalid-query-parameter for a non-numeric blank-create index', async () => {
+    server.setOverride('POST /v0/workbook/worksheets:new', {
+      status: 400,
+      body: JSON.stringify({ code: 'invalid-query-parameter', title: 'invalid-query-parameter' }),
+    });
+
+    const result = await client.createBlankWorksheet(undefined);
+    expect(result.isErr()).toBe(true);
+    const error = result.unwrapErr();
+    if (error.type === 'problem') {
+      expect(error.status).toBe(400);
+      expect(error.code).toBe('invalid-query-parameter');
+    } else {
+      throw new Error(`expected problem error, got ${error.type}`);
+    }
+  });
+
   it('gets application info from GET /v0/app', async () => {
     const result = await client.getApp();
 

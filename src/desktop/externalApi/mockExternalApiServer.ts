@@ -653,6 +653,31 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const newSheetKind =
+      method === 'POST' && path === EXTERNAL_API_ROUTES.workbookWorksheetsNew
+        ? 'worksheet'
+        : method === 'POST' && path === EXTERNAL_API_ROUTES.workbookDashboardsNew
+          ? 'dashboard'
+          : method === 'POST' && path === EXTERNAL_API_ROUTES.workbookStoryboardsNew
+            ? 'storyboard'
+            : undefined;
+    if (newSheetKind) {
+      if (body.trim().length > 0) {
+        sendProblem(res, 400, 'invalid-request-body', 'The :new routes accept no request body.');
+        return;
+      }
+      const rawIndex = searchParams['index'];
+      if (rawIndex !== undefined && !/^-?\d+$/.test(rawIndex)) {
+        sendProblem(res, 400, 'invalid-query-parameter', `Non-numeric index: ${rawIndex}`);
+        return;
+      }
+      const capitalized = newSheetKind.charAt(0).toUpperCase() + newSheetKind.slice(1);
+      sendJson(res, 200, {
+        createdSheets: [{ id: `${newSheetKind}-new-1`, name: `${capitalized} 1` }],
+      });
+      return;
+    }
+
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',

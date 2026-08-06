@@ -29,6 +29,9 @@ import { getListSiteDatasourcesTool } from './data-source/listSiteDatasources.js
 import { getListSiteWorkbooksTool } from './data-source/listSiteWorkbooks.js';
 import { getListWorkbookDatasourcesTool } from './data-source/listWorkbookDatasources.js';
 import { getApplyStoryboardTool } from './external-api/applyStoryboard.js';
+import { getCreateDashboardBlankTool } from './external-api/createDashboardBlank.js';
+import { getCreateStoryboardBlankTool } from './external-api/createStoryboardBlank.js';
+import { getCreateWorksheetBlankTool } from './external-api/createWorksheetBlank.js';
 import { exportDashboardImageTool } from './external-api/exportDashboardImage.js';
 import { exportWorksheetImageTool } from './external-api/exportWorksheetImage.js';
 import { getApiRootTool } from './external-api/getApiRoot.js';
@@ -79,6 +82,9 @@ export const desktopToolFactories = [
   getListDashboardsTool,
   getGetWorksheetXmlTool,
   getApplyWorksheetTool,
+  getCreateWorksheetBlankTool,
+  getCreateDashboardBlankTool,
+  getCreateStoryboardBlankTool,
   getDeleteWorksheetTool,
   getRefineWorksheetTool,
   getGetDashboardXmlTool,

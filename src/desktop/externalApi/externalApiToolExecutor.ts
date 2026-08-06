@@ -25,6 +25,7 @@ import {
 import {
   ApiRoot,
   AppInfo,
+  CreatedSheets,
   DashboardItem,
   DashboardList,
   DatasourceList,
@@ -305,6 +306,27 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     signal: AbortSignal,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument((client) => client.redo(signal), 'redo');
+  }
+
+  async createBlankWorksheet(
+    index: number | undefined,
+    signal: AbortSignal,
+  ): Promise<Result<CreatedSheets, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.createBlankWorksheet(index, signal));
+  }
+
+  async createBlankDashboard(
+    index: number | undefined,
+    signal: AbortSignal,
+  ): Promise<Result<CreatedSheets, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.createBlankDashboard(index, signal));
+  }
+
+  async createBlankStoryboard(
+    index: number | undefined,
+    signal: AbortSignal,
+  ): Promise<Result<CreatedSheets, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.createBlankStoryboard(index, signal));
   }
 
   async health(signal: AbortSignal): Promise<Result<{ healthy: boolean }, ExecuteCommandError>> {

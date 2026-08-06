@@ -6,6 +6,8 @@ import {
   apiRootSchema,
   AppInfo,
   appInfoSchema,
+  CreatedSheets,
+  createdSheetsSchema,
   DashboardItem,
   dashboardItemSchema,
   DashboardList,
@@ -254,6 +256,44 @@ export class ExternalApiClient {
   async redo(signal?: AbortSignal): Promise<Result<OperationEnvelope, ExternalApiError>> {
     const response = await this.request('POST', EXTERNAL_API_ROUTES.workbookRedo, { signal });
     return this.parseEnvelope(response, signal);
+  }
+
+  // The three `:new` routes create ONE blank sheet of the route kind and return a bare `CreatedSheets`
+  // body (not an operation envelope) — so parse with `parseJson`, not `parseEnvelope`.
+  async createBlankWorksheet(
+    index: number | undefined,
+    signal?: AbortSignal,
+  ): Promise<Result<CreatedSheets, ExternalApiError>> {
+    const response = await this.request(
+      'POST',
+      buildNewSheetRoute(EXTERNAL_API_ROUTES.workbookWorksheetsNew, index),
+      { signal },
+    );
+    return this.parseJson(response, createdSheetsSchema, signal);
+  }
+
+  async createBlankDashboard(
+    index: number | undefined,
+    signal?: AbortSignal,
+  ): Promise<Result<CreatedSheets, ExternalApiError>> {
+    const response = await this.request(
+      'POST',
+      buildNewSheetRoute(EXTERNAL_API_ROUTES.workbookDashboardsNew, index),
+      { signal },
+    );
+    return this.parseJson(response, createdSheetsSchema, signal);
+  }
+
+  async createBlankStoryboard(
+    index: number | undefined,
+    signal?: AbortSignal,
+  ): Promise<Result<CreatedSheets, ExternalApiError>> {
+    const response = await this.request(
+      'POST',
+      buildNewSheetRoute(EXTERNAL_API_ROUTES.workbookStoryboardsNew, index),
+      { signal },
+    );
+    return this.parseJson(response, createdSheetsSchema, signal);
   }
 
   async fetchOpenApi(signal?: AbortSignal): Promise<Result<unknown, ExternalApiError>> {
@@ -677,6 +717,10 @@ function timeoutMsForRoute(route: string, configuredTimeoutMs: number | undefine
   return route === EXTERNAL_API_ROUTES.health
     ? Math.min(globalTimeoutMs, DEFAULT_HEALTH_TIMEOUT_MS)
     : globalTimeoutMs;
+}
+
+function buildNewSheetRoute(base: string, index: number | undefined): string {
+  return index === undefined ? base : `${base}?index=${index}`;
 }
 
 function buildWorksheetByIdRoute(worksheetId: string): string {
