@@ -176,7 +176,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   it('should have correct tool properties', () => {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
-    expect(tool.name).toBe('generate-pulse-metric-value-insight-bundle');
+    expect(tool.name).toBe('generate-pulse-insight-bundle');
     expect(tool.description).toContain(
       'Generate an insight bundle for the current aggregated value',
     );
