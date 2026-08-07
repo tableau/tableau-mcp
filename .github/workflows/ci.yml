@@ -57,15 +57,17 @@ jobs:
       - name: Build NPM package
         run: npm pack
 
-      # Only Node 22 publishes coverage below. Keep the instrumented leg single-worker;
-      # Vitest 3's fixed worker watchdog can otherwise fail after every test has passed.
-      - name: Tests with coverage
-        if: matrix.node-version == '>=22.7.5 <23'
-        run: npm run coverage
-
       - name: Tests
-        if: matrix.node-version == '24.x'
         run: npx vitest run --config ./vitest.config.ts --maxWorkers=2
+
+      # Coverage is informational (fail_below_min is false below). Vitest 3 can exit 1
+      # after every test passes when its fixed worker watchdog fires during coverage;
+      # the required test step above remains authoritative, and the report step still
+      # fails if this command does not produce the Cobertura artifact.
+      - name: Generate coverage report
+        if: matrix.node-version == '>=22.7.5 <23'
+        continue-on-error: true
+        run: npm run coverage
 
       - name: E2E Tests
         if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
