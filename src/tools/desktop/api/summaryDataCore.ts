@@ -56,19 +56,15 @@ export async function fetchWorksheetSummaryData({
     return Ok({ worksheet: resolvedWorksheet, columns: [], rows: [] });
   }
 
+  // No columnsToIncludeByFieldName: it matches only a column-instance name, not a plain field
+  // name, so it would silently no-op. Columns are projected from the returned data below instead.
   const querySummary = async (): Promise<Result<SummaryData, McpToolError>> =>
     await read(
       'summary-data',
       async (activeExecutor, activeSignal) =>
         await activeExecutor.getWorksheetSummaryData(
           resolvedWorksheet.id,
-          {
-            maxRows,
-            ignoreSelection: true,
-            ...(columns && columns.length > 0
-              ? { columnsToIncludeByFieldName: columns.join(',') }
-              : {}),
-          },
+          { maxRows, ignoreSelection: true },
           activeSignal,
         ),
     );
