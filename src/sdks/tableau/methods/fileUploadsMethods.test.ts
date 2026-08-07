@@ -1,3 +1,4 @@
+import { AxiosInstance } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 
 import FileUploadsMethods from './fileUploadsMethods.js';
@@ -22,7 +23,7 @@ describe('FileUploadsMethods', () => {
       const result = await fileUploadsMethods.initiateFileUpload({ siteId: 'site-1' });
 
       expect(result).toEqual({ uploadSessionId: 'session-1', fileSize: 0 });
-      expect(mockApiClient.initiateFileUpload).toHaveBeenCalledWith({
+      expect(mockApiClient.initiateFileUpload).toHaveBeenCalledWith(undefined, {
         params: { siteId: 'site-1' },
         headers: { Authorization: 'Bearer test' },
       });
@@ -41,7 +42,10 @@ describe('FileUploadsMethods', () => {
       );
       // @ts-expect-error - Mocking private property
       fileUploadsMethods._apiClient = {
-        axios: { put: mockPut, defaults: { baseURL: 'http://test' } },
+        axios: {
+          put: mockPut,
+          defaults: { baseURL: 'http://test' },
+        } as unknown as AxiosInstance,
       };
 
       const chunk = Buffer.from('hello');
@@ -80,7 +84,10 @@ describe('FileUploadsMethods', () => {
       );
       // @ts-expect-error - Mocking private property
       fileUploadsMethods._apiClient = {
-        axios: { put: mockPut, defaults: { baseURL: 'http://test' } },
+        axios: {
+          put: mockPut,
+          defaults: { baseURL: 'http://test' },
+        } as unknown as AxiosInstance,
       };
 
       await fileUploadsMethods.appendToFileUpload({

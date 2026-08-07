@@ -29,7 +29,7 @@ export default class FileUploadsMethods extends AuthenticatedMethods<typeof file
    */
   initiateFileUpload = async ({ siteId }: { siteId: string }): Promise<FileUpload> => {
     return (
-      await this._apiClient.initiateFileUpload({
+      await this._apiClient.initiateFileUpload(undefined, {
         params: { siteId },
         ...this.authHeader,
       })
