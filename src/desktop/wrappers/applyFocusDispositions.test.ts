@@ -52,10 +52,7 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
   'src/tools/desktop/authoring/datasource/authorSet.ts': ['applyWorkbookText:restore'],
   'src/tools/desktop/authoring/datasource/formatLabels.ts': ['applyWorkbookText:artifact'],
   'src/tools/desktop/api/applyWorkbook.ts': ['loadWorkbookXml:restore'],
-  'src/tools/desktop/api/applyWorksheet.ts': [
-    'loadWorksheetXml:artifact',
-    'loadWorksheetXml:artifact',
-  ],
+  'src/tools/desktop/api/applyWorksheet.ts': ['loadWorksheetXml:artifact'],
   'src/tools/desktop/authoring/sheets/refineWorksheet.ts': ['loadWorksheetXml:artifact'],
 };
 

@@ -63,6 +63,7 @@ const DEFAULT_WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets /></wor
 const DEFAULT_WORKSHEET_DOCUMENT_XML =
   '<?xml version="1.0"?>' +
   '<worksheet name="Sales by Region"><table>' +
+  '<view><datasources><datasource name="Sample - Superstore" /></datasources></view>' +
   '<rows>[Sample - Superstore].[none:Region:nk]</rows>' +
   '<cols>[Sample - Superstore].[sum:Sales:qk]</cols>' +
   '</table></worksheet>';

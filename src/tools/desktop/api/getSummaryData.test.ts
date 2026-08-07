@@ -190,11 +190,12 @@ describe('getSummaryDataTool', () => {
 
       const summaryRequest = harness.server.requests.at(-1) as any;
       expect(summaryRequest?.path).toBe('/v0/workbook/worksheets/sheet-sales/summaryData');
+      // Columns are projected from the returned data client-side, so no column filter is sent.
       expect(summaryRequest?.searchParams).toMatchObject({
         maxRows: '50',
         ignoreSelection: 'true',
-        columnsToIncludeByFieldName: 'Region,Sales',
       });
+      expect(summaryRequest?.searchParams).not.toHaveProperty('columnsToIncludeByFieldName');
     } finally {
       await harness.close();
     }

@@ -151,8 +151,8 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // param describes via src/tools/desktop/params.ts replaced undescribed, empty, and
 // drifted variants across the surface. The bytes bought described opaque params;
 // tools at a grandfathered per-tool cap were left untouched rather than grown.
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 31_937;
-const FULL_TOOL_SURFACE_BUDGET = 46_819;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 28_720;
+const FULL_TOOL_SURFACE_BUDGET = 47_936;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -405,10 +405,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 35-tool modern surface with one dashboard mutation door', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 37-tool modern surface with one dashboard mutation door', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(35);
+    expect(selected).toHaveLength(37);
     expect(selected.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining(['bind-template', 'build-and-apply-worksheet']),
     );
