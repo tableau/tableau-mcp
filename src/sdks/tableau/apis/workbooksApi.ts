@@ -89,11 +89,43 @@ const addTagsToWorkbookEndpoint = makeEndpoint({
   response: z.object({ tags: tagsSchema }),
 });
 
+const publishWorkbookEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/sites/:siteId/workbooks',
+  alias: 'publishWorkbook',
+  description:
+    'Publishes a workbook on the specified site, committing a file previously uploaded via Initiate File Upload and Append to File Upload calls.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'uploadSessionId',
+      type: 'Query',
+      schema: z.string(),
+    },
+    {
+      name: 'workbookType',
+      type: 'Query',
+      schema: z.enum(['twb', 'twbx']),
+    },
+    {
+      name: 'overwrite',
+      type: 'Query',
+      schema: z.boolean().optional(),
+    },
+  ],
+  response: z.object({ workbook: workbookSchema }),
+});
+
 const workbooksApi = makeApi([
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
   deleteWorkbookEndpoint,
   addTagsToWorkbookEndpoint,
+  publishWorkbookEndpoint,
 ]);
 
 export const workbooksApis = [...workbooksApi] as const satisfies ZodiosEndpointDefinitions;

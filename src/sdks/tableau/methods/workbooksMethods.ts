@@ -2,9 +2,10 @@ import { Zodios } from '@zodios/core';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
+import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import { Pagination } from '../types/pagination.js';
-import { Workbook } from '../types/workbook.js';
+import { Workbook, workbookSchema } from '../types/workbook.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
@@ -128,4 +129,61 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       },
     );
   };
+
+  /**
+   * Publishes a workbook on the specified site, committing a file previously uploaded
+   * via `fileUploadsMethods.initiateFileUpload` and `fileUploadsMethods.appendToFileUpload`.
+   * Sends a `multipart/mixed` body, which Zodios cannot construct, so this bypasses the
+   * Zodios-typed client and calls the underlying axios instance directly.
+   *
+   * @param siteId - The Tableau site ID
+   * @param uploadSessionId - The upload session ID returned by `initiateFileUpload`
+   * @param workbookType - `twb` or `twbx`, matching the file uploaded to the session
+   * @param name - The name to give the published workbook
+   * @param projectId - The ID of the project to publish the workbook into
+   * @param overwrite - Whether to overwrite an existing workbook with the same name
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#publish_workbook
+   */
+  publishWorkbook = async ({
+    siteId,
+    uploadSessionId,
+    workbookType,
+    name,
+    projectId,
+    overwrite,
+  }: {
+    siteId: string;
+    uploadSessionId: string;
+    workbookType: 'twb' | 'twbx';
+    name: string;
+    projectId: string;
+    overwrite?: boolean;
+  }): Promise<Workbook> => {
+    const xml = `<tsRequest><workbook name="${escapeXmlAttribute(name)}"><project id="${escapeXmlAttribute(projectId)}"/></workbook></tsRequest>`;
+    const { body, contentType } = buildMultipartMixedBody([
+      { name: 'request_payload', contentType: 'text/xml', data: xml },
+    ]);
+
+    const response = await this._apiClient.axios.post(
+      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks`,
+      body,
+      {
+        params: { uploadSessionId, workbookType, overwrite },
+        headers: {
+          'Content-Type': contentType,
+          ...this.authHeader.headers,
+        },
+      },
+    );
+
+    return workbookSchema.parse(response.data.workbook);
+  };
+}
+
+function escapeXmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
