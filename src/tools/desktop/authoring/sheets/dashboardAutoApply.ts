@@ -71,6 +71,8 @@ export const DASHBOARD_ZONES_VIA_WORKBOOK = true;
 
 const MIN_ASKS = 2;
 const MAX_ASKS = 6;
+const MAX_PROPOSAL_CANDIDATES = 3;
+const MAX_PROPOSAL_FIELDS = 20;
 
 const askSchema = z.object({
   ask: z.string().min(1),
@@ -92,10 +94,17 @@ const paramsSchema = {
 
 /** One ask's outcome, tagged with its position and original ask text for diagnostics. */
 type AskOutcome = { index: number; ask: string; result: BinderResult };
+type ProposalResult = Extract<BinderResult, { status: 'propose' }>;
+type ProposalSummary = Omit<ProposalResult, 'llm_input' | 'output_schema'> & {
+  llm_input: Pick<ProposalResult['llm_input'], 'ask' | 'candidate_templates' | 'fields'>;
+};
+type RefusalAskOutcome = Omit<AskOutcome, 'result'> & {
+  result: Exclude<BinderResult, ProposalResult> | ProposalSummary;
+};
 
 type DashboardAutoApplyRefusalResult = {
   applied: false;
-  results: AskOutcome[];
+  results: RefusalAskOutcome[];
   guidance: string;
   apply_error?: string;
 };
@@ -197,7 +206,25 @@ function refusal(
 ): ReturnType<IncompleteOperationError<DashboardAutoApplyRefusalResult>['toErr']> {
   const result: DashboardAutoApplyRefusalResult = {
     applied: false,
-    results,
+    results: results.map((outcome): RefusalAskOutcome => {
+      if (outcome.result.status !== 'propose') return outcome;
+      const proposal = outcome.result;
+      return {
+        ...outcome,
+        result: {
+          status: proposal.status,
+          decline_reason: proposal.decline_reason,
+          llm_input: {
+            ask: proposal.llm_input.ask,
+            candidate_templates: proposal.llm_input.candidate_templates.slice(
+              0,
+              MAX_PROPOSAL_CANDIDATES,
+            ),
+            fields: proposal.llm_input.fields.slice(0, MAX_PROPOSAL_FIELDS),
+          },
+        },
+      };
+    }),
     guidance,
     ...(apply_error ? { apply_error } : {}),
   };

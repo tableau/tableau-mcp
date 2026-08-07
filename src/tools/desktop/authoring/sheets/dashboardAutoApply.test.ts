@@ -134,10 +134,20 @@ const proposeResult: BinderResult = {
     code: 'no_llm_classifier_declined',
     detail: 'classifyNoLlm returned no deterministic template; routed to proposal candidates',
   },
-  llm_input: { ask: 'weird ask', candidate_templates: [], fields: [] } as unknown as Extract<
-    BinderResult,
-    { status: 'propose' }
-  >['llm_input'],
+  llm_input: {
+    ask: 'weird ask',
+    candidate_templates: Array.from({ length: 10 }, (_, index) => ({
+      template: `candidate-${index}`,
+      description: `Candidate ${index}`,
+      slots: [{ slot_id: `field_base_${index}`, kind: 'quantitative', required: true }],
+    })),
+    fields: Array.from({ length: 20 }, (_, index) => ({
+      name: `Field ${index}`,
+      role: 'measure',
+      type: 'quantitative',
+      datatype: 'real',
+    })),
+  } as unknown as Extract<BinderResult, { status: 'propose' }>['llm_input'],
   output_schema: { type: 'object' },
 };
 
@@ -587,6 +597,10 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(body.results).toHaveLength(2);
     expect(body.results[0].result.status).toBe('bound');
     expect(body.results[1].result.status).toBe('propose');
+    expect(body.results[1].result.llm_input.candidate_templates).toHaveLength(3);
+    expect(body.results[1].result.llm_input.fields).toHaveLength(20);
+    expect(body.results[1].result.output_schema).toBeUndefined();
+    expect(result.content[0].text.length).toBeLessThan(20_000);
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
