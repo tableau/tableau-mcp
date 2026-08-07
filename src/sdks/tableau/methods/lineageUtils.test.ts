@@ -1,5 +1,7 @@
 import {
+  getSearchContentLineageQuery,
   getViewLineageByLuid,
+  getViewLineageQuery,
   getWorkbookLineageByLuid,
   mergeViewLineage,
   mergeWorkbookLineage,
@@ -74,6 +76,100 @@ describe('lineageUtils', () => {
         owner: { id: 'owner-1', name: 'Workbook Owner' },
         project: { id: 'project-1', name: 'Executive Project' },
         upstreamDatasources: [{ luid: 'datasource-1', name: 'Sales' }],
+      },
+    ]);
+  });
+
+  it('queries both sheetsConnection and dashboardsConnection for view lineage', () => {
+    const query = getViewLineageQuery(['view-1', 'dashboard-1']);
+
+    expect(query).toContain('sheetsConnection(filter: { luidWithin: ["view-1", "dashboard-1"] })');
+    expect(query).toContain(
+      'dashboardsConnection(filter: { luidWithin: ["view-1", "dashboard-1"] })',
+    );
+  });
+
+  it('queries both sheetsConnection and dashboardsConnection in search content lineage', () => {
+    const query = getSearchContentLineageQuery({
+      workbookLuids: [],
+      viewLuids: ['view-1'],
+    });
+
+    expect(query).toContain('sheetsConnection(filter: { luidWithin: ["view-1"] })');
+    expect(query).toContain('dashboardsConnection(filter: { luidWithin: ["view-1"] })');
+  });
+
+  it('parses and merges dashboard view lineage from dashboardsConnection', () => {
+    const lineageByLuid = getViewLineageByLuid({
+      data: {
+        sheetsConnection: { nodes: [] },
+        dashboardsConnection: {
+          nodes: [
+            {
+              luid: 'dashboard-1',
+              upstreamDatasources: [
+                { luid: 'datasource-1', name: 'Data Depot' },
+                { name: 'Embedded Datasource' },
+              ],
+              workbook: {
+                luid: 'workbook-1',
+                name: 'Customer Support',
+                projectLuid: 'project-1',
+                projectName: 'Support Project',
+                owner: { luid: 'owner-1', name: 'Support Owner' },
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    const result = mergeViewLineage(
+      [{ id: 'dashboard-1', workbook: { id: 'workbook-1' }, owner: {}, project: {} }],
+      lineageByLuid,
+    );
+
+    expect(result).toEqual([
+      {
+        id: 'dashboard-1',
+        workbook: { id: 'workbook-1', name: 'Customer Support' },
+        owner: { id: 'owner-1', name: 'Support Owner' },
+        project: { id: 'project-1', name: 'Support Project' },
+        upstreamDatasources: [{ luid: 'datasource-1', name: 'Data Depot' }],
+      },
+    ]);
+  });
+
+  it('merges sheet and dashboard lineage nodes from a combined response', () => {
+    const lineageByLuid = getViewLineageByLuid({
+      data: {
+        sheetsConnection: {
+          nodes: [
+            {
+              luid: 'sheet-1',
+              upstreamDatasources: [{ luid: 'ds-sheet', name: 'Sheet DS' }],
+            },
+          ],
+        },
+        dashboardsConnection: {
+          nodes: [
+            {
+              luid: 'dashboard-1',
+              upstreamDatasources: [{ luid: 'ds-dash', name: 'Dashboard DS' }],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(mergeViewLineage([{ id: 'sheet-1' }, { id: 'dashboard-1' }], lineageByLuid)).toEqual([
+      {
+        id: 'sheet-1',
+        upstreamDatasources: [{ luid: 'ds-sheet', name: 'Sheet DS' }],
+      },
+      {
+        id: 'dashboard-1',
+        upstreamDatasources: [{ luid: 'ds-dash', name: 'Dashboard DS' }],
       },
     ]);
   });
