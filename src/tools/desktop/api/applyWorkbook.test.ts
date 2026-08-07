@@ -24,6 +24,18 @@ describe('applyWorkbookTool', () => {
   const resultSchema = z.object({
     message: z.string(),
   });
+  const structuredSchema = z.object({
+    message: z.string(),
+    nextAction: z.object({
+      kind: z.literal('done'),
+      label: z.string(),
+      receipt: z.object({
+        did: z.array(z.string()),
+        didNot: z.array(z.string()),
+        unverified: z.array(z.string()),
+      }),
+    }),
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,6 +76,25 @@ describe('applyWorkbookTool', () => {
     expect(resultObj.message).toContain('Successfully applied workbook update');
     expect(resultObj.message).toContain('HOST VERIFICATION — unverified');
     expect(resultObj.message).toContain('full workbook intent NOT re-verified');
+
+    // The text block is unchanged: it still carries only { message }.
+    expect(Object.keys(JSON.parse(result.content[0].text))).toEqual(['message']);
+
+    // Superset rule: the structured block carries the full text message plus the
+    // receipt, whose claims split observed (dispatch, preflight) from not observed
+    // (structural readback — whole-workbook applies have none).
+    const structured = structuredSchema.parse(result.structuredContent);
+    expect(structured.message).toBe(resultObj.message);
+    expect(structured.nextAction.receipt).toEqual({
+      did: [
+        'Desktop accepted the workbook XML apply command',
+        'preflight validation returned 0 warning(s)',
+      ],
+      didNot: [],
+      unverified: [
+        'whether the applied workbook retained its intended structure — no structural readback ran (whole workbook applies have none)',
+      ],
+    });
   });
 
   it('should successfully apply workbook XML in file mode', async () => {

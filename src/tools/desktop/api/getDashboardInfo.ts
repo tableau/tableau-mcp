@@ -4,11 +4,17 @@ import { z } from 'zod';
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import {
+  artifactNameParam,
+  deprecatedArtifactAliasParam,
+  resolveArtifactNameArg,
+} from '../params.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  dashboard: z.string().describe('Dashboard name/id.'),
+  dashboardName: artifactNameParam('dashboard').optional(),
+  dashboard: deprecatedArtifactAliasParam('dashboard'),
 };
 const title = 'Get Dashboard Info';
 
@@ -27,11 +33,16 @@ export const getDashboardInfoTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ session, dashboard }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, dashboardName, dashboard }, extra): Promise<CallToolResult> => {
       return await getDashboardInfo.logAndExecute({
         extra,
-        args: { session, dashboard },
+        args: { session, dashboardName, dashboard },
         callback: async () => {
+          const nameResult = resolveArtifactNameArg('dashboard', dashboardName, dashboard);
+          if (nameResult.isErr()) {
+            return nameResult;
+          }
+          const resolvedDashboardName = nameResult.value;
           const listResult = await runExternalApiReadTool({
             session,
             extra,
@@ -46,7 +57,7 @@ export const getDashboardInfoTool = (
 
               const dashboardResult = resolveItemByNameOrId(
                 'Dashboard',
-                dashboard,
+                resolvedDashboardName,
                 listResult.value.dashboards ?? [],
               );
               if (dashboardResult.isErr()) {

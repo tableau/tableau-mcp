@@ -45,6 +45,7 @@ const TERMINAL_FAILURE_NEXT_ACTION = {
 
 type SummaryDataArgs = {
   session?: string;
+  worksheetName?: string;
   worksheet?: string;
   maxRows?: number;
   columns?: string[];
@@ -154,7 +155,7 @@ describe('getSummaryDataTool', () => {
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      worksheet: expect.any(Object),
+      worksheetName: expect.any(Object),
       maxRows: expect.any(Object),
       columns: expect.any(Object),
     });
@@ -168,7 +169,7 @@ describe('getSummaryDataTool', () => {
     const harness = await startHarness();
     try {
       const result = await harness.callTool({
-        worksheet: 'Sales by Region',
+        worksheetName: 'Sales by Region',
         maxRows: 50,
         columns: ['Region', 'Sales'],
       });
@@ -310,7 +311,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheet: 'Empty Sheet' });
+      const result = await harness.callTool({ worksheetName: 'Empty Sheet' });
 
       expect(result.isError).toBe(false);
       expect(parseJsonResult(result)).toEqual({
@@ -345,7 +346,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheet: 'Sales by Region' });
+      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
 
       expect(result.isError).toBe(false);
       expect(parseJsonResult(result)).toMatchObject({
@@ -377,7 +378,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheet: 'Sales by Region' });
+      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
 
       expect(result.isError).toBe(false);
       expect(parseJsonResult(result)).toMatchObject({
@@ -405,11 +406,68 @@ describe('getSummaryDataTool', () => {
     }
   });
 
+  it('accepts the deprecated worksheet alias key and rejects a conflict with worksheetName', async () => {
+    const harness = await startHarness();
+    try {
+      const aliased = await harness.callTool({ worksheet: 'Sales by Region' });
+      expect(aliased.isError).toBe(false);
+      expect(parseResult(aliased).worksheet).toEqual({
+        id: 'sheet-sales',
+        name: 'Sales by Region',
+      });
+
+      const conflict = await harness.callTool({
+        worksheetName: 'Sales by Region',
+        worksheet: 'Profit by Category',
+      });
+      expect(conflict.isError).toBe(true);
+      invariant(conflict.content[0].type === 'text');
+      expect(conflict.content[0].text).toContain('worksheetName ("Sales by Region")');
+      expect(conflict.content[0].text).toContain('Pass one of them.');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('counts an alias call against the same transient-failure signature as a named call', async () => {
+    const harness = await startHarness((server) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
+        status: 500,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({
+          type: 'summary-failed',
+          title: 'Summary unavailable',
+          status: 500,
+          detail: 'Could not query worksheet',
+        }),
+      });
+    });
+
+    try {
+      const first = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
+      const second = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+
+      expect(parseJsonResult(first)).toMatchObject({
+        status: 'retryable',
+        reason: 'request-failed',
+      });
+      // The alias resolves to the same signature, so the repeat escalates to terminal.
+      expect(parseJsonResult(second)).toMatchObject({
+        status: 'terminal',
+        reason: 'request-failed',
+        guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
+      });
+      expectStructuredBlock(second, TERMINAL_FAILURE_NEXT_ACTION);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('does not replay a prior success payload for repeated calls', async () => {
     const harness = await startHarness();
     try {
       const args = {
-        worksheet: 'Sales by Region',
+        worksheetName: 'Sales by Region',
         maxRows: 50,
         columns: ['Region', 'Sales'],
       };
@@ -443,7 +501,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const args = { worksheet: 'Empty Sheet' };
+      const args = { worksheetName: 'Empty Sheet' };
       const first = await harness.callTool(args);
       const repeated = await harness.callTool(args);
       const firstBody = parseJsonResult(first) as Record<string, unknown>;
@@ -465,7 +523,7 @@ describe('getSummaryDataTool', () => {
   it('allows parallel first calls to execute without fabricating a prior result', async () => {
     const harness = await startHarness();
     try {
-      const args = { worksheet: 'Sales by Region', columns: ['Region'] };
+      const args = { worksheetName: 'Sales by Region', columns: ['Region'] };
       const [first, parallel] = await Promise.all([harness.callTool(args), harness.callTool(args)]);
 
       expect(parseResult(first).status).toBe('success');
@@ -493,7 +551,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheet: 'Sales by Region' });
+      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
 
       expect(result.isError).toBe(true);
       expect(parseJsonResult(result)).toMatchObject({
@@ -505,7 +563,7 @@ describe('getSummaryDataTool', () => {
       expectStructuredBlock(result, { label: 'Retry get-summary-data once', kind: 'prefill' });
 
       harness.server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', undefined);
-      const retry = await harness.callTool({ worksheet: 'Sales by Region' });
+      const retry = await harness.callTool({ worksheetName: 'Sales by Region' });
       expect(parseResult(retry).status).toBe('success');
       expect(
         harness.server.requests.filter((request) => request.path.endsWith('/summaryData')),
@@ -530,8 +588,8 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const first = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
-      const second = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+      const first = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
+      const second = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
 
       expect(parseJsonResult(first)).toMatchObject({
         status: 'retryable',
@@ -552,7 +610,7 @@ describe('getSummaryDataTool', () => {
   it('passes an explicit session to the session resolver', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ session: 'desktop-2', worksheet: 'sheet-sales' });
+      const result = await harness.callTool({ session: 'desktop-2', worksheetName: 'sheet-sales' });
 
       expect(result.isError).toBe(false);
       expect(sessionResolution.resolveSession).toHaveBeenCalledWith('desktop-2');
@@ -568,7 +626,7 @@ describe('getSummaryDataTool', () => {
     );
 
     try {
-      const failed = await harness.callTool({ worksheet: 'Sales by Region' });
+      const failed = await harness.callTool({ worksheetName: 'Sales by Region' });
 
       expect(failed.isError).toBe(true);
       expect(parseJsonResult(failed)).toMatchObject({
@@ -577,7 +635,7 @@ describe('getSummaryDataTool', () => {
         guidance: expect.stringContaining('transient — one retry is reasonable'),
       });
 
-      const retry = await harness.callTool({ worksheet: 'Sales by Region' });
+      const retry = await harness.callTool({ worksheetName: 'Sales by Region' });
       expect(parseResult(retry).status).toBe('success');
     } finally {
       await harness.close();
@@ -591,12 +649,15 @@ describe('getSummaryDataTool', () => {
     );
 
     try {
-      const firstFailure = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
-      const success = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+      const firstFailure = await harness.callTool({
+        worksheetName: 'Sales by Region',
+        maxRows: 50,
+      });
+      const success = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
       vi.mocked(sessionResolution.resolveSession).mockReturnValueOnce(
         new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
       );
-      const nextFailure = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+      const nextFailure = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
 
       expect(parseJsonResult(firstFailure)).toMatchObject({
         status: 'retryable',
@@ -624,8 +685,8 @@ describe('getSummaryDataTool', () => {
     );
 
     try {
-      const first = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
-      const second = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+      const first = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
+      const second = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
 
       expect(parseJsonResult(first)).toMatchObject({
         status: 'retryable',
@@ -652,12 +713,12 @@ describe('getSummaryDataTool', () => {
     try {
       const sessionA = await harness.callTool({
         session: 'desktop-a',
-        worksheet: 'Sales by Region',
+        worksheetName: 'Sales by Region',
         maxRows: 50,
       });
       const sessionB = await harness.callTool({
         session: 'desktop-b',
-        worksheet: 'Sales by Region',
+        worksheetName: 'Sales by Region',
         maxRows: 50,
       });
 
@@ -684,8 +745,8 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const first = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
-      const second = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+      const first = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
+      const second = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
 
       expect(parseJsonResult(first)).toMatchObject({
         status: 'retryable',
@@ -723,15 +784,15 @@ describe('getSummaryDataTool', () => {
 
     try {
       const unresolvedFailure = await harness.callTool({
-        worksheet: 'Sales by Region',
+        worksheetName: 'Sales by Region',
         maxRows: 50,
       });
       const resolvedTransportFailure = await harness.callTool({
-        worksheet: 'Sales by Region',
+        worksheetName: 'Sales by Region',
         maxRows: 50,
       });
       const secondResolvedTransportFailure = await harness.callTool({
-        worksheet: 'Sales by Region',
+        worksheetName: 'Sales by Region',
         maxRows: 50,
       });
 
@@ -822,7 +883,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheet: 'Regional Sales' });
+      const result = await harness.callTool({ worksheetName: 'Regional Sales' });
 
       expect(result.isError).toBe(true);
       expect(parseJsonResult(result)).toMatchObject({
@@ -840,7 +901,7 @@ describe('getSummaryDataTool', () => {
   it('returns an action-required repair error with available names when worksheet is not found', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ worksheet: 'Missing Sheet' });
+      const result = await harness.callTool({ worksheetName: 'Missing Sheet' });
 
       expect(result.isError).toBe(true);
       expect(parseJsonResult(result)).toMatchObject({
@@ -880,7 +941,7 @@ describe('getSummaryDataTool', () => {
     });
 
     try {
-      const result = await harness.callTool({ worksheet: 'Sales by Region' });
+      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
 
       expect(result.isError).toBe(true);
       expect(parseJsonResult(result)).toMatchObject({
@@ -897,7 +958,7 @@ describe('getSummaryDataTool', () => {
   it('clamps maxRows to 1000 before querying summary data', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ worksheet: 'sheet-sales', maxRows: 5000 });
+      const result = await harness.callTool({ worksheetName: 'sheet-sales', maxRows: 5000 });
 
       expect(result.isError).toBe(false);
       expect(parseResult(result).maxRows).toBe(1000);
@@ -930,6 +991,7 @@ async function startHarness(
       await callback(
         {
           session: args.session,
+          worksheetName: args.worksheetName,
           worksheet: args.worksheet,
           maxRows: args.maxRows,
           columns: args.columns,

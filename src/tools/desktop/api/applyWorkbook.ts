@@ -6,12 +6,14 @@ import { formatWorkbookPromiseCheck } from '../../../desktop/validation/promise-
 import { loadWorkbookXml } from '../../../desktop/wrappers/loadWorkbookXml.js';
 import {
   DesktopCommandExecutionError,
+  UnknownError,
   WorkbookXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, sessionParam } from '../params.js';
+import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
-import { runApplyPreamble } from './applyPreamble.js';
+import { acceptedNoReadbackApplyResult, runApplyPreamble } from './applyPreamble.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -70,7 +72,10 @@ export const getApplyWorkbookTool = (
               case 'load-workbook-xml-error':
                 return new WorkbookXmlLoadFailedError(error).toErr();
               default: {
+                // Exhaustive: an unexpected error type must never fall through to the
+                // success path and mint a receipt for an apply that was not observed.
                 const _: never = type;
+                return new UnknownError(error).toErr();
               }
             }
           }
@@ -78,8 +83,9 @@ export const getApplyWorkbookTool = (
           // Host verification receipt (W-23447506): whole-workbook applies have
           // no structural readback, so say so honestly instead of implying
           // full re-verification happened.
-          const receipt = result.isOk()
-            ? formatWorkbookPromiseCheck(result.value.validationWarnings)
+          const validationWarnings = result.isOk() ? result.value.validationWarnings : [];
+          const hostVerification = result.isOk()
+            ? formatWorkbookPromiseCheck(validationWarnings)
             : '';
           if (result.isOk()) {
             await emitEpisodeEvent(extra.config, {
@@ -92,10 +98,18 @@ export const getApplyWorkbookTool = (
             });
           }
 
-          return new Ok({
-            message: `Successfully applied workbook update. The workbook has been updated.${receipt}`,
-          });
+          // The shared structured receipt mirrors the text above and nothing more:
+          // dispatch and preflight warnings were observed; the applied structure was
+          // not, so it is listed as unverified (promise_outcome 'unverified' above).
+          return new Ok(
+            acceptedNoReadbackApplyResult({
+              kind: 'workbook',
+              resultWarnings: validationWarnings,
+              hostVerification,
+            }),
+          );
         },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },
   });

@@ -18,6 +18,18 @@ vi.mock('fs');
 
 describe('applyDashboardTool', () => {
   const resultSchema = z.object({ message: z.string() });
+  const structuredSchema = z.object({
+    message: z.string(),
+    nextAction: z.object({
+      kind: z.literal('done'),
+      label: z.string(),
+      receipt: z.object({
+        did: z.array(z.string()),
+        didNot: z.array(z.string()),
+        unverified: z.array(z.string()),
+      }),
+    }),
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,6 +63,25 @@ describe('applyDashboardTool', () => {
     expect(resultObj.message).toContain('Successfully applied dashboard update');
     expect(resultObj.message).toContain('HOST VERIFICATION — unverified');
     expect(resultObj.message).toContain('full dashboard intent NOT re-verified');
+
+    // The text block is unchanged: it still carries only { message }.
+    expect(Object.keys(JSON.parse(result.content[0].text))).toEqual(['message']);
+
+    // Superset rule: the structured block carries the full text message plus the
+    // receipt, whose claims split observed (dispatch, preflight) from not observed
+    // (structural readback — dashboard applies have none).
+    const structured = structuredSchema.parse(result.structuredContent);
+    expect(structured.message).toBe(resultObj.message);
+    expect(structured.nextAction.receipt).toEqual({
+      did: [
+        'Desktop accepted the dashboard XML apply for "Sales Dashboard"',
+        'preflight validation returned 0 warning(s)',
+      ],
+      didNot: [],
+      unverified: [
+        'whether the applied dashboard retained its intended layout — no structural readback ran (dashboard applies have none)',
+      ],
+    });
   });
 
   it('should successfully apply dashboard XML in file mode', async () => {

@@ -36,7 +36,7 @@ describe('getStoryboardXmlTool', () => {
     expect(tool.name).toBe('get-storyboard-xml');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
-      storyboard: expect.any(Object),
+      storyboardName: expect.any(Object),
       mode: expect.any(Object),
     });
     // The tool writes a cache file, so it is not read-only.
@@ -44,7 +44,7 @@ describe('getStoryboardXmlTool', () => {
   });
 
   it('writes the fragment to a cache file and points at apply-storyboard (default mode)', async () => {
-    const result = await getToolResult({ storyboard: 'QBR Story' });
+    const result = await getToolResult({ storyboardName: 'QBR Story' });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -56,7 +56,7 @@ describe('getStoryboardXmlTool', () => {
   });
 
   it('returns the fragment inline when mode is inline', async () => {
-    const result = await getToolResult({ storyboard: 'QBR Story', mode: 'inline' });
+    const result = await getToolResult({ storyboardName: 'QBR Story', mode: 'inline' });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -68,8 +68,38 @@ describe('getStoryboardXmlTool', () => {
     expect(resultObj.storyboardXml).toContain('type="storyboard"');
   });
 
+  it('accepts the deprecated storyboard alias key', async () => {
+    const result = await getToolResult({ storyboard: 'QBR Story', mode: 'inline' });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const resultObj = z
+      .object({ storyboardXml: z.string() })
+      .parse(JSON.parse(result.content[0].text));
+    expect(resultObj.storyboardXml).toContain('name="QBR Story"');
+  });
+
+  it('errors when both storyboardName and its alias are absent', async () => {
+    const result = await getToolResult({});
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'storyboardName is required (storyboard is a deprecated alias).',
+    );
+  });
+
+  it('errors when storyboardName and its alias disagree', async () => {
+    const result = await getToolResult({ storyboardName: 'QBR Story', storyboard: 'Other' });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('storyboardName ("QBR Story")');
+    expect(result.content[0].text).toContain('Pass one of them.');
+  });
+
   it('errors when the document route returns no <dashboard> subtree', async () => {
-    const result = await getToolResult({ storyboard: 'QBR Story', emptyDocument: true });
+    const result = await getToolResult({ storyboardName: 'QBR Story', emptyDocument: true });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -78,7 +108,11 @@ describe('getStoryboardXmlTool', () => {
 
   it('forces file mode when the inline fragment exceeds the cap, regardless of requested mode', async () => {
     const bigDocument = storyboardDocument('QBR Story', '<x>' + 'y'.repeat(20000) + '</x>');
-    const result = await getToolResult({ storyboard: 'QBR Story', mode: 'inline', bigDocument });
+    const result = await getToolResult({
+      storyboardName: 'QBR Story',
+      mode: 'inline',
+      bigDocument,
+    });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -91,7 +125,11 @@ describe('getStoryboardXmlTool', () => {
   });
 
   it('respects a smaller cap overridden via config', async () => {
-    const result = await getToolResult({ storyboard: 'QBR Story', mode: 'inline', capBytes: 8 });
+    const result = await getToolResult({
+      storyboardName: 'QBR Story',
+      mode: 'inline',
+      capBytes: 8,
+    });
 
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
@@ -100,7 +138,7 @@ describe('getStoryboardXmlTool', () => {
   });
 
   it('reports an honest too-new endpoint error when the storyboard list route is absent', async () => {
-    const result = await getToolResult({ storyboard: 'QBR Story', listRouteMissing: true });
+    const result = await getToolResult({ storyboardName: 'QBR Story', listRouteMissing: true });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -109,7 +147,7 @@ describe('getStoryboardXmlTool', () => {
   });
 
   it('reports an honest too-new endpoint error when the storyboard document route is absent', async () => {
-    const result = await getToolResult({ storyboard: 'QBR Story', documentRouteMissing: true });
+    const result = await getToolResult({ storyboardName: 'QBR Story', documentRouteMissing: true });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -120,7 +158,7 @@ describe('getStoryboardXmlTool', () => {
   it('passes the abort signal to both executor calls', async () => {
     const customSignal = new AbortController().signal;
     const { listStoryboards, getStoryboardDocument } = await getToolCalls({
-      storyboard: 'QBR Story',
+      storyboardName: 'QBR Story',
       customSignal,
     });
 
@@ -172,7 +210,8 @@ function makeExecutor({
 
 async function getToolResult(opts: {
   session?: string;
-  storyboard: string;
+  storyboardName?: string;
+  storyboard?: string;
   mode?: 'file' | 'inline';
   capBytes?: number;
   bigDocument?: string;
@@ -181,7 +220,14 @@ async function getToolResult(opts: {
   emptyDocument?: boolean;
   customSignal?: AbortSignal;
 }): Promise<CallToolResult> {
-  const { session = '12345', storyboard, mode = 'file', capBytes, customSignal } = opts;
+  const {
+    session = '12345',
+    storyboardName,
+    storyboard,
+    mode = 'file',
+    capBytes,
+    customSignal,
+  } = opts;
   const { executor } = makeExecutor(opts);
   const tool = getStoryboardXmlTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -194,10 +240,10 @@ async function getToolResult(opts: {
     ...(customSignal && { signal: customSignal }),
     ...(capBytes !== undefined && { config: { ...base.config, inlineXmlMaxBytes: capBytes } }),
   };
-  return await callback({ session, storyboard, mode }, extra);
+  return await callback({ session, storyboardName, storyboard, mode }, extra);
 }
 
-async function getToolCalls(opts: { storyboard: string; customSignal?: AbortSignal }): Promise<{
+async function getToolCalls(opts: { storyboardName: string; customSignal?: AbortSignal }): Promise<{
   listStoryboards: ReturnType<typeof vi.fn>;
   getStoryboardDocument: ReturnType<typeof vi.fn>;
 }> {
@@ -211,6 +257,14 @@ async function getToolCalls(opts: { storyboard: string; customSignal?: AbortSign
       .mockResolvedValue(executor) as unknown as TableauDesktopToolContext['getExecutor'],
     ...(opts.customSignal && { signal: opts.customSignal }),
   };
-  await callback({ session: '12345', storyboard: opts.storyboard, mode: 'inline' }, extra);
+  await callback(
+    {
+      session: '12345',
+      storyboardName: opts.storyboardName,
+      storyboard: undefined,
+      mode: 'inline',
+    },
+    extra,
+  );
   return executor;
 }

@@ -72,7 +72,9 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
     const readResult = await readCb(
       {
         filePath: file,
+        worksheetName: undefined,
         worksheet: 'Sales',
+        dashboardName: undefined,
         dashboard: undefined,
         startByte: undefined,
         endByte: undefined,
@@ -93,7 +95,9 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
         session: 's1',
         filePath: file,
         xmlContent: modifiedSales,
+        worksheetName: undefined,
         worksheet: 'Sales',
+        dashboardName: undefined,
         dashboard: undefined,
       },
       extra(),

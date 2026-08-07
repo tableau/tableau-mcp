@@ -4,11 +4,17 @@ import { z } from 'zod';
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import {
+  artifactNameParam,
+  deprecatedArtifactAliasParam,
+  resolveArtifactNameArg,
+} from '../params.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  storyboard: z.string().describe('Storyboard name/id.'),
+  storyboardName: artifactNameParam('storyboard').optional(),
+  storyboard: deprecatedArtifactAliasParam('storyboard'),
 };
 const title = 'Get Storyboard Info';
 
@@ -27,11 +33,16 @@ export const getStoryboardInfoTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ session, storyboard }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, storyboardName, storyboard }, extra): Promise<CallToolResult> => {
       return await getStoryboardInfo.logAndExecute({
         extra,
-        args: { session, storyboard },
+        args: { session, storyboardName, storyboard },
         callback: async () => {
+          const nameResult = resolveArtifactNameArg('storyboard', storyboardName, storyboard);
+          if (nameResult.isErr()) {
+            return nameResult;
+          }
+          const resolvedStoryboardName = nameResult.value;
           return await runExternalApiReadTool({
             session,
             extra,
@@ -46,7 +57,7 @@ export const getStoryboardInfoTool = (
 
               const storyboardResult = resolveItemByNameOrId(
                 'Storyboard',
-                storyboard,
+                resolvedStoryboardName,
                 listResult.value.storyboards ?? [],
               );
               if (storyboardResult.isErr()) {

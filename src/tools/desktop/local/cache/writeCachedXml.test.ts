@@ -184,6 +184,32 @@ describe('writeCachedXmlTool', () => {
       expect(written).not.toContain('[Sales]</rows>');
     });
 
+    it('splices via the aligned worksheetName key too', async () => {
+      const modified =
+        "<worksheet name='Sales'><table><rows>[Sales Modified]</rows></table></worksheet>";
+
+      const result = await getResult(CACHED_FILE, modified, { worksheetName: 'Sales' });
+
+      expect(result.isError).toBeFalsy();
+      const written = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+      expect(written).toContain('[Sales Modified]');
+      expect(written).toContain('[Profit]');
+    });
+
+    it('rejects a worksheetName/worksheet conflict without writing', async () => {
+      const result = await getResult(
+        CACHED_FILE,
+        "<worksheet name='Sales'><rows>[x]</rows></worksheet>",
+        { worksheetName: 'Sales', worksheet: 'Profit' },
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('worksheetName ("Sales")');
+      expect(result.content[0].text).toContain('Pass one of them.');
+      expect(writeFileSync).not.toHaveBeenCalled();
+    });
+
     it('errors (without writing) when the element to splice is absent', async () => {
       const result = await getResult(CACHED_FILE, "<worksheet name='Nope'/>", {
         worksheet: 'Nope',
@@ -287,7 +313,12 @@ describe('writeCachedXmlTool', () => {
 async function getResult(
   filePath: string,
   xmlContent: string,
-  selectors: { worksheet?: string; dashboard?: string } = {},
+  selectors: {
+    worksheetName?: string;
+    worksheet?: string;
+    dashboardName?: string;
+    dashboard?: string;
+  } = {},
   ...requestedSession: [string | undefined] | []
 ): Promise<CallToolResult> {
   const session = (requestedSession.length > 0 ? requestedSession[0] : SESSION) as string;
@@ -298,7 +329,9 @@ async function getResult(
       session,
       filePath,
       xmlContent,
+      worksheetName: selectors.worksheetName,
       worksheet: selectors.worksheet,
+      dashboardName: selectors.dashboardName,
       dashboard: selectors.dashboard,
     },
     getMockRequestHandlerExtra(),

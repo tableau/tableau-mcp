@@ -70,7 +70,7 @@ The law made concrete — key signature first, melody over it:
                    sourceField: '[Sample - Superstore].[:Measure Names]',
                    targetParameter: '[Parameters].[Parameter 1]', activation: 'on-select' }
    ```
-5. **Melody — polish:** `format-labels { worksheet: 'Profit', showLabels: true }`.
+5. **Melody — polish:** `format-labels { worksheetName: 'Profit', showLabels: true }`.
 6. **Build the sheets + dashboard** with `bind-template` / `refine-worksheet`, referencing the set/calcs by caption and placing the parameter controls.
 
 ### What does NOT work
