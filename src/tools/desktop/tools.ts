@@ -46,11 +46,11 @@ import { getBatchCreateAndCacheSheetsTool } from './authoring/sheets/batchCreate
 import { getBuildAndApplyDashboardTool } from './authoring/sheets/buildAndApplyDashboard.js';
 import { getBuildAndApplyWorksheetTool } from './authoring/sheets/buildAndApplyWorksheet.js';
 import { getComposeDashboardTool } from './authoring/sheets/composeDashboard.js';
-import { getDashboardAutoApplyTool } from './authoring/sheets/dashboardAutoApply.js';
 import { getDashboardHealthCheckTool } from './authoring/sheets/dashboardHealthCheck.js';
 import { getDeleteWorksheetTool } from './authoring/sheets/deleteWorksheet.js';
 import { getPlanDashboardCreationTool } from './authoring/sheets/planDashboardCreation.js';
 import { getRefineWorksheetTool } from './authoring/sheets/refineWorksheet.js';
+import { getRunDashboardBatchTool } from './authoring/sheets/runDashboardBatch.js';
 import { getBuildWorksheetsFromTemplatesTool } from './authoring/templates/buildWorksheetsFromTemplates.js';
 import { getInjectTemplateTool } from './authoring/templates/injectTemplate.js';
 import { getAskUserTool } from './local/askUser.js';
@@ -96,7 +96,7 @@ export const desktopToolFactories = [
   getExecuteTableauCommandTool,
   getAskUserTool,
   getBindTemplateTool,
-  getDashboardAutoApplyTool,
+  getRunDashboardBatchTool,
   getComposeDashboardTool,
   getDashboardHealthCheckTool,
   getListTemplatesTool,

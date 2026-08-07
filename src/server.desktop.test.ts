@@ -175,9 +175,8 @@ describe('desktop tools/list serialized surface', () => {
 
     // The default served surface includes instructions. Full-profile tool schemas are
     // pinned separately so intentional route prose does not fund schema growth.
-    // Re-pinned 2026-08-06 (atomic dashboard routes): the two one-call routes replace
-    // unsupported dashboard-edit wording and keep the instruction surface smaller.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(2_959);
+    // Re-pinned 2026-08-07: one bounded dashboard batch replaces the two competing routes.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_045);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(fullToolSurfaceTotal).toBeLessThanOrEqual(FULL_TOOL_SURFACE_BUDGET);
   });
@@ -367,6 +366,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
   it('TOOL_PROFILE=demo registers exactly the slim set (nothing more, nothing less)', () => {
     const selected = selectToolsForProfile(allTools(), 'demo');
     expect(new Set(selected.map((t) => t.name))).toEqual(DEMO_TOOL_PROFILE);
+    expect(selected.map((tool) => tool.name)).toContain('run-dashboard-batch');
+    expect(selected.map((tool) => tool.name)).not.toContain('dashboard-auto-apply');
     // The escalation-fallback chain the preamble-hunt requires must survive the slim.
     for (const fallback of [
       'bind-template',
@@ -404,10 +405,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 33-tool modern surface without legacy binder wrappers', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 32-tool modern surface with one dashboard mutation door', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(33);
+    expect(selected).toHaveLength(32);
     expect(selected.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining(['bind-template', 'build-and-apply-worksheet']),
     );
@@ -429,8 +430,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'remove-field',
       'resolve-field',
       'apply-worksheet',
-      'dashboard-auto-apply',
-      'compose-dashboard',
+      'run-dashboard-batch',
       'read-knowledge-resource',
       'search-knowledge',
       'get-summary-data',
@@ -475,6 +475,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'plan-dashboard-creation',
       'batch-create-and-cache-sheets',
       'build-and-apply-dashboard',
+      'compose-dashboard',
+      'dashboard-auto-apply',
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);
     }
@@ -502,6 +504,17 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     const tools = allTools();
     expect(selectToolsForProfile(tools, 'full')).toBe(tools);
     expect(tools.map((tool) => tool.name)).toContain('list-knowledge-resources');
+    expect(tools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining([
+        'apply-worksheet',
+        'compose-dashboard',
+        'plan-dashboard-creation',
+        'batch-create-and-cache-sheets',
+        'build-and-apply-dashboard',
+        'run-dashboard-batch',
+      ]),
+    );
+    expect(tools.map((tool) => tool.name)).not.toContain('dashboard-auto-apply');
   });
 
   it('"combined-lean" registers the full desktop set (the lean half is the web side)', () => {

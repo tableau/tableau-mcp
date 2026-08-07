@@ -162,11 +162,17 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('MEMBERSHIP');
   });
 
-  it('routes dashboard composition through visible dashboard tools before command search', () => {
+  it('routes dashboard composition through one bounded batch', () => {
     const dashboard = routes.find((route) => route.id === 'dashboard');
-    expect(dashboard?.toolSequence).toEqual(['compose-dashboard', 'dashboard-auto-apply']);
+    expect(dashboard?.toolSequence).toEqual(['run-dashboard-batch']);
+    expect(dashboard?.action).toContain('build focused worksheet artifacts first');
+    expect(dashboard?.action).toContain('place them and compose once');
     expect(dashboard?.action).toContain('existing worksheets');
-    expect(dashboard?.action).toContain('new views');
+    expect(dashboard?.action).toContain('omit artifactIds');
+    expect(dashboard?.action).not.toContain('zero worksheet apply tasks');
+    expect(dashboard?.action).toContain('Never replay a partial or unknown batch');
+    expect(dashboard?.action).toContain('inspect live workbook state first');
+    expect(dashboard?.action).not.toContain('dashboard-auto-apply');
   });
 
   it('does not send dashboard edits through worksheet-only tools', () => {
@@ -254,6 +260,9 @@ describe('buildDesktopInstructions', () => {
     const specLoop = buildDesktopInstructions({ sessionPinned: false, profile: 'spec-loop' });
 
     expect(demo).toContain('bind-template');
+    expect(demo).toContain('run-dashboard-batch');
+    expect(demo).toContain('compose-only');
+    expect(demo).toContain('live worksheet names');
     expect(demo).not.toContain('build-worksheets-from-templates');
     expect(specLoop).not.toMatch(/template/i);
   });

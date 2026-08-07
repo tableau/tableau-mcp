@@ -6,26 +6,23 @@ import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/ex
 import * as sessionResolution from '../../../../desktop/session/sessionResolution.js';
 import { TemplateArtifactStore } from '../../../../desktop/templates/templateArtifactStore.js';
 import { McpToolError } from '../../../../errors/mcpToolError.js';
-import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { DesktopMcpServer, getDesktopToolListEntry } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import * as applyArtifactModule from '../../api/applyWorksheetArtifact.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import * as composeModule from './composeDashboardCore.js';
-import { getRunDashboardBatchTool, type RunDashboardBatchTask } from './runDashboardBatch.js';
+import { getRunDashboardBatchTool } from './runDashboardBatch.js';
 
 vi.mock('../../../../desktop/session/sessionResolution.js');
 vi.mock('../../api/applyWorksheetArtifact.js');
 vi.mock('./composeDashboardCore.js');
 
-const APPLY_A1 = { tool: 'apply-worksheet' as const, artifactId: 'a1' };
-const APPLY_A2 = { tool: 'apply-worksheet' as const, artifactId: 'a2' };
-const COMPOSE = {
-  tool: 'compose-dashboard' as const,
+const BATCH = {
   dashboardName: 'Executive Overview',
   worksheetNames: ['Existing', 'New A', 'New B'],
   title: 'Executive Overview',
-  layout: { layoutType: 'columns' as const },
+  layoutType: 'columns' as const,
 };
 
 describe('runDashboardBatchTool', () => {
@@ -34,22 +31,40 @@ describe('runDashboardBatchTool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('12345'));
   });
 
-  it('accepts apply tasks followed by one compose and rejects invalid sequences', async () => {
+  it('publishes a typed flat queue contract under the per-tool byte cap', async () => {
     const tool = getRunDashboardBatchTool(new DesktopMcpServer());
     const schema = z.object(await Provider.from(tool.paramsSchema));
 
     expect(
-      schema.safeParse({ session: '12345', tasks: [APPLY_A1, APPLY_A2, COMPOSE] }).success,
+      schema.safeParse({ session: '12345', artifactIds: ['a1', 'a2'], ...BATCH }).success,
     ).toBe(true);
-    expect(schema.safeParse({ session: '12345', tasks: [COMPOSE, APPLY_A1] }).success).toBe(false);
-    expect(schema.safeParse({ session: '12345', tasks: [APPLY_A1] }).success).toBe(false);
-    expect(schema.safeParse({ session: '12345', tasks: [COMPOSE, COMPOSE] }).success).toBe(false);
+    expect(schema.safeParse({ session: '12345', ...BATCH }).success).toBe(true);
+    expect(
+      schema.safeParse({ session: '12345', artifactIds: Array(7).fill('a'), ...BATCH }).success,
+    ).toBe(false);
+    expect(schema.safeParse({ session: '12345', ...BATCH, worksheetNames: [] }).success).toBe(
+      false,
+    );
+    const tooLong = 'x'.repeat(256);
+    expect(schema.safeParse({ ...BATCH, artifactIds: [tooLong] }).success).toBe(false);
+    expect(schema.safeParse({ ...BATCH, dashboardName: tooLong }).success).toBe(false);
+    expect(schema.safeParse({ ...BATCH, worksheetNames: [tooLong] }).success).toBe(false);
+    expect(schema.safeParse({ ...BATCH, title: tooLong }).success).toBe(false);
 
-    const getExecutor = vi.fn();
-    const invalid = await callBatch([COMPOSE, APPLY_A1], { getExecutor });
-    expect(invalid.isError).toBe(true);
-    expect(getExecutor).not.toHaveBeenCalled();
-    expect(sessionResolution.resolveSession).not.toHaveBeenCalled();
+    const entry = await getDesktopToolListEntry(tool);
+    expect(entry.inputSchema).toMatchObject({
+      properties: {
+        artifactIds: { type: 'array', items: { type: 'string' } },
+        dashboardName: { type: 'string' },
+        worksheetNames: { type: 'array', items: { type: 'string' } },
+        title: { type: 'string' },
+        layoutType: { type: 'string' },
+        gridColumns: { type: 'integer' },
+      },
+      required: expect.arrayContaining(['dashboardName', 'worksheetNames']),
+    });
+    expect(entry.inputSchema.properties).not.toHaveProperty('tasks');
+    expect(JSON.stringify(entry).length).toBeLessThanOrEqual(1_020);
   });
 
   it('runs a1, a2, then compose in order with one executor resolution', async () => {
@@ -66,7 +81,7 @@ describe('runDashboardBatchTool', () => {
     });
     const getExecutor = vi.fn().mockResolvedValue({} as ExternalApiToolExecutor);
 
-    const result = await callBatch([APPLY_A1, APPLY_A2, COMPOSE], { getExecutor });
+    const result = await callBatch(['a1', 'a2'], { getExecutor });
 
     expect(result.isError).toBe(false);
     expect(order).toEqual(['a1', 'a2', 'compose']);
@@ -75,9 +90,9 @@ describe('runDashboardBatchTool', () => {
       applied: true,
       retrySafe: false,
       steps: [
-        { tool: 'apply-worksheet', artifactId: 'a1', state: 'applied' },
-        { tool: 'apply-worksheet', artifactId: 'a2', state: 'applied' },
-        { tool: 'compose-dashboard', dashboardName: 'Executive Overview', state: 'applied' },
+        { operation: 'worksheet', artifactId: 'a1', state: 'applied' },
+        { operation: 'worksheet', artifactId: 'a2', state: 'applied' },
+        { operation: 'dashboard', dashboardName: 'Executive Overview', state: 'applied' },
       ],
     });
   });
@@ -89,7 +104,7 @@ describe('runDashboardBatchTool', () => {
       error: toolError('artifact unavailable'),
     });
 
-    const result = await callBatch([APPLY_A1, COMPOSE]);
+    const result = await callBatch(['a1']);
 
     expect(result.isError).toBe(true);
     expect(bodyOf(result)).toMatchObject({
@@ -97,7 +112,7 @@ describe('runDashboardBatchTool', () => {
       retrySafe: true,
       steps: [
         { state: 'failed', retrySafe: true },
-        { tool: 'compose-dashboard', state: 'skipped' },
+        { operation: 'dashboard', state: 'skipped' },
       ],
     });
     expect(composeModule.composeDashboardCore).not.toHaveBeenCalled();
@@ -112,7 +127,7 @@ describe('runDashboardBatchTool', () => {
         error: toolError('second artifact unavailable'),
       });
 
-    const result = await callBatch([APPLY_A1, APPLY_A2, COMPOSE]);
+    const result = await callBatch(['a1', 'a2']);
 
     expect(result.isError).toBe(true);
     expect(bodyOf(result)).toMatchObject({
@@ -135,7 +150,7 @@ describe('runDashboardBatchTool', () => {
       return { state: 'unknown', retrySafe: false, error: toolError('dispatch uncertain') };
     });
 
-    const result = await callBatch([APPLY_A1, APPLY_A2, COMPOSE], { store });
+    const result = await callBatch(['a1', 'a2'], { store });
 
     expect(bodyOf(result)).toMatchObject({
       applied: 'unknown',
@@ -154,7 +169,7 @@ describe('runDashboardBatchTool', () => {
         appliedArtifact('a1', 'New A', status),
       );
 
-      const result = await callBatch([APPLY_A1, COMPOSE]);
+      const result = await callBatch(['a1']);
 
       expect(result.isError).toBe(true);
       expect(bodyOf(result)).toMatchObject({
@@ -172,7 +187,7 @@ describe('runDashboardBatchTool', () => {
     );
     vi.mocked(composeModule.composeDashboardCore).mockResolvedValue(composedDashboard());
 
-    const result = await callBatch([APPLY_A1, COMPOSE]);
+    const result = await callBatch(['a1']);
 
     expect(result.isError).toBe(false);
     expect(bodyOf(result)).toMatchObject({
@@ -184,9 +199,7 @@ describe('runDashboardBatchTool', () => {
   it('supports compose-only with existing sheets and hybrid existing/new names', async () => {
     vi.mocked(composeModule.composeDashboardCore).mockResolvedValue(composedDashboard());
 
-    const composeOnly = await callBatch([
-      { ...COMPOSE, worksheetNames: ['Existing A', 'Existing B'] },
-    ]);
+    const composeOnly = await callBatch([], { worksheetNames: ['Existing A', 'Existing B'] });
     expect(composeOnly.isError).toBe(false);
     expect(composeModule.composeDashboardCore).toHaveBeenLastCalledWith(
       expect.objectContaining({ worksheetNames: ['Existing A', 'Existing B'] }),
@@ -195,7 +208,7 @@ describe('runDashboardBatchTool', () => {
     vi.mocked(applyArtifactModule.applyWorksheetArtifact).mockResolvedValue(
       appliedArtifact('a1', 'New A'),
     );
-    const hybrid = await callBatch([APPLY_A1, COMPOSE]);
+    const hybrid = await callBatch(['a1']);
     expect(hybrid.isError).toBe(false);
     expect(composeModule.composeDashboardCore).toHaveBeenLastCalledWith(
       expect.objectContaining({ worksheetNames: ['Existing', 'New A', 'New B'] }),
@@ -213,7 +226,7 @@ describe('runDashboardBatchTool', () => {
       error: toolError('compose failed'),
     });
 
-    const result = await callBatch([APPLY_A1, COMPOSE]);
+    const result = await callBatch(['a1']);
 
     expect(bodyOf(result)).toMatchObject({
       applied: 'partial',
@@ -227,7 +240,7 @@ describe('runDashboardBatchTool', () => {
       .mockResolvedValueOnce(appliedArtifact('a1', 'New A'))
       .mockRejectedValueOnce(new Error(`unexpected apply ${'x'.repeat(800)}`));
 
-    const result = await callBatch([APPLY_A1, APPLY_A2, COMPOSE]);
+    const result = await callBatch(['a1', 'a2']);
     const body = bodyOf(result);
 
     expect(result.isError).toBe(true);
@@ -250,7 +263,7 @@ describe('runDashboardBatchTool', () => {
     );
     vi.mocked(composeModule.composeDashboardCore).mockRejectedValue(new Error('compose exploded'));
 
-    const result = await callBatch([APPLY_A1, COMPOSE]);
+    const result = await callBatch(['a1']);
 
     expect(result.isError).toBe(true);
     expect(bodyOf(result)).toMatchObject({
@@ -276,7 +289,7 @@ describe('runDashboardBatchTool', () => {
       return appliedArtifact('a1', 'New A');
     });
 
-    const result = await callBatch([APPLY_A1, APPLY_A2, COMPOSE], {
+    const result = await callBatch(['a1', 'a2'], {
       signal: controller.signal,
     });
 
@@ -291,17 +304,24 @@ describe('runDashboardBatchTool', () => {
 });
 
 async function callBatch(
-  tasks: RunDashboardBatchTask[],
+  artifactIds: string[],
   options: {
     store?: TemplateArtifactStore;
     signal?: AbortSignal;
     getExecutor?: ReturnType<typeof vi.fn>;
+    worksheetNames?: string[];
   } = {},
 ): Promise<CallToolResult> {
   const tool = getRunDashboardBatchTool(new DesktopMcpServer(), { store: options.store });
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { session: '12345', tasks },
+    {
+      session: '12345',
+      artifactIds,
+      ...BATCH,
+      gridColumns: undefined,
+      ...(options.worksheetNames ? { worksheetNames: options.worksheetNames } : {}),
+    },
     {
       ...getMockRequestHandlerExtra(),
       signal: options.signal ?? new AbortController().signal,

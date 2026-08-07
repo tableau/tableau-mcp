@@ -96,10 +96,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard',
     trigger: 'a dashboard ask',
     action:
-      'existing worksheets: call compose-dashboard once; new views: call dashboard-auto-apply once. Each replaces the same-named dashboard.',
-    toolSequence: ['compose-dashboard', 'dashboard-auto-apply'],
-    stopConditions: ['call compose-dashboard once', 'call dashboard-auto-apply once'],
-    requiredEvidence: ['the selected tool returns a verified dashboard receipt'],
+      'build focused worksheet artifacts first, then place them and compose once with run-dashboard-batch. For existing worksheets, omit artifactIds. Never replay a partial or unknown batch; inspect live workbook state first.',
+    toolSequence: ['run-dashboard-batch'],
+    stopConditions: [
+      'place them and compose once',
+      'Never replay a partial or unknown batch',
+      'inspect live workbook state first',
+    ],
+    requiredEvidence: ['each batch step returns a receipt'],
   },
   {
     kind: 'route',
@@ -189,6 +193,7 @@ export function generateDesktopInstructions(table: readonly DesktopInstructionEn
 const DEMO_PROFILE_INSTRUCTIONS = [
   'You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.',
   "For a chart request, use bind-template with the user's ask. Use the returned fallback tools when it cannot apply.",
+  'For a dashboard, use bind-template to place views, then call run-dashboard-batch compose-only with the live worksheet names.',
 ] as const;
 
 const SPEC_LOOP_PROFILE_INSTRUCTIONS = [

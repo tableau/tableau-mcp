@@ -7,71 +7,31 @@ import {
   getTemplateArtifactStore,
   type TemplateArtifactStore,
 } from '../../../../desktop/templates/templateArtifactStore.js';
-import {
-  ArgsValidationError,
-  IncompleteOperationError,
-  type McpToolError,
-} from '../../../../errors/mcpToolError.js';
+import { IncompleteOperationError, type McpToolError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { applyWorksheetArtifact } from '../../api/applyWorksheetArtifact.js';
 import { sessionParam } from '../../params.js';
 import { jsonToolResult, type StructuredResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
-import type { DesktopToolName } from '../../toolName.js';
 import { composeDashboardCore } from './composeDashboardCore.js';
-
-const applyTaskSchema = z.object({
-  tool: z.literal('apply-worksheet').describe('Task kind.'),
-  artifactId: z.string().trim().min(1).max(255).describe('Template artifact ID.'),
-});
-
-const layoutSchema = z.object({
-  layoutType: z
-    .enum(['auto-grid', 'rows', 'columns'])
-    .optional()
-    .default('auto-grid')
-    .describe('Zone arrangement.'),
-  gridColumns: z.number().int().min(1).max(6).optional().describe('Grid column count.'),
-});
-
-const composeTaskSchema = z.object({
-  tool: z.literal('compose-dashboard').describe('Task kind.'),
-  dashboardName: z.string().trim().min(1).max(255).describe('Dashboard name.'),
-  worksheetNames: z
-    .array(z.string().trim().min(1).max(255))
-    .min(1)
-    .max(6)
-    .describe('Rendered worksheet names.'),
-  title: z.string().trim().min(1).max(255).optional().describe('Optional dashboard title.'),
-  layout: layoutSchema.optional().describe('Optional dashboard layout.'),
-});
-
-const taskSchema = z.discriminatedUnion('tool', [applyTaskSchema, composeTaskSchema]);
-
-const tasksSchema = z
-  .array(taskSchema)
-  .min(1)
-  .max(7)
-  .superRefine((tasks, context) => {
-    const issue = dashboardBatchSequenceIssue(tasks);
-    if (issue) context.addIssue({ code: 'custom', message: issue });
-  })
-  .describe('Ordered worksheet mutations followed by one dashboard composition.');
 
 const paramsSchema = {
   session: sessionParam({ max: 64 }),
-  tasks: tasksSchema,
+  artifactIds: z.array(z.string().trim().min(1).max(255)).max(6).optional().describe('IDs.'),
+  dashboardName: z.string().trim().min(1).max(255).describe('Name.'),
+  worksheetNames: z.array(z.string().trim().min(1).max(255)).min(1).max(6).describe('Sheets.'),
+  title: z.string().trim().min(1).max(255).optional().describe('Title.'),
+  layoutType: z.enum(['auto-grid', 'rows', 'columns']).optional().describe('Layout.'),
+  gridColumns: z.number().int().min(1).max(6).optional().describe('Cols.'),
 };
-
-export type RunDashboardBatchTask = z.output<typeof taskSchema>;
 
 type AppliedState = true | false | 'partial' | 'unknown';
 
 type StepReceipt =
   | {
       index: number;
-      tool: 'apply-worksheet';
+      operation: 'worksheet';
       artifactId: string;
       state: 'applied';
       retrySafe: false;
@@ -80,7 +40,7 @@ type StepReceipt =
     }
   | {
       index: number;
-      tool: 'apply-worksheet';
+      operation: 'worksheet';
       artifactId: string;
       state: 'failed' | 'unknown';
       retrySafe: boolean;
@@ -94,7 +54,7 @@ type StepReceipt =
     }
   | {
       index: number;
-      tool: 'compose-dashboard';
+      operation: 'dashboard';
       dashboardName: string;
       state: 'applied';
       retrySafe: false;
@@ -104,7 +64,7 @@ type StepReceipt =
     }
   | {
       index: number;
-      tool: 'compose-dashboard';
+      operation: 'dashboard';
       dashboardName: string;
       state: 'failed' | 'partial' | 'unknown';
       retrySafe: boolean;
@@ -113,7 +73,7 @@ type StepReceipt =
     }
   | {
       index: number;
-      tool: RunDashboardBatchTask['tool'];
+      operation: 'worksheet' | 'dashboard';
       state: 'aborted' | 'skipped';
       retrySafe: true;
       artifactId?: string;
@@ -129,7 +89,7 @@ type RunDashboardBatchPayload = {
 
 type RunDashboardBatchResult = StructuredResult<RunDashboardBatchPayload>;
 
-const title = 'Build dashboard views';
+const title = 'Dashboard';
 const MAX_UNEXPECTED_ERROR_LENGTH = 500;
 
 export const getRunDashboardBatchTool = (
@@ -139,9 +99,9 @@ export const getRunDashboardBatchTool = (
   const artifactStore = dependencies.store ?? getTemplateArtifactStore(server);
   const tool = new DesktopTool({
     server,
-    name: 'run-dashboard-batch' as DesktopToolName,
+    name: 'run-dashboard-batch',
     title,
-    description: 'Apply prepared worksheets in order, then compose one dashboard.',
+    description: 'Apply artifacts; compose.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -149,14 +109,31 @@ export const getRunDashboardBatchTool = (
       destructiveHint: true,
       idempotentHint: false,
     },
-    callback: async ({ session, tasks }, extra): Promise<CallToolResult> => {
+    callback: async (
+      {
+        session,
+        artifactIds,
+        dashboardName,
+        worksheetNames,
+        title: dashboardTitle,
+        layoutType,
+        gridColumns,
+      },
+      extra,
+    ): Promise<CallToolResult> => {
       return await tool.logAndExecute<RunDashboardBatchResult>({
         extra,
-        args: { session, tasks },
+        args: {
+          session,
+          artifactIds,
+          dashboardName,
+          worksheetNames,
+          title: dashboardTitle,
+          layoutType,
+          gridColumns,
+        },
         callback: async (): Promise<Result<RunDashboardBatchResult, McpToolError>> => {
-          const sequenceIssue = dashboardBatchSequenceIssue(tasks);
-          if (sequenceIssue) return new ArgsValidationError(sequenceIssue).toErr();
-
+          const orderedArtifactIds = artifactIds ?? [];
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) return sessionResult.error.toErr();
           const resolvedSession = sessionResult.value;
@@ -164,10 +141,12 @@ export const getRunDashboardBatchTool = (
           const steps: StepReceipt[] = [];
           let successfulMutations = 0;
 
-          for (const [index, task] of tasks.entries()) {
+          for (const [index, artifactId] of orderedArtifactIds.entries()) {
             if (extra.signal.aborted) {
-              steps.push(abortedReceipt(task, index));
-              appendSkippedSteps(steps, tasks, index + 1, `stopped after task ${index} aborted`);
+              const reason = `stopped after task ${index} aborted`;
+              steps.push(abortedApplyReceipt(artifactId, index));
+              appendSkippedArtifacts(steps, orderedArtifactIds, index + 1, reason);
+              appendSkippedCompose(steps, orderedArtifactIds.length, dashboardName, reason);
               return incomplete({
                 applied: successfulMutations > 0 ? 'partial' : false,
                 retrySafe: successfulMutations === 0,
@@ -175,65 +154,39 @@ export const getRunDashboardBatchTool = (
               });
             }
 
-            if (task.tool === 'apply-worksheet') {
-              let outcome: Awaited<ReturnType<typeof applyWorksheetArtifact>>;
-              try {
-                outcome = await applyWorksheetArtifact({
-                  store: artifactStore,
-                  artifactId: task.artifactId,
-                  sessionId: resolvedSession,
-                  executor,
-                  signal: extra.signal,
-                });
-              } catch (error) {
+            let outcome: Awaited<ReturnType<typeof applyWorksheetArtifact>>;
+            try {
+              outcome = await applyWorksheetArtifact({
+                store: artifactStore,
+                artifactId,
+                sessionId: resolvedSession,
+                executor,
+                signal: extra.signal,
+              });
+            } catch (error) {
+              steps.push({
+                index,
+                operation: 'worksheet',
+                artifactId,
+                state: 'unknown',
+                retrySafe: false,
+                error: boundedUnexpectedError(error),
+              });
+              const reason = `stopped after task ${index} ended unexpectedly`;
+              appendSkippedArtifacts(steps, orderedArtifactIds, index + 1, reason);
+              appendSkippedCompose(steps, orderedArtifactIds.length, dashboardName, reason);
+              return incomplete({ applied: 'unknown', retrySafe: false, steps });
+            }
+
+            if (outcome.state === 'applied') {
+              successfulMutations += 1;
+              const { verification } = outcome.receipt;
+              if (verification.status === 'failed' || verification.status === 'skipped') {
                 steps.push({
                   index,
-                  tool: task.tool,
-                  artifactId: task.artifactId,
+                  operation: 'worksheet',
+                  artifactId,
                   state: 'unknown',
-                  retrySafe: false,
-                  error: boundedUnexpectedError(error),
-                });
-                appendSkippedSteps(
-                  steps,
-                  tasks,
-                  index + 1,
-                  `stopped after task ${index} ended unexpectedly`,
-                );
-                return incomplete({ applied: 'unknown', retrySafe: false, steps });
-              }
-
-              if (outcome.state === 'applied') {
-                successfulMutations += 1;
-                const { verification } = outcome.receipt;
-                if (verification.status === 'failed' || verification.status === 'skipped') {
-                  steps.push({
-                    index,
-                    tool: task.tool,
-                    artifactId: task.artifactId,
-                    state: 'unknown',
-                    retrySafe: false,
-                    title: outcome.receipt.title,
-                    verification: {
-                      ok: verification.ok,
-                      status: verification.status,
-                      ...(verification.message ? { message: verification.message } : {}),
-                    },
-                  });
-                  appendSkippedSteps(
-                    steps,
-                    tasks,
-                    index + 1,
-                    `stopped after task ${index} could not be verified`,
-                  );
-                  return incomplete({ applied: 'unknown', retrySafe: false, steps });
-                }
-
-                steps.push({
-                  index,
-                  tool: task.tool,
-                  artifactId: task.artifactId,
-                  state: 'applied',
                   retrySafe: false,
                   title: outcome.receipt.title,
                   verification: {
@@ -242,85 +195,41 @@ export const getRunDashboardBatchTool = (
                     ...(verification.message ? { message: verification.message } : {}),
                   },
                 });
-                continue;
-              }
-
-              steps.push({
-                index,
-                tool: task.tool,
-                artifactId: task.artifactId,
-                state: outcome.state,
-                retrySafe: outcome.retrySafe,
-                error: outcome.error.getErrorText(),
-              });
-              appendSkippedSteps(steps, tasks, index + 1, `stopped after task ${index} failed`);
-              if (outcome.state === 'unknown') {
+                const reason = `stopped after task ${index} could not be verified`;
+                appendSkippedArtifacts(steps, orderedArtifactIds, index + 1, reason);
+                appendSkippedCompose(steps, orderedArtifactIds.length, dashboardName, reason);
                 return incomplete({ applied: 'unknown', retrySafe: false, steps });
               }
-              return incomplete({
-                applied: successfulMutations > 0 ? 'partial' : false,
-                retrySafe: successfulMutations === 0 && outcome.retrySafe,
-                steps,
-              });
-            }
 
-            let outcome: Awaited<ReturnType<typeof composeDashboardCore>>;
-            try {
-              outcome = await composeDashboardCore({
-                dashboardName: task.dashboardName,
-                worksheetNames: task.worksheetNames,
-                title: task.title,
-                layout: task.layout,
-                executor,
-                signal: extra.signal,
-              });
-            } catch (error) {
               steps.push({
                 index,
-                tool: task.tool,
-                dashboardName: task.dashboardName,
-                state: 'unknown',
-                retrySafe: false,
-                stage: 'unexpected-error',
-                error: boundedUnexpectedError(error),
-              });
-              appendSkippedSteps(
-                steps,
-                tasks,
-                index + 1,
-                `stopped after task ${index} ended unexpectedly`,
-              );
-              return incomplete({ applied: 'unknown', retrySafe: false, steps });
-            }
-            if (outcome.state === 'applied') {
-              successfulMutations += 1;
-              steps.push({
-                index,
-                tool: task.tool,
-                dashboardName: task.dashboardName,
+                operation: 'worksheet',
+                artifactId,
                 state: 'applied',
                 retrySafe: false,
-                worksheets: outcome.receipt.worksheets,
-                replaced: outcome.receipt.replaced,
-                verification: outcome.receipt.verification,
+                title: outcome.receipt.title,
+                verification: {
+                  ok: verification.ok,
+                  status: verification.status,
+                  ...(verification.message ? { message: verification.message } : {}),
+                },
               });
               continue;
             }
 
             steps.push({
               index,
-              tool: task.tool,
-              dashboardName: task.dashboardName,
+              operation: 'worksheet',
+              artifactId,
               state: outcome.state,
               retrySafe: outcome.retrySafe,
-              stage: outcome.stage,
               error: outcome.error.getErrorText(),
             });
+            const reason = `stopped after task ${index} failed`;
+            appendSkippedArtifacts(steps, orderedArtifactIds, index + 1, reason);
+            appendSkippedCompose(steps, orderedArtifactIds.length, dashboardName, reason);
             if (outcome.state === 'unknown') {
               return incomplete({ applied: 'unknown', retrySafe: false, steps });
-            }
-            if (outcome.state === 'partial') {
-              return incomplete({ applied: 'partial', retrySafe: false, steps });
             }
             return incomplete({
               applied: successfulMutations > 0 ? 'partial' : false,
@@ -329,7 +238,83 @@ export const getRunDashboardBatchTool = (
             });
           }
 
-          return Ok({ applied: true, retrySafe: false, steps });
+          const composeIndex = orderedArtifactIds.length;
+          if (extra.signal.aborted) {
+            steps.push({
+              index: composeIndex,
+              operation: 'dashboard',
+              dashboardName,
+              state: 'aborted',
+              retrySafe: true,
+              reason: 'The request was aborted before this task started.',
+            });
+            return incomplete({
+              applied: successfulMutations > 0 ? 'partial' : false,
+              retrySafe: successfulMutations === 0,
+              steps,
+            });
+          }
+
+          let composeOutcome: Awaited<ReturnType<typeof composeDashboardCore>>;
+          try {
+            composeOutcome = await composeDashboardCore({
+              dashboardName,
+              worksheetNames,
+              title: dashboardTitle,
+              layout: {
+                layoutType: layoutType ?? 'auto-grid',
+                ...(gridColumns ? { gridColumns } : {}),
+              },
+              executor,
+              signal: extra.signal,
+            });
+          } catch (error) {
+            steps.push({
+              index: composeIndex,
+              operation: 'dashboard',
+              dashboardName,
+              state: 'unknown',
+              retrySafe: false,
+              stage: 'unexpected-error',
+              error: boundedUnexpectedError(error),
+            });
+            return incomplete({ applied: 'unknown', retrySafe: false, steps });
+          }
+
+          if (composeOutcome.state === 'applied') {
+            steps.push({
+              index: composeIndex,
+              operation: 'dashboard',
+              dashboardName,
+              state: 'applied',
+              retrySafe: false,
+              worksheets: composeOutcome.receipt.worksheets,
+              replaced: composeOutcome.receipt.replaced,
+              verification: composeOutcome.receipt.verification,
+            });
+            return Ok({ applied: true, retrySafe: false, steps });
+          }
+
+          steps.push({
+            index: composeIndex,
+            operation: 'dashboard',
+            dashboardName,
+            state: composeOutcome.state,
+            retrySafe: composeOutcome.retrySafe,
+            stage: composeOutcome.stage,
+            error: composeOutcome.error.getErrorText(),
+          });
+          if (composeOutcome.state === 'unknown') {
+            return incomplete({ applied: 'unknown', retrySafe: false, steps });
+          }
+          if (composeOutcome.state === 'partial') {
+            return incomplete({ applied: 'partial', retrySafe: false, steps });
+          }
+          return incomplete({
+            applied: successfulMutations > 0 ? 'partial' : false,
+            retrySafe: successfulMutations === 0 && composeOutcome.retrySafe,
+            steps,
+          });
         },
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
@@ -338,21 +323,6 @@ export const getRunDashboardBatchTool = (
 
   return tool;
 };
-
-function dashboardBatchSequenceIssue(tasks: readonly RunDashboardBatchTask[]): string | undefined {
-  const composeIndexes = tasks.flatMap((task, index) =>
-    task.tool === 'compose-dashboard' ? [index] : [],
-  );
-  if (composeIndexes.length !== 1) {
-    return 'The batch must contain exactly one dashboard composition task.';
-  }
-  if (composeIndexes[0] !== tasks.length - 1) {
-    return 'The dashboard composition task must be last.';
-  }
-  const applyCount = tasks.filter((task) => task.tool === 'apply-worksheet').length;
-  if (applyCount > 6) return 'The batch accepts at most six worksheet artifact tasks.';
-  return undefined;
-}
 
 function incomplete(
   payload: RunDashboardBatchPayload,
@@ -367,36 +337,47 @@ function boundedUnexpectedError(error: unknown): string {
     : `${message.slice(0, MAX_UNEXPECTED_ERROR_LENGTH - 3)}...`;
 }
 
-function abortedReceipt(task: RunDashboardBatchTask, index: number): StepReceipt {
+function abortedApplyReceipt(artifactId: string, index: number): StepReceipt {
   return {
     index,
-    tool: task.tool,
-    ...(task.tool === 'apply-worksheet'
-      ? { artifactId: task.artifactId }
-      : { dashboardName: task.dashboardName }),
+    operation: 'worksheet',
+    artifactId,
     state: 'aborted',
     retrySafe: true,
     reason: 'The request was aborted before this task started.',
   };
 }
 
-function appendSkippedSteps(
+function appendSkippedArtifacts(
   steps: StepReceipt[],
-  tasks: readonly RunDashboardBatchTask[],
+  artifactIds: readonly string[],
   startIndex: number,
   reason: string,
 ): void {
-  for (let index = startIndex; index < tasks.length; index += 1) {
-    const task = tasks[index]!;
+  for (let index = startIndex; index < artifactIds.length; index += 1) {
     steps.push({
       index,
-      tool: task.tool,
-      ...(task.tool === 'apply-worksheet'
-        ? { artifactId: task.artifactId }
-        : { dashboardName: task.dashboardName }),
+      operation: 'worksheet',
+      artifactId: artifactIds[index]!,
       state: 'skipped',
       retrySafe: true,
       reason,
     });
   }
+}
+
+function appendSkippedCompose(
+  steps: StepReceipt[],
+  index: number,
+  dashboardName: string,
+  reason: string,
+): void {
+  steps.push({
+    index,
+    operation: 'dashboard',
+    dashboardName,
+    state: 'skipped',
+    retrySafe: true,
+    reason,
+  });
 }

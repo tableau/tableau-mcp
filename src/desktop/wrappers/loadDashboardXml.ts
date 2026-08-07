@@ -301,7 +301,7 @@ function sheetAbsentMessage(kind: LoadDashboardKind, canonicalName: string): str
   return (
     `No dashboard named "${canonicalName}" is open to update. This updates an existing dashboard ` +
     'in place and does not create one. FIX: check the name with list-dashboards, or create a new ' +
-    'dashboard with dashboard-auto-apply.'
+    'dashboard with run-dashboard-batch.'
   );
 }
 
