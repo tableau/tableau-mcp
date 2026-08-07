@@ -2609,6 +2609,56 @@
             "items": {
               "$ref": "#/components/schemas/OperationWarning"
             }
+          },
+          "blockingWindows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WindowInfo"
+            }
+          }
+        }
+      },
+      "WindowInfo": {
+        "type": "object",
+        "description": "A visible modal Qt top-level window currently blocking the command queue from progressing. The content fields (messageText, informativeText, detailedText, iconLevel, buttons) are best-effort: QMessageBox exposes them precisely, while generic dialogs scrape visible QLabel/QAbstractButton children and may include incidental labels alongside diagnostic text.",
+        "required": [
+          "objectName",
+          "title",
+          "className"
+        ],
+        "properties": {
+          "objectName": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "className": {
+            "type": "string"
+          },
+          "messageText": {
+            "type": "string"
+          },
+          "informativeText": {
+            "type": "string"
+          },
+          "detailedText": {
+            "type": "string"
+          },
+          "iconLevel": {
+            "type": "string",
+            "x-extensible-enum": [
+              "critical",
+              "warning",
+              "information",
+              "question"
+            ]
+          },
+          "buttons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -2831,6 +2881,12 @@
             "items": {
               "$ref": "#/components/schemas/Operation"
             }
+          },
+          "blockingWindows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WindowInfo"
+            }
           }
         }
       },
@@ -3026,7 +3082,8 @@
         ],
         "properties": {
           "fieldName": {
-            "type": "string"
+            "type": "string",
+            "description": "The on-shelf field to sort, given as its fully-qualified column-instance name exactly as it appears in the worksheet document's <cols>/<rows> (e.g. \"[Sample - Superstore].[none:Ship Mode:nk]\"). The base column name (e.g. \"[Sample - Superstore].[Ship Mode]\") will not match any field on the view and the sort is silently ignored."
           },
           "direction": {
             "type": "string",

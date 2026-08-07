@@ -347,6 +347,21 @@ export const operationWarningSchema = z
   .passthrough();
 export type OperationWarning = z.infer<typeof operationWarningSchema>;
 
+/** A modal window blocking the command queue, reported on an Operation that cannot progress. */
+export const windowInfoSchema = z
+  .object({
+    objectName: z.string(),
+    title: z.string(),
+    className: z.string(),
+    messageText: z.string().optional(),
+    informativeText: z.string().optional(),
+    detailedText: z.string().optional(),
+    iconLevel: z.string().optional(),
+    buttons: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type WindowInfo = z.infer<typeof windowInfoSchema>;
+
 /**
  * Operation envelope returned by `POST /v0/workbook/document`, `POST /v0/app:invokeCommand`,
  * and the `GET /v0/operations/{id}` poll route. Only `id`/`kind`/`state` are required here even
@@ -363,6 +378,7 @@ export const operationEnvelopeSchema = z
     result: z.record(z.string(), z.unknown()).optional(),
     error: operationErrorSchema.optional(),
     warnings: z.array(operationWarningSchema).optional(),
+    blockingWindows: z.array(windowInfoSchema).optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
     completedAt: z.string().optional(),
