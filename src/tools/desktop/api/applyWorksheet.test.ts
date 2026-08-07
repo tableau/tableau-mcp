@@ -435,6 +435,48 @@ describe('applyWorksheetTool', () => {
     expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
   });
 
+  it('checks artifact availability before resolving an executor', async () => {
+    const store = artifactStore();
+    const getExecutor = vi.fn().mockRejectedValue(new Error('Desktop unavailable'));
+    const tool = getApplyWorksheetTool(new DesktopMcpServer(), { store });
+    const callback = await Provider.from(tool.callback);
+
+    const result = await callback(
+      {
+        session: '99999',
+        artifactId: 'artifact-1',
+        worksheetName: undefined,
+        worksheetFile: undefined,
+      },
+      { ...getMockRequestHandlerExtra(), getExecutor },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(getExecutor).not.toHaveBeenCalled();
+  });
+
+  it('releases a reserved artifact when executor resolution throws', async () => {
+    const store = artifactStore();
+    const tool = getApplyWorksheetTool(new DesktopMcpServer(), { store });
+    const callback = await Provider.from(tool.callback);
+
+    const result = await callback(
+      {
+        session: '12345',
+        artifactId: 'artifact-1',
+        worksheetName: undefined,
+        worksheetFile: undefined,
+      },
+      {
+        ...getMockRequestHandlerExtra(),
+        getExecutor: vi.fn().mockRejectedValue(new Error('Desktop unavailable')),
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(store.reserve('artifact-1', '12345').ok).toBe(true);
+  });
+
   it('allows only one concurrent apply for an artifact', async () => {
     const store = artifactStore();
     let finish!: () => void;

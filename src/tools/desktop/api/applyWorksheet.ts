@@ -7,7 +7,6 @@ import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import {
   getTemplateArtifactStore,
   type TemplateArtifactStore,
-  type TemplateArtifactUnavailableReason,
 } from '../../../desktop/templates/templateArtifactStore.js';
 import {
   classifyWorksheetPromiseOutcome,
@@ -25,6 +24,10 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { runApplyPreamble } from './applyPreamble.js';
+import {
+  applyWorksheetArtifact,
+  templateArtifactUnavailableError,
+} from './applyWorksheetArtifact.js';
 
 const paramsSchema = {
   session: sessionParam({ max: 64 }),
@@ -42,28 +45,6 @@ const paramsSchema = {
     .optional()
     .describe('Cached worksheet path for manual apply; omit with artifactId.'),
 };
-
-function artifactUnavailableMessage(
-  artifactId: string,
-  reason: TemplateArtifactUnavailableReason,
-): string {
-  switch (reason) {
-    case 'in-use':
-      return `Template artifact "${artifactId}" is already being applied.`;
-    case 'session-mismatch':
-      return `Template artifact "${artifactId}" belongs to a different Desktop session.`;
-    case 'consumed':
-      return `Template artifact "${artifactId}" was already consumed. Build a fresh artifact.`;
-    case 'evicted':
-      return `Template artifact "${artifactId}" was evicted. Build a fresh artifact.`;
-    case 'unknown':
-      return `Template artifact "${artifactId}" is not available.`;
-    default: {
-      const exhaustive: never = reason;
-      return exhaustive;
-    }
-  }
-}
 
 const title = 'Updating worksheet';
 
@@ -117,64 +98,29 @@ export const getApplyWorksheetTool = (
             const resolvedSession = sessionResult.value;
             const reservation = artifactStore.reserve(artifactId, resolvedSession);
             if (!reservation.ok) {
-              return new McpToolError({
-                type: 'template-artifact-unavailable',
-                message: artifactUnavailableMessage(artifactId, reservation.reason),
-                statusCode: 409,
-              }).toErr();
+              return templateArtifactUnavailableError(artifactId, reservation.reason).toErr();
             }
-
-            const dispatchState = { attempted: false };
-            let finalized = false;
-            const finalize = (): void => {
-              if (finalized) return;
-              finalized = true;
-              if (dispatchState.attempted) artifactStore.consume(reservation.lease);
-              else artifactStore.release(reservation.lease);
-            };
             try {
               const executor = await extra.getExecutor(resolvedSession);
-              const result = await loadWorksheetXml({
-                worksheetName: reservation.artifact.title,
-                xml: reservation.artifact.worksheetXml,
-                focus: { navigate: 'artifact', sheetName: reservation.artifact.title },
+              const outcome = await applyWorksheetArtifact({
+                store: artifactStore,
+                artifactId,
+                sessionId: resolvedSession,
                 executor,
                 signal: extra.signal,
-                artifactApply: {
-                  windowXml: reservation.artifact.windowXml,
-                  expectedTargetState: reservation.artifact.targetState,
-                  expectedInstanceId: reservation.artifact.instanceId,
-                  dispatchState,
-                },
+                reservation,
               });
-              finalize();
-
-              if (result.isErr()) {
-                const { type, error } = result.error;
-                if (type === 'execute-command-error') {
-                  return new DesktopCommandExecutionError(
-                    error,
-                    dispatchState.attempted
-                      ? 'The artifact may have reached Desktop and was consumed. Do not retry it; build a fresh artifact after inspecting the workbook.'
-                      : undefined,
-                  ).toErr();
-                }
-                return new WorksheetXmlLoadFailedError(error).toErr();
-              }
+              if (outcome.state !== 'applied') return outcome.error.toErr();
 
               return Ok({
-                artifactId,
-                title: reservation.artifact.title,
+                artifactId: outcome.receipt.artifactId,
+                title: outcome.receipt.title,
                 applied: true,
                 retrySafe: false,
-                verification: result.value.readbackVerification ?? {
-                  ok: true,
-                  status: 'skipped',
-                  message: 'Post-apply workbook readback was unavailable.',
-                },
+                verification: outcome.receipt.verification,
               });
             } catch (error) {
-              finalize();
+              artifactStore.release(reservation.lease);
               throw error;
             }
           }
