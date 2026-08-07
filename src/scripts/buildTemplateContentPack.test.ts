@@ -508,12 +508,15 @@ describe('resolveTemplateContentPackVersion', () => {
 });
 
 describe('two-artifact packaging boundary', () => {
-  it('does not embed the template corpus in the MCP desktop-data staging allowlist', async () => {
+  it('temporarily stages only the TBM corpus in the MCP desktop-data allowlist', async () => {
     const buildScript = await readFile(join(process.cwd(), 'src', 'scripts', 'build.ts'), 'utf8');
     const allowlist = buildScript.match(/const stagedDesktopData = \[([\s\S]*?)\];/)?.[1];
 
     expect(allowlist).toBeDefined();
-    expect(allowlist).not.toMatch(/['"]templates['"]/);
+    expect(allowlist).toMatch(/['"]templates['"]/);
+    expect(allowlist).not.toMatch(/['"]template-manifests['"]/);
+    expect(allowlist).not.toMatch(/['"]content-manifest\.json['"]/);
+    expect(allowlist).not.toMatch(/['"]data-visualization-templates-xml['"]/);
   });
 
   it('lists, reads, and binds an extracted generated pack mounted through TEMPLATES_DIR', async () => {
