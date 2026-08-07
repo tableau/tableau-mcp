@@ -138,7 +138,7 @@ describe('targetDashboardInvariantIssues', () => {
     ]);
   });
 
-  it('allows an inert retained viewpoint for an existing rendered worksheet', () => {
+  it('rejects a retained viewpoint even when its worksheet still renders', () => {
     expect(
       targetDashboardInvariantIssues(
         `<workbook>
@@ -163,8 +163,8 @@ describe('targetDashboardInvariantIssues', () => {
         </workbook>`,
         'Live Dashboard',
         ['bars', 'simple scatterplot'],
-      ),
-    ).toEqual([]);
+      ).map((issue) => issue.code),
+    ).toEqual(['direct-viewpoint-unexpected']);
   });
 
   it('still rejects duplicated or unresolved retained viewpoints', () => {
@@ -197,6 +197,7 @@ describe('targetDashboardInvariantIssues', () => {
 
     expect(issues.map((issue) => issue.code).sort()).toEqual([
       'direct-viewpoint-duplicate',
+      'direct-viewpoint-unexpected',
       'direct-viewpoint-unexpected',
       'direct-viewpoint-unexpected',
     ]);

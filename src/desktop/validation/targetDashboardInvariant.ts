@@ -140,19 +140,7 @@ export function targetDashboardInvariantIssues(
   );
   if (expectedWorksheetNames) {
     issues.push(
-      ...exactNameClosureIssues(
-        'direct-viewpoint',
-        viewpointNames,
-        expectedNames,
-        dashboardName,
-        (viewpointName) =>
-          worksheets.some((worksheet) => elementNameEquals(worksheet, viewpointName)) &&
-          windows.some(
-            (window) =>
-              window.getAttribute('class') === 'worksheet' &&
-              elementNameEquals(window, viewpointName),
-          ),
-      ),
+      ...exactNameClosureIssues('direct-viewpoint', viewpointNames, expectedNames, dashboardName),
     );
   }
   for (const worksheetName of expectedNames) {
@@ -225,14 +213,13 @@ function exactNameClosureIssues(
   actualNames: string[],
   expectedNames: string[],
   dashboardName: string,
-  allowUnexpected?: (name: string) => boolean,
 ): TargetDashboardInvariantIssue[] {
   const actualCounts = nameCounts(actualNames);
   const expectedKeys = new Set(expectedNames.map(normalizeXmlName));
   const issues: TargetDashboardInvariantIssue[] = [];
 
   for (const [key, { displayName, count }] of actualCounts) {
-    if (!expectedKeys.has(key) && !allowUnexpected?.(displayName)) {
+    if (!expectedKeys.has(key)) {
       issues.push({
         code: `${kind}-unexpected`,
         message: `Dashboard "${dashboardName}" has an unexpected ${kind.replaceAll('-', ' ')} for "${displayName}".`,

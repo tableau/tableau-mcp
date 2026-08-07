@@ -6,6 +6,7 @@ import {
   extractDashboardXml,
   listWorkbookDashboards,
 } from '../../../../desktop/metadata/dashboards.js';
+import * as injectTemplateModule from '../../../../desktop/templates/injectTemplate.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import * as loadWorkbookXmlModule from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
@@ -46,15 +47,18 @@ describe('composeDashboardTool', () => {
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
-  it('composes existing rendered worksheets with one whole-workbook apply and verifies readback', async () => {
+  it('composes a new dashboard with one whole-workbook apply and verifies readback', async () => {
     const harness = setupHarness();
 
-    const result = await getToolResult({ getExecutor: harness.getExecutor });
+    const result = await getToolResult({
+      dashboardName: 'New Dashboard',
+      getExecutor: harness.getExecutor,
+    });
 
     expect(result.isError).toBe(false);
     expect(bodyOf(result)).toMatchObject({
       applied: true,
-      dashboard: 'Sales Dashboard',
+      dashboard: 'New Dashboard',
       worksheets: ['Sales', 'Profit'],
       verification: { status: 'passed' },
     });
@@ -79,16 +83,39 @@ describe('composeDashboardTool', () => {
   });
 
   it('rejects duplicate worksheet input before dispatch', async () => {
-    const harness = setupHarness();
+    const getExecutor = vi.fn(async () => {
+      throw new Error('executor must not be resolved for invalid input');
+    });
 
     const result = await getToolResult({
       worksheetNames: ['Sales', 'Sales'],
-      getExecutor: harness.getExecutor,
+      getExecutor,
     });
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain('Duplicate');
+    expect(getExecutor).not.toHaveBeenCalled();
     expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+  });
+
+  it('reports structured partial state when replacement candidate construction fails after delete', async () => {
+    const harness = setupHarness();
+    vi.spyOn(injectTemplateModule, 'injectTemplate').mockImplementationOnce(() => {
+      throw new Error('candidate failed');
+    });
+
+    const result = await getToolResult({ getExecutor: harness.getExecutor });
+
+    expect(result.isError).toBe(true);
+    expect(bodyOf(result)).toMatchObject({
+      applied: 'partial',
+      retrySafe: false,
+      dashboard: 'Sales Dashboard',
+      worksheets: ['Sales', 'Profit'],
+      stage: 'replace-create',
+    });
+    expect(textOf(result)).toContain('Inspect live state before any retry');
+    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledTimes(1);
   });
 
   it('replaces only the same-named dashboard', async () => {
@@ -156,7 +183,7 @@ describe('composeDashboardTool', () => {
     const result = await getToolResult({ getExecutor: harness.getExecutor });
 
     expect(result.isError).toBe(false);
-    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledTimes(2);
     expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledWith(
       expect.objectContaining({ baselineXml: pristineXml, expectedWorkbookXml: pristineXml }),
     );
@@ -191,13 +218,16 @@ describe('composeDashboardTool', () => {
       }),
     });
 
-    const result = await getToolResult({ getExecutor: harness.getExecutor });
+    const result = await getToolResult({
+      dashboardName: 'New Dashboard',
+      getExecutor: harness.getExecutor,
+    });
 
     expect(result.isError).toBe(true);
     expect(bodyOf(result)).toMatchObject({
       applied: 'unknown',
       retrySafe: false,
-      dashboard: 'Sales Dashboard',
+      dashboard: 'New Dashboard',
       stage: 'apply',
     });
     expect(textOf(result)).not.toContain('Nothing was applied');
@@ -215,13 +245,16 @@ describe('composeDashboardTool', () => {
       }),
     });
 
-    const result = await getToolResult({ getExecutor: harness.getExecutor });
+    const result = await getToolResult({
+      dashboardName: 'New Dashboard',
+      getExecutor: harness.getExecutor,
+    });
 
     expect(result.isError).toBe(true);
     expect(bodyOf(result)).toMatchObject({
       applied: 'unknown',
       retrySafe: false,
-      dashboard: 'Sales Dashboard',
+      dashboard: 'New Dashboard',
       stage: 'apply',
     });
     expect(textOf(result)).toContain('Desktop rejected the posted document');
@@ -230,13 +263,16 @@ describe('composeDashboardTool', () => {
   it('reports a post-apply readback mismatch as unknown and unsafe to retry', async () => {
     const harness = setupHarness({ readbackXml: LIVE_WORKBOOK });
 
-    const result = await getToolResult({ getExecutor: harness.getExecutor });
+    const result = await getToolResult({
+      dashboardName: 'New Dashboard',
+      getExecutor: harness.getExecutor,
+    });
 
     expect(result.isError).toBe(true);
     expect(bodyOf(result)).toMatchObject({
       applied: 'unknown',
       retrySafe: false,
-      dashboard: 'Sales Dashboard',
+      dashboard: 'New Dashboard',
       stage: 'readback-verification',
     });
     expect(bodyOf(result).verificationIssues).toEqual(expect.arrayContaining([expect.any(String)]));
