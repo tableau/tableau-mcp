@@ -12,7 +12,7 @@ Repo-level contract for the global agent OS. Defines what "correct" means in `ta
 
 - **Entry:** `src/index.ts` selects stdio vs HTTP transport (`src/transports.ts`) by `TRANSPORT`.
 - **Web server:** `src/server.web.ts` + `src/server/express.ts` (`WebMcpServer`); web tools in `src/tools/web/`.
-- **Desktop server:** `src/server.desktop.ts` (`DesktopMcpServer`); discovers local Tableau Desktop via `@modelcontextprotocol/ext-apps` + `DesktopDiscoverer`; proxies through `DesktopToolExecutor`. Desktop tools in `src/tools/desktop/`.
+- **Desktop server:** `src/server.desktop.ts` (`DesktopMcpServer`); reaches local Tableau Desktop only through the External Client API (`src/desktop/externalApi/` — client, discovery, and every endpoint method on `ExternalApiToolExecutor`); wrappers around API calls in `src/desktop/wrappers/`. Desktop tools in `src/tools/desktop/` (`api/` thin endpoint tools, `authoring/` multi-step, `local/` no-API).
 - **SDK layer:** `src/sdks/tableau/` wraps the Tableau REST API (Zodios).
 - **Cross-cutting:** `src/config.ts` (auth: pat/uat/direct-trust/oauth), `src/logging/` (PAT/token masking), `src/telemetry/`, `src/server/oauth/`, `src/sessions.ts`, `src/errors/mcpToolError.ts`.
 
@@ -39,12 +39,12 @@ When migrating or adding a Desktop tool, conform to the structure proven by #347
 
 - **Thin tool files** under `src/tools/desktop/<group>/<name>.ts`, one tool per file + colocated `<name>.test.ts`. Each exports a factory `get<Name>Tool(server): DesktopTool<typeof paramsSchema>`.
 - **Register** by adding the factory to `src/tools/desktop/tools.ts` (`desktopToolFactories`) and the name to `src/tools/desktop/toolName.ts` (`desktopToolNames` union). No direct `server.registerTool` in tool files.
-- **Agent-API calls** go in a command layer `src/desktop/commands/<group>/<name>.ts` (+ colocated test) returning `Result<T, ExecuteCommandError>` via `executor.executeCommand(...)`. Pure local-FS / reference-library / passthrough tools legitimately have **no** command layer — document that when it applies.
+- **External Client API calls** go in a wrapper module `src/desktop/wrappers/<name>.ts` (+ colocated test) returning `Result<T, ExecuteCommandError>` through the executor. Pure local-FS / reference-library / passthrough tools legitimately have **no** wrapper — document that when it applies.
 - **Schemas:** `paramsSchema` is a zod `ZodRawShape` (plain object of zod fields, **not** `z.object(...)`); empty = `{}`; every field `.describe(...)`d. Rename `_session` → `session`; snake_case → camelCase.
 - **Errors:** business logic returns `ts-results-es` `Result`; typed subclasses of `McpToolError` in `src/errors/mcpToolError.ts`; everything funnels through `DesktopTool.logAndExecute` — **never hand-build `isError` payloads.** Reserve `CallToolResult.isError` for the `McpToolError` funnel.
 - **Naming:** drop the `tableau-` prefix; collapse source inline/file tool *pairs* into one tool with `mode: z.enum(['file','inline'])`.
 - **Tests (vitest):** colocated; `describe/it/expect/vi` are globals (no imports — `tsconfig` has `vitest/globals`); mock with `vi.hoisted` + `vi.mock`; build extra via `getMockRequestHandlerExtra()`; invoke via `Provider.from(tool.callback)`. Cover the registration in `src/server.desktop.test.ts` and `src/tools/toolName.test.ts`.
-- **Heavier deps pulled in only when the group needs workbook XML:** `src/desktop/cache.ts`, `src/desktop/libraries/workbook-serialization-converter/**`, `src/desktop/validation/{registry,types,rules/**}`.
+- **Heavier deps pulled in only when the group needs workbook XML:** `src/desktop/cache.ts`, `src/desktop/metadata/parser.ts`, `src/desktop/validation/{registry,types,rules/**}`.
 
 ## Generated files
 

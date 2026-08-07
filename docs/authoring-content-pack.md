@@ -1,6 +1,11 @@
 # Authoring content pack — milestone-2 remote provider (Lane M6, design + skeleton)
 
-Status: **design + skeleton only — NO network I/O.** This document defines the content-pack
+Status: **SUPERSEDED (2026-08-06).** The intelligence/provider subsystem this document
+describes was removed when the TBM template flow landed (#723): templates now ship as
+bundled `.tbm` bookmarks with slot contracts inferred at load time, and no provider seam
+remains in the tree. Kept for the design record only.
+
+Original status: **design + skeleton only — NO network I/O.** This document defines the content-pack
 contract and the caching/verification state machine that milestone 2 will run behind the existing
 `AuthoringIntelligenceProvider` seam (`src/desktop/intelligence/provider.ts`). The real fetch
 transport, the signing scheme, and the hosting endpoint are **deliberately not implemented here** —

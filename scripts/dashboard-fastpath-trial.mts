@@ -4,8 +4,8 @@
  * Goal: "build me a sales dashboard" → 3 stamped charts + one composed dashboard,
  * measured end-to-end, sub-60s wall.
  *
- * Path exercised (all against the LIVE Desktop over the LEGACY transport via
- * build/index.desktop.js on stdio — TABLEAU_EXTERNAL_API is intentionally NOT set):
+ * Path exercised (all against the LIVE Desktop over the External Client API via
+ * build/index.desktop.js on stdio):
  *   Leg 1-3:  bind-template({ auto_apply:true }) × 3  → 3 stamped worksheets, one MCP call each
  *   Leg 4:    batch-create-and-cache-sheets({ worksheetNames:[], dashboardName })
  *               → creates ONLY the empty dashboard placeholder (+ caches workbook/dashboard XML).

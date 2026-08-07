@@ -1,5 +1,17 @@
 # Authoring migration — binder drift sync + canonical tool exemplar (Lane M2, day 2)
 
+> **Historical record — superseded.** This document describes the 2026-07-05 migration
+> snapshot, including manifest-era assets and the old command-layer layout. Do not use it as
+> the current architecture guide. See [`README.desktop.md`](../README.desktop.md) and the
+> [External Client API guide](../src/desktop/externalApi/README.md) instead. The live TBM path
+> is implemented in [`bookmarkTemplate.ts`](../src/desktop/templates/bookmarkTemplate.ts),
+> [`templatePath.ts`](../src/desktop/templates/templatePath.ts), and
+> [`runtimeTemplateCatalog.ts`](../src/desktop/templates/runtimeTemplateCatalog.ts); the
+> current build/apply tools are
+> [`buildWorksheetsFromTemplates.ts`](../src/tools/desktop/authoring/templates/buildWorksheetsFromTemplates.ts)
+> and [`applyWorksheet.ts`](../src/tools/desktop/api/applyWorksheet.ts). The sections below are
+> retained only to explain the historical port.
+
 Migration source of truth: the source implementation (**snapshot S1**) — a read-only, local-only
 snapshot workspace (git-excluded), taken 2026-07-05. It is untracked and **never** imported at build
 time. Day-1 port baseline = `src/desktop/binder/` @ commit `ecc843cf`.
@@ -83,9 +95,9 @@ emoji text, hand-built `isError`).
 
 **Files**
 
-- `src/tools/desktop/binder/bindTemplate.ts` — factory `getBindTemplateTool(server)` (`:130`), zod
+- `src/tools/desktop/authoring/binder/bindTemplate.ts` — factory `getBindTemplateTool(server)` (`:130`), zod
   `paramsSchema` (`:48`), `logAndExecute` funnel (`:151`).
-- `src/tools/desktop/binder/bindTemplate.test.ts` — 7 colocated cases, mocked executor + mocked binder core
+- `src/tools/desktop/authoring/binder/bindTemplate.test.ts` — 7 colocated cases, mocked executor + mocked binder core
   (`Provider.from(tool.callback)` + `getMockRequestHandlerExtra()`).
 - Registered in `src/tools/desktop/toolName.ts` (`'bind-template'`) and `src/tools/desktop/tools.ts`
   (`getBindTemplateTool` in `desktopToolFactories`). Registration is auto-covered by the data-driven

@@ -3,9 +3,7 @@ import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
 import { beginEpisode, resetEpisodeEventsForTests } from '../../desktop/episode-events.js';
-import * as externalDiscovery from '../../desktop/externalApi/discovery.js';
 import { sessionRouteState } from '../../desktop/route/route-state.js';
-import { ArgsValidationError } from '../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { Provider } from '../../utils/provider.js';
 import { DesktopTool } from './tool.js';
@@ -104,21 +102,8 @@ describe('DesktopTool episode telemetry', () => {
   });
 });
 
-describe('DesktopTool authoring attempt telemetry', () => {
-  it('executes get-worksheet-xml before any authoring attempt', async () => {
-    const callback = vi.fn(async () => new Ok({ worksheetXml: '<worksheet/>' }));
-
-    const result = await makeTool('get-worksheet-xml').logAndExecute({
-      extra: getMockRequestHandlerExtra(),
-      args: { session: 'S1' },
-      callback,
-    });
-
-    expect(result.isError).toBe(false);
-    expect(callback).toHaveBeenCalledOnce();
-  });
-
-  it('records an initial worksheet read as succeeded in the episode stream', async () => {
+describe('DesktopTool worksheet orientation', () => {
+  it('executes get-worksheet-xml before authoring and records ordinary success telemetry', async () => {
     const dir = tmpDir();
     const extra = {
       ...getMockRequestHandlerExtra(),
@@ -129,21 +114,16 @@ describe('DesktopTool authoring attempt telemetry', () => {
       },
     };
     const begin = await beginEpisode(extra.config, { sessionId: 'S1' });
-    const gatedCallback = vi.fn(async () => new Ok({ fields: [] }));
+    const callback = vi.fn(async () => new Ok({ worksheetXml: '<worksheet/>' }));
 
     const result = await makeTool('get-worksheet-xml').logAndExecute({
       extra,
       args: { session: 'S1' },
-      callback: gatedCallback,
-    });
-    await makeTool().logAndExecute({
-      extra,
-      args: { session: 'S1' },
-      callback: async () => new Ok({ answer: 'continue' }),
+      callback,
     });
 
     expect(result.isError).toBe(false);
-    expect(gatedCallback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledOnce();
     expect(readEvents(dir)).toMatchObject([
       { type: 'episode_begin', episode_id: begin.episode_id },
       {
@@ -160,135 +140,7 @@ describe('DesktopTool authoring attempt telemetry', () => {
         success: true,
         outcome: 'succeeded',
       },
-      { type: 'tool_start', tool: 'ask-user' },
-      { type: 'tool_end', tool: 'ask-user', success: true, outcome: 'succeeded' },
     ]);
-  });
-
-  it('invokes the executor seam for an initial worksheet read', async () => {
-    const getExecutor = vi.fn();
-    const extra = { ...getMockRequestHandlerExtra(), getExecutor };
-    const tool = makeTool('get-worksheet-xml');
-
-    const result = await tool.logAndExecute({
-      extra,
-      args: { session: 'S1' },
-      callback: async () => {
-        await getExecutor('S1');
-        return new Ok({ fields: [] });
-      },
-    });
-
-    expect(result.isError).toBe(false);
-    expect(getExecutor).toHaveBeenCalledWith('S1');
-  });
-
-  it('executes orientation after a failed bind-template attempt', async () => {
-    const extra = getMockRequestHandlerExtra();
-    const failedBind = await makeTool('bind-template').logAndExecute({
-      extra,
-      args: { session: 'S1' },
-      callback: async () => new ArgsValidationError('expected bind failure').toErr(),
-    });
-    const orientationCallback = vi.fn(async () => new Ok({ fields: [] }));
-
-    const orientation = await makeTool('get-worksheet-xml').logAndExecute({
-      extra,
-      args: { session: 'S1' },
-      callback: orientationCallback,
-    });
-
-    expect(failedBind.isError).toBe(true);
-    expect(orientation.isError).toBe(false);
-    expect(orientationCallback).toHaveBeenCalledOnce();
-  });
-
-  it('executes orientation after author-parameter', async () => {
-    const extra = getMockRequestHandlerExtra();
-    await makeTool('author-parameter').logAndExecute({
-      extra,
-      args: { session: 'S1' },
-      callback: async () => new Ok({ parameterName: '[Parameter 1]' }),
-    });
-    const orientationCallback = vi.fn(async () => new Ok({ worksheetXml: '<worksheet/>' }));
-
-    await makeTool('get-worksheet-xml').logAndExecute({
-      extra,
-      args: { session: 'S1' },
-      callback: orientationCallback,
-    });
-
-    expect(orientationCallback).toHaveBeenCalledOnce();
-  });
-
-  it('does not require another session to unlock worksheet reads', async () => {
-    const extra = getMockRequestHandlerExtra();
-    await makeTool('author-set').logAndExecute({
-      extra,
-      args: { session: 'S1' },
-      callback: async () => new Ok({ setName: '[Top Customers]' }),
-    });
-    const orientationCallback = vi.fn(async () => new Ok({ fields: [] }));
-
-    const result = await makeTool('get-worksheet-xml').logAndExecute({
-      extra,
-      args: { session: 'S2' },
-      callback: orientationCallback,
-    });
-
-    expect(result.isError).toBe(false);
-    expect(orientationCallback).toHaveBeenCalledOnce();
-  });
-
-  it('allows list-available-fields before an authoring attempt', async () => {
-    const callback = vi.fn(async () => new Ok({ fields: [] }));
-
-    const result = await makeTool('list-available-fields').logAndExecute({
-      extra: getMockRequestHandlerExtra(),
-      args: { session: 'S1' },
-      callback,
-    });
-
-    expect(result.isError).toBe(false);
-    expect(callback).toHaveBeenCalledOnce();
-    expect(sessionRouteState.hasAuthoringAttempt('S1')).toBe(false);
-  });
-
-  it.each([
-    'bind-template',
-    'author-parameter',
-    'author-set',
-    'author-calc',
-    'author-action',
-    'add-field',
-    'apply-worksheet',
-    'refine-worksheet',
-    'execute-tableau-command',
-  ] as const)('records %s before its callback fails', async (name) => {
-    await makeTool(name).logAndExecute({
-      extra: getMockRequestHandlerExtra(),
-      args: { session: 'S1' },
-      callback: async () => new ArgsValidationError('expected failure').toErr(),
-    });
-
-    expect(sessionRouteState.hasAuthoringAttempt('S1')).toBe(true);
-    expect(sessionRouteState.get('S1')?.firstAuthoringAttempt?.tool).toBe(name);
-  });
-
-  it('records an omitted session against the resolved single Desktop session', async () => {
-    vi.spyOn(externalDiscovery, 'discoverInstances').mockReturnValue([
-      { pid: 4242 } as ReturnType<typeof externalDiscovery.discoverInstances>[number],
-    ]);
-
-    await makeTool('author-calc').logAndExecute({
-      extra: getMockRequestHandlerExtra(),
-      args: {} as any,
-      callback: async () => new Ok({ calculationName: '[Profit Ratio]' }),
-    });
-
-    expect(sessionRouteState.hasAuthoringAttempt('4242')).toBe(true);
-    expect(sessionRouteState.get('4242')?.firstAuthoringAttempt?.tool).toBe('author-calc');
-    expect(sessionRouteState.get(undefined)).toBeUndefined();
   });
 });
 

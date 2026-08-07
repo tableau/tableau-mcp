@@ -33,6 +33,8 @@
 import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
+import { escapeXml } from '../binder/escape.js';
+
 export type TopNEnd = 'top' | 'bottom';
 export type SortDirection = 'ASC' | 'DESC';
 
@@ -108,21 +110,6 @@ function parseXml(xml: string): Document | null {
   } catch {
     return null;
   }
-}
-
-/**
- * Escape a value derived from the (untrusted) worksheet XML before it is spliced back into
- * an attribute value or element text. For a normal Tableau qualified name (bracketed
- * identifier, no `& < > ' "`) this is the identity function, so patched XML is byte-stable;
- * a hostile name cannot break out of its attribute/text context.
- */
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/'/g, '&apos;')
-    .replace(/"/g, '&quot;');
 }
 
 /** Read a single/double-quoted attribute value out of an element's attribute slice. */

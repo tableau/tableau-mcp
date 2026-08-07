@@ -15,14 +15,14 @@ import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
 import { createCallDeadline } from './desktop/callDeadline.js';
+import { buildDesktopInstructions } from './desktop/instructions.js';
 import {
   getKnowledgeCorpusEntryCount,
   getKnowledgeDir,
   listKnowledgeResources,
   readKnowledgeResource,
 } from './desktop/knowledge/index.js';
-import { buildDesktopInstructions } from './desktop/routeTable.js';
-import { SessionManager } from './desktop/sessionManager.js';
+import { SessionManager } from './desktop/session/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { DesktopTool } from './tools/desktop/tool.js';
@@ -69,9 +69,9 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
  * API — is sufficient with no XML authoring tools, templates, or bind-template.
  * Everything a chart/calc/dashboard ask needs routes through execute-tableau-command;
  * the rest is discovery + readback (on apiVersion <=0.1.0 the /v0 generic route was
- * write-blind, so the list-* tools were how the model observed state). The
- * get-worksheet-xml read is retained across every profile and is available before authoring.
- * Proven by hand 2026-07-19: a full analytics workbook (calcs +
+ * write-blind, so the list-* tools were how the model observed state). get-worksheet-xml
+ * is retained across every profile for existing-sheet inspection and edits, including
+ * before any authoring attempt. Proven by hand 2026-07-19: a full analytics workbook (calcs +
  * charts + dashboard) authored live in seconds, zero agent-authored XML.
  * The known-command guard (from #542) makes the single execute-tableau-command tool
  * safe against hallucinated verbs.
@@ -106,7 +106,7 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * Thirty-three tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
  * and first-class workbook/data reads/navigation; the only raw XML read is get-worksheet-xml,
  * the read leg the manual add-field/remove-field/apply-worksheet path needs to mint its
- * worksheetFile — no whole-workbook get/apply, no cache, no validation XML tools. This is the
+ * worksheetFile — no whole-workbook get/apply or validation XML tools. This is the
  * "make it shorter" answer — a lean, semantically-named surface under the 46k tools/list cliff,
  * not a describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19 (CODA):
  * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.

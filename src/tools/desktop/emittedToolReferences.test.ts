@@ -5,17 +5,29 @@ import ts from 'typescript';
 import { desktopToolNames } from './toolName.js';
 
 const SOURCE_FILES = [
-  'src/tools/desktop/binder/bindTemplate.ts',
+  'src/tools/desktop/authoring/binder/bindTemplate.ts',
   'src/desktop/binder/explicit-bind.ts',
-  'src/tools/desktop/coordination/planDashboardCreation.ts',
-  'src/tools/desktop/dashboard/dashboardAutoApply.ts',
-  'src/tools/desktop/fields/addField.ts',
-  'src/tools/desktop/fields/removeField.ts',
-  'src/tools/desktop/coordination/batchCreateAndCacheSheets.ts',
+  'src/tools/desktop/authoring/sheets/planDashboardCreation.ts',
+  'src/tools/desktop/authoring/sheets/dashboardAutoApply.ts',
+  'src/tools/desktop/authoring/fields/addField.ts',
+  'src/tools/desktop/authoring/fields/removeField.ts',
+  'src/tools/desktop/authoring/sheets/batchCreateAndCacheSheets.ts',
 ] as const;
 
 const CONDITIONAL_TOOLS = ['inject-template', 'apply-workbook', 'apply-dashboard'] as const;
 const NON_TOOL_VOCABULARY = [
+  // Geo + aggregation-compat blocker codes and binder prose (not tool names): emitted by
+  // bindTemplate.ts / explicit-bind.ts to explain why a slot could not bind.
+  'aggregation-level-mismatch',
+  'already-aggregated',
+  'generated-geo-required',
+  'geo-not-geocodable',
+  'non-aggregate',
+  'non-aggregated',
+  'non-map',
+  're-aggregates',
+  'row-level',
+  'semantic-role',
   'all-or-nothing',
   'already-bound',
   'aggregation-level-mismatch',

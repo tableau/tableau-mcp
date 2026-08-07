@@ -9,8 +9,6 @@ import {
   emitToolErrorEvent,
   episodeSessionIdFromArgs,
 } from '../../desktop/episode-events.js';
-import { sessionRouteState } from '../../desktop/route/route-state.js';
-import { resolveSession } from '../../desktop/sessionResolution.js';
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
@@ -18,18 +16,6 @@ import { LogAndExecuteParams, Tool } from '../tool.js';
 import { getStructuredContent } from './structuredContent.js';
 import { TableauDesktopRequestHandlerExtra, TableauDesktopToolCallback } from './toolContext.js';
 import { DesktopToolName } from './toolName.js';
-
-const AUTHORING_ATTEMPT_TOOLS: ReadonlySet<DesktopToolName> = new Set([
-  'bind-template',
-  'author-parameter',
-  'author-set',
-  'author-calc',
-  'author-action',
-  'add-field',
-  'apply-worksheet',
-  'refine-worksheet',
-  'execute-tableau-command',
-]);
 
 /**
  * The parameters the logAndExecute method
@@ -56,7 +42,6 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     getSuccessResult,
   }: DesktopToolLogAndExecuteParams<T, Args>): Promise<CallToolResult> {
     const { requestId } = extra;
-    this.recordAuthoringAttempt(args);
     this.notifyInvocation({ requestId, args });
 
     let toolResult: CallToolResult;
@@ -149,21 +134,6 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       });
       return toolResult;
     }
-  }
-
-  private recordAuthoringAttempt(args: unknown): void {
-    if (!AUTHORING_ATTEMPT_TOOLS.has(this.name)) return;
-    const requestedSession =
-      typeof args === 'object' &&
-      args !== null &&
-      typeof (args as { session?: unknown }).session === 'string'
-        ? (args as { session: string }).session
-        : undefined;
-    const resolvedSession = resolveSession(requestedSession);
-    sessionRouteState.recordAuthoringAttempt(
-      resolvedSession.isOk() ? resolvedSession.value : undefined,
-      this.name,
-    );
   }
 }
 

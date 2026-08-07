@@ -244,6 +244,68 @@ describe('desktop/templates/facetSplice', () => {
     });
   });
 
+  // ── manifest slots are authoritative: no structural guessing ──────────────
+  describe('spliceBoundFacet — non-empty manifest slots suppress the structural fallback', () => {
+    // gantt-chart / ww-ou-arrow / ww-ou-diff regression: a template whose only
+    // categorical dimension base columns are REQUIRED (no optional facet slot). A raw
+    // required dimension base column with no authored column-instance used to be
+    // greedily mis-matched by the structural scan when the manifest reported zero facet
+    // candidates, throwing on a chart that was never faceted. When a non-empty manifest
+    // slot set is supplied and none is an optional categorical facet, the answer is
+    // "no facet" (identity) — the structural scan must NOT run.
+    const requiredDimTemplate = `<workbook><worksheets><worksheet name='{{TITLE}}'>
+  <table><view>
+    <datasource-dependencies datasource='{{DATASOURCE}}'>
+      <column datatype='string' name='[{{field_base_1}}]' role='dimension' type='nominal' />
+      <column datatype='real' name='[{{field_base_2}}]' role='measure' type='quantitative' />
+      <column-instance column='[{{field_base_2}}]' derivation='Sum' name='[sum:{{field_base_2}}:qk]' pivot='key' type='quantitative' />
+    </datasource-dependencies>
+  </view></table>
+  <rows>[{{DATASOURCE}}].[none:{{field_base_1}}:nk]</rows>
+  <cols>[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]</cols>
+</worksheet></worksheets></workbook>`;
+
+    const requiredSlots: SlotSpec[] = [
+      {
+        slot_id: 'dim',
+        template_field: '{{field_base_1}}',
+        required: true,
+        kind: 'categorical',
+        role: ['rows'],
+      } as unknown as SlotSpec,
+      {
+        slot_id: 'measure',
+        template_field: '{{field_base_2}}',
+        required: true,
+        kind: 'quantitative',
+        role: ['cols'],
+      } as unknown as SlotSpec,
+    ];
+
+    it('returns identity (does not throw or splice) when the sole dimension slot is required', () => {
+      const mapping = {
+        '{{field_base_1}}': `[${DS}].[none:Region:nk]`,
+        '{{field_base_2}}': `[${DS}].[sum:Sales:qk]`,
+      };
+      expect(spliceBoundFacet(requiredDimTemplate, mapping, requiredSlots)).toBe(
+        requiredDimTemplate,
+      );
+    });
+
+    it('still runs the structural fallback when NO manifest slots are supplied (manifest-less caller)', () => {
+      // Same XML + mapping, but slots omitted: the manifest-less structural scan is
+      // free to identify the placeholder dimension as the facet (proving the gate keys
+      // on slot presence, not on the mapping shape).
+      const mapping = {
+        '{{field_base_1}}': `[${DS}].[none:Region:nk]`,
+        '{{field_base_2}}': `[${DS}].[sum:Sales:qk]`,
+      };
+      // With no slots, resolveFacet finds field_base_1 structurally and splices it;
+      // the single-dimension shelf resolves, so this does NOT throw.
+      expect(() => spliceBoundFacet(requiredDimTemplate, mapping)).not.toThrow();
+    });
+  });
+
   // ── faceted apply produces the trellis shelf (both roles) ─────────────────
   describe('faceted apply — trend-line-chart facet_col (role: cols)', () => {
     const faceted = {

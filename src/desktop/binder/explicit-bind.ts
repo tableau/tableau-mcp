@@ -576,7 +576,7 @@ function fixForBlocker(b: Blocker): string {
     case 'calc-dependency-unmet':
       return 'Bind every manifest slot required by the template-owned calculation.';
     default:
-      return 'Fall back to plan-dashboard-creation, placing fields per sheet with add-field.';
+      return 'Choose another eligible template from list-templates, then rebuild.';
   }
 }
 

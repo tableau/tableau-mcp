@@ -355,7 +355,7 @@ export function verifyWorksheetReadback(
   return findings;
 }
 
-export function formatReadbackFinding(finding: ReadbackFinding): string {
+function formatReadbackFinding(finding: ReadbackFinding): string {
   const column = finding.column ? ` column="${finding.column}"` : '';
   return `<${finding.node}${column}>`;
 }
@@ -368,13 +368,6 @@ export function formatReadbackVerificationError(findings: ReadbackFinding[]): st
     'The rendered chart does NOT match the intent — likely an invalid/unsupported node. ' +
     'Fix the worksheet XML to use Tableau-supported shelf, mark, filter, and encoding nodes, then re-apply.'
   );
-}
-
-export function formatReadbackVerificationStatus(
-  result: ReadbackVerificationResult | undefined,
-): string {
-  if (result?.status !== 'skipped') return '';
-  return 'Apply succeeded, but could not verify (readback unavailable). Re-read the worksheet before relying on the result.';
 }
 
 export function formatReadbackVerificationWarnings(findings: ReadbackFinding[]): string {

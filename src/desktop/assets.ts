@@ -63,6 +63,10 @@ type ManifestEntry = { sha256: string; bytes: number };
 
 let _manifest: Map<string, ManifestEntry> | undefined;
 const _verifiedAssets = new Map<string, string>();
+// Disk-branch mirror of _verifiedAssets: successful reads keyed by ABSOLUTE path (so a
+// stubbed getDirname resolves to its own entries). The in-repo desktop/data tree is
+// immutable at runtime, so a cached read never goes stale; misses are not cached.
+const _diskAssets = new Map<string, string>();
 
 // The SEA asset manifest maps every embedded asset key to its build-time sha256 and
 // byte length. buildSea.ts hashes each file as it embeds it, so coverage cannot drift:
@@ -152,25 +156,25 @@ export function readDataAsset(relPath: string): string | null {
   if (runningAsSea()) {
     return readVerifiedSeaAsset(`desktop/data/${rel}`);
   }
+  const path = join(getDataRoot(), ...rel.split('/'));
+  const cached = _diskAssets.get(path);
+  if (cached !== undefined) {
+    return cached;
+  }
   try {
-    return readFileSync(join(getDataRoot(), ...rel.split('/')), 'utf-8');
+    const text = readFileSync(path, 'utf-8');
+    _diskAssets.set(path, text);
+    return text;
   } catch {
     return null;
   }
-}
-
-export function dataAssetExists(relPath: string): boolean {
-  const rel = toForwardSlash(relPath);
-  if (runningAsSea()) {
-    return getManifest().has(`desktop/data/${rel}`);
-  }
-  return existsSync(join(getDataRoot(), ...rel.split('/')));
 }
 
 export function _setSeaApiForTest(seaApi: SeaApi | null): void {
   _setSharedSeaApiForTest(seaApi);
   _manifest = undefined;
   _verifiedAssets.clear();
+  _diskAssets.clear();
 }
 
 // File names (not full paths) of the entries under a desktop/data subdirectory.

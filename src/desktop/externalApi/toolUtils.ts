@@ -1,6 +1,7 @@
 import { Ok, Result } from 'ts-results-es';
 
 import { ArgsValidationError, McpToolError } from '../../errors/mcpToolError.js';
+import { decodeXmlEntities } from '../xmlElement.js';
 
 export function isRouteMissing(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) {
@@ -76,19 +77,6 @@ function resolveUniqueNameMatch<T extends { id: string; name: string }>(
 
 function containsXmlEntity(value: string): boolean {
   return /&#|&(amp|lt|gt|quot|apos);/.test(value);
-}
-
-function decodeXmlEntities(value: string): string {
-  return value
-    .replace(/&#x([0-9a-fA-F]+);/g, (_match, hex: string) =>
-      String.fromCodePoint(parseInt(hex, 16)),
-    )
-    .replace(/&#(\d+);/g, (_match, code: string) => String.fromCodePoint(parseInt(code, 10)))
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
 }
 
 function formatItems(items: Array<{ id: string; name: string }>): string {

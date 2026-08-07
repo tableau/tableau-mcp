@@ -11,7 +11,8 @@
  */
 import fs from 'node:fs';
 import { discoverInstances } from '../src/desktop/externalApi/discovery.js';
-import { ExternalApiClient } from '../src/desktop/externalApi/externalApiClient.js';
+import { ExternalApiHttp } from '../src/desktop/externalApi/externalApiHttp.js';
+import { EXTERNAL_API_ROUTES } from '../src/desktop/externalApi/types.js';
 
 const out = (ok: boolean, leg: string, detail = ''): void =>
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${leg.padEnd(28)} ${detail}`);
@@ -28,17 +29,17 @@ if (instances.length === 0) {
 const inst = instances[0];
 out(true, 'discovery', `pid=${inst.pid} baseUrl=${inst.baseUrl}`);
 
-const client = new ExternalApiClient(inst);
+const client = new ExternalApiHttp(inst);
 
-const health = await client.health();
+const health = await client.getOk(EXTERNAL_API_ROUTES.health);
 out(
-  health.isOk() && health.value.healthy,
+  health.isOk() && health.value.ok,
   'GET /v1/health',
   health.isErr() ? errDetail(health.error) : '',
 );
 
 let xml: string | null = null;
-const doc = await client.getWorkbookDocument();
+const doc = await client.getXml(EXTERNAL_API_ROUTES.workbookDocument);
 if (doc.isOk()) {
   xml = doc.value.xml;
   out(
@@ -51,7 +52,8 @@ if (doc.isOk()) {
 }
 
 if (xml) {
-  const applied = await client.applyWorkbookDocument(xml); // byte-identical round-trip — a no-op apply
+  // byte-identical round-trip — a no-op apply
+  const applied = await client.postXmlEnvelope(EXTERNAL_API_ROUTES.workbookDocument, xml);
   out(
     applied.isOk(),
     'POST /v1/workbook/document',
@@ -64,7 +66,11 @@ if (xml) {
 
 // tabdoc:undo is a REAL registry command with no required params — harmless when there is
 // nothing to undo, and it proves the {namespace, command, parameters} body shape end-to-end.
-const op = await client.invokeCommand('tabdoc', 'undo', {});
+const op = await client.postJsonEnvelope(EXTERNAL_API_ROUTES.invokeCommand, {
+  namespace: 'tabdoc',
+  command: 'undo',
+  parameters: {},
+});
 out(
   op.isOk(),
   'POST /v1/app:invokeCommand',
@@ -74,12 +80,15 @@ out(
         '  ← if THIS fails with command-not-found too, send us your invokeCommand example — the body field names need aligning',
 );
 
-const spec = await client.fetchOpenApi();
-if (spec.isOk()) {
-  fs.writeFileSync('athena-openapi.live.json', JSON.stringify(spec.value, null, 2));
+try {
+  const specResponse = await fetch(new URL('/openapi.json', inst.baseUrl), {
+    headers: { Authorization: `Bearer ${inst.token}` },
+  });
+  if (!specResponse.ok) throw new Error(`HTTP ${specResponse.status}`);
+  fs.writeFileSync('athena-openapi.live.json', JSON.stringify(await specResponse.json(), null, 2));
   out(true, 'GET /openapi.json', 'saved to athena-openapi.live.json — PLEASE SEND THIS FILE BACK');
-} else {
-  out(false, 'GET /openapi.json', errDetail(spec.error));
+} catch (error) {
+  out(false, 'GET /openapi.json', errDetail(error));
 }
 
 console.log('\nDone. Any FAIL line + the openapi file is exactly the feedback we need.');

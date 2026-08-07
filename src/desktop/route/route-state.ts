@@ -64,9 +64,12 @@ export const MAX_BIND_RECOVERY_PROPOSAL_SIGNATURES = 8;
 /** One reminder is allowed; a second consecutive bare resubmit terminates bind recovery. */
 export const MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS = 2;
 
+/** Full-profile binder discriminator retained as state data, never rendered as recovery text. */
+export const LEGACY_BIND_TEMPLATE_TOOL = 'bind-template' as const;
+
 /** Actionable Call-2 choices retained so a repeated bare ask does not lose the proposal payload. */
 export interface BindRecoveryProposalContext {
-  tool: 'bind-template';
+  tool: typeof LEGACY_BIND_TEMPLATE_TOOL;
   arguments: {
     session: string;
     ask: string;
@@ -181,14 +184,6 @@ export interface AppliedSheetRecord {
   ts: string;
 }
 
-/** The first authoring attempt that unlocked orientation tools for a session. */
-export interface AuthoringAttempt {
-  /** The mutating tool whose invocation unlocked orientation. */
-  tool: string;
-  /** ISO timestamp recorded before the tool body ran, so failures still count. */
-  ts: string;
-}
-
 /**
  * The MOST RECENT ask bind-template classified for this session (most-recent-ask-wins).
  * `last_outcome` is null between classification and the concluded bind-template outcome.
@@ -220,8 +215,6 @@ export interface SessionRouteState {
   unprotected_passthroughs: UnprotectedPassthroughs;
   /** Sheets applied by bind-template in this session, keyed by render signature. */
   appliedSheets: Map<string, AppliedSheetRecord>;
-  /** First mutating authoring attempt; its presence unlocks orientation tools. */
-  firstAuthoringAttempt?: AuthoringAttempt;
   /** Most recent bind-template ask classification for this session, if any. */
   current_ask?: SessionAskClassification;
 }
@@ -460,28 +453,6 @@ export class SessionRouteStateStore {
   get(sessionId: string | undefined): SessionRouteState | undefined {
     if (!sessionId) return undefined;
     return this.bySession.get(sessionId);
-  }
-
-  /** Whether this session has crossed the bind-first gate with a mutating authoring attempt. */
-  hasAuthoringAttempt(sessionId: string | undefined): boolean {
-    return this.get(sessionId)?.firstAuthoringAttempt !== undefined;
-  }
-
-  /**
-   * Unlock orientation for a session before a mutating tool body runs. Only the first attempt
-   * is retained so later repair calls cannot rewrite the sequence receipt.
-   */
-  recordAuthoringAttempt(
-    sessionId: string | undefined,
-    tool: string,
-  ): SessionRouteState | undefined {
-    if (!sessionId) return undefined;
-    const state = this.ensure(sessionId);
-    state.firstAuthoringAttempt ??= {
-      tool,
-      ts: new Date().toISOString(),
-    };
-    return state;
   }
 
   recordSummaryDataTransientFailure(sessionId: string | undefined, signature: string): number {

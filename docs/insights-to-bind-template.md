@@ -25,7 +25,7 @@ bind-template({
 })
 ```
 
-Full contract: `src/tools/desktop/binder/proposalSchema.ts` (strict — unknown keys fail closed). Slot/kind vocabulary: `src/desktop/binder/manifest-types.ts`.
+Full contract: `src/tools/desktop/authoring/binder/proposalSchema.ts` (strict — unknown keys fail closed). Slot/kind vocabulary: `src/desktop/binder/manifest-types.ts`.
 
 ## Insight-card fields → slot kinds
 
@@ -71,8 +71,8 @@ Cards are generated against a **published datasource (LUID/contentUrl)**; `bind-
 
 ## Code pointers
 
-- Tool + guidance: `src/tools/desktop/binder/bindTemplate.ts`
-- Shared proposal contract: `src/tools/desktop/binder/proposalSchema.ts`
+- Tool + guidance: `src/tools/desktop/authoring/binder/bindTemplate.ts`
+- Shared proposal contract: `src/tools/desktop/authoring/binder/proposalSchema.ts`
 - Slot/manifest vocabulary: `src/desktop/binder/manifest-types.ts`
 - Manifests (one per template): `src/desktop/data/template-manifests/`
 - String-month temporal support: `temporal_from_string` in the trend-line manifest (#565)
