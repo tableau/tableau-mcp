@@ -175,9 +175,9 @@ describe('desktop tools/list serialized surface', () => {
 
     // The default served surface includes instructions. Full-profile tool schemas are
     // pinned separately so intentional route prose does not fund schema growth.
-    // Re-pinned 2026-08-06 (merge of upstream #720 titles + #723 template flow): the
-    // merged default route prose measures 3,099 bytes (was 7,042 pre-merge).
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(2_960);
+    // Re-pinned 2026-08-06 (atomic dashboard routes): the two one-call routes replace
+    // unsupported dashboard-edit wording and keep the instruction surface smaller.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(2_959);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(fullToolSurfaceTotal).toBeLessThanOrEqual(FULL_TOOL_SURFACE_BUDGET);
   });
@@ -404,10 +404,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 32-tool modern surface without legacy binder wrappers', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 33-tool modern surface without legacy binder wrappers', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(32);
+    expect(selected).toHaveLength(33);
     expect(selected.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining(['bind-template', 'build-and-apply-worksheet']),
     );
@@ -430,6 +430,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'resolve-field',
       'apply-worksheet',
       'dashboard-auto-apply',
+      'compose-dashboard',
       'read-knowledge-resource',
       'search-knowledge',
       'get-summary-data',

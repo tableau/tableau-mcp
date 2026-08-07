@@ -27,6 +27,10 @@ import {
   escapeXml,
 } from '../../../../desktop/templates/injectTemplateCore.js';
 import { loadRuntimeTemplateCatalogSnapshots } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
+import {
+  type TargetDashboardInvariantIssue,
+  targetDashboardInvariantIssues,
+} from '../../../../desktop/validation/targetDashboardInvariant.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { injectViewpoints } from '../../../../desktop/wrappers/injectViewpoints.js';
 import { loadDashboardXml } from '../../../../desktop/wrappers/loadDashboardXml.js';
@@ -34,6 +38,7 @@ import {
   loadWorkbookXml,
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import { normalizeXmlName, xmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
@@ -95,12 +100,22 @@ type DashboardAutoApplyRefusalResult = {
   apply_error?: string;
 };
 
+type DashboardAutoApplyDriftResult = {
+  applied: false;
+  retrySafe: true;
+  results: AskOutcome[];
+  guidance: string;
+  apply_error: string;
+};
+
 type Replaced = { dashboard?: string; sheets: string[] };
 
 type DashboardAutoApplySuccessResult = {
   applied: true;
+  retrySafe: false;
   dashboard: string;
   sheets: Array<{ title: string; template_name: string }>;
+  verification: DashboardAutoApplyVerification & { state: 'verified' };
   phase_ms: { read: number; bind: number; inject: number; apply: number };
   guidance: string;
   replaced?: Replaced;
@@ -108,20 +123,48 @@ type DashboardAutoApplySuccessResult = {
 
 type DashboardAutoApplyPartialResult = {
   applied: 'partial';
+  retrySafe: false;
   dashboard: string;
   sheets: Array<{ title: string; template_name: string }>;
   zones:
     | { state: 'unknown'; attempted: Zone[] }
     | { state: 'failed'; attempted: Zone[]; landed: []; failed: Zone[] };
   apply_error: string;
+  verification: DashboardAutoApplyVerification;
+  guidance: string;
+  replaced?: Replaced;
+};
+
+type DashboardAutoApplyVerification =
+  | {
+      state: 'verified';
+      dashboard: string;
+      worksheetZones: string[];
+      worksheetWindows: string[];
+      dashboardWindow: true;
+      directViewpoints: string[];
+    }
+  | { state: 'failed'; issues: TargetDashboardInvariantIssue[] }
+  | { state: 'unknown'; read_error: string };
+
+type DashboardAutoApplyUnknownResult = {
+  applied: 'unknown';
+  retrySafe: false;
+  dashboard: string;
+  sheets: Array<{ title: string; template_name: string }>;
+  results: AskOutcome[];
+  apply_error: string;
+  verification: DashboardAutoApplyVerification;
   guidance: string;
   replaced?: Replaced;
 };
 
 type DashboardAutoApplyToolResult =
   | DashboardAutoApplyRefusalResult
+  | DashboardAutoApplyDriftResult
   | DashboardAutoApplySuccessResult
-  | DashboardAutoApplyPartialResult;
+  | DashboardAutoApplyPartialResult
+  | DashboardAutoApplyUnknownResult;
 type StructuredDashboardAutoApplyToolResult = StructuredResult<DashboardAutoApplyToolResult>;
 
 /** Human-readable detail for a loadWorkbookXml failure (mirrors bindTemplate.ts). */
@@ -137,6 +180,9 @@ function describeApplyError(
     }
     if (inner.type === 'load-rejected') {
       return `Tableau rejected the load: ${inner.message}`;
+    }
+    if (inner.type === 'workbook-drift') {
+      return 'the workbook changed while the dashboard was being prepared';
     }
     return 'invalid workbook content';
   }
@@ -208,6 +254,32 @@ export const getDashboardAutoApplyTool = (
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
 
+          const verifyDashboardReadback = async (
+            expectedWorksheetNames: string[],
+          ): Promise<DashboardAutoApplyVerification> => {
+            const readback = await getWorkbookXml({ executor, signal: extra.signal });
+            if (readback.isErr()) {
+              return {
+                state: 'unknown',
+                read_error: `workbook readback failed: ${JSON.stringify(readback.error)}`,
+              };
+            }
+            const issues = targetDashboardInvariantIssues(
+              readback.value,
+              dashboardName,
+              expectedWorksheetNames,
+            );
+            if (issues.length > 0) return { state: 'failed', issues };
+            return {
+              state: 'verified',
+              dashboard: dashboardName,
+              worksheetZones: expectedWorksheetNames,
+              worksheetWindows: expectedWorksheetNames,
+              dashboardWindow: true,
+              directViewpoints: expectedWorksheetNames,
+            };
+          };
+
           const readStart = Date.now();
           const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (xmlResult.isErr()) {
@@ -278,7 +350,10 @@ export const getDashboardAutoApplyTool = (
             return override !== undefined ? escapeXml(override) : bound.args.title;
           });
           const seen = new Map<string, number[]>();
-          resolvedTitles.forEach((t, i) => seen.set(t, [...(seen.get(t) ?? []), i]));
+          resolvedTitles.forEach((title, index) => {
+            const key = normalizeXmlName(title);
+            seen.set(key, [...(seen.get(key) ?? []), index]);
+          });
           const dupes = [...seen.entries()].filter(([, idxs]) => idxs.length > 1);
           if (dupes.length > 0) {
             const detail = dupes
@@ -298,7 +373,9 @@ export const getDashboardAutoApplyTool = (
           // we are about to regenerate.
           let currentXml = pristineXml;
           const replaced: Replaced = { sheets: [] };
-          if (listWorkbookDashboards(currentXml).includes(dashboardName)) {
+          if (
+            listWorkbookDashboards(currentXml).some((name) => xmlNamesEqual(name, dashboardName))
+          ) {
             currentXml = deleteDashboard(currentXml, dashboardName);
             replaced.dashboard = dashboardName;
           }
@@ -410,11 +487,55 @@ export const getDashboardAutoApplyTool = (
           // dashboard.
           const applyResult = await loadWorkbookXml({
             xml: currentXml,
+            baselineXml: pristineXml,
+            expectedWorkbookXml: pristineXml,
             focus: { navigate: 'artifact', sheetName: dashboardName },
             executor,
             signal: extra.signal,
           });
           if (applyResult.isErr()) {
+            if (
+              applyResult.error.type === 'load-workbook-xml-error' &&
+              applyResult.error.error.type === 'workbook-drift'
+            ) {
+              const applyError = describeApplyError(applyResult.error);
+              return new IncompleteOperationError({
+                applied: false,
+                retrySafe: true,
+                results: outcomes,
+                apply_error: applyError,
+                guidance:
+                  'The live workbook changed before dispatch, so nothing was applied. Re-read the workbook and retry dashboard-auto-apply.',
+              }).toErr();
+            }
+            const postDispatchError =
+              applyResult.error.type === 'execute-command-error' ||
+              (applyResult.error.type === 'load-workbook-xml-error' &&
+                applyResult.error.error.type === 'load-rejected');
+            if (postDispatchError) {
+              const verification = await verifyDashboardReadback(resolvedTitles);
+              const applyError = describeApplyError(applyResult.error);
+              return new IncompleteOperationError(
+                withNextAction(
+                  {
+                    applied: 'unknown',
+                    retrySafe: false,
+                    dashboard: dashboardName,
+                    sheets,
+                    results: outcomes,
+                    apply_error: applyError,
+                    verification,
+                    guidance:
+                      `The workbook apply command failed after dispatch (${applyError}), so its outcome is ` +
+                      'unknown and it may have reached Desktop. Do not retry blindly. Inspect the live workbook ' +
+                      'with list-dashboards and get-workbook-inventory, then use activate-sheet on the target ' +
+                      'before deciding whether repair is needed.',
+                    ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
+                  },
+                  prefillNextAction('Inspect the live workbook before any retry'),
+                ),
+              ).toErr();
+            }
             return refusal(
               outcomes,
               `Server-side auto-apply did not complete (${describeApplyError(applyResult.error)}). Nothing ` +
@@ -458,21 +579,25 @@ export const getDashboardAutoApplyTool = (
                       landed: [],
                       failed: realZones,
                     };
+              const verification = await verifyDashboardReadback(resolvedTitles);
               return new IncompleteOperationError(
                 withNextAction(
                   {
                     applied: 'partial',
+                    retrySafe: false,
                     dashboard: dashboardName,
                     sheets,
                     zones: zonesState,
                     apply_error: message,
+                    verification,
                     guidance:
                       `The workbook (sheets + an empty "${dashboardName}" dashboard) was applied, but laying ` +
-                      `in the zones failed (${message}). Retry dashboard-auto-apply with the same asks and ` +
-                      'dashboard name; it will replace the valid empty dashboard.',
+                      `in the zones failed (${message}). Do not retry blindly. Inspect the live workbook with ` +
+                      'list-dashboards and get-workbook-inventory, then use activate-sheet on the target before ' +
+                      'deciding whether to rebuild it.',
                     ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
                   },
-                  prefillNextAction('Re-issue the zones'),
+                  prefillNextAction('Inspect the dashboard before any retry'),
                 ),
               ).toErr();
             }
@@ -480,10 +605,35 @@ export const getDashboardAutoApplyTool = (
 
           const applyMs = Date.now() - applyStart;
 
+          const verification = await verifyDashboardReadback(resolvedTitles);
+          if (verification.state !== 'verified') {
+            return new IncompleteOperationError(
+              withNextAction(
+                {
+                  applied: 'unknown',
+                  retrySafe: false,
+                  dashboard: dashboardName,
+                  sheets,
+                  results: outcomes,
+                  apply_error: 'structural verification after apply did not pass',
+                  verification,
+                  guidance:
+                    `Desktop reported the "${dashboardName}" apply complete, but the target dashboard did not ` +
+                    'pass structural readback. Do not retry blindly. Inspect with list-dashboards and ' +
+                    'get-workbook-inventory, then use activate-sheet on the target before repairing the workbook.',
+                  ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
+                },
+                prefillNextAction('Inspect the dashboard structure'),
+              ),
+            ).toErr();
+          }
+
           return new Ok({
             applied: true,
+            retrySafe: false,
             dashboard: dashboardName,
             sheets,
+            verification,
             phase_ms: { read: readMs, bind: bindMs, inject: injectMs, apply: applyMs },
             guidance: `Applied "${dashboardName}" (${sheets.length} sheet(s)) to the live workbook (read ${readMs}ms, bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
             ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),

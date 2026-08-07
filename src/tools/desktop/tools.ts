@@ -45,6 +45,7 @@ import { getApplyDashboardWithViewpointsTool } from './authoring/sheets/applyDas
 import { getBatchCreateAndCacheSheetsTool } from './authoring/sheets/batchCreateAndCacheSheets.js';
 import { getBuildAndApplyDashboardTool } from './authoring/sheets/buildAndApplyDashboard.js';
 import { getBuildAndApplyWorksheetTool } from './authoring/sheets/buildAndApplyWorksheet.js';
+import { getComposeDashboardTool } from './authoring/sheets/composeDashboard.js';
 import { getDashboardAutoApplyTool } from './authoring/sheets/dashboardAutoApply.js';
 import { getDashboardHealthCheckTool } from './authoring/sheets/dashboardHealthCheck.js';
 import { getDeleteWorksheetTool } from './authoring/sheets/deleteWorksheet.js';
@@ -96,6 +97,7 @@ export const desktopToolFactories = [
   getAskUserTool,
   getBindTemplateTool,
   getDashboardAutoApplyTool,
+  getComposeDashboardTool,
   getDashboardHealthCheckTool,
   getListTemplatesTool,
   getBuildWorksheetsFromTemplatesTool,

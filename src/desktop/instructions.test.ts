@@ -164,7 +164,15 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
   it('routes dashboard composition through visible dashboard tools before command search', () => {
     const dashboard = routes.find((route) => route.id === 'dashboard');
-    expect(dashboard?.toolSequence).toEqual(['dashboard-auto-apply']);
+    expect(dashboard?.toolSequence).toEqual(['compose-dashboard', 'dashboard-auto-apply']);
+    expect(dashboard?.action).toContain('existing worksheets');
+    expect(dashboard?.action).toContain('new views');
+  });
+
+  it('does not send dashboard edits through worksheet-only tools', () => {
+    const editInPlace = routes.find((route) => route.id === 'edit-in-place');
+
+    expect(editInPlace?.trigger).not.toContain('dashboard');
   });
 
   it.each(routes)('route "$id" declares a tool sequence and stop conditions', (route) => {

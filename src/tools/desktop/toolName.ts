@@ -30,6 +30,7 @@ export const desktopToolNames = [
   'tableau-end-episode',
   'bind-template',
   'dashboard-auto-apply',
+  'compose-dashboard',
   'dashboard-health-check',
   'list-templates',
   'build-worksheets-from-templates',

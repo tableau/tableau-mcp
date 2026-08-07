@@ -75,6 +75,112 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     expect(appliedXml).toEqual([validXml]);
   });
 
+  it('accepts a guarded apply when the live workbook still matches the expected workbook', async () => {
+    const { executor, appliedXml } = dispatchingExecutor();
+
+    const result = await loadWorkbookXml({
+      xml: validXmlWithWindows,
+      expectedWorkbookXml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(executor.getWorkbookDocument).toHaveBeenCalledOnce();
+    expect(appliedXml).toEqual([validXmlWithWindows]);
+  });
+
+  it('refuses a guarded apply before dispatch when the live workbook has drifted', async () => {
+    const applyWorkbookDocument = vi.fn();
+    const getWorkbookDocument = vi.fn().mockResolvedValue(
+      Ok({
+        xml: validXmlWithWindows,
+        applicationVersion: undefined,
+        xsdPayloadVersion: undefined,
+      }),
+    );
+    const executor = makeExecutorMock({ applyWorkbookDocument, getWorkbookDocument });
+
+    const result = await loadWorkbookXml({
+      xml: validXmlWithWindows,
+      expectedWorkbookXml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-workbook-xml-error');
+      expect(result.error.error).toEqual({ type: 'workbook-drift' });
+    }
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('returns the guarded read failure and does not dispatch', async () => {
+    const readError = { type: 'command-timed-out' as const, error: 'Read timed out' };
+    const applyWorkbookDocument = vi.fn();
+    const getWorkbookDocument = vi.fn().mockResolvedValue(Err(readError));
+    const executor = makeExecutorMock({ applyWorkbookDocument, getWorkbookDocument });
+
+    const result = await loadWorkbookXml({
+      xml: validXmlWithWindows,
+      expectedWorkbookXml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'execute-command-error');
+      expect(result.error.error).toEqual(readError);
+    }
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('serializes guarded applies and rejects the stale second candidate', async () => {
+    const candidateB = validXmlWithWindows;
+    const candidateC = validXmlWithWindows.replace('Sheet 2', 'Sheet 3');
+    let liveXml = validXml;
+    const applyWorkbookDocument = vi.fn(async (xml: string) => {
+      liveXml = xml;
+      return Ok({ command_id: 'cmd', status: 'completed' as const, submitted_at: '' });
+    });
+    const getWorkbookDocument = vi.fn(async () =>
+      Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+    );
+    const executor = makeExecutorMock({ applyWorkbookDocument, getWorkbookDocument });
+
+    const [first, second] = await Promise.all([
+      loadWorkbookXml({
+        xml: candidateB,
+        expectedWorkbookXml: validXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      }),
+      loadWorkbookXml({
+        xml: candidateC,
+        expectedWorkbookXml: validXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      }),
+    ]);
+
+    expect(first.isOk()).toBe(true);
+    expect(second.isErr()).toBe(true);
+    if (second.isErr()) {
+      invariant(second.error.type === 'load-workbook-xml-error');
+      expect(second.error.error).toEqual({ type: 'workbook-drift' });
+    }
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).toHaveBeenCalledWith(candidateB, mockSignal, undefined);
+  });
+
   it('does not attempt pruning when the whole-document POST fails', async () => {
     const error = { type: 'command-timed-out' as const, error: 'Timeout' };
     const appliedXml: string[] = [];

@@ -83,6 +83,7 @@ const NON_TOOL_VOCABULARY = [
   'per-viz',
   // Internal auto-apply failure dispositions, not emitted tool references.
   'post-dispatch',
+  'workbook-drift',
   'pre-dispatch',
   'pre-edit',
   'promise-check',

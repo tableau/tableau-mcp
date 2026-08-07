@@ -14,9 +14,11 @@ import * as runtimeCatalogModule from '../../../../desktop/templates/runtimeTemp
 import { readTemplate } from '../../../../desktop/templates/templatePath.js';
 import type { TemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import * as validationRegistry from '../../../../desktop/validation/registry.js';
+import * as targetDashboardInvariantModule from '../../../../desktop/validation/targetDashboardInvariant.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import * as injectViewpointsModule from '../../../../desktop/wrappers/injectViewpoints.js';
 import * as loadDashboardXmlModule from '../../../../desktop/wrappers/loadDashboardXml.js';
+import * as loadWorkbookXmlModule from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { NoDesktopInstancesFoundError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
@@ -48,6 +50,13 @@ vi.mock('../../../../desktop/validation/registry.js', async (importOriginal) => 
   const actual =
     await importOriginal<typeof import('../../../../desktop/validation/registry.js')>();
   return { ...actual, runValidation: vi.fn() };
+});
+vi.mock('../../../../desktop/validation/targetDashboardInvariant.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('../../../../desktop/validation/targetDashboardInvariant.js')
+    >();
+  return { ...actual, targetDashboardInvariantIssues: vi.fn() };
 });
 // Partial fs mock: templates come from the mocked SEA-aware `readTemplate` seam
 // (templatePath.js above); fs reads stay live for the real manifest/content loads
@@ -219,6 +228,7 @@ function setupMocks({
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
   bindSpy: ReturnType<typeof vi.fn>;
+  setLiveXml: (xml: string) => void;
 } {
   const dashboardsXml = existingDashboards
     .map((n) => `<dashboard name="${n}"><zones/></dashboard>`)
@@ -245,11 +255,17 @@ function setupMocks({
     Ok({ validationWarnings: [] }),
   );
 
-  vi.mocked(validationRegistry.runValidation).mockReturnValue(
-    validationValid
-      ? { valid: true, issues: [] }
-      : { valid: false, issues: [{ ruleId: 'r', severity: 'error', message: 'boom' }] },
-  );
+  const validValidation = { valid: true, issues: [] };
+  const invalidValidation = {
+    valid: false,
+    issues: [{ ruleId: 'r', severity: 'error' as const, message: 'boom' }],
+  };
+  vi.mocked(validationRegistry.runValidation)
+    .mockReset()
+    .mockReturnValue(validValidation)
+    .mockReturnValueOnce(validationValid ? validValidation : invalidValidation)
+    .mockReturnValueOnce(validValidation);
+  vi.mocked(targetDashboardInvariantModule.targetDashboardInvariantIssues).mockReturnValue([]);
 
   const executeCommand = vi.fn().mockResolvedValue(dispatch);
   const applyWorkbookDocument = vi.fn(async (xml: string) => {
@@ -258,11 +274,23 @@ function setupMocks({
     }
     return dispatch;
   });
+  const getWorkbookDocument = vi.fn(async () =>
+    Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+  );
   const getExecutor = vi.fn().mockResolvedValue({
     executeCommand,
     applyWorkbookDocument,
+    getWorkbookDocument,
   });
-  return { executeCommand, applyWorkbookDocument, getExecutor, bindSpy };
+  return {
+    executeCommand,
+    applyWorkbookDocument,
+    getExecutor,
+    bindSpy,
+    setLiveXml: (xml: string) => {
+      liveXml = xml;
+    },
+  };
 }
 
 async function getToolResult({
@@ -312,6 +340,15 @@ describe('dashboardAutoApplyTool happy path', () => {
       { title: 'Sales by Region', template_name: 'bar-basic' },
       { title: 'Profit by Month', template_name: 'line-basic' },
     ]);
+    expect(body.retrySafe).toBe(false);
+    expect(body.verification).toEqual({
+      state: 'verified',
+      dashboard: 'Sales Dashboard',
+      worksheetZones: ['Sales by Region', 'Profit by Month'],
+      worksheetWindows: ['Sales by Region', 'Profit by Month'],
+      dashboardWindow: true,
+      directViewpoints: ['Sales by Region', 'Profit by Month'],
+    });
     expect(typeof body.phase_ms.read).toBe('number');
     expect(typeof body.phase_ms.bind).toBe('number');
     expect(typeof body.phase_ms.inject).toBe('number');
@@ -321,15 +358,22 @@ describe('dashboardAutoApplyTool happy path', () => {
       'dashboard',
       'guidance',
       'phase_ms',
+      'retrySafe',
       'sheets',
+      'verification',
     ]);
 
     // The public dashboard boundary performs the one primary read plus one validated
     // navigation read; internal worksheets never activate independently. The navigation
     // stops there in this fixture because the dashboard is absent from the read, so there
     // is nothing to reissue.
-    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(3);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(targetDashboardInvariantModule.targetDashboardInvariantIssues).toHaveBeenCalledWith(
+      expect.any(String),
+      'Sales Dashboard',
+      ['Sales by Region', 'Profit by Month'],
+    );
     expect(runtimeCatalogModule.loadRuntimeTemplateCatalogSnapshots).toHaveBeenCalledWith({
       automaticOnly: true,
     });
@@ -452,11 +496,35 @@ describe('dashboardAutoApplyTool happy path', () => {
       getExecutor,
     });
 
-    expect(validationRegistry.runValidation).toHaveBeenCalledTimes(1);
+    expect(validationRegistry.runValidation).toHaveBeenCalledTimes(2);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    const validationOrder = vi.mocked(validationRegistry.runValidation).mock.invocationCallOrder[0];
+    const validationOrder = vi.mocked(validationRegistry.runValidation).mock.invocationCallOrder[1];
     const dispatchOrder = applyWorkbookDocument.mock.invocationCallOrder[0];
     expect(validationOrder).toBeLessThan(dispatchOrder);
+  });
+
+  it('forwards the pristine workbook as the candidate-validation baseline', async () => {
+    const { getExecutor } = setupMocks();
+    const loadSpy = vi
+      .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
+      .mockResolvedValue(Ok({ validationWarnings: [] }));
+
+    try {
+      await getToolResult({
+        session: '1',
+        asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+        getExecutor,
+      });
+
+      expect(loadSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baselineXml: expect.stringContaining('<workbook>'),
+          expectedWorkbookXml: expect.stringContaining('<workbook>'),
+        }),
+      );
+    } finally {
+      loadSpy.mockRestore();
+    }
   });
 
   it('replaces a pre-existing same-named dashboard and reports it in `replaced`', async () => {
@@ -472,6 +540,28 @@ describe('dashboardAutoApplyTool happy path', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
     expect(body.replaced).toEqual({ dashboard: 'Sales Dashboard', sheets: [] });
+  });
+
+  it('replaces an NFD dashboard when the request uses the NFC-equivalent name', async () => {
+    const nfdName = 'Re\u0301sume\u0301';
+    const nfcName = 'R\u00e9sum\u00e9';
+    const { applyWorkbookDocument, getExecutor } = setupMocks({ existingDashboards: [nfdName] });
+
+    const result = await getToolResult({
+      session: '1',
+      dashboardName: nfcName,
+      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const [postedXml] = applyWorkbookDocument.mock.calls[0] ?? [];
+    expect(String(postedXml)).not.toContain(`name="${nfdName}"`);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).replaced).toEqual({
+      dashboard: nfcName,
+      sheets: [],
+    });
   });
 });
 
@@ -609,7 +699,34 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  it('failed workbook apply is an error with every ask outcome preserved', async () => {
+  it('workbook drift aborts before dispatch and is safe to retry', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupMocks();
+    const loadSpy = vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Err({
+        type: 'load-workbook-xml-error',
+        error: { type: 'workbook-drift' },
+      }),
+    );
+
+    try {
+      const result = await getToolResult({
+        session: '1',
+        asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+        getExecutor,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body).toMatchObject({ applied: false, retrySafe: true });
+      expect(String(body.apply_error)).toContain('workbook changed');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
+  it('post-dispatch workbook error reports unknown state and forbids a blind retry', async () => {
     const { getExecutor } = setupMocks({
       dispatch: Err({ type: 'command-timed-out', error: 'Timeout' }),
     });
@@ -623,12 +740,74 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(false);
-    expect(body.results).toEqual([
-      { index: 0, ask: 'bar chart of Sales by Region', result: boundA },
-      { index: 1, ask: 'line chart of Profit by Month', result: boundB },
-    ]);
+    expect(body.applied).toBe('unknown');
+    expect(body.retrySafe).toBe(false);
     expect(String(body.apply_error)).toContain('command-timed-out');
+    expect(String(body.guidance)).toContain('list-dashboards');
+    expect(String(body.guidance)).toContain('get-workbook-inventory');
+  });
+
+  it('load rejection is post-dispatch unknown and triggers structural readback', async () => {
+    const { getExecutor } = setupMocks();
+    const loadSpy = vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Err({
+        type: 'load-workbook-xml-error',
+        error: { type: 'load-rejected', message: 'Desktop rejected the posted document' },
+      }),
+    );
+
+    try {
+      const result = await getToolResult({
+        session: '1',
+        asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+        getExecutor,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.applied).toBe('unknown');
+      expect(body.retrySafe).toBe(false);
+      expect(String(body.apply_error)).toContain('Desktop rejected the posted document');
+      expect(targetDashboardInvariantModule.targetDashboardInvariantIssues).toHaveBeenCalledWith(
+        expect.any(String),
+        'Sales Dashboard',
+        ['Sales by Region', 'Profit by Month'],
+      );
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
+  it('does not claim success when structural readback is incomplete', async () => {
+    const { getExecutor } = setupMocks();
+    vi.mocked(targetDashboardInvariantModule.targetDashboardInvariantIssues).mockReturnValue([
+      {
+        code: 'direct-viewpoint-missing',
+        message: 'Dashboard "Sales Dashboard" has no direct viewpoint for "Profit by Month".',
+      },
+    ]);
+
+    const result = await getToolResult({
+      session: '1',
+      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe('unknown');
+    expect(body.retrySafe).toBe(false);
+    expect(body.verification).toEqual({
+      state: 'failed',
+      issues: [
+        {
+          code: 'direct-viewpoint-missing',
+          message: 'Dashboard "Sales Dashboard" has no direct viewpoint for "Profit by Month".',
+        },
+      ],
+    });
   });
 
   it('zone apply failure reports an error naming failed zones and landed artifacts', async () => {
@@ -750,6 +929,26 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it('canonically equivalent resolved titles refuse before dispatch', async () => {
+    const nfd = boundResultFor('bar-basic', 'Cafe\u0301');
+    const nfc = boundResultFor('line-basic', 'Caf\u00e9');
+    const { applyWorkbookDocument, getExecutor } = setupMocks({ binds: [nfd, nfc] });
+
+    const result = await getToolResult({
+      session: '1',
+      asks: [{ ask: 'bar chart' }, { ask: 'line chart' }],
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(false);
+    expect(String(body.guidance)).toMatch(/Duplicate resolved title/);
+    expect(String(body.guidance)).toMatch(/\[0, 1\]/);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('a title referenced by an existing dashboard zone refuses — zero dispatches', async () => {
     const { applyWorkbookDocument, getExecutor } = setupMocks();
     // A DIFFERENT existing dashboard's zone already references "Sales by Region".
@@ -776,14 +975,13 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
   it('replacing the SAME-named dashboard does not self-collide with the zone-reference guard', async () => {
     // The dashboard we are about to replace references "Sales by Region" itself — that
     // must NOT trip the "referenced by an existing dashboard" refusal (Q1).
-    const { applyWorkbookDocument, getExecutor } = setupMocks({
+    const { applyWorkbookDocument, getExecutor, setLiveXml } = setupMocks({
       existingDashboards: ['Sales Dashboard'],
     });
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(
-      Ok(
-        '<?xml version="1.0"?><workbook><dashboards><dashboard name="Sales Dashboard"><zones><zone name="Sales by Region"/></zones></dashboard></dashboards><windows></windows></workbook>',
-      ),
-    );
+    const workbookXml =
+      '<?xml version="1.0"?><workbook><dashboards><dashboard name="Sales Dashboard"><zones><zone name="Sales by Region"/></zones></dashboard></dashboards><windows></windows></workbook>';
+    setLiveXml(workbookXml);
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(workbookXml));
 
     const result = await getToolResult({
       session: '1',
@@ -798,12 +996,11 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
   });
 
   it('a resolved title matching an already-existing worksheet is reported as replaced', async () => {
-    const { getExecutor } = setupMocks();
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(
-      Ok(
-        '<?xml version="1.0"?><workbook><worksheets><worksheet name="Sales by Region"></worksheet></worksheets><dashboards></dashboards><windows></windows></workbook>',
-      ),
-    );
+    const { getExecutor, setLiveXml } = setupMocks();
+    const workbookXml =
+      '<?xml version="1.0"?><workbook><worksheets><worksheet name="Sales by Region"></worksheet></worksheets><dashboards></dashboards><windows></windows></workbook>';
+    setLiveXml(workbookXml);
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(workbookXml));
 
     const result = await getToolResult({
       session: '1',

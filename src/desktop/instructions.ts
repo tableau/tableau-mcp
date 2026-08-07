@@ -94,12 +94,12 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'route',
     id: 'dashboard',
-    trigger: 'a dashboard ask with 2-6 vizzes',
+    trigger: 'a dashboard ask',
     action:
-      'call dashboard-auto-apply once with 2-6 specific viz asks; it builds the worksheets and dashboard together.',
-    toolSequence: ['dashboard-auto-apply'],
-    stopConditions: ['call dashboard-auto-apply once'],
-    requiredEvidence: ['dashboard-auto-apply returns an applied dashboard receipt'],
+      'existing worksheets: call compose-dashboard once; new views: call dashboard-auto-apply once. Each replaces the same-named dashboard.',
+    toolSequence: ['compose-dashboard', 'dashboard-auto-apply'],
+    stopConditions: ['call compose-dashboard once', 'call dashboard-auto-apply once'],
+    requiredEvidence: ['the selected tool returns a verified dashboard receipt'],
   },
   {
     kind: 'route',
@@ -139,7 +139,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'route',
     id: 'edit-in-place',
-    trigger: 'current/existing sheet/chart/view/dashboard',
+    trigger: 'current/existing sheet/chart/view',
     action:
       'edit in place: resolve target with list-worksheets -> list-dashboards -> ask-user when ambiguous, then use refine-worksheet or add-field -> apply-worksheet for color, size, detail, Rows, or Columns. For a requested new chart, use list-templates -> list-available-fields -> build-worksheets-from-templates, then apply-worksheet. Never create new sheets unless asked.',
     toolSequence: [

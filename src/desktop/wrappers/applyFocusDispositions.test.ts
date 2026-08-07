@@ -42,6 +42,7 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
     'loadDashboardXml:artifact',
     'loadWorkbookXml:artifact',
   ],
+  'src/tools/desktop/authoring/sheets/composeDashboard.ts': ['loadWorkbookXml:artifact'],
   'src/tools/desktop/authoring/sheets/dashboardAutoApply.ts': [
     'loadWorkbookXml:artifact',
     'loadDashboardXml:artifact',
