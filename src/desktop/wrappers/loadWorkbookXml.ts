@@ -34,10 +34,19 @@ export async function loadWorkbookXml({
   focus,
   executor,
   signal,
+  skipValidation,
 }: {
   xml: string;
   focus: ApplyFocus;
   filePath?: string;
+  // Skip the runValidation preflight entirely. Reserved for callers that produce
+  // XML from a pre-vetted, non-LLM source (deterministic template bind) where the
+  // input cannot be malformed the way a model's freehand XML can. Preflight over a
+  // multi-MB workbook is CPU-bound (~4s on a large sqlproxy datasource); skipping it
+  // is the single biggest latency lever on the trusted path. Never set this for
+  // model-authored XML — Desktop's own load rejection (a blocking modal) is the only
+  // remaining backstop.
+  skipValidation?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorkbookXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -46,8 +55,11 @@ export async function loadWorkbookXml({
 
   // Preflight semantic validation — catches known failure patterns before
   // sending XML to Tableau. Rules are extensible via src/validation/rules/.
-  const validation = runValidation(xml, 'workbook');
-  const blockingIssues = blockingValidationIssues(validation.issues);
+  // Skipped only on the trusted deterministic path (see skipValidation above).
+  const validation = skipValidation
+    ? { valid: true, issues: [] as ValidationIssue[] }
+    : runValidation(xml, 'workbook');
+  const blockingIssues = skipValidation ? [] : blockingValidationIssues(validation.issues);
   if (blockingIssues.length > 0) {
     log({
       level: 'error',
