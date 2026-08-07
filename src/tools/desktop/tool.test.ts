@@ -49,13 +49,14 @@ describe('DesktopTool episode telemetry', () => {
     };
     const begin = await beginEpisode(extra.config, { sessionId: 'S1' });
 
-    await tool.logAndExecute({
+    const result = await tool.logAndExecute({
       extra,
       args: { session: 'S1' },
       callback: async () => new Ok({ ok: true }),
     });
 
-    expect(readEvents(dir)).toMatchObject([
+    const events = readEvents(dir);
+    expect(events).toMatchObject([
       { type: 'episode_begin', episode_id: begin.episode_id },
       {
         type: 'tool_start',
@@ -69,9 +70,11 @@ describe('DesktopTool episode telemetry', () => {
         episode_id: begin.episode_id,
         tool: 'ask-user',
         success: true,
+        request_id_hash: expect.stringMatching(/^[a-f0-9]{16}$/),
+        result_size_chars: JSON.stringify(result).length,
       },
     ]);
-    expect(readEvents(dir)[2].duration_ms).toEqual(expect.any(Number));
+    expect(events[2].duration_ms).toEqual(expect.any(Number));
   });
 
   it('emits tool_error and unsuccessful tool_end when the callback throws', async () => {
@@ -86,7 +89,7 @@ describe('DesktopTool episode telemetry', () => {
       },
     };
 
-    await tool.logAndExecute({
+    const result = await tool.logAndExecute({
       extra,
       args: { session: 'S1' },
       callback: async () => {
@@ -97,7 +100,14 @@ describe('DesktopTool episode telemetry', () => {
     expect(readEvents(dir)).toMatchObject([
       { type: 'tool_start', session_id: 'S1', tool: 'ask-user' },
       { type: 'tool_error', session_id: 'S1', tool: 'ask-user' },
-      { type: 'tool_end', session_id: 'S1', tool: 'ask-user', success: false },
+      {
+        type: 'tool_end',
+        session_id: 'S1',
+        tool: 'ask-user',
+        success: false,
+        request_id_hash: expect.stringMatching(/^[a-f0-9]{16}$/),
+        result_size_chars: JSON.stringify(result).length,
+      },
     ]);
   });
 });

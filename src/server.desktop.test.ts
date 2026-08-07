@@ -1,9 +1,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
-import { CallToolResult, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolResult,
+  ListToolsRequestSchema,
+  Tool as McpTool,
+} from '@modelcontextprotocol/sdk/types.js';
 
 import * as configModule from './config.desktop.js';
+import * as episodeEvents from './desktop/episode-events.js';
 import {
   buildDesktopInstructions,
   SESSION_RESOLUTION_TEXT_PINNED,
@@ -114,6 +119,44 @@ describe('DesktopMcpServer', () => {
       .mocked(sharedMcpServer.server.setRequestHandler)
       .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
     expect(listToolsCall).toBeUndefined();
+  });
+
+  it('records the bounded registered schema surface without recording schemas', async () => {
+    const base = configModule.getDesktopConfig();
+    const configSpy = vi.spyOn(configModule, 'getDesktopConfig').mockReturnValue({
+      ...base,
+      episodeEventsEnabled: false,
+      toolProfile: 'unexpected-profile',
+    });
+    const emitSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
+
+    try {
+      const server = getServer();
+      const instructions = buildDesktopInstructions({
+        sessionPinned: base.desktopSessionId !== undefined,
+        profile: 'unexpected-profile',
+      });
+
+      await server.registerTools();
+      const listToolsCall = vi
+        .mocked(server.mcpServer.server.setRequestHandler)
+        .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
+      const listResult = await listToolsCall![1]({} as never, {} as never);
+      const listedTools = (listResult as { tools: McpTool[] }).tools;
+
+      expect(emitSpy).toHaveBeenCalledWith(expect.anything(), {
+        type: 'tool_schemas_registered',
+        profile: 'unknown',
+        tool_count: listedTools.length,
+        schemas_json_chars: JSON.stringify(listedTools).length,
+        instructions_chars: instructions.length,
+      });
+      const event = emitSpy.mock.calls.at(-1)?.[1];
+      expect(JSON.stringify(event)).not.toContain(String(listedTools[0]?.description));
+    } finally {
+      configSpy.mockRestore();
+      emitSpy.mockRestore();
+    }
   });
 });
 

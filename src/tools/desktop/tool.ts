@@ -1,5 +1,6 @@
 import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { createHash } from 'crypto';
 import { ZodRawShape } from 'zod';
 
 import { desktopCallTimeoutMessage, isDesktopCallTimeout } from '../../desktop/callDeadline.js';
@@ -45,7 +46,6 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     this.notifyInvocation({ requestId, args });
 
     let toolResult: CallToolResult;
-    const startedAt = Date.now();
     const sessionId = episodeSessionIdFromArgs(extra.config, args);
     const episodeId = currentEpisodeId(sessionId);
 
@@ -55,6 +55,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       episode_id: episodeId,
       tool: this.name,
     });
+    const startedAt = performance.now();
 
     try {
       const result = await raceDeadline(extra, callback);
@@ -70,9 +71,11 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
           session_id: sessionId,
           episode_id: episodeId,
           tool: this.name,
-          duration_ms: Date.now() - startedAt,
+          duration_ms: performance.now() - startedAt,
           success: true,
           outcome: 'succeeded',
+          request_id_hash: hashRequestId(requestId),
+          result_size_chars: serializedResultSize(toolResult),
         });
         return toolResult;
       }
@@ -94,9 +97,11 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         session_id: sessionId,
         episode_id: episodeId,
         tool: this.name,
-        duration_ms: Date.now() - startedAt,
+        duration_ms: performance.now() - startedAt,
         success: false,
         outcome: 'failed',
+        request_id_hash: hashRequestId(requestId),
+        result_size_chars: serializedResultSize(toolResult),
       });
       return toolResult;
     } catch (error) {
@@ -128,13 +133,23 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         session_id: sessionId,
         episode_id: episodeId,
         tool: this.name,
-        duration_ms: Date.now() - startedAt,
+        duration_ms: performance.now() - startedAt,
         success: false,
         outcome: 'failed',
+        request_id_hash: hashRequestId(requestId),
+        result_size_chars: serializedResultSize(toolResult),
       });
       return toolResult;
     }
   }
+}
+
+function serializedResultSize(result: CallToolResult): number {
+  return JSON.stringify(result).length;
+}
+
+function hashRequestId(requestId: RequestId): string {
+  return createHash('sha256').update(String(requestId)).digest('hex').slice(0, 16);
 }
 
 /**

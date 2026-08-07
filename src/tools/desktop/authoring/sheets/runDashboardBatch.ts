@@ -2,6 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok, type Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import {
+  type BatchApplyOutcome,
+  currentEpisodeId,
+  emitEpisodeEvent,
+  episodeSessionIdFromArgs,
+} from '../../../../desktop/episode-events.js';
 import { findAllWorksheets, parseXML } from '../../../../desktop/metadata/parser.js';
 import { compareTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
@@ -141,7 +147,10 @@ export const getRunDashboardBatchTool = (
       },
       extra,
     ): Promise<CallToolResult> => {
-      return await tool.logAndExecute<RunDashboardBatchResult>({
+      const startedAt = performance.now();
+      const sessionId = episodeSessionIdFromArgs(extra.config, { session });
+      let executionStarted = false;
+      const result = await tool.logAndExecute<RunDashboardBatchResult>({
         extra,
         args: {
           session,
@@ -329,6 +338,7 @@ export const getRunDashboardBatchTool = (
 
               let outcome: Awaited<ReturnType<typeof applyWorksheetArtifact>>;
               try {
+                executionStarted = true;
                 outcome = await applyWorksheetArtifact({
                   store: artifactStore,
                   artifactId,
@@ -433,6 +443,7 @@ export const getRunDashboardBatchTool = (
 
             let composeOutcome: Awaited<ReturnType<typeof composeDashboardCore>>;
             try {
+              executionStarted = true;
               composeOutcome = await composeDashboardCore({
                 dashboardName,
                 worksheetNames: [
@@ -500,11 +511,40 @@ export const getRunDashboardBatchTool = (
         },
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
+      await emitEpisodeEvent(extra.config, {
+        type: 'batch_apply',
+        session_id: sessionId,
+        episode_id: currentEpisodeId(sessionId),
+        artifact_count: artifactIds?.length ?? 0,
+        existing_worksheet_count: existingWorksheetNames?.length ?? 0,
+        duration_ms: performance.now() - startedAt,
+        outcome: batchApplyOutcome(result, executionStarted),
+      });
+      return result;
     },
   });
 
   return tool;
 };
+
+function batchApplyOutcome(result: CallToolResult, executionStarted: boolean): BatchApplyOutcome {
+  const content = result.content.find((item) => item.type === 'text');
+  if (!content || content.type !== 'text') return 'refused';
+  try {
+    const payload = JSON.parse(content.text) as {
+      applied?: AppliedState;
+      steps?: Array<{ state?: string }>;
+    };
+    if (payload.applied === true) return 'succeeded';
+    if (payload.applied === 'unknown') return 'unknown';
+    if (payload.steps?.some((step) => step.state === 'aborted')) return 'aborted';
+    if (payload.applied === 'partial') return 'partial';
+    if (payload.applied === false) return executionStarted ? 'failed' : 'refused';
+  } catch {
+    // Non-structured failures are refusals before a batch outcome exists.
+  }
+  return 'refused';
+}
 
 function incomplete(
   payload: RunDashboardBatchPayload,
