@@ -43,7 +43,7 @@ export type RestApiCredentials =
  */
 export class RestApi {
   private static _host: string;
-  private static _version = '3.24';
+  private static _version = '3.29';
 
   private _creds?: RestApiCredentials;
   private _maxRequestTimeoutMs: number;
