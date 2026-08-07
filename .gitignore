@@ -46,3 +46,4 @@ src/web/apps/dist/
 # Loose local report / probe artifacts (never commit)
 *.tsv
 stale-*.md
+/logs/

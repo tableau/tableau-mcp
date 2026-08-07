@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { paginationSchema } from '../types/pagination.js';
 import { tagsSchema } from '../types/tags.js';
 import { workbookSchema } from '../types/workbook.js';
+import { workbookValidationResultSchema } from '../types/workbookValidation.js';
 import { paginationParameters } from './paginationParameters.js';
 
 const getWorkbookEndpoint = makeEndpoint({
@@ -120,12 +121,34 @@ const publishWorkbookEndpoint = makeEndpoint({
   response: z.object({ workbook: workbookSchema }),
 });
 
+const validateUploadedWorkbookEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/sites/:siteId/workbooks/validateUploadedWorkbook',
+  alias: 'validateUploadedWorkbook',
+  description: 'Validates a workbook that has been uploaded to the site via a file upload session.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'uploadSessionId',
+      type: 'Query',
+      schema: z.string(),
+      description: 'The ID of the file upload session containing the workbook to validate.',
+    },
+  ],
+  response: workbookValidationResultSchema,
+});
+
 const workbooksApi = makeApi([
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
   deleteWorkbookEndpoint,
   addTagsToWorkbookEndpoint,
   publishWorkbookEndpoint,
+  validateUploadedWorkbookEndpoint,
 ]);
 
 export const workbooksApis = [...workbooksApi] as const satisfies ZodiosEndpointDefinitions;

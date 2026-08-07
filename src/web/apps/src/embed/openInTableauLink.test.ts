@@ -17,6 +17,16 @@ describe('setupOpenInTableauLink', () => {
     // Create container element (simulating the main element)
     container = document.createElement('main');
     container.className = 'main';
+    // Add viz stage wrapper with the viz container inside, mirroring the real DOM.
+    // The overlay pill (created on demand by setupOpenInTableauLink) lives in #vizStage.
+    const vizStage = document.createElement('div');
+    vizStage.id = 'vizStage';
+    vizStage.className = 'viz-stage';
+    const vizContainer = document.createElement('div');
+    vizContainer.id = 'tableauVizContainer';
+    vizContainer.className = 'viz-container';
+    vizStage.appendChild(vizContainer);
+    container.appendChild(vizStage);
     document.body.appendChild(container);
 
     // Create mock App with openLink and getHostCapabilities
@@ -43,14 +53,56 @@ describe('setupOpenInTableauLink', () => {
     const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
     expect(linkElement).not.toBeNull();
     expect(linkElement.id).toBe('openInTableauLink');
-    expect(linkElement.className).toBe('open-in-tableau');
+    expect(linkElement.className).toBe('overlay-control');
     expect(linkElement.getAttribute('rel')).toBe('noopener noreferrer');
     expect(linkElement.getAttribute('aria-label')).toBe(
       'Open in Tableau (opens in a new browser tab)',
     );
-    expect(linkElement.textContent).toBe('Open in Tableau ↗');
-    expect(linkElement.hidden).toBe(false);
     expect(linkElement.getAttribute('href')).toBe(url);
+
+    // Verify icon + label structure
+    const icon = linkElement.querySelector('svg.viz-control-icon');
+    const label = linkElement.querySelector('span');
+    expect(icon).not.toBeNull();
+    expect(label).not.toBeNull();
+    expect(label?.textContent).toBe('Open in Tableau');
+  });
+
+  it('should place link in the overlay pill inside the viz stage', () => {
+    const url = 'https://tableau.example.com/views/workbook/view';
+
+    setupOpenInTableauLink(mockApp, url, container);
+
+    const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
+    const vizStage = container.querySelector('#vizStage') as HTMLElement;
+    const vizContainer = container.querySelector('#tableauVizContainer') as HTMLElement;
+    const overlayGroup = container.querySelector('#vizOverlayGroup') as HTMLElement;
+
+    expect(linkElement).not.toBeNull();
+    expect(vizStage).not.toBeNull();
+    expect(vizContainer).not.toBeNull();
+    expect(overlayGroup).not.toBeNull();
+
+    // Link should be inside the overlay pill, which lives in the viz stage
+    // (sibling of the viz container, NOT inside it, so it survives re-embed).
+    expect(overlayGroup.contains(linkElement)).toBe(true);
+    expect(vizStage.contains(overlayGroup)).toBe(true);
+    expect(vizContainer.contains(linkElement)).toBe(false);
+  });
+
+  it('appends the link as the first control so it sits left of a later fullscreen button', () => {
+    const url = 'https://tableau.example.com/views/workbook/view';
+
+    setupOpenInTableauLink(mockApp, url, container);
+
+    // Simulate the fullscreen button being appended afterward (handleToolResult order).
+    const overlayGroup = container.querySelector('#vizOverlayGroup') as HTMLElement;
+    const laterButton = document.createElement('button');
+    laterButton.className = 'overlay-control';
+    overlayGroup.appendChild(laterButton);
+
+    const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
+    expect(Array.from(overlayGroup.children).indexOf(linkElement)).toBe(0);
   });
 
   it('should not create link when URL is empty', () => {
@@ -114,7 +166,7 @@ describe('setupOpenInTableauLink', () => {
     expect(preventDefaultSpy).toHaveBeenCalled();
   });
 
-  it('should call recordEvent with MCP_APP_CLICKED when link is clicked', async () => {
+  it('should call recordEvent with OPEN_IN_TABLEAU_CLICKED when link is clicked', async () => {
     const url = 'https://tableau.example.com/views/workbook/view';
 
     setupOpenInTableauLink(mockApp, url, container);
@@ -128,7 +180,27 @@ describe('setupOpenInTableauLink', () => {
     // Wait for async handler
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'MCP_APP_CLICKED', url);
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'OPEN_IN_TABLEAU_CLICKED', url);
+  });
+
+  it('records the click event even when openLink throws', async () => {
+    // The event captures the user's click action, not the request outcome, so it must be
+    // recorded unconditionally — including when the host-mediated openLink call rejects.
+    const url = 'https://tableau.example.com/views/workbook/view';
+    mockApp.openLink = vi.fn().mockRejectedValue(new Error('Connection lost'));
+
+    setupOpenInTableauLink(mockApp, url, container);
+
+    const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
+    expect(linkElement).not.toBeNull();
+
+    // Click the link
+    linkElement.click();
+
+    // Wait for async handler
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'OPEN_IN_TABLEAU_CLICKED', url);
   });
 
   it('should show inline error when openLink returns isError true', async () => {

@@ -1,24 +1,46 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
 /**
+ * Telemetry event types recorded by the MCP app UI. Passed directly as string
+ * literals at call sites (e.g. recordEvent(app, 'FULLSCREEN_CLICKED')); the union
+ * provides compile-time checking and autocomplete without a runtime constant.
+ * The two *_CLICKED events distinguish which control the user activated.
+ */
+export type McpAppEventType =
+  | 'OPEN_IN_TABLEAU_CLICKED'
+  | 'FULLSCREEN_CLICKED'
+  | 'TOOL_ERROR'
+  | 'PARSE_ERROR'
+  | 'AUTH_ERROR'
+  | 'EMBED_LOAD_ERROR';
+
+/**
  * Best-effort telemetry reporter for MCP app events (errors, user actions, etc.).
  * Calls the app-only `record-event` server tool via the host proxy. Fire-and-forget:
  * it never awaits, never throws, and silently no-ops when the host cannot
  * proxy server tools. Telemetry must never block the UI.
  *
+ * `detail` carries any context for the event — a click target (url, fullscreen)
+ * for user actions, or the causing error for error events — and populates the
+ * telemetry `message` field.
+ *
  * @param app - The MCP App instance.
- * @param eventType - The event type (e.g. 'TOOL_ERROR', 'MCP_APP_CLICKED').
- * @param detail - Optional detail context (error message, URL, etc.).
+ * @param eventType - The event type (e.g. 'TOOL_ERROR', 'FULLSCREEN_CLICKED').
+ * @param detail - Optional context for the event (URL, fullscreen target, or error cause).
  */
-export function recordEvent(app: App, eventType: string, detail?: unknown): void {
+export function recordEvent(app: App, eventType: McpAppEventType, detail?: unknown): void {
   try {
     if (!app.getHostCapabilities()?.serverTools) {
       return;
     }
 
     const message = toMessage(detail);
-    const args =
-      message !== undefined ? { event_type: eventType, message } : { event_type: eventType };
+    const args: { event_type: McpAppEventType; message?: string } = {
+      event_type: eventType,
+    };
+    if (message !== undefined) {
+      args.message = message;
+    }
 
     void app.callServerTool({ name: 'record-event', arguments: args }).catch(() => {
       // Best-effort telemetry: swallow transport failures.
@@ -28,7 +50,7 @@ export function recordEvent(app: App, eventType: string, detail?: unknown): void
   }
 }
 
-function toMessage(detail: unknown): string | undefined {
+export function toMessage(detail: unknown): string | undefined {
   if (detail === undefined || detail === null) {
     return undefined;
   }
