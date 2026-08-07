@@ -147,12 +147,11 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
   return JSON.stringify(await getDesktopToolListEntry(tool));
 }
 
-// Re-pinned 2026-08-06 (tool-surface unification wave): uniform session/mode/file
-// param describes via src/tools/desktop/params.ts replaced undescribed, empty, and
-// drifted variants across the surface. The bytes bought described opaque params;
-// tools at a grandfathered per-tool cap were left untouched rather than grown.
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 28_720;
-const FULL_TOOL_SURFACE_BUDGET = 47_936;
+// Re-pinned 2026-08-07: added delete-sheet, rename-sheet, sort-worksheet,
+// list-worksheet-logical-tables, and get-worksheet-underlying-data over the External
+// Client API sheet-action and logical-table routes, and dropped delete-worksheet.
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 29_380;
+const FULL_TOOL_SURFACE_BUDGET = 48_958;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
