@@ -29,6 +29,7 @@ import {
   storyboardListSchema,
   summaryDataSchema,
   validationResultSchema,
+  windowInfoSchema,
   workbookInventorySchema,
   worksheetItemSchema,
   worksheetListSchema,
@@ -41,8 +42,9 @@ import {
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
  * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.4,
- * captured 2026-08-06 (a build serving worksheet logical-table reads and the
- * `:delete`/`:rename`/`:sort`/`:goToSheet` sheet-action routes). No hand-edits.
+ * captured 2026-08-07 (a build serving worksheet logical-table reads, the
+ * `:delete`/`:rename`/`:sort`/`:goToSheet` sheet-action routes, and Operation
+ * `blockingWindows`). No hand-edits.
  */
 
 type SpecSchema = {
@@ -131,6 +133,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['SummaryData', summaryDataSchema],
       ['LogicalTableItem', logicalTableItemSchema],
       ['LogicalTableList', logicalTableListSchema],
+      ['WindowInfo', windowInfoSchema],
       ['ValidationResult', validationResultSchema],
     ] as const)('%s: properties and required set match', (name, schema) => {
       const component = specSchema(name);
