@@ -9,6 +9,7 @@ import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js
 import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { deprecatedArtifactAliasParam, resolveArtifactNameArg } from '../params.js';
 import {
   doneNextAction,
   jsonToolResult,
@@ -48,7 +49,8 @@ const SUMMARY_DATA_UNRESOLVED_SESSION_SCOPE = '__summary-data-session-unresolved
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  worksheet: z.string().optional().describe('Worksheet name/id; omit if unique.'),
+  worksheetName: z.string().optional().describe('Worksheet name/id; omit if unique.'),
+  worksheet: deprecatedArtifactAliasParam('worksheet'),
   maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
   columns: z.array(z.string()).optional().describe('Fields.'),
 };
@@ -90,21 +92,33 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ session, worksheet, maxRows, columns }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { session, worksheetName, worksheet, maxRows, columns },
+      extra,
+    ): Promise<CallToolResult> => {
       return await getSummaryData.logAndExecute({
         extra,
-        args: { session, worksheet, maxRows, columns },
+        args: { session, worksheetName, worksheet, maxRows, columns },
         callback: async (): Promise<Result<SummaryDataCompletedResult, McpToolError>> => {
+          // The worksheet selector stays optional (omit when unique); the resolver here
+          // only rejects a worksheetName/alias conflict and coalesces the two keys.
+          const worksheetArg = resolveArtifactNameArg('worksheet', worksheetName, worksheet, {
+            allowMissing: true,
+          });
+          if (worksheetArg.isErr()) {
+            return worksheetArg;
+          }
+          const requestedWorksheet = worksheetArg.value;
           let transientAccountingSessionId = SUMMARY_DATA_UNRESOLVED_SESSION_SCOPE;
           const resolvedMaxRows = clampMaxRows(maxRows);
           const resolvedSignature = summaryDataSignature({
-            worksheet,
+            worksheet: requestedWorksheet,
             maxRows: resolvedMaxRows,
             columns,
           });
           const unresolvedSignature = summaryDataUnresolvedSignature({
             requestedSession: session,
-            worksheet,
+            worksheet: requestedWorksheet,
             maxRows: resolvedMaxRows,
             columns,
           });
@@ -130,7 +144,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
               callback: async (_executor, _signal, read) => {
                 const summaryResult = await fetchWorksheetSummaryData({
                   read,
-                  worksheet,
+                  worksheet: requestedWorksheet,
                   maxRows: resolvedMaxRows,
                   columns,
                   materializeEmpty: true,

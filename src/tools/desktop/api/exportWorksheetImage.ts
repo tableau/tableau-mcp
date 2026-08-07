@@ -5,6 +5,11 @@ import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js
 import { ImageResult } from '../../../desktop/externalApi/types.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import {
+  artifactNameParam,
+  deprecatedArtifactAliasParam,
+  resolveArtifactNameArg,
+} from '../params.js';
 import { DesktopTool } from '../tool.js';
 import {
   buildSheetImageToolResult,
@@ -14,7 +19,8 @@ import {
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  worksheet: z.string().describe('Worksheet name/id.'),
+  worksheetName: artifactNameParam('worksheet').optional(),
+  worksheet: deprecatedArtifactAliasParam('worksheet'),
   filePath: z
     .string()
     .optional()
@@ -42,14 +48,19 @@ export const exportWorksheetImageTool = (
       openWorldHint: false,
     },
     callback: async (
-      { session, worksheet, filePath, mimeType },
+      { session, worksheetName, worksheet, filePath, mimeType },
       extra,
     ): Promise<CallToolResult> => {
       const { query } = resolveImageExportQuery({ filePath, mimeType });
       return await exportWorksheetImage.logAndExecute<ImageResult>({
         extra,
-        args: { session, worksheet, filePath, mimeType },
+        args: { session, worksheetName, worksheet, filePath, mimeType },
         callback: async () => {
+          const nameResult = resolveArtifactNameArg('worksheet', worksheetName, worksheet);
+          if (nameResult.isErr()) {
+            return nameResult;
+          }
+          const resolvedWorksheetName = nameResult.value;
           return await runExternalApiReadTool<ImageResult>({
             session,
             extra,
@@ -64,7 +75,7 @@ export const exportWorksheetImageTool = (
 
               const worksheetResult = resolveItemByNameOrId(
                 'Worksheet',
-                worksheet,
+                resolvedWorksheetName,
                 listResult.value.worksheets ?? [],
               );
               if (worksheetResult.isErr()) {

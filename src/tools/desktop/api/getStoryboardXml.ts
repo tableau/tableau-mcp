@@ -5,13 +5,20 @@ import { parseXML } from '../../../desktop/metadata/parser.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { artifactNameParam, sessionParam, xmlModeParam } from '../params.js';
+import {
+  artifactNameParam,
+  deprecatedArtifactAliasParam,
+  resolveArtifactNameArg,
+  sessionParam,
+  xmlModeParam,
+} from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  storyboard: artifactNameParam('storyboard'),
+  storyboardName: artifactNameParam('storyboard').optional(),
+  storyboard: deprecatedArtifactAliasParam('storyboard'),
   mode: xmlModeParam(),
 };
 const title = 'Get Storyboard Document';
@@ -34,11 +41,19 @@ export const getStoryboardXmlTool = (
       idempotentHint: false,
       openWorldHint: false,
     },
-    callback: async ({ session, storyboard, mode }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { session, storyboardName, storyboard, mode },
+      extra,
+    ): Promise<CallToolResult> => {
       return await getStoryboardXml.logAndExecute<GetStoryboardXmlToolResult>({
         extra,
-        args: { session, storyboard, mode },
+        args: { session, storyboardName, storyboard, mode },
         callback: async () => {
+          const nameResult = resolveArtifactNameArg('storyboard', storyboardName, storyboard);
+          if (nameResult.isErr()) {
+            return nameResult;
+          }
+          const resolvedStoryboardName = nameResult.value;
           return await runExternalApiReadTool({
             session,
             extra,
@@ -56,7 +71,7 @@ export const getStoryboardXmlTool = (
 
               const storyboardResult = resolveItemByNameOrId(
                 'Storyboard',
-                storyboard,
+                resolvedStoryboardName,
                 listResult.value.storyboards ?? [],
               );
               if (storyboardResult.isErr()) {
@@ -76,7 +91,7 @@ export const getStoryboardXmlTool = (
               const storyboardXml = documentResult.value.xml;
               if (!parseXML(storyboardXml).dashboard) {
                 return new UnknownError(
-                  `No storyboard document subtree found for "${storyboard}".`,
+                  `No storyboard document subtree found for "${resolvedStoryboardName}".`,
                 ).toErr();
               }
 

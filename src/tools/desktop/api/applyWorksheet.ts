@@ -22,6 +22,14 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
+import {
+  doneNextAction,
+  jsonToolResult,
+  prefillNextAction,
+  receipt,
+  StructuredResult,
+  withNextAction,
+} from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { runApplyPreamble } from './applyPreamble.js';
 import {
@@ -86,7 +94,9 @@ export const getApplyWorksheetTool = (
       return await applyWorksheetTool.logAndExecute({
         extra,
         args: { session, artifactId, worksheetName, worksheetFile },
-        callback: async (): Promise<Result<ApplyWorksheetResult, McpToolError>> => {
+        callback: async (): Promise<
+          Result<StructuredResult<ApplyWorksheetResult>, McpToolError>
+        > => {
           if (artifactId) {
             if (worksheetName !== undefined || worksheetFile !== undefined) {
               return new ArgsValidationError(
@@ -112,13 +122,48 @@ export const getApplyWorksheetTool = (
               });
               if (outcome.state !== 'applied') return outcome.error.toErr();
 
-              return Ok({
-                artifactId: outcome.receipt.artifactId,
-                title: outcome.receipt.title,
-                applied: true,
-                retrySafe: false,
-                verification: outcome.receipt.verification,
-              });
+              // The artifact apply already carries the verification outcome
+              // (applyWorksheetArtifact resolves the skipped fallback), so the
+              // structured receipt references that same object rather than
+              // deriving a second account of the readback.
+              const verification = outcome.receipt.verification;
+              const verificationRan = verification.status !== 'skipped';
+              return Ok(
+                withNextAction(
+                  {
+                    artifactId: outcome.receipt.artifactId,
+                    title: outcome.receipt.title,
+                    applied: true as const,
+                    retrySafe: false as const,
+                    verification,
+                  },
+                  // A 'done' marker tells the agent to stop; an observed FAILED readback
+                  // is the one outcome where stopping buries the failure, so that branch
+                  // points at the follow-up work instead of minting a terminal receipt.
+                  verification.status === 'failed'
+                    ? prefillNextAction('Verification failed — inspect sheet, rebuild artifact')
+                    : doneNextAction(
+                        receipt({
+                          did: [
+                            `Desktop accepted the artifact apply for worksheet "${outcome.receipt.title}"`,
+                            ...(verificationRan
+                              ? [
+                                  `read back the applied worksheet — verification status "${verification.status}"`,
+                                ]
+                              : []),
+                          ],
+                          unverified: verificationRan
+                            ? [
+                                'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
+                              ]
+                            : [
+                                'whether the applied worksheet retained its intended structure — post-apply workbook readback was unavailable',
+                              ],
+                        }),
+                        'Artifact apply dispatched — see verification',
+                      ),
+                ),
+              );
             } catch (error) {
               artifactStore.release(reservation.lease);
               throw error;
@@ -199,12 +244,43 @@ export const getApplyWorksheetTool = (
               promiseOutcome,
             });
           }
-          const receipt = receiptInput ? formatWorksheetPromiseCheck(receiptInput) : '';
+          const hostVerification = receiptInput ? formatWorksheetPromiseCheck(receiptInput) : '';
 
-          return new Ok({
-            message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${readbackWarning}${receipt}`,
-          });
+          // The structured receipt is derived from the same readback outcome the text
+          // reports: when the readback ran its status is an observation; when it was
+          // skipped or absent, the applied structure is listed as unverified.
+          const readback = receiptInput?.readback;
+          const readbackRan = readback !== undefined && readback.status !== 'skipped';
+          return new Ok(
+            withNextAction(
+              {
+                message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
+              },
+              doneNextAction(
+                receipt({
+                  did: [
+                    `Desktop accepted the worksheet XML apply for "${worksheetName}"`,
+                    `preflight validation returned ${receiptInput?.validationWarnings.length ?? 0} warning(s)`,
+                    ...(readbackRan
+                      ? [
+                          `read back the applied worksheet — verification status "${readback.status}", promise outcome "${promiseOutcome}"`,
+                        ]
+                      : []),
+                  ],
+                  unverified: readbackRan
+                    ? [
+                        'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
+                      ]
+                    : [
+                        'whether the applied worksheet retained its intended structure — post-apply readback was unavailable',
+                      ],
+                }),
+                'Worksheet apply finished — see verification',
+              ),
+            ),
+          );
         },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },
   });

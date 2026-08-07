@@ -78,7 +78,7 @@ apply-worksheet({ ... }) →
 - **Right:** the receipt says nodes were dropped, so re-read and correct before reporting:
 
 ```
-1. get-worksheet-xml({ session, worksheet: "Sales by Region", mode: "file" })   # inspect what actually survived
+1. get-worksheet-xml({ session, worksheetName: "Sales by Region", mode: "file" })   # inspect what actually survived
 2. patch the specific dropped construct (the sort / filter node), then re-apply
 3. apply-worksheet(...) → HOST VERIFICATION — verified: … readback clean.       # only NOW report "done"
 ```

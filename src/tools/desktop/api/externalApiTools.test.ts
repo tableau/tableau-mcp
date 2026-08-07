@@ -97,7 +97,7 @@ describe('External API coverage tools', () => {
   it('gets worksheet metadata by id after resolving it through the worksheet list', async () => {
     const harness = await startHarness(getWorksheetInfoTool);
     try {
-      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
 
       expect(result.isError).toBe(false);
       expect(
@@ -115,10 +115,56 @@ describe('External API coverage tools', () => {
     }
   });
 
+  it.each([
+    {
+      makeTool: getWorksheetInfoTool,
+      nameKey: 'worksheetName',
+      aliasKey: 'worksheet',
+      value: 'sheet-sales',
+    },
+    {
+      makeTool: getDashboardInfoTool,
+      nameKey: 'dashboardName',
+      aliasKey: 'dashboard',
+      value: 'dash-exec',
+    },
+    {
+      makeTool: getStoryboardInfoTool,
+      nameKey: 'storyboardName',
+      aliasKey: 'storyboard',
+      value: 'story-qbr',
+    },
+  ])(
+    'accepts the deprecated $aliasKey alias key and rejects missing or conflicting keys',
+    async ({ makeTool, nameKey, aliasKey, value }) => {
+      const harness = await startHarness(makeTool);
+      try {
+        const aliased = await harness.callTool({ [aliasKey]: value });
+        expect(aliased.isError).toBe(false);
+        expect(z.object({ id: z.string() }).parse(parseResult(aliased)).id).toBe(value);
+
+        const missing = await harness.callTool({});
+        expect(missing.isError).toBe(true);
+        expect(JSON.stringify(missing.content)).toContain(
+          `${nameKey} is required (${aliasKey} is a deprecated alias).`,
+        );
+
+        const conflict = await harness.callTool({ [nameKey]: value, [aliasKey]: 'other' });
+        expect(conflict.isError).toBe(true);
+        const conflictText = JSON.stringify(conflict.content);
+        expect(conflictText).toContain(`${nameKey} (\\"${value}\\")`);
+        expect(conflictText).toContain(`${aliasKey} (\\"other\\")`);
+        expect(conflictText).toContain('Pass one of them.');
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
   it('gets worksheet metadata by name after resolving it to an id', async () => {
     const harness = await startHarness(getWorksheetInfoTool);
     try {
-      const result = await harness.callTool({ worksheet: 'Sales by Region' });
+      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
 
       expect(result.isError).toBe(false);
       expect(
@@ -139,7 +185,7 @@ describe('External API coverage tools', () => {
   it('reports available worksheets when the worksheet selector does not resolve', async () => {
     const harness = await startHarness(getWorksheetInfoTool);
     try {
-      const result = await harness.callTool({ worksheet: 'Missing Sheet' });
+      const result = await harness.callTool({ worksheetName: 'Missing Sheet' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
@@ -158,7 +204,7 @@ describe('External API coverage tools', () => {
   it('gets dashboard metadata by name after resolving it to an id', async () => {
     const harness = await startHarness(getDashboardInfoTool);
     try {
-      const result = await harness.callTool({ dashboard: 'Executive Dashboard' });
+      const result = await harness.callTool({ dashboardName: 'Executive Dashboard' });
 
       expect(result.isError).toBe(false);
       expect(
@@ -205,7 +251,7 @@ describe('External API coverage tools', () => {
       });
     });
     try {
-      const result = await harness.callTool({ dashboard: 'Sales &amp; Data' });
+      const result = await harness.callTool({ dashboardName: 'Sales &amp; Data' });
 
       expect(result.isError).toBe(false);
       expect(z.object({ id: z.string() }).parse(parseResult(result)).id).toBe('dash-amp');
@@ -221,7 +267,7 @@ describe('External API coverage tools', () => {
   it('gets storyboard metadata by name after resolving it to an id', async () => {
     const harness = await startHarness(getStoryboardInfoTool);
     try {
-      const result = await harness.callTool({ storyboard: 'QBR Story' });
+      const result = await harness.callTool({ storyboardName: 'QBR Story' });
 
       expect(result.isError).toBe(false);
       expect(
@@ -244,7 +290,7 @@ describe('External API coverage tools', () => {
     try {
       // A storyboard serializes as a `<dashboard type="storyboard">`; its /document route returns
       // that bare fragment directly, so the tool returns it as-is.
-      const result = await harness.callTool({ storyboard: 'QBR Story', mode: 'inline' });
+      const result = await harness.callTool({ storyboardName: 'QBR Story', mode: 'inline' });
 
       expect(result.isError).toBe(false);
       const storyboardXml = z
@@ -282,19 +328,19 @@ describe('External API coverage tools', () => {
     },
     {
       makeTool: getDashboardInfoTool,
-      args: { dashboard: 'dash-exec' },
+      args: { dashboardName: 'dash-exec' },
       overrideKey: 'GET /v0/workbook/dashboards/dash-exec',
       expectedMessage: 'does not serve the dashboard metadata endpoint',
     },
     {
       makeTool: getStoryboardInfoTool,
-      args: { storyboard: 'story-qbr' },
+      args: { storyboardName: 'story-qbr' },
       overrideKey: 'GET /v0/workbook/storyboards/story-qbr',
       expectedMessage: 'does not serve the storyboard metadata endpoint',
     },
     {
       makeTool: getStoryboardXmlTool,
-      args: { storyboard: 'story-qbr' },
+      args: { storyboardName: 'story-qbr' },
       overrideKey: 'GET /v0/workbook/storyboards/story-qbr/document',
       expectedMessage: 'does not serve the storyboard document endpoint',
     },

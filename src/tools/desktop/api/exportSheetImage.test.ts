@@ -34,7 +34,7 @@ describe('export-image tools', () => {
   it('returns a worksheet image inline as a base64 PNG block after resolving the sheet by id', async () => {
     const harness = await startHarness(exportWorksheetImageTool);
     try {
-      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'image');
@@ -54,7 +54,7 @@ describe('export-image tools', () => {
   it('resolves a worksheet by name before exporting', async () => {
     const harness = await startHarness(exportWorksheetImageTool);
     try {
-      const result = await harness.callTool({ worksheet: 'Sales by Region' });
+      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'image');
@@ -70,7 +70,7 @@ describe('export-image tools', () => {
   it('returns a dashboard image inline as a base64 PNG block after resolving by name', async () => {
     const harness = await startHarness(exportDashboardImageTool);
     try {
-      const result = await harness.callTool({ dashboard: 'Executive Dashboard' });
+      const result = await harness.callTool({ dashboardName: 'Executive Dashboard' });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'image');
@@ -100,7 +100,7 @@ describe('export-image tools', () => {
     });
     try {
       const result = await harness.callTool({
-        worksheet: 'sheet-sales',
+        worksheetName: 'sheet-sales',
         mimeType: 'image/svg+xml',
       });
 
@@ -120,7 +120,7 @@ describe('export-image tools', () => {
     const harness = await startHarness(exportWorksheetImageTool);
     try {
       const result = await harness.callTool({
-        worksheet: 'sheet-sales',
+        worksheetName: 'sheet-sales',
         filePath: '/tmp/sales.png',
       });
 
@@ -139,7 +139,7 @@ describe('export-image tools', () => {
       inlineImageMaxBytes: 1,
     });
     try {
-      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
 
       expect(result.isError).toBe(false);
       expect(result.content).toHaveLength(1);
@@ -160,7 +160,7 @@ describe('export-image tools', () => {
       inlineImageMaxBytes: 69,
     });
     try {
-      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'image');
@@ -194,7 +194,7 @@ describe('export-image tools', () => {
     );
     try {
       const result = await harness.callTool({
-        worksheet: 'sheet-sales',
+        worksheetName: 'sheet-sales',
         mimeType: 'image/svg+xml',
       });
 
@@ -220,7 +220,7 @@ describe('export-image tools', () => {
       });
     });
     try {
-      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
@@ -250,7 +250,7 @@ describe('export-image tools', () => {
     });
     try {
       const result = await harness.callTool({
-        worksheet: 'sheet-sales',
+        worksheetName: 'sheet-sales',
         mimeType: 'image/svg+xml',
       });
 
@@ -279,7 +279,7 @@ describe('export-image tools', () => {
     });
     try {
       const result = await harness.callTool({
-        worksheet: 'sheet-sales',
+        worksheetName: 'sheet-sales',
         mimeType: 'image/svg+xml',
       });
 
@@ -308,7 +308,7 @@ describe('export-image tools', () => {
     });
     try {
       const result = await harness.callTool({
-        worksheet: 'sheet-sales',
+        worksheetName: 'sheet-sales',
         mimeType: 'image/svg+xml',
       });
 
@@ -333,7 +333,7 @@ describe('export-image tools', () => {
       { imageExportTimeoutMs: 1 },
     );
     try {
-      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
@@ -361,7 +361,7 @@ describe('export-image tools', () => {
       });
     });
     try {
-      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
@@ -387,7 +387,7 @@ describe('export-image tools', () => {
       });
     });
     try {
-      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
@@ -399,10 +399,53 @@ describe('export-image tools', () => {
     }
   });
 
+  it.each([
+    {
+      makeTool: exportWorksheetImageTool,
+      nameKey: 'worksheetName',
+      aliasKey: 'worksheet',
+      value: 'sheet-sales',
+      imagePath: '/v0/workbook/worksheets/sheet-sales/image',
+    },
+    {
+      makeTool: exportDashboardImageTool,
+      nameKey: 'dashboardName',
+      aliasKey: 'dashboard',
+      value: 'dash-exec',
+      imagePath: '/v0/workbook/dashboards/dash-exec/image',
+    },
+  ])(
+    'accepts the deprecated $aliasKey alias key and rejects missing or conflicting keys',
+    async ({ makeTool, nameKey, aliasKey, value, imagePath }) => {
+      const harness = await startHarness(makeTool);
+      try {
+        const aliased = await harness.callTool({ [aliasKey]: value });
+        expect(aliased.isError).toBe(false);
+        invariant(aliased.content[0].type === 'image');
+        expect(harness.server.requests.at(-1)?.path).toBe(imagePath);
+
+        const missing = await harness.callTool({});
+        expect(missing.isError).toBe(true);
+        invariant(missing.content[0].type === 'text');
+        expect(missing.content[0].text).toContain(
+          `${nameKey} is required (${aliasKey} is a deprecated alias).`,
+        );
+
+        const conflict = await harness.callTool({ [nameKey]: value, [aliasKey]: 'other' });
+        expect(conflict.isError).toBe(true);
+        invariant(conflict.content[0].type === 'text');
+        expect(conflict.content[0].text).toContain(`${nameKey} ("${value}")`);
+        expect(conflict.content[0].text).toContain('Pass one of them.');
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
   it('reports available worksheets when the selector does not resolve (no image call)', async () => {
     const harness = await startHarness(exportWorksheetImageTool);
     try {
-      const result = await harness.callTool({ worksheet: 'Missing Sheet' });
+      const result = await harness.callTool({ worksheetName: 'Missing Sheet' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
@@ -418,13 +461,13 @@ describe('export-image tools', () => {
   it.each([
     {
       makeTool: exportWorksheetImageTool,
-      args: { worksheet: 'sheet-sales' },
+      args: { worksheetName: 'sheet-sales' },
       overrideKey: 'GET /v0/workbook/worksheets/sheet-sales/image',
       expectedMessage: 'does not serve the worksheet image endpoint',
     },
     {
       makeTool: exportDashboardImageTool,
-      args: { dashboard: 'dash-exec' },
+      args: { dashboardName: 'dash-exec' },
       overrideKey: 'GET /v0/workbook/dashboards/dash-exec/image',
       expectedMessage: 'does not serve the dashboard image endpoint',
     },
@@ -460,19 +503,19 @@ describe('export-image tools', () => {
     {
       label: 'a relative worksheet filePath',
       makeTool: exportWorksheetImageTool,
-      args: { worksheet: 'sheet-sales', filePath: 'relative/report.png' },
+      args: { worksheetName: 'sheet-sales', filePath: 'relative/report.png' },
       imagePath: '/v0/workbook/worksheets/sheet-sales/image',
     },
     {
       label: 'a ..-bearing worksheet filePath',
       makeTool: exportWorksheetImageTool,
-      args: { worksheet: 'sheet-sales', filePath: '/tmp/../etc/report.png' },
+      args: { worksheetName: 'sheet-sales', filePath: '/tmp/../etc/report.png' },
       imagePath: '/v0/workbook/worksheets/sheet-sales/image',
     },
     {
       label: 'a relative dashboard filePath',
       makeTool: exportDashboardImageTool,
-      args: { dashboard: 'dash-exec', filePath: 'relative/dash.png' },
+      args: { dashboardName: 'dash-exec', filePath: 'relative/dash.png' },
       imagePath: '/v0/workbook/dashboards/dash-exec/image',
     },
   ])(

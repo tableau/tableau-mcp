@@ -108,7 +108,9 @@ describe('the served profile still has a working edit path with no document para
     const readResult = await readCb(
       {
         filePath: file,
+        worksheetName: undefined,
         worksheet: 'Sales',
+        dashboardName: undefined,
         dashboard: undefined,
         startByte: undefined,
         endByte: undefined,
@@ -125,7 +127,9 @@ describe('the served profile still has a working edit path with no document para
         filePath: file,
         xmlContent:
           "<worksheet name='Sales'><table><rows>[Sales Modified]</rows></table></worksheet>",
+        worksheetName: undefined,
         worksheet: 'Sales',
+        dashboardName: undefined,
         dashboard: undefined,
       },
       extra(),
