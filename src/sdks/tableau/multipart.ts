@@ -15,7 +15,7 @@ export function buildMultipartMixedBody(parts: ReadonlyArray<MultipartPart>): {
 
   const chunks: Array<Buffer> = [];
   for (const part of parts) {
-    let disposition = `form-data; name="${part.name}"`;
+    let disposition = `name="${part.name}"`;
     if (part.filename !== undefined) {
       disposition += `; filename="${part.filename}"`;
     }

@@ -61,11 +61,9 @@ describe('FileUploadsMethods', () => {
       const [url, body, config] = mockPut.mock.calls[0];
       expect(url).toBe('http://test/sites/site-1/fileUploads/session-1');
       expect(Buffer.isBuffer(body)).toBe(true);
+      expect(body.toString('latin1')).toContain('Content-Disposition: name="request_payload"');
       expect(body.toString('latin1')).toContain(
-        'Content-Disposition: form-data; name="request_payload"',
-      );
-      expect(body.toString('latin1')).toContain(
-        'Content-Disposition: form-data; name="tableau_file"; filename="file"',
+        'Content-Disposition: name="tableau_file"; filename="file"',
       );
       expect(body.includes(chunk)).toBe(true);
       expect(config.headers['Content-Type']).toMatch(/^multipart\/mixed; boundary=/);

@@ -47,9 +47,7 @@ describe('WorkbooksMethods', () => {
       expect(body.toString('utf-8')).toContain(
         '<tsRequest><workbook name="My Workbook"><project id="project-1"/></workbook></tsRequest>',
       );
-      expect(body.toString('latin1')).toContain(
-        'Content-Disposition: form-data; name="request_payload"',
-      );
+      expect(body.toString('latin1')).toContain('Content-Disposition: name="request_payload"');
       expect(config.headers['Content-Type']).toMatch(/^multipart\/mixed; boundary=/);
       expect(config.headers.Authorization).toBe('Bearer test');
       expect(config.params).toEqual({

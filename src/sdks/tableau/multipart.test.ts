@@ -26,7 +26,7 @@ describe('buildMultipartMixedBody', () => {
 
     expect(body.toString('latin1')).toEqual(
       `--${boundary}\r\n` +
-        'Content-Disposition: form-data; name="request_payload"\r\n' +
+        'Content-Disposition: name="request_payload"\r\n' +
         'Content-Type: text/xml\r\n' +
         '\r\n' +
         '<tsRequest/>\r\n' +
@@ -50,7 +50,7 @@ describe('buildMultipartMixedBody', () => {
     const expected = Buffer.concat([
       Buffer.from(
         `--${boundary}\r\n` +
-          'Content-Disposition: form-data; name="request_payload"\r\n' +
+          'Content-Disposition: name="request_payload"\r\n' +
           'Content-Type: text/xml\r\n' +
           '\r\n' +
           '\r\n',
@@ -58,7 +58,7 @@ describe('buildMultipartMixedBody', () => {
       ),
       Buffer.from(
         `--${boundary}\r\n` +
-          'Content-Disposition: form-data; name="tableau_file"; filename="file"\r\n' +
+          'Content-Disposition: name="tableau_file"; filename="file"\r\n' +
           'Content-Type: application/octet-stream\r\n' +
           '\r\n',
         'latin1',
