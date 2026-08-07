@@ -16,6 +16,7 @@ import {
 } from './methods/authenticationMethods.js';
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
+import FileUploadsMethods from './methods/fileUploadsMethods.js';
 import FlowsMethods from './methods/flowsMethods.js';
 import JobsMethods from './methods/jobsMethods.js';
 import McpSettingsMethods from './methods/mcpSettingsMethods.js';
@@ -171,6 +172,15 @@ export class RestApi {
     });
     this._addInterceptors(RestApi.baseUrl, datasourcesMethods.interceptors);
     return datasourcesMethods;
+  }
+
+  get fileUploadsMethods(): FileUploadsMethods {
+    const fileUploadsMethods = new FileUploadsMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, fileUploadsMethods.interceptors);
+    return fileUploadsMethods;
   }
 
   get flowsMethods(): FlowsMethods {
