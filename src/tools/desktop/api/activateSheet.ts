@@ -2,13 +2,14 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { resolveSession } from '../../../desktop/session/sessionResolution.js';
-import { activateSheetWithValidatedGoto } from '../../../desktop/wrappers/activateSheet.js';
 import {
-  DesktopCommandExecutionError,
-  McpToolError,
-  XmlModificationError,
-} from '../../../errors/mcpToolError.js';
+  endpointNotInThisBuild,
+  isRouteMissing,
+  resolveItemByNameOrId,
+} from '../../../desktop/externalApi/toolUtils.js';
+import { resolveSession } from '../../../desktop/session/sessionResolution.js';
+import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
+import { DesktopCommandExecutionError, McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import {
@@ -18,20 +19,17 @@ import {
 } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 
-export { activateSheetWithValidatedGoto };
-
 const paramsSchema = {
   session: sessionParam(),
   sheetName: z.string().min(1).describe('Worksheet or dashboard name to make active.'),
 };
 
-// `focus_requested`, not `activated`: the inspection this returns is read BEFORE the
-// goto-sheet dispatch, so the tool knows it asked and does not know Tableau complied.
+// `focus_requested`, not `activated`: the goToSheet route settles asynchronously, so the
+// tool knows it asked and does not know Tableau has repainted.
 type ActivateSheetToolResult = {
   focus_requested: boolean;
   sheetName: string;
   message: string;
-  previousSheet?: string;
   availableSheets: string[];
 };
 
@@ -68,8 +66,7 @@ export const getActivateSheetTool = (
     server,
     name: 'activate-sheet',
     title,
-    description:
-      'Activate an existing worksheet or dashboard by exact name after validating it against a fresh live-workbook read.',
+    description: 'Activate an existing worksheet or dashboard by exact name or id.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -86,41 +83,60 @@ export const getActivateSheetTool = (
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
-          const resolvedSession = sessionResult.value;
-          const executor = await extra.getExecutor(resolvedSession);
 
-          const activation = await activateSheetWithValidatedGoto({
-            sheetName,
-            executor,
-            signal: extra.signal,
+          const resolved = await runExternalApiReadTool({
+            session,
+            extra,
+            callback: async (_executor, _signal, read) => {
+              const worksheets = await read(
+                'worksheet list',
+                async (executor, signal) => await executor.listWorksheets(signal),
+              );
+              if (worksheets.isErr()) {
+                return worksheets;
+              }
+              const dashboards = await read(
+                'dashboard list',
+                async (executor, signal) => await executor.listDashboards(signal),
+              );
+              if (dashboards.isErr()) {
+                return dashboards;
+              }
+
+              const candidates = [
+                ...(worksheets.value.worksheets ?? []),
+                ...(dashboards.value.dashboards ?? []),
+              ];
+              const availableSheets = candidates.map((candidate) => candidate.name);
+              const match = resolveItemByNameOrId('Sheet', sheetName, candidates);
+              if (match.isErr()) {
+                return new ActivateSheetNotFoundError(sheetName, availableSheets).toErr();
+              }
+              return new Ok({ id: match.value.id, name: match.value.name, availableSheets });
+            },
           });
-          switch (activation.status) {
-            case 'read-failed':
-            case 'command-failed':
-              return new DesktopCommandExecutionError(activation.error).toErr();
-            case 'parse-failed':
-              return new XmlModificationError(
-                `Could not inspect the live workbook before activation: ${activation.message}`,
-              ).toErr();
-            case 'not-found':
-              return new ActivateSheetNotFoundError(sheetName, activation.availableSheets).toErr();
-            case 'already-active':
-              return new Ok({
-                focus_requested: false,
-                sheetName,
-                message: `Sheet "${sheetName}" was already the active sheet; nothing was dispatched.`,
-                previousSheet: activation.previousSheet,
-                availableSheets: activation.availableSheets,
-              });
-            case 'activated':
-              return new Ok({
-                focus_requested: true,
-                sheetName,
-                message: `Requested focus on sheet "${sheetName}".`,
-                ...(activation.previousSheet ? { previousSheet: activation.previousSheet } : {}),
-                availableSheets: activation.availableSheets,
-              });
+          if (resolved.isErr()) {
+            return resolved.error.toErr();
           }
+
+          const executor = await extra.getExecutor(sessionResult.value);
+          const result = await executor.goToSheet(resolved.value.id, extra.signal);
+          if (result.isErr()) {
+            if (isRouteMissing(result.error)) {
+              return endpointNotInThisBuild('activate-sheet').toErr();
+            }
+            return new DesktopCommandExecutionError(result.error).toErr();
+          }
+
+          return new Ok({
+            focus_requested: true,
+            sheetName: resolved.value.name,
+            message:
+              result.value.status === 'completed'
+                ? `Requested focus on sheet "${resolved.value.name}".`
+                : `Requested focus on sheet "${resolved.value.name}"; Desktop is still applying it.`,
+            availableSheets: resolved.value.availableSheets,
+          });
         },
       });
     },

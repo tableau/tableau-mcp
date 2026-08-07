@@ -3,6 +3,7 @@ import { getApplyDashboardTool } from './api/applyDashboard.js';
 import { getApplyStoryboardTool } from './api/applyStoryboard.js';
 import { getApplyWorkbookTool } from './api/applyWorkbook.js';
 import { getApplyWorksheetTool } from './api/applyWorksheet.js';
+import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { getExecuteTableauCommandTool } from './api/executeTableauCommand.js';
 import { exportDashboardImageTool } from './api/exportDashboardImage.js';
 import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
@@ -18,6 +19,7 @@ import { getSummaryDataTool } from './api/getSummaryData.js';
 import { getWorkbookInventoryTool } from './api/getWorkbookInventory.js';
 import { getGetWorkbookXmlTool } from './api/getWorkbookXml.js';
 import { getWorksheetInfoTool } from './api/getWorksheetInfo.js';
+import { getWorksheetUnderlyingDataTool } from './api/getWorksheetUnderlyingData.js';
 import { getGetWorksheetXmlTool } from './api/getWorksheetXml.js';
 import { getListDashboardsTool } from './api/listDashboards.js';
 import { getListInstancesTool } from './api/listInstances.js';
@@ -25,8 +27,11 @@ import { getListSiteDatasourcesTool } from './api/listSiteDatasources.js';
 import { getListSiteWorkbooksTool } from './api/listSiteWorkbooks.js';
 import { getListStoryboardsTool } from './api/listStoryboards.js';
 import { getListWorkbookDatasourcesTool } from './api/listWorkbookDatasources.js';
+import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
 import { getListWorksheetsTool } from './api/listWorksheets.js';
 import { getRedoWorkbookTool } from './api/redoWorkbook.js';
+import { getRenameSheetTool } from './api/renameSheet.js';
+import { getSortWorksheetTool } from './api/sortWorksheet.js';
 import { getUndoWorkbookTool } from './api/undoWorkbook.js';
 import { getValidateWorkbookXmlTool } from './api/validateWorkbookXml.js';
 import { getBindTemplateTool } from './authoring/binder/bindTemplate.js';
@@ -47,7 +52,6 @@ import { getBuildAndApplyDashboardTool } from './authoring/sheets/buildAndApplyD
 import { getBuildAndApplyWorksheetTool } from './authoring/sheets/buildAndApplyWorksheet.js';
 import { getComposeDashboardTool } from './authoring/sheets/composeDashboard.js';
 import { getDashboardHealthCheckTool } from './authoring/sheets/dashboardHealthCheck.js';
-import { getDeleteWorksheetTool } from './authoring/sheets/deleteWorksheet.js';
 import { getPlanDashboardCreationTool } from './authoring/sheets/planDashboardCreation.js';
 import { getRefineWorksheetTool } from './authoring/sheets/refineWorksheet.js';
 import { getRunDashboardBatchTool } from './authoring/sheets/runDashboardBatch.js';
@@ -78,7 +82,9 @@ export const desktopToolFactories = [
   getListDashboardsTool,
   getGetWorksheetXmlTool,
   getApplyWorksheetTool,
-  getDeleteWorksheetTool,
+  getDeleteSheetTool,
+  getRenameSheetTool,
+  getSortWorksheetTool,
   getRefineWorksheetTool,
   getGetDashboardXmlTool,
   getApplyDashboardTool,
@@ -119,6 +125,8 @@ export const desktopToolFactories = [
   getDashboardInfoTool,
   getStoryboardInfoTool,
   getSummaryDataTool,
+  getListWorksheetLogicalTablesTool,
+  getWorksheetUnderlyingDataTool,
   exportWorksheetImageTool,
   exportDashboardImageTool,
   getWorkbookInventoryTool,
