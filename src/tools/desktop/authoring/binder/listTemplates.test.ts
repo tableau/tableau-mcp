@@ -99,6 +99,24 @@ describe('list-templates', () => {
     ]);
   });
 
+  it('finds and ranks template IDs from natural chart-shape queries', async () => {
+    catalog([
+      'magnitude-horizontal-bar',
+      'ranking-ordered-bar',
+      'ranking-ordered-column',
+      'spatial-choropleth-map',
+    ]);
+
+    const horizontal = await getBody({ query: 'ranked horizontal bar', limit: 4 });
+    expect(horizontal.templates[0].template).toBe('ranking-ordered-bar');
+
+    const vertical = await getBody({ query: 'ranked vertical bar', limit: 4 });
+    expect(vertical.templates[0].template).toBe('ranking-ordered-column');
+
+    const map = await getBody({ query: 'choropleth map filled state', limit: 4 });
+    expect(map.templates[0].template).toBe('spatial-choropleth-map');
+  });
+
   it('returns factual compact provenance and computed eligibility without structural internals', async () => {
     catalog(['safe-bar']);
 
@@ -114,6 +132,16 @@ describe('list-templates', () => {
           total: 2,
           required: 2,
           kinds: ['categorical', 'quantitative'],
+          required_slots: [
+            {
+              slot_id: 'field_base_1',
+              kind: 'categorical',
+            },
+            {
+              slot_id: 'field_base_2',
+              kind: 'quantitative',
+            },
+          ],
         },
       },
     ]);
@@ -151,6 +179,17 @@ describe('list-templates', () => {
     );
   });
 
+  it('defaults a detail lookup to one result when limit is omitted', async () => {
+    catalog(['safe-bar']);
+
+    const result = await getToolResult({ query: 'safe-bar', includeSlots: true });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.templates).toHaveLength(1);
+    expect(body.templates[0].slots).toHaveLength(2);
+  });
+
   it('returns semantic roles for neutral geo slots from a real choropleth TBM', async () => {
     delete process.env['TEMPLATES_DIR'];
 
@@ -173,6 +212,31 @@ describe('list-templates', () => {
           kind: 'geo',
           semantic_role: '[State].[Name]',
         }),
+      ]),
+    );
+  });
+
+  it('includes required slot IDs and semantic roles in a compact real-template result', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const body = await getBody({ query: 'spatial-choropleth-map', limit: 1 });
+
+    expect(body.templates[0].slot_signature.required_slots).toEqual(
+      expect.arrayContaining([
+        {
+          slot_id: 'field_base_1',
+          kind: 'quantitative',
+        },
+        {
+          slot_id: 'field_base_2',
+          kind: 'geo',
+          semantic_role: '[Country].[ISO3166_2]',
+        },
+        {
+          slot_id: 'field_base_3',
+          kind: 'geo',
+          semantic_role: '[State].[Name]',
+        },
       ]),
     );
   });
