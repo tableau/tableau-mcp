@@ -39,10 +39,10 @@ class ActivateSheetNotFoundError extends McpToolError {
 
   constructor(sheetName: string, availableSheets: string[]) {
     const message = [
-      `Sheet "${sheetName}" was not found in the live workbook worksheet/dashboard list.`,
+      `Sheet "${sheetName}" was not found in the live workbook worksheet/dashboard/storyboard list.`,
       availableSheets.length > 0
         ? `Available sheets: ${availableSheets.map((name) => `"${name}"`).join(', ')}.`
-        : 'The workbook has no activatable worksheets or dashboards.',
+        : 'The workbook has no activatable worksheets, dashboards, or storyboards.',
       'Use list-worksheets or list-dashboards to confirm the current names.',
     ].join(' ');
     super({
@@ -66,7 +66,7 @@ export const getActivateSheetTool = (
     server,
     name: 'activate-sheet',
     title,
-    description: 'Activate an existing worksheet or dashboard by exact name or id.',
+    description: 'Activate an existing worksheet, dashboard, or storyboard by exact name or id.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -102,10 +102,18 @@ export const getActivateSheetTool = (
               if (dashboards.isErr()) {
                 return dashboards;
               }
+              const storyboards = await read(
+                'storyboard list',
+                async (executor, signal) => await executor.listStoryboards(signal),
+              );
+              if (storyboards.isErr()) {
+                return storyboards;
+              }
 
               const candidates = [
                 ...(worksheets.value.worksheets ?? []),
                 ...(dashboards.value.dashboards ?? []),
+                ...(storyboards.value.storyboards ?? []),
               ];
               const availableSheets = candidates.map((candidate) => candidate.name);
               const match = resolveItemByNameOrId('Sheet', sheetName, candidates);

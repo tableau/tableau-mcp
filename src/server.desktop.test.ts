@@ -151,8 +151,8 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // param describes via src/tools/desktop/params.ts replaced undescribed, empty, and
 // drifted variants across the surface. The bytes bought described opaque params;
 // tools at a grandfathered per-tool cap were left untouched rather than grown.
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 31_883;
-const FULL_TOOL_SURFACE_BUDGET = 46_765;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 31_937;
+const FULL_TOOL_SURFACE_BUDGET = 46_819;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {

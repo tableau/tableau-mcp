@@ -624,6 +624,6 @@ export type ExternalApiError =
   // 503: retry the whole request (there is no operation to poll).
   | { type: 'operation-pending'; retryAfterSeconds?: number }
   // Blocked on a human; a poll can never clear it.
-  | { type: 'awaiting-user'; operationId?: string }
+  | { type: 'awaiting-user'; operationId?: string; blockingWindows?: Array<WindowInfo> }
   | { type: 'operation-expired'; operationId?: string }
   | { type: 'poll-timeout'; operationId?: string };

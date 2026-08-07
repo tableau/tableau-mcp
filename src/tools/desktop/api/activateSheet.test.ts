@@ -123,7 +123,12 @@ describe('activateSheetTool', () => {
     expect(parsed.sheetName).toBe('Sales by Region');
     expect(parsed.focus_requested).toBe(true);
     expect(parsed.message).toContain('Requested focus on sheet "Sales by Region"');
-    expect(parsed.availableSheets).toEqual(['Sales by Region', 'Profit', 'Executive Dashboard']);
+    expect(parsed.availableSheets).toEqual([
+      'Sales by Region',
+      'Profit',
+      'Executive Dashboard',
+      'QBR Story',
+    ]);
     expect(goToSheet).toHaveBeenCalledWith('sheet-sales', expect.anything());
   });
 
@@ -136,6 +141,15 @@ describe('activateSheetTool', () => {
     expect(goToSheet).toHaveBeenCalledWith('dash-exec', expect.anything());
   });
 
+  it('resolves a storyboard target and requests focus by its id', async () => {
+    const { executor, goToSheet } = makeApiExecutor();
+
+    const result = await getToolResult({ sheetName: 'QBR Story', executor });
+
+    expect(result.isError).toBe(false);
+    expect(goToSheet).toHaveBeenCalledWith('story-qbr', expect.anything());
+  });
+
   it('errors for an unknown sheet with the available sheets and issues no command', async () => {
     const { executor, goToSheet } = makeApiExecutor();
 
@@ -146,7 +160,7 @@ describe('activateSheetTool', () => {
     expect(result.content[0].text).toContain('Sheet "Missing" was not found');
     expect(result.structuredContent).toEqual({
       message: result.content[0].text,
-      availableSheets: ['Sales by Region', 'Profit', 'Executive Dashboard'],
+      availableSheets: ['Sales by Region', 'Profit', 'Executive Dashboard', 'QBR Story'],
       nextAction: {
         label: 'Choose an available sheet and retry',
         kind: 'prefill',
@@ -188,9 +202,12 @@ function makeApiExecutor(): {
   const listDashboards = vi
     .fn()
     .mockResolvedValue(Ok({ dashboards: [{ id: 'dash-exec', name: 'Executive Dashboard' }] }));
+  const listStoryboards = vi
+    .fn()
+    .mockResolvedValue(Ok({ storyboards: [{ id: 'story-qbr', name: 'QBR Story' }] }));
   const goToSheet = vi.fn().mockResolvedValue(Ok({ status: 'completed' }));
   return {
-    executor: makeExecutorMock({ listWorksheets, listDashboards, goToSheet }),
+    executor: makeExecutorMock({ listWorksheets, listDashboards, listStoryboards, goToSheet }),
     goToSheet,
   };
 }

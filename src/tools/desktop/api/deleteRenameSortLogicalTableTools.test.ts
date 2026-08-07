@@ -28,7 +28,7 @@ const DASHBOARD_NAME = 'Executive Dashboard';
 const DASHBOARD_ID = 'dash-exec';
 const LOGICAL_TABLE_ID = 'lt-orders';
 
-describe('External Client API sheet-action + logical-table read tools', () => {
+describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
@@ -78,12 +78,12 @@ describe('External Client API sheet-action + logical-table read tools', () => {
     }
   });
 
-  it('sort-worksheet POSTs :sort with the field, direction, and type', async () => {
+  it('sort-worksheet resolves a plain field name to its on-shelf token and POSTs :sort', async () => {
     const harness = await startHarness(getSortWorksheetTool);
     try {
       const { result } = await run(harness, {
         worksheet: WORKSHEET_NAME,
-        fieldName: '[Superstore].[Sales]',
+        fieldName: 'Sales',
         direction: 'desc',
         sortType: 'alpha',
       });
@@ -93,10 +93,26 @@ describe('External Client API sheet-action + logical-table read tools', () => {
       );
       expect(posted).toHaveLength(1);
       expect(JSON.parse(posted[0].body)).toEqual({
-        fieldName: '[Superstore].[Sales]',
+        fieldName: '[Sample - Superstore].[sum:Sales:qk]',
         direction: 'desc',
         sortType: 'alpha',
       });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('sort-worksheet rejects a field that is not on the worksheet shelves, POSTing nothing', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    try {
+      const { result } = await run(harness, { worksheet: WORKSHEET_NAME, fieldName: 'Discount' });
+      expect(result.isError).toBeTruthy();
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('not on worksheet');
+      const posted = harness.server.requests.filter(
+        (r) => r.method === 'POST' && r.path === `/v0/workbook/worksheets/${WORKSHEET_ID}:sort`,
+      );
+      expect(posted).toHaveLength(0);
     } finally {
       await harness.close();
     }
@@ -216,7 +232,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     baseUrl: server.baseUrl,
     token: 'valid-token',
     pid: 999,
-    instanceId: 'inst-sheet-actions',
+    instanceId: 'inst-sheet-tools',
     apiVersion: '0.2.4',
   };
 }
