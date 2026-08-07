@@ -1,4 +1,3 @@
-// src/sdks/tableau/types/fileUpload.ts
 import { z } from 'zod';
 
 export const fileUploadSchema = z.object({
