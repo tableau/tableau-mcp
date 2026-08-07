@@ -61,7 +61,11 @@ const DEFAULT_WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets /></wor
 // `<worksheet>` or `<dashboard>`, not wrapped in a `<workbook>`. The handler serves the same
 // fragment for any known id of that kind, standing in for the resolved item.
 const DEFAULT_WORKSHEET_DOCUMENT_XML =
-  '<?xml version="1.0"?>' + '<worksheet name="Sales by Region"><table><rows /></table></worksheet>';
+  '<?xml version="1.0"?>' +
+  '<worksheet name="Sales by Region"><table>' +
+  '<rows>[Sample - Superstore].[none:Region:nk]</rows>' +
+  '<cols>[Sample - Superstore].[sum:Sales:qk]</cols>' +
+  '</table></worksheet>';
 const DEFAULT_DASHBOARD_DOCUMENT_XML =
   '<?xml version="1.0"?>' +
   '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>';

@@ -43,7 +43,7 @@ import {
  *
  * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.4,
  * captured 2026-08-07 (a build serving worksheet logical-table reads, the
- * `:delete`/`:rename`/`:sort`/`:goToSheet` sheet-action routes, and Operation
+ * `:delete`, `:rename`, `:sort`, and `:goToSheet` routes, and Operation
  * `blockingWindows`). No hand-edits.
  */
 

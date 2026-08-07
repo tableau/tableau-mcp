@@ -60,6 +60,7 @@ import {
   summaryDataSchema,
   ValidationResult,
   validationResultSchema,
+  WindowInfo,
   WorkbookInventory,
   workbookInventorySchema,
   worksheetDocumentRoute,
@@ -755,6 +756,19 @@ function supportsOperationResult(apiVersion: string | undefined): boolean {
   return major > 0 || (major === 0 && (minor > 1 || (minor === 1 && patch >= 1)));
 }
 
+function describeBlockingWindows(windows: Array<WindowInfo> | undefined): string {
+  if (windows === undefined || windows.length === 0) {
+    return '';
+  }
+  const named = windows.map((window) => {
+    const label = window.title || window.messageText || window.className || 'a dialog';
+    return window.messageText && window.messageText !== label
+      ? `"${label}" (${window.messageText})`
+      : `"${label}"`;
+  });
+  return ` Open dialog(s): ${named.join('; ')}.`;
+}
+
 function mapClientError(
   error: ExternalApiError | NoInstance | InstanceMismatch,
   pinnedPid?: number,
@@ -801,7 +815,7 @@ function mapClientError(
           code: 'awaiting-user',
           message:
             'The operation is blocked on a Tableau Desktop dialog and cannot complete over the API ' +
-            'until a person dismisses it.',
+            `until a person dismisses it.${describeBlockingWindows(error.blockingWindows)}`,
           recoverable: false,
         },
       };
