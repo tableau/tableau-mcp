@@ -404,7 +404,7 @@ export function validateComposeDashboardInput(
   );
 }
 
-function resolveRenderedWorksheetNames(
+export function resolveRenderedWorksheetNames(
   workbookXml: string,
   requestedNames: string[],
 ): Array<string | undefined> {

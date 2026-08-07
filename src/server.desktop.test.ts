@@ -175,8 +175,8 @@ describe('desktop tools/list serialized surface', () => {
 
     // The default served surface includes instructions. Full-profile tool schemas are
     // pinned separately so intentional route prose does not fund schema growth.
-    // Re-pinned 2026-08-07: one bounded dashboard batch replaces the two competing routes.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_045);
+    // Re-pinned 2026-08-07: the batch derives new sheet names and accepts only live names.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_111);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(fullToolSurfaceTotal).toBeLessThanOrEqual(FULL_TOOL_SURFACE_BUDGET);
   });

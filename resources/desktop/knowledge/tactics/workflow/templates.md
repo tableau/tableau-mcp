@@ -15,7 +15,7 @@ After template escalation, direct worksheet authoring is normal, not a failure. 
 
 - **Bind first (named chart type):** `bind-template` with `auto_apply: true` for named simple or composed charts. Auto-apply only fires on templates that already passed the live-render + parity gate, so a confident bind is safe to apply.
 - **Escalate to direct worksheet authoring:** when bind escalates or proposes instead of applying, use `build-and-apply-worksheet` for the whole worksheet, or stepwise `add-field` → `apply-worksheet` → `refine-worksheet` for top-N, sorting, and other finishing steps.
-- **Dashboards use one bounded batch:** build focused worksheet artifacts first, then pass their ordered `artifactIds` and the final live worksheet names to `run-dashboard-batch`. Use an empty `artifactIds` list to compose existing worksheets. Full-profile puppet/BYOA callers may still use `compose-dashboard` or the phased dashboard tools directly.
+- **Dashboards use one bounded batch:** build focused worksheet artifacts first, then pass their ordered `artifactIds` to `run-dashboard-batch`. It derives those worksheet names from the artifacts; pass `existingWorksheetNames` only for sheets already live in the workbook. Full-profile puppet/BYOA callers may still use `compose-dashboard` or the phased dashboard tools directly.
 - **Profile-conditional XML paths:** `inject-template` and `apply-workbook` exist only in full/demo profiles. Use them when the active profile exposes them; otherwise stay with the binder and direct authoring tools.
 
 ## Common Mistakes
@@ -28,7 +28,7 @@ After template escalation, direct worksheet authoring is normal, not a failure. 
 
 1. Call `bind-template` with the user ask and `auto_apply: true` for every named simple or composed chart request.
 2. On escalate/propose (no eligible template), build directly with `build-and-apply-worksheet`, or use `add-field` → `apply-worksheet` → `refine-worksheet` when you need stepwise control.
-3. For dashboard requests, prepare worksheet artifacts, then call `run-dashboard-batch` once with their ordered `artifactIds` and the final worksheet names. Inspect live state before any retry after a `partial` or `unknown` result; never replay the batch blindly.
+3. For dashboard requests, prepare worksheet artifacts, then call `run-dashboard-batch` once with their ordered `artifactIds`; add `existingWorksheetNames` only for sheets already live in the workbook. Inspect live state before any retry after a `partial` or `unknown` result; never replay the batch blindly.
 4. In full/demo profiles only, browse XML templates with `list-templates` and apply a specific proven template with `inject-template`.
 
 ## Source and Confidence

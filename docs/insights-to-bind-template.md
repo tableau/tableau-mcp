@@ -53,7 +53,7 @@ Recommended launch set (all `fast_path_eligible`, live render-verified):
 
 Slot ids are historical names from each template's source workbook — treat them as opaque ids; the **kind** is the contract. 40+ templates exist across 10 families (`time-series`, `ranking`, `part-to-whole`, `correlation`, `distribution`, `deviation`, `magnitude`, `spatial`, `kpi`, `specialized`) — extend the routing table as card types grow.
 
-For a multi-card layout, build one worksheet artifact per card, then call `run-dashboard-batch` with the ordered `artifactIds` and final worksheet names. It applies those artifacts in order and composes the dashboard once; omit `artifactIds` when every worksheet already exists.
+For a multi-card layout, build one worksheet artifact per card, then call `run-dashboard-batch` with the ordered `artifactIds`. It derives those worksheet names from the artifacts; pass `existingWorksheetNames` only for sheets already live in the workbook. It applies the artifacts in order and composes the dashboard once; omit `artifactIds` when every worksheet already exists.
 
 ## Recommendation: make the extended bundle card carry the bind
 
