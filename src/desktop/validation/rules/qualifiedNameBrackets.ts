@@ -24,12 +24,12 @@
  * false-rejects valid content (e.g. a bundled template).
  */
 import { DOMParser } from '@xmldom/xmldom';
-import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
 
 const TEXT_NODE = 3;
 const ATTRIBUTE_NODE = 2;
+const ELEMENT_NODE = 1;
 
 /**
  * Attributes / elements that carry FREE TEXT (calc formulas, captions, rich-text
@@ -135,7 +135,30 @@ export const qualifiedNameBracketsRule: ValidationRule = {
       return [];
     }
 
-    const nodes = xpath.select('//@* | //text()', doc as unknown as Node) as Node[];
+    // Collect every attribute + text node via a LINEAR iterative DOM walk.
+    // Previously this used xpath.select('//@* | //text()'), but the `xpath`
+    // package evaluates the '//@*' descendant global-attribute axis in O(n²) of
+    // total node count — on a large workbook (e.g. a live sqlproxy datasource
+    // with ~60k+ nodes) that call alone blocks the event loop for ~90s and hangs
+    // the apply preflight. The walk below visits the exact same node set in O(n).
+    const nodes: Node[] = [];
+    const stack: Node[] = doc.documentElement ? [doc.documentElement] : [];
+    while (stack.length > 0) {
+      const node = stack.pop() as Node;
+      if (node.nodeType === ELEMENT_NODE) {
+        const attrs = (node as unknown as Element).attributes;
+        for (let i = 0; i < attrs.length; i += 1) {
+          nodes.push(attrs.item(i) as unknown as Node);
+        }
+      }
+      for (let child = node.firstChild; child; child = child.nextSibling) {
+        if (child.nodeType === TEXT_NODE) {
+          nodes.push(child);
+        } else if (child.nodeType === ELEMENT_NODE) {
+          stack.push(child);
+        }
+      }
+    }
     const issues: ValidationIssue[] = [];
     const seen = new Set<string>();
 
