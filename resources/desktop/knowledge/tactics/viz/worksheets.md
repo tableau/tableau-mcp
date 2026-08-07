@@ -133,11 +133,11 @@ Key points:
 
 ## Deleting worksheets
 
-**`apply-workbook` can only ADD or UPDATE sheets. It cannot delete them by omission.** Use `delete-worksheet` for deletion.
+**`apply-workbook` can only ADD or UPDATE sheets. It cannot delete them by omission.** Use `delete-sheet` for deletion.
 
 Tableau merges new content with existing internal state. Any sheet already in Tableau's memory persists even if omitted from the submitted XML.
 
-`delete-worksheet` calls Tableau's native `tabdoc:delete-sheet` command. If it fails, do not try to delete by submitting workbook XML without the worksheet; use Tableau Undo (`Cmd+Z`), File → Revert to Saved, or manually editing the saved `.twb` XML file.
+`delete-sheet` deletes a worksheet, dashboard, or storyboard by name or id via Tableau's native `:delete` route. It refuses to delete the workbook's last remaining worksheet. If it fails, do not try to delete by submitting workbook XML without the worksheet; use Tableau Undo (`Cmd+Z`), File → Revert to Saved, or manually editing the saved `.twb` XML file.
 
 **Prevention:**
 - Dashboard creation can take >30 seconds and trigger a timeout error. Check workbook structure after a timeout — the dashboard may have been applied successfully despite the error

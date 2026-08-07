@@ -37,9 +37,13 @@ import {
   ImageExportQuery,
   ImageResult,
   imageResultSchema,
+  LogicalTableList,
+  logicalTableListSchema,
   OperationEnvelope,
   OperationError,
   OperationWarning,
+  sheetActionRoute,
+  SheetRef,
   Site,
   SiteDatasourceList,
   siteDatasourceListSchema,
@@ -56,6 +60,7 @@ import {
   summaryDataSchema,
   ValidationResult,
   validationResultSchema,
+  WindowInfo,
   WorkbookInventory,
   workbookInventorySchema,
   worksheetDocumentRoute,
@@ -64,9 +69,14 @@ import {
   worksheetItemSchema,
   WorksheetList,
   worksheetListSchema,
+  worksheetLogicalTableDataRoute,
+  worksheetLogicalTablesRoute,
   worksheetRoute,
+  WorksheetSort,
+  worksheetSortRoute,
   WorksheetSummaryDataQuery,
   worksheetSummaryDataRoute,
+  WorksheetUnderlyingDataQuery,
 } from './types.js';
 
 const LOGGER = 'ExternalApiToolExecutor';
@@ -384,6 +394,30 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async listWorksheetLogicalTables(
+    worksheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<LogicalTableList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(worksheetLogicalTablesRoute(worksheetId), logicalTableListSchema, signal),
+    );
+  }
+
+  async getWorksheetUnderlyingData(
+    worksheetId: string,
+    logicalTableId: string,
+    query: WorksheetUnderlyingDataQuery,
+    signal: AbortSignal,
+  ): Promise<Result<SummaryData, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(
+        worksheetLogicalTableDataRoute(worksheetId, logicalTableId, query),
+        summaryDataSchema,
+        signal,
+      ),
+    );
+  }
+
   async exportWorksheetImage(
     worksheetId: string,
     query: ImageExportQuery,
@@ -478,6 +512,49 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postEnvelope(EXTERNAL_API_ROUTES.workbookRedo, signal),
       'redo',
+    );
+  }
+
+  async deleteSheet(
+    sheet: SheetRef,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(sheetActionRoute(sheet, 'delete'), signal),
+      'delete-sheet',
+    );
+  }
+
+  async renameSheet(
+    sheet: SheetRef,
+    name: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postJsonEnvelope(sheetActionRoute(sheet, 'rename'), { name }, signal),
+      'rename-sheet',
+    );
+  }
+
+  async sortWorksheet(
+    worksheetId: string,
+    sort: WorksheetSort,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postJsonEnvelope(worksheetSortRoute(worksheetId), sort, signal),
+      'sort-worksheet',
+    );
+  }
+
+  async goToSheet(
+    sheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) =>
+        http.postJsonEnvelope(EXTERNAL_API_ROUTES.workbookGoToSheet, { id: sheetId }, signal),
+      'go-to-sheet',
     );
   }
 
@@ -679,6 +756,19 @@ function supportsOperationResult(apiVersion: string | undefined): boolean {
   return major > 0 || (major === 0 && (minor > 1 || (minor === 1 && patch >= 1)));
 }
 
+function describeBlockingWindows(windows: Array<WindowInfo> | undefined): string {
+  if (windows === undefined || windows.length === 0) {
+    return '';
+  }
+  const named = windows.map((window) => {
+    const label = window.title || window.messageText || window.className || 'a dialog';
+    return window.messageText && window.messageText !== label
+      ? `"${label}" (${window.messageText})`
+      : `"${label}"`;
+  });
+  return ` Open dialog(s): ${named.join('; ')}.`;
+}
+
 function mapClientError(
   error: ExternalApiError | NoInstance | InstanceMismatch,
   pinnedPid?: number,
@@ -725,7 +815,7 @@ function mapClientError(
           code: 'awaiting-user',
           message:
             'The operation is blocked on a Tableau Desktop dialog and cannot complete over the API ' +
-            'until a person dismisses it.',
+            `until a person dismisses it.${describeBlockingWindows(error.blockingWindows)}`,
           recoverable: false,
         },
       };

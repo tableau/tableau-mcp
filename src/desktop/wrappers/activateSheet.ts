@@ -13,7 +13,6 @@ import type {
   ParsedWorkbook,
   ParsedWorksheet,
 } from '../metadata/types.js';
-import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 
 export type ActivateSheetResult =
@@ -101,9 +100,9 @@ async function executeGotoSheet({
  * it here cannot be selected or parameterized by agent input beyond this helper's validated
  * sheetName.
  *
- * Lock-free: the post-apply focus dispatch runs inside the apply lock, and withApplyLock
- * is a promise chain rather than a reentrant mutex, so taking it again from in there would
- * deadlock. Callers that are not already holding the lock use activateSheetWithValidatedGoto.
+ * Must not take the apply lock: its sole caller (post-apply focus dispatch) already holds
+ * it, and withApplyLock is a promise chain rather than a reentrant mutex, so re-taking it
+ * from in there would deadlock.
  */
 export async function activateSheetValidated({
   sheetName,
@@ -128,11 +127,4 @@ export async function activateSheetValidated({
   }
 
   return inspection;
-}
-
-/** The same validated navigation, serialized against in-flight applies, for the tool seam. */
-export async function activateSheetWithValidatedGoto(
-  params: { sheetName: string } & WithExecutorAndAbortSignal,
-): Promise<ActivateSheetResult> {
-  return await withApplyLock(() => activateSheetValidated(params));
 }

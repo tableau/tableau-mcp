@@ -24,15 +24,25 @@ export const EXTERNAL_API_ROUTES = {
   workbookWorksheets: '/v0/workbook/worksheets',
   workbookUndo: '/v0/workbook:undo',
   workbookRedo: '/v0/workbook:redo',
+  workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
   dashboardDocument: '/v0/workbook/dashboards/{id}/document',
   dashboardImage: '/v0/workbook/dashboards/{id}/image',
+  dashboardDelete: '/v0/workbook/dashboards/{id}:delete',
+  dashboardRename: '/v0/workbook/dashboards/{id}:rename',
   storyboardById: '/v0/workbook/storyboards/{id}',
   storyboardDocument: '/v0/workbook/storyboards/{id}/document',
+  storyboardDelete: '/v0/workbook/storyboards/{id}:delete',
+  storyboardRename: '/v0/workbook/storyboards/{id}:rename',
   worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetDocument: '/v0/workbook/worksheets/{id}/document',
   worksheetImage: '/v0/workbook/worksheets/{id}/image',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
+  worksheetLogicalTables: '/v0/workbook/worksheets/{id}/logicalTables',
+  worksheetLogicalTableData: '/v0/workbook/worksheets/{id}/logicalTables/{logicalTableId}/data',
+  worksheetDelete: '/v0/workbook/worksheets/{id}:delete',
+  worksheetRename: '/v0/workbook/worksheets/{id}:rename',
+  worksheetSort: '/v0/workbook/worksheets/{id}:sort',
   site: '/v0/site',
   siteDatasources: '/v0/site/datasources',
   siteWorkbooks: '/v0/site/workbooks',
@@ -52,7 +62,34 @@ export type WorksheetSummaryDataQuery = {
   maxRows?: number;
   ignoreAliases?: boolean;
   ignoreSelection?: boolean;
-  columnsToIncludeByFieldName?: string;
+  /**
+   * Field names restricting the returned columns. Each becomes its own repeated
+   * `columnsToIncludeByFieldName` query pair — the API does not comma-split, so a
+   * field name may itself contain a comma.
+   */
+  columnsToIncludeByFieldName?: Array<string>;
+};
+
+/** Query accepted by {@link worksheetLogicalTableDataRoute}. */
+export type WorksheetUnderlyingDataQuery = WorksheetSummaryDataQuery & {
+  includeAllColumns?: boolean;
+};
+
+/** The three sheet kinds whose `:rename`/`:delete` action routes hang under distinct path prefixes. */
+export type SheetKind = 'worksheet' | 'dashboard' | 'storyboard';
+
+/** A sheet targeted by an id-addressed action route, tagged with its kind's path prefix. */
+export type SheetRef = {
+  kind: SheetKind;
+  id: string;
+};
+
+/** Body of `POST /v0/workbook/worksheets/{id}:sort`. `fieldName` is required; the rest default server-side. */
+export type WorksheetSort = {
+  fieldName: string;
+  direction?: 'asc' | 'desc';
+  sortType?: 'data-source-order' | 'alpha';
+  clearSort?: boolean;
 };
 
 /** Query accepted by {@link worksheetImageRoute} and {@link dashboardImageRoute}. */
@@ -108,12 +145,58 @@ export function worksheetSummaryDataRoute(
   if (query.ignoreSelection !== undefined) {
     search.set('ignoreSelection', String(query.ignoreSelection));
   }
-  if (query.columnsToIncludeByFieldName !== undefined) {
-    search.set('columnsToIncludeByFieldName', query.columnsToIncludeByFieldName);
+  for (const column of query.columnsToIncludeByFieldName ?? []) {
+    search.append('columnsToIncludeByFieldName', column);
   }
 
   const suffix = search.size > 0 ? `?${search.toString()}` : '';
   return `${worksheetRoute(worksheetId)}/summaryData${suffix}`;
+}
+
+const SHEET_ROUTE_PREFIX: Record<SheetKind, string> = {
+  worksheet: EXTERNAL_API_ROUTES.workbookWorksheets,
+  dashboard: EXTERNAL_API_ROUTES.workbookDashboards,
+  storyboard: EXTERNAL_API_ROUTES.workbookStoryboards,
+};
+
+export function sheetActionRoute(sheet: SheetRef, action: 'rename' | 'delete'): string {
+  return `${SHEET_ROUTE_PREFIX[sheet.kind]}/${encodeURIComponent(sheet.id)}:${action}`;
+}
+
+export function worksheetSortRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}:sort`;
+}
+
+export function worksheetLogicalTablesRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}/logicalTables`;
+}
+
+export function worksheetLogicalTableDataRoute(
+  worksheetId: string,
+  logicalTableId: string,
+  query: WorksheetUnderlyingDataQuery,
+): string {
+  const search = new URLSearchParams();
+  if (query.maxRows !== undefined) {
+    search.set('maxRows', String(query.maxRows));
+  }
+  if (query.ignoreAliases !== undefined) {
+    search.set('ignoreAliases', String(query.ignoreAliases));
+  }
+  if (query.ignoreSelection !== undefined) {
+    search.set('ignoreSelection', String(query.ignoreSelection));
+  }
+  if (query.includeAllColumns !== undefined) {
+    search.set('includeAllColumns', String(query.includeAllColumns));
+  }
+  for (const column of query.columnsToIncludeByFieldName ?? []) {
+    search.append('columnsToIncludeByFieldName', column);
+  }
+
+  const suffix = search.size > 0 ? `?${search.toString()}` : '';
+  return `${worksheetRoute(worksheetId)}/logicalTables/${encodeURIComponent(
+    logicalTableId,
+  )}/data${suffix}`;
 }
 
 // Builds the `?filePath=…&mimeType=…` suffix with encodeURIComponent (percent-encoding),
@@ -216,6 +299,7 @@ export const PROBLEM_CODES = [
   'payload-version-unsupported',
   'not-found',
   'sheet-not-found',
+  'logical-table-not-found',
   'operation-pending',
   'method-not-allowed',
   'not-implemented',
@@ -263,6 +347,21 @@ export const operationWarningSchema = z
   .passthrough();
 export type OperationWarning = z.infer<typeof operationWarningSchema>;
 
+/** A modal window blocking the command queue, reported on an Operation that cannot progress. */
+export const windowInfoSchema = z
+  .object({
+    objectName: z.string(),
+    title: z.string(),
+    className: z.string(),
+    messageText: z.string().optional(),
+    informativeText: z.string().optional(),
+    detailedText: z.string().optional(),
+    iconLevel: z.string().optional(),
+    buttons: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type WindowInfo = z.infer<typeof windowInfoSchema>;
+
 /**
  * Operation envelope returned by `POST /v0/workbook/document`, `POST /v0/app:invokeCommand`,
  * and the `GET /v0/operations/{id}` poll route. Only `id`/`kind`/`state` are required here even
@@ -279,6 +378,7 @@ export const operationEnvelopeSchema = z
     result: z.record(z.string(), z.unknown()).optional(),
     error: operationErrorSchema.optional(),
     warnings: z.array(operationWarningSchema).optional(),
+    blockingWindows: z.array(windowInfoSchema).optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
     completedAt: z.string().optional(),
@@ -442,6 +542,23 @@ export const summaryDataSchema = z
   .passthrough();
 export type SummaryData = z.infer<typeof summaryDataSchema>;
 
+/** One logical table available for a worksheet's underlying data. */
+export const logicalTableItemSchema = z
+  .object({
+    id: z.string().optional(),
+    caption: z.string().optional(),
+  })
+  .passthrough();
+export type LogicalTableItem = z.infer<typeof logicalTableItemSchema>;
+
+/** Logical table list returned by `GET /v0/workbook/worksheets/{id}/logicalTables`. */
+export const logicalTableListSchema = z
+  .object({
+    tables: z.array(logicalTableItemSchema).optional(),
+  })
+  .passthrough();
+export type LogicalTableList = z.infer<typeof logicalTableListSchema>;
+
 /** Validation result returned by `POST /v0/workbook/document:validate`. */
 export const validationResultSchema = z
   .object({
@@ -507,6 +624,6 @@ export type ExternalApiError =
   // 503: retry the whole request (there is no operation to poll).
   | { type: 'operation-pending'; retryAfterSeconds?: number }
   // Blocked on a human; a poll can never clear it.
-  | { type: 'awaiting-user'; operationId?: string }
+  | { type: 'awaiting-user'; operationId?: string; blockingWindows?: Array<WindowInfo> }
   | { type: 'operation-expired'; operationId?: string }
   | { type: 'poll-timeout'; operationId?: string };

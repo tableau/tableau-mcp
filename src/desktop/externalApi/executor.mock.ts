@@ -40,6 +40,8 @@ export function makeExecutorMock(
     getDashboardDocument: vi.fn(),
     getStoryboardDocument: vi.fn(),
     getWorksheetSummaryData: vi.fn(),
+    listWorksheetLogicalTables: vi.fn(),
+    getWorksheetUnderlyingData: vi.fn(),
     exportWorksheetImage: vi.fn(),
     exportDashboardImage: vi.fn(),
     validateWorkbookDocument: vi.fn(),
@@ -49,6 +51,10 @@ export function makeExecutorMock(
     applyStoryboardDocument: vi.fn(),
     undo: vi.fn(),
     redo: vi.fn(),
+    deleteSheet: vi.fn(),
+    renameSheet: vi.fn(),
+    sortWorksheet: vi.fn(),
+    goToSheet: vi.fn(),
   };
   return { ...defaults, ...overrides } as ExternalApiToolExecutor;
 }
