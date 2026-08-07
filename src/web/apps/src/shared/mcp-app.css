@@ -170,3 +170,10 @@ tableau-viz {
   font-weight: 400;
   color: #5a6b7b;
 }
+
+.mcp-app-error-cause {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: #8a97a3;
+}

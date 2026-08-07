@@ -50,7 +50,7 @@ export function recordEvent(app: App, eventType: McpAppEventType, detail?: unkno
   }
 }
 
-function toMessage(detail: unknown): string | undefined {
+export function toMessage(detail: unknown): string | undefined {
   if (detail === undefined || detail === null) {
     return undefined;
   }
