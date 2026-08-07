@@ -12,6 +12,8 @@ import {
   datasourceListSchema,
   EXTERNAL_API_ROUTES,
   healthSchema,
+  logicalTableItemSchema,
+  logicalTableListSchema,
   operationEnvelopeSchema,
   operationErrorSchema,
   operationWarningSchema,
@@ -38,9 +40,9 @@ import {
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.3,
- * captured 2026-08-03 (a build whose poll payload carries typed-read results, including
- * document reads under `result.document`). No hand-edits.
+ * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.4,
+ * captured 2026-08-06 (a build serving worksheet logical-table reads and the
+ * `:delete`/`:rename`/`:sort`/`:goToSheet` sheet-action routes). No hand-edits.
  */
 
 type SpecSchema = {
@@ -127,6 +129,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['SiteDatasourceItem', siteDatasourceItemSchema],
       ['SiteDatasourceList', siteDatasourceListSchema],
       ['SummaryData', summaryDataSchema],
+      ['LogicalTableItem', logicalTableItemSchema],
+      ['LogicalTableList', logicalTableListSchema],
       ['ValidationResult', validationResultSchema],
     ] as const)('%s: properties and required set match', (name, schema) => {
       const component = specSchema(name);
@@ -187,6 +191,16 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.worksheetDocument,
       EXTERNAL_API_ROUTES.worksheetImage,
       EXTERNAL_API_ROUTES.worksheetSummaryData,
+      EXTERNAL_API_ROUTES.worksheetLogicalTables,
+      EXTERNAL_API_ROUTES.worksheetLogicalTableData,
+      EXTERNAL_API_ROUTES.worksheetDelete,
+      EXTERNAL_API_ROUTES.worksheetRename,
+      EXTERNAL_API_ROUTES.worksheetSort,
+      EXTERNAL_API_ROUTES.dashboardDelete,
+      EXTERNAL_API_ROUTES.dashboardRename,
+      EXTERNAL_API_ROUTES.storyboardDelete,
+      EXTERNAL_API_ROUTES.storyboardRename,
+      EXTERNAL_API_ROUTES.workbookGoToSheet,
       EXTERNAL_API_ROUTES.dashboardImage,
       EXTERNAL_API_ROUTES.operations,
       EXTERNAL_API_ROUTES.operationById,

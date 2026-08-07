@@ -10,6 +10,8 @@ import {
   datasourceListSchema,
   EXTERNAL_API_ROUTES,
   ExternalApiInstance,
+  logicalTableListSchema,
+  sheetActionRoute,
   siteDatasourceListSchema,
   siteSchema,
   siteWorkbookListSchema,
@@ -23,7 +25,10 @@ import {
   worksheetDocumentRoute,
   worksheetItemSchema,
   worksheetListSchema,
+  worksheetLogicalTableDataRoute,
+  worksheetLogicalTablesRoute,
   worksheetRoute,
+  worksheetSortRoute,
   worksheetSummaryDataRoute,
 } from './types.js';
 
@@ -465,17 +470,15 @@ describe('ExternalApiHttp', () => {
     expect(last?.path).toBe('/v0/app');
   });
 
-  it('gets worksheet summary data with query parameters', async () => {
-    const result = await http.getJson(
-      worksheetSummaryDataRoute('sheet-sales', {
-        maxRows: 25,
-        ignoreAliases: true,
-        ignoreSelection: true,
-        columnsToIncludeByFieldName: 'Sales,Profit',
-      }),
-      summaryDataSchema,
-      new AbortController().signal,
-    );
+  it('gets worksheet summary data, repeating columnsToIncludeByFieldName per column', async () => {
+    const route = worksheetSummaryDataRoute('sheet-sales', {
+      maxRows: 25,
+      ignoreAliases: true,
+      ignoreSelection: true,
+      columnsToIncludeByFieldName: ['Sales', 'Profit'],
+    });
+
+    const result = await http.getJson(route, summaryDataSchema, new AbortController().signal);
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
@@ -490,15 +493,125 @@ describe('ExternalApiHttp', () => {
       ],
     });
 
+    // The mock's searchParams map collapses repeated keys; assert the built route string
+    // carries a pair per column (a field name may itself contain a comma).
+    const query = new URL(route, 'http://localhost').searchParams;
+    expect(query.get('maxRows')).toBe('25');
+    expect(query.getAll('columnsToIncludeByFieldName')).toEqual(['Sales', 'Profit']);
+
     const last = server.requests.at(-1) as any;
     expect(last?.method).toBe('GET');
     expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales/summaryData');
-    expect(last?.searchParams).toEqual({
-      maxRows: '25',
-      ignoreAliases: 'true',
-      ignoreSelection: 'true',
-      columnsToIncludeByFieldName: 'Sales,Profit',
+  });
+
+  it('lists worksheet logical tables from GET .../logicalTables', async () => {
+    const result = await http.getJson(
+      worksheetLogicalTablesRoute('sheet-sales'),
+      logicalTableListSchema,
+      new AbortController().signal,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().tables).toEqual([
+      { id: 'lt-orders', caption: 'Orders' },
+      { id: 'lt-returns', caption: 'Returns' },
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales/logicalTables');
+  });
+
+  it('gets underlying data, repeating columnsToIncludeByFieldName per column', async () => {
+    const route = worksheetLogicalTableDataRoute('sheet-sales', 'lt-orders', {
+      maxRows: 25,
+      includeAllColumns: true,
+      columnsToIncludeByFieldName: ['Region, State', 'Sales'],
     });
+
+    const result = await http.getJson(route, summaryDataSchema, new AbortController().signal);
+
+    expect(result.isOk()).toBe(true);
+    const query = new URL(route, 'http://localhost').searchParams;
+    expect(query.get('maxRows')).toBe('25');
+    expect(query.get('includeAllColumns')).toBe('true');
+    expect(query.getAll('columnsToIncludeByFieldName')).toEqual(['Region, State', 'Sales']);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales/logicalTables/lt-orders/data');
+  });
+
+  it('deletes a worksheet via a bodyless POST .../{id}:delete', async () => {
+    const result = await http.postEnvelope(
+      sheetActionRoute({ kind: 'worksheet', id: 'sheet-sales' }, 'delete'),
+      new AbortController().signal,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().state).toBe('succeeded');
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('POST');
+    expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales:delete');
+    expect(last?.body).toBe('');
+  });
+
+  it('routes a dashboard delete to the dashboards :delete path', async () => {
+    const result = await http.postEnvelope(
+      sheetActionRoute({ kind: 'dashboard', id: 'dash-exec' }, 'delete'),
+      new AbortController().signal,
+    );
+
+    expect(result.isOk()).toBe(true);
+    const last = server.requests.at(-1);
+    expect(last?.path).toBe('/v0/workbook/dashboards/dash-exec:delete');
+  });
+
+  it('renames a worksheet via POST .../{id}:rename with a JSON name body', async () => {
+    const result = await http.postJsonEnvelope(
+      sheetActionRoute({ kind: 'worksheet', id: 'sheet-sales' }, 'rename'),
+      { name: 'Regional' },
+      new AbortController().signal,
+    );
+
+    expect(result.isOk()).toBe(true);
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('POST');
+    expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales:rename');
+    expect(JSON.parse(last?.body ?? '{}')).toEqual({ name: 'Regional' });
+  });
+
+  it('sorts a worksheet via POST .../{id}:sort with the sort body', async () => {
+    const result = await http.postJsonEnvelope(
+      worksheetSortRoute('sheet-sales'),
+      { fieldName: '[Superstore].[Sales]', direction: 'desc', sortType: 'alpha' },
+      new AbortController().signal,
+    );
+
+    expect(result.isOk()).toBe(true);
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('POST');
+    expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales:sort');
+    expect(JSON.parse(last?.body ?? '{}')).toEqual({
+      fieldName: '[Superstore].[Sales]',
+      direction: 'desc',
+      sortType: 'alpha',
+    });
+  });
+
+  it('activates a sheet via POST /v0/workbook:goToSheet with the id', async () => {
+    const result = await http.postJsonEnvelope(
+      EXTERNAL_API_ROUTES.workbookGoToSheet,
+      { id: 'sheet-profit' },
+      new AbortController().signal,
+    );
+
+    expect(result.isOk()).toBe(true);
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('POST');
+    expect(last?.path).toBe('/v0/workbook:goToSheet');
+    expect(JSON.parse(last?.body ?? '{}')).toEqual({ id: 'sheet-profit' });
   });
 
   it('validates a workbook document via POST /v0/workbook/document:validate', async () => {

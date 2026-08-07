@@ -1,10 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { makeExecutorMock } from '../../../desktop/externalApi/executor.mock.js';
-import type { ExternalApiToolExecutor } from '../../../desktop/externalApi/executorTypes.js';
-import { activateSheetWithValidatedGoto } from '../../../desktop/wrappers/activateSheet.js';
+import type { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
+import { activateSheetValidated } from '../../../desktop/wrappers/activateSheet.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -55,21 +55,18 @@ const successSchema = z.object({
   focus_requested: z.boolean(),
   sheetName: z.string(),
   message: z.string(),
-  previousSheet: z.string().optional(),
   availableSheets: z.array(z.string()),
 });
 
-describe('activateSheetWithValidatedGoto', () => {
+// The post-apply focus path (applyFocus.ts) still drives navigation through the XML-read
+// validated goto; the tool no longer does. These pin that surviving core command fn.
+describe('activateSheetValidated', () => {
   const signal = new AbortController().signal;
 
   it('fresh-reads the workbook before issuing goto-sheet with the exact target', async () => {
-    const { executor, getWorkbookDocument, executeCommand } = makeExecutor();
+    const { executor, getWorkbookDocument, executeCommand } = makeXmlExecutor();
 
-    const result = await activateSheetWithValidatedGoto({
-      sheetName: 'Beta',
-      executor,
-      signal,
-    });
+    const result = await activateSheetValidated({ sheetName: 'Beta', executor, signal });
 
     expect(result).toEqual({
       status: 'activated',
@@ -86,76 +83,27 @@ describe('activateSheetWithValidatedGoto', () => {
   });
 
   it('refuses a missing sheet without issuing any command', async () => {
-    const { executor, executeCommand } = makeExecutor();
+    const { executor, executeCommand } = makeXmlExecutor();
 
-    const result = await activateSheetWithValidatedGoto({
-      sheetName: 'Missing',
-      executor,
-      signal,
-    });
+    const result = await activateSheetValidated({ sheetName: 'Missing', executor, signal });
 
-    expect(result).toEqual({
-      status: 'not-found',
-      availableSheets: ['Alpha', 'Beta'],
-    });
-    expect(executeCommand).not.toHaveBeenCalled();
-  });
-
-  it('uses an exact case-sensitive name check', async () => {
-    const { executor, executeCommand } = makeExecutor();
-
-    const result = await activateSheetWithValidatedGoto({
-      sheetName: 'beta',
-      executor,
-      signal,
-    });
-
-    expect(result).toEqual({
-      status: 'not-found',
-      availableSheets: ['Alpha', 'Beta'],
-    });
+    expect(result).toEqual({ status: 'not-found', availableSheets: ['Alpha', 'Beta'] });
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('dispatches nothing when the target window is already the maximized one', async () => {
-    const { executor, getWorkbookDocument, executeCommand } = makeExecutor({
+    const { executor, executeCommand } = makeXmlExecutor({
       xml: buildWorkbook({ activeSheetName: 'Beta' }),
     });
 
-    const result = await activateSheetWithValidatedGoto({
-      sheetName: 'Beta',
-      executor,
-      signal,
-    });
+    const result = await activateSheetValidated({ sheetName: 'Beta', executor, signal });
 
     expect(result).toEqual({
       status: 'already-active',
       previousSheet: 'Beta',
       availableSheets: ['Alpha', 'Beta'],
     });
-    expect(getWorkbookDocument).toHaveBeenCalledTimes(1);
     expect(executeCommand).not.toHaveBeenCalled();
-  });
-
-  it('accepts a dashboard found in the same fresh workbook read', async () => {
-    const { executor, executeCommand } = makeExecutor({
-      xml: buildWorkbook({ dashboardNames: ['Sales Dashboard'] }),
-    });
-
-    const result = await activateSheetWithValidatedGoto({
-      sheetName: 'Sales Dashboard',
-      executor,
-      signal,
-    });
-
-    expect(result.status).toBe('activated');
-    expect(executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        namespace: 'tabdoc',
-        command: 'goto-sheet',
-        args: { Sheet: 'Sales Dashboard' },
-      }),
-    );
   });
 });
 
@@ -164,43 +112,32 @@ describe('activateSheetTool', () => {
     vi.clearAllMocks();
   });
 
-  it('navigates through validated goto-sheet and returns read-derived context', async () => {
-    const { executor, executeCommand } = makeExecutor();
+  it('resolves the name to an id from the inventory and requests focus via goToSheet', async () => {
+    const { executor, goToSheet } = makeApiExecutor();
 
-    const result = await getToolResult({ sheetName: 'Beta', executor });
+    const result = await getToolResult({ sheetName: 'Sales by Region', executor });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = successSchema.parse(JSON.parse(result.content[0].text));
-    expect(parsed.sheetName).toBe('Beta');
+    expect(parsed.sheetName).toBe('Sales by Region');
     expect(parsed.focus_requested).toBe(true);
-    expect(parsed.message).toContain('Requested focus on sheet "Beta"');
-    expect(parsed.previousSheet).toBe('Alpha');
-    expect(parsed.availableSheets).toEqual(['Alpha', 'Beta']);
-    expect(executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Beta' } }),
-    );
+    expect(parsed.message).toContain('Requested focus on sheet "Sales by Region"');
+    expect(parsed.availableSheets).toEqual(['Sales by Region', 'Profit', 'Executive Dashboard']);
+    expect(goToSheet).toHaveBeenCalledWith('sheet-sales', expect.anything());
   });
 
-  it('reports focus_requested false when the sheet is already active', async () => {
-    const { executor, executeCommand } = makeExecutor({
-      xml: buildWorkbook({ activeSheetName: 'Beta' }),
-    });
+  it('resolves a dashboard target and requests focus by its id', async () => {
+    const { executor, goToSheet } = makeApiExecutor();
 
-    const result = await getToolResult({ sheetName: 'Beta', executor });
+    const result = await getToolResult({ sheetName: 'Executive Dashboard', executor });
 
     expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
-    expect(parsed.focus_requested).toBe(false);
-    expect(parsed.message).toContain('was already the active sheet');
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).toHaveBeenCalledWith('dash-exec', expect.anything());
   });
 
   it('errors for an unknown sheet with the available sheets and issues no command', async () => {
-    const { executor, executeCommand } = makeExecutor({
-      xml: buildWorkbook({ worksheetNames: ['Revenue "Q1"', 'Profit, YoY'] }),
-    });
+    const { executor, goToSheet } = makeApiExecutor();
 
     const result = await getToolResult({ sheetName: 'Missing', executor });
 
@@ -209,13 +146,13 @@ describe('activateSheetTool', () => {
     expect(result.content[0].text).toContain('Sheet "Missing" was not found');
     expect(result.structuredContent).toEqual({
       message: result.content[0].text,
-      availableSheets: ['Revenue "Q1"', 'Profit, YoY'],
+      availableSheets: ['Sales by Region', 'Profit', 'Executive Dashboard'],
       nextAction: {
         label: 'Choose an available sheet and retry',
         kind: 'prefill',
       },
     });
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 });
 
@@ -236,38 +173,41 @@ async function getToolResult({
   return await callback({ session: '12345', sheetName }, extra);
 }
 
-function makeExecutor({
-  xml = buildWorkbook(),
-  xmlSequence,
-  executeResult = Ok({ command_id: 'goto-1' }),
-}: {
-  xml?: string;
-  xmlSequence?: string[];
-  executeResult?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
-} = {}): {
+function makeApiExecutor(): {
+  executor: ExternalApiToolExecutor;
+  goToSheet: ReturnType<typeof vi.fn>;
+} {
+  const listWorksheets = vi.fn().mockResolvedValue(
+    Ok({
+      worksheets: [
+        { id: 'sheet-sales', name: 'Sales by Region' },
+        { id: 'sheet-profit', name: 'Profit' },
+      ],
+    }),
+  );
+  const listDashboards = vi
+    .fn()
+    .mockResolvedValue(Ok({ dashboards: [{ id: 'dash-exec', name: 'Executive Dashboard' }] }));
+  const goToSheet = vi.fn().mockResolvedValue(Ok({ status: 'completed' }));
+  return {
+    executor: makeExecutorMock({ listWorksheets, listDashboards, goToSheet }),
+    goToSheet,
+  };
+}
+
+function makeXmlExecutor({ xml = buildWorkbook() }: { xml?: string } = {}): {
   executor: ExternalApiToolExecutor;
   getWorkbookDocument: ReturnType<typeof vi.fn>;
   executeCommand: ReturnType<typeof vi.fn>;
 } {
-  const getWorkbookDocument = vi.fn();
-  const xmls = xmlSequence && xmlSequence.length > 0 ? xmlSequence : [xml];
-  for (const entry of xmls) {
-    getWorkbookDocument.mockResolvedValueOnce(
-      Ok({
-        xml: entry,
-        applicationVersion: undefined,
-        xsdPayloadVersion: undefined,
-      }),
-    );
-  }
-  getWorkbookDocument.mockResolvedValue(
+  const getWorkbookDocument = vi.fn().mockResolvedValue(
     Ok({
-      xml: xmls[xmls.length - 1],
+      xml,
       applicationVersion: undefined,
       xsdPayloadVersion: undefined,
     }),
   );
-  const executeCommand = vi.fn().mockResolvedValue(executeResult);
+  const executeCommand = vi.fn().mockResolvedValue(Ok({ command_id: 'goto-1' }));
   return {
     executor: makeExecutorMock({ getWorkbookDocument, executeCommand }),
     getWorkbookDocument,
