@@ -5,6 +5,7 @@ import { workbooksApis } from '../apis/workbooksApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { Pagination } from '../types/pagination.js';
 import { Workbook } from '../types/workbook.js';
+import { WorkbookValidationResult } from '../types/workbookValidation.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
@@ -127,5 +128,28 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
         ...this.authHeader,
       },
     );
+  };
+
+  /**
+   * Validates a workbook that has been uploaded to the site via a file upload session.
+   *
+   * Required scopes: `tableau:workbooks:create`
+   *
+   * @param siteId - The Tableau site ID
+   * @param uploadSessionId - The ID of the file upload session containing the workbook to validate.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#validate_uploaded_workbook
+   */
+  validateUploadedWorkbook = async ({
+    siteId,
+    uploadSessionId,
+  }: {
+    siteId: string;
+    uploadSessionId: string;
+  }): Promise<WorkbookValidationResult> => {
+    return await this._apiClient.validateUploadedWorkbook(undefined, {
+      params: { siteId },
+      queries: { uploadSessionId },
+      ...this.authHeader,
+    });
   };
 }
