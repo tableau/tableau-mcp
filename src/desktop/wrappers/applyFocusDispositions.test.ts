@@ -42,19 +42,17 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
     'loadDashboardXml:artifact',
     'loadWorkbookXml:artifact',
   ],
-  'src/tools/desktop/authoring/sheets/dashboardAutoApply.ts': [
+  'src/tools/desktop/api/applyWorksheetArtifact.ts': ['loadWorksheetXml:artifact'],
+  'src/tools/desktop/authoring/sheets/composeDashboardCore.ts': [
+    'loadWorkbookXml:none',
     'loadWorkbookXml:artifact',
-    'loadDashboardXml:artifact',
   ],
   'src/tools/desktop/authoring/datasource/authorAction.ts': ['applyWorkbookText:restore'],
   'src/tools/desktop/authoring/datasource/authorCalcCore.ts': ['applyWorkbookText:restore'],
   'src/tools/desktop/authoring/datasource/authorSet.ts': ['applyWorkbookText:restore'],
   'src/tools/desktop/authoring/datasource/formatLabels.ts': ['applyWorkbookText:artifact'],
   'src/tools/desktop/api/applyWorkbook.ts': ['loadWorkbookXml:restore'],
-  'src/tools/desktop/api/applyWorksheet.ts': [
-    'loadWorksheetXml:artifact',
-    'loadWorksheetXml:artifact',
-  ],
+  'src/tools/desktop/api/applyWorksheet.ts': ['loadWorksheetXml:artifact'],
   'src/tools/desktop/authoring/sheets/deleteWorksheet.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/authoring/sheets/refineWorksheet.ts': ['loadWorksheetXml:artifact'],
 };

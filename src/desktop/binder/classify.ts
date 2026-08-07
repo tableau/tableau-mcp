@@ -196,6 +196,7 @@ const PLURALIZABLE_CHART_NOUNS: ReadonlySet<string> = new Set([
   'treemap',
   'pie',
   'donut',
+  'bubble',
 ]);
 
 /**
@@ -449,6 +450,7 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'treemap',
   'pie',
   'donut',
+  'bubble',
   // 2026-07-06 growth (per the table's own contract — grow as new distinct-shape
   // templates are stamped eligible): gantt-task-rollup-chart's stamp made time-series
   // a TWO-member eligible family, collapsing strict-majority nativity for trend-line's
@@ -700,6 +702,7 @@ function askCarriesSpatialIntent(
  */
 const LATLON_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map-latlon';
 const GENERATED_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map';
+const CORRELATION_BUBBLE_TEMPLATE = 'correlation-bubble-chart';
 
 /**
  * POINT-LOCATION CUES (Blake wall #2). Coordinate/point-location intent a user types when
@@ -3170,6 +3173,69 @@ function resolveBareMeasureKpi(
   return bound.bindings;
 }
 
+function resolveExplicitCorrelationBubble(
+  manifest: TemplateManifest,
+  ask: string,
+  maskedAsk: string,
+  matched: SchemaField[],
+  summary: SchemaSummary,
+  aggOverride: Derivation | null,
+): Array<{ slot_id: string; field: string }> | null {
+  if (manifest.template !== CORRELATION_BUBBLE_TEMPLATE || aggOverride !== null) return null;
+  if (phraseIndexInAsk(maskedAsk, 'bubble') < 0) return null;
+
+  const measures = matched.filter(isMeasure);
+  const dimensions = matched.filter(isCategorical);
+  if (matched.length !== 4 || measures.length !== 3 || dimensions.length !== 1) return null;
+
+  const exactNames = fieldExactNames(summary.fields);
+  const position = (field: SchemaField): number => {
+    const candidates = [field.name, field.caption, bareName(field.columnName)]
+      .filter((name): name is string => Boolean(name))
+      .map((name) => fieldNameMatchInAsk(ask, name, exactNames))
+      .filter((index) => index >= 0);
+    return candidates.length > 0 ? Math.min(...candidates) : -1;
+  };
+  const positionedMeasures = measures
+    .map((field) => ({ field, index: position(field) }))
+    .sort((a, b) => a.index - b.index);
+  const dimension = { field: dimensions[0], index: position(dimensions[0]) };
+  if (positionedMeasures.some(({ index }) => index < 0) || dimension.index < 0) return null;
+
+  const versusIndex = ['versus', 'vs']
+    .map((cue) => phraseIndexInAsk(ask, cue))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)[0];
+  const sizeMatch = /\bsized?\s+by\b/i.exec(ask);
+  if (versusIndex === undefined || !sizeMatch) return null;
+  const sizedByIndex = sizeMatch.index;
+  const [x, y, size] = positionedMeasures;
+  if (!(x.index < versusIndex && versusIndex < y.index)) return null;
+  if (!(y.index < dimension.index && dimension.index < sizedByIndex && sizedByIndex < size.index)) {
+    return null;
+  }
+  if (!/\bby\b/i.test(ask.slice(y.index, dimension.index))) return null;
+
+  const uniqueSlot = (role: string, kind: SlotKind) => {
+    const slots = manifest.slots.filter(
+      (slot) => slot.bindable && slot.kind === kind && slot.role.includes(role),
+    );
+    return slots.length === 1 ? slots[0] : null;
+  };
+  const cols = uniqueSlot('cols', 'quantitative');
+  const rows = uniqueSlot('rows', 'quantitative');
+  const sizeSlot = uniqueSlot('size', 'quantitative');
+  const lod = uniqueSlot('lod', 'categorical');
+  if (!cols || !rows || !sizeSlot || !lod) return null;
+
+  return [
+    { slot_id: cols.slot_id, field: x.field.name },
+    { slot_id: rows.slot_id, field: y.field.name },
+    { slot_id: sizeSlot.slot_id, field: size.field.name },
+    { slot_id: lod.slot_id, field: dimension.field.name },
+  ];
+}
+
 interface NoLlmClassification {
   template: string;
   bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
@@ -3357,6 +3423,21 @@ export function classifyNoLlm(
     }
   }
 
+  const bubble = manifests.get(CORRELATION_BUBBLE_TEMPLATE);
+  if (bubble?.fast_path_eligible) {
+    const bindings = resolveExplicitCorrelationBubble(
+      bubble,
+      ask,
+      maskedAsk,
+      matched,
+      summary,
+      aggOverride,
+    );
+    if (bindings) {
+      return attachAskModifiers(ask, { template: bubble.template, bindings }, filterCandidates);
+    }
+  }
+
   // Keyword-score the eligible fast-path templates against the masked ask.
   const scored: Array<{ m: TemplateManifest; score: number }> = [];
   for (const m of manifests.values()) {
@@ -3408,6 +3489,8 @@ export function classifyNoLlm(
     schemaDims,
   );
   if (!chosen) return null;
+  // WHY: generic greedy binding drops the optional size encoding and can reverse X/Y.
+  if (chosen.template === CORRELATION_BUBBLE_TEMPLATE) return null;
 
   // DEMOTE (family guard, W-23447710): a spatial-intent ask must never bind a
   // non-spatial keyword-count winner. Bare "map" stays out of CHART_NOUN_KEYWORDS

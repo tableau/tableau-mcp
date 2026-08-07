@@ -1,8 +1,4 @@
-// Pure zone-computation module extracted byte-for-byte from
-// buildAndApplyDashboard.ts:58-118,169-273 (W60 single-pass dashboard-auto-apply spec, §5/Q2)
-// so both build-and-apply-dashboard (KPI strip + custom zones, unchanged behavior) and the new
-// dashboard-auto-apply tool (v1: auto-grid/rows/columns only, no KPIs/custom) share ONE zone
-// builder. No fs, no MCP — pure over its inputs so it is characterization-testable.
+// Shared zone computation for direct and batched dashboard composition.
 
 import { z } from 'zod';
 

@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
@@ -11,12 +11,13 @@ import { isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
-import { ArgsValidationError } from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getSummaryDataTool } from './getSummaryData.js';
+import { fetchWorksheetSummaryData, type SummaryDataRead } from './summaryDataCore.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
@@ -53,6 +54,89 @@ type SummaryDataHarness = {
   callTool: (args: SummaryDataArgs) => Promise<CallToolResult>;
   close: () => Promise<void>;
 };
+
+describe('fetchWorksheetSummaryData', () => {
+  it('materializes a populated worksheet once before retrying an initially empty summary', async () => {
+    const endpoints: string[] = [];
+    let summaryReads = 0;
+    const read = (async (endpoint: string) => {
+      endpoints.push(endpoint);
+      if (endpoint === 'worksheet list') {
+        return Ok({
+          worksheets: [
+            {
+              id: 'sheet-bubble',
+              name: 'Sales vs Profit by Product',
+              hidden: false,
+              datasources: ['Sample - Superstore'],
+            },
+          ],
+        });
+      }
+      if (endpoint === 'worksheet image') {
+        return Ok({ imageBase64: 'cG5n', width: 1, height: 1 });
+      }
+      summaryReads += 1;
+      return Ok(
+        summaryReads === 1
+          ? { columns: [], rows: [] }
+          : {
+              columns: [{ name: 'Product Name' }, { name: 'SUM(Sales)' }],
+              rows: [['Acco 7-Outlet Power Adapter', 41.9]],
+            },
+      );
+    }) as SummaryDataRead;
+
+    const result = await fetchWorksheetSummaryData({
+      read,
+      worksheet: 'Sales vs Profit by Product',
+      maxRows: 10,
+      materializeEmpty: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) throw result.error;
+    expect(result.value.columns).toEqual([{ name: 'Product Name' }, { name: 'SUM(Sales)' }]);
+    expect(result.value.rows).toEqual([['Acco 7-Outlet Power Adapter', 41.9]]);
+    expect(endpoints).toEqual([
+      'worksheet list',
+      'summary-data',
+      'worksheet image',
+      'summary-data',
+    ]);
+  });
+
+  it('surfaces a materialization failure instead of misreporting a populated sheet as empty', async () => {
+    const renderError = new UnknownError('worksheet image failed');
+    const read = (async (endpoint: string) => {
+      if (endpoint === 'worksheet list') {
+        return Ok({
+          worksheets: [
+            {
+              id: 'sheet-bubble',
+              name: 'Sales vs Profit by Product',
+              hidden: false,
+              datasources: ['Sample - Superstore'],
+            },
+          ],
+        });
+      }
+      if (endpoint === 'worksheet image') return Err(renderError);
+      return Ok({ columns: [], rows: [] });
+    }) as SummaryDataRead;
+
+    const result = await fetchWorksheetSummaryData({
+      read,
+      worksheet: 'Sales vs Profit by Product',
+      maxRows: 10,
+      materializeEmpty: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected materialization failure');
+    expect(result.error).toEqual({ type: 'request', error: renderError });
+  });
+});
 
 describe('getSummaryDataTool', () => {
   beforeEach(() => {
@@ -94,16 +178,120 @@ describe('getSummaryDataTool', () => {
       expect(body.status).toBe('success');
       expect(body.worksheet).toEqual({ id: 'sheet-sales', name: 'Sales by Region' });
       expect(body.maxRows).toBe(50);
+      expect(body.summaryData.columns).toEqual([
+        { name: 'Region', dataType: 'string' },
+        { name: 'Sales', dataType: 'real' },
+      ]);
       expect(body.summaryData.rows).toEqual([
-        ['West', 1200, 240],
-        ['East', 900, 120],
+        ['West', 1200],
+        ['East', 900],
       ]);
 
       const summaryRequest = harness.server.requests.at(-1) as any;
       expect(summaryRequest?.path).toBe('/v0/workbook/worksheets/sheet-sales/summaryData');
       expect(summaryRequest?.searchParams).toMatchObject({
         maxRows: '50',
+        ignoreSelection: 'true',
         columnsToIncludeByFieldName: 'Region,Sales',
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('projects requested base field names when Desktop returns aggregated captions', async () => {
+    const harness = await startHarness((server) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          columns: [
+            { name: 'Region', dataType: 'string' },
+            { name: 'SUM(Profit)', dataType: 'real' },
+            { name: 'SUM(Sales)', dataType: 'real' },
+          ],
+          rows: [['West', 240, 1200]],
+        }),
+      });
+    });
+
+    try {
+      const result = await harness.callTool({
+        worksheet: 'Sales by Region',
+        columns: ['Region', 'Profit'],
+      });
+
+      expect(result.isError).toBe(false);
+      expect(parseResult(result).summaryData).toEqual({
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'SUM(Profit)', dataType: 'real' },
+        ],
+        rows: [['West', 240]],
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('returns an actionable error when Desktop ignores an invalid requested column', async () => {
+    const harness = await startHarness();
+    try {
+      const result = await harness.callTool({
+        worksheet: 'Sales by Region',
+        columns: ['Region', 'Not A Real Field'],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(parseJsonResult(result)).toMatchObject({
+        status: 'action-required',
+        reason: 'columns-not-found',
+        guidance:
+          'Use exact column names returned by this worksheet, or omit columns to retrieve the full summary table.',
+        error: {
+          message: expect.stringContaining('Available columns: Region, Sales, Profit'),
+        },
+      });
+      expectStructuredBlock(result, {
+        label: 'Repair summary columns and retry',
+        kind: 'prefill',
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('returns an actionable error when an exact caption identifies multiple columns', async () => {
+    const harness = await startHarness((server) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          columns: [
+            { name: 'Region', dataType: 'string' },
+            { name: 'SUM(Sales)', dataType: 'real' },
+            { name: 'SUM(Sales)', dataType: 'real' },
+          ],
+          rows: [['West', 1200, 1200]],
+        }),
+      });
+    });
+
+    try {
+      const result = await harness.callTool({
+        worksheet: 'Sales by Region',
+        columns: ['SUM(Sales)'],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(parseJsonResult(result)).toMatchObject({
+        status: 'action-required',
+        reason: 'columns-not-found',
+        error: {
+          message: expect.stringContaining(
+            'Requested summary column "SUM(Sales)" matches more than one returned column',
+          ),
+        },
       });
     } finally {
       await harness.close();
@@ -133,7 +321,7 @@ describe('getSummaryDataTool', () => {
         shape: '0 rows x 0 columns',
         summaryData: { columns: [], rows: [] },
         guidance:
-          'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — choose with list-templates, build with build-worksheets-from-templates, apply with apply-worksheet, or name a populated sheet.',
+          'Desktop returned no summary columns for this sheet. Do NOT call get-summary-data again for this ask — name a sheet with fields on the view, or build and apply one first.',
       });
       expectStructuredBlock(result, {
         label: 'List templates, build a chart, then apply it',
@@ -166,7 +354,7 @@ describe('getSummaryDataTool', () => {
         shape: '0 rows x 0 columns',
         summaryData: { columns: [], rows: [] },
         guidance:
-          'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — choose with list-templates, build with build-worksheets-from-templates, apply with apply-worksheet, or name a populated sheet.',
+          'Desktop returned no summary columns for this sheet. Do NOT call get-summary-data again for this ask — name a sheet with fields on the view, or build and apply one first.',
       });
       expect(result.structuredContent).toMatchObject({
         nextAction: {
@@ -263,7 +451,7 @@ describe('getSummaryDataTool', () => {
       expect(parseJsonResult(repeated)).toEqual({
         ...firstBody,
         guidance:
-          'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — choose with list-templates, build with build-worksheets-from-templates, apply with apply-worksheet, or name a populated sheet.',
+          'Desktop returned no summary columns for this sheet. Do NOT call get-summary-data again for this ask — name a sheet with fields on the view, or build and apply one first.',
       });
       expect(repeated.structuredContent).toEqual(first.structuredContent);
       expect(harness.server.requests.some((request) => request.path.endsWith('/summaryData'))).toBe(

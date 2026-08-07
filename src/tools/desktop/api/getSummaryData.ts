@@ -26,7 +26,7 @@ import { fetchWorksheetSummaryData } from './summaryDataCore.js';
 const DEFAULT_MAX_ROWS = 200;
 const MAX_ROWS_CAP = 1000;
 const EMPTY_SHEET_GUIDANCE =
-  'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — choose with list-templates, build with build-worksheets-from-templates, apply with apply-worksheet, or name a populated sheet.';
+  'Desktop returned no summary columns for this sheet. Do NOT call get-summary-data again for this ask — name a sheet with fields on the view, or build and apply one first.';
 const NO_ROWS_GUIDANCE =
   "The summary query returned no rows. Do NOT call get-summary-data again for this ask — the answer is 'no data'; say so.";
 const SUMMARY_DATA_DONE_LABEL = 'Data retrieval complete — no further calls needed';
@@ -36,6 +36,8 @@ const WORKSHEET_AMBIGUOUS_GUIDANCE =
   'Choose one worksheet by exact id or name, then call get-summary-data again.';
 const WORKSHEET_NOT_FOUND_GUIDANCE =
   'The requested worksheet was not found. Choose an available populated worksheet, correct the worksheet name/id, or use list-templates, build-worksheets-from-templates, and apply-worksheet before calling get-summary-data again.';
+const COLUMNS_NOT_FOUND_GUIDANCE =
+  'Use exact column names returned by this worksheet, or omit columns to retrieve the full summary table.';
 const TRANSIENT_FAILURE_GUIDANCE =
   'The request may be transient — one retry is reasonable. If it fails again, report the failure.';
 const REPEATED_TRANSIENT_FAILURE_GUIDANCE =
@@ -131,11 +133,16 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                   worksheet,
                   maxRows: resolvedMaxRows,
                   columns,
+                  materializeEmpty: true,
                 });
                 if (summaryResult.isErr()) {
-                  return summaryResult.error.type === 'worksheet'
-                    ? worksheetError(summaryResult.error.error).toErr()
-                    : requestError(summaryResult.error.error).toErr();
+                  if (summaryResult.error.type === 'worksheet') {
+                    return worksheetError(summaryResult.error.error).toErr();
+                  }
+                  if (summaryResult.error.type === 'columns') {
+                    return columnsError(summaryResult.error.error).toErr();
+                  }
+                  return requestError(summaryResult.error.error).toErr();
                 }
 
                 const resolvedWorksheet = summaryResult.value.worksheet;
@@ -225,6 +232,7 @@ type SummaryDataErrorStatus = 'terminal' | 'retryable' | 'action-required';
 type SummaryDataErrorReason =
   | 'worksheet-not-found'
   | 'worksheet-ambiguous'
+  | 'columns-not-found'
   | 'session-resolution-failed'
   | 'request-failed'
   | 'endpoint-unavailable';
@@ -324,6 +332,15 @@ function worksheetError(error: ArgsValidationError): SummaryDataResponseError {
       );
 }
 
+function columnsError(error: ArgsValidationError): SummaryDataResponseError {
+  return summaryDataError(
+    error,
+    'action-required',
+    'columns-not-found',
+    COLUMNS_NOT_FOUND_GUIDANCE,
+  );
+}
+
 function emptySheetResult(worksheet: WorksheetItem, maxRows: number): SummaryDataCompletedResult {
   return withNextAction(
     {
@@ -378,6 +395,9 @@ function nextActionForSummaryError(
   }
   if (reason === 'worksheet-not-found') {
     return prefillNextAction('Repair worksheet selection and retry');
+  }
+  if (reason === 'columns-not-found') {
+    return prefillNextAction('Repair summary columns and retry');
   }
   return prefillNextAction('Choose a worksheet and retry');
 }

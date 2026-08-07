@@ -94,20 +94,16 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'route',
     id: 'dashboard',
-    trigger: 'a dashboard ask with 2-6 vizzes',
+    trigger: 'a dashboard ask',
     action:
-      'build sheets with list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet, applying each worksheet sequentially; then compose with dashboard-auto-apply or plan-dashboard-creation -> build-and-apply-dashboard.',
-    toolSequence: [
-      'list-templates',
-      'list-available-fields',
-      'build-worksheets-from-templates',
-      'apply-worksheet',
-      'dashboard-auto-apply',
-      'plan-dashboard-creation',
-      'build-and-apply-dashboard',
+      'build focused worksheet artifacts first, then pass artifactIds to run-dashboard-batch to place them and compose once. Put only existing worksheets in existingWorksheetNames; omit artifactIds for compose-only. Never replay a partial or unknown batch; inspect live workbook state first.',
+    toolSequence: ['run-dashboard-batch'],
+    stopConditions: [
+      'place them and compose once',
+      'Never replay a partial or unknown batch',
+      'inspect live workbook state first',
     ],
-    stopConditions: ['applying each worksheet sequentially'],
-    requiredEvidence: ['each sheet build returns a success envelope before dashboard composition'],
+    requiredEvidence: ['each batch step returns a receipt'],
   },
   {
     kind: 'route',
@@ -147,7 +143,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'route',
     id: 'edit-in-place',
-    trigger: 'current/existing sheet/chart/view/dashboard',
+    trigger: 'current/existing sheet/chart/view',
     action:
       'edit in place: resolve target with list-worksheets -> list-dashboards -> ask-user when ambiguous, then use refine-worksheet or add-field -> apply-worksheet for color, size, detail, Rows, or Columns. For a requested new chart, use list-templates -> list-available-fields -> build-worksheets-from-templates, then apply-worksheet. Never create new sheets unless asked.',
     toolSequence: [
@@ -197,6 +193,7 @@ export function generateDesktopInstructions(table: readonly DesktopInstructionEn
 const DEMO_PROFILE_INSTRUCTIONS = [
   'You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.',
   "For a chart request, use bind-template with the user's ask. Use the returned fallback tools when it cannot apply.",
+  'For a dashboard, use bind-template to place views, then call run-dashboard-batch compose-only with existingWorksheetNames set to the live worksheet names.',
 ] as const;
 
 const SPEC_LOOP_PROFILE_INSTRUCTIONS = [

@@ -48,6 +48,21 @@ describe('desktop knowledge resources', () => {
     expect(content).toContain('HOST VERIFICATION');
     expect(content).toContain('verified');
     expect(content).toContain('unverified');
+    expect(content).toContain('run-dashboard-batch');
+    expect(content).toContain('structural verification');
+    expect(content).toContain('partial');
+    expect(content).toContain('unknown');
+    expect(content).toContain('never replay');
+    expect(content).not.toContain('dashboard-auto-apply');
+  });
+
+  it('teaches the current dashboard batch path in template guidance', () => {
+    const content = readKnowledgeResource('expertise://tableau/tactics/workflow/templates');
+
+    expect(content).toContain('artifactIds');
+    expect(content).toContain('run-dashboard-batch');
+    expect(content).toContain('compose-dashboard');
+    expect(content).not.toContain('dashboard-auto-apply');
   });
 
   it('surfaces the Tableau vocabulary entry for user-facing narration prompts', () => {

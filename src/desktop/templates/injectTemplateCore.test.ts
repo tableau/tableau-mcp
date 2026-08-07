@@ -454,6 +454,8 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
     if (!result.ok) return;
     expect(result.xml).toContain('[Football].[none:Country:nk]');
     expect(result.xml).toContain('[Football].[sum:Goals For:qk]');
+    expect(result.xml).toContain('<color column="[Football].[sum:Goals For:qk]"');
+    expect(result.xml).not.toContain('custom-interpolated');
     expect(result.xml).not.toContain('[none:State:nk]');
     expect(result.xml).not.toContain('name="[State]"');
     expect(result.xml).not.toContain('column="[State]"');

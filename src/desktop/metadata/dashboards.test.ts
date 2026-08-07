@@ -1,5 +1,6 @@
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import {
+  deleteDashboard,
   extractDashboardXml,
   listWorkbookDashboards,
   upsertDashboardIntoWorkbook,
@@ -122,5 +123,31 @@ describe('upsertDashboardIntoWorkbook', () => {
 describe('listWorkbookDashboards', () => {
   it('lists dashboard names', () => {
     expect(listWorkbookDashboards(WORKBOOK_WITH_USER_NAMESPACE)).toEqual(['Overview']);
+  });
+});
+
+describe('deleteDashboard', () => {
+  it('removes every canonically equivalent dashboard and dashboard window', () => {
+    const workbook = `<workbook>
+      <dashboards>
+        <dashboard name='Re\u0301sume\u0301'><zones /></dashboard>
+        <dashboard name='R\u00e9sum\u00e9'><zones /></dashboard>
+        <dashboard name='Keep'><zones /></dashboard>
+      </dashboards>
+      <windows>
+        <window class='dashboard' name='Re\u0301sume\u0301' />
+        <window class='dashboard' name='R\u00e9sum\u00e9' />
+        <window class='worksheet' name='R\u00e9sum\u00e9' />
+        <window class='dashboard' name='Keep' />
+      </windows>
+    </workbook>`;
+
+    const result = deleteDashboard(workbook, 'R\u00e9sum\u00e9');
+
+    expect(listWorkbookDashboards(result)).toEqual(['Keep']);
+    expect(result).not.toContain('class="dashboard" name="Re\u0301sume\u0301"');
+    expect(result).not.toContain('class="dashboard" name="R\u00e9sum\u00e9"');
+    expect(result).toContain('class="worksheet" name="R\u00e9sum\u00e9"');
+    expect(result).toContain('class="dashboard" name="Keep"');
   });
 });

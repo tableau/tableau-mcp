@@ -58,11 +58,6 @@
           <breakdown value='auto' />
         </view>
         <mark class='Bar' />
-        <style>
-          <style-rule element='mark'>
-            <format attr='mark-color' value='#666666' />
-          </style-rule>
-        </style>
       </pane>
     </panes>
     <rows>[Sample - Superstore].[none:Customer Name:nk]</rows>

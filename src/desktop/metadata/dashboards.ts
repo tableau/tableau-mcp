@@ -134,7 +134,9 @@ export function deleteDashboard(workbookXml: string, dashboardName: string): str
 
   if (workbook.workbook?.dashboards) {
     const dashboards = normalizeArray(workbook.workbook.dashboards.dashboard);
-    const filtered = dashboards.filter((db) => db['@_name'] !== dashboardName);
+    const filtered = dashboards.filter(
+      (db) => !db['@_name'] || !xmlNamesEqual(db['@_name'], dashboardName),
+    );
     if (filtered.length === 0) {
       delete workbook.workbook.dashboards.dashboard;
     } else if (filtered.length === 1) {
@@ -147,7 +149,12 @@ export function deleteDashboard(workbookXml: string, dashboardName: string): str
   if (workbook.workbook?.windows) {
     const windows = normalizeArray(workbook.workbook.windows.window);
     const filtered = windows.filter(
-      (win) => !(win['@_name'] === dashboardName && win['@_class'] === 'dashboard'),
+      (win) =>
+        !(
+          win['@_name'] &&
+          xmlNamesEqual(win['@_name'], dashboardName) &&
+          win['@_class'] === 'dashboard'
+        ),
     );
     if (filtered.length === 0) {
       delete workbook.workbook.windows.window;

@@ -35,6 +35,7 @@ const PLURALIZABLE_CHART_NOUNS: ReadonlySet<string> = new Set([
   'treemap',
   'pie',
   'donut',
+  'bubble',
 ]);
 
 /**
@@ -101,6 +102,7 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'treemap',
   'pie',
   'donut',
+  'bubble',
   'line',
   'trend',
   'gantt',
