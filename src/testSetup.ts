@@ -4,6 +4,16 @@ import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 
 stubDefaultEnvVars();
 
+beforeEach(async () => {
+  // Imported dynamically (not at top level) so this global setup file doesn't eagerly pull in
+  // `./dataApps/init.js`'s dependency graph — which reaches `./config.js` and, through it, the
+  // real, unmocked `./logging/fileLogger.js` — before each test file's own `vi.mock(...)` calls
+  // register. A static top-level import here broke `src/logging/logger.test.ts`'s
+  // `vi.mock('./fileLogger.js')` isolation.
+  const { resetDataAppWorkspaceStore } = await import('./dataApps/init.js');
+  resetDataAppWorkspaceStore();
+});
+
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -15,8 +25,15 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
           version: '1.0.0',
           name: 'test-client',
         }),
+        getCapabilities: vi.fn().mockReturnValue({
+          logging: {},
+          tools: {},
+          prompts: {},
+          resources: {},
+        }),
       },
       registerTool: vi.fn(),
+      registerResource: vi.fn(),
       connect: vi.fn(),
       close: vi.fn(),
     })),

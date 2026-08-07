@@ -6,6 +6,8 @@ export const webToolNames = [
   'list-jobs',
   'list-users',
   'list-workbooks',
+  'create-and-publish-workbook',
+  'validate-workbook-package',
   'list-projects',
   'list-views',
   'list-custom-views',
@@ -39,6 +41,13 @@ export const webToolNames = [
   'delete-content',
   'confirm-delete-content',
   'render-interactive-viz',
+  'scaffold-data-app',
+  'edit-data-app',
+  'upsert-data-app-files',
+  'patch-data-app-file',
+  'search-data-app-file',
+  'read-data-app-file',
+  'list-data-app-files',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -57,13 +66,19 @@ export const webToolGroupNames = [
   'token-management',
   'mcp-apps',
   'admin-insights',
+  'data-app',
   'content',
 ] as const;
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
 export const webToolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
-  workbook: ['list-workbooks', 'get-workbook'],
+  workbook: [
+    'list-workbooks',
+    'get-workbook',
+    'create-and-publish-workbook',
+    'validate-workbook-package',
+  ],
   project: ['list-projects'],
   view: [
     'list-views',
@@ -96,6 +111,21 @@ export const webToolGroups = {
   'token-management': ['revoke-access-token', 'reset-consent'],
   'mcp-apps': ['get-embed-token', 'record-event', 'render-interactive-viz'],
   'admin-insights': ['query-admin-insights'],
+  // File-only workspace authoring tools plus validate-workbook-package and
+  // create-and-publish-workbook, which also stay in the `workbook` group (membership is
+  // additive). Grouping them here lets INCLUDE_TOOLS/EXCLUDE_TOOLS='data-app' gate the whole
+  // scaffold -> author -> validate -> publish workflow as a unit.
+  'data-app': [
+    'scaffold-data-app',
+    'edit-data-app',
+    'upsert-data-app-files',
+    'patch-data-app-file',
+    'search-data-app-file',
+    'read-data-app-file',
+    'list-data-app-files',
+    'validate-workbook-package',
+    'create-and-publish-workbook',
+  ],
   content: ['delete-content', 'confirm-delete-content'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 

@@ -2,6 +2,14 @@ import { getConfirmDeleteContentTool } from './_lib/confirmDeleteContent.js';
 import { getDeleteContentTool } from './_lib/deleteContent.js';
 import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
+import { getCreateAndPublishWorkbookTool } from './createAndPublishWorkbook/createAndPublishWorkbook.js';
+import { getEditDataAppTool } from './dataApps/editDataApp.js';
+import { getListDataAppFilesTool } from './dataApps/listDataAppFiles.js';
+import { getPatchDataAppFileTool } from './dataApps/patchDataAppFile.js';
+import { getReadDataAppFileTool } from './dataApps/readDataAppFile.js';
+import { getScaffoldDataAppTool } from './dataApps/scaffoldDataApp.js';
+import { getSearchDataAppFileTool } from './dataApps/searchDataAppFile.js';
+import { getUpsertDataAppFilesTool } from './dataApps/upsertDataAppFiles.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
 import { getConfirmUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/confirmUpdateCloudExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
@@ -29,6 +37,7 @@ import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getListUsersTool } from './users/listUsers.js';
 import { getUpdateUserTool } from './users/updateUser.js';
+import { getValidateWorkbookPackageTool } from './validateWorkbookPackage/validateWorkbookPackage.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
 import { getGetCustomViewImageTool } from './views/getCustomViewImage.js';
 import { getGetViewTool } from './views/getView.js';
@@ -69,6 +78,8 @@ export const webToolFactories = [
   getGetViewDataTool,
   getGetViewImageTool,
   getListWorkbooksTool,
+  getCreateAndPublishWorkbookTool,
+  getValidateWorkbookPackageTool,
   getListProjectsTool,
   getListViewsTool,
   getListCustomViewsTool,
@@ -80,4 +91,11 @@ export const webToolFactories = [
   getQueryAdminInsightsTool,
   getDeleteContentTool,
   getConfirmDeleteContentTool,
+  getScaffoldDataAppTool,
+  getEditDataAppTool,
+  getUpsertDataAppFilesTool,
+  getPatchDataAppFileTool,
+  getSearchDataAppFileTool,
+  getReadDataAppFileTool,
+  getListDataAppFilesTool,
 ];

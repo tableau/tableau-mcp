@@ -1,8 +1,18 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
 import { DesktopMcpServer } from './server.desktop.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
 
 describe('DesktopMcpServer', () => {
+  it('does not advertise resources', () => {
+    vi.mocked(McpServer).mockClear();
+    new DesktopMcpServer();
+
+    const [, options] = vi.mocked(McpServer).mock.calls.at(-1) ?? [];
+    expect((options as any)?.capabilities?.resources).toBeUndefined();
+  });
+
   it('should register tools', async () => {
     const server = getServer();
     await server.registerTools();

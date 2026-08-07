@@ -281,3 +281,143 @@ export class FileReadError extends McpToolError {
     });
   }
 }
+
+// Publish preconditions that fail before any content is written (bad/missing/oversized file, or an
+// unresolvable publish target). statusCode 400: the request cannot be satisfied as given.
+export class PublishWorkbookError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'publish-workbook-error', message, statusCode: 400 });
+  }
+}
+
+// Bad input to the pure .twbx builder (illegal packageId, unsafe content path, or a .trex whose
+// source-location references a file that was not bundled). buildTwbx throws this; the tool wrappers
+// catch it and return .toErr() so it renders as a clean 400 tool error instead of a raw stack.
+export class BuildTwbxError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'build-twbx-error', message, statusCode: 400 });
+  }
+}
+
+// edit-data-app: the downloaded workbook could not be interpreted as a data-app package — its bytes
+// are not a valid archive, it has no `Packages/<id>/manifest.json`, or that package has no
+// `content/index.html` entrypoint. In other words the workbook was not produced by the scaffold ->
+// publish flow, so there is nothing to reopen as an editable workspace. statusCode 422: the request
+// is well-formed (the workbook exists and downloaded) but its content cannot satisfy the operation.
+export class WorkbookDataAppNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'workbook-data-app-not-found', message, statusCode: 422 });
+  }
+}
+
+// A requested data-app workspace does not exist for the caller's actor scope, or it has expired and
+// is no longer readable. Opaque handles (`appId`) intentionally return the same not-found signal for
+// "never existed", "belongs to a different actor", and "expired" so a caller cannot probe for the
+// existence of another scope's workspaces. statusCode 404: the handle resolves to nothing usable.
+export class DataAppWorkspaceNotFoundError extends McpToolError {
+  constructor(message = 'Data app workspace not found or expired.') {
+    super({ type: 'data-app-workspace-not-found', message, statusCode: 404 });
+  }
+}
+
+// A requested validation receipt does not exist for the caller's actor scope, or it has expired.
+// Like workspaces, this collapses "wrong scope"/"never existed"/"expired" into one signal so a
+// `validationId` from another actor cannot be probed. statusCode 404.
+export class DataAppValidationNotFoundError extends McpToolError {
+  constructor(message = 'Data app validation not found or expired.') {
+    super({ type: 'data-app-validation-not-found', message, statusCode: 404 });
+  }
+}
+
+// Validation ids are immutable receipt handles. Reusing one must never replace its package bytes or
+// metadata, even when concurrent writers race. statusCode 409: the receipt already exists.
+export class DataAppValidationAlreadyExistsError extends McpToolError {
+  constructor(message = 'Data app validation already exists.') {
+    super({ type: 'data-app-validation-already-exists', message, statusCode: 409 });
+  }
+}
+
+// The caller has no stable actor scope for a persistence operation (e.g. a multi-user HTTP request
+// with neither an authenticated Tableau identity nor an MCP session), or attempted to reach a
+// workspace/validation outside its own scope. Raw PATs/tokens are never used as a scope key, so an
+// unscoped multi-user request is rejected rather than silently sharing storage. statusCode 403.
+export class DataAppWorkspaceAccessDeniedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-workspace-access-denied', message, statusCode: 403 });
+  }
+}
+
+// A caller-supplied workspace file path failed containment defenses: traversal (`..`), absolute
+// paths, backslashes, NUL bytes, a symlink component, or an attempt to overwrite a protected
+// tool-managed manifest. statusCode 400: the path can never be satisfied safely.
+export class UnsafeWorkspacePathError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'unsafe-workspace-path', message, statusCode: 400 });
+  }
+}
+
+// A workspace mutation would exceed a configured limit: file count, per-file bytes, or total
+// workspace bytes. statusCode 413: the payload is too large to store under policy.
+export class DataAppWorkspaceLimitExceededError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-workspace-limit-exceeded', message, statusCode: 413 });
+  }
+}
+
+// patch-data-app-file: the target file is not present in the workspace. Distinct from
+// data-app-workspace-not-found (a missing/expired/wrong-scope `appId`): here the workspace resolved
+// fine but has no such file. statusCode 404. The caller should create the file with
+// upsert-data-app-files instead of patching it.
+export class DataAppFileNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-file-not-found', message, statusCode: 404 });
+  }
+}
+
+// patch-data-app-file: the edit's `oldString` anchor was not found in the current file content.
+// statusCode 422: the request is well-formed but cannot be applied against the current content. The
+// message may include a near-miss hint (e.g. the anchor matches except for line endings).
+export class DataAppPatchAnchorNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-patch-anchor-not-found', message, statusCode: 422 });
+  }
+}
+
+// patch-data-app-file: the `oldString` anchor matched more than one location and `replaceAll` was
+// not set. statusCode 422. The message includes the match count so the caller can widen the anchor
+// with surrounding context or set `replaceAll: true`.
+export class DataAppPatchAmbiguousMatchError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-patch-ambiguous-match', message, statusCode: 422 });
+  }
+}
+
+// patch-data-app-file: an edit supplied an `expectedDigest` that does not match the file's current
+// per-file digest — the file changed since the caller last read it. statusCode 409: a concurrency
+// conflict. The caller should re-read the file, recompute the edit, and retry.
+export class DataAppPatchStaleError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-patch-stale', message, statusCode: 409 });
+  }
+}
+
+// patch-data-app-file: the target file's bytes are not valid UTF-8 text (e.g. a binary asset), so an
+// anchor-based text edit cannot be applied without risking corruption. statusCode 422. The caller
+// should rewrite the file whole with upsert-data-app-files instead.
+export class DataAppPatchNotTextError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-patch-not-text', message, statusCode: 422 });
+  }
+}
+
+// search-data-app-file: a regular-expression search exceeded its time budget and was force-aborted.
+// This backstops the static backtracking pre-screen (hasCatastrophicBacktracking), which cannot catch
+// every super-linear pattern (e.g. overlapping alternations like "(a|aa)+$"): the match runs in a
+// worker thread that is terminated on timeout, so one pathological pattern cannot stall the shared
+// event loop for other users. statusCode 400: the caller should simplify the pattern or search with a
+// literal substring instead.
+export class DataAppRegexTimeoutError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-regex-timeout', message, statusCode: 400 });
+  }
+}

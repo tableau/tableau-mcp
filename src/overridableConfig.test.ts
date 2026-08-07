@@ -56,7 +56,13 @@ describe('OverridableConfig', () => {
       vi.stubEnv('INCLUDE_TOOLS', 'query-datasource,workbook');
 
       const config = new OverridableConfig({});
-      expect(config.includeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
+      expect(config.includeTools).toEqual([
+        'query-datasource',
+        'list-workbooks',
+        'get-workbook',
+        'create-and-publish-workbook',
+        'validate-workbook-package',
+      ]);
     });
 
     it('should parse EXCLUDE_TOOLS into an array of valid tool names', () => {
@@ -70,7 +76,53 @@ describe('OverridableConfig', () => {
       vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource,workbook');
 
       const config = new OverridableConfig({});
-      expect(config.excludeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
+      expect(config.excludeTools).toEqual([
+        'query-datasource',
+        'list-workbooks',
+        'get-workbook',
+        'create-and-publish-workbook',
+        'validate-workbook-package',
+      ]);
+    });
+
+    it('should expand the data-app group in EXCLUDE_TOOLS to the complete workflow', () => {
+      // Site/tool scoping must be able to disable the ENTIRE scaffold -> author -> validate -> publish
+      // workflow as one unit, including the validate/publish tools it shares with the workbook group.
+      vi.stubEnv('EXCLUDE_TOOLS', 'data-app');
+
+      const config = new OverridableConfig({});
+      expect([...config.excludeTools].sort()).toEqual(
+        [
+          'scaffold-data-app',
+          'edit-data-app',
+          'upsert-data-app-files',
+          'patch-data-app-file',
+          'search-data-app-file',
+          'read-data-app-file',
+          'list-data-app-files',
+          'validate-workbook-package',
+          'create-and-publish-workbook',
+        ].sort(),
+      );
+    });
+
+    it('should expand the data-app group in INCLUDE_TOOLS to the complete workflow', () => {
+      vi.stubEnv('INCLUDE_TOOLS', 'data-app');
+
+      const config = new OverridableConfig({});
+      expect([...config.includeTools].sort()).toEqual(
+        [
+          'scaffold-data-app',
+          'edit-data-app',
+          'upsert-data-app-files',
+          'patch-data-app-file',
+          'search-data-app-file',
+          'read-data-app-file',
+          'list-data-app-files',
+          'validate-workbook-package',
+          'create-and-publish-workbook',
+        ].sort(),
+      );
     });
 
     it('should filter out invalid tool names from INCLUDE_TOOLS', () => {

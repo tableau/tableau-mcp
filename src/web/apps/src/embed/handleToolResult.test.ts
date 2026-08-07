@@ -12,6 +12,11 @@ vi.mock('./getEmbedTokenToolClient.js');
 vi.mock('./embedTableauViz.js');
 vi.mock('./loadTableauEmbeddingApi.js');
 vi.mock('./openInTableauLink.js');
+vi.mock('./publishedWorkbookCard.js', async (importOriginal) => {
+  // Keep the real type guard so dispatch is exercised; spy on the renderer only.
+  const actual = await importOriginal<typeof import('./publishedWorkbookCard.js')>();
+  return { ...actual, renderPublishedWorkbookCard: vi.fn() };
+});
 vi.mock('../shared/recordEventClient.js');
 
 import { recordEvent } from '../shared/recordEventClient.js';
@@ -19,6 +24,7 @@ import { embedTableauViz } from './embedTableauViz.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
+import { renderPublishedWorkbookCard } from './publishedWorkbookCard.js';
 
 describe('handleToolResult', () => {
   let mockApp: App;
@@ -342,6 +348,66 @@ describe('handleToolResult', () => {
 
     // Assert setupOpenInTableauLink WAS called
     expect(vi.mocked(setupOpenInTableauLink)).toHaveBeenCalledTimes(1);
+  });
+
+  it('published-workbook card: renders the card and short-circuits the embed path', async () => {
+    const publishResult: CallToolResult = {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            appView: 'published-workbook-card',
+            name: 'My Viz',
+            url: 'https://main-windows/#/site/AdminProfiles/workbooks/4122',
+            projectId: 'proj-abc',
+          }),
+        },
+      ],
+    };
+
+    await handleToolResult(mockApp, publishResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The card renderer was invoked with the parsed payload...
+    expect(vi.mocked(renderPublishedWorkbookCard)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(renderPublishedWorkbookCard)).toHaveBeenCalledWith(
+      mockApp,
+      expect.objectContaining({ appView: 'published-workbook-card', name: 'My Viz' }),
+    );
+
+    // ...and the embed-a-viz path was never touched.
+    expect(vi.mocked(loadTableauEmbeddingApi)).not.toHaveBeenCalled();
+    expect(vi.mocked(callGetEmbedTokenTool)).not.toHaveBeenCalled();
+    expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
+    expect(vi.mocked(setupOpenInTableauLink)).not.toHaveBeenCalled();
+  });
+
+  it('published-workbook card: passes builder warnings through to the renderer', async () => {
+    const publishResult: CallToolResult = {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            appView: 'published-workbook-card',
+            name: 'My Viz',
+            url: 'https://main-windows/#/site/AdminProfiles/workbooks/4122',
+            projectName: 'Default',
+            warnings: ['data.parquet may 404 at serve time'],
+            // Traceability fields are additive and must not break dispatch.
+            validationId: 'a'.repeat(32),
+            digest: 'c'.repeat(64),
+          }),
+        },
+      ],
+    };
+
+    await handleToolResult(mockApp, publishResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(vi.mocked(renderPublishedWorkbookCard)).toHaveBeenCalledWith(
+      mockApp,
+      expect.objectContaining({ warnings: ['data.parquet may 404 at serve time'] }),
+    );
   });
 
   it('no-ops on an empty (dataless) delivery instead of showing PARSE_ERROR', async () => {

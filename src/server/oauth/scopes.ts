@@ -26,6 +26,7 @@ export type McpScope =
   | 'tableau:mcp:insight:create'
   | 'tableau:mcp:tasks:read'
   | 'tableau:mcp:tasks:write'
+  | 'tableau:mcp:workbook:publish'
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read'
@@ -50,6 +51,9 @@ export type TableauApiScope =
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:delete'
+  | 'tableau:workbooks:create'
+  | 'tableau:workbooks:update'
+  | 'tableau:workbooks:download'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
@@ -69,6 +73,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:jobs:read',
   'tableau:mcp:users:read',
   'tableau:mcp:workbook:read',
+  'tableau:mcp:workbook:publish',
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
   'tableau:mcp:users:write',
@@ -179,6 +184,18 @@ const toolScopeMap: Record<
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
+  'create-and-publish-workbook': {
+    mcp: ['tableau:mcp:workbook:publish'],
+    api: new Set(['tableau:workbooks:create', 'tableau:content:read']),
+  },
+  // Pure in-memory pre-flight: builds the .twbx and checks structure/size/asset-references WITHOUT
+  // publishing. No Tableau REST API call, so no API scopes are required (empty set). It also needs no
+  // MCP scope — any authenticated user may validate a package they are about to publish. Kept in the
+  // map because the WebTool constructor calls getRequiredApiScopesForTool for every tool name.
+  'validate-workbook-package': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -365,6 +382,41 @@ const toolScopeMap: Record<
       'tableau:users:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
+  },
+  // Most data-app authoring tools touch only the server-local DataAppWorkspaceStore (no REST call),
+  // so both scope sets are empty: any authenticated (or single-user stdio) caller may author/inspect
+  // their own workspace regardless of granted MCP scopes.
+  //
+  // scaffold-data-app is the exception: to wire the workbook to its published datasource(s) it
+  // resolves each datasource's identity (via REST) and reads one field (via VizQL Data Service), so
+  // it needs content:read + viz_data_service:read — but still no MCP scope.
+  'scaffold-data-app': {
+    mcp: [],
+    api: new Set<TableauApiScope>(['tableau:content:read', 'tableau:viz_data_service:read']),
+  },
+  'edit-data-app': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'upsert-data-app-files': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'patch-data-app-file': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'search-data-app-file': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'read-data-app-file': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'list-data-app-files': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
   },
 };
 

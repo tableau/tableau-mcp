@@ -44,6 +44,41 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
   };
 
   /**
+   * Downloads the packaged bytes of the specified workbook.
+   *
+   * Required scopes: `tableau:workbooks:download`
+   *
+   * @param workbookId - The ID of the workbook to download.
+   * @param siteId - The Tableau site ID
+   * @param includeExtract - Whether to include extract data in the download. Defaults to the REST
+   *   endpoint's own default (true). Data apps are live (no extract), so callers that only need the
+   *   workbook structure can pass `false` to keep the download small.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook
+   */
+  downloadWorkbook = async ({
+    workbookId,
+    siteId,
+    includeExtract = true,
+  }: {
+    workbookId: string;
+    siteId: string;
+    includeExtract?: boolean;
+  }): Promise<Buffer> => {
+    const response = await this._apiClient.axios.request({
+      method: 'get',
+      url: `/sites/${siteId}/workbooks/${workbookId}/content`,
+      params: { includeExtract: includeExtract ? 'True' : 'False' },
+      responseType: 'arraybuffer',
+      headers: {
+        ...this.authHeader.headers,
+      },
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    });
+    return Buffer.from(response.data);
+  };
+
+  /**
    * Returns the workbooks on a site.
    *
    * Required scopes: `tableau:content:read`

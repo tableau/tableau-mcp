@@ -8,6 +8,7 @@ import { embedTableauViz } from './embedTableauViz.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
+import { isPublishedWorkbookResult, renderPublishedWorkbookCard } from './publishedWorkbookCard.js';
 
 const urlSchema = z.object({
   url: z.string().url(),
@@ -26,14 +27,19 @@ const callToolResultSchema = z.object({
 });
 
 /**
+ * Parses the first text content entry of a tool result into a plain JSON value. Throws if the
+ * result shape is unexpected or the text is not valid JSON (callers turn that into PARSE_ERROR).
+ */
+function parseResultPayload(result: CallToolResult): unknown {
+  const validated = callToolResultSchema.parse(result);
+  return JSON.parse(validated.content[0].text);
+}
+
+/**
  * Extracts the view URL from tool result content
  */
 export function extractUrlObjectFromResult(result: CallToolResult): string {
-  const validated = callToolResultSchema.parse(result);
-  const content = validated.content[0];
-
-  const data = JSON.parse(content.text);
-  const { url } = urlSchema.parse(data);
+  const { url } = urlSchema.parse(parseResultPayload(result));
   return url;
 }
 
@@ -68,10 +74,35 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
     return;
   }
 
-  // Parse failure
+  // Parse the payload once so we can dispatch on the optional `appView` discriminator. The shared
+  // bundle has no per-tool routing, so this is how we tell a published-workbook result apart from
+  // the default embed-a-viz path.
+  let payload: unknown;
+  try {
+    payload = parseResultPayload(result);
+  } catch (e) {
+    showError('PARSE_ERROR', e, app);
+    return;
+  }
+
+  // create-and-publish-workbook: render a link card instead of embedding a viz. `url` is optional —
+  // a successful publish with no server-returned webpageUrl still renders a (non-clickable) card
+  // rather than falling through to the default embed path.
+  //
+  // No in-feed dashboard preview: the published dashboard's charts are drawn by the model's inline
+  // JS, which the host's nonce-based CSP refuses to run inside a sandboxed iframe (a srcdoc frame
+  // inherits the embedder CSP). The interactive dashboard is shown pre-publish as a Claude artifact,
+  // and this card's Open link renders the real charts on the Tableau site — so the card stands alone.
+  if (isPublishedWorkbookResult(payload)) {
+    renderPublishedWorkbookCard(app, payload);
+    return;
+  }
+
+  // Default path: embed the Tableau viz at `url`.
   let viewUrl: string;
   try {
-    viewUrl = extractUrlObjectFromResult(result);
+    const { url } = urlSchema.parse(payload);
+    viewUrl = url;
   } catch (e) {
     showError('PARSE_ERROR', e, app);
     return;
