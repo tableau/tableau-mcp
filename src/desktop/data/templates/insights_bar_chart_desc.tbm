@@ -54,8 +54,8 @@
   <table>
     <view>
       <datasources>
-    <datasource caption='Sample - Superstore' name='Sample - Superstore' />
-  </datasources>
+        <datasource caption='Sample - Superstore' name='Sample - Superstore' />
+      </datasources>
       <datasource-dependencies datasource='Sample - Superstore'>
         <column aggregation='Sum' datatype='integer' default-type='quantitative' layered='true' name='[ARR]' pivot='key' role='measure' type='quantitative' user-datatype='integer' visual-totals='Default' />
         <column aggregation='Count' datatype='string' default-type='nominal' layered='true' name='[Product]' pivot='key' role='dimension' type='nominal' user-datatype='string' visual-totals='Default' />

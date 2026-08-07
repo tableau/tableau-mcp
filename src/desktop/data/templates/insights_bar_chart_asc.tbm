@@ -5,7 +5,8 @@
   <document-format-change-manifest>
     <_.fcp.ExtendedPublishedDataSourceUI.true...ExtendedPublishedDataSourceUI />
     <ISO8601DefaultCalendarPref />
-    <ISO8601PeriodTypes />
+    <IntuitiveSorting />
+    <IntuitiveSorting_SP2 />
     <MarkAnimation />
     <ObjectModelEncapsulateLegacy />
     <ObjectModelTableType />
@@ -35,16 +36,20 @@
           <card type='title' />
         </strip>
       </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='0' param='[Sample - Superstore].[none:Product:nk]' type='color' />
+        </strip>
+      </edge>
     </cards>
     <viewpoint>
       <highlight>
         <color-one-way>
-          <field>[Sample - Superstore].[none:Close Date:qk]</field>
-          <field>[Sample - Superstore].[yr:Close Date:ok]</field>
+          <field>[Sample - Superstore].[none:Product:nk]</field>
         </color-one-way>
       </highlight>
     </viewpoint>
-    <simple-id uuid='{04EFD9E7-6809-4F41-B572-213648E86906}' />
+    <simple-id uuid='{F2A39237-BE90-4B47-9E19-B30712717ACA}' />
   </window>
   <table>
     <view>
@@ -53,15 +58,13 @@
       </datasources>
       <datasource-dependencies datasource='Sample - Superstore'>
         <column aggregation='Sum' datatype='integer' default-type='quantitative' layered='true' name='[ARR]' pivot='key' role='measure' type='quantitative' user-datatype='integer' visual-totals='Default' />
-        <column aggregation='Year' datatype='date' default-type='ordinal' layered='true' name='[Close Date]' pivot='key' role='dimension' type='ordinal' user-datatype='date' visual-totals='Default' />
-        <column-instance column='[Close Date]' derivation='None' name='[none:Close Date:qk]' pivot='key' type='quantitative' />
+        <column aggregation='Count' datatype='string' default-type='nominal' layered='true' name='[Product]' pivot='key' role='dimension' type='nominal' user-datatype='string' visual-totals='Default' />
+        <column-instance column='[Product]' derivation='None' name='[none:Product:nk]' pivot='key' type='nominal' />
         <column-instance column='[ARR]' derivation='Sum' name='[sum:ARR:qk]' pivot='key' type='quantitative' />
-        <column-instance column='[Close Date]' derivation='Day-Trunc' name='[tdy:Close Date:qk]' pivot='key' type='quantitative' />
       </datasource-dependencies>
-      <filter class='relative-date' column='[Sample - Superstore].[none:Close Date:qk]' first-period='-99' include-future='true' include-null='false' last-period='0' period-type-v2='day' />
-      <slices>
-        <column>[Sample - Superstore].[none:Close Date:qk]</column>
-      </slices>
+      <shelf-sorts>
+        <shelf-sort-v2 dimension-to-sort='[Sample - Superstore].[none:Product:nk]' direction='ASC' is-on-innermost-dimension='true' measure-to-sort-by='[Sample - Superstore].[sum:ARR:qk]' shelf='rows' />
+      </shelf-sorts>
       <aggregation value='true' />
     </view>
     <style />
@@ -71,10 +74,12 @@
           <breakdown value='auto' />
         </view>
         <mark class='Automatic' />
-        <trendline enable-confidence-bands='true' enable-instant-analytics='true' enabled='true' exclude-color='false' exclude-intercept='false' fit='linear' />
+        <encodings>
+          <color column='[Sample - Superstore].[none:Product:nk]' />
+        </encodings>
       </pane>
     </panes>
-    <rows>[Sample - Superstore].[sum:ARR:qk]</rows>
-    <cols>[Sample - Superstore].[tdy:Close Date:qk]</cols>
+    <rows>[Sample - Superstore].[none:Product:nk]</rows>
+    <cols>[Sample - Superstore].[sum:ARR:qk]</cols>
   </table>
 </bookmark>
