@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok, type Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { findAllWorksheets, parseXML } from '../../../../desktop/metadata/parser.js';
 import { compareTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import {
@@ -221,6 +222,21 @@ export const getRunDashboardBatchTool = (
             }
             const workbookXml = workbookResult.value.xml;
             const liveInstanceId = workbookResult.value.instanceId;
+            const conflictingWorksheetName = [
+              ...findAllWorksheets(parseXML(workbookXml)).map((worksheet) => worksheet['@_name']),
+              ...reservations.map((reservation) => reservation.artifact.title),
+            ].find(
+              (worksheetName): worksheetName is string =>
+                typeof worksheetName === 'string' && xmlNamesEqual(worksheetName, dashboardName),
+            );
+            if (conflictingWorksheetName) {
+              return preflightInputFailure(
+                steps,
+                orderedArtifactIds,
+                dashboardName,
+                `Dashboard name "${dashboardName}" conflicts with worksheet "${conflictingWorksheetName}". Use a unique dashboard name.`,
+              );
+            }
             for (const [index, reservation] of reservations.entries()) {
               const blockingIssues = blockingValidationIssues(
                 runValidation(reservation.artifact.worksheetXml, 'worksheet').issues,

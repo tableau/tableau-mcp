@@ -255,6 +255,16 @@ describe('runDashboardBatchTool', () => {
     expect(composeModule.composeDashboardCore).not.toHaveBeenCalled();
   });
 
+  it('rejects a dashboard name that collides with a worksheet before writing', async () => {
+    const store = artifactStore(['a1'], { titles: { a1: 'Executive Overview' } });
+
+    const result = await callBatch(['a1'], { store });
+
+    expect(bodyOf(result)).toMatchObject({ applied: false, retrySafe: true });
+    expect(applyArtifactModule.applyWorksheetArtifact).not.toHaveBeenCalled();
+    expect(composeModule.composeDashboardCore).not.toHaveBeenCalled();
+  });
+
   it('rejects more than six combined worksheets before writing', async () => {
     const result = await callBatch(['a1'], {
       existingWorksheetNames: ['E1', 'E2', 'E3', 'E4', 'E5', 'E6'],
