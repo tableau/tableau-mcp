@@ -55,6 +55,10 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   ['slope chart of Sales by Region over Order Date', 'slope-chart'],
   ['filled map of Profit by State/Province', 'spatial-choropleth-map'],
   ['filled map of Profit by State/Province and Country/Region', 'spatial-choropleth-map'],
+  [
+    'bubble chart of Sales versus Profit by Product Name sized by Quantity',
+    'correlation-bubble-chart',
+  ],
 ];
 
 // ── KNOWN SAFE-PROPOSES (NOT bound — fail-closed by design; WHY each) ──────────
@@ -150,6 +154,10 @@ const PINNED_PROPOSE: ReadonlyArray<readonly [ask: string, note: string]> = [
     'pinned-current-behavior: W62 stamp made correlation-bubble-chart eligible, but no-LLM classifier still proposes on this phrasing',
   ],
   [
+    'bubble chart of Sales versus Profit by Product Name sized by Quantity and Discount',
+    'two competing size measures stay on the proposal path',
+  ],
+  [
     'dot strip plot of Sales by Sub-Category over Order Date',
     'pinned-current-behavior: W63 stamp made ranking-dot-strip-plot eligible, but its rows slot needs a MONTH-derivation temporal (deriv=mn) that this phrasing does not fill deterministically → propose (fail-open to the LLM path)',
   ],
@@ -183,6 +191,19 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
       expect(res.args.template_name).toBe(template);
       expect(res.args.template_parameters.DATASOURCE).toBe(EXPECTED_DATASOURCE);
     }
+  });
+
+  it('maps an explicit bubble request without swapping axes or dropping size', async () => {
+    const res = await bind('bubble chart of Sales versus Profit by Product Name sized by Quantity');
+    expect(res.status).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.used_llm).toBe(false);
+    expect(res.args.field_mapping).toEqual({
+      '{{field_base_1}}': '[Sample - Superstore].[avg:Profit:qk]',
+      '{{field_base_2}}': '[Sample - Superstore].[sum:Sales:qk]',
+      '{{field_base_3}}': '[Sample - Superstore].[sum:Quantity:qk]',
+      '{{field_base_4}}': '[Sample - Superstore].[none:Product Name:nk]',
+    });
   });
 });
 
