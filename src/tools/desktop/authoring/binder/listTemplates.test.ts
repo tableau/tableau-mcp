@@ -117,6 +117,42 @@ describe('list-templates', () => {
     expect(map.templates[0].template).toBe('spatial-choropleth-map');
   });
 
+  it('hides the specialized rate choropleth behind the canonical map for a generic query', async () => {
+    catalog([
+      'spatial-choropleth-map',
+      'spatial__choropleth__map-rates-or-ratios-by-region',
+      'spatial__hexbin-map__aggregate-geography-into-equal-hex-cells',
+    ]);
+
+    const generic = await getBody({ query: 'choropleth map', limit: 10 });
+    expect(generic.templates.map((template: { template: string }) => template.template)).toEqual([
+      'spatial-choropleth-map',
+    ]);
+
+    const shortGeneric = await getBody({ query: 'choropleth', limit: 10 });
+    expect(
+      shortGeneric.templates.map((template: { template: string }) => template.template),
+    ).toEqual(['spatial-choropleth-map']);
+
+    const explicit = await getBody({
+      query: 'spatial__choropleth__map-rates-or-ratios-by-region',
+      limit: 10,
+    });
+    expect(explicit.templates.map((template: { template: string }) => template.template)).toEqual([
+      'spatial__choropleth__map-rates-or-ratios-by-region',
+    ]);
+
+    const specialized = await getBody({ query: 'hexbin map', limit: 10 });
+    expect(specialized.templates[0].template).toBe(
+      'spatial__hexbin-map__aggregate-geography-into-equal-hex-cells',
+    );
+
+    const rateSpecialized = await getBody({ query: 'rate choropleth', limit: 10 });
+    expect(rateSpecialized.templates[0].template).toBe(
+      'spatial__choropleth__map-rates-or-ratios-by-region',
+    );
+  });
+
   it('returns factual compact provenance and computed eligibility without structural internals', async () => {
     catalog(['safe-bar']);
 

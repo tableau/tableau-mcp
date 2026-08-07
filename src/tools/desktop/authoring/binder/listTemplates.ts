@@ -95,6 +95,8 @@ function canonicalSearchToken(token: string): string {
   if (token === 'columns') return 'column';
   if (token === 'maps') return 'map';
   if (token === 'charts') return 'chart';
+  if (token === 'rates') return 'rate';
+  if (token === 'ratios') return 'ratio';
   return token;
 }
 
@@ -230,6 +232,9 @@ export const getListTemplatesTool = (
           const hasLiteralMatch =
             normalizedQuery !== undefined &&
             catalog.some((entry) => entry.template.toLowerCase().includes(normalizedQuery));
+          const hasExactIdMatch =
+            normalizedQuery !== undefined &&
+            catalog.some((entry) => entry.template.toLowerCase() === normalizedQuery);
           const queryMatches = (entry: TemplateCatalogEntry): boolean =>
             normalizedQuery === undefined ||
             (hasLiteralMatch
@@ -242,8 +247,31 @@ export const getListTemplatesTool = (
               provenance: entry.provenance,
               issue: entry.discoveryIssue!,
             }));
-          const candidates = catalog
-            .filter((entry) => entry.discoveryIssue === undefined && queryMatches(entry))
+          const matchingEntries = catalog.filter(
+            (entry) => entry.discoveryIssue === undefined && queryMatches(entry),
+          );
+          const bestCanonicalScore =
+            normalizedQuery !== undefined && !hasExactIdMatch
+              ? matchingEntries
+                  .filter((entry) => !entry.template.includes('__'))
+                  .reduce(
+                    (best, entry) =>
+                      Math.max(best, fuzzyQueryScore(entry.template, normalizedQuery)),
+                    0,
+                  )
+              : 0;
+          const candidates = matchingEntries
+            // Exact IDs keep specialized templates available; fuzzy searches prefer an equally good canonical shape.
+            .filter((entry) => {
+              if (
+                normalizedQuery === undefined ||
+                hasExactIdMatch ||
+                !entry.template.includes('__')
+              ) {
+                return true;
+              }
+              return fuzzyQueryScore(entry.template, normalizedQuery) > bestCanonicalScore;
+            })
             .sort((a, b) => {
               if (normalizedQuery !== undefined && !hasLiteralMatch) {
                 const scoreDifference =
