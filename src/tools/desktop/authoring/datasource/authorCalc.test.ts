@@ -23,6 +23,18 @@ const BASE_XML = [
   '</workbook>',
 ].join('');
 
+const EMBEDDED_PUBLISHED_DATASOURCE =
+  "<datasource name='Published Metadata'><column name='[ARR]' /></datasource>";
+const PUBLISHED_BASE_XML = [
+  "<?xml version='1.0' encoding='utf-8'?>",
+  "<workbook version='18.1'><datasources><datasource name='Published'>",
+  "<connection class='sqlproxy'><metadata-records><metadata-record><attributes><attribute>",
+  `<![CDATA[${EMBEDDED_PUBLISHED_DATASOURCE}]]>`,
+  '</attribute></attributes></metadata-record></metadata-records></connection>',
+  "<column caption='ARR' datatype='integer' name='[ARR]' role='measure' type='quantitative' />",
+  "</datasource></datasources><worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
+].join('');
+
 describe('authorCalcTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -165,6 +177,48 @@ describe('authorCalcTool', () => {
     // the splice must land INSIDE the top-level <datasources> block, before its close
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded.indexOf("caption='Margin'")).toBeLessThan(loaded.indexOf('</datasources>'));
+  });
+
+  it('splices a calc after a published datasource CDATA payload and before the outer close', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const calcXml =
+      "<column caption='ARR Plus Ten' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[ARR] + 10' /></column>";
+    const readbackXml = PUBLISHED_BASE_XML.replace(
+      '</datasource></datasources>',
+      `${calcXml}</datasource></datasources>`,
+    );
+
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'ARR Plus Ten', formula: '[ARR] + 10' },
+      initialXml: PUBLISHED_BASE_XML,
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded.slice(loaded.indexOf('<![CDATA[') + 9, loaded.indexOf(']]>'))).toBe(
+      EMBEDDED_PUBLISHED_DATASOURCE,
+    );
+    expect(loaded.indexOf("caption='ARR Plus Ten'")).toBeGreaterThan(loaded.indexOf(']]>'));
+    expect(loaded.indexOf("caption='ARR Plus Ten'")).toBeLessThan(
+      loaded.lastIndexOf('</datasource>'),
+    );
+  });
+
+  it('rejects a datasource name that exists only inside published metadata CDATA', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'ARR Plus Ten',
+        formula: '[ARR] + 10',
+        datasource: 'Published Metadata',
+      },
+      initialXml: PUBLISHED_BASE_XML,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Datasource "Published Metadata" was not found');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('rejects multiple candidate datasources without a selector and lists them', async () => {
