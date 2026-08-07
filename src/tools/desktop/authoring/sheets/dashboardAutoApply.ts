@@ -428,7 +428,7 @@ export const getDashboardAutoApplyTool = (
             // Fallback mode (§2 "Probe fails"): the workbook (worksheets + minimal empty
             // dashboard) is already live; a second dispatch lays in the real zones. A
             // failure here is a REAL partial window (Q3) — the dashboard exists with a
-            // valid empty layout, coherent and recoverable via build-and-apply-dashboard.
+            // valid empty layout and can be replaced by retrying this atomic tool.
             const realZones = computeZones(titleText, {
               kpis: [],
               charts: resolvedTitles,
@@ -468,8 +468,8 @@ export const getDashboardAutoApplyTool = (
                     apply_error: message,
                     guidance:
                       `The workbook (sheets + an empty "${dashboardName}" dashboard) was applied, but laying ` +
-                      `in the zones failed (${message}). Re-issue the zones via build-and-apply-dashboard — the ` +
-                      'dashboard exists with a valid empty layout, nothing is corrupted.',
+                      `in the zones failed (${message}). Retry dashboard-auto-apply with the same asks and ` +
+                      'dashboard name; it will replace the valid empty dashboard.',
                     ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
                   },
                   prefillNextAction('Re-issue the zones'),

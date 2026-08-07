@@ -164,15 +164,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
   it('routes dashboard composition through visible dashboard tools before command search', () => {
     const dashboard = routes.find((route) => route.id === 'dashboard');
-    expect(dashboard?.toolSequence).toEqual([
-      'list-templates',
-      'list-available-fields',
-      'build-worksheets-from-templates',
-      'apply-worksheet',
-      'dashboard-auto-apply',
-      'plan-dashboard-creation',
-      'build-and-apply-dashboard',
-    ]);
+    expect(dashboard?.toolSequence).toEqual(['dashboard-auto-apply']);
   });
 
   it.each(routes)('route "$id" declares a tool sequence and stop conditions', (route) => {

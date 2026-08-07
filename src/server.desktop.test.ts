@@ -177,7 +177,7 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-06 (merge of upstream #720 titles + #723 template flow): the
     // merged default route prose measures 3,099 bytes (was 7,042 pre-merge).
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_099);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(2_960);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(fullToolSurfaceTotal).toBeLessThanOrEqual(FULL_TOOL_SURFACE_BUDGET);
   });
@@ -404,10 +404,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 35-tool modern surface without legacy binder wrappers', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 32-tool modern surface without legacy binder wrappers', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(35);
+    expect(selected).toHaveLength(32);
     expect(selected.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining(['bind-template', 'build-and-apply-worksheet']),
     );
@@ -430,9 +430,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'resolve-field',
       'apply-worksheet',
       'dashboard-auto-apply',
-      'plan-dashboard-creation',
-      'batch-create-and-cache-sheets',
-      'build-and-apply-dashboard',
       'read-knowledge-resource',
       'search-knowledge',
       'get-summary-data',
@@ -474,6 +471,9 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'get-dashboard-info',
       'get-storyboard-info',
       'list-knowledge-resources',
+      'plan-dashboard-creation',
+      'batch-create-and-cache-sheets',
+      'build-and-apply-dashboard',
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);
     }

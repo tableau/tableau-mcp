@@ -96,18 +96,10 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard',
     trigger: 'a dashboard ask with 2-6 vizzes',
     action:
-      'build sheets with list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet, applying each worksheet sequentially; then compose with dashboard-auto-apply or plan-dashboard-creation -> build-and-apply-dashboard.',
-    toolSequence: [
-      'list-templates',
-      'list-available-fields',
-      'build-worksheets-from-templates',
-      'apply-worksheet',
-      'dashboard-auto-apply',
-      'plan-dashboard-creation',
-      'build-and-apply-dashboard',
-    ],
-    stopConditions: ['applying each worksheet sequentially'],
-    requiredEvidence: ['each sheet build returns a success envelope before dashboard composition'],
+      'call dashboard-auto-apply once with 2-6 specific viz asks; it builds the worksheets and dashboard together.',
+    toolSequence: ['dashboard-auto-apply'],
+    stopConditions: ['call dashboard-auto-apply once'],
+    requiredEvidence: ['dashboard-auto-apply returns an applied dashboard receipt'],
   },
   {
     kind: 'route',
