@@ -32,7 +32,7 @@ const EXPECTED_EXCLUDED = [
 describe('bundled bookmark pass-1 eligibility', () => {
   // WHY: Full-suite CPU contention can push this all-bookmark validation sweep past Vitest's 5s default.
   it(
-    'converts all 133 bookmarks and excludes only the 22 unsafe pass-1 templates',
+    'converts all 135 bookmarks and excludes only the 22 unsafe pass-1 templates',
     { timeout: 30_000 },
     () => {
       const names = listBookmarkNames();
@@ -57,9 +57,13 @@ describe('bundled bookmark pass-1 eligibility', () => {
           const errors = runValidation(validationXml, 'workbook').issues.filter(
             (issue) =>
               issue.severity === 'error' &&
+              // Mirror the production eligibility gate (isBindingResolvedPlaceholderError):
+              // DATASOURCE, field_base_N, and ALL-CAPS literal template_parameters
+              // ({{DIRECTION}}, {{DATE_MIN}}/{{DATE_MAX}}) are all filled at bind time,
+              // so leaving them unsubstituted in a raw template is expected, not an error.
               !(
                 issue.ruleId === 'unsubstituted-template-token' &&
-                /\{\{(?:DATASOURCE|field_base_[1-9]\d*)\}\}/.test(issue.message)
+                /\{\{(?:DATASOURCE|field_base_[1-9]\d*|[A-Z][A-Z0-9_]*)\}\}/.test(issue.message)
               ),
           );
           for (const issue of errors) {
@@ -82,12 +86,12 @@ describe('bundled bookmark pass-1 eligibility', () => {
         }
       }
 
-      expect(names).toHaveLength(133);
+      expect(names).toHaveLength(135);
       expect(conversionErrors).toEqual([]);
       expect(retainedMappedSourceAttrs).toEqual([]);
       expect(unexpectedValidationErrors).toEqual([]);
       expect(excluded).toEqual(EXPECTED_EXCLUDED);
-      expect(names.length - excluded.length).toBe(111);
+      expect(names.length - excluded.length).toBe(113);
     },
   );
 });

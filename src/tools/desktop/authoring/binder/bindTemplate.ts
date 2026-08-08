@@ -112,6 +112,10 @@ const paramsSchema = {
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional().describe('Apply immediately.'),
+  skip_validation: z
+    .boolean()
+    .optional()
+    .describe('Skip apply-time validation preflight; deterministic/pre-vetted callers only.'),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
@@ -1420,6 +1424,7 @@ async function performAutoApply({
   schemaSummary,
   templateSnapshot,
   appliedDefault,
+  skipValidation,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -1433,6 +1438,7 @@ async function performAutoApply({
   schemaSummary: SchemaSummary;
   templateSnapshot: TemplateRuntimeSnapshot;
   appliedDefault?: AppliedDefault;
+  skipValidation?: boolean;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
@@ -1534,6 +1540,7 @@ async function performAutoApply({
     focus: { navigate: 'artifact', sheetName: literalTitle },
     executor,
     signal,
+    skipValidation,
   });
   if (applyResult.isErr()) {
     return {
@@ -1950,12 +1957,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
       idempotentHint: false,
     },
     callback: async (
-      { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs },
+      { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs, skip_validation },
       extra,
     ): Promise<CallToolResult> => {
       return await bindTemplateTool.logAndExecute<BindTemplateToolResult>({
         extra,
-        args: { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs },
+        args: { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs, skip_validation },
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -2311,6 +2318,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             schemaSummary,
             templateSnapshot: selectedTemplate.snapshot,
             appliedDefault,
+            skipValidation: skip_validation === true,
           });
           const appliedResult = autoApplyResult.result;
           // Only a bind the binder called FINISHED may be replayed as "already built" on
