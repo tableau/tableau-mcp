@@ -60,7 +60,6 @@ export interface BuildDashboardCandidateXmlArgs {
 export type ComposeDashboardOutcome =
   | { state: 'applied'; retrySafe: false; receipt: ComposeDashboardReceipt }
   | { state: 'failed'; retrySafe: true; stage: string; error: McpToolError }
-  | { state: 'partial'; retrySafe: false; stage: string; error: McpToolError }
   | { state: 'unknown'; retrySafe: false; stage: string; error: McpToolError };
 
 export function buildDashboardCandidateXml({
@@ -249,14 +248,6 @@ async function createDashboard({
     dashboardName,
     worksheetNames,
   );
-  const targetCount = listWorkbookDashboards(readbackResult.value).filter((name) =>
-    xmlNamesEqual(name, dashboardName),
-  ).length;
-  if (targetCount !== 1) {
-    readbackIssues.push(
-      `Expected exactly one dashboard named "${dashboardName}" after apply; found ${targetCount}.`,
-    );
-  }
   if (!readbackResult.settled || readbackIssues.length > 0) {
     const error = recoveryError({
       applied: 'unknown',

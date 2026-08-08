@@ -77,7 +77,7 @@ const paramsSchema = {
   gridColumns: z.number().int().min(1).max(6).optional().describe('Cols.'),
 };
 
-type AppliedState = true | false | 'partial' | 'unknown';
+type AppliedState = true | false | 'unknown';
 
 type StepReceipt =
   | {
@@ -742,7 +742,6 @@ function batchApplyOutcome(result: CallToolResult, executionStarted: boolean): B
     if (payload.applied === true) return 'succeeded';
     if (payload.applied === 'unknown') return 'unknown';
     if (payload.steps?.some((step) => step.state === 'aborted')) return 'aborted';
-    if (payload.applied === 'partial') return 'partial';
     if (payload.applied === false) return executionStarted ? 'failed' : 'refused';
   } catch {
     // Non-structured failures are refusals before a batch outcome exists.
