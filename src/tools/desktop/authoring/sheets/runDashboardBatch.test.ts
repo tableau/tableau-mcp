@@ -158,6 +158,25 @@ describe('runDashboardBatchTool', () => {
     expect(event).not.toHaveProperty('worksheetNames');
   });
 
+  it('returns without waiting for the telemetry sink', async () => {
+    vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    vi.mocked(applyArtifactModule.applyWorksheetArtifact).mockResolvedValue(
+      appliedArtifact('a1', 'New A'),
+    );
+    vi.mocked(composeModule.composeDashboardCore).mockResolvedValue(composedDashboard());
+
+    const result = await Promise.race([
+      callBatch(['a1']),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('batch waited for telemetry')), 100),
+      ),
+    ]);
+
+    expect(result.isError).toBe(false);
+  });
+
   it('records preflight rejection as refused', async () => {
     const emitSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
 

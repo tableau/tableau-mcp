@@ -146,6 +146,7 @@ describe('DesktopMcpServer', () => {
 
       expect(emitSpy).toHaveBeenCalledWith(expect.anything(), {
         type: 'tool_schemas_registered',
+        surface: 'desktop',
         profile: 'unknown',
         tool_count: listedTools.length,
         schemas_json_chars: JSON.stringify(listedTools).length,

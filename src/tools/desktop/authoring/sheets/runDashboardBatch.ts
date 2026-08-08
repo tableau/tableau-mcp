@@ -511,7 +511,7 @@ export const getRunDashboardBatchTool = (
         },
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
-      await emitEpisodeEvent(extra.config, {
+      void emitEpisodeEvent(extra.config, {
         type: 'batch_apply',
         session_id: sessionId,
         episode_id: currentEpisodeId(sessionId),
