@@ -180,6 +180,12 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
+  // Temporary file-transport probe. It downloads the caller-provided file but makes no Tableau
+  // REST API request and does not need a Tableau content scope.
+  'inspect-web-authoring-file-input': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
