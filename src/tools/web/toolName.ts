@@ -15,6 +15,7 @@ export const webToolNames = [
   'get-embed-token',
   'record-event',
   'get-workbook',
+  'publish-workbook',
   'get-view',
   'get-flow',
   'list-flow-runs',
@@ -63,7 +64,7 @@ export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
 export const webToolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
-  workbook: ['list-workbooks', 'get-workbook'],
+  workbook: ['list-workbooks', 'get-workbook', 'publish-workbook'],
   project: ['list-projects'],
   view: [
     'list-views',

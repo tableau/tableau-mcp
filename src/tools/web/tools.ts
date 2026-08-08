@@ -38,6 +38,7 @@ import { getListCustomViewsTool } from './views/listCustomViews.js';
 import { getListViewsTool } from './views/listViews.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
+import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 
 export const webToolFactories = [
   getGetDatasourceMetadataTool,
@@ -65,6 +66,7 @@ export const webToolFactories = [
   getGeneratePulseInsightBriefTool,
   getGenerateInsightCardsTool,
   getGetWorkbookTool,
+  getPublishWorkbookTool,
   getGetViewTool,
   getGetViewDataTool,
   getGetViewImageTool,
