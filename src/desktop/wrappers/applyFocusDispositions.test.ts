@@ -43,10 +43,8 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
     'loadWorkbookXml:artifact',
   ],
   'src/tools/desktop/api/applyWorksheetArtifact.ts': ['loadWorksheetXml:artifact'],
-  'src/tools/desktop/authoring/sheets/composeDashboardCore.ts': [
-    'loadWorkbookXml:none',
-    'loadWorkbookXml:artifact',
-  ],
+  'src/tools/desktop/authoring/sheets/composeDashboardCore.ts': ['loadWorkbookXml:artifact'],
+  'src/tools/desktop/authoring/sheets/runDashboardBatch.ts': ['loadWorkbookXml:none'],
   'src/tools/desktop/authoring/datasource/authorAction.ts': ['applyWorkbookText:restore'],
   'src/tools/desktop/authoring/datasource/authorCalcCore.ts': ['applyWorkbookText:restore'],
   'src/tools/desktop/authoring/datasource/authorSet.ts': ['applyWorkbookText:restore'],

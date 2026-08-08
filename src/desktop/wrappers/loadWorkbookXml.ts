@@ -39,6 +39,7 @@ export async function loadWorkbookXml({
   baselineXml,
   expectedWorkbookXml,
   focus,
+  applyOptions,
   executor,
   signal,
 }: {
@@ -46,6 +47,7 @@ export async function loadWorkbookXml({
   baselineXml?: string;
   expectedWorkbookXml?: string;
   focus: ApplyFocus;
+  applyOptions?: ApplyWorkbookDocumentOptions;
   filePath?: string;
 } & WithExecutorAndAbortSignal): Promise<LoadWorkbookXmlResult> {
   xml = xml.trim();
@@ -103,7 +105,7 @@ export async function loadWorkbookXml({
       }
     }
 
-    const result = await applyWorkbookText({ xml, focus, executor, signal });
+    const result = await applyWorkbookText({ xml, focus, executor, signal, applyOptions });
     if (result.isErr()) {
       return Err({ type: 'execute-command-error', error: result.error });
     }

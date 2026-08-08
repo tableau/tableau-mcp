@@ -73,6 +73,24 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     expect(result.isOk()).toBe(true);
 
     expect(appliedXml).toEqual([validXml]);
+    expect(executor.applyWorkbookDocument).toHaveBeenCalledWith(validXml, mockSignal, undefined);
+  });
+
+  it('forwards transactional apply options to the whole-document POST', async () => {
+    const { executor } = dispatchingExecutor();
+    const onDispatch = vi.fn();
+    const applyOptions = { expectedInstanceId: 'inst-expected', onDispatch };
+
+    const result = await loadWorkbookXml({
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      applyOptions,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(executor.applyWorkbookDocument).toHaveBeenCalledWith(validXml, mockSignal, applyOptions);
   });
 
   it('accepts a guarded apply when the live workbook still matches the expected workbook', async () => {

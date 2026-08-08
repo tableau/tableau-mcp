@@ -151,9 +151,6 @@ const NON_TOOL_VOCABULARY = [
   // Health-check repair-primitive codes, not tools the model can call.
   'reinject-from-template',
   'render-diagnostics',
-  'replace-create',
-  'replace-delete',
-  'replace-delete-readback',
   'request-failed',
   'safe-by-construction',
   'schema-too-large',
