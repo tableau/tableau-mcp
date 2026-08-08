@@ -20,7 +20,7 @@ export function constructWebAuthoringUrl({
 
   url.pathname =
     `/vizql/show${sitePath}/authoring/newWorkbook/` +
-    `${encodeURIComponent(workbookId)}/fromFileUpload/${encodeURIComponent(uploadSessionId)}`;
+    `${workbookId}/fromFileUpload/${uploadSessionId}`;
   url.search = '';
   url.hash = '';
 

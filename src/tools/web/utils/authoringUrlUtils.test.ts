@@ -29,16 +29,16 @@ describe('constructWebAuthoringUrl', () => {
     );
   });
 
-  it('encodes each dynamic path segment', () => {
+  it('encodes the site name and preserves Tableau identifiers', () => {
     expect(
       constructWebAuthoringUrl({
         server: 'https://tableau.example.com',
         siteName: 'my site',
-        workbookId: 'workbook/id',
-        uploadSessionId: 'upload/id',
+        workbookId: 'new-workbook-id',
+        uploadSessionId: '4840:upload-id-0:0',
       }),
     ).toBe(
-      'https://tableau.example.com/vizql/show/t/my%20site/authoring/newWorkbook/workbook%2Fid/fromFileUpload/upload%2Fid',
+      'https://tableau.example.com/vizql/show/t/my%20site/authoring/newWorkbook/new-workbook-id/fromFileUpload/4840:upload-id-0:0',
     );
   });
 });
