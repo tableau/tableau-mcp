@@ -61,9 +61,15 @@
         <column aggregation='Count' datatype='string' default-type='nominal' layered='true' name='[Product]' pivot='key' role='dimension' type='nominal' user-datatype='string' visual-totals='Default' />
         <column-instance column='[Product]' derivation='None' name='[none:Product:nk]' pivot='key' type='nominal' />
         <column-instance column='[ARR]' derivation='Sum' name='[sum:ARR:qk]' pivot='key' type='quantitative' />
+        <column aggregation='Year' datatype='date' default-type='ordinal' layered='true' name='[Close Date]' pivot='key' role='dimension' type='ordinal' user-datatype='date' visual-totals='Default' />
+        <column-instance column='[Close Date]' derivation='None' name='[none:Close Date:qk]' pivot='key' type='quantitative' />
       </datasource-dependencies>
+      <filter class='quantitative' column='[Sample - Superstore].[none:Close Date:qk]' included-values='in-range'>
+        <min>#{{DATE_MIN}}#</min>
+        <max>#{{DATE_MAX}}#</max>
+      </filter>
       <shelf-sorts>
-        <shelf-sort-v2 dimension-to-sort='[Sample - Superstore].[none:Product:nk]' direction='DESC' is-on-innermost-dimension='true' measure-to-sort-by='[Sample - Superstore].[sum:ARR:qk]' shelf='rows' />
+        <shelf-sort-v2 dimension-to-sort='[Sample - Superstore].[none:Product:nk]' direction='{{DIRECTION}}' is-on-innermost-dimension='true' measure-to-sort-by='[Sample - Superstore].[sum:ARR:qk]' shelf='rows' />
       </shelf-sorts>
       <aggregation value='true' />
     </view>

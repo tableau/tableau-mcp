@@ -29,6 +29,21 @@ interface EligibleTemplate {
 const TEMPLATE_DIR = join(process.cwd(), 'src', 'desktop', 'data', 'templates');
 const EMPTY_WORKBOOK = "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>";
 const FIELD_TOKEN = /^\{\{field_base_[1-9]\d*\}\}$/;
+
+// A template may carry literal ALL-CAPS {{TOKEN}}s the binder fills from a proposal's
+// template_parameters (e.g. a bar's {{DIRECTION}}, a date filter's {{DATE_MIN}}/{{DATE_MAX}}).
+// The real bind always supplies them; the corpus harness supplies only DATASOURCE, so it must
+// discover and fill the rest here or a raw apply trips unsubstituted-template-token. DATASOURCE
+// and field_base_* are reserved (filled by the field rewriter) — mirror injectTemplateCore's skip.
+function literalTemplateParameters(templateXml: string): Record<string, string> {
+  const params: Record<string, string> = { DATASOURCE: 'Unrelated DS' };
+  for (const match of templateXml.matchAll(/\{\{([A-Z][A-Z0-9_]*)\}\}/g)) {
+    const key = match[1];
+    if (key === 'DATASOURCE') continue;
+    params[key] = 'x';
+  }
+  return params;
+}
 const INSTANCE_PREFIX_WRAPPERS = new Set([
   'cum',
   'diff',
@@ -425,7 +440,7 @@ describe('TBM engine corpus invariants', { timeout: 30_000 }, () => {
           templateXml: template.xml,
           title: `Validation ${template.name}`,
           sheetType: 'worksheet',
-          templateParameters: { DATASOURCE: 'Unrelated DS' },
+          templateParameters: literalTemplateParameters(template.xml),
           fieldMapping: mapping,
           templateSlots: template.slots,
           applyNonce: `validation-${template.name}`,
