@@ -1,6 +1,7 @@
 import { AxiosInstance } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 
+import { workbooksApis } from '../apis/workbooksApi.js';
 import WorkbooksMethods from './workbooksMethods.js';
 
 describe('WorkbooksMethods', () => {
@@ -238,6 +239,78 @@ describe('WorkbooksMethods', () => {
       expect(validation.errors).toEqual(result.errors);
       expect(validation.warnings).toEqual(result.warnings);
       expect(validation.uploadId).toBeUndefined();
+    });
+
+    it('should return the structured body when the API responds 422 (validation errors) instead of throwing', async () => {
+      const data = {
+        timestamp: '2026-06-10T14:32:18.456Z',
+        errors: [
+          {
+            severity: 'ERROR',
+            message: 'Missing required closing tag for element',
+            line: 127,
+            column: 5,
+            elementName: 'preferences',
+          },
+        ],
+        warnings: [],
+      };
+      // Zodios/axios throws on a 422. isErrorFromAlias matches this shape via the
+      // endpoint's declared 422 error schema, so the method returns the body.
+      const axiosError = {
+        isAxiosError: true,
+        config: { method: 'post', url: '/sites/site-1/workbooks/validateUploadedWorkbook' },
+        response: { status: 422, data },
+      };
+      const mockApiClient = {
+        api: workbooksApis,
+        validateUploadedWorkbook: vi.fn().mockRejectedValue(axiosError),
+      };
+
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = mockApiClient;
+
+      const validation = await workbooksMethods.validateUploadedWorkbook({
+        siteId: 'site-1',
+        uploadSessionId: 'session-42',
+      });
+
+      expect(validation).toEqual(data);
+    });
+
+    it('should propagate a non-422 error (e.g. 404) instead of swallowing it', async () => {
+      const axiosError = {
+        isAxiosError: true,
+        config: { method: 'post', url: '/sites/site-1/workbooks/validateUploadedWorkbook' },
+        response: {
+          status: 404,
+          data: { error: { code: '404', summary: 'Not Found', detail: 'Unknown upload session' } },
+        },
+      };
+      const mockApiClient = {
+        api: workbooksApis,
+        validateUploadedWorkbook: vi.fn().mockRejectedValue(axiosError),
+      };
+
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = mockApiClient;
+
+      await expect(
+        workbooksMethods.validateUploadedWorkbook({
+          siteId: 'site-1',
+          uploadSessionId: 'unknown-session',
+        }),
+      ).rejects.toBe(axiosError);
     });
   });
 });

@@ -140,6 +140,16 @@ const validateUploadedWorkbookEndpoint = makeEndpoint({
     },
   ],
   response: workbookValidationResultSchema,
+  // A 422 is not a request failure: it means validation ran and found structural
+  // errors. The body has the same shape as the 200 response (just with `errors`
+  // populated), so we reuse the schema. This lets `isErrorFromAlias` type-narrow the
+  // caught error so the method can return the structured payload instead of throwing.
+  errors: [
+    {
+      status: 422,
+      schema: workbookValidationResultSchema,
+    },
+  ],
 });
 
 const workbooksApi = makeApi([
