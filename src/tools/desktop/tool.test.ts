@@ -2,6 +2,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
+import * as episodeEvents from '../../desktop/episode-events.js';
 import { beginEpisode, resetEpisodeEventsForTests } from '../../desktop/episode-events.js';
 import { sessionRouteState } from '../../desktop/route/route-state.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
@@ -49,29 +50,57 @@ describe('DesktopTool episode telemetry', () => {
     };
     const begin = await beginEpisode(extra.config, { sessionId: 'S1' });
 
-    await tool.logAndExecute({
+    const result = await tool.logAndExecute({
       extra,
       args: { session: 'S1' },
       callback: async () => new Ok({ ok: true }),
     });
 
-    expect(readEvents(dir)).toMatchObject([
-      { type: 'episode_begin', episode_id: begin.episode_id },
-      {
-        type: 'tool_start',
-        session_id: 'S1',
-        episode_id: begin.episode_id,
-        tool: 'ask-user',
-      },
-      {
-        type: 'tool_end',
-        session_id: 'S1',
-        episode_id: begin.episode_id,
-        tool: 'ask-user',
-        success: true,
-      },
-    ]);
-    expect(readEvents(dir)[2].duration_ms).toEqual(expect.any(Number));
+    await vi.waitFor(() => {
+      expect(readEvents(dir)).toMatchObject([
+        { type: 'episode_begin', episode_id: begin.episode_id },
+        {
+          type: 'tool_start',
+          session_id: 'S1',
+          episode_id: begin.episode_id,
+          tool: 'ask-user',
+        },
+        {
+          type: 'tool_end',
+          session_id: 'S1',
+          episode_id: begin.episode_id,
+          tool: 'ask-user',
+          success: true,
+          request_id_hash: expect.stringMatching(/^[a-f0-9]{16}$/),
+          result_size_chars: JSON.stringify(result).length,
+        },
+      ]);
+    });
+    const events = readEvents(dir);
+    expect(events[2].duration_ms).toEqual(expect.any(Number));
+  });
+
+  it('returns without waiting for the telemetry sink', async () => {
+    const emitSpy = vi
+      .spyOn(episodeEvents, 'emitEpisodeEvent')
+      .mockImplementation(() => new Promise(() => undefined));
+
+    try {
+      const result = await Promise.race([
+        makeTool().logAndExecute({
+          extra: getMockRequestHandlerExtra(),
+          args: { session: 'S1' },
+          callback: async () => new Ok({ ok: true }),
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('tool waited for telemetry')), 100),
+        ),
+      ]);
+
+      expect(result.isError).toBe(false);
+    } finally {
+      emitSpy.mockRestore();
+    }
   });
 
   it('emits tool_error and unsuccessful tool_end when the callback throws', async () => {
@@ -86,7 +115,7 @@ describe('DesktopTool episode telemetry', () => {
       },
     };
 
-    await tool.logAndExecute({
+    const result = await tool.logAndExecute({
       extra,
       args: { session: 'S1' },
       callback: async () => {
@@ -94,11 +123,20 @@ describe('DesktopTool episode telemetry', () => {
       },
     });
 
-    expect(readEvents(dir)).toMatchObject([
-      { type: 'tool_start', session_id: 'S1', tool: 'ask-user' },
-      { type: 'tool_error', session_id: 'S1', tool: 'ask-user' },
-      { type: 'tool_end', session_id: 'S1', tool: 'ask-user', success: false },
-    ]);
+    await vi.waitFor(() => {
+      expect(readEvents(dir)).toMatchObject([
+        { type: 'tool_start', session_id: 'S1', tool: 'ask-user' },
+        { type: 'tool_error', session_id: 'S1', tool: 'ask-user' },
+        {
+          type: 'tool_end',
+          session_id: 'S1',
+          tool: 'ask-user',
+          success: false,
+          request_id_hash: expect.stringMatching(/^[a-f0-9]{16}$/),
+          result_size_chars: JSON.stringify(result).length,
+        },
+      ]);
+    });
   });
 });
 
@@ -124,23 +162,25 @@ describe('DesktopTool worksheet orientation', () => {
 
     expect(result.isError).toBe(false);
     expect(callback).toHaveBeenCalledOnce();
-    expect(readEvents(dir)).toMatchObject([
-      { type: 'episode_begin', episode_id: begin.episode_id },
-      {
-        type: 'tool_start',
-        session_id: 'S1',
-        episode_id: begin.episode_id,
-        tool: 'get-worksheet-xml',
-      },
-      {
-        type: 'tool_end',
-        session_id: 'S1',
-        episode_id: begin.episode_id,
-        tool: 'get-worksheet-xml',
-        success: true,
-        outcome: 'succeeded',
-      },
-    ]);
+    await vi.waitFor(() => {
+      expect(readEvents(dir)).toMatchObject([
+        { type: 'episode_begin', episode_id: begin.episode_id },
+        {
+          type: 'tool_start',
+          session_id: 'S1',
+          episode_id: begin.episode_id,
+          tool: 'get-worksheet-xml',
+        },
+        {
+          type: 'tool_end',
+          session_id: 'S1',
+          episode_id: begin.episode_id,
+          tool: 'get-worksheet-xml',
+          success: true,
+          outcome: 'succeeded',
+        },
+      ]);
+    });
   });
 });
 

@@ -77,6 +77,63 @@ describe('episode event writer', () => {
     expect(events[0].ts).toEqual(expect.any(String));
     expect(readdirSync(dir)[0]).toMatch(/^episodes-.*\.jsonl$/);
   });
+
+  it('writes only bounded metadata for startup, Desktop RPC, and batch events', async () => {
+    const dir = tmpDir();
+    const cfg = config({ episodeEventsEnabled: true, episodeEventsDirectory: dir });
+
+    await emitEpisodeEvent(cfg, {
+      type: 'tool_schemas_registered',
+      surface: 'desktop',
+      profile: 'dynamic-authoring',
+      tool_count: 32,
+      schemas_json_chars: 27_000,
+      instructions_chars: 3_000,
+    });
+    await emitEpisodeEvent(cfg, {
+      type: 'desktop_rpc',
+      session_id: 'S1',
+      operation: 'document_apply',
+      duration_ms: 12,
+      transport_success: true,
+      rescan_count: 0,
+    });
+    await emitEpisodeEvent(cfg, {
+      type: 'batch_apply',
+      session_id: 'S1',
+      artifact_count: 2,
+      existing_worksheet_count: 1,
+      duration_ms: 25,
+      outcome: 'succeeded',
+    });
+
+    expect(readEvents(dir)).toMatchObject([
+      {
+        type: 'tool_schemas_registered',
+        surface: 'desktop',
+        profile: 'dynamic-authoring',
+        tool_count: 32,
+        schemas_json_chars: 27_000,
+        instructions_chars: 3_000,
+      },
+      {
+        type: 'desktop_rpc',
+        session_id: 'S1',
+        operation: 'document_apply',
+        duration_ms: 12,
+        transport_success: true,
+        rescan_count: 0,
+      },
+      {
+        type: 'batch_apply',
+        session_id: 'S1',
+        artifact_count: 2,
+        existing_worksheet_count: 1,
+        duration_ms: 25,
+        outcome: 'succeeded',
+      },
+    ]);
+  });
 });
 
 describe('episode lifecycle events', () => {

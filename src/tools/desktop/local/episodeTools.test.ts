@@ -84,6 +84,7 @@ describe('episode lifecycle tools', () => {
     expect(offNames).not.toContain('tableau-begin-episode');
     expect(offNames).not.toContain('tableau-end-episode');
 
+    vi.stubEnv('EPISODE_EVENTS_DIR', tmpDir());
     vi.stubEnv('EPISODE_EVENTS', 'on');
     const onServer = serverWithRegisterSpy();
     await onServer.registerTools();

@@ -155,13 +155,16 @@ describe('DesktopTool per-call deadline', () => {
     });
     await vi.advanceTimersByTimeAsync(60_000);
     await pending;
+    vi.useRealTimers();
 
-    expect(readEvents(dir)).toMatchObject([
-      { type: 'episode_begin' },
-      { type: 'tool_start', tool: 'apply-workbook' },
-      { type: 'tool_error', tool: 'apply-workbook' },
-      { type: 'tool_end', tool: 'apply-workbook', success: false },
-    ]);
+    await vi.waitFor(() => {
+      expect(readEvents(dir)).toMatchObject([
+        { type: 'episode_begin' },
+        { type: 'tool_start', tool: 'apply-workbook' },
+        { type: 'tool_error', tool: 'apply-workbook' },
+        { type: 'tool_end', tool: 'apply-workbook', success: false },
+      ]);
+    });
     const toolError = readEvents(dir)[2];
     expect(String(toolError.error)).toContain('did not respond within 60s');
 

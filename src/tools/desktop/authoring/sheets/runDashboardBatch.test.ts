@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as episodeEvents from '../../../../desktop/episode-events.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
 import { captureTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
 import * as sessionResolution from '../../../../desktop/session/sessionResolution.js';
@@ -129,6 +130,105 @@ describe('runDashboardBatchTool', () => {
         { operation: 'dashboard', dashboardName: 'Executive Overview', state: 'applied' },
       ],
     });
+  });
+
+  it('records only bounded batch counts and the final outcome', async () => {
+    const emitSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
+    vi.mocked(applyArtifactModule.applyWorksheetArtifact).mockResolvedValue(
+      appliedArtifact('a1', 'New A'),
+    );
+    vi.mocked(composeModule.composeDashboardCore).mockResolvedValue(composedDashboard());
+
+    await callBatch(['a1']);
+
+    expect(emitSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        type: 'batch_apply',
+        session_id: '12345',
+        artifact_count: 1,
+        existing_worksheet_count: 1,
+        duration_ms: expect.any(Number),
+        outcome: 'succeeded',
+      }),
+    );
+    const event = emitSpy.mock.calls.find(([, value]) => value.type === 'batch_apply')?.[1];
+    expect(event).not.toHaveProperty('dashboardName');
+    expect(event).not.toHaveProperty('artifactIds');
+    expect(event).not.toHaveProperty('worksheetNames');
+  });
+
+  it('returns without waiting for the telemetry sink', async () => {
+    vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    vi.mocked(applyArtifactModule.applyWorksheetArtifact).mockResolvedValue(
+      appliedArtifact('a1', 'New A'),
+    );
+    vi.mocked(composeModule.composeDashboardCore).mockResolvedValue(composedDashboard());
+
+    const result = await Promise.race([
+      callBatch(['a1']),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('batch waited for telemetry')), 100),
+      ),
+    ]);
+
+    expect(result.isError).toBe(false);
+  });
+
+  it('records preflight rejection as refused', async () => {
+    const emitSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
+
+    await callBatch(['a1', 'a1'], { store: artifactStore(['a1']) });
+
+    expect(emitSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'batch_apply', outcome: 'refused' }),
+    );
+  });
+
+  it('records an unavailable artifact as refused before execution starts', async () => {
+    const emitSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
+
+    await callBatch(['a1', 'missing'], { store: artifactStore(['a1']) });
+
+    expect(emitSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'batch_apply', outcome: 'refused' }),
+    );
+  });
+
+  it('records a runtime apply failure as failed', async () => {
+    const emitSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
+    vi.mocked(applyArtifactModule.applyWorksheetArtifact).mockResolvedValue({
+      state: 'failed',
+      retrySafe: true,
+      error: toolError('artifact unavailable'),
+    });
+
+    await callBatch(['a1']);
+
+    expect(emitSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'batch_apply', outcome: 'failed' }),
+    );
+  });
+
+  it('records an abort as aborted even after an earlier worksheet applied', async () => {
+    const emitSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
+    const controller = new AbortController();
+    vi.mocked(applyArtifactModule.applyWorksheetArtifact).mockImplementationOnce(async () => {
+      controller.abort();
+      return appliedArtifact('a1', 'New A');
+    });
+
+    await callBatch(['a1', 'a2'], { signal: controller.signal });
+
+    expect(emitSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'batch_apply', outcome: 'aborted' }),
+    );
   });
 
   it('reserves every artifact before writes and releases them when the second is invalid', async () => {

@@ -24,12 +24,31 @@ export type EpisodeStatus = 'succeeded' | 'failed' | 'abandoned';
 export type ToolInvocationOutcome = 'succeeded' | 'failed' | 'refused_by_gate';
 
 type EventBase = {
-  session_id: string;
   episode_id?: string;
 };
 
+type SessionEventBase = EventBase & {
+  session_id: string;
+};
+
+export type DesktopRpcOperation = 'read' | 'command' | 'document_apply';
+export type ToolSchemaProfile =
+  | 'dynamic-authoring'
+  | 'demo'
+  | 'spec-loop'
+  | 'full'
+  | 'combined-lean'
+  | 'unknown';
+export type BatchApplyOutcome =
+  | 'succeeded'
+  | 'partial'
+  | 'unknown'
+  | 'refused'
+  | 'failed'
+  | 'aborted';
+
 export type EpisodeEventInput =
-  | (EventBase & {
+  | (SessionEventBase & {
       type: 'episode_begin';
       intent?: string;
       source: 'agent' | 'client' | 'auto';
@@ -40,36 +59,38 @@ export type EpisodeEventInput =
       tableau_desktop_session_id?: string;
       langsmith_run_id?: string;
     })
-  | (EventBase & {
+  | (SessionEventBase & {
       type: 'episode_end';
       status: EpisodeStatus;
       route_receipt?: RouteReceipt;
       notes?: string;
       langsmith_run_id?: string;
     })
-  | (EventBase & {
+  | (SessionEventBase & {
       type: 'tool_start';
       tool: string;
     })
-  | (EventBase & {
+  | (SessionEventBase & {
       type: 'tool_end';
       tool: string;
       duration_ms: number;
       success: boolean;
       outcome: ToolInvocationOutcome;
+      request_id_hash: string;
+      result_size_chars: number;
     })
-  | (EventBase & {
+  | (SessionEventBase & {
       type: 'tool_error';
       tool: string;
       error?: string;
     })
-  | (EventBase & {
+  | (SessionEventBase & {
       type: 'apply_succeeded';
       tool: string;
       operation: string;
       promise_outcome: PromiseOutcome;
     })
-  | (EventBase & {
+  | (SessionEventBase & {
       type: 'readback_verification';
       tool: string;
       operation: string;
@@ -78,6 +99,28 @@ export type EpisodeEventInput =
       warnings?: number;
       findings?: ReadbackFinding[];
       message?: string;
+    })
+  | (SessionEventBase & {
+      type: 'desktop_rpc';
+      operation: DesktopRpcOperation;
+      duration_ms: number;
+      transport_success: boolean;
+      rescan_count: number;
+    })
+  | (EventBase & {
+      type: 'tool_schemas_registered';
+      surface: 'desktop';
+      profile: ToolSchemaProfile;
+      tool_count: number;
+      schemas_json_chars: number;
+      instructions_chars: number;
+    })
+  | (SessionEventBase & {
+      type: 'batch_apply';
+      artifact_count: number;
+      existing_worksheet_count: number;
+      duration_ms: number;
+      outcome: BatchApplyOutcome;
     });
 
 export type EpisodeEvent = EpisodeEventInput & {

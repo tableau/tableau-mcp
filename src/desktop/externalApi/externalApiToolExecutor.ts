@@ -87,6 +87,15 @@ export type ExternalApiToolExecutorDeps = {
     instance: ExternalApiInstance,
     options?: ExternalApiHttpOptions,
   ) => ExternalApiHttp;
+  /** Optional fail-soft observer for one logical Desktop operation, including a 401 rescan. */
+  onRpc?: (event: DesktopRpcTelemetryEvent) => void | Promise<void>;
+};
+
+export type DesktopRpcTelemetryEvent = {
+  operation: 'read' | 'command' | 'document_apply';
+  durationMs: number;
+  transportSuccess: boolean;
+  rescanCount: number;
 };
 
 type NoInstance = { type: 'no-instance'; pinnedPid?: number };
@@ -185,7 +194,7 @@ export class ExternalApiToolExecutor {
   > {
     const resolvedArgs = args ?? {};
 
-    const outcomeResult = await this.withRescan(async (http) => {
+    const outcomeResult = await this.withRescan('command', async (http) => {
       const result = await http.postJsonEnvelope(
         EXTERNAL_API_ROUTES.invokeCommand,
         { namespace, command, parameters: resolvedArgs },
@@ -492,7 +501,7 @@ export class ExternalApiToolExecutor {
     command: string,
     options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
-    const outcomeResult = await this.withRescan(async (http) => {
+    const outcomeResult = await this.withRescan('document_apply', async (http) => {
       if (
         options?.expectedInstanceId !== undefined &&
         http.instanceId !== options.expectedInstanceId
@@ -571,35 +580,57 @@ export class ExternalApiToolExecutor {
   }
 
   private async withRescan<T>(
+    operation: DesktopRpcTelemetryEvent['operation'],
     op: (http: ExternalApiHttp) => Promise<Result<T, ExternalApiError | InstanceMismatch>>,
   ): Promise<Result<T, ExternalApiError | NoInstance | InstanceMismatch>> {
-    const first = await this.ensureHttp();
-    if (first.isErr()) {
-      return Err(first.error);
-    }
-
-    let result = await op(first.value);
-    if (result.isErr() && result.error.type === 'unauthorized') {
-      log({
-        message: 'External Client API returned 401 — rescanning discovery once',
-        level: 'warning',
-        logger: LOGGER,
-      });
-      this.http = undefined;
-      const rescanned = await this.resolveHttp();
-      if (rescanned.isErr()) {
-        return Err(rescanned.error);
+    const startedAt = performance.now();
+    let rescanCount = 0;
+    let finalResult: Result<T, ExternalApiError | NoInstance | InstanceMismatch> | undefined;
+    try {
+      const first = await this.ensureHttp();
+      if (first.isErr()) {
+        finalResult = Err(first.error);
+        return finalResult;
       }
-      result = await op(rescanned.value);
-    }
 
-    return result;
+      let result = await op(first.value);
+      if (result.isErr() && result.error.type === 'unauthorized') {
+        rescanCount = 1;
+        log({
+          message: 'External Client API returned 401 — rescanning discovery once',
+          level: 'warning',
+          logger: LOGGER,
+        });
+        this.http = undefined;
+        const rescanned = await this.resolveHttp();
+        if (rescanned.isErr()) {
+          finalResult = Err(rescanned.error);
+          return finalResult;
+        }
+        result = await op(rescanned.value);
+      }
+
+      finalResult = result;
+      return finalResult;
+    } finally {
+      try {
+        const delivery = this.deps.onRpc?.({
+          operation,
+          durationMs: performance.now() - startedAt,
+          transportSuccess: finalResult?.isOk() ?? false,
+          rescanCount,
+        });
+        void delivery?.catch(() => undefined);
+      } catch {
+        // Telemetry is observational and must never alter a Desktop operation.
+      }
+    }
   }
 
   private async readExternalApi<T>(
     op: (http: ExternalApiHttp) => Promise<Result<T, ExternalApiError>>,
   ): Promise<Result<T, ExecuteCommandError>> {
-    const result = await this.withRescan(op);
+    const result = await this.withRescan('read', op);
     if (result.isErr()) {
       return Err(mapClientError(result.error, this.deps.pid));
     }
