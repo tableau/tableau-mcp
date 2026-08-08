@@ -30,11 +30,8 @@ const TEMPLATE_DIR = join(process.cwd(), 'src', 'desktop', 'data', 'templates');
 const EMPTY_WORKBOOK = "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>";
 const FIELD_TOKEN = /^\{\{field_base_[1-9]\d*\}\}$/;
 
-// A template may carry literal ALL-CAPS {{TOKEN}}s the binder fills from a proposal's
-// template_parameters (e.g. a bar's {{DIRECTION}}, a date filter's {{DATE_MIN}}/{{DATE_MAX}}).
-// The real bind always supplies them; the corpus harness supplies only DATASOURCE, so it must
-// discover and fill the rest here or a raw apply trips unsubstituted-template-token. DATASOURCE
-// and field_base_* are reserved (filled by the field rewriter) — mirror injectTemplateCore's skip.
+// Supply a value for every literal ALL-CAPS {{TOKEN}} the template declares, like a real
+// bind's template_parameters. DATASOURCE and field_base_* are filled by the field rewriter.
 function literalTemplateParameters(templateXml: string): Record<string, string> {
   const params: Record<string, string> = { DATASOURCE: 'Unrelated DS' };
   for (const match of templateXml.matchAll(/\{\{([A-Z][A-Z0-9_]*)\}\}/g)) {
