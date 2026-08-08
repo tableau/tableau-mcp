@@ -90,7 +90,8 @@ export const getBatchCreateAndCacheSheetsTool = (
           if (workbookResult.isErr()) {
             return new DesktopCommandExecutionError(workbookResult.error).toErr();
           }
-          let workbookXml = workbookResult.value;
+          const baselineXml = workbookResult.value;
+          let workbookXml = baselineXml;
 
           // Add worksheets and dashboard to workbook XML
           for (const name of worksheetNames) {
@@ -103,6 +104,8 @@ export const getBatchCreateAndCacheSheetsTool = (
           // anything the user asked to look at, so put them back where they were.
           const applyResult = await loadWorkbookXml({
             xml: workbookXml,
+            baselineXml,
+            expectedWorkbookXml: baselineXml,
             focus: { navigate: 'restore' },
             executor,
             signal,

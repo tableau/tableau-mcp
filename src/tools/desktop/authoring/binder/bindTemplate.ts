@@ -962,7 +962,9 @@ function applyFailureDisposition(
 ): AutoApplyFailureDisposition {
   if (
     error.type === 'load-workbook-xml-error' &&
-    (error.error.type === 'invalid-xml' || error.error.type === 'validation-failed')
+    (error.error.type === 'invalid-xml' ||
+      error.error.type === 'validation-failed' ||
+      error.error.type === 'workbook-drift')
   ) {
     return 'pre-dispatch';
   }
@@ -1531,6 +1533,8 @@ async function performAutoApply({
   const applyStart = Date.now();
   const applyResult = await loadWorkbookXml({
     xml: appliedWorkbookXml,
+    baselineXml: workbookXml,
+    expectedWorkbookXml: workbookXml,
     focus: { navigate: 'artifact', sheetName: literalTitle },
     executor,
     signal,

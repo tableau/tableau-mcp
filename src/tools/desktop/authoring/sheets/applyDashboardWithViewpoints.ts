@@ -171,6 +171,8 @@ export const getApplyDashboardWithViewpointsTool = (
 
           const workbookApplyResult = await loadWorkbookXml({
             xml: updatedWorkbookXml,
+            baselineXml: workbookResult.value,
+            expectedWorkbookXml: workbookResult.value,
             focus: { navigate: 'artifact', sheetName: dashboardName },
             executor,
             signal: extra.signal,

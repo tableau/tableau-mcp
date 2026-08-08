@@ -10,7 +10,10 @@ import {
 import { WithExecutorAndAbortSignal } from '../../../../desktop/externalApi/executorTypes.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import { applyWorkbookText } from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import {
+  describeLoadWorkbookXmlError,
+  loadWorkbookXml,
+} from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
@@ -88,14 +91,18 @@ export async function authorCalculationsInWorkbook({
 
   // A calc is not something the user looks at, and this helper also runs as an early leg of
   // bind-template, where the apply that follows names the chart it built.
-  const loadResult = await applyWorkbookText({
+  const loadResult = await loadWorkbookXml({
     xml: prepared.value.editedXml,
+    baselineXml: workbookXml,
+    expectedWorkbookXml: workbookXml,
     focus: { navigate: 'restore' },
     executor,
     signal,
   });
   if (loadResult.isErr()) {
-    return new DesktopCommandExecutionError(loadResult.error).toErr();
+    return loadResult.error.type === 'execute-command-error'
+      ? new DesktopCommandExecutionError(loadResult.error.error).toErr()
+      : new XmlModificationError(describeLoadWorkbookXmlError(loadResult.error.error)).toErr();
   }
 
   const readback = await pollReadback({
