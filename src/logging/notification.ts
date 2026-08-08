@@ -108,28 +108,44 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
 
     // server.sendNotification doesn't provide a way to provide the relatedRequestId
     // so we're using server.notification directly.
-    return mcpServer.server.notification(
-      {
-        method: 'notifications/message',
-        params: {
-          level,
-          notifier,
-          data: JSON.stringify(
-            {
-              timestamp: new Date().toISOString(),
-              currentNotificationLevel,
-              notifier,
-              message: sanitizedMessage,
-            },
-            null,
-            2,
-          ),
+    //
+    // The transport backing this session may already be closed by the time we get
+    // here (e.g. the client sent a DELETE to end an HTTP session while a request —
+    // and its eventual error/response notification — was still in flight). In that
+    // case server.notification() rejects with "Error: Not connected". That rejection
+    // was previously left unhandled by every caller, which crashed the whole process
+    // for one client's already-abandoned session. Swallow it: there is no one left to
+    // notify, so dropping the message is the correct behavior, not a bug to propagate.
+    return mcpServer.server
+      .notification(
+        {
+          method: 'notifications/message',
+          params: {
+            level,
+            notifier,
+            data: JSON.stringify(
+              {
+                timestamp: new Date().toISOString(),
+                currentNotificationLevel,
+                notifier,
+                message: sanitizedMessage,
+              },
+              null,
+              2,
+            ),
+          },
         },
-      },
-      {
-        relatedRequestId: requestId,
-      },
-    );
+        {
+          relatedRequestId: requestId,
+        },
+      )
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message !== 'Not connected') {
+          throw error;
+        }
+        // The session's transport is already gone — nothing to notify, nothing to do.
+      });
   };
 }
 
