@@ -1,4 +1,4 @@
-import { Zodios } from '@zodios/core';
+import { isErrorFromAlias, Zodios } from '@zodios/core';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
@@ -196,11 +196,22 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     siteId: string;
     uploadSessionId: string;
   }): Promise<WorkbookValidationResult> => {
-    return await this._apiClient.validateUploadedWorkbook(undefined, {
-      params: { siteId },
-      queries: { uploadSessionId },
-      ...this.authHeader,
-    });
+    try {
+      return await this._apiClient.validateUploadedWorkbook(undefined, {
+        params: { siteId },
+        queries: { uploadSessionId },
+        ...this.authHeader,
+      });
+    } catch (error) {
+      // A 422 means validation ran and found structural errors. That is a normal,
+      // expected outcome (not a request failure), so return the structured body as-is
+      // instead of throwing. Genuine request problems (400/404/network) still propagate.
+      if (isErrorFromAlias(this._apiClient.api, 'validateUploadedWorkbook', error)) {
+        return error.response.data;
+      }
+
+      throw error;
+    }
   };
 }
 

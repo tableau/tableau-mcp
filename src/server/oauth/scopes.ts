@@ -28,6 +28,7 @@ export type McpScope =
   | 'tableau:mcp:tasks:write'
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:content:delete'
+  | 'tableau:mcp:workbook:create'
   | 'tableau:mcp:users:read'
   | 'tableau:mcp:users:write';
 
@@ -49,6 +50,7 @@ export type TableauApiScope =
   | 'tableau:tasks:delete'
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
+  | 'tableau:workbooks:create'
   | 'tableau:workbooks:delete'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
@@ -71,6 +73,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:workbook:read',
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
+  'tableau:mcp:workbook:create',
   'tableau:mcp:users:write',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
@@ -237,6 +240,10 @@ const toolScopeMap: Record<
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'validate-uploaded-workbook': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set<TableauApiScope>(['tableau:workbooks:create']),
   },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
