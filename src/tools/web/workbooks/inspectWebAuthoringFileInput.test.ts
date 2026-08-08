@@ -6,6 +6,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import {
+  createPinnedLookup,
   downloadWorkbookFile,
   getInspectWebAuthoringFileInputTool,
   inspectWorkbookFileInput,
@@ -101,6 +102,28 @@ describe('inspectWorkbookFileInput', () => {
     );
 
     expect(result.fileName).toBe('unsafe__name.twb');
+  });
+});
+
+describe('createPinnedLookup', () => {
+  const address = publicAddress[0];
+
+  it('resolves to the pinned address using the legacy callback form', () => {
+    const callback = vi.fn();
+
+    createPinnedLookup(address)('files.example.com', {}, callback);
+
+    expect(callback).toHaveBeenCalledWith(null, address.address, address.family);
+  });
+
+  it('resolves to the pinned address using the array callback form when options.all is set', () => {
+    const callback = vi.fn();
+
+    createPinnedLookup(address)('files.example.com', { all: true }, callback);
+
+    expect(callback).toHaveBeenCalledWith(null, [
+      { address: address.address, family: address.family },
+    ]);
   });
 });
 

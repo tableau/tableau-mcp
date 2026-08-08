@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { DOMParser } from '@xmldom/xmldom';
 import { lookup } from 'dns/promises';
 import { Agent as HttpsAgent } from 'https';
-import { isIP } from 'net';
+import { isIP, LookupFunction } from 'net';
 import { isSSRFSafeURL } from 'ssrfcheck';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
@@ -201,6 +201,19 @@ async function resolvePublicAddresses(hostname: string): Promise<ReadonlyArray<R
   }
 }
 
+// Node's happy-eyeballs/family-autoselection connect path calls the custom `lookup` with
+// `options.all: true`, which requires the array-based callback form; the legacy
+// `callback(err, address, family)` form throws ERR_INVALID_IP_ADDRESS in that case.
+export function createPinnedLookup(address: ResolvedAddress): LookupFunction {
+  return (_hostname, options, callback) => {
+    if (typeof options === 'object' && options.all) {
+      callback(null, [{ address: address.address, family: address.family }]);
+    } else {
+      callback(null, address.address, address.family);
+    }
+  };
+}
+
 async function requestWorkbookFile({
   url,
   address,
@@ -214,11 +227,7 @@ async function requestWorkbookFile({
   timeoutMs: number;
   signal?: AbortSignal;
 }): Promise<DownloadResponse> {
-  const httpsAgent = new HttpsAgent({
-    lookup: (_hostname, _options, callback) => {
-      callback(null, address.address, address.family);
-    },
-  });
+  const httpsAgent = new HttpsAgent({ lookup: createPinnedLookup(address) });
 
   try {
     const response = await axios.get<ArrayBuffer>(url.toString(), {
