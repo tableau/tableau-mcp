@@ -250,6 +250,8 @@ export const getDeleteWorksheetTool = (
           // survived and nothing at all when it did not.
           const applyResult = await loadWorkbookXml({
             xml: removal.xml,
+            baselineXml: xmlResult.value,
+            expectedWorkbookXml: xmlResult.value,
             focus: { navigate: 'restore' },
             executor,
             signal: extra.signal,

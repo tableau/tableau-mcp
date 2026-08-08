@@ -498,7 +498,7 @@ async function getToolResult({
   result: CallToolResult;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
 }> {
-  const documents = [initialXml, readbackXml ?? initialXml];
+  const documents = [initialXml, initialXml, readbackXml ?? initialXml];
   let readCount = 0;
   const executeCommand = vi
     .fn()

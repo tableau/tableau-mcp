@@ -28,6 +28,15 @@ export interface LoadWorkbookXmlOk {
   validationWarnings: ValidationIssue[];
 }
 
+export function describeLoadWorkbookXmlError(error: LoadWorkbookXmlError): string {
+  if (error.type === 'workbook-drift') return 'The workbook changed before the authoring write.';
+  if (error.type === 'load-rejected') return error.message;
+  if (error.type === 'validation-failed') {
+    return error.issues.map((issue) => issue.message).join('; ');
+  }
+  return 'The workbook XML was invalid.';
+}
+
 type LoadWorkbookXmlResult = Result<
   LoadWorkbookXmlOk,
   | { type: 'execute-command-error'; error: ExecuteCommandError }
