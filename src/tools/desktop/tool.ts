@@ -49,7 +49,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     const sessionId = episodeSessionIdFromArgs(extra.config, args);
     const episodeId = currentEpisodeId(sessionId);
 
-    await emitEpisodeEvent(extra.config, {
+    void emitEpisodeEvent(extra.config, {
       type: 'tool_start',
       session_id: sessionId,
       episode_id: episodeId,
@@ -66,7 +66,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
               isError: false,
               content: [{ type: 'text', text: JSON.stringify(result.value) }],
             };
-        await emitEpisodeEvent(extra.config, {
+        void emitEpisodeEvent(extra.config, {
           type: 'tool_end',
           session_id: sessionId,
           episode_id: episodeId,
@@ -86,13 +86,13 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         content: [{ type: 'text', text: result.error.getErrorText() }],
         ...(structuredContent ? { structuredContent } : {}),
       };
-      await emitToolErrorEvent({
+      void emitToolErrorEvent({
         config: extra.config,
         sessionId,
         tool: this.name,
         error: result.error.getErrorText(),
       });
-      await emitEpisodeEvent(extra.config, {
+      void emitEpisodeEvent(extra.config, {
         type: 'tool_end',
         session_id: sessionId,
         episode_id: episodeId,
@@ -122,13 +122,13 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
           tool: this.name,
           session: sessionId,
         });
-        await emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error: text });
+        void emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error: text });
         toolResult = { isError: true, content: [{ type: 'text', text }] };
       } else {
-        await emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error });
+        void emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error });
         toolResult = getErrorResult(requestId, error);
       }
-      await emitEpisodeEvent(extra.config, {
+      void emitEpisodeEvent(extra.config, {
         type: 'tool_end',
         session_id: sessionId,
         episode_id: episodeId,

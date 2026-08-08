@@ -99,6 +99,25 @@ describe('runDashboardBatchTool', () => {
     expect(event).not.toHaveProperty('worksheetNames');
   });
 
+  it('returns without waiting for the telemetry sink', async () => {
+    const emitSpy = vi
+      .spyOn(episodeEvents, 'emitEpisodeEvent')
+      .mockImplementation(() => new Promise(() => undefined));
+
+    try {
+      const result = await Promise.race([
+        callBatch(['a1']),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('batch waited for telemetry')), 100),
+        ),
+      ]);
+
+      expect(result.isError).toBe(false);
+    } finally {
+      emitSpy.mockRestore();
+    }
+  });
+
   it('records duplicate and unavailable artifacts as refused', async () => {
     const emitSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
     await callBatch(['a1', 'a1'], { store: artifactStore(['a1']) });

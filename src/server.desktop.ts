@@ -291,6 +291,7 @@ export class DesktopMcpServer extends Server {
     });
     await emitEpisodeEvent(config, {
       type: 'tool_schemas_registered',
+      surface: 'desktop',
       profile: normalizeToolSchemaProfile(config.toolProfile),
       tool_count: listedTools.length,
       schemas_json_chars: JSON.stringify(listedTools).length,

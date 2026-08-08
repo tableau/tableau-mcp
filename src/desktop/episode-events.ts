@@ -109,6 +109,7 @@ export type EpisodeEventInput =
     })
   | (EventBase & {
       type: 'tool_schemas_registered';
+      surface: 'desktop';
       profile: ToolSchemaProfile;
       tool_count: number;
       schemas_json_chars: number;

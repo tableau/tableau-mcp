@@ -84,6 +84,7 @@ describe('episode event writer', () => {
 
     await emitEpisodeEvent(cfg, {
       type: 'tool_schemas_registered',
+      surface: 'desktop',
       profile: 'dynamic-authoring',
       tool_count: 32,
       schemas_json_chars: 27_000,
@@ -109,6 +110,7 @@ describe('episode event writer', () => {
     expect(readEvents(dir)).toMatchObject([
       {
         type: 'tool_schemas_registered',
+        surface: 'desktop',
         profile: 'dynamic-authoring',
         tool_count: 32,
         schemas_json_chars: 27_000,
