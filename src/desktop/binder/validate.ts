@@ -83,6 +83,9 @@ export interface BindingProposal {
   sort?: { by: string; direction: 'asc' | 'desc' };
   top_n?: number;
   filters?: FilterSpec[];
+  /** Literal {{KEY}} template substitutions (e.g. date-range {{DATE_MIN}}); reserved
+   *  keys DATASOURCE/field_base_* are stripped before use. */
+  template_parameters?: Record<string, string>;
   confidence?: number;
 }
 

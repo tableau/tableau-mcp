@@ -278,6 +278,24 @@ export const PROPOSAL_OUTPUT_SCHEMA: Record<string, unknown> = {
 const DEFAULT_MIN_CONFIDENCE = 0.6;
 
 /**
+ * Caller-supplied {{KEY}} substitutions, minus the reserved keys the binder owns.
+ * DATASOURCE is set from the resolved datasource; field_base_* are slot-backed and
+ * resolved through field_mapping (never generic text-replaced). Values are XML-escaped
+ * for verbatim attribute substitution, matching DATASOURCE/title handling.
+ */
+function sanitizeTemplateParameters(
+  params: Record<string, string> | undefined,
+): Record<string, string> {
+  if (!params) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (key === 'DATASOURCE' || /^field_base_[1-9]\d*$/.test(key)) continue;
+    out[key] = escapeXml(value);
+  }
+  return out;
+}
+
+/**
  * Characters illegal in an XML 1.0 document even when escaped: the C0 control block
  * (U+0000–U+001F) and DEL (U+007F). A title carrying one — NUL especially, which cannot
  * appear in XML at all — would make the substituted worksheet fragment unparseable
@@ -455,7 +473,7 @@ function validateAndBuild(
     // (escaped exactly once at their production), so they are NOT re-escaped here.
     title: escapeXml(proposal.title),
     sheet_type: 'worksheet',
-    template_parameters: { DATASOURCE: v.datasource },
+    template_parameters: { ...sanitizeTemplateParameters(proposal.template_parameters), DATASOURCE: v.datasource },
     field_mapping: v.field_mapping,
     ...(sort ? { sort } : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),

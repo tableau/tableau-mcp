@@ -77,6 +77,10 @@ export const proposalSchema = z
           .strict(),
       )
       .optional(),
+    // Literal {{KEY}} substitutions for non-field template tokens (e.g. a baked-in
+    // date-range filter's {{DATE_MIN}}/{{DATE_MAX}}). Merged into the binder's
+    // template_parameters; DATASOURCE/field_base_* are reserved and ignored here.
+    template_parameters: z.record(z.string(), z.string()).optional(),
   })
   .strict()
   .describe(
