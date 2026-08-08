@@ -166,9 +166,9 @@ function sanitizeValidationRuleId(ruleId: string): string {
 }
 
 function isBindingResolvedPlaceholderError(ruleId: string, message: string): boolean {
-  // Tokens resolved at bind time are expected to be present in a raw eligible template:
-  // DATASOURCE + field_base_N (slot-backed), and any ALL-CAPS token supplied through the
-  // proposal's template_parameters (e.g. a date-range filter's {{DATE_MIN}}/{{DATE_MAX}}).
+  // These tokens are filled at bind time, so leaving them unsubstituted in a raw
+  // template is fine: DATASOURCE, field_base_N, and ALL-CAPS template_parameters
+  // like {{DATE_MIN}}/{{DATE_MAX}}.
   return (
     ruleId === 'unsubstituted-template-token' &&
     /\{\{(?:DATASOURCE|field_base_[1-9]\d*|[A-Z][A-Z0-9_]*)\}\}/.test(message)

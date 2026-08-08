@@ -112,10 +112,6 @@ const paramsSchema = {
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional().describe('Apply immediately.'),
-  // Trusted-path escape hatch: skip the apply-time workbook validation preflight.
-  // Only for a deterministic, non-LLM caller binding a pre-vetted template with exact
-  // field names (the preflight is ~4s of CPU on a large workbook and cannot catch
-  // anything a vetted template would trip). Never set from a model-driven ask.
   skip_validation: z
     .boolean()
     .optional()

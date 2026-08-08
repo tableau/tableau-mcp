@@ -277,12 +277,6 @@ export const PROPOSAL_OUTPUT_SCHEMA: Record<string, unknown> = {
 
 const DEFAULT_MIN_CONFIDENCE = 0.6;
 
-/**
- * Caller-supplied {{KEY}} substitutions, minus the reserved keys the binder owns.
- * DATASOURCE is set from the resolved datasource; field_base_* are slot-backed and
- * resolved through field_mapping (never generic text-replaced). Values are XML-escaped
- * for verbatim attribute substitution, matching DATASOURCE/title handling.
- */
 function sanitizeTemplateParameters(
   params: Record<string, string> | undefined,
 ): Record<string, string> {
