@@ -36,14 +36,14 @@ describe('connections-not-authorable rule', () => {
     expect(issues[0].message).not.toMatch(/^FIX/i);
   });
 
-  it('a federated wrapper with a fabricated (non-Desktop-minted) named-connection id is rejected', () => {
+  it('does not guess from a federated named-connection name without a live baseline', () => {
     const xml = `<?xml version="1.0"?>
 <workbook>
   <datasources>
     <datasource name="my-data">
       <connection class="federated">
         <named-connections>
-          <named-connection caption="Sales" name="excel-direct.myconnection1">
+          <named-connection caption="Sales" name="Sample - Superstoreleaf">
             <connection class="excel-direct" filename="/Users/me/Documents/sales.xls" />
           </named-connection>
         </named-connections>
@@ -51,9 +51,7 @@ describe('connections-not-authorable rule', () => {
     </datasource>
   </datasources>
 </workbook>`;
-    const issues = connectionsNotAuthorableRule.validate(xml);
-    expect(issues.length).toBeGreaterThan(0);
-    expect(issues[0].xpath).toContain('excel-direct.myconnection1');
+    expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
   });
 
   it('a federated wrapper with a Desktop-minted named-connection id passes', () => {

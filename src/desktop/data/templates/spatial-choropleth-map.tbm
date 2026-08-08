@@ -52,35 +52,6 @@
           <style-rule element='header'>
             <format attr='border-style' data-class='total' value='none' />
           </style-rule>
-          <style-rule element='mark'>
-            <encoding attr='color' field='[Sample - Superstore].[sum:Profit:qk]' num-steps='4' type='custom-interpolated'>
-              <color-palette custom='true' name='' type='ordered-diverging'>
-                <color>#9e3d22</color>
-                <color>#ad4523</color>
-                <color>#bc4d23</color>
-                <color>#cb5522</color>
-                <color>#d95e21</color>
-                <color>#e76820</color>
-                <color>#ee7725</color>
-                <color>#f58a30</color>
-                <color>#fa9e3f</color>
-                <color>#fdb053</color>
-                <color>#ffc171</color>
-                <color>#d9d5c9</color>
-                <color>#cbd1d6</color>
-                <color>#bec9d3</color>
-                <color>#b1c1d0</color>
-                <color>#a4bacd</color>
-                <color>#98b3ca</color>
-                <color>#8cabc7</color>
-                <color>#80a4c4</color>
-                <color>#749dc1</color>
-                <color>#6997be</color>
-                <color>#5e90bb</color>
-                <color>#548ab9</color>
-              </color-palette>
-            </encoding>
-          </style-rule>
           <style-rule element='pane'>
             <format attr='border-style' data-class='total' value='none' />
           </style-rule>

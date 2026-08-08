@@ -11,13 +11,20 @@ import {
   FileReadError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import {
+  artifactNameParam,
+  deprecatedArtifactAliasParam,
+  resolveArtifactNameArg,
+} from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
 const paramsSchema = {
   filePath: z.string(),
-  worksheet: z.string().optional(),
-  dashboard: z.string().optional(),
+  worksheetName: artifactNameParam('worksheet').optional(),
+  worksheet: deprecatedArtifactAliasParam('worksheet'),
+  dashboardName: artifactNameParam('dashboard').optional(),
+  dashboard: deprecatedArtifactAliasParam('dashboard'),
   startByte: z.number().int().min(0).optional(),
   endByte: z.number().int().min(0).optional(),
 };
@@ -39,13 +46,30 @@ export const getReadCachedXmlTool = (
       openWorldHint: false,
     },
     callback: async (
-      { filePath, worksheet, dashboard, startByte, endByte },
+      { filePath, worksheetName, worksheet, dashboardName, dashboard, startByte, endByte },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { filePath, worksheet, dashboard, startByte, endByte },
+        args: { filePath, worksheetName, worksheet, dashboardName, dashboard, startByte, endByte },
         callback: async () => {
+          // Both selectors are optional slice keys: both-absent is legal (whole file),
+          // so the resolver only rejects a *Name/alias conflict and coalesces the keys.
+          const worksheetArg = resolveArtifactNameArg('worksheet', worksheetName, worksheet, {
+            allowMissing: true,
+          });
+          if (worksheetArg.isErr()) {
+            return worksheetArg;
+          }
+          const dashboardArg = resolveArtifactNameArg('dashboard', dashboardName, dashboard, {
+            allowMissing: true,
+          });
+          if (dashboardArg.isErr()) {
+            return dashboardArg;
+          }
+          const worksheetSelector = worksheetArg.value;
+          const dashboardSelector = dashboardArg.value;
+
           const absolutePath = resolve(filePath);
           const cacheDir = getCacheDir();
 
@@ -57,8 +81,12 @@ export const getReadCachedXmlTool = (
 
           // Reject ambiguous slice requests instead of silently prioritizing one selector.
           const selectorsReceived: string[] = [];
-          if (worksheet !== undefined) selectorsReceived.push(`worksheet="${worksheet}"`);
-          if (dashboard !== undefined) selectorsReceived.push(`dashboard="${dashboard}"`);
+          if (worksheetSelector !== undefined) {
+            selectorsReceived.push(`worksheet="${worksheetSelector}"`);
+          }
+          if (dashboardSelector !== undefined) {
+            selectorsReceived.push(`dashboard="${dashboardSelector}"`);
+          }
           if (startByte !== undefined || endByte !== undefined) {
             selectorsReceived.push(
               `byte range (startByte=${startByte ?? 0}, endByte=${endByte ?? 'end'})`,
@@ -86,24 +114,24 @@ export const getReadCachedXmlTool = (
           // Optional slice selectors keep large cached files out of context.
           let slice = fileContent;
           let sliceLabel = '';
-          if (worksheet !== undefined) {
-            const match = findElement(fileContent, 'worksheet', worksheet);
+          if (worksheetSelector !== undefined) {
+            const match = findElement(fileContent, 'worksheet', worksheetSelector);
             if (!match) {
               return new ArgsValidationError(
-                `No <worksheet name="${worksheet}"> element found in ${filePath}.`,
+                `No <worksheet name="${worksheetSelector}"> element found in ${filePath}.`,
               ).toErr();
             }
             slice = match.text;
-            sliceLabel = ` (worksheet "${worksheet}")`;
-          } else if (dashboard !== undefined) {
-            const match = findElement(fileContent, 'dashboard', dashboard);
+            sliceLabel = ` (worksheet "${worksheetSelector}")`;
+          } else if (dashboardSelector !== undefined) {
+            const match = findElement(fileContent, 'dashboard', dashboardSelector);
             if (!match) {
               return new ArgsValidationError(
-                `No <dashboard name="${dashboard}"> element found in ${filePath}.`,
+                `No <dashboard name="${dashboardSelector}"> element found in ${filePath}.`,
               ).toErr();
             }
             slice = match.text;
-            sliceLabel = ` (dashboard "${dashboard}")`;
+            sliceLabel = ` (dashboard "${dashboardSelector}")`;
           } else if (startByte !== undefined || endByte !== undefined) {
             slice = sliceBytes(fileContent, startByte, endByte);
             sliceLabel = ` (bytes ${startByte ?? 0}-${endByte ?? 'end'})`;

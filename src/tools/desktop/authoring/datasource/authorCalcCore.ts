@@ -31,6 +31,11 @@ type DatasourceElement = {
   selfClosing: boolean;
 };
 
+type XmlRange = {
+  start: number;
+  end: number;
+};
+
 export type Role = z.infer<typeof roleSchema>;
 export type Datatype = z.infer<typeof datatypeSchema>;
 
@@ -329,15 +334,29 @@ function selectTargetDatasource(
 
 function findDatasourceElements(xml: string): DatasourceElement[] {
   const elements: DatasourceElement[] = [];
+  const opaqueRanges = findOpaqueXmlRanges(xml);
   // Worksheet <dependencies> blocks clone <datasource name='...'> elements.
   // Only the top-level <datasources> block holds the real datasource definitions.
-  const blockStart = xml.indexOf('<datasources>');
-  const blockEnd = xml.indexOf('</datasources>', blockStart);
+  const blockStart = findTokenOutsideOpaque(xml, '<datasources>', 0, xml.length, opaqueRanges);
+  const blockEnd =
+    blockStart === -1
+      ? -1
+      : findTokenOutsideOpaque(
+          xml,
+          '</datasources>',
+          blockStart + '<datasources>'.length,
+          xml.length,
+          opaqueRanges,
+        );
   const scanFrom = blockStart === -1 ? 0 : blockStart;
   const scanTo = blockEnd === -1 ? xml.length : blockEnd;
   const openTagRe = /<datasource\b[^>]*(?:\/>|>)/g;
   for (const match of xml.matchAll(openTagRe)) {
-    if (match.index < scanFrom || match.index >= scanTo) {
+    if (
+      match.index < scanFrom ||
+      match.index >= scanTo ||
+      containingRange(match.index, opaqueRanges) !== undefined
+    ) {
       continue;
     }
     const openTag = match[0];
@@ -360,7 +379,7 @@ function findDatasourceElements(xml: string): DatasourceElement[] {
       });
       continue;
     }
-    const closeStart = xml.indexOf('</datasource>', openEnd);
+    const closeStart = findDatasourceClose(xml, openEnd, scanTo, opaqueRanges);
     if (closeStart === -1) {
       continue;
     }
@@ -376,6 +395,62 @@ function findDatasourceElements(xml: string): DatasourceElement[] {
     });
   }
   return elements;
+}
+
+function findOpaqueXmlRanges(xml: string): XmlRange[] {
+  const opaqueSections = [
+    { open: '<![CDATA[', close: ']]>' },
+    { open: '<!--', close: '-->' },
+    { open: '<?', close: '?>' },
+  ];
+  const ranges: XmlRange[] = [];
+  let cursor = 0;
+
+  while (cursor < xml.length) {
+    const next = opaqueSections
+      .map((section) => ({ ...section, start: xml.indexOf(section.open, cursor) }))
+      .filter((section) => section.start !== -1)
+      .sort((left, right) => left.start - right.start)[0];
+    if (!next) break;
+
+    const closeStart = xml.indexOf(next.close, next.start + next.open.length);
+    const end = closeStart === -1 ? xml.length : closeStart + next.close.length;
+    ranges.push({ start: next.start, end });
+    cursor = end;
+  }
+
+  return ranges;
+}
+
+function containingRange(offset: number, ranges: XmlRange[]): XmlRange | undefined {
+  return ranges.find((range) => range.start <= offset && offset < range.end);
+}
+
+function findTokenOutsideOpaque(
+  xml: string,
+  token: string,
+  from: number,
+  scanTo: number,
+  opaqueRanges: XmlRange[],
+): number {
+  let cursor = from;
+  while (cursor < scanTo) {
+    const tokenStart = xml.indexOf(token, cursor);
+    if (tokenStart === -1 || tokenStart >= scanTo) return -1;
+    const opaqueRange = containingRange(tokenStart, opaqueRanges);
+    if (!opaqueRange) return tokenStart;
+    cursor = opaqueRange.end;
+  }
+  return -1;
+}
+
+function findDatasourceClose(
+  xml: string,
+  from: number,
+  scanTo: number,
+  opaqueRanges: XmlRange[],
+): number {
+  return findTokenOutsideOpaque(xml, '</datasource>', from, scanTo, opaqueRanges);
 }
 
 function hasColumnCaption(datasourceXml: string, caption: string): boolean {

@@ -85,8 +85,7 @@ export const getBuildAndApplyDashboardTool = (
             ).toErr();
           }
 
-          // Zone math lifted to dashboardZones.ts (W60 dashboard-auto-apply spec §5/Q2) so
-          // both this tool and dashboard-auto-apply share one builder. Zero behavior change.
+          // The direct and batched dashboard paths share one zone builder.
           const zones = computeZones(titleText, layoutSpec);
           const dashboardXml = buildDashboardXml(dashboardName, zones);
           const sessionResult = resolveSession(session);

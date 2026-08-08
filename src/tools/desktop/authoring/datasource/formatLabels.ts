@@ -13,7 +13,12 @@ import {
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
-import { sessionParam } from '../../params.js';
+import {
+  artifactNameParam,
+  deprecatedArtifactAliasParam,
+  resolveArtifactNameArg,
+  sessionParam,
+} from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 
 // Primitives in, mark-label format XML server-side, readback out. Turns mark labels
@@ -23,7 +28,8 @@ import { DesktopTool } from '../../tool.js';
 // MERGES via the document round-trip and survives readback.
 const paramsSchema = {
   session: sessionParam(),
-  worksheet: z.string().describe(''),
+  worksheetName: artifactNameParam('worksheet').optional(),
+  worksheet: deprecatedArtifactAliasParam('worksheet'),
   showLabels: z.boolean().default(true).describe(''),
 };
 
@@ -47,12 +53,20 @@ export const getFormatLabelsTool = (server: DesktopMcpServer): DesktopTool<typeo
       destructiveHint: false,
       idempotentHint: true,
     },
-    callback: async ({ session, worksheet, showLabels = true }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { session, worksheetName, worksheet, showLabels = true },
+      extra,
+    ): Promise<CallToolResult> => {
       return await tool.logAndExecute<FormatLabelsResult>({
         extra,
-        args: { session, worksheet, showLabels },
+        args: { session, worksheetName, worksheet, showLabels },
         callback: async () => {
-          if (worksheet.trim().length === 0) {
+          const nameResult = resolveArtifactNameArg('worksheet', worksheetName, worksheet);
+          if (nameResult.isErr()) {
+            return nameResult;
+          }
+          const targetWorksheet = nameResult.value;
+          if (targetWorksheet.trim().length === 0) {
             return new ArgsValidationError('worksheet empty').toErr();
           }
 
@@ -68,7 +82,7 @@ export const getFormatLabelsTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           const liveXml = readResult.value;
-          const editResult = setMarkLabels(liveXml, worksheet.trim(), showLabels);
+          const editResult = setMarkLabels(liveXml, targetWorksheet.trim(), showLabels);
           if (editResult.isErr()) {
             return editResult.error.toErr();
           }
@@ -81,7 +95,7 @@ export const getFormatLabelsTool = (server: DesktopMcpServer): DesktopTool<typeo
 
           const loadResult = await applyWorkbookText({
             xml: editedXml,
-            focus: { navigate: 'artifact', sheetName: worksheet.trim() },
+            focus: { navigate: 'artifact', sheetName: targetWorksheet.trim() },
             executor,
             signal: extra.signal,
           });
@@ -92,7 +106,7 @@ export const getFormatLabelsTool = (server: DesktopMcpServer): DesktopTool<typeo
           const readback = await pollReadback({
             read: () => getWorkbookXml({ executor, signal: extra.signal }),
             settled: (xml) => {
-              const worksheetXml = extractWorksheet(xml, worksheet.trim());
+              const worksheetXml = extractWorksheet(xml, targetWorksheet.trim());
               return worksheetXml !== undefined && hasMarkLabelsSetting(worksheetXml, showLabels);
             },
             signal: extra.signal,
@@ -107,7 +121,7 @@ export const getFormatLabelsTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           return new Ok({
-            worksheet: worksheet.trim(),
+            worksheet: targetWorksheet.trim(),
             showLabels,
             hint: 'labels now render on the marks; tune font/placement with additional format attrs if needed',
           });

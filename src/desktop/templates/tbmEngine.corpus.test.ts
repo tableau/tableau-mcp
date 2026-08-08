@@ -209,6 +209,67 @@ describe('TBM engine corpus invariants', { timeout: 30_000 }, () => {
     corpus = eligibleTemplates();
   }, 30_000);
 
+  it('lets Tableau choose the default color for basic single-series charts', () => {
+    const basicTemplates = [
+      'magnitude-simple-bar',
+      'ranking-dot-strip-plot',
+      'ranking-ordered-bar',
+      'ranking-ordered-column',
+    ];
+    const styledOrFieldColoredTemplates: string[] = [];
+
+    for (const templateName of basicTemplates) {
+      const template = corpus.find((candidate) => candidate.name === templateName);
+      expect(template, `missing eligible template ${templateName}`).toBeDefined();
+
+      const document = new DOMParser().parseFromString(template!.xml, 'text/xml');
+      const markStyles = (
+        Array.from(document.getElementsByTagName('style-rule')) as unknown as Element[]
+      ).filter((style) => style.getAttribute('element') === 'mark');
+
+      for (const style of markStyles) {
+        const fixedColors = (
+          Array.from(style.getElementsByTagName('format')) as unknown as Element[]
+        ).filter((format) => format.getAttribute('attr') === 'mark-color');
+        if (fixedColors.length > 0) styledOrFieldColoredTemplates.push(templateName);
+      }
+
+      const colorPlacements = Array.from(document.getElementsByTagName('color')).filter((color) =>
+        color.hasAttribute('column'),
+      );
+      if (colorPlacements.length > 0) styledOrFieldColoredTemplates.push(templateName);
+    }
+
+    expect(styledOrFieldColoredTemplates).toEqual([]);
+  });
+
+  it('lets Tableau choose the palette for the portable choropleth', () => {
+    const template = corpus.find((candidate) => candidate.name === 'spatial-choropleth-map');
+    expect(template).toBeDefined();
+
+    const document = new DOMParser().parseFromString(template!.xml, 'text/xml');
+    const colorPlacements = Array.from(document.getElementsByTagName('color')).filter((color) =>
+      color.hasAttribute('column'),
+    );
+    const fixedColorPalettes = (
+      Array.from(document.getElementsByTagName('style-rule')) as unknown as Element[]
+    )
+      .filter((style) => style.getAttribute('element') === 'mark')
+      .flatMap((style) =>
+        (Array.from(style.getElementsByTagName('encoding')) as unknown as Element[]).filter(
+          (encoding) => encoding.getAttribute('attr') === 'color',
+        ),
+      );
+
+    expect(colorPlacements).toHaveLength(1);
+    expect(
+      template!.slots.filter(
+        (slot) => slot.required && slot.kind === 'quantitative' && slot.role.includes('color'),
+      ),
+    ).toHaveLength(1);
+    expect(fixedColorPalettes).toEqual([]);
+  });
+
   it('classifies every authored primary derivation as bindable or explicitly template-owned', () => {
     const failures: string[] = [];
 

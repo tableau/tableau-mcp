@@ -245,7 +245,7 @@ function readbackOutcome(
  * no top-level identity to gate on, so it is rejected before apply with a recovery hint rather than
  * failing as a misleading mismatch against an empty XML name.
  */
-function resolveCanonicalWorksheetName(
+export function resolveCanonicalWorksheetName(
   worksheetName: string,
   xml: string,
 ): Result<string, Extract<LoadWorksheetXmlError, { type: 'name-mismatch' }>> {

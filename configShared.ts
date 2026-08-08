@@ -15,10 +15,9 @@ export const configShared = {
     // watchdog, which vitest 3.x exposes no config for. Reducing main-process load
     // (fewer reporters, fewer workers) is the only real lever.
     teardownTimeout: 30_000,
-    // junit doubles per-task reporter work and nothing local consumes junit/*.xml, so it
-    // runs only where CI collects it.
-    reporters: process.env.CI
-      ? [['default', { summary: false }], 'junit']
-      : [['default', { summary: false }]],
+    // No workflow parses junit/unit.xml. Keep passing-test logs off the CI worker channel;
+    // failures still print their captured output for diagnosis.
+    silent: process.env.CI ? 'passed-only' : false,
+    reporters: [['default', { summary: false }]],
   },
 } satisfies Parameters<typeof defineConfig>[0];

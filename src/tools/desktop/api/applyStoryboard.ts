@@ -7,11 +7,13 @@ import { loadStoryboardXml } from '../../../desktop/wrappers/loadDashboardXml.js
 import {
   DesktopCommandExecutionError,
   StoryboardXmlLoadFailedError,
+  UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
+import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
-import { runApplyPreamble } from './applyPreamble.js';
+import { acceptedNoReadbackApplyResult, runApplyPreamble } from './applyPreamble.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -81,7 +83,10 @@ export const getApplyStoryboardTool = (
               case 'load-dashboard-xml-error':
                 return new StoryboardXmlLoadFailedError(error).toErr();
               default: {
+                // Exhaustive: an unexpected error type must never fall through to the
+                // success path and mint a receipt for an apply that was not observed.
                 const _: never = type;
+                return new UnknownError(error).toErr();
               }
             }
           }
@@ -90,8 +95,9 @@ export const getApplyStoryboardTool = (
           // readback, so say so honestly instead of implying full re-verification happened.
           // No storyboard-specific promise-check formatter exists; the dashboard one is
           // shape-identical for this shared loader.
-          const receipt = result.isOk()
-            ? formatDashboardPromiseCheck(result.value.validationWarnings)
+          const validationWarnings = result.isOk() ? result.value.validationWarnings : [];
+          const hostVerification = result.isOk()
+            ? formatDashboardPromiseCheck(validationWarnings)
             : '';
           if (result.isOk()) {
             await emitEpisodeEvent(extra.config, {
@@ -104,10 +110,19 @@ export const getApplyStoryboardTool = (
             });
           }
 
-          return new Ok({
-            message: `Successfully applied storyboard update for "${storyboardName}". The storyboard has been updated.${receipt}`,
-          });
+          // The shared structured receipt mirrors the text above and nothing more:
+          // dispatch and preflight warnings were observed; the applied structure was
+          // not, so it is listed as unverified (promise_outcome 'unverified' above).
+          return new Ok(
+            acceptedNoReadbackApplyResult({
+              kind: 'storyboard',
+              appliedName: storyboardName,
+              resultWarnings: validationWarnings,
+              hostVerification,
+            }),
+          );
         },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },
   });

@@ -26,6 +26,28 @@ describe('applyWorksheetTool', () => {
   const resultSchema = z.object({
     message: z.string(),
   });
+  const receiptSchema = z.object({
+    did: z.array(z.string()),
+    didNot: z.array(z.string()),
+    unverified: z.array(z.string()),
+  });
+  const nextActionSchema = z.object({
+    kind: z.literal('done'),
+    label: z.string(),
+    receipt: receiptSchema,
+  });
+  const structuredSchema = z.object({
+    message: z.string(),
+    nextAction: nextActionSchema,
+  });
+  const artifactStructuredSchema = z.object({
+    artifactId: z.string(),
+    title: z.string(),
+    applied: z.boolean(),
+    retrySafe: z.boolean(),
+    verification: z.object({ ok: z.boolean(), status: z.string() }),
+    nextAction: nextActionSchema,
+  });
   const skippedReadbackVerification = {
     ok: true,
     status: 'skipped' as const,
@@ -88,6 +110,25 @@ describe('applyWorksheetTool', () => {
     expect(resultObj.message).toBe(
       'Successfully applied worksheet update for "Sheet 1". The worksheet has been updated.\n\nHOST VERIFICATION — unverified: preflight clean · apply completed · readback unavailable. Do not claim the change is confirmed; report only the evidence above.',
     );
+
+    // The text block is unchanged: it still carries only { message }.
+    expect(Object.keys(JSON.parse(result.content[0].text))).toEqual(['message']);
+
+    // Superset rule: the structured block carries the full text message plus the
+    // receipt. No readback ran here, so the receipt claims only dispatch and
+    // preflight, and lists the applied structure as unverified.
+    const structured = structuredSchema.parse(result.structuredContent);
+    expect(structured.message).toBe(resultObj.message);
+    expect(structured.nextAction.receipt).toEqual({
+      did: [
+        'Desktop accepted the worksheet XML apply for "Sheet 1"',
+        'preflight validation returned 0 warning(s)',
+      ],
+      didNot: [],
+      unverified: [
+        'whether the applied worksheet retained its intended structure — post-apply readback was unavailable',
+      ],
+    });
   });
 
   it('should successfully apply worksheet XML in file mode', async () => {
@@ -208,6 +249,22 @@ describe('applyWorksheetTool', () => {
     expect(resultSchema.parse(JSON.parse(result.content[0].text)).message).toBe(
       'Successfully applied worksheet update for "Sheet 1". The worksheet has been updated.\n\nHOST VERIFICATION — verified: preflight clean · apply completed · readback clean. No host evidence of any workbook problem beyond the findings listed above — do not report unlisted issues.',
     );
+
+    // The readback ran, so its outcome is an observation the receipt may claim;
+    // rendered output stays unverified because readback compares XML only.
+    const structured = structuredSchema.parse(result.structuredContent);
+    expect(structured.message).toBe(resultSchema.parse(JSON.parse(result.content[0].text)).message);
+    expect(structured.nextAction.receipt).toEqual({
+      did: [
+        'Desktop accepted the worksheet XML apply for "Sheet 1"',
+        'preflight validation returned 0 warning(s)',
+        'read back the applied worksheet — verification status "passed", promise outcome "verified"',
+      ],
+      didNot: [],
+      unverified: [
+        'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
+      ],
+    });
     expect(eventSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: '12345',
@@ -373,6 +430,34 @@ describe('applyWorksheetTool', () => {
       retrySafe: false,
       verification: { ok: false, status: 'failed' },
     });
+
+    // The text block is unchanged: it still carries only the artifact result body.
+    expect(Object.keys(JSON.parse(result.content[0].text))).toEqual([
+      'artifactId',
+      'title',
+      'applied',
+      'retrySafe',
+      'verification',
+    ]);
+
+    // Superset rule: the structured block folds the same artifact body in — an
+    // observed failed readback, not a success claim. A failed verification must NOT
+    // mint a 'done' marker (that tells the agent to stop and would bury the failure);
+    // it directs the agent to inspect the sheet and build a fresh artifact instead.
+    const structured = artifactStructuredSchema
+      .extend({ nextAction: z.object({ kind: z.literal('prefill'), label: z.string() }) })
+      .parse(result.structuredContent);
+    expect(structured).toMatchObject({
+      artifactId: 'artifact-1',
+      title: 'Artifact Sheet',
+      applied: true,
+      retrySafe: false,
+      verification: { ok: false, status: 'failed' },
+    });
+    expect(structured.nextAction).toEqual({
+      kind: 'prefill',
+      label: 'Verification failed — inspect sheet, rebuild artifact',
+    });
     expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
   });
 
@@ -433,6 +518,48 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(true);
     expect(store.reserve('artifact-1', '12345').ok).toBe(true);
     expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
+  });
+
+  it('checks artifact availability before resolving an executor', async () => {
+    const store = artifactStore();
+    const getExecutor = vi.fn().mockRejectedValue(new Error('Desktop unavailable'));
+    const tool = getApplyWorksheetTool(new DesktopMcpServer(), { store });
+    const callback = await Provider.from(tool.callback);
+
+    const result = await callback(
+      {
+        session: '99999',
+        artifactId: 'artifact-1',
+        worksheetName: undefined,
+        worksheetFile: undefined,
+      },
+      { ...getMockRequestHandlerExtra(), getExecutor },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(getExecutor).not.toHaveBeenCalled();
+  });
+
+  it('releases a reserved artifact when executor resolution throws', async () => {
+    const store = artifactStore();
+    const tool = getApplyWorksheetTool(new DesktopMcpServer(), { store });
+    const callback = await Provider.from(tool.callback);
+
+    const result = await callback(
+      {
+        session: '12345',
+        artifactId: 'artifact-1',
+        worksheetName: undefined,
+        worksheetFile: undefined,
+      },
+      {
+        ...getMockRequestHandlerExtra(),
+        getExecutor: vi.fn().mockRejectedValue(new Error('Desktop unavailable')),
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(store.reserve('artifact-1', '12345').ok).toBe(true);
   });
 
   it('allows only one concurrent apply for an artifact', async () => {

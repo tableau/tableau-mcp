@@ -131,6 +131,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
       'corpus.json', // searchExamples/searchWorkbookExamples CORPUS_PATH
       'twb-example-index.json', // searchLibrary TWB_INDEX_PATH — committed trimmed index (~920 KB)
       'examples', // searchLibrary EXAMPLES_DIR — search-examples
+      'templates', // Compatibility fallback until TAS materializes the published content pack.
     ];
     await mkdir(desktopDataOut, { recursive: true });
     for (const entry of stagedDesktopData) {

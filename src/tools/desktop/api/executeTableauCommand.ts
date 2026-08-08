@@ -3,10 +3,15 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import type { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
+import type { DatasourceItem } from '../../../desktop/externalApi/types.js';
 import { guardCommand } from '../../../desktop/guards/commandGuard.js';
 import { knownLiveFailureFixFor } from '../../../desktop/guards/commandPolicy.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
-import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import {
+  ArgsValidationError,
+  DesktopCommandExecutionError,
+  McpToolError,
+} from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
@@ -67,6 +72,18 @@ export const getExecuteTableauCommandTool = (
           const { dispatchArgs, warnings: commandGuardWarnings } = commandGuard;
 
           const executor = await extra.getExecutor(resolvedSession);
+          const verifyRootFileConnection = shouldVerifyRootFileConnection(command, dispatchArgs);
+          let datasourcesBefore: DatasourceItem[] = [];
+          if (verifyRootFileConnection) {
+            const beforeResult = await executor.listWorkbookDatasources(extra.signal);
+            if (beforeResult.isErr()) {
+              return commandPostconditionError(
+                'Cannot verify a new workbook datasource because the current datasource inventory could not be read. The command was not sent.',
+              ).toErr();
+            }
+            datasourcesBefore = beforeResult.value.datasources ?? [];
+          }
+
           const result = await executor.executeCommand({
             namespace,
             command: cmd,
@@ -81,10 +98,31 @@ export const getExecuteTableauCommandTool = (
             ).toErr();
           }
 
+          let verification: DatasourceVerification | undefined;
+          if (verifyRootFileConnection) {
+            const afterResult = await executor.listWorkbookDatasources(extra.signal);
+            if (afterResult.isErr()) {
+              return commandPostconditionError(
+                'Desktop accepted the connection command, but datasource readback failed; state may have changed. Inspect workbook datasources and do not retry automatically.',
+              ).toErr();
+            }
+            const addedDatasources = findAddedDatasources(
+              datasourcesBefore,
+              afterResult.value.datasources ?? [],
+            );
+            if (addedDatasources.length === 0) {
+              return commandPostconditionError(
+                'Desktop reported success, but no new workbook datasource appeared. The command may have had no effect; inspect workbook datasources before retrying.',
+              ).toErr();
+            }
+            verification = { status: 'passed', addedDatasources };
+          }
+
           const payload = shapeCommandResult({
             result: result.value.result,
             envelopeWarnings: result.value.warnings ?? [],
             guardWarnings: commandGuardWarnings,
+            verification,
           });
 
           return new Ok(payload);
@@ -104,16 +142,26 @@ type ExecuteTableauCommandSuccess = {
   message: string;
   result?: Record<string, unknown> | string;
   warnings?: ExecuteCommandWarning[];
+  verification?: DatasourceVerification;
 };
+
+type DatasourceVerification = {
+  status: 'passed';
+  addedDatasources: VerifiedDatasource[];
+};
+
+type VerifiedDatasource = Pick<DatasourceItem, 'id' | 'luid' | 'name' | 'caption'>;
 
 function shapeCommandResult({
   result,
   envelopeWarnings,
   guardWarnings,
+  verification,
 }: {
   result: Record<string, unknown> | null | undefined;
   envelopeWarnings: ExecuteCommandWarning[];
   guardWarnings: string[];
+  verification?: DatasourceVerification;
 }): ExecuteTableauCommandSuccess {
   const outputSerializationFailed = envelopeWarnings.some(
     (warning) => warning.code === 'output-serialization-failed',
@@ -121,8 +169,14 @@ function shapeCommandResult({
   const payload: ExecuteTableauCommandSuccess = {
     message: outputSerializationFailed
       ? 'Command executed, but the requested result cannot be returned because Desktop reported output serialization failed; the command executed; state may have changed; do NOT retry - re-read state instead.'
-      : 'Command executed successfully.',
+      : verification
+        ? 'Command executed successfully and the new workbook datasource was verified.'
+        : 'Command executed successfully.',
   };
+
+  if (verification) {
+    payload.verification = verification;
+  }
 
   if (result !== undefined && result !== null) {
     const serialized = JSON.stringify(result, null, 2);
@@ -157,4 +211,51 @@ function hasOutputSerializationFailed(payload: ExecuteTableauCommandSuccess): bo
   return (
     payload.warnings?.some((warning) => warning.code === 'output-serialization-failed') ?? false
   );
+}
+
+function shouldVerifyRootFileConnection(
+  command: string,
+  dispatchArgs: Record<string, unknown>,
+): boolean {
+  if (command !== 'tabui:data-catalog-connect-to-file') return false;
+  return ['IsLeafConnection', 'is-leaf-connection', 'is-leaf-connection-ui'].some(
+    (key) => dispatchArgs[key] === false,
+  );
+}
+
+function findAddedDatasources(
+  before: DatasourceItem[],
+  after: DatasourceItem[],
+): VerifiedDatasource[] {
+  const beforeIds = new Set(
+    before.map(datasourceIdentity).filter((id): id is string => id !== null),
+  );
+  return after
+    .filter((datasource) => {
+      const identity = datasourceIdentity(datasource);
+      return identity !== null && !beforeIds.has(identity);
+    })
+    .map(projectDatasource);
+}
+
+function datasourceIdentity(datasource: DatasourceItem): string | null {
+  if (datasource.id) return `id:${datasource.id}`;
+  if (datasource.luid) return `luid:${datasource.luid}`;
+  if (datasource.name || datasource.caption) {
+    return `name:${datasource.name ?? ''}|caption:${datasource.caption ?? ''}`;
+  }
+  return null;
+}
+
+function projectDatasource(datasource: DatasourceItem): VerifiedDatasource {
+  return {
+    ...(datasource.id ? { id: datasource.id } : {}),
+    ...(typeof datasource.luid === 'string' ? { luid: datasource.luid } : {}),
+    ...(datasource.name ? { name: datasource.name } : {}),
+    ...(datasource.caption ? { caption: datasource.caption } : {}),
+  };
+}
+
+function commandPostconditionError(message: string): McpToolError {
+  return new McpToolError({ type: 'command-postcondition', message, statusCode: 409 });
 }

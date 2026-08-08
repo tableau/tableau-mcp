@@ -11,6 +11,7 @@ import {
   WorkbookNotFoundError,
   WorksheetNotFoundError,
 } from '../../../errors/mcpToolError.js';
+import { doneNextAction, receipt, StructuredResult, withNextAction } from '../structuredContent.js';
 
 /**
  * Shared preamble for the apply-* tools' cached-file path: empty-path validation,
@@ -72,4 +73,56 @@ export function runApplyPreamble({
   }
 
   return new Ok({ xml, resolvedSession });
+}
+
+type NoReadbackApplyKind = 'dashboard' | 'storyboard' | 'workbook';
+
+// Per-kind wording for the shared receipt below: what the unverified structure is
+// called, and how the class of applies with no structural readback is named.
+const NO_READBACK_WORDING: Record<NoReadbackApplyKind, { noun: string; scope: string }> = {
+  dashboard: { noun: 'layout', scope: 'dashboard' },
+  storyboard: { noun: 'structure', scope: 'storyboard' },
+  workbook: { noun: 'structure', scope: 'whole workbook' },
+};
+
+/**
+ * Shared success result for the apply-* tools that have NO structural readback:
+ * dispatch and the preflight warnings from the load result were observed; the applied
+ * structure was not, so it is listed as unverified rather than claimed.
+ */
+export function acceptedNoReadbackApplyResult({
+  kind,
+  appliedName,
+  resultWarnings,
+  hostVerification,
+}: {
+  kind: NoReadbackApplyKind;
+  /** Sheet name for the per-sheet applies; a whole-workbook apply names none. */
+  appliedName?: string;
+  /** Preflight validation warnings observed on the load result. */
+  resultWarnings: readonly unknown[];
+  /** Host verification line appended to the message text. */
+  hostVerification: string;
+}): StructuredResult<{ message: string }> {
+  const { noun, scope } = NO_READBACK_WORDING[kind];
+  const target = appliedName === undefined ? '' : ` for "${appliedName}"`;
+  const subject = appliedName === undefined ? 'command' : `for "${appliedName}"`;
+  const capitalized = kind.charAt(0).toUpperCase() + kind.slice(1);
+  return withNextAction(
+    {
+      message: `Successfully applied ${kind} update${target}. The ${kind} has been updated.${hostVerification}`,
+    },
+    doneNextAction(
+      receipt({
+        did: [
+          `Desktop accepted the ${kind} XML apply ${subject}`,
+          `preflight validation returned ${resultWarnings.length} warning(s)`,
+        ],
+        unverified: [
+          `whether the applied ${kind} retained its intended ${noun} — no structural readback ran (${scope} applies have none)`,
+        ],
+      }),
+      `${capitalized} apply accepted — ${noun} not re-read`,
+    ),
+  );
 }

@@ -7,7 +7,7 @@ These two rules cover the moments an agent is most tempted to report the wrong t
 ## When to Use
 
 - **A field or datasource lookup returns `not_found`** (from `resolve-field`, `list-available-fields`, or a field tool), *especially* right after the user changed the workbook — connected a new data source, renamed a field, swapped an extract, or added a sheet in Tableau.
-- **You are about to report a change is finished** after any apply-style call (`apply-worksheet`, `apply-workbook`, `apply-dashboard`, `apply-dashboard-with-viewpoints`, `build-and-apply-dashboard`, `dashboard-auto-apply`). Read the `HOST VERIFICATION` line *before* you narrate success.
+- **You are about to report a change is finished** after any apply-style call (`apply-worksheet`, `apply-workbook`, `apply-dashboard`, `apply-dashboard-with-viewpoints`, `build-and-apply-dashboard`, `compose-dashboard`, `run-dashboard-batch`). Read its verification receipt *before* you narrate success.
 
 ## Best Practices
 
@@ -30,7 +30,8 @@ HOST VERIFICATION — <status>: <checks> . <claim guard>
 ```
 
 - `status` is one of **`verified`**, **`unverified`**, **`failed`**. **`verified` is the only status that backs a "done" claim.**
-- Worksheet applies get a real structural readback, so they can reach `verified`. **Whole-workbook and dashboard applies are `unverified` by construction** — there is no structural readback for them yet, so the receipt says so plainly.
+- Worksheet applies get a real structural readback, so they can reach `verified`. `compose-dashboard` and each `run-dashboard-batch` step also return structural verification. Whole-workbook applies can still be `unverified`; the receipt says so plainly.
+- A batch result of `partial` or `unknown` means some workbook changes may already exist. Inspect the live workbook before deciding what remains, and **never replay the batch** or a consumed artifact blindly.
 - If the receipt says `unverified` or `failed` for something you claimed — a sort, a filter, an encoding, or the change as a whole — **re-read the artifact and correct your answer before reporting completion**: `get-worksheet-xml` for a sheet, `get-dashboard-xml` for a dashboard, `get-workbook-xml` for the whole workbook (or a worksheet-list readback to confirm survival).
 - Never report success that contradicts the receipt. Report only the evidence the host gives you.
 
@@ -41,7 +42,7 @@ What does **NOT** work:
 - **Declaring "Tableau is unreachable" or "that datasource is gone" on the first `not_found`** without a session refresh. The far more common cause is a stale cache from before the user's change.
 - **Re-reading the same stale cache repeatedly** — calling `resolve-field` again against an un-refreshed `workbookFile` and expecting a different answer. `resolve-field` reads the file as-is; nothing changes until you refresh the file.
 - **Narrating success over a failed/unverified receipt** — e.g. answering "Done — sorted descending and filtered to Top 10" when the line reads `HOST VERIFICATION — failed: … readback FAILED (nodes dropped).` The nodes were dropped; the claim is false.
-- **Treating a whole-workbook or dashboard `unverified` receipt as confirmation.** `unverified` means "not re-verified," not "verified." Read the sheet back before claiming the intent landed.
+- **Treating a whole-workbook `unverified` receipt, or a batch `partial`/`unknown` result, as confirmation.** Read the affected live sheets/dashboard before claiming the intent landed or attempting recovery.
 - **Inventing problems that nothing measured** when the receipt is `verified` — the guard text explicitly says not to report unlisted issues.
 
 ## Implementation
@@ -77,12 +78,12 @@ apply-worksheet({ ... }) →
 - **Right:** the receipt says nodes were dropped, so re-read and correct before reporting:
 
 ```
-1. get-worksheet-xml({ session, worksheet: "Sales by Region", mode: "file" })   # inspect what actually survived
+1. get-worksheet-xml({ session, worksheetName: "Sales by Region", mode: "file" })   # inspect what actually survived
 2. patch the specific dropped construct (the sort / filter node), then re-apply
 3. apply-worksheet(...) → HOST VERIFICATION — verified: … readback clean.       # only NOW report "done"
 ```
 
-For a whole-workbook or dashboard apply, the receipt is `unverified` by design:
+For a whole-workbook apply, the receipt may be `unverified`:
 
 ```
 HOST VERIFICATION — unverified: preflight clean · apply completed · full workbook intent NOT re-verified.
@@ -91,10 +92,12 @@ Treat sheet-level state as unconfirmed until read back; do not report problems w
 
 Read the affected sheets back (`get-worksheet-xml` / worksheet-list readback) before claiming the intent landed; report the apply as completed-but-unverified until you have that evidence.
 
+For `compose-dashboard` and `run-dashboard-batch`, use the returned structural verification. If a batch is `partial` or `unknown`, inspect the live workbook and continue only from the state that actually landed; never replay the original batch.
+
 ## Source and Confidence
 
 - Source/evidence type: ported from the `agent-to-tableau-desktop` bundled skill "When things fail" rules 8 (stale-cache re-read) and 9 (honor the `HOST VERIFICATION` receipt), merged 2026-07-16. Adapted to tmcp tool names and the tmcp receipt seam.
 - Enforcement/receipt seams in this repo: `src/desktop/validation/promise-check.ts` (the `HOST VERIFICATION` receipt), `src/desktop/validation/readback-verify.ts` (worksheet structural readback), `src/tools/desktop/fields/listAvailableFields.ts` (session refresh) and `src/tools/desktop/fields/resolveField.ts` (cache-only resolve).
 - Related: `expertise://tableau/tactics/workflow/recovery` (failed-apply recovery ladder) · `expertise://tableau/strategy/workflow/troubleshooting-workbooks` (general troubleshooting).
 - Confidence: field-tested (a2td merged rules)
-- Last reviewed: 2026-07-16
+- Last reviewed: 2026-08-07

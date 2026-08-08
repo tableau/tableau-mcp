@@ -14,7 +14,12 @@ import {
   FileReadError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
-import { sessionParam } from '../../params.js';
+import {
+  artifactNameParam,
+  deprecatedArtifactAliasParam,
+  resolveArtifactNameArg,
+  sessionParam,
+} from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
@@ -22,8 +27,10 @@ const paramsSchema = {
   session: sessionParam(),
   filePath: z.string(),
   xmlContent: z.string(),
-  worksheet: z.string().optional(),
-  dashboard: z.string().optional(),
+  worksheetName: artifactNameParam('worksheet').optional(),
+  worksheet: deprecatedArtifactAliasParam('worksheet'),
+  dashboardName: artifactNameParam('dashboard').optional(),
+  dashboard: deprecatedArtifactAliasParam('dashboard'),
 };
 
 const toolTitle = 'Saving draft';
@@ -43,13 +50,30 @@ export const getWriteCachedXmlTool = (
       openWorldHint: false,
     },
     callback: async (
-      { session, filePath, xmlContent, worksheet, dashboard },
+      { session, filePath, xmlContent, worksheetName, worksheet, dashboardName, dashboard },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { session, filePath, xmlContent, worksheet, dashboard },
+        args: { session, filePath, xmlContent, worksheetName, worksheet, dashboardName, dashboard },
         callback: async () => {
+          // Both selectors are optional splice keys: both-absent is legal (whole file),
+          // so the resolver only rejects a *Name/alias conflict and coalesces the keys.
+          const worksheetArg = resolveArtifactNameArg('worksheet', worksheetName, worksheet, {
+            allowMissing: true,
+          });
+          if (worksheetArg.isErr()) {
+            return worksheetArg;
+          }
+          const dashboardArg = resolveArtifactNameArg('dashboard', dashboardName, dashboard, {
+            allowMissing: true,
+          });
+          if (dashboardArg.isErr()) {
+            return dashboardArg;
+          }
+          const worksheetSelector = worksheetArg.value;
+          const dashboardSelector = dashboardArg.value;
+
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
@@ -67,8 +91,12 @@ export const getWriteCachedXmlTool = (
 
           // Reject ambiguous splice requests instead of silently prioritizing worksheet.
           const selectorsReceived: string[] = [];
-          if (worksheet !== undefined) selectorsReceived.push(`worksheet="${worksheet}"`);
-          if (dashboard !== undefined) selectorsReceived.push(`dashboard="${dashboard}"`);
+          if (worksheetSelector !== undefined) {
+            selectorsReceived.push(`worksheet="${worksheetSelector}"`);
+          }
+          if (dashboardSelector !== undefined) {
+            selectorsReceived.push(`dashboard="${dashboardSelector}"`);
+          }
           if (selectorsReceived.length > 1) {
             return new ArgsValidationError(
               `Multiple selectors provided: ${selectorsReceived.join(', ')}. Pass exactly one of ` +
@@ -89,12 +117,12 @@ export const getWriteCachedXmlTool = (
           // filesystem-less client never has to round-trip the whole (large) document.
           let contentToWrite = xmlContent;
           const selectorTag =
-            worksheet !== undefined
+            worksheetSelector !== undefined
               ? 'worksheet'
-              : dashboard !== undefined
+              : dashboardSelector !== undefined
                 ? 'dashboard'
                 : undefined;
-          const selectorName = worksheet ?? dashboard;
+          const selectorName = worksheetSelector ?? dashboardSelector;
           if (selectorTag !== undefined && selectorName !== undefined) {
             // Guard the splice: the replacement's outer element must be exactly the
             // element the selector targets. Otherwise a mistyped/mismatched fragment

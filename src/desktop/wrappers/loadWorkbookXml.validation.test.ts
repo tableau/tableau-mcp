@@ -220,4 +220,101 @@ describe('loadWorkbookXml validation preflight', () => {
     }
     expect(executor.executeCommand).not.toHaveBeenCalled();
   });
+
+  it('allows a candidate that preserves an unrelated blocking issue from the baseline', async () => {
+    const brokenDashboard =
+      "<worksheets><worksheet name='Included Sheet'><table /></worksheet></worksheets>" +
+      "<dashboards><dashboard name='Existing Broken Dashboard'><zones>" +
+      "<zone h='100000' id='3' type-v2='layout-basic' w='100000' x='0' y='0'>" +
+      "<zone h='98000' id='4' name='Missing Sheet' w='98000' x='1000' y='1000' />" +
+      '</zone></zones></dashboard></dashboards>';
+    const baselineXml = `<?xml version='1.0'?><workbook>${brokenDashboard}</workbook>`;
+    const candidateXml = `<?xml version='1.0'?><workbook>${brokenDashboard}<windows /></workbook>`;
+    const applyWorkbookDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({ applyWorkbookDocument });
+
+    const result = await loadWorkbookXml({
+      xml: candidateXml,
+      baselineXml,
+      executor,
+      signal: new AbortController().signal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a blocking issue introduced relative to the baseline', async () => {
+    const baselineXml =
+      "<?xml version='1.0'?><workbook>" +
+      "<worksheets><worksheet name='Included Sheet'><table /></worksheet></worksheets>" +
+      '</workbook>';
+    const candidateXml =
+      "<?xml version='1.0'?><workbook>" +
+      "<worksheets><worksheet name='Included Sheet'><table /></worksheet></worksheets>" +
+      "<dashboards><dashboard name='New Broken Dashboard'><zones>" +
+      "<zone h='100000' id='3' type-v2='layout-basic' w='100000' x='0' y='0'>" +
+      "<zone h='98000' id='4' name='Missing Sheet' w='98000' x='1000' y='1000' />" +
+      '</zone></zones></dashboard></dashboards></workbook>';
+    const applyWorkbookDocument = vi.fn();
+    const executor = makeExecutorMock({ applyWorkbookDocument });
+
+    const result = await loadWorkbookXml({
+      xml: candidateXml,
+      baselineXml,
+      executor,
+      signal: new AbortController().signal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-workbook-xml-error');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual([
+        expect.objectContaining({
+          ruleId: 'dashboard-zones-reference-included-worksheets',
+          message: expect.stringContaining('Missing Sheet'),
+        }),
+      ]);
+    }
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects an increased occurrence count for a baseline blocking issue', async () => {
+    const datasourceStart = "<?xml version='1.0'?><workbook><datasources><datasource name='Data'>";
+    const firstReference =
+      "<column name='[C1]'><calculation class='tableau' formula='IF [Missing Set] THEN 1 ELSE 0 END'/></column>";
+    const secondReference =
+      "<column name='[C2]'><calculation class='tableau' formula='IF [Missing Set] THEN 2 ELSE 0 END'/></column>";
+    const datasourceEnd = '</datasource></datasources></workbook>';
+    const baselineXml = datasourceStart + firstReference + datasourceEnd;
+    const candidateXml = datasourceStart + firstReference + secondReference + datasourceEnd;
+    const applyWorkbookDocument = vi.fn();
+    const executor = makeExecutorMock({ applyWorkbookDocument });
+
+    const result = await loadWorkbookXml({
+      xml: candidateXml,
+      baselineXml,
+      executor,
+      signal: new AbortController().signal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-workbook-xml-error');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual([
+        expect.objectContaining({
+          ruleId: 'undeclared-set-reference',
+          occurrenceCount: 2,
+        }),
+      ]);
+    }
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
 });
