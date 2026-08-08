@@ -112,7 +112,7 @@ export const getExecuteTableauCommandTool = (
             );
             if (addedDatasources.length === 0) {
               return commandPostconditionError(
-                'Desktop reported success, but no new workbook datasource appeared. The command may have been a no-op; inspect workbook datasources before retrying.',
+                'Desktop reported success, but no new workbook datasource appeared. The command may have had no effect; inspect workbook datasources before retrying.',
               ).toErr();
             }
             verification = { status: 'passed', addedDatasources };

@@ -370,6 +370,50 @@ describe('executeTableauCommandTool', () => {
     expect(result.content[0].text).toContain('do not retry automatically');
   });
 
+  it('does not verify a leaf file connection (IsLeafConnection=true skips inventory reads)', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const listWorkbookDatasources = vi.fn();
+    const extra = getMockRequestHandlerExtra();
+    extra.getExecutor = vi.fn().mockResolvedValue({ executeCommand, listWorkbookDatasources });
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: { DSClass: 'hyper', IsLeafConnection: true, FilePath: '/tmp/coffee-chain.hyper' },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).message).toBe('Command executed successfully.');
+    expect(listWorkbookDatasources).not.toHaveBeenCalled();
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not verify a file connection when no leaf flag is provided', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const listWorkbookDatasources = vi.fn();
+    const extra = getMockRequestHandlerExtra();
+    extra.getExecutor = vi.fn().mockResolvedValue({ executeCommand, listWorkbookDatasources });
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: { DSClass: 'hyper', FilePath: '/tmp/coffee-chain.hyper' },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).message).toBe('Command executed successfully.');
+    expect(listWorkbookDatasources).not.toHaveBeenCalled();
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
   it('surfaces command failure message and tableau-error-code extension', async () => {
     const commandError = {
       type: 'command-failed' as const,
