@@ -44,6 +44,7 @@ export default class FileUploadsMethods extends AuthenticatedMethods<typeof file
    *
    * @param siteId - The Tableau site ID
    * @param uploadSessionId - The upload session ID returned by `initiateFileUpload`
+   * @param filename - The filename presented to Tableau for this upload chunk
    * @param chunk - The chunk of file bytes to append
    * @param sequenceId - Optional sequence ID for concurrent chunk uploads to the same session
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#append_to_file_upload
@@ -51,11 +52,13 @@ export default class FileUploadsMethods extends AuthenticatedMethods<typeof file
   appendToFileUpload = async ({
     siteId,
     uploadSessionId,
+    filename,
     chunk,
     sequenceId,
   }: {
     siteId: string;
     uploadSessionId: string;
+    filename: string;
     chunk: Buffer;
     sequenceId?: string;
   }): Promise<FileUpload> => {
@@ -63,7 +66,7 @@ export default class FileUploadsMethods extends AuthenticatedMethods<typeof file
       { name: 'request_payload', contentType: 'text/xml', data: '' },
       {
         name: 'tableau_file',
-        filename: 'file',
+        filename,
         contentType: 'application/octet-stream',
         data: chunk,
       },
