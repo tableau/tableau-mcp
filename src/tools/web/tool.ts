@@ -53,7 +53,6 @@ export type ToolMeta = {
   ui?: {
     visibility?: Array<'model' | 'app'>;
   };
-  'openai/fileParams'?: string[];
 };
 
 export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = ToolParams<

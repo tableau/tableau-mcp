@@ -1,7 +1,9 @@
 import { randomUUID } from 'crypto';
 
+import { WebAuthoringStageError } from '../../../errors/mcpToolError.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WorkbookValidationResult } from '../../../sdks/tableau/types/workbookValidation.js';
+import { getHttpStatus } from '../../../utils/getHttpStatus.js';
 import { constructWebAuthoringUrl } from '../utils/authoringUrlUtils.js';
 
 type WebAuthoringRestApi = {
@@ -18,6 +20,7 @@ export type StageWorkbookForWebAuthoringArgs = {
   server: string;
   siteName: string;
   workbookBytes: Buffer;
+  workbookFileName?: string;
   generateUuid?: () => string;
 };
 
@@ -32,31 +35,52 @@ export async function stageWorkbookForWebAuthoring({
   server,
   siteName,
   workbookBytes,
+  workbookFileName,
   generateUuid = randomUUID,
 }: StageWorkbookForWebAuthoringArgs): Promise<StagedWebAuthoringWorkbook> {
-  const { uploadSessionId } = await restApi.fileUploadsMethods.initiateFileUpload({
-    siteId: restApi.siteId,
-  });
+  const { uploadSessionId } = await runStage('initiate', async () =>
+    restApi.fileUploadsMethods.initiateFileUpload({
+      siteId: restApi.siteId,
+    }),
+  );
 
-  await restApi.fileUploadsMethods.appendToFileUpload({
-    siteId: restApi.siteId,
-    uploadSessionId,
-    filename: `${generateUuid()}.twb`,
-    chunk: workbookBytes,
-  });
+  await runStage('append', async () =>
+    restApi.fileUploadsMethods.appendToFileUpload({
+      siteId: restApi.siteId,
+      uploadSessionId,
+      filename: workbookFileName ?? `${generateUuid()}.twb`,
+      chunk: workbookBytes,
+    }),
+  );
 
-  const validation = await restApi.workbooksMethods.validateUploadedWorkbook({
-    siteId: restApi.siteId,
-    uploadSessionId,
-  });
+  const validation = await runStage('validate', async () =>
+    restApi.workbooksMethods.validateUploadedWorkbook({
+      siteId: restApi.siteId,
+      uploadSessionId,
+    }),
+  );
 
   return {
     validation,
-    authoringUrl: constructWebAuthoringUrl({
-      server,
-      siteName,
-      workbookId: generateUuid(),
-      uploadSessionId,
-    }),
+    authoringUrl: await runStage('handoff', async () =>
+      constructWebAuthoringUrl({
+        server,
+        siteName,
+        workbookId: generateUuid(),
+        uploadSessionId,
+      }),
+    ),
   };
+}
+
+async function runStage<T>(
+  stage: 'initiate' | 'append' | 'validate' | 'handoff',
+  callback: () => Promise<T> | T,
+): Promise<T> {
+  try {
+    return await callback();
+  } catch (error) {
+    const httpStatus = error instanceof Error ? getHttpStatus(error) : '';
+    throw new WebAuthoringStageError(stage, httpStatus || undefined);
+  }
 }

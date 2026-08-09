@@ -60,7 +60,7 @@ describe('OverridableConfig', () => {
         'query-datasource',
         'list-workbooks',
         'get-workbook',
-        'inspect-web-authoring-file-input',
+        'start-web-authoring-session',
       ]);
     });
 
@@ -79,7 +79,7 @@ describe('OverridableConfig', () => {
         'query-datasource',
         'list-workbooks',
         'get-workbook',
-        'inspect-web-authoring-file-input',
+        'start-web-authoring-session',
       ]);
     });
 
