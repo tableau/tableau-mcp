@@ -109,6 +109,32 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(text).toContain('excluded from the final');
   });
 
+  it('scopes the ts-users query to the Step-1 candidate emails to avoid the 10000-row truncation blind spot', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('"filterType": "SET"');
+    expect(text).toContain(
+      '<REPLACE with the candidate User Emails from Step 1 — one string per candidate>',
+    );
+    expect(text).toContain('**Scope this query to the Step-1 candidates.**');
+    expect(text).toContain('Do not fetch all site users.');
+  });
+
+  it('warns when the ts-users query hits the 10000-row truncation limit', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('truncated at the 10000-row limit');
+    expect(text).toContain('could be falsely listed as inactive');
+  });
+
   it('states null Desktop/Prep dates are NOT treated as activity and adds the availability caveat', async () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});

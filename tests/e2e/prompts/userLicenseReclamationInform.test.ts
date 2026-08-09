@@ -109,6 +109,20 @@ describe('user-license-reclamation-inform prompt', () => {
       expect(text).toContain('populated only when the tenant collects Desktop/Prep telemetry');
       expect(text).toContain('Desktop/Prep activity data may be unavailable on this tenant');
     });
+
+    it('scopes the ts-users query to Step-1 candidate emails and warns on truncation (W-23757367)', async () => {
+      if (!promptAvailable) {
+        return;
+      }
+      const text = await client.getPromptText(PROMPT_NAME);
+      expect(text).toContain('"filterType": "SET"');
+      expect(text).toContain(
+        '<REPLACE with the candidate User Emails from Step 1 — one string per candidate>',
+      );
+      expect(text).toContain('**Scope this query to the Step-1 candidates.**');
+      expect(text).toContain('Do not fetch all site users.');
+      expect(text).toContain('truncated at the 10000-row limit');
+    });
   });
 
   describe('with admin tools disabled', () => {

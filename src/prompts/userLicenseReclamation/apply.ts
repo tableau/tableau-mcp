@@ -134,10 +134,28 @@ const buildActivityQuery = (inactiveDays: number): Record<string, unknown> => ({
   limit: 10000,
 });
 
+// Scope TS Users to the Step-1 candidate emails via a SET filter on `User Email`.
+// The candidate set (inactive licensed users) is small, so this keeps the response
+// well under the 10000-row cap — an UNfiltered query on a large tenant (e.g. 27k
+// users) would be silently truncated to an arbitrary 10000-user slice, dropping a
+// Desktop-active candidate's row → "null = no signal" → false-positive downgrade.
+// The `values` array is a render-time placeholder the model must replace with the
+// actual candidate emails from Step 1 before issuing the call.
+const TS_USERS_EMAIL_PLACEHOLDER =
+  '<REPLACE with the candidate User Emails from Step 1 — one string per candidate>';
+
 const buildDesktopPrepQuery = (): Record<string, unknown> => ({
   kind: 'ts-users',
   query: {
     fields: TS_USERS_FIELDS.map((fieldCaption) => ({ fieldCaption })),
+    filters: [
+      {
+        field: { fieldCaption: 'User Email' },
+        filterType: 'SET',
+        values: [TS_USERS_EMAIL_PLACEHOLDER],
+        exclude: false,
+      },
+    ],
   },
   limit: 10000,
 });
@@ -200,6 +218,13 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       : [];
 
     const activityLookbackDays = Math.min(inactiveDays, TS_EVENTS_LOOKBACK_MAX_DAYS);
+
+    // Concrete UTC cutoff for the Desktop/Prep (2b) recency comparison — rendered
+    // into the instructions so the model has a deterministic boundary instead of
+    // re-deriving "the last N days" itself (parity with inform.ts `cutoffIso`).
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - inactiveDays);
+    const cutoffIso = cutoffDate.toISOString();
 
     const userIdScope =
       userIds.length > 0
@@ -272,6 +297,12 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
         `server-content access — neither reflects Tableau **Desktop** or **Prep** usage. Call \`${ADMIN_INSIGHTS_TOOL}\` ` +
         'exactly once more with the arguments below to retrieve per-user Desktop/Prep last-access dates.',
       '',
+      '**Scope this query to the Step-1 candidates.** Before issuing the call, replace the `User Email` ' +
+        "filter's `values` placeholder below with the exact list of candidate `email` values from Step 1 " +
+        '(one string per candidate). This SET filter bounds the response to the candidate set — which is ' +
+        'already small (inactive licensed users) — so the 10000-row cap cannot silently drop a ' +
+        'Desktop-active candidate and turn them into a false positive. Do NOT fetch all site users.',
+      '',
       '```json',
       JSON.stringify(buildDesktopPrepQuery(), null, 2),
       '```',
@@ -279,10 +310,15 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       "Match each row to a candidate by `User Email` (against the candidate's `email`) or `User Name` " +
         "(against the candidate's `name`). Treat the user as **Desktop/Prep-active** if either " +
         '`Tableau Desktop - Last Access Date` OR `Tableau Prep - Last Access Date` is **non-null AND ' +
-        `within the last ${inactiveDays} days**.`,
+        `on or after ${cutoffIso}** (i.e. within the last ${inactiveDays} days).`,
       '**Null handling — null is NOT activity.** A null, empty, or missing Desktop/Prep date is NOT ' +
         'evidence of activity; such a user remains a candidate. Only a recent *non-null* Desktop/Prep ' +
         'date rescues a user.',
+      `If the query returns exactly ${10000} rows, warn the admin: "⚠️ TS Users results were truncated at ` +
+        `the ${10000}-row limit. Some candidates may be missing their Desktop/Prep last-access date and ` +
+        'could be falsely flagged as inactive — narrow the scope with `userIds` or a smaller candidate ' +
+        'set." (With the `User Email` scoping above this should not occur unless the candidate set itself ' +
+        'exceeds 10000.)',
       '',
       '**Inactivity determination (all conditions must hold):**',
       `- The user's \`lastLogin\` from Step 1 is either **null** (never signed in) OR older than ${inactiveDays} days ago, AND`,

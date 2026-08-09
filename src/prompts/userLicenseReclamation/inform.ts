@@ -118,12 +118,27 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
     // DATETIMEs (there are separate `... (Local)` variants — use the UTC captions here). No date
     // filter is applied: these are one-row-per-user last-access timestamps, so we fetch them and
     // compare against the cutoff client-side (null = no signal, NOT activity — see Step 3).
+    //
+    // Scope to the Step-1 candidate emails via a SET filter on `User Email`: an UNfiltered query
+    // on a large tenant (e.g. 27k users) would be silently truncated to an arbitrary 10000-user
+    // slice, dropping a Desktop-active candidate's row → "null = no signal" → false candidate.
+    // The `values` array is a render-time placeholder the model replaces with the Step-1 emails.
+    const tsUsersEmailPlaceholder =
+      '<REPLACE with the candidate User Emails from Step 1 — one string per candidate>';
     const tsUsersQuery = {
       fields: [
         { fieldCaption: 'User Email' },
         { fieldCaption: 'User Name' },
         { fieldCaption: 'Tableau Desktop - Last Access Date' },
         { fieldCaption: 'Tableau Prep - Last Access Date' },
+      ],
+      filters: [
+        {
+          field: { fieldCaption: 'User Email' },
+          filterType: 'SET',
+          values: [tsUsersEmailPlaceholder],
+          exclude: false,
+        },
       ],
     };
 
@@ -156,11 +171,15 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       '',
       'TS Events and `lastLogin` only capture web sign-in and server-content access — neither reflects Tableau **Desktop** or **Prep** usage. Call `query-admin-insights` with `kind: "ts-users"` to retrieve per-user Desktop/Prep last-access dates:',
       '',
+      "**Scope this query to the Step-1 candidates.** Before issuing the call, replace the `User Email` filter's `values` placeholder below with the exact list of candidate `email` values from Step 1 (one string per candidate). This SET filter bounds the response to the candidate set, so the 10000-row cap cannot silently drop a Desktop-active candidate and turn them into a false positive. Do not fetch all site users.",
+      '',
       '```json',
       JSON.stringify({ kind: 'ts-users', query: tsUsersQuery, limit: 10000 }, null, 2),
       '```',
       '',
       `Match each row to a candidate by \`User Email\` (against the candidate's \`email\`) or \`User Name\` (against the candidate's \`name\`). A candidate is **active** — and must be excluded from the final list — if either \`Tableau Desktop - Last Access Date\` OR \`Tableau Prep - Last Access Date\` is **non-null AND on or after ${cutoffIso}** (i.e. within the last ${inactiveDays} days).`,
+      '',
+      'If the TS Users query returns exactly 10000 rows, warn that results were truncated at the 10000-row limit: some candidates may be missing their Desktop/Prep last-access date and could be falsely listed as inactive — narrow the scope with a smaller role set or candidate list. (With the `User Email` scoping above this should not occur unless the candidate set itself exceeds 10000.)',
       '',
       '**Null handling — null is NOT activity.** A `null`, empty, or missing Desktop/Prep date is NOT evidence of activity: the user REMAINS a candidate. Only a recent *non-null* Desktop/Prep date rescues a user. (Many tenants do not collect Desktop/Prep telemetry, in which case these fields are null for every user — see the caveat note in Step 4.)',
       '',

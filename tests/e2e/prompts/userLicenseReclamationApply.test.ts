@@ -92,6 +92,30 @@ describe('user-license-reclamation-apply prompt', () => {
       expect(text).toContain('Only a recent *non-null* Desktop/Prep date rescues a user');
     });
 
+    it('scopes the ts-users query to Step-1 candidate emails and warns on truncation (W-23757367)', async () => {
+      if (!promptAvailable) {
+        return;
+      }
+      const text = await client.getPromptText(PROMPT_NAME);
+      // The ts-users query carries a `User Email` SET filter with a replace-me placeholder.
+      expect(text).toContain('"filterType": "SET"');
+      expect(text).toContain(
+        '<REPLACE with the candidate User Emails from Step 1 — one string per candidate>',
+      );
+      expect(text).toContain('**Scope this query to the Step-1 candidates.**');
+      expect(text).toContain('Do NOT fetch all site users.');
+      // Defense-in-depth truncation warning mirrors the ts-events / site-content warnings.
+      expect(text).toContain('TS Users results were truncated at the 10000-row limit');
+    });
+
+    it('renders a concrete ISO cutoff for the Desktop/Prep recency check (parity with inform)', async () => {
+      if (!promptAvailable) {
+        return;
+      }
+      const text = await client.getPromptText(PROMPT_NAME);
+      expect(text).toMatch(/on or after \d{4}-\d{2}-\d{2}T[\d:.]+Z\*\* \(i\.e\. within the last/);
+    });
+
     it('carries the Desktop/Prep data-availability caveat', async () => {
       if (!promptAvailable) {
         return;
