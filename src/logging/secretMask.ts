@@ -18,6 +18,14 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
 
   const maskedData = result.value;
   if (shouldNotifyWhenLevelIsAtLeast('debug')) {
+    const isFileUploadRequest = /\/fileUploads(?:\/|$)/i.test(maskedData.url ?? '');
+    if (maskedData.url) {
+      maskedData.url = redactUploadSessionIdFromUrl(maskedData.url);
+    }
+    if (isFileUploadRequest) {
+      delete maskedData.data;
+    }
+
     if (maskedData.data?.credentials) {
       maskedData.data.credentials = '<redacted>';
     }
@@ -46,6 +54,12 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
     if (maskedData.params?.['user_id']) {
       maskedData.params['user_id'] = '<redacted>';
     }
+
+    if (maskedData.params?.['uploadSessionId']) {
+      maskedData.params['uploadSessionId'] = '<redacted>';
+    }
+
+    redactUploadIdentifiers(maskedData.data);
   } else {
     delete maskedData.data;
     delete maskedData.headers;
@@ -63,9 +77,13 @@ export const maskResponse = (response: ResponseInterceptorConfig): MaskedRespons
 
   const maskedData = result.value;
   if (shouldNotifyWhenLevelIsAtLeast('debug')) {
+    if (maskedData.url) {
+      maskedData.url = redactUploadSessionIdFromUrl(maskedData.url);
+    }
     if (maskedData.data?.credentials) {
       maskedData.data.credentials = '<redacted>';
     }
+    redactUploadIdentifiers(maskedData.data);
   } else {
     delete maskedData.data;
     delete maskedData.headers;
@@ -73,6 +91,29 @@ export const maskResponse = (response: ResponseInterceptorConfig): MaskedRespons
 
   return maskedData;
 };
+
+function redactUploadSessionIdFromUrl(url: string): string {
+  return url.replace(/(\/fileUploads\/)[^/?]+/gi, '$1<redacted>');
+}
+
+function redactUploadIdentifiers(value: unknown, seen = new WeakSet<object>()): void {
+  if (!value || typeof value !== 'object' || ArrayBuffer.isView(value)) return;
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => redactUploadIdentifiers(item, seen));
+    return;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'uploadSessionId' || key === 'uploadId') {
+      (value as Record<string, unknown>)[key] = '<redacted>';
+    } else {
+      redactUploadIdentifiers(child, seen);
+    }
+  }
+}
 
 function clone<T>(obj: T): Result<T, Error> {
   try {

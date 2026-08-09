@@ -107,6 +107,65 @@ describe('secretMask', () => {
     });
   });
 
+  it('should remove multipart upload bodies and redact upload sessions in request paths', () => {
+    const maskedRequest = maskRequest({
+      method: 'PUT',
+      baseUrl: 'https://example.com/api/3.26',
+      url: '/sites/site-id/fileUploads/secret-upload-session-id',
+      headers: {
+        'X-Tableau-Auth': 'secret-token',
+        'Content-Type': 'multipart/mixed; boundary=boundary',
+      },
+      params: { sequenceID: '0' },
+      data: Buffer.from('<workbook>secret workbook bytes</workbook>'),
+    });
+
+    expect(maskedRequest).toEqual({
+      method: 'PUT',
+      baseUrl: 'https://example.com/api/3.26',
+      url: '/sites/site-id/fileUploads/<redacted>',
+      headers: {
+        'X-Tableau-Auth': '<redacted>',
+        'Content-Type': 'multipart/mixed; boundary=boundary',
+      },
+      params: { sequenceID: '0' },
+    });
+  });
+
+  it('should redact upload session validation query parameters', () => {
+    const maskedRequest = maskRequest({
+      method: 'POST',
+      baseUrl: 'https://example.com/api/3.26',
+      url: '/sites/site-id/workbooks/validate',
+      headers: {},
+      params: {
+        uploadSessionId: 'secret-upload-session-id',
+      },
+    });
+
+    expect(maskedRequest.params).toEqual({ uploadSessionId: '<redacted>' });
+  });
+
+  it('should redact upload IDs recursively from debug response bodies', () => {
+    const maskedResponse = maskResponse({
+      status: 200,
+      baseUrl: 'https://example.com/api/3.26',
+      params: {},
+      url: '/sites/site-id/fileUploads/secret-upload-session-id',
+      headers: {},
+      data: {
+        fileUpload: { uploadSessionId: 'secret-upload-session-id' },
+        validation: { uploadId: 'secret-upload-id', errors: [] },
+      },
+    });
+
+    expect(maskedResponse.url).toBe('/sites/site-id/fileUploads/<redacted>');
+    expect(maskedResponse.data).toEqual({
+      fileUpload: { uploadSessionId: '<redacted>' },
+      validation: { uploadId: '<redacted>', errors: [] },
+    });
+  });
+
   it('should not include headers and data in the request if the log level is not debug', () => {
     setNotificationLevel(new WebMcpServer().mcpServer, 'info', { silent: true });
 

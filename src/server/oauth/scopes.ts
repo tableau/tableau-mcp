@@ -19,6 +19,7 @@ export type McpScope =
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
   | 'tableau:mcp:workbook:read'
+  | 'tableau:mcp:workbook:create'
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:flow:read'
@@ -50,12 +51,14 @@ export type TableauApiScope =
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:delete'
+  | 'tableau:workbooks:create'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
-  | 'tableau:users:update';
+  | 'tableau:users:update'
+  | 'tableau:file_uploads:create';
 
 /**
  * Default scopes supported by the MCP server
@@ -69,6 +72,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:jobs:read',
   'tableau:mcp:users:read',
   'tableau:mcp:workbook:read',
+  'tableau:mcp:workbook:create',
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
   'tableau:mcp:users:write',
@@ -180,6 +184,10 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
+  'start-web-authoring-session': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set(['tableau:file_uploads:create', 'tableau:workbooks:create']),
+  },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
@@ -237,6 +245,13 @@ const toolScopeMap: Record<
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  // Commits an already-staged file upload session as a published workbook. Does NOT validate the
+  // workbook first (that is a separate, opt-in step). Publishing is the only Tableau REST call, so
+  // only the workbook-create scope is needed.
+  'publish-workbook': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set(['tableau:workbooks:create']),
   },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
