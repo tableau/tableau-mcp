@@ -24,8 +24,6 @@ const TOOLS_WITHOUT_API_SCOPES_WITH_PASSTHROUGH_GUARD: ReadonlyArray<WebToolName
   // MCP app event telemetry: no Tableau REST API call. App-only tool that records telemetry
   // regardless of auth type. Safe with passthrough auth as it only sends telemetry events.
   'record-event',
-  // Temporary file-transport probe: no Tableau REST API call and safe regardless of auth type.
-  'inspect-web-authoring-file-input',
 ];
 
 describe('passthroughAuthMiddleware', () => {

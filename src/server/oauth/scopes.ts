@@ -57,7 +57,8 @@ export type TableauApiScope =
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
-  | 'tableau:users:update';
+  | 'tableau:users:update'
+  | 'tableau:file_uploads:create';
 
 /**
  * Default scopes supported by the MCP server
@@ -183,11 +184,9 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
-  // Temporary file-transport probe. It downloads the caller-provided file but makes no Tableau
-  // REST API request and does not need a Tableau content scope.
-  'inspect-web-authoring-file-input': {
-    mcp: [],
-    api: new Set<TableauApiScope>(),
+  'start-web-authoring-session': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set(['tableau:file_uploads:create', 'tableau:workbooks:create']),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
