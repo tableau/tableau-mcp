@@ -38,6 +38,7 @@ import { getListCustomViewsTool } from './views/listCustomViews.js';
 import { getListViewsTool } from './views/listViews.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
+import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 import { getStartWebAuthoringSessionTool } from './workbooks/startWebAuthoringSession.js';
 
 export const webToolFactories = [
@@ -67,6 +68,7 @@ export const webToolFactories = [
   getGenerateInsightCardsTool,
   getStartWebAuthoringSessionTool,
   getGetWorkbookTool,
+  getPublishWorkbookTool,
   getGetViewTool,
   getGetViewDataTool,
   getGetViewImageTool,

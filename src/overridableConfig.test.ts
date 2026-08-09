@@ -61,6 +61,7 @@ describe('OverridableConfig', () => {
         'list-workbooks',
         'get-workbook',
         'start-web-authoring-session',
+        'publish-workbook',
       ]);
     });
 
@@ -80,6 +81,7 @@ describe('OverridableConfig', () => {
         'list-workbooks',
         'get-workbook',
         'start-web-authoring-session',
+        'publish-workbook',
       ]);
     });
 

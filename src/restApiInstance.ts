@@ -38,6 +38,7 @@ type JwtScopes =
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:delete'
+  | 'tableau:workbooks:create'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
@@ -47,8 +48,7 @@ type JwtScopes =
   | 'tableau:flows:read'
   | 'tableau:flow_connections:read'
   | 'tableau:flow_runs:read'
-  | 'tableau:file_uploads:create'
-  | 'tableau:workbooks:create';
+  | 'tableau:file_uploads:create';
 
 export type RestApiArgs = Pick<
   TableauWebRequestHandlerExtra,
