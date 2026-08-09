@@ -47,6 +47,7 @@ describe('stageWorkbookForWebAuthoring', () => {
       uploadSessionId: 'upload-session-id',
     });
     expect(result).toEqual({
+      uploadSessionId: 'upload-session-id',
       validation,
       authoringUrl:
         'https://tableau.example.com/vizql/show/t/blackbear/authoring/newWorkbook/new-workbook-id/fromFileUpload/upload-session-id',

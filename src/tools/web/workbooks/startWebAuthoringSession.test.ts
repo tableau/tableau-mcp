@@ -54,12 +54,13 @@ describe('getStartWebAuthoringSessionTool', () => {
     expect(schema.safeParse({ workbookFilePath, extra: true }).success).toBe(false);
   });
 
-  it('stages a local workbook and returns a ready URL without exposing the upload ID separately', async () => {
+  it('stages a local workbook and returns its ready URL and validated upload session ID', async () => {
     vi.mocked(resolveLocalWorkbook).mockResolvedValue({
       fileName: 'generated-workbook.twb',
       bytes: Buffer.from('<workbook />'),
     });
     vi.mocked(stageWorkbookForWebAuthoring).mockResolvedValue({
+      uploadSessionId: 'upload-session-id',
       validation: {
         uploadId: 'secret-upload-id',
         timestamp: '2026-08-09T12:00:00Z',
@@ -76,6 +77,7 @@ describe('getStartWebAuthoringSessionTool', () => {
     expect(result.structuredContent).toEqual({
       status: 'ready',
       url: 'https://tableau.example.com/vizql/show/authoring/newWorkbook/id/fromFileUpload/token',
+      uploadSessionId: 'upload-session-id',
       warnings: [],
     });
     expect(result.structuredContent).not.toHaveProperty('uploadId');
@@ -102,6 +104,7 @@ describe('getStartWebAuthoringSessionTool', () => {
         bytes: Buffer.from('<workbook />'),
       });
       vi.mocked(stageWorkbookForWebAuthoring).mockResolvedValue({
+        uploadSessionId: 'upload-session-id',
         validation: { timestamp: '2026-08-09T12:00:00Z', errors: [], warnings: [] },
         authoringUrl: 'https://tableau.example.com/authoring-url',
       });
@@ -143,6 +146,7 @@ describe('getStartWebAuthoringSessionTool', () => {
 describe('toStartWebAuthoringSessionResult', () => {
   it('returns validation errors and warnings without an authoring URL', () => {
     const result = toStartWebAuthoringSessionResult({
+      uploadSessionId: 'upload-session-id',
       validation: {
         uploadId: 'secret-upload-id',
         timestamp: '2026-08-09T12:00:00Z',
@@ -158,11 +162,13 @@ describe('toStartWebAuthoringSessionResult', () => {
       warnings: [finding('warning', 'Deprecated element')],
     });
     expect(result).not.toHaveProperty('url');
+    expect(result).not.toHaveProperty('uploadSessionId');
     expect(result).not.toHaveProperty('uploadId');
   });
 
   it('removes control characters and bounds finding text', () => {
     const result = toStartWebAuthoringSessionResult({
+      uploadSessionId: 'upload-session-id',
       validation: {
         timestamp: '2026-08-09T12:00:00Z',
         errors: [],
@@ -173,6 +179,7 @@ describe('toStartWebAuthoringSessionResult', () => {
 
     expect(result.status).toBe('ready');
     if (result.status === 'ready') {
+      expect(result.uploadSessionId).toBe('upload-session-id');
       expect(result.warnings[0].severity).toBe('warning ');
       expect(result.warnings[0].message).not.toContain('\u0000');
       expect(result.warnings[0].message).toHaveLength(2_000);

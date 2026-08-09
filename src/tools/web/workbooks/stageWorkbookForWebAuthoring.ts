@@ -25,6 +25,7 @@ export type StageWorkbookForWebAuthoringArgs = {
 };
 
 export type StagedWebAuthoringWorkbook = {
+  uploadSessionId: string;
   validation: WorkbookValidationResult;
   authoringUrl: string;
 };
@@ -61,6 +62,7 @@ export async function stageWorkbookForWebAuthoring({
   );
 
   return {
+    uploadSessionId,
     validation,
     authoringUrl: await runStage('handoff', async () =>
       constructWebAuthoringUrl({

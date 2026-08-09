@@ -12,7 +12,7 @@ const paramsSchema = {
   uploadSessionId: z
     .string()
     .describe(
-      'The upload session ID returned by a prior Initiate File Upload / Append to File Upload sequence. The workbook file must already be fully staged into this session.',
+      'The validated upload session ID returned by start-web-authoring-session. The workbook file must already be fully staged into this session.',
     ),
   name: z.string().describe('The name to give the published workbook.'),
   projectId: z.string().describe('The LUID of the project to publish the workbook into.'),
@@ -29,9 +29,9 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
     server,
     name: 'publish-workbook',
     description: `
-Publishes a workbook to a Tableau site by committing a file that was already staged into an upload session via a prior Initiate File Upload / Append to File Upload sequence. This tool publishes \`.twb\` (unpackaged workbook XML) uploads specifically.
+Publishes a workbook to a Tableau site by committing the validated staged file associated with an \`uploadSessionId\` returned by \`start-web-authoring-session\`. This tool publishes \`.twb\` (unpackaged workbook XML) uploads specifically.
 
-**This tool does NOT validate the workbook before publishing.** It commits the upload session as-is. Tableau's Publish Workbook REST endpoint does not itself check the TWB's structural or semantic correctness — it only enforces things like file size limits, that not all views are hidden, and that connections are reachable. If you want a safety check before publishing, call the \`validate-uploaded-workbook\` tool (or the equivalent SDK method) against the same \`uploadSessionId\` first, then call this tool only if validation passes.
+**This tool does NOT validate the workbook again before publishing.** Use the \`uploadSessionId\` from a successful \`start-web-authoring-session\` result, which is returned only after validation has no blocking errors. This publishes the staged TWB associated with that upload session; it does not capture later edits made in the browser's live Web Authoring session.
 
 Returns the published workbook's metadata (including its new LUID) and a URL to view it.`,
     paramsSchema,
@@ -50,7 +50,7 @@ Returns the published workbook's metadata (including its new LUID) and a URL to 
     ): Promise<CallToolResult> => {
       return await publishWorkbookTool.logAndExecute<{ data: Workbook; url: string }>({
         extra,
-        args: { uploadSessionId, name, projectId, overwrite },
+        args: { uploadSessionId: '<redacted>', name, projectId, overwrite },
         callback: async () => {
           const workbook = await useRestApi({
             ...extra,
