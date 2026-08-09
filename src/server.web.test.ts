@@ -99,6 +99,7 @@ describe('server', () => {
           description: await Provider.from(tool.description),
           inputSchema: await Provider.from(tool.paramsSchema),
           annotations: await Provider.from(tool.annotations),
+          _meta: await Provider.from(tool.meta),
         },
         expect.any(Function),
       );
@@ -204,6 +205,7 @@ describe('server', () => {
         description: await Provider.from(tool.description),
         inputSchema: await Provider.from(tool.paramsSchema),
         annotations: await Provider.from(tool.annotations),
+        _meta: await Provider.from(tool.meta),
       },
       expect.any(Function),
     );
@@ -235,6 +237,7 @@ describe('server', () => {
             description: await Provider.from(tool.description),
             inputSchema: await Provider.from(tool.paramsSchema),
             annotations: await Provider.from(tool.annotations),
+            _meta: await Provider.from(tool.meta),
           },
           expect.any(Function),
         );

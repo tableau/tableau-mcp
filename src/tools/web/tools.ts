@@ -37,6 +37,7 @@ import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListCustomViewsTool } from './views/listCustomViews.js';
 import { getListViewsTool } from './views/listViews.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
+import { getInspectWebAuthoringFileInputTool } from './workbooks/inspectWebAuthoringFileInput.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 
@@ -65,6 +66,7 @@ export const webToolFactories = [
   getGeneratePulseMetricValueInsightBundleTool,
   getGeneratePulseInsightBriefTool,
   getGenerateInsightCardsTool,
+  getInspectWebAuthoringFileInputTool,
   getGetWorkbookTool,
   getPublishWorkbookTool,
   getGetViewTool,
