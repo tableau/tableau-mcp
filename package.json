@@ -40,6 +40,7 @@
     "start:http": "node build/index.js",
     "start:http:apm": "node -r ./build/telemetry/tracing.js build/index.js",
     "start:http:docker": "docker run -p 3927:3927 -i --rm --env-file env.list tableau-mcp",
+    "smoke:web-authoring": "tsx src/scripts/smokeStartWebAuthoring.ts",
     "lint": "npm exec eslint",
     "lint:fix": "npm exec eslint -- --fix",
     "inspect": "npx @modelcontextprotocol/inspector --config config.json --server tableau",

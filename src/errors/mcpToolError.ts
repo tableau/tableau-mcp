@@ -185,6 +185,33 @@ export class WorkbookNotFoundError extends McpToolError {
   }
 }
 
+export class UnsupportedWebAuthoringAuthError extends McpToolError {
+  constructor() {
+    super({
+      type: 'unsupported-web-authoring-auth',
+      message:
+        'start-web-authoring-session requires OAuth, embedded OAuth, or passthrough authentication.',
+      statusCode: 400,
+    });
+  }
+}
+
+export class LocalWorkbookFileError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'local-workbook-file', message, statusCode: 400 });
+  }
+}
+
+export class WebAuthoringStageError extends McpToolError {
+  constructor(stage: 'initiate' | 'append' | 'validate' | 'handoff', httpStatus?: string) {
+    super({
+      type: 'web-authoring-stage',
+      message: `Web authoring ${stage} failed${httpStatus ? ` (HTTP ${httpStatus})` : ''}.`,
+      statusCode: httpStatus ? Number(httpStatus) : 500,
+    });
+  }
+}
+
 export class ZodiosValidationError extends McpToolError {
   constructor(error: ZodiosError) {
     super({

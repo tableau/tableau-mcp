@@ -52,6 +52,7 @@ describe('FileUploadsMethods', () => {
       const result = await fileUploadsMethods.appendToFileUpload({
         siteId: 'site-1',
         uploadSessionId: 'session-1',
+        filename: 'workbook.twb',
         chunk,
       });
 
@@ -63,7 +64,7 @@ describe('FileUploadsMethods', () => {
       expect(Buffer.isBuffer(body)).toBe(true);
       expect(body.toString('latin1')).toContain('Content-Disposition: name="request_payload"');
       expect(body.toString('latin1')).toContain(
-        'Content-Disposition: name="tableau_file"; filename="file"',
+        'Content-Disposition: name="tableau_file"; filename="workbook.twb"',
       );
       expect(body.includes(chunk)).toBe(true);
       expect(config.headers['Content-Type']).toMatch(/^multipart\/mixed; boundary=/);
@@ -91,6 +92,7 @@ describe('FileUploadsMethods', () => {
       await fileUploadsMethods.appendToFileUpload({
         siteId: 'site-1',
         uploadSessionId: 'session-1',
+        filename: 'workbook.twb',
         chunk: Buffer.from('hello'),
         sequenceId: '3',
       });
