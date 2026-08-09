@@ -154,6 +154,33 @@ describe('user-license-reclamation-apply prompt', () => {
     expect(text).not.toContain('"Login"');
   });
 
+  it('provides a deterministic VDS query for ts-users (Step 2b) with Desktop/Prep captions', async () => {
+    const text = await textOf();
+    expect(text).toContain('"kind": "ts-users"');
+    expect(text).toContain('"fieldCaption": "Tableau Desktop - Last Access Date"');
+    expect(text).toContain('"fieldCaption": "Tableau Prep - Last Access Date"');
+    // TS Users uses plain user captions, NOT the TS-Events-specific `Actor User Name`.
+    expect(text).toContain('"fieldCaption": "User Email"');
+    expect(text).toContain('"fieldCaption": "User Name"');
+    expect(text).not.toContain('"fieldCaption": "Actor User Email"');
+    expect(text).toContain('"limit": 10000');
+  });
+
+  it('treats a recent non-null Desktop/Prep date as active and null as no-signal in inactivity determination', async () => {
+    const text = await textOf();
+    expect(text).toContain('Inactivity determination (all conditions must hold):');
+    expect(text).toContain('NO recent non-null Tableau Desktop OR Prep last-access date');
+    expect(text).toContain('null is NOT activity');
+    expect(text).toContain('recent non-null Desktop or Prep last-access date is **active**');
+  });
+
+  it('includes the Desktop/Prep availability caveat in the notes and Fixed notes', async () => {
+    const text = await textOf();
+    expect(text).toContain('Desktop / Prep last-access dates');
+    expect(text).toContain('null for every');
+    expect(text).toContain('Desktop/Prep activity data');
+  });
+
   it('provides a deterministic VDS query for site-content (Step 3)', async () => {
     const text = await textOf();
     expect(text).toContain('"kind": "site-content"');

@@ -93,6 +93,20 @@ const argsSchema = {
 // `Event Date` is DATETIME (UTC) — NOT `Created At` which doesn't exist on TS Events.
 const TS_EVENTS_FIELDS = ['Actor User Name', 'Event Type', 'Event Date'];
 
+// TS Users captions verified against the official Admin Insights TS Users data dictionary
+// (help.tableau.com adminview_insights_users). TS Users uses PLAIN, unprefixed user captions
+// (`User Email` / `User Name`) — NOT the `Actor User Name` caption that is specific to TS Events.
+// `Tableau Desktop - Last Access Date` / `Tableau Prep - Last Access Date` are UTC DATETIMEs
+// (separate `... (Local)` variants exist — use the UTC captions here). These are one-row-per-user
+// last-access timestamps, so no date filter is applied — the model compares them to the cutoff
+// client-side (null = no signal, NOT activity).
+const TS_USERS_FIELDS = [
+  'User Email',
+  'User Name',
+  'Tableau Desktop - Last Access Date',
+  'Tableau Prep - Last Access Date',
+];
+
 // Site Content verified captions — `Owner LUID` does NOT exist on this datasource;
 // join on `Owner Email` against the user email from Step 1.
 const SITE_CONTENT_FIELDS = ['Item Type', 'Item Name', 'Owner Email', 'Item Parent Project Name'];
@@ -120,6 +134,14 @@ const buildActivityQuery = (inactiveDays: number): Record<string, unknown> => ({
   limit: 10000,
 });
 
+const buildDesktopPrepQuery = (): Record<string, unknown> => ({
+  kind: 'ts-users',
+  query: {
+    fields: TS_USERS_FIELDS.map((fieldCaption) => ({ fieldCaption })),
+  },
+  limit: 10000,
+});
+
 const buildOwnershipQuery = (): Record<string, unknown> => ({
   kind: 'site-content',
   query: {
@@ -141,9 +163,10 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
   title: 'User license reclamation — downgrade inactive users to Unlicensed',
   description:
     'Tableau Cloud admin workflow (destructive Apply phase): identify inactive licensed users ' +
-    'via `list-users` and `query-admin-insights` (kind: ts-events), present candidates with ' +
-    'owned-content counts, and — only after a required human-in-the-loop approval — downgrade ' +
-    `approved users to Unlicensed via \`${UPDATE_USER_TOOL}\`. Admin-only. ` +
+    'via `list-users` and `query-admin-insights` (kinds ts-events for content-access events and ' +
+    'ts-users for Tableau Desktop/Prep last-access dates), present candidates with owned-content ' +
+    'counts, and — only after a required human-in-the-loop approval — downgrade approved users to ' +
+    `Unlicensed via \`${UPDATE_USER_TOOL}\`. Admin-only. ` +
     'Ownership of content is retained after downgrade (no content is deleted).',
   argsSchema,
   disabled: (config) => !config.adminToolsEnabled,
@@ -232,7 +255,9 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
           ]
         : []),
       '',
-      `**Step 2 — Activity signals (read-only).** Call \`${ADMIN_INSIGHTS_TOOL}\` exactly once with the arguments below ` +
+      `**Step 2 — Activity signals (read-only).** Make TWO \`${ADMIN_INSIGHTS_TOOL}\` calls.`,
+      '',
+      `**2a — Content-access events.** Call \`${ADMIN_INSIGHTS_TOOL}\` exactly once with the arguments below ` +
         `to retrieve access events within the ${activityLookbackDays}-day lookback window.`,
       '',
       '```json',
@@ -243,12 +268,31 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
         `within the ${activityLookbackDays}-day lookback window. Match \`Actor User Name\` against the candidate's ` +
         '`name` or `email` field from Step 1.',
       '',
-      '**Inactivity determination (both conditions must hold):**',
+      '**2b — Tableau Desktop / Prep activity.** TS Events and `lastLogin` capture only web sign-in and ' +
+        `server-content access — neither reflects Tableau **Desktop** or **Prep** usage. Call \`${ADMIN_INSIGHTS_TOOL}\` ` +
+        'exactly once more with the arguments below to retrieve per-user Desktop/Prep last-access dates.',
+      '',
+      '```json',
+      JSON.stringify(buildDesktopPrepQuery(), null, 2),
+      '```',
+      '',
+      "Match each row to a candidate by `User Email` (against the candidate's `email`) or `User Name` " +
+        "(against the candidate's `name`). Treat the user as **Desktop/Prep-active** if either " +
+        '`Tableau Desktop - Last Access Date` OR `Tableau Prep - Last Access Date` is **non-null AND ' +
+        `within the last ${inactiveDays} days**.`,
+      '**Null handling — null is NOT activity.** A null, empty, or missing Desktop/Prep date is NOT ' +
+        'evidence of activity; such a user remains a candidate. Only a recent *non-null* Desktop/Prep ' +
+        'date rescues a user.',
+      '',
+      '**Inactivity determination (all conditions must hold):**',
       `- The user's \`lastLogin\` from Step 1 is either **null** (never signed in) OR older than ${inactiveDays} days ago, AND`,
-      `- The user has NO \`Access\` event in the TS Events result within the ${activityLookbackDays}-day lookback window.`,
+      `- The user has NO \`Access\` event in the TS Events result (2a) within the ${activityLookbackDays}-day lookback window, AND`,
+      `- The user has NO recent non-null Tableau Desktop OR Prep last-access date (2b) within the last ${inactiveDays} days.`,
       '',
       `Users whose \`lastLogin\` is within the last ${inactiveDays} days are NOT candidates, even if they have no Access event ` +
         '(the absence may be due to ETL lag or non-content activity). Exclude them from the inactive set.',
+      'A user with a recent non-null Desktop or Prep last-access date is **active** and must be excluded even if ' +
+        'they have no TS Events Access event and a stale `lastLogin`.',
       '',
       `If the query returns exactly ${10000} rows, warn the admin: "⚠️ TS Events results were truncated at the ` +
         `${10000}-row limit. Some active users may not appear in the result — candidates are not exhaustive. ` +
@@ -259,6 +303,11 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
         'been active earlier than records suggest — treat candidates as provisional.',
       'Note: TS Events data is subject to ETL lag (typically 24–48h). A user who accessed content very ' +
         'recently may not yet appear in TS Events.',
+      'Note: Tableau Desktop / Prep last-access dates (2b) are populated only when the tenant collects ' +
+        'Desktop/Prep telemetry. On tenants where this data is unavailable these fields are null for every ' +
+        'user, so the Desktop/Prep signal excludes no one — a null date is "no signal", NOT activity. If ' +
+        'every candidate has null Desktop and Prep dates, note in the report that Desktop/Prep activity data ' +
+        'may be unavailable on this tenant and the candidate set could include users active only in Desktop/Prep.',
       '',
       `**Step 3 — Ownership inventory (read-only).** Call \`${ADMIN_INSIGHTS_TOOL}\` exactly once with the arguments below ` +
         'to retrieve content ownership data.',
@@ -332,6 +381,9 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       '- Admin-only, Tableau Cloud. Users the admin excluded or that are missing from the inventory are never touched.',
       `- TS Events lookback is ${TS_EVENTS_LOOKBACK_MAX_DAYS} days on standard Tableau Cloud. ` +
         'Data is subject to 24–48h ETL lag — candidates are provisional, not definitive.',
+      '- Tableau Desktop / Prep last-access dates may be unavailable (null for all users) on tenants that do ' +
+        'not collect Desktop/Prep telemetry. A null date is treated as "no signal", never as activity, so a ' +
+        'user active only in Desktop/Prep could still be flagged — treat candidates as provisional.',
     ].join('\n');
 
     return {

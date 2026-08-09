@@ -91,6 +91,36 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(text).toContain('"Event Date"');
   });
 
+  it('includes the ts-users Desktop/Prep cross-reference query block', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('"kind": "ts-users"');
+    expect(text).toContain('"fieldCaption": "Tableau Desktop - Last Access Date"');
+    expect(text).toContain('"fieldCaption": "Tableau Prep - Last Access Date"');
+    // TS Users uses plain user captions, NOT the TS-Events-specific `Actor User Name`.
+    expect(text).toContain('"fieldCaption": "User Email"');
+    expect(text).toContain('"fieldCaption": "User Name"');
+    // A recent non-null Desktop/Prep date makes a user active → excluded.
+    expect(text).toContain('active');
+    expect(text).toContain('excluded from the final');
+  });
+
+  it('states null Desktop/Prep dates are NOT treated as activity and adds the availability caveat', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('null is NOT activity');
+    expect(text).toContain('REMAINS a candidate');
+    expect(text).toContain('Desktop/Prep activity data may be unavailable on this tenant');
+  });
+
   it('instructs cross-referencing to exclude active users', async () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});

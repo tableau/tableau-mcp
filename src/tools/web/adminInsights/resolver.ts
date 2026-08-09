@@ -17,6 +17,7 @@ export const ADMIN_INSIGHTS_PROJECT_NAME = 'Admin Insights';
 
 export const ADMIN_INSIGHTS_DATASETS = {
   TS_EVENTS: 'TS Events',
+  TS_USERS: 'TS Users',
   SITE_CONTENT: 'Site Content',
   JOB_PERFORMANCE: 'Job Performance',
 } as const;
