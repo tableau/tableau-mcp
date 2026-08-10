@@ -17,7 +17,7 @@ This prompt is restricted to Tableau site administrators and requires the `ADMIN
 The prompt sequences existing deterministic tools — it performs no calculations itself. Steps 1–3 are read-only; no write happens until after the Step 4 approval break:
 
 1. **User inventory (read-only)** — calls [`list-users`](../tools/users/list-users.md) to retrieve all users on the site, then filters client-side to licensed roles in scope. Users with null `lastLogin` (never signed in) are also included as candidates.
-2. **Activity signals (read-only)** — calls [`query-admin-insights`](../tools/admin-insights/query-admin-insights.md) with `kind: "ts-events"` to retrieve recent Access events. Cross-references activity against candidates from Step 1 to identify truly inactive users. TS Events lookback is capped at 90 days on standard Tableau Cloud (365 with Advanced Management); data is subject to 24–48h ETL lag.
+2. **Activity signals (read-only)** — makes two [`query-admin-insights`](../tools/admin-insights/query-admin-insights.md) calls: (2a) `kind: "ts-events"` to retrieve recent Access events, and (2b) `kind: "ts-users"` to retrieve per-user Tableau **Desktop** and **Prep** last-access dates (joined by `User Email` / `User Name`). A user is inactive only if their `lastLogin` is stale/null, they have no recent TS Events Access event, **and** they have no recent *non-null* Desktop or Prep last-access date. A `null` Desktop/Prep date is "no signal", not activity — the user remains a candidate. TS Events lookback is capped at 90 days on standard Tableau Cloud (365 with Advanced Management); data is subject to 24–48h ETL lag.
 3. **Ownership inventory (read-only)** — calls [`query-admin-insights`](../tools/admin-insights/query-admin-insights.md) with `kind: "site-content"` to count workbooks and data sources owned by each inactive user (matched by `Owner Email`). This is informational only — ownership is **not** affected by the downgrade.
 4. **Human confirmation break** — presents the inactive users as a table (username, display name, current role, last login, days inactive, owned workbooks, owned datasources) and requires explicit approval before any downgrade. In a dry run (the default) the workflow stops here.
 5. **Apply (only after Step 4 approval)** — for each approved user, calls [`update-user`](../tools/users/update-user.md) with `siteRole: "Unlicensed"`. Calls are sequential; the first error stops the run.
@@ -40,6 +40,7 @@ The prompt sequences existing deterministic tools — it performs no calculation
 - `update-user` is reversible by re-assigning the user's prior site role.
 - Apply calls run sequentially; the first error stops the run so the admin can review partial state.
 - TS Events lookback is 90 days on standard Tableau Cloud. Data is subject to 24–48h ETL lag — candidates are provisional, not definitive.
+- Tableau Desktop / Prep last-access dates may be unavailable (null for all users) on tenants that do not collect Desktop/Prep telemetry. A null date is treated as "no signal", never as activity, so a user active only in Desktop/Prep could still be flagged — treat candidates as provisional.
 
 ## Configuration
 

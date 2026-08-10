@@ -326,8 +326,8 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:view:read', 'tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
-  // Dispatches on `kind` to ts-events, site-content, job-performance (raw VDS) or stale-content
-  // (server-side anti-join). Union of the scopes required by all four kinds.
+  // Dispatches on `kind` to ts-events, ts-users, site-content, job-performance (raw VDS) or
+  // stale-content (server-side anti-join). Union of the scopes required by all kinds.
   'query-admin-insights': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set([
