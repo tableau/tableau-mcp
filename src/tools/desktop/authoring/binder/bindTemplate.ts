@@ -112,10 +112,7 @@ const paramsSchema = {
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional().describe('Apply immediately.'),
-  skip_validation: z
-    .boolean()
-    .optional()
-    .describe('Skip the preflight. Honored only for a trusted caller; otherwise ignored.'),
+  skip_validation: z.boolean().optional(),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
