@@ -16,6 +16,32 @@ const getWorkbookEndpoint = makeEndpoint({
   response: z.object({ workbook: workbookSchema }),
 });
 
+const downloadWorkbookEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/workbooks/:workbookId/content',
+  alias: 'downloadWorkbook',
+  description: 'Downloads a workbook in TWB or TWBX format.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'workbookId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'includeExtract',
+      type: 'Query',
+      schema: z.boolean().optional(),
+      description: 'Whether to include workbook extracts in the downloaded file.',
+    },
+  ],
+  response: z.string(),
+});
+
 const queryWorkbooksForSiteEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/workbooks',
@@ -145,6 +171,7 @@ const validateUploadedWorkbookEndpoint = makeEndpoint({
 const workbooksApi = makeApi([
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
+  downloadWorkbookEndpoint,
   deleteWorkbookEndpoint,
   addTagsToWorkbookEndpoint,
   publishWorkbookEndpoint,

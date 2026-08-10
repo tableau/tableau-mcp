@@ -107,6 +107,27 @@ describe('secretMask', () => {
     });
   });
 
+  it('should omit downloaded workbook bytes from debug response logs', () => {
+    const workbookBytes = (): string => 'non-cloneable workbook stream';
+
+    const maskedResponse = maskResponse({
+      status: 200,
+      baseUrl: 'https://example.com/api/3.29',
+      params: { includeExtract: false },
+      url: '/sites/site-id/workbooks/workbook-id/content',
+      headers: { 'content-type': 'application/xml' },
+      data: workbookBytes,
+    });
+
+    expect(maskedResponse).toEqual({
+      status: 200,
+      baseUrl: 'https://example.com/api/3.29',
+      params: { includeExtract: false },
+      url: '/sites/site-id/workbooks/workbook-id/content',
+      headers: { 'content-type': 'application/xml' },
+    });
+  });
+
   it('should remove multipart upload bodies and redact upload sessions in request paths', () => {
     const maskedRequest = maskRequest({
       method: 'PUT',
