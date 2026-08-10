@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { matchSentiment, sentimentMapSchema } from './sentimentMap.js';
 
 const MAP = sentimentMapSchema.parse({
@@ -33,7 +34,7 @@ describe('matchSentiment', () => {
   });
   it('fuzzy: rejects when two keys tie within threshold (ambiguous)', () => {
     const map = sentimentMapSchema.parse({
-      cost: 'SENTIMENT_TYPE_DOWN_IS_GOOD',
+      cosh: 'SENTIMENT_TYPE_DOWN_IS_GOOD',
       cast: 'SENTIMENT_TYPE_UP_IS_GOOD',
     });
     // "cost" is edit-distance 1 from BOTH -> ambiguous -> no match
@@ -44,5 +45,15 @@ describe('matchSentiment', () => {
   });
   it('schema rejects an unknown token', () => {
     expect(() => sentimentMapSchema.parse({ ARR: 'SENTIMENT_TYPE_BOGUS' })).toThrow();
+  });
+  it('exact match returns immediately despite nearby fuzzy neighbors', () => {
+    // Regression: exact-match should NOT be rejected due to close alternative keys.
+    const map = sentimentMapSchema.parse({
+      ARR: 'SENTIMENT_TYPE_UP_IS_GOOD',
+      MRR: 'SENTIMENT_TYPE_DOWN_IS_GOOD',
+    });
+    // "ARR" exactly matches key "ARR"; even though "MRR" is nearby (distance 1),
+    // exact match wins and returns immediately.
+    expect(matchSentiment(map, 'ARR', undefined)).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
   });
 });

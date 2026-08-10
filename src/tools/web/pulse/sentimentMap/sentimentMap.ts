@@ -65,29 +65,9 @@ export function matchSentiment(
   const normKeys = keys.map((k) => ({ key: k, norm: normalize(k) }));
 
   // 1. Normalized-exact, candidate order (caption before localName).
-  let exactMatch: SentimentToken | undefined;
   for (const cand of candidates) {
     const hit = normKeys.find((k) => k.norm === cand);
-    if (hit) {
-      exactMatch = map[hit.key];
-      break; // caption wins
-    }
-  }
-
-  if (exactMatch !== undefined) {
-    // Found exact match, but check for ambiguous close alternatives.
-    for (const cand of candidates) {
-      for (const k of normKeys) {
-        const dist = levenshtein(cand, k.norm);
-        if (dist > 0 && dist <= FUZZY_MAX_DISTANCE) {
-          if (map[k.key] !== exactMatch) {
-            // Found a close alternative with different sentiment -> ambiguous
-            return undefined;
-          }
-        }
-      }
-    }
-    return exactMatch;
+    if (hit) return map[hit.key];
   }
 
   // 2. Fuzzy: best single unambiguous match within threshold.
