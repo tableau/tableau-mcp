@@ -117,10 +117,19 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
       expect(result.unwrap().state).toBe('FAILED');
     });
 
-    it('returns awaiting-user when a poll reaches AWAITING_USER', async () => {
+    it('returns awaiting-user with the blocking window(s) when a poll reaches AWAITING_USER', async () => {
       server.setOverride('POST /v0/app:invokeCommand', accepted202('op-user-1'));
       server.setOperation('op-user-1', {
-        poll: [{ id: 'op-user-1', kind: 'tabui:open-bookmark', state: 'AWAITING_USER' }],
+        poll: [
+          {
+            id: 'op-user-1',
+            kind: 'tabui:open-bookmark',
+            state: 'AWAITING_USER',
+            blockingWindows: [
+              { objectName: 'msgbox', title: 'Save Changes?', className: 'QMessageBox' },
+            ],
+          },
+        ],
       });
 
       const result = await http.postJsonEnvelope(
@@ -128,7 +137,13 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         invokeBody('tabui', 'open-bookmark'),
       );
       expect(result.isErr()).toBe(true);
-      expect(result.unwrapErr().type).toBe('awaiting-user');
+      const error = result.unwrapErr();
+      expect(error.type).toBe('awaiting-user');
+      if (error.type === 'awaiting-user') {
+        expect(error.blockingWindows).toEqual([
+          { objectName: 'msgbox', title: 'Save Changes?', className: 'QMessageBox' },
+        ]);
+      }
     });
 
     it('returns operation-expired when the polled operation 404s', async () => {
