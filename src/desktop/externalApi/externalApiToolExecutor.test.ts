@@ -431,6 +431,57 @@ describe('ExternalApiToolExecutor', () => {
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/storyboards/story-qbr');
     });
 
+    it.each([
+      {
+        label: 'pauses worksheet auto-updates',
+        call: (executor: ExternalApiToolExecutor) =>
+          executor.pauseWorksheetAutoUpdates('sheet-sales', signal),
+        path: '/v0/workbook/worksheets/sheet-sales:pauseAutoUpdates',
+      },
+      {
+        label: 'resumes worksheet auto-updates',
+        call: (executor: ExternalApiToolExecutor) =>
+          executor.resumeWorksheetAutoUpdates('sheet-sales', signal),
+        path: '/v0/workbook/worksheets/sheet-sales:resumeAutoUpdates',
+      },
+      {
+        label: 'pauses dashboard auto-updates',
+        call: (executor: ExternalApiToolExecutor) =>
+          executor.pauseDashboardAutoUpdates('dash-exec', signal),
+        path: '/v0/workbook/dashboards/dash-exec:pauseAutoUpdates',
+      },
+      {
+        label: 'resumes dashboard auto-updates',
+        call: (executor: ExternalApiToolExecutor) =>
+          executor.resumeDashboardAutoUpdates('dash-exec', signal),
+        path: '/v0/workbook/dashboards/dash-exec:resumeAutoUpdates',
+      },
+    ])('$label via a bodyless POST to the per-sheet action route', async ({ call, path }) => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await call(executor);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().status).toBe('completed');
+      const last = server.requests.at(-1);
+      expect(last?.method).toBe('POST');
+      expect(last?.path).toBe(path);
+      expect(last?.body).toBe('');
+    });
+
+    it('dispatches auto-update pause without an id-existence guard (matches the live command)', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.pauseWorksheetAutoUpdates('sheet-not-in-inventory', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(server.requests.at(-1)?.path).toBe(
+        '/v0/workbook/worksheets/sheet-not-in-inventory:pauseAutoUpdates',
+      );
+    });
+
     it('lists dashboards', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
@@ -725,7 +776,9 @@ describe('ExternalApiToolExecutor', () => {
             id: 'op-read',
             kind: 'workbook.listWorksheets',
             state: 'SUCCEEDED',
-            result: { worksheets: [{ id: 'ws-1', name: 'Sales', hidden: false }] },
+            result: {
+              worksheets: [{ id: 'ws-1', name: 'Sales', hidden: false, isActiveSheet: false }],
+            },
           },
         ],
       });

@@ -41,9 +41,10 @@ import {
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.4,
- * captured 2026-08-07 (a build serving worksheet logical-table reads, the
- * `:delete`, `:rename`, `:sort`, and `:goToSheet` routes, and Operation
+ * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.5 — a build
+ * adding the per-sheet `:pauseAutoUpdates`/`:resumeAutoUpdates` routes and the
+ * `isActiveSheet`/`isAutoUpdatesPaused` sheet-item fields, on top of the 0.2.4 surface
+ * (logical-table reads, `:delete`/`:rename`/`:sort`/`:goToSheet`, Operation
  * `blockingWindows`). No hand-edits.
  */
 
@@ -199,8 +200,12 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.worksheetDelete,
       EXTERNAL_API_ROUTES.worksheetRename,
       EXTERNAL_API_ROUTES.worksheetSort,
+      EXTERNAL_API_ROUTES.worksheetPauseAutoUpdates,
+      EXTERNAL_API_ROUTES.worksheetResumeAutoUpdates,
       EXTERNAL_API_ROUTES.dashboardDelete,
       EXTERNAL_API_ROUTES.dashboardRename,
+      EXTERNAL_API_ROUTES.dashboardPauseAutoUpdates,
+      EXTERNAL_API_ROUTES.dashboardResumeAutoUpdates,
       EXTERNAL_API_ROUTES.storyboardDelete,
       EXTERNAL_API_ROUTES.storyboardRename,
       EXTERNAL_API_ROUTES.workbookGoToSheet,
