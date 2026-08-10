@@ -79,7 +79,30 @@ describe('pause-auto-updates / resume-auto-updates', () => {
       expect(posted).toHaveLength(1);
       expect(posted[0].body).toBe('');
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('"resumed":true');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.resumed).toBe(true);
+      // Worksheet resume affects only the named sheet — no dashboard blast-radius flag.
+      expect(body).not.toHaveProperty('alsoResumedContainedWorksheets');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('resume-auto-updates on a dashboard surfaces the contained-worksheet blast radius in the result', async () => {
+    const harness = await startHarness(getResumeAutoUpdatesTool);
+    try {
+      const result = await harness.callTool({ sheet: DASHBOARD_NAME });
+      expect(result.isError).toBeFalsy();
+      const posted = harness.server.requests.filter(
+        (r) =>
+          r.method === 'POST' &&
+          r.path === `/v0/workbook/dashboards/${DASHBOARD_ID}:resumeAutoUpdates`,
+      );
+      expect(posted).toHaveLength(1);
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.alsoResumedContainedWorksheets).toBe(true);
+      expect(body.message).toContain('every worksheet it contains');
     } finally {
       await harness.close();
     }

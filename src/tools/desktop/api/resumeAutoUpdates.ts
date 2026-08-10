@@ -68,13 +68,18 @@ export const getResumeAutoUpdatesTool = (
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 
+          const completed = result.value.status === 'completed';
+          const alsoResumedContainedWorksheets = ref.kind === 'dashboard';
+          const scopeSuffix = alsoResumedContainedWorksheets
+            ? ' and every worksheet it contains'
+            : '';
           return new Ok({
-            resumed: result.value.status === 'completed',
+            resumed: completed,
             sheet: { id: ref.id, kind: ref.kind, name: previousName },
-            message:
-              result.value.status === 'completed'
-                ? `Resumed auto-updates for ${ref.kind} "${previousName}".`
-                : `Requested resuming auto-updates for ${ref.kind} "${previousName}"; Desktop is still applying it.`,
+            ...(alsoResumedContainedWorksheets ? { alsoResumedContainedWorksheets: true } : {}),
+            message: completed
+              ? `Resumed auto-updates for ${ref.kind} "${previousName}"${scopeSuffix}.`
+              : `Requested resuming auto-updates for ${ref.kind} "${previousName}"${scopeSuffix}; Desktop is still applying it.`,
           });
         },
       });
