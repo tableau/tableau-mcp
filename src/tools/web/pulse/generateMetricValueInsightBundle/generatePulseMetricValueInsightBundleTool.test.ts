@@ -461,6 +461,42 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     ).toEqual({ date: '2026-04-15', end_date: '2026-04-20' });
   });
 
+  it('injects sentiment_type from config map before POST', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+    const sentimentBundleRequest = {
+      bundle_request: {
+        ...bundleRequest.bundle_request,
+        input: {
+          ...bundleRequest.bundle_request.input,
+          metadata: {
+            ...bundleRequest.bundle_request.input.metadata,
+            name: 'ARR',
+          },
+        },
+      },
+    };
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    const extra = getMockRequestHandlerExtra();
+    extra.config.insightSentimentMap = { ARR: 'SENTIMENT_TYPE_UP_IS_GOOD' };
+    await callback(
+      {
+        bundleRequest: sentimentBundleRequest,
+        bundleType: undefined,
+        slim: undefined,
+        verbosity: undefined,
+      },
+      extra,
+    );
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0][0].bundle_request.input.metric
+        .definition.representation_options.sentiment_type,
+    ).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
+  });
+
   async function getToolResult(
     bundleType?: PulseInsightBundleType,
     slim?: boolean,

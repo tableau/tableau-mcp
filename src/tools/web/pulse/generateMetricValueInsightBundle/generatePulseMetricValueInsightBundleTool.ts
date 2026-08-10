@@ -10,6 +10,7 @@ import {
 } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { WebTool } from '../../tool.js';
+import { applySentimentToBundleRequest } from '../sentimentMap/sentimentMap.js';
 import { validateBundleRequest } from '../validatePulsePayload.js';
 import { slimBundle } from './slimBundle.js';
 
@@ -174,6 +175,11 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
           if (validationError) {
             return new ArgsValidationError(validationError).toErr();
           }
+
+          // Inject the metric's configured sentiment (skill-authored, matched
+          // by measure name) so Pulse classifies the change favorable/unfavorable.
+          // No match -> request unchanged -> Pulse treats it as neutral.
+          applySentimentToBundleRequest(bundleRequest, extra.config.insightSentimentMap);
 
           const configWithOverrides = await extra.getConfigWithOverrides();
 
