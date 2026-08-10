@@ -115,7 +115,10 @@ const paramsSchema = {
   skip_validation: z
     .boolean()
     .optional()
-    .describe('Skip apply-time validation preflight; deterministic/pre-vetted callers only.'),
+    .describe(
+      'Skip apply-time validation preflight. Honored only for a server-trusted caller ' +
+        '(config-gated); ignored otherwise, so the preflight still runs.',
+    ),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
@@ -2318,7 +2321,10 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             schemaSummary,
             templateSnapshot: selectedTemplate.snapshot,
             appliedDefault,
-            skipValidation: skip_validation === true,
+            // Honor skip_validation only for a server-trusted caller (config gate set by the
+            // deterministic spawner). An untrusted LLM turn that passes the flag gets full
+            // validation, not a bypass — the param alone cannot skip the preflight.
+            skipValidation: skip_validation === true && extra.config.allowSkipValidation,
           });
           const appliedResult = autoApplyResult.result;
           // Only a bind the binder called FINISHED may be replayed as "already built" on
