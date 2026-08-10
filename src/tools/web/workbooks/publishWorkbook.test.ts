@@ -54,10 +54,11 @@ describe('publishWorkbookTool', () => {
     });
   });
 
-  it('should state in its description that it does not validate the workbook', () => {
+  it('should direct callers to use the validated upload session from the start tool', () => {
     const publishWorkbookTool = getPublishWorkbookTool(new WebMcpServer());
-    expect(publishWorkbookTool.description).toContain('does NOT validate');
-    expect(publishWorkbookTool.description).toContain('validate-uploaded-workbook');
+    expect(publishWorkbookTool.description).toContain('does NOT validate the workbook again');
+    expect(publishWorkbookTool.description).toContain('start-web-authoring-session');
+    expect(publishWorkbookTool.description).not.toContain('validate-uploaded-workbook');
   });
 
   it('should be annotated as a non-read-only, non-destructive create operation', () => {
@@ -104,6 +105,25 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
       expect.objectContaining({ overwrite: true }),
     );
+  });
+
+  it('should redact the upload session ID passed to shared logging', async () => {
+    const tool = getPublishWorkbookTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    const logAndExecute = vi
+      .spyOn(tool, 'logAndExecute')
+      .mockResolvedValue({ isError: false, content: [] } as CallToolResult);
+
+    await callback(validArgs, getMockRequestHandlerExtra());
+
+    const loggedArgs = logAndExecute.mock.calls[0][0].args;
+    expect(loggedArgs).toEqual({
+      uploadSessionId: '<redacted>',
+      name: validArgs.name,
+      projectId: validArgs.projectId,
+      overwrite: undefined,
+    });
+    expect(JSON.stringify(loggedArgs)).not.toContain(validArgs.uploadSessionId);
   });
 
   it('should fall back to webpageUrl when the workbook has no views', async () => {
