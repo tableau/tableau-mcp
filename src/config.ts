@@ -8,6 +8,10 @@ import {
   providerConfigSchema as featureGateProviderConfigSchema,
 } from './features/types.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
+import {
+  type SentimentMap,
+  sentimentMapSchema,
+} from './tools/web/pulse/sentimentMap/sentimentMap.js';
 import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
@@ -78,6 +82,7 @@ export class Config extends BaseConfig {
   flowToolsEnabled: boolean;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
+  insightSentimentMap: SentimentMap;
 
   constructor() {
     super();
@@ -145,6 +150,7 @@ export class Config extends BaseConfig {
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
+      INSIGHT_SENTIMENT_MAP: insightSentimentMap,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -275,6 +281,16 @@ export class Config extends BaseConfig {
         provider: 'noop',
       };
     }
+
+    this.insightSentimentMap = (() => {
+      if (!insightSentimentMap) return {};
+      try {
+        return sentimentMapSchema.parse(JSON.parse(insightSentimentMap));
+      } catch {
+        // Malformed author map must not take the server down; ignore it.
+        return {};
+      }
+    })();
 
     this.latencyMetricName = latencyMetricName || 'http_server_1agg1_request_duration';
     this.productTelemetryEndpoint =
