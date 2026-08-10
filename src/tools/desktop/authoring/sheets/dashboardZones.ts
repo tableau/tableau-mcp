@@ -57,11 +57,9 @@ export type Zone =
 export function buildZoneXml(zone: Zone): string {
   if (zone.kind === 'text') {
     return `<zone h="${zone.h}" id="${zone.id}" type-v2="text" w="${zone.w}" x="${zone.x}" y="${zone.y}">
-          <zone-text>
-            <formatted-text>
-              <run bold="${zone.bold}" fontalignment="${zone.fontAlignment}" fontcolor="${zone.fontColor}" fontname="${zone.fontName}" fontsize="${zone.fontSize}">${zone.text}</run>
-            </formatted-text>
-          </zone-text>
+          <formatted-text>
+            <run bold="${zone.bold}" fontalignment="${zone.fontAlignment}" fontcolor="${zone.fontColor}" fontname="${zone.fontName}" fontsize="${zone.fontSize}">${zone.text}</run>
+          </formatted-text>
           ${ZONE_STYLE}
         </zone>`;
   }

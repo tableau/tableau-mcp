@@ -97,6 +97,16 @@ describe('computeZones — KPI strip (build-and-apply-dashboard only; unchanged 
 });
 
 describe('buildDashboardXml', () => {
+  it('writes title text directly under the text zone in Desktop readback shape', () => {
+    const zones = computeZones('Q1 Sales', spec({ charts: ['A'] }));
+    const xml = buildDashboardXml('My Dashboard', zones);
+
+    expect(xml).toContain(
+      '<zone h="8000" id="10" type-v2="text" w="100000" x="0" y="0">\n          <formatted-text>',
+    );
+    expect(xml).not.toContain('<zone-text>');
+  });
+
   it('wraps zones in the fixed 1400x1000 layout-basic dashboard shape', () => {
     const zones = computeZones(undefined, spec({ charts: ['A', 'B'] }));
     const xml = buildDashboardXml('My Dashboard', zones);

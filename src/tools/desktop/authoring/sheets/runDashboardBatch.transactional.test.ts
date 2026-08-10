@@ -13,6 +13,7 @@ import {
   TemplateArtifactStore,
   type TemplateWorksheetArtifact,
 } from '../../../../desktop/templates/templateArtifactStore.js';
+import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -94,6 +95,43 @@ describe('run-dashboard-batch transactional apply', () => {
       applied: true,
       steps: [{ operation: 'dashboard', state: 'applied', replaced: true }],
     });
+  });
+
+  it('waits for a concurrent apply before activating the dashboard', async () => {
+    let releaseConcurrentApply!: () => void;
+    const concurrentApplyReleased = new Promise<void>((resolve) => {
+      releaseConcurrentApply = resolve;
+    });
+    let markConcurrentApplyStarted!: () => void;
+    const concurrentApplyStarted = new Promise<void>((resolve) => {
+      markConcurrentApplyStarted = resolve;
+    });
+    let concurrentApply: Promise<void> | undefined;
+    const store = artifactStore(['a1']);
+    const harness = statefulExecutor({
+      afterApplyDispatch: () => {
+        concurrentApply = withApplyLock(async () => {
+          markConcurrentApplyStarted();
+          await concurrentApplyReleased;
+        });
+      },
+    });
+
+    const resultPromise = callBatch(store, harness.executor, ['a1']);
+    await concurrentApplyStarted;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const activatedWhileApplyWasInFlight = vi.mocked(harness.executor.executeCommand).mock.calls
+      .length;
+
+    releaseConcurrentApply();
+    await concurrentApply;
+    const result = await resultPromise;
+
+    expect(activatedWhileApplyWasInFlight).toBe(0);
+    expect(result.isError).toBe(false);
+    expect(harness.executor.executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Executive Overview' } }),
+    );
   });
 
   it('releases every lease and writes nothing when a later artifact fails preflight', async () => {
@@ -209,11 +247,13 @@ function statefulExecutor({
   failAfterDispatch = false,
   readbackTransform,
   staleReadbackCount = 0,
+  afterApplyDispatch,
 }: {
   guardedReadXml?: string;
   failAfterDispatch?: boolean;
   readbackTransform?: (xml: string) => string;
   staleReadbackCount?: number;
+  afterApplyDispatch?: () => void;
 } = {}): {
   executor: ExternalApiToolExecutor;
   posts: string[];
@@ -245,6 +285,7 @@ function statefulExecutor({
       async (xml: string, _signal: AbortSignal, options?: ApplyWorkbookDocumentOptions) => {
         options?.onDispatch?.();
         posts.push(xml);
+        afterApplyDispatch?.();
         if (failAfterDispatch) {
           return Err({ type: 'command-timed-out' as const, error: 'timed out' });
         }

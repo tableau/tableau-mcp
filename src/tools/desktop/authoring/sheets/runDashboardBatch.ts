@@ -37,7 +37,7 @@ import {
   runValidation,
 } from '../../../../desktop/validation/registry.js';
 import { targetDashboardInvariantIssues } from '../../../../desktop/validation/targetDashboardInvariant.js';
-import { activateSheetValidated } from '../../../../desktop/wrappers/activateSheet.js';
+import { activateSheetWithValidatedGoto } from '../../../../desktop/wrappers/activateSheet.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
   loadWorkbookXml,
@@ -532,7 +532,7 @@ export const getRunDashboardBatchTool = (
               });
             }
 
-            await activateSheetValidated({
+            await activateSheetWithValidatedGoto({
               sheetName: dashboardName,
               executor,
               signal: extra.signal,

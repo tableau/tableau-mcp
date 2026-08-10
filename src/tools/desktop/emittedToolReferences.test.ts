@@ -201,7 +201,6 @@ const NON_TOOL_VOCABULARY = [
   'zone-delete',
   'zone-style',
   'zone-surgery',
-  'zone-text',
 ] as const;
 
 const TOOL_NAME_CANDIDATE_RE = /\b[a-z][a-z0-9]*(?:-[a-z0-9]+)+\b/g;
