@@ -30,6 +30,7 @@ export type StartWebAuthoringSessionResult =
   | {
       status: 'ready';
       url: string;
+      uploadSessionId: string;
       warnings: ValidationFinding[];
     }
   | {
@@ -45,7 +46,7 @@ export const getStartWebAuthoringSessionTool = (
     server,
     name: 'start-web-authoring-session',
     description:
-      'Starts a live, unsaved Tableau Web Authoring session from a local TWB file. The tool reads the bounded local file, stages and validates it through Tableau temporary upload APIs, and returns an authoring URL only when validation has no blocking errors. It never publishes or saves the workbook.',
+      'Starts a live, unsaved Tableau Web Authoring session from a local TWB file. The tool reads the bounded local file, stages and validates it through Tableau temporary upload APIs, and returns an authoring URL and uploadSessionId only when validation has no blocking errors. Pass that uploadSessionId to publish-workbook to publish the validated staged TWB. This tool never publishes or saves the workbook.',
     paramsSchema,
     annotations: {
       title: 'Start Web Authoring Session',
@@ -96,6 +97,7 @@ export const getStartWebAuthoringSessionTool = (
 };
 
 export function toStartWebAuthoringSessionResult({
+  uploadSessionId,
   validation,
   authoringUrl,
 }: Awaited<ReturnType<typeof stageWorkbookForWebAuthoring>>): StartWebAuthoringSessionResult {
@@ -106,7 +108,7 @@ export function toStartWebAuthoringSessionResult({
     return { status: 'invalid', errors, warnings };
   }
 
-  return { status: 'ready', url: authoringUrl, warnings };
+  return { status: 'ready', url: authoringUrl, uploadSessionId, warnings };
 }
 
 function isSupportedWebAuthoringAuth(
