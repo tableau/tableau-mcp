@@ -115,6 +115,76 @@ describe('verifyWorksheetReadback', () => {
     );
   });
 
+  it('accepts Desktop canonicalizing two shelf measures from slash to plus syntax', () => {
+    const intended = worksheet(`<cols>${SALES_FIELD} / ${PROFIT_FIELD}</cols>`);
+    const readback = worksheet(`<cols>(${SALES_FIELD} + ${PROFIT_FIELD})</cols>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
+  it('still flags a measure that Desktop drops from a canonicalized multi-measure shelf', () => {
+    const intended = worksheet(`<cols>${SALES_FIELD} / ${PROFIT_FIELD}</cols>`);
+    const readback = worksheet(`<cols>(${SALES_FIELD})</cols>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual({
+      kind: 'shelf',
+      node: 'cols',
+      column: PROFIT_FIELD,
+      intended: PROFIT_FIELD,
+      readback: 'changed',
+      severity: 'error',
+    });
+  });
+
+  it('does not treat a changed shelf operator as Desktop multi-measure canonicalization', () => {
+    const intended = worksheet(`<cols>${SALES_FIELD} * ${PROFIT_FIELD}</cols>`);
+    const readback = worksheet(`<cols>(${SALES_FIELD} + ${PROFIT_FIELD})</cols>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual(
+      expect.objectContaining({ kind: 'shelf', node: 'cols', readback: 'changed' }),
+    );
+  });
+
+  it('flags one occurrence when Desktop drops a duplicate shelf measure', () => {
+    const intended = worksheet(`<cols>${SALES_FIELD} / ${SALES_FIELD}</cols>`);
+    const readback = worksheet(`<cols>${SALES_FIELD}</cols>`);
+
+    expect(
+      verifyWorksheetReadback(intended, readback).filter(
+        (finding) => finding.kind === 'shelf' && finding.column === SALES_FIELD,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('recognizes canonicalized qualified refs with escaped closing brackets', () => {
+    const sales = '[D]]S].[sum:Sales]]Net:qk]';
+    const profit = '[D]]S].[sum:Profit]]Net:qk]';
+    const intended = worksheet(`<cols>${sales} / ${profit}</cols>`);
+    const readback = worksheet(`<cols>(${sales} + ${profit})</cols>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
+  it('does not normalize slash to plus for dimension shelves', () => {
+    const category = '[DS].[none:Category:nk]';
+    const region = '[DS].[none:Region:nk]';
+    const intended = worksheet(`<cols>${category} / ${region}</cols>`);
+    const readback = worksheet(`<cols>(${category} + ${region})</cols>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual(
+      expect.objectContaining({ kind: 'shelf', node: 'cols', readback: 'changed' }),
+    );
+  });
+
+  it('normalizes quantitative shelf refs with trailing instance suffixes', () => {
+    const sales = '[DS].[rank:sum:Sales:qk:3]';
+    const profit = '[DS].[usr:Profit Ratio:qk:14]';
+    const intended = worksheet(`<cols>${sales} / ${profit}</cols>`);
+    const readback = worksheet(`<cols>(${sales} + ${profit})</cols>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
   it('does not flag an authored Automatic mark that Tableau resolved to a concrete class', () => {
     const intended = encodedWorksheet().replace(
       '<mark class="Shape"/>',

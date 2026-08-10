@@ -17,6 +17,25 @@ const routeMissing = {
   },
 };
 
+const COMPLETE_WORKBOOK_XML = `<?xml version='1.0'?>
+<workbook version='18.1'>
+  <datasources>
+    <datasource name='Sample - Superstore' />
+  </datasources>
+  <worksheets>
+    <worksheet name='Sheet 1'>
+      <table><cols>[Sample - Superstore].[sum:Sales:qk]</cols></table>
+    </worksheet>
+    <worksheet name='Other Sheet'><table /></worksheet>
+  </worksheets>
+  <dashboards />
+  <windows>
+    <window class='worksheet' name='Sheet 1' />
+    <window class='worksheet' name='Other Sheet' />
+  </windows>
+  <thumbnails />
+</workbook>`;
+
 type KindFixture = {
   kind: PerSheetKind;
   sheetName: string;
@@ -69,8 +88,54 @@ describe('tryApplyViaPerSheetRoute', () => {
     vi.restoreAllMocks();
   });
 
+  it('posts a complete workbook document when adding a second measure to an existing worksheet', async () => {
+    const editedWorksheet =
+      '<worksheet name="Sheet 1"><table><cols>[Sample - Superstore].[sum:Sales:qk] / [Sample - Superstore].[sum:Profit:qk]</cols></table></worksheet>';
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const getWorkbookDocument = vi.fn().mockResolvedValue(
+      Ok({
+        xml: COMPLETE_WORKBOOK_XML,
+        instanceId: 'desktop-instance',
+        applicationVersion: '2026.1',
+        payloadVersion: '18.1',
+      }),
+    );
+    const executor = makeExecutorMock({
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: 'Sheet 1' }] })),
+      getWorkbookDocument,
+      applyWorksheetDocument,
+      executeCommand: vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' })),
+    });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: 'worksheet',
+      sheetName: 'Sheet 1',
+      fragmentXml: editedWorksheet,
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(applyWorksheetDocument).toHaveBeenCalledTimes(1);
+    const postedXml = applyWorksheetDocument.mock.calls[0]?.[1] as string;
+    expect(postedXml).toContain('<workbook');
+    expect(postedXml).toContain('<worksheets>');
+    expect(postedXml).toContain('[sum:Profit:qk]');
+    expect(postedXml).toContain('name="Other Sheet"');
+    expect(postedXml).toContain('<windows>');
+    expect(postedXml).toContain('<thumbnails');
+  });
+
   it.each(FIXTURES)(
-    'posts the $kind fragment as-is to its per-sheet route and reports applied',
+    'posts the current $kind payload shape to its per-sheet route and reports applied',
     async ({ kind, sheetName, fragmentXml, listMethod, listValue, applyMethod, id }) => {
       const apply = vi
         .fn()
@@ -81,6 +146,14 @@ describe('tryApplyViaPerSheetRoute', () => {
       const executor = makeExecutorMock({
         [listMethod]: vi.fn().mockResolvedValue(Ok(listValue)),
         [applyMethod]: apply,
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: COMPLETE_WORKBOOK_XML,
+            instanceId: 'desktop-instance',
+            applicationVersion: '2026.1',
+            payloadVersion: '18.1',
+          }),
+        ),
         executeCommand,
       });
 
@@ -97,13 +170,16 @@ describe('tryApplyViaPerSheetRoute', () => {
       if (result.isOk()) {
         expect(result.value).toBe('applied');
       }
-      // The route resolves by id, and the posted body is the sheet fragment as-is (Tableau Desktop
-      // wraps it into the live workbook server-side — the MCP does not build a <workbook> envelope).
       expect(apply).toHaveBeenCalledTimes(1);
       const [postedId, postedXml] = apply.mock.calls[0];
       expect(postedId).toBe(id);
-      expect(postedXml).toBe(fragmentXml);
-      expect(postedXml).not.toContain('<workbook>');
+      if (kind === 'worksheet') {
+        expect(postedXml).toContain('<workbook');
+        expect(postedXml).toContain('<worksheets>');
+        expect(postedXml).toContain('name="Other Sheet"');
+      } else {
+        expect(postedXml).toBe(fragmentXml);
+      }
     },
   );
 
@@ -167,6 +243,14 @@ describe('tryApplyViaPerSheetRoute', () => {
       const executor = makeExecutorMock({
         [listMethod]: vi.fn().mockResolvedValue(Ok(listValue)),
         [applyMethod]: apply,
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: COMPLETE_WORKBOOK_XML,
+            instanceId: 'desktop-instance',
+            applicationVersion: '2026.1',
+            payloadVersion: '18.1',
+          }),
+        ),
       });
 
       const result = await tryApplyViaPerSheetRoute({

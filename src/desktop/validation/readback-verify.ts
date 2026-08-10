@@ -112,7 +112,25 @@ function walkElements(node: unknown, visit: (tag: string, element: XmlRecord) =>
 
 function shelfValues(value: unknown): string[] {
   return normalizeArray(value)
-    .flatMap((item) => textValue(item).split('/'))
+    .flatMap((item) => {
+      const text = textValue(item);
+      const references = [...text.matchAll(/\[(?:[^\]]|\]\])+\](?:\.\[(?:[^\]]|\]\])+\])?/g)];
+      if (references.length > 0) {
+        const separators = references.map((match, index) => {
+          const start =
+            index === 0 ? 0 : references[index - 1]!.index! + references[index - 1]![0].length;
+          return text.slice(start, match.index);
+        });
+        const suffix = text.slice(references.at(-1)!.index! + references.at(-1)![0].length);
+        const isMultiMeasureExpression =
+          references.every((match) => /:qk(?::[^:\]]+)?\]$/.test(match[0])) &&
+          /^[\s(]*$/.test(separators[0] ?? '') &&
+          separators.slice(1).every((separator) => /^\s*[+/]\s*$/.test(separator)) &&
+          /^[\s)]*$/.test(suffix);
+        if (isMultiMeasureExpression) return references.map((match) => match[0]);
+      }
+      return text.split('/');
+    })
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -295,8 +313,13 @@ export function verifyWorksheetReadback(
   }
 
   for (const shelf of ['rows', 'cols'] as const) {
+    const remainingReadback = [...readback.shelves[shelf]];
     for (const value of intended.shelves[shelf]) {
-      if (readback.shelves[shelf].includes(value)) continue;
+      const index = remainingReadback.indexOf(value);
+      if (index >= 0) {
+        remainingReadback.splice(index, 1);
+        continue;
+      }
       findings.push({
         kind: 'shelf',
         node: shelf,

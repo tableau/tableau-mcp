@@ -4,6 +4,7 @@ import { log } from '../../logging/logger.js';
 import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
+import { upsertSheetIntoWorkbook } from '../metadata/sheets.js';
 import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
 
 export type PerSheetKind = 'worksheet' | 'dashboard' | 'storyboard';
@@ -65,12 +66,25 @@ export async function tryApplyViaPerSheetRoute({
     return Ok('sheet-absent');
   }
 
-  // POST the sheet fragment as-is: Tableau Desktop wraps it into the live workbook on the per-sheet
-  // `/document` route, so the MCP does not build a workbook envelope.
+  let documentXml = fragmentXml;
+  if (kind === 'worksheet') {
+    const workbookResult = await client.getWorkbookDocument(signal);
+    if (workbookResult.isErr()) {
+      return Err(workbookResult.error);
+    }
+    try {
+      documentXml = upsertSheetIntoWorkbook(workbookResult.value.xml, sheetName, fragmentXml);
+    } catch (error) {
+      return Err({ type: 'invalid-response', error });
+    }
+  }
+
+  // The worksheet endpoint replaces only the resolved sheet, but its POST contract still requires
+  // a complete workbook document. Preserve the live envelope so required metadata reaches Desktop.
   const applyResult = await applyDocumentForKind(
     kind,
     resolved.value.id,
-    fragmentXml,
+    documentXml,
     client,
     signal,
   );
