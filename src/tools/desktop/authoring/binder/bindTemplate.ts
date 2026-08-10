@@ -115,10 +115,7 @@ const paramsSchema = {
   skip_validation: z
     .boolean()
     .optional()
-    .describe(
-      'Skip apply-time validation preflight. Honored only for a server-trusted caller ' +
-        '(config-gated); ignored otherwise, so the preflight still runs.',
-    ),
+    .describe('Skip the preflight. Honored only for a trusted caller; otherwise ignored.'),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.

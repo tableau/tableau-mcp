@@ -362,7 +362,8 @@ describe('buildTemplateContentPack', () => {
         }
       }
 
-      expect(templates).toHaveLength(133);
+      // 133 base + the 2 insight templates (insights_bar_chart, insights_line_chart).
+      expect(templates).toHaveLength(135);
       expect(/\bapi-key\s*=\s*(['"])[^'"]+\1/i.test(corpus)).toBe(false);
       expect(absolutePathAttributes).toBe(0);
       expect(credentialAttributes).toBe(0);
