@@ -98,10 +98,14 @@ function asRecord(v: unknown): Record<string, unknown> | undefined {
 /** Inject the matched metric sentiment into a bundle request, in place. Reads
  *  the caption (`input.metadata.name`) and localName
  *  (`input.metric.definition.basic_specification.measure.field`), matches them
- *  against `map`, and on a hit sets
- *  `input.metric.representation_options.sentiment_type` — a sibling of
- *  `metric.definition` per `pulseBundleRequestSchema`, not a child of it. Any
- *  missing node or empty map is a silent no-op — fail closed, never throw. */
+ *  against `map`, and on a hit merges `sentiment_type` into an *already-present*
+ *  `input.metric.representation_options` — a sibling of `metric.definition` per
+ *  `pulseBundleRequestSchema`, not a child of it. If `representation_options` is
+ *  absent, this is a no-op: we never fabricate it, since
+ *  `pulseRepresentationOptionsSchema.type` is required and we don't know the
+ *  correct value for an arbitrary metric — the card simply degrades to neutral.
+ *  Any missing node or empty map is likewise a silent no-op — fail closed, never
+ *  throw. */
 export function applySentimentToBundleRequest(bundleRequest: unknown, map: SentimentMap): void {
   const root = asRecord(bundleRequest);
   const input = asRecord(root?.bundle_request)?.input;
@@ -119,6 +123,7 @@ export function applySentimentToBundleRequest(bundleRequest: unknown, map: Senti
   const token = matchSentiment(map, caption, localName);
   if (token === undefined) return;
 
-  const existing = asRecord(metric.representation_options) ?? {};
+  const existing = asRecord(metric.representation_options);
+  if (existing === undefined) return; // no representation_options to merge into — fail closed, stay neutral
   metric.representation_options = { ...existing, sentiment_type: token };
 }

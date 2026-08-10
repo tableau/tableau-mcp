@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { pulseBundleRequestSchema } from '../../../../sdks/tableau/types/pulse.js';
 import {
   applySentimentToBundleRequest,
   matchSentiment,
@@ -85,13 +86,12 @@ function reqWith(
 describe('applySentimentToBundleRequest', () => {
   const MAP = sentimentMapSchema.parse({ ARR: 'SENTIMENT_TYPE_UP_IS_GOOD' });
 
-  it('sets sentiment_type on a match, creating representation_options', () => {
+  it('is a no-op on a match when representation_options is absent (never fabricates it)', () => {
     const req = reqWith('ARR', 'arr');
     applySentimentToBundleRequest(req, MAP);
     expect(
-      (req.bundle_request.input.metric as Record<string, any>).representation_options
-        .sentiment_type,
-    ).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
+      (req.bundle_request.input.metric as Record<string, any>).representation_options,
+    ).toBeUndefined();
   });
 
   it('merges into an existing representation_options, preserving other fields', () => {
@@ -121,5 +121,54 @@ describe('applySentimentToBundleRequest', () => {
     expect(
       (req.bundle_request.input.metric as Record<string, any>).representation_options,
     ).toBeUndefined();
+  });
+
+  it('no-ops (stays schema-valid) when the matched metric has no representation_options', () => {
+    const map = sentimentMapSchema.parse({ ARR: 'SENTIMENT_TYPE_UP_IS_GOOD' });
+    // Full, schema-shaped bundle request that MATCHES (caption 'ARR') but omits
+    // metric.representation_options entirely (it's `.optional()` in the schema).
+    const request: Record<string, unknown> = {
+      bundle_request: {
+        version: 1,
+        options: {
+          output_format: 'OUTPUT_FORMAT_HTML',
+          time_zone: 'UTC',
+          language: 'LANGUAGE_EN_US',
+          locale: 'LOCALE_EN_US',
+        },
+        input: {
+          metadata: {
+            name: 'ARR',
+            metric_id: 'metric-1',
+            definition_id: 'def-1',
+          },
+          metric: {
+            definition: {
+              datasource: { id: 'ds-1' },
+              basic_specification: {
+                measure: { field: 'arr', aggregation: 'AGGREGATION_SUM' },
+                time_dimension: { field: 'Order Date' },
+                filters: [],
+              },
+              is_running_total: false,
+            },
+            metric_specification: {
+              filters: [],
+              measurement_period: {
+                granularity: 'GRANULARITY_BY_MONTH',
+                range: 'RANGE_LAST_COMPLETE',
+              },
+              comparison: { comparison: 'TIME_COMPARISON_PREVIOUS_PERIOD' },
+            },
+            // No representation_options here — this is the case that must stay a no-op.
+          },
+        },
+      },
+    };
+
+    applySentimentToBundleRequest(request, map);
+
+    // Must not have fabricated an invalid representation_options (missing required `type`):
+    expect(() => pulseBundleRequestSchema.parse(request)).not.toThrow();
   });
 });
