@@ -1960,12 +1960,30 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
       idempotentHint: false,
     },
     callback: async (
-      { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs, skip_validation },
+      {
+        session,
+        ask,
+        proposal,
+        minConfidence,
+        auto_apply,
+        target_worksheet,
+        calcs,
+        skip_validation,
+      },
       extra,
     ): Promise<CallToolResult> => {
       return await bindTemplateTool.logAndExecute<BindTemplateToolResult>({
         extra,
-        args: { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs, skip_validation },
+        args: {
+          session,
+          ask,
+          proposal,
+          minConfidence,
+          auto_apply,
+          target_worksheet,
+          calcs,
+          skip_validation,
+        },
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {

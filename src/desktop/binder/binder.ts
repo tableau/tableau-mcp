@@ -467,7 +467,10 @@ function validateAndBuild(
     // (escaped exactly once at their production), so they are NOT re-escaped here.
     title: escapeXml(proposal.title),
     sheet_type: 'worksheet',
-    template_parameters: { ...sanitizeTemplateParameters(proposal.template_parameters), DATASOURCE: v.datasource },
+    template_parameters: {
+      ...sanitizeTemplateParameters(proposal.template_parameters),
+      DATASOURCE: v.datasource,
+    },
     field_mapping: v.field_mapping,
     ...(sort ? { sort } : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
