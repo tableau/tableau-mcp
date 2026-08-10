@@ -99,25 +99,26 @@ function asRecord(v: unknown): Record<string, unknown> | undefined {
  *  the caption (`input.metadata.name`) and localName
  *  (`input.metric.definition.basic_specification.measure.field`), matches them
  *  against `map`, and on a hit sets
- *  `input.metric.definition.representation_options.sentiment_type`. Any missing
- *  node or empty map is a silent no-op — fail closed, never throw. */
+ *  `input.metric.representation_options.sentiment_type` — a sibling of
+ *  `metric.definition` per `pulseBundleRequestSchema`, not a child of it. Any
+ *  missing node or empty map is a silent no-op — fail closed, never throw. */
 export function applySentimentToBundleRequest(bundleRequest: unknown, map: SentimentMap): void {
   const root = asRecord(bundleRequest);
   const input = asRecord(root?.bundle_request)?.input;
   const inputRec = asRecord(input);
   const metric = asRecord(inputRec?.metric);
-  const definition = asRecord(metric?.definition);
-  if (definition === undefined) return;
+  if (metric === undefined) return;
 
   const metadata = asRecord(inputRec?.metadata);
   const caption = typeof metadata?.name === 'string' ? metadata.name : undefined;
 
-  const measure = asRecord(asRecord(definition.basic_specification)?.measure);
+  const definition = asRecord(metric.definition);
+  const measure = asRecord(asRecord(definition?.basic_specification)?.measure);
   const localName = typeof measure?.field === 'string' ? measure.field : undefined;
 
   const token = matchSentiment(map, caption, localName);
   if (token === undefined) return;
 
-  const existing = asRecord(definition.representation_options) ?? {};
-  definition.representation_options = { ...existing, sentiment_type: token };
+  const existing = asRecord(metric.representation_options) ?? {};
+  metric.representation_options = { ...existing, sentiment_type: token };
 }

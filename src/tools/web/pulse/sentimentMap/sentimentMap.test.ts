@@ -74,8 +74,8 @@ function reqWith(
         metric: {
           definition: {
             basic_specification: { measure: { field, aggregation: 'AGGREGATION_SUM' } },
-            ...(repOpts ? { representation_options: repOpts } : {}),
           },
+          ...(repOpts ? { representation_options: repOpts } : {}),
         },
       },
     },
@@ -89,7 +89,7 @@ describe('applySentimentToBundleRequest', () => {
     const req = reqWith('ARR', 'arr');
     applySentimentToBundleRequest(req, MAP);
     expect(
-      (req.bundle_request.input.metric.definition as Record<string, any>).representation_options
+      (req.bundle_request.input.metric as Record<string, any>).representation_options
         .sentiment_type,
     ).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
   });
@@ -97,8 +97,7 @@ describe('applySentimentToBundleRequest', () => {
   it('merges into an existing representation_options, preserving other fields', () => {
     const req = reqWith('ARR', 'arr', { type: 'NUMBER_FORMAT_TYPE_NUMBER' });
     applySentimentToBundleRequest(req, MAP);
-    const ro = (req.bundle_request.input.metric.definition as Record<string, any>)
-      .representation_options;
+    const ro = (req.bundle_request.input.metric as Record<string, any>).representation_options;
     expect(ro.type).toBe('NUMBER_FORMAT_TYPE_NUMBER');
     expect(ro.sentiment_type).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
   });
@@ -107,7 +106,7 @@ describe('applySentimentToBundleRequest', () => {
     const req = reqWith('Expenses', 'expenses');
     applySentimentToBundleRequest(req, MAP);
     expect(
-      (req.bundle_request.input.metric.definition as Record<string, any>).representation_options,
+      (req.bundle_request.input.metric as Record<string, any>).representation_options,
     ).toBeUndefined();
   });
 
@@ -120,7 +119,7 @@ describe('applySentimentToBundleRequest', () => {
     const req = reqWith('ARR', 'arr');
     applySentimentToBundleRequest(req, {});
     expect(
-      (req.bundle_request.input.metric.definition as Record<string, any>).representation_options,
+      (req.bundle_request.input.metric as Record<string, any>).representation_options,
     ).toBeUndefined();
   });
 });

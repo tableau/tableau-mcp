@@ -7,7 +7,10 @@ import {
   PulseNotAvailableError,
 } from '../../../../errors/mcpToolError.js';
 import { formatPulseInsightsApiError } from '../../../../errors/pulseInsightsApiError.js';
-import { PulseInsightBundleType } from '../../../../sdks/tableau/types/pulse.js';
+import {
+  pulseBundleRequestSchema,
+  PulseInsightBundleType,
+} from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
 import invariant from '../../../../utils/invariant.js';
@@ -491,10 +494,18 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       extra,
     );
     expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledTimes(1);
-    expect(
-      mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0][0].bundle_request.input.metric
-        .definition.representation_options.sentiment_type,
-    ).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
+    const capturedRequest = mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0][0];
+    expect(capturedRequest.bundle_request.input.metric.representation_options.sentiment_type).toBe(
+      'SENTIMENT_TYPE_UP_IS_GOOD',
+    );
+
+    // Prove the injected field is at a path the wire schema actually keeps —
+    // i.e. it would survive Zodios's default object-stripping on the real
+    // HTTP request, not just satisfy a mock.
+    const parsed = pulseBundleRequestSchema.parse(capturedRequest);
+    expect(parsed.bundle_request.input.metric.representation_options?.sentiment_type).toBe(
+      'SENTIMENT_TYPE_UP_IS_GOOD',
+    );
   });
 
   async function getToolResult(
