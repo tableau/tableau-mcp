@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
 import * as discoveryModule from '../../../desktop/externalApi/discovery.js';
 import { _resetExternalApiCommandRegistryForTest } from '../../../desktop/externalApi/paramWireRegistry.js';
@@ -28,6 +28,26 @@ function makeExtra(
     getWorkbookDocument: vi.fn(),
   });
   return extra;
+}
+
+const ROOT_FILE_CONNECT_ARGS = {
+  DSClass: 'hyper',
+  IsLeafConnection: false,
+  FilePath: '/tmp/coffee-chain.hyper',
+};
+
+function makeRootFileConnectExtra(...datasourceReads: any[]): {
+  extra: ReturnType<typeof getMockRequestHandlerExtra>;
+  executeCommand: ReturnType<typeof vi.fn>;
+} {
+  const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+  const listWorkbookDatasources = vi.fn();
+  for (const read of datasourceReads) {
+    listWorkbookDatasources.mockResolvedValueOnce(read);
+  }
+  const extra = getMockRequestHandlerExtra();
+  extra.getExecutor = vi.fn().mockResolvedValue({ executeCommand, listWorkbookDatasources });
+  return { extra, executeCommand };
 }
 
 function writeExternalApiRegistry({
@@ -237,6 +257,161 @@ describe('executeTableauCommandTool', () => {
     expect(payload.message).toBe('Command executed successfully.');
     expect(payload.result).toBeUndefined();
     expect(payload.message).not.toContain('no result data');
+  });
+
+  it('rejects false success when a root file connection adds no workbook datasource', async () => {
+    const unchanged = new Ok({
+      datasources: [{ id: 'existing', name: 'Sample - Superstore' }],
+    });
+    const { extra } = makeRootFileConnectExtra(unchanged, unchanged);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: ROOT_FILE_CONNECT_ARGS,
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('no new workbook datasource appeared');
+    expect(result.content[0].text).toContain('inspect workbook datasources before retrying');
+  });
+
+  it('returns the datasource verified after a root file connection', async () => {
+    const existing = { id: 'existing', name: 'Sample - Superstore' };
+    const { extra } = makeRootFileConnectExtra(
+      new Ok({ datasources: [existing] }),
+      new Ok({
+        datasources: [
+          existing,
+          {
+            id: 'connected',
+            luid: null,
+            name: 'coffee-chain Extract',
+            caption: 'coffee-chain Extract',
+          },
+        ],
+      }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: ROOT_FILE_CONNECT_ARGS,
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      message: 'Command executed successfully and the new workbook datasource was verified.',
+      verification: {
+        status: 'passed',
+        addedDatasources: [
+          {
+            id: 'connected',
+            name: 'coffee-chain Extract',
+            caption: 'coffee-chain Extract',
+          },
+        ],
+      },
+    });
+  });
+
+  it('does not send a root file connection when the datasource baseline cannot be read', async () => {
+    const { extra, executeCommand } = makeRootFileConnectExtra(
+      new Err({
+        type: 'command-failed' as const,
+        error: { code: 'not-found', message: 'datasource route unavailable', recoverable: false },
+      }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: ROOT_FILE_CONNECT_ARGS,
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('The command was not sent');
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('reports unknown state when datasource readback fails after a root file connection', async () => {
+    const { extra } = makeRootFileConnectExtra(
+      new Ok({ datasources: [] }),
+      new Err({
+        type: 'command-failed' as const,
+        error: { code: 'not-found', message: 'datasource route unavailable', recoverable: false },
+      }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: ROOT_FILE_CONNECT_ARGS,
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('state may have changed');
+    expect(result.content[0].text).toContain('do not retry automatically');
+  });
+
+  it('does not verify a leaf file connection (IsLeafConnection=true skips inventory reads)', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const listWorkbookDatasources = vi.fn();
+    const extra = getMockRequestHandlerExtra();
+    extra.getExecutor = vi.fn().mockResolvedValue({ executeCommand, listWorkbookDatasources });
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: { DSClass: 'hyper', IsLeafConnection: true, FilePath: '/tmp/coffee-chain.hyper' },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).message).toBe('Command executed successfully.');
+    expect(listWorkbookDatasources).not.toHaveBeenCalled();
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not verify a file connection when no leaf flag is provided', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const listWorkbookDatasources = vi.fn();
+    const extra = getMockRequestHandlerExtra();
+    extra.getExecutor = vi.fn().mockResolvedValue({ executeCommand, listWorkbookDatasources });
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: { DSClass: 'hyper', FilePath: '/tmp/coffee-chain.hyper' },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).message).toBe('Command executed successfully.');
+    expect(listWorkbookDatasources).not.toHaveBeenCalled();
+    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces command failure message and tableau-error-code extension', async () => {
@@ -559,6 +734,21 @@ describe('executeTableauCommandTool', () => {
         },
       ],
     };
+    const ROOT_FILE_REGISTRY_ENTRY = {
+      agent_can_invoke: true,
+      opens_blocking_dialog: false,
+      modifies_state: 'true',
+      in_params: [
+        { local: 'DSClass', type: 'UPI_DSClass', required: true, wire: 'dsclass' },
+        {
+          local: 'IsLeafConnection',
+          type: 'UPI_IsLeafConnection',
+          required: false,
+          wire: 'is-leaf-connection-ui',
+        },
+        { local: 'FilePath', type: 'UPI_FilePath', required: true, wire: 'filepath' },
+      ],
+    };
 
     it('keeps existing behavior when EXTERNAL_API_REGISTRY_DIR is unset', async () => {
       const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
@@ -691,6 +881,38 @@ describe('executeTableauCommandTool', () => {
       expect(executeCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           args: { worksheet: 'Sheet 1', 'show-me-command-type': 'bars' },
+        }),
+      );
+    });
+
+    it('verifies a root file connection after registry parameter rewriting', async () => {
+      enableExternalApiRegistry({
+        'tabui:data-catalog-connect-to-file': ROOT_FILE_REGISTRY_ENTRY,
+      });
+      const { extra, executeCommand } = makeRootFileConnectExtra(
+        new Ok({ datasources: [] }),
+        new Ok({ datasources: [{ id: 'connected', name: 'coffee-chain Extract' }] }),
+      );
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabui:data-catalog-connect-to-file',
+          args: ROOT_FILE_CONNECT_ARGS,
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).verification).toMatchObject({ status: 'passed' });
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: {
+            dsclass: 'hyper',
+            'is-leaf-connection-ui': false,
+            filepath: '/tmp/coffee-chain.hyper',
+          },
         }),
       );
     });

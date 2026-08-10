@@ -1,0 +1,91 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0805.0231                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <_.fcp.ExtendedPublishedDataSourceUI.true...ExtendedPublishedDataSourceUI />
+    <ISO8601DefaultCalendarPref />
+    <IntuitiveSorting />
+    <IntuitiveSorting_SP2 />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <datasources>
+    <datasource caption='Sample - Superstore' name='Sample - Superstore' />
+  </datasources>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='0' param='[Sample - Superstore].[none:Product:nk]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <highlight>
+        <color-one-way>
+          <field>[Sample - Superstore].[none:Product:nk]</field>
+        </color-one-way>
+      </highlight>
+    </viewpoint>
+    <simple-id uuid='{F2A39237-BE90-4B47-9E19-B30712717ACA}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Sample - Superstore' name='Sample - Superstore' />
+      </datasources>
+      <datasource-dependencies datasource='Sample - Superstore'>
+        <column aggregation='Sum' datatype='integer' default-type='quantitative' layered='true' name='[ARR]' pivot='key' role='measure' type='quantitative' user-datatype='integer' visual-totals='Default' />
+        <column aggregation='Count' datatype='string' default-type='nominal' layered='true' name='[Product]' pivot='key' role='dimension' type='nominal' user-datatype='string' visual-totals='Default' />
+        <column-instance column='[Product]' derivation='None' name='[none:Product:nk]' pivot='key' type='nominal' />
+        <column-instance column='[ARR]' derivation='Sum' name='[sum:ARR:qk]' pivot='key' type='quantitative' />
+        <column aggregation='Year' datatype='date' default-type='ordinal' layered='true' name='[Close Date]' pivot='key' role='dimension' type='ordinal' user-datatype='date' visual-totals='Default' />
+        <column-instance column='[Close Date]' derivation='None' name='[none:Close Date:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='quantitative' column='[Sample - Superstore].[none:Close Date:qk]' included-values='in-range'>
+        <min>#{{DATE_MIN}}#</min>
+        <max>#{{DATE_MAX}}#</max>
+      </filter>
+      <shelf-sorts>
+        <shelf-sort-v2 dimension-to-sort='[Sample - Superstore].[none:Product:nk]' direction='{{DIRECTION}}' is-on-innermost-dimension='true' measure-to-sort-by='[Sample - Superstore].[sum:ARR:qk]' shelf='rows' />
+      </shelf-sorts>
+      <aggregation value='true' />
+    </view>
+    <style />
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[Sample - Superstore].[none:Product:nk]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>[Sample - Superstore].[none:Product:nk]</rows>
+    <cols>[Sample - Superstore].[sum:ARR:qk]</cols>
+  </table>
+</bookmark>

@@ -166,9 +166,12 @@ function sanitizeValidationRuleId(ruleId: string): string {
 }
 
 function isBindingResolvedPlaceholderError(ruleId: string, message: string): boolean {
+  // These tokens are filled at bind time, so leaving them unsubstituted in a raw
+  // template is fine: DATASOURCE, field_base_N, and ALL-CAPS template_parameters
+  // like {{DATE_MIN}}/{{DATE_MAX}}.
   return (
     ruleId === 'unsubstituted-template-token' &&
-    /\{\{(?:DATASOURCE|field_base_[1-9]\d*)\}\}/.test(message)
+    /\{\{(?:DATASOURCE|field_base_[1-9]\d*|[A-Z][A-Z0-9_]*)\}\}/.test(message)
   );
 }
 

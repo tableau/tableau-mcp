@@ -61,7 +61,12 @@ const DEFAULT_WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets /></wor
 // `<worksheet>` or `<dashboard>`, not wrapped in a `<workbook>`. The handler serves the same
 // fragment for any known id of that kind, standing in for the resolved item.
 const DEFAULT_WORKSHEET_DOCUMENT_XML =
-  '<?xml version="1.0"?>' + '<worksheet name="Sales by Region"><table><rows /></table></worksheet>';
+  '<?xml version="1.0"?>' +
+  '<worksheet name="Sales by Region"><table>' +
+  '<view><datasources><datasource name="Sample - Superstore" /></datasources></view>' +
+  '<rows>[Sample - Superstore].[none:Region:nk]</rows>' +
+  '<cols>[Sample - Superstore].[sum:Sales:qk]</cols>' +
+  '</table></worksheet>';
 const DEFAULT_DASHBOARD_DOCUMENT_XML =
   '<?xml version="1.0"?>' +
   '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>';
@@ -143,6 +148,10 @@ const DEFAULT_SUMMARY_DATA = {
     ['East', 900, 120],
   ],
 };
+const DEFAULT_LOGICAL_TABLES = [
+  { id: 'lt-orders', caption: 'Orders' },
+  { id: 'lt-returns', caption: 'Returns' },
+];
 const DEFAULT_SITE_DATASOURCES = [
   {
     id: 'ds-superstore',
@@ -207,6 +216,27 @@ const sendProblem = (res: ServerResponse, status: number, code: string, detail: 
   res.end(
     JSON.stringify({ type: 'problem', title: detail, status, instance: '/v0/mock', detail, code }),
   );
+};
+
+const sendOperation = (res: ServerResponse, command: string): void => {
+  sendJson(res, 200, {
+    id: `op-${command}-1`,
+    kind: `tabdoc:${command}`,
+    state: 'succeeded',
+    createdAt: '2026-07-07T10:00:00Z',
+    completedAt: '2026-07-07T10:00:01Z',
+    result: {},
+  });
+};
+
+const sheetIdKnown = (kindSegment: string, id: string): boolean => {
+  const inventory =
+    kindSegment === 'worksheets'
+      ? DEFAULT_WORKSHEETS
+      : kindSegment === 'dashboards'
+        ? DEFAULT_DASHBOARDS
+        : DEFAULT_STORYBOARDS;
+  return inventory.some((item) => item.id === id);
 };
 
 // The per-sheet `/document` POST routes share the whole-workbook POST contract: reject a non-XML
@@ -518,6 +548,40 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const logicalTablesMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/logicalTables$/);
+    if (method === 'GET' && logicalTablesMatch) {
+      const worksheetId = decodeURIComponent(logicalTablesMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendJson(res, 200, { tables: DEFAULT_LOGICAL_TABLES });
+      return;
+    }
+
+    const logicalTableDataMatch = path.match(
+      /^\/v0\/workbook\/worksheets\/([^/]+)\/logicalTables\/([^/]+)\/data$/,
+    );
+    if (method === 'GET' && logicalTableDataMatch) {
+      const worksheetId = decodeURIComponent(logicalTableDataMatch[1]);
+      const logicalTableId = decodeURIComponent(logicalTableDataMatch[2]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      if (!DEFAULT_LOGICAL_TABLES.some((table) => table.id === logicalTableId)) {
+        sendProblem(
+          res,
+          404,
+          'logical-table-not-found',
+          `Logical table not found: ${logicalTableId}`,
+        );
+        return;
+      }
+      sendJson(res, 200, DEFAULT_SUMMARY_DATA);
+      return;
+    }
+
     const worksheetImageMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/image$/);
     if (method === 'GET' && worksheetImageMatch) {
       const worksheetId = decodeURIComponent(worksheetImageMatch[1]);
@@ -650,6 +714,72 @@ export async function startMockExternalApiServer(
         completedAt: '2026-07-07T10:00:01Z',
         result: {},
       });
+      return;
+    }
+
+    const sheetActionMatch = path.match(
+      /^\/v0\/workbook\/(worksheets|dashboards|storyboards)\/([^/]+):(rename|delete)$/,
+    );
+    if (method === 'POST' && sheetActionMatch) {
+      const kindSegment = sheetActionMatch[1];
+      const sheetId = decodeURIComponent(sheetActionMatch[2]);
+      const action = sheetActionMatch[3];
+      if (!sheetIdKnown(kindSegment, sheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Sheet not found: ${sheetId}`);
+        return;
+      }
+      if (action === 'rename') {
+        let parsed: { name?: unknown };
+        try {
+          parsed = JSON.parse(body);
+        } catch {
+          sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+          return;
+        }
+        if (typeof parsed.name !== 'string' || parsed.name.length === 0) {
+          sendProblem(res, 400, 'invalid-request-body', 'rename requires a string `name`.');
+          return;
+        }
+      }
+      sendOperation(res, `${action}-sheet`);
+      return;
+    }
+
+    const sortMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+):sort$/);
+    if (method === 'POST' && sortMatch) {
+      const worksheetId = decodeURIComponent(sortMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      let parsed: { fieldName?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (typeof parsed.fieldName !== 'string' || parsed.fieldName.length === 0) {
+        sendProblem(res, 400, 'invalid-request-body', 'sort requires a string `fieldName`.');
+        return;
+      }
+      sendOperation(res, 'sort-worksheet');
+      return;
+    }
+
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookGoToSheet) {
+      let parsed: { id?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (typeof parsed.id !== 'string' || parsed.id.length === 0) {
+        sendProblem(res, 400, 'invalid-request-body', 'goToSheet requires a string `id`.');
+        return;
+      }
+      sendOperation(res, 'go-to-sheet');
       return;
     }
 

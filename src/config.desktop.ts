@@ -54,6 +54,15 @@ export class Config extends BaseConfig {
    */
   desktopCallTimeoutMs: number;
 
+  /**
+   * Server-side gate for bind-template's `skip_validation`. Set true (env ALLOW_SKIP_VALIDATION)
+   * only by a trusted spawner — the backend's self-owned deterministic build_viz session, which
+   * builds the proposal in code. Over stdio there is no per-call principal; this process-env flag
+   * is the caller-identity boundary. When false the `skip_validation` param is ignored and the
+   * apply-time preflight always runs, so an ordinary LLM turn cannot bypass it by passing the flag.
+   */
+  allowSkipValidation: boolean;
+
   constructor() {
     super();
 
@@ -65,6 +74,7 @@ export class Config extends BaseConfig {
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
       TABLEAU_DESKTOP_CALL_TIMEOUT_MS: desktopCallTimeoutMs,
+      ALLOW_SKIP_VALIDATION: allowSkipValidation,
     } = cleansedVars;
 
     if (this.transport !== 'stdio') {
@@ -96,6 +106,8 @@ export class Config extends BaseConfig {
       defaultValue: DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
       minValue: MIN_DESKTOP_CALL_TIMEOUT_MS,
     });
+
+    this.allowSkipValidation = allowSkipValidation === 'true';
   }
 }
 

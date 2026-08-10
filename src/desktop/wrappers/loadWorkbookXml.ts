@@ -51,6 +51,7 @@ export async function loadWorkbookXml({
   applyOptions,
   executor,
   signal,
+  skipValidation,
 }: {
   xml: string;
   baselineXml?: string;
@@ -58,6 +59,7 @@ export async function loadWorkbookXml({
   focus: ApplyFocus;
   applyOptions?: ApplyWorkbookDocumentOptions;
   filePath?: string;
+  skipValidation?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorkbookXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -66,9 +68,14 @@ export async function loadWorkbookXml({
 
   // Preflight semantic validation — catches known failure patterns before
   // sending XML to Tableau. Rules are extensible via src/validation/rules/.
-  const validation = runValidation(xml, 'workbook');
-  const blockingIssues =
-    baselineXml === undefined
+  // Skipped entirely on the trusted deterministic path (skipValidation); otherwise
+  // fail only on blocking issues, or on baseline-introduced ones when a baseline is given.
+  const validation = skipValidation
+    ? { valid: true, issues: [] as ValidationIssue[] }
+    : runValidation(xml, 'workbook');
+  const blockingIssues = skipValidation
+    ? []
+    : baselineXml === undefined
       ? blockingValidationIssues(validation.issues)
       : introducedBlockingValidationIssues(
           runValidation(baselineXml, 'workbook').issues,

@@ -51,7 +51,6 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
   'src/tools/desktop/authoring/datasource/formatLabels.ts': ['loadWorkbookXml:artifact'],
   'src/tools/desktop/api/applyWorkbook.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/api/applyWorksheet.ts': ['loadWorksheetXml:artifact'],
-  'src/tools/desktop/authoring/sheets/deleteWorksheet.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/authoring/sheets/refineWorksheet.ts': ['loadWorksheetXml:artifact'],
 };
 

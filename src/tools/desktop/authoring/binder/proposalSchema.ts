@@ -77,6 +77,9 @@ export const proposalSchema = z
           .strict(),
       )
       .optional(),
+    // Fills {{KEY}} tokens in a template with literal text, e.g. a date filter's
+    // {{DATE_MIN}}/{{DATE_MAX}}.
+    template_parameters: z.record(z.string(), z.string()).optional(),
   })
   .strict()
   .describe(

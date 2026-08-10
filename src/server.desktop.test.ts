@@ -191,12 +191,17 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
   return JSON.stringify(await getDesktopToolListEntry(tool));
 }
 
-// Re-pinned 2026-08-06 (tool-surface unification wave): uniform session/mode/file
-// param describes via src/tools/desktop/params.ts replaced undescribed, empty, and
-// drifted variants across the surface. The bytes bought described opaque params;
-// tools at a grandfathered per-tool cap were left untouched rather than grown.
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 30_356;
-const FULL_TOOL_SURFACE_BUDGET = 47_312;
+// Re-pinned 2026-08-07: added delete-sheet, rename-sheet, sort-worksheet,
+// list-worksheet-logical-tables, and get-worksheet-underlying-data over the External
+// Client API sheet-action and logical-table routes, and dropped delete-worksheet.
+// Raised 2026-08-10 (#734 review fold) 48_958 -> 49_076: bind-template gained
+// skip_validation, the server-gated trust flag for the deterministic build_viz path.
+// It is a genuinely new param (name + boolean schema, description dropped since the
+// LLM must never set it), so shrinking prose could not fund it. bind-template is not
+// in DYNAMIC_AUTHORING_TOOL_PROFILE, so the served surface (29_380) is unchanged and
+// stays ~16K under the 46K auto-deferral cliff; only this full-surface ratchet moves.
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 29_380;
+const FULL_TOOL_SURFACE_BUDGET = 49_076;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -285,7 +290,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2467], // raised with sign-off (2026-08-05): agreed UI-label title 'Matching template' costs a few bytes over 'Bind Template'; earlier raise (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
+    ['bind-template', 2585], // raised 2026-08-10 (#734 review fold): +skip_validation, the server-gated trust flag for the deterministic build_viz path — a genuinely new param (name + boolean schema, description dropped since the LLM must never set it), ~118B over the prior cap so shrinking prose could not fund it; ratcheted to the measured 2585 (down from a transient 2675) once the description was removed; earlier raise with sign-off (2026-08-05): agreed UI-label title 'Matching template' costs a few bytes over 'Bind Template'; earlier raise (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
     ['add-field', 1438], // raised with sign-off (2026-08-05): agreed UI-label title 'Adding field'; provenance-style describes (from field resolution, never invented)
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['refine-worksheet', 1466], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
@@ -449,10 +454,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 32-tool modern surface with one dashboard mutation door', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 37-tool modern surface with one dashboard mutation door', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(32);
+    expect(selected).toHaveLength(37);
     expect(selected.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining(['bind-template', 'build-and-apply-worksheet']),
     );
@@ -482,12 +487,17 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'list-workbook-datasources',
       'list-site-datasources',
       'activate-sheet',
+      'delete-sheet',
+      'rename-sheet',
+      'sort-worksheet',
       'undo-workbook',
       'redo-workbook',
       'list-instances',
       'list-available-fields',
       'list-worksheets',
       'list-dashboards',
+      'list-worksheet-logical-tables',
+      'get-worksheet-underlying-data',
       // The manual field-edit path's read leg — mints the worksheetFile add-field/
       // remove-field/apply-worksheet consume.
       'get-worksheet-xml',

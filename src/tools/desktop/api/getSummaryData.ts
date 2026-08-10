@@ -52,7 +52,10 @@ const paramsSchema = {
   worksheetName: z.string().optional().describe('Worksheet name/id; omit if unique.'),
   worksheet: deprecatedArtifactAliasParam('worksheet'),
   maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
-  columns: z.array(z.string()).optional().describe('Fields.'),
+  columns: z
+    .array(z.string())
+    .optional()
+    .describe('Field names to restrict the returned columns (e.g. "Region").'),
 };
 
 type SummaryDataValue = {
