@@ -88,3 +88,36 @@ export function matchSentiment(
   if (best === undefined || tie) return undefined;
   return best.token;
 }
+
+function asRecord(v: unknown): Record<string, unknown> | undefined {
+  return v !== null && typeof v === 'object' && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : undefined;
+}
+
+/** Inject the matched metric sentiment into a bundle request, in place. Reads
+ *  the caption (`input.metadata.name`) and localName
+ *  (`input.metric.definition.basic_specification.measure.field`), matches them
+ *  against `map`, and on a hit sets
+ *  `input.metric.definition.representation_options.sentiment_type`. Any missing
+ *  node or empty map is a silent no-op — fail closed, never throw. */
+export function applySentimentToBundleRequest(bundleRequest: unknown, map: SentimentMap): void {
+  const root = asRecord(bundleRequest);
+  const input = asRecord(root?.bundle_request)?.input;
+  const inputRec = asRecord(input);
+  const metric = asRecord(inputRec?.metric);
+  const definition = asRecord(metric?.definition);
+  if (definition === undefined) return;
+
+  const metadata = asRecord(inputRec?.metadata);
+  const caption = typeof metadata?.name === 'string' ? metadata.name : undefined;
+
+  const measure = asRecord(asRecord(definition.basic_specification)?.measure);
+  const localName = typeof measure?.field === 'string' ? measure.field : undefined;
+
+  const token = matchSentiment(map, caption, localName);
+  if (token === undefined) return;
+
+  const existing = asRecord(definition.representation_options) ?? {};
+  definition.representation_options = { ...existing, sentiment_type: token };
+}

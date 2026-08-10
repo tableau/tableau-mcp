@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { matchSentiment, sentimentMapSchema } from './sentimentMap.js';
+import {
+  applySentimentToBundleRequest,
+  matchSentiment,
+  sentimentMapSchema,
+} from './sentimentMap.js';
 
 const MAP = sentimentMapSchema.parse({
   ARR: 'SENTIMENT_TYPE_UP_IS_GOOD',
@@ -55,5 +59,68 @@ describe('matchSentiment', () => {
     // "ARR" exactly matches key "ARR"; even though "MRR" is nearby (distance 1),
     // exact match wins and returns immediately.
     expect(matchSentiment(map, 'ARR', undefined)).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
+  });
+});
+
+function reqWith(
+  name: string,
+  field: string,
+  repOpts?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    bundle_request: {
+      input: {
+        metadata: { name },
+        metric: {
+          definition: {
+            basic_specification: { measure: { field, aggregation: 'AGGREGATION_SUM' } },
+            ...(repOpts ? { representation_options: repOpts } : {}),
+          },
+        },
+      },
+    },
+  };
+}
+
+describe('applySentimentToBundleRequest', () => {
+  const MAP = sentimentMapSchema.parse({ ARR: 'SENTIMENT_TYPE_UP_IS_GOOD' });
+
+  it('sets sentiment_type on a match, creating representation_options', () => {
+    const req = reqWith('ARR', 'arr');
+    applySentimentToBundleRequest(req, MAP);
+    expect(
+      (req.bundle_request.input.metric.definition as Record<string, any>).representation_options
+        .sentiment_type,
+    ).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
+  });
+
+  it('merges into an existing representation_options, preserving other fields', () => {
+    const req = reqWith('ARR', 'arr', { type: 'NUMBER_FORMAT_TYPE_NUMBER' });
+    applySentimentToBundleRequest(req, MAP);
+    const ro = (req.bundle_request.input.metric.definition as Record<string, any>)
+      .representation_options;
+    expect(ro.type).toBe('NUMBER_FORMAT_TYPE_NUMBER');
+    expect(ro.sentiment_type).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
+  });
+
+  it('is a no-op when the measure does not match', () => {
+    const req = reqWith('Expenses', 'expenses');
+    applySentimentToBundleRequest(req, MAP);
+    expect(
+      (req.bundle_request.input.metric.definition as Record<string, any>).representation_options,
+    ).toBeUndefined();
+  });
+
+  it('is a no-op on an unexpected shape (no throw)', () => {
+    const junk = { bundle_request: {} } as unknown;
+    expect(() => applySentimentToBundleRequest(junk, MAP)).not.toThrow();
+  });
+
+  it('is a no-op with an empty map', () => {
+    const req = reqWith('ARR', 'arr');
+    applySentimentToBundleRequest(req, {});
+    expect(
+      (req.bundle_request.input.metric.definition as Record<string, any>).representation_options,
+    ).toBeUndefined();
   });
 });
