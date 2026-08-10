@@ -319,6 +319,14 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
         'could be falsely flagged as inactive — narrow the scope with `userIds` or a smaller candidate ' +
         'set." (With the `User Email` scoping above this should not occur unless the candidate set itself ' +
         'exceeds 10000.)',
+      'If the query returns 0 rows, the `User Email` scoping was likely NOT applied — either the ' +
+        '`<REPLACE ...>` placeholder was left unsubstituted, or no candidate email matched. TS Users is ' +
+        'one row per user, so a real candidate set should return at least one row. Do NOT treat 0 rows as ' +
+        '"no Desktop/Prep activity" — under the null = no-signal rule that would keep EVERY candidate and ' +
+        'reintroduce the exact false-positive downgrades this workflow guards against. Warn the admin: ' +
+        '"⚠️ TS Users returned 0 rows — Desktop/Prep activity could not be confirmed for any candidate, so ' +
+        'the candidate set may contain false positives. Verify the `User Email` placeholder was replaced ' +
+        'with the exact Step-1 candidate emails and re-run before approving any downgrade."',
       '',
       '**Inactivity determination (all conditions must hold):**',
       `- The user's \`lastLogin\` from Step 1 is either **null** (never signed in) OR older than ${inactiveDays} days ago, AND`,

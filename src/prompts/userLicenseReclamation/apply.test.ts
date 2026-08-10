@@ -184,6 +184,14 @@ describe('user-license-reclamation-apply prompt', () => {
     expect(text).toContain('could be falsely flagged as inactive');
   });
 
+  it('fails loud when TS Users (Step 2b) returns 0 rows (scoping likely not applied)', async () => {
+    const text = await textOf();
+    expect(text).toContain('returns 0 rows');
+    expect(text).toContain('⚠️ TS Users returned 0 rows');
+    expect(text).toContain('may contain false positives');
+    expect(text).toContain('re-run before approving any downgrade');
+  });
+
   it('renders a concrete ISO cutoff in the Desktop/Prep recency check (parity with inform)', async () => {
     const text = await textOf();
     expect(text).toMatch(

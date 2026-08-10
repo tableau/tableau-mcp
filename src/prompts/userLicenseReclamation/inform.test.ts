@@ -135,6 +135,18 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(text).toContain('could be falsely listed as inactive');
   });
 
+  it('fails loud when the ts-users query returns 0 rows (scoping likely not applied)', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('returns 0 rows');
+    expect(text).toContain('could not be confirmed for any candidate');
+    expect(text).toContain('may contain false positives');
+  });
+
   it('states null Desktop/Prep dates are NOT treated as activity and adds the availability caveat', async () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
