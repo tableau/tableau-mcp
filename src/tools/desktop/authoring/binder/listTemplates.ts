@@ -235,11 +235,16 @@ export const getListTemplatesTool = (
           const hasExactIdMatch =
             normalizedQuery !== undefined &&
             catalog.some((entry) => entry.template.toLowerCase() === normalizedQuery);
+          const hasWholeTokenMatch =
+            normalizedQuery !== undefined &&
+            catalog.some((entry) => fuzzyQueryScore(entry.template, normalizedQuery) > 0);
           const queryMatches = (entry: TemplateCatalogEntry): boolean =>
             normalizedQuery === undefined ||
-            (hasLiteralMatch
-              ? entry.template.toLowerCase().includes(normalizedQuery)
-              : fuzzyQueryScore(entry.template, normalizedQuery) > 0);
+            (hasExactIdMatch
+              ? entry.template.toLowerCase() === normalizedQuery
+              : hasWholeTokenMatch
+                ? fuzzyQueryScore(entry.template, normalizedQuery) > 0
+                : hasLiteralMatch && entry.template.toLowerCase().includes(normalizedQuery));
           const discoveryDiagnostics: DiscoveryDiagnostic[] = catalog
             .filter((entry) => entry.discoveryIssue !== undefined && queryMatches(entry))
             .map((entry) => ({
@@ -273,7 +278,7 @@ export const getListTemplatesTool = (
               return fuzzyQueryScore(entry.template, normalizedQuery) > bestCanonicalScore;
             })
             .sort((a, b) => {
-              if (normalizedQuery !== undefined && !hasLiteralMatch) {
+              if (normalizedQuery !== undefined && !hasExactIdMatch && hasWholeTokenMatch) {
                 const scoreDifference =
                   fuzzyQueryScore(b.template, normalizedQuery) -
                   fuzzyQueryScore(a.template, normalizedQuery);

@@ -117,6 +117,29 @@ describe('list-templates', () => {
     expect(map.templates[0].template).toBe('spatial-choropleth-map');
   });
 
+  it('prefers whole-token matches over broader ID substrings', async () => {
+    catalog([
+      'connected-scatterplot',
+      'correlation-scatter-plot-chart',
+      'specialized__connected-scatter',
+    ]);
+
+    const wholeToken = await getBody({ query: 'scatter', limit: 10 });
+    expect(wholeToken.templates.map((template: { template: string }) => template.template)).toEqual(
+      ['correlation-scatter-plot-chart'],
+    );
+
+    const exact = await getBody({ query: 'connected-scatterplot', limit: 10 });
+    expect(exact.templates.map((template: { template: string }) => template.template)).toEqual([
+      'connected-scatterplot',
+    ]);
+
+    const compoundToken = await getBody({ query: 'scatterplot', limit: 10 });
+    expect(
+      compoundToken.templates.map((template: { template: string }) => template.template),
+    ).toEqual(['connected-scatterplot']);
+  });
+
   it('hides the specialized rate choropleth behind the canonical map for a generic query', async () => {
     catalog([
       'spatial-choropleth-map',
