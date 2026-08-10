@@ -298,7 +298,11 @@ export class ExternalApiHttp {
       const envelope = parsed.value;
       const state = envelope.state?.toUpperCase();
       if (state === 'AWAITING_USER') {
-        return Err({ type: 'awaiting-user', operationId: envelope.id ?? operationId });
+        return Err({
+          type: 'awaiting-user',
+          operationId: envelope.id ?? operationId,
+          blockingWindows: envelope.blockingWindows,
+        });
       }
       if (isTerminalState(envelope.state)) {
         return Ok(envelope);
