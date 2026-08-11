@@ -5,6 +5,10 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { parseDatasourceQualifiedColumnRef } from '../../../../desktop/metadata/field-resolver.js';
+import {
+  type FieldRewriteEvent,
+  setFieldRewriteListener,
+} from '../../../../desktop/metadata/field-rewrite-listener.js';
 import { parseShelfValue } from '../../../../desktop/metadata/fields.js';
 import {
   addFieldToCols,
@@ -242,6 +246,19 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return new ArgsValidationError(columnRefRejection(columnRef, workbookXml)).toErr();
           }
 
+          // Without workbookXml, a real column that this session's caller failed to
+          // pass through resolves as absent and gets a guessed type instead of a
+          // thrown error (see fields.ts's documented no-workbook fallback). That
+          // guess can disagree with Desktop's own schema and get silently written
+          // to disk here, then rejected by Desktop on apply with no clue why.
+          // Capture those events so a caller who omitted workbookFile finds out now.
+          const fabricationEvents: FieldRewriteEvent[] = [];
+          if (!workbookXml) {
+            setFieldRewriteListener((event) => {
+              if (event.fabricated) fabricationEvents.push(event);
+            });
+          }
+
           let modifiedXml: string;
           let placement: string;
           try {
@@ -273,6 +290,8 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return new XmlModificationError(
               error instanceof Error ? error.message : String(error),
             ).toErr();
+          } finally {
+            if (!workbookXml) setFieldRewriteListener(null);
           }
 
           const issues = wellFormedXmlRule.validate(modifiedXml);
@@ -288,9 +307,20 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return new FileReadError(error).toErr();
           }
 
+          const fabricationWarning =
+            fabricationEvents.length > 0
+              ? ` WARNING: no workbookFile was provided, so ${fabricationEvents
+                  .map((e) => e.requested)
+                  .join(', ')} could not be verified against the real workbook and had its ` +
+                'type guessed (fabricated) instead of read. A guessed type can disagree with ' +
+                'the actual field and Desktop will reject the apply. Pass workbookFile (from ' +
+                'field resolution) and retry before calling apply-worksheet.'
+              : '';
+
           return new Ok({
-            message: `Successfully added field to ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.`,
+            message: `Successfully added field to ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.${fabricationWarning}`,
             file: worksheetFile,
+            ...(fabricationEvents.length > 0 ? { fabricatedFields: fabricationEvents } : {}),
           });
         },
       });
