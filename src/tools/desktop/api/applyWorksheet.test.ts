@@ -304,6 +304,30 @@ describe('applyWorksheetTool', () => {
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
   });
 
+  it('infers the worksheet name from a cached worksheet fragment', async () => {
+    const mockXml = '<worksheet name="Sales &amp; Profit"><table></table></worksheet>';
+    const mockFilePath = '/path/to/worksheet.xml';
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(mockXml);
+    const loadSpy = vi
+      .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockResolvedValue(Ok({ readbackWarnings: [] }));
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetFile: mockFilePath,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(loadSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        worksheetName: 'Sales & Profit',
+        focus: { navigate: 'artifact', sheetName: 'Sales & Profit' },
+      }),
+    );
+  });
+
   it('reports skipped readback honestly for inline worksheet XML apply', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
@@ -842,7 +866,7 @@ async function getToolResult({
   configOverrides,
 }: {
   session: string;
-  worksheetName: string;
+  worksheetName?: string;
   worksheetFile?: string;
   worksheetXml?: string;
   mockExecutor: TableauDesktopToolContext['getExecutor'];

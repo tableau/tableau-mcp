@@ -20,6 +20,7 @@ import {
 } from '../../../desktop/validation/promise-check.js';
 import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
 import { loadWorksheetXml } from '../../../desktop/wrappers/loadWorksheetXml.js';
+import { parseOuterElement } from '../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -67,7 +68,7 @@ const paramsSchema = {
     .describe('Exact template binding to build and apply in this call.'),
   worksheetName: artifactNameParam('worksheet', { min: 1, max: 255 })
     .optional()
-    .describe('Existing worksheet name for cached-file apply; omit with other modes.'),
+    .describe('Existing worksheet name; inferred from a cached worksheet fragment.'),
   worksheetFile: artifactFileParam('worksheet', { max: 4096 })
     .optional()
     .describe('Cached worksheet path for manual apply; omit with other modes.'),
@@ -133,12 +134,6 @@ export const getApplyWorksheetTool = (
               'Provide exactly one apply mode: artifactId, templatePlan, or worksheetName with worksheetFile.',
             ).toErr();
           }
-          if (cachedModeSelected && !worksheetName?.trim()) {
-            return new ArgsValidationError(
-              'A worksheetName is required when applying a cached worksheet file.',
-            ).toErr();
-          }
-
           if (artifactId !== undefined) {
             const sessionResult = resolveSession(session);
             if (sessionResult.isErr()) return sessionResult.error.toErr();
@@ -291,12 +286,21 @@ export const getApplyWorksheetTool = (
             return preamble;
           }
           const { xml: worksheetXml, resolvedSession } = preamble.value;
+          const outerElement = parseOuterElement(worksheetXml);
+          const resolvedWorksheetName =
+            worksheetName?.trim() ||
+            (outerElement?.tagName === 'worksheet' ? outerElement.name?.trim() : undefined);
+          if (!resolvedWorksheetName) {
+            return new ArgsValidationError(
+              'A worksheetName is required unless the cached file is a single named worksheet fragment.',
+            ).toErr();
+          }
 
           const executor = await extra.getExecutor(resolvedSession);
           const result = await loadWorksheetXml({
-            worksheetName: worksheetName!,
+            worksheetName: resolvedWorksheetName,
             xml: worksheetXml,
-            focus: { navigate: 'artifact', sheetName: worksheetName! },
+            focus: { navigate: 'artifact', sheetName: resolvedWorksheetName },
             executor,
             signal: extra.signal,
             // apply-worksheet updates an existing worksheet in place via the per-sheet `/document`
@@ -357,12 +361,12 @@ export const getApplyWorksheetTool = (
           return new Ok(
             withNextAction(
               {
-                message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
+                message: `Successfully applied worksheet update for "${resolvedWorksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
               },
               doneNextAction(
                 receipt({
                   did: [
-                    `Desktop accepted the worksheet XML apply for "${worksheetName}"`,
+                    `Desktop accepted the worksheet XML apply for "${resolvedWorksheetName}"`,
                     `preflight validation returned ${receiptInput?.validationWarnings.length ?? 0} warning(s)`,
                     ...(readbackRan
                       ? [
