@@ -126,10 +126,17 @@ describe('applySentimentToBundleRequest', () => {
     ).toBeUndefined();
   });
 
-  it('stays schema-valid when it fabricates representation_options for a matched metric', () => {
+  // REGRESSION GUARD (cross-repo): the tab-agent-south insights skill
+  // (skills_seed/overridable/insights/SKILL.md) instructs the agent to build the
+  // live bundle request WITHOUT representation_options. This test pins that exact
+  // shape and asserts sentiment still reaches the wire. Do not "simplify" it by
+  // adding representation_options to the fixture — that would defeat its purpose
+  // and let a no-op-when-absent regression silently ship an always-neutral card.
+  it('injects sentiment into the representation_options-less request the insights skill builds', () => {
     const map = sentimentMapSchema.parse({ ARR: 'SENTIMENT_TYPE_UP_IS_GOOD' });
     // Full, schema-shaped bundle request that MATCHES (caption 'ARR') but omits
-    // metric.representation_options entirely (it's `.optional()` in the schema).
+    // metric.representation_options entirely (it's `.optional()` in the schema) —
+    // mirrors the skill's template exactly.
     const request: Record<string, unknown> = {
       bundle_request: {
         version: 1,
