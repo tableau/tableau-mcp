@@ -28,6 +28,8 @@ import {
   dashboardItemSchema,
   DashboardList,
   dashboardListSchema,
+  dashboardPauseAutoUpdatesRoute,
+  dashboardResumeAutoUpdatesRoute,
   dashboardRoute,
   DatasourceList,
   datasourceListSchema,
@@ -71,6 +73,8 @@ import {
   worksheetListSchema,
   worksheetLogicalTableDataRoute,
   worksheetLogicalTablesRoute,
+  worksheetPauseAutoUpdatesRoute,
+  worksheetResumeAutoUpdatesRoute,
   worksheetRoute,
   WorksheetSort,
   worksheetSortRoute,
@@ -564,6 +568,46 @@ export class ExternalApiToolExecutor {
       (http) =>
         http.postJsonEnvelope(EXTERNAL_API_ROUTES.workbookGoToSheet, { id: sheetId }, signal),
       'go-to-sheet',
+    );
+  }
+
+  async pauseWorksheetAutoUpdates(
+    worksheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(worksheetPauseAutoUpdatesRoute(worksheetId), signal),
+      'pause-worksheet-auto-updates',
+    );
+  }
+
+  async resumeWorksheetAutoUpdates(
+    worksheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(worksheetResumeAutoUpdatesRoute(worksheetId), signal),
+      'resume-worksheet-auto-updates',
+    );
+  }
+
+  async pauseDashboardAutoUpdates(
+    dashboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(dashboardPauseAutoUpdatesRoute(dashboardId), signal),
+      'pause-dashboard-auto-updates',
+    );
+  }
+
+  async resumeDashboardAutoUpdates(
+    dashboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(dashboardResumeAutoUpdatesRoute(dashboardId), signal),
+      'resume-dashboard-auto-updates',
     );
   }
 

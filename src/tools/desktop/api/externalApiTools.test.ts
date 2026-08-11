@@ -241,13 +241,20 @@ describe('External API coverage tools', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          dashboards: [{ id: 'dash-amp', name: 'Sales & Data', hidden: false }],
+          dashboards: [
+            { id: 'dash-amp', name: 'Sales & Data', hidden: false, isActiveSheet: false },
+          ],
         }),
       });
       server.setOverride('GET /v0/workbook/dashboards/dash-amp', {
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ id: 'dash-amp', name: 'Sales & Data', hidden: false }),
+        body: JSON.stringify({
+          id: 'dash-amp',
+          name: 'Sales & Data',
+          hidden: false,
+          isActiveSheet: false,
+        }),
       });
     });
     try {

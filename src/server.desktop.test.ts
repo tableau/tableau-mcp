@@ -191,19 +191,22 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
   return JSON.stringify(await getDesktopToolListEntry(tool));
 }
 
-// Re-pinned 2026-08-07: added delete-sheet, rename-sheet, sort-worksheet,
-// list-worksheet-logical-tables, and get-worksheet-underlying-data over the External
-// Client API sheet-action and logical-table routes, and dropped delete-worksheet.
+// Re-pinned 2026-08-10: added pause-auto-updates and resume-auto-updates over the External
+// Client API per-sheet auto-update routes — both in DYNAMIC_AUTHORING_TOOL_PROFILE, so the
+// served surface moves 29_380 -> 30_627 and the full surface 49_076 -> 50_323.
 // Raised 2026-08-10 (#734 review fold) 48_958 -> 49_076: bind-template gained
 // skip_validation, the server-gated trust flag for the deterministic build_viz path.
 // It is a genuinely new param (name + boolean schema, description dropped since the
 // LLM must never set it), so shrinking prose could not fund it. bind-template is not
-// in DYNAMIC_AUTHORING_TOOL_PROFILE, so the served surface (29_380) is unchanged and
-// stays ~16K under the 46K auto-deferral cliff; only this full-surface ratchet moves.
+// in DYNAMIC_AUTHORING_TOOL_PROFILE, so that ratchet was unchanged by #734.
+// Re-pinned 2026-08-07: added delete-sheet, rename-sheet, sort-worksheet,
+// list-worksheet-logical-tables, and get-worksheet-underlying-data over the External
+// Client API sheet-action and logical-table routes, and dropped delete-worksheet.
 // Re-pinned 2026-08-10: apply-worksheet gained the direct templatePlan mode so an
 // explicit single-view request can build+apply in one call without widening the tool set.
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 30_238;
-const FULL_TOOL_SURFACE_BUDGET = 49_854;
+// The combined surface moves 30_627 -> 31_485; full moves 50_323 -> 51_101.
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 31_485;
+const FULL_TOOL_SURFACE_BUDGET = 51_101;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -458,10 +461,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 37-tool modern surface with one dashboard mutation door', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 39-tool modern surface with one dashboard mutation door', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(37);
+    expect(selected).toHaveLength(39);
     expect(selected.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining(['bind-template', 'build-and-apply-worksheet']),
     );

@@ -29,8 +29,10 @@ import { getListStoryboardsTool } from './api/listStoryboards.js';
 import { getListWorkbookDatasourcesTool } from './api/listWorkbookDatasources.js';
 import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
 import { getListWorksheetsTool } from './api/listWorksheets.js';
+import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
 import { getRedoWorkbookTool } from './api/redoWorkbook.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
+import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
 import { getUndoWorkbookTool } from './api/undoWorkbook.js';
 import { getValidateWorkbookXmlTool } from './api/validateWorkbookXml.js';
@@ -85,6 +87,8 @@ export const desktopToolFactories = [
   getDeleteSheetTool,
   getRenameSheetTool,
   getSortWorksheetTool,
+  getPauseAutoUpdatesTool,
+  getResumeAutoUpdatesTool,
   getRefineWorksheetTool,
   getGetDashboardXmlTool,
   getApplyDashboardTool,

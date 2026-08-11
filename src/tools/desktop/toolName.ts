@@ -12,6 +12,8 @@ export const desktopToolNames = [
   'delete-sheet',
   'rename-sheet',
   'sort-worksheet',
+  'pause-auto-updates',
+  'resume-auto-updates',
   'refine-worksheet',
   'get-dashboard-xml',
   'apply-dashboard',
