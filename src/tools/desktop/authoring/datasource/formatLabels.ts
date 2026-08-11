@@ -5,10 +5,7 @@ import { z } from 'zod';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import {
-  describeLoadWorkbookXmlError,
-  loadWorkbookXml,
-} from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
@@ -23,6 +20,7 @@ import {
   sessionParam,
 } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
+import { workbookLoadToolError } from './workbookLoadToolError.js';
 
 // Primitives in, mark-label format XML server-side, readback out. Turns mark labels
 // ON for a worksheet (labels hug the bars) — the finishing polish over the melody.
@@ -105,11 +103,7 @@ export const getFormatLabelsTool = (server: DesktopMcpServer): DesktopTool<typeo
             signal: extra.signal,
           });
           if (loadResult.isErr()) {
-            return loadResult.error.type === 'execute-command-error'
-              ? new DesktopCommandExecutionError(loadResult.error.error).toErr()
-              : new XmlModificationError(
-                  describeLoadWorkbookXmlError(loadResult.error.error),
-                ).toErr();
+            return workbookLoadToolError(loadResult.error).toErr();
           }
 
           const readback = await pollReadback({

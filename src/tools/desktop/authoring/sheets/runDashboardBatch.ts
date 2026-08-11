@@ -40,6 +40,7 @@ import { targetDashboardInvariantIssues } from '../../../../desktop/validation/t
 import { activateSheetWithValidatedGoto } from '../../../../desktop/wrappers/activateSheet.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
+  describeLoadWorkbookXmlError,
   loadWorkbookXml,
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
@@ -713,22 +714,13 @@ function describeLoadError(error: LoadWorkbookXmlFailure): string {
   if (error.type === 'execute-command-error') {
     return new DesktopCommandExecutionError(error.error).getErrorText();
   }
-  return describeWorkbookLoadError(error.error);
+  return describeLoadWorkbookXmlError(error.error);
 }
 
 function loadFailureStage(error: LoadWorkbookXmlFailure): string {
   return error.type === 'load-workbook-xml-error' && error.error.type === 'workbook-drift'
     ? 'workbookDrift'
     : 'preDispatchApply';
-}
-
-function describeWorkbookLoadError(error: LoadWorkbookXmlError): string {
-  if (error.type === 'validation-failed') {
-    return error.issues.map((issue) => issue.message).join('; ');
-  }
-  if (error.type === 'load-rejected') return error.message;
-  if (error.type === 'workbook-drift') return 'The workbook changed before the batch was written.';
-  return 'Invalid workbook content.';
 }
 
 function batchApplyOutcome(result: CallToolResult, executionStarted: boolean): BatchApplyOutcome {

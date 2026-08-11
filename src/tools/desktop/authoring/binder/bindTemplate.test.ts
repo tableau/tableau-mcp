@@ -3910,6 +3910,10 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     });
 
     expect(drifted.isError).toBe(true);
+    invariant(drifted.content[0].type === 'text');
+    expect(JSON.parse(drifted.content[0].text).apply_error).toContain(
+      'The workbook changed before the authoring write.',
+    );
     expect(admittedRetry.isError).toBe(true);
     invariant(admittedRetry.content[0].type === 'text');
     expect(JSON.parse(admittedRetry.content[0].text).apply_error).toContain('apply failed');

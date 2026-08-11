@@ -10,16 +10,14 @@ import {
 import { WithExecutorAndAbortSignal } from '../../../../desktop/externalApi/executorTypes.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import {
-  describeLoadWorkbookXmlError,
-  loadWorkbookXml,
-} from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
+import { workbookLoadToolError } from './workbookLoadToolError.js';
 
 export const roleSchema = z.enum(['measure', 'dimension']);
 export const datatypeSchema = z.enum(['real', 'integer', 'string', 'boolean', 'date', 'datetime']);
@@ -100,9 +98,7 @@ export async function authorCalculationsInWorkbook({
     signal,
   });
   if (loadResult.isErr()) {
-    return loadResult.error.type === 'execute-command-error'
-      ? new DesktopCommandExecutionError(loadResult.error.error).toErr()
-      : new XmlModificationError(describeLoadWorkbookXmlError(loadResult.error.error)).toErr();
+    return workbookLoadToolError(loadResult.error).toErr();
   }
 
   const readback = await pollReadback({

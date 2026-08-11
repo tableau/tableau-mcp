@@ -222,6 +222,25 @@ describe('runDashboardBatchTool', () => {
     expect(harness.posts).toHaveLength(0);
   });
 
+  it('reports a workbook change detected immediately before the batch write', async () => {
+    const harness = statefulExecutor({ driftBeforeApply: true });
+
+    const result = await callBatch(['a1'], { executor: harness.executor });
+
+    expect(bodyOf(result)).toMatchObject({
+      applied: false,
+      retrySafe: true,
+      steps: expect.arrayContaining([
+        expect.objectContaining({
+          operation: 'dashboard',
+          stage: 'workbookDrift',
+          error: 'The workbook changed before the authoring write.',
+        }),
+      ]),
+    });
+    expect(harness.posts).toHaveLength(0);
+  });
+
   it('rejects missing or unrendered existing worksheets before writing', async () => {
     const missing = await callBatch([], { existingWorksheetNames: ['Missing'] });
     const unrenderedXml = WORKBOOK_XML.replace(
@@ -358,23 +377,32 @@ async function callBatch(
 function statefulExecutor({
   initialXml = WORKBOOK_XML,
   failAfterDispatch = false,
+  driftBeforeApply = false,
   readbackTransform,
 }: {
   initialXml?: string;
   failAfterDispatch?: boolean;
+  driftBeforeApply?: boolean;
   readbackTransform?: (xml: string) => string;
 } = {}): { executor: ExternalApiToolExecutor; posts: string[] } {
   let current = initialXml;
+  let readCount = 0;
   const posts: string[] = [];
   const executor = {
-    getWorkbookDocument: vi.fn(async () =>
-      Ok({
-        xml: posts.length > 0 && readbackTransform ? readbackTransform(current) : current,
+    getWorkbookDocument: vi.fn(async () => {
+      const xml =
+        driftBeforeApply && readCount++ > 0
+          ? current.replace('<workbook>', '<workbook changed="true">')
+          : posts.length > 0 && readbackTransform
+            ? readbackTransform(current)
+            : current;
+      return Ok({
+        xml,
         applicationVersion: undefined,
         xsdPayloadVersion: undefined,
         instanceId: 'inst-live',
-      }),
-    ),
+      });
+    }),
     applyWorkbookDocument: vi.fn(
       async (xml: string, _signal: AbortSignal, options?: ApplyWorkbookDocumentOptions) => {
         options?.onDispatch?.();

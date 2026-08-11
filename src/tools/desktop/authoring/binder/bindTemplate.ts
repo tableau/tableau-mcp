@@ -62,6 +62,7 @@ import {
 } from '../../../../desktop/validation/readback-verify.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
+  describeLoadWorkbookXmlError,
   loadWorkbookXml,
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
@@ -948,6 +949,9 @@ function describeApplyError(
     }
     if (inner.type === 'load-rejected') {
       return `Tableau rejected the load: ${inner.message}`;
+    }
+    if (inner.type === 'workbook-drift') {
+      return describeLoadWorkbookXmlError(inner);
     }
     return 'invalid workbook content';
   }
