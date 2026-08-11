@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { paginationSchema } from '../types/pagination.js';
 import { tagsSchema } from '../types/tags.js';
 import { workbookSchema } from '../types/workbook.js';
+import { workbookValidationResultSchema } from '../types/workbookValidation.js';
 import { paginationParameters } from './paginationParameters.js';
 
 const getWorkbookEndpoint = makeEndpoint({
@@ -89,11 +90,60 @@ const addTagsToWorkbookEndpoint = makeEndpoint({
   response: z.object({ tags: tagsSchema }),
 });
 
+const publishWorkbookEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/sites/:siteId/workbooks',
+  alias: 'publishWorkbook',
+  description:
+    'Publishes a workbook on the specified site, committing a validated workbook upload session.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'uploadSessionId',
+      type: 'Query',
+      schema: z.string(),
+    },
+    {
+      name: 'workbookType',
+      type: 'Query',
+      schema: z.enum(['twb', 'twbx']),
+    },
+    {
+      name: 'overwrite',
+      type: 'Query',
+      schema: z.boolean().optional(),
+    },
+  ],
+  response: z.object({ workbook: workbookSchema }),
+});
+
+const validateWorkbookAndUploadEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/sites/:siteId/workbooks/validateWorkbookAndUpload',
+  alias: 'validateWorkbookAndUpload',
+  description:
+    'Validates a TWB workbook file and uploads it to a temporary file upload session when validation succeeds.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: workbookValidationResultSchema,
+});
+
 const workbooksApi = makeApi([
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
   deleteWorkbookEndpoint,
   addTagsToWorkbookEndpoint,
+  publishWorkbookEndpoint,
+  validateWorkbookAndUploadEndpoint,
 ]);
 
 export const workbooksApis = [...workbooksApi] as const satisfies ZodiosEndpointDefinitions;

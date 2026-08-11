@@ -132,6 +132,7 @@ describe('scopes', () => {
       const scopes = await getSupportedMcpScopes();
       expect(scopes).toContain('tableau:mcp:datasource:read');
       expect(scopes).toContain('tableau:mcp:workbook:read');
+      expect(scopes).toContain('tableau:mcp:workbook:create');
       expect(scopes).toContain('tableau:mcp:view:read');
       expect(scopes).toContain('tableau:mcp:view:download');
       expect(scopes).toContain('tableau:mcp:pulse:read');
@@ -257,6 +258,7 @@ describe('scopes', () => {
       const scopes = await getSupportedApiScopes();
       expect(scopes).toContain('tableau:content:read');
       expect(scopes).toContain('tableau:mcp_site_settings:read');
+      expect(scopes).toContain('tableau:workbooks:create');
     });
   });
 
@@ -342,6 +344,7 @@ describe('scopes', () => {
 
       await expect(isValidScope('tableau:mcp:datasource:read')).resolves.toBe(true);
       await expect(isValidScope('tableau:mcp:workbook:read')).resolves.toBe(true);
+      await expect(isValidScope('tableau:mcp:workbook:create')).resolves.toBe(true);
     });
 
     it('should return false for invalid scopes', async () => {
