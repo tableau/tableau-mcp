@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   mockQueryProjects: vi.fn(),
   mockValidateWorkbookAndUpload: vi.fn(),
   mockResolveLocalWorkbook: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -32,6 +33,10 @@ vi.mock('../../../restApiInstance.js', () => ({
 
 vi.mock('./localWorkbookFile.js', () => ({
   resolveLocalWorkbook: mocks.mockResolveLocalWorkbook,
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 const validArgs = {
@@ -54,6 +59,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
         { id: 'default-project-id', name: 'Default' },
       ],
     });
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -70,6 +76,22 @@ describe('validateUploadAndPublishWorkbookTool', () => {
       overwrite: expect.any(Object),
     });
     expect(tool.description).toContain('site Default project');
+  });
+
+  it('is disabled when the upload-validate-publish feature flag is OFF', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+
+    const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
+
+    expect(await Provider.from(tool.disabled)).toBe(true);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('upload-validate-publish');
+  });
+
+  it('is enabled when the upload-validate-publish feature flag is ON', async () => {
+    const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
+
+    expect(await Provider.from(tool.disabled)).toBe(false);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('upload-validate-publish');
   });
 
   it('validates, publishes to the top-level Default project, and returns the published workbook', async () => {

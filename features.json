@@ -1,5 +1,6 @@
 {
   "mcp-apps": false,
+  "upload-validate-publish": false,
   "view-file-mode": false,
   "view-data-file-mode": false,
   "workbook-file-mode": true,

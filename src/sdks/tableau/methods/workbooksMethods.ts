@@ -7,7 +7,10 @@ import { RestApiCredentials } from '../restApi.js';
 import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
 import { Pagination } from '../types/pagination.js';
 import { Workbook, workbookSchema } from '../types/workbook.js';
-import { WorkbookValidationResult, workbookValidationResultSchema } from '../types/workbookValidation.js';
+import {
+  WorkbookValidationResult,
+  workbookValidationResultSchema,
+} from '../types/workbookValidation.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**

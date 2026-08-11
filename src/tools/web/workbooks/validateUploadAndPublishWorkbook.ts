@@ -3,11 +3,13 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { UnknownError } from '../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Project } from '../../../sdks/tableau/types/project.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import { resolveLocalWorkbook } from './localWorkbookFile.js';
@@ -65,6 +67,9 @@ export const getValidateUploadAndPublishWorkbookTool = (
       idempotentHint: false,
       openWorldHint: true,
     },
+    disabled: new Provider(
+      async () => !(await getFeatureGate().isFeatureEnabled('upload-validate-publish')),
+    ),
     callback: async ({ workbookFilePath, name, overwrite }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<ValidateUploadAndPublishWorkbookResult>({
         extra,

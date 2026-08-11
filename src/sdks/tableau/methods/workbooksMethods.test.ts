@@ -129,7 +129,6 @@ describe('WorkbooksMethods', () => {
         overwrite: true,
       });
     });
-
   });
 
   describe('validateWorkbookAndUpload', () => {
