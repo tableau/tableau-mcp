@@ -66,6 +66,14 @@ interface SlotSummary {
   purpose?: string;
 }
 
+interface CompactSlotSummary {
+  slot_id: string;
+  kind: string;
+  derivation: string;
+  role: string[];
+  semantic_role?: string;
+}
+
 interface TemplateSummary {
   template: string;
   provenance: string;
@@ -76,11 +84,8 @@ interface TemplateSummary {
     total: number;
     required: number;
     kinds: string[];
-    required_slots: Array<{
-      slot_id: string;
-      kind: string;
-      semantic_role?: string;
-    }>;
+    required_slots: CompactSlotSummary[];
+    optional_slots: CompactSlotSummary[];
   };
   slots?: SlotSummary[];
 }
@@ -142,6 +147,16 @@ function summarizeSlot(slot: SlotSpec): SlotSummary {
   };
 }
 
+function summarizeCompactSlot(slot: SlotSpec): CompactSlotSummary {
+  return {
+    slot_id: slot.slot_id,
+    kind: slot.kind,
+    derivation: slot.derivation,
+    role: slot.role.slice(),
+    ...(slot.semantic_role ? { semantic_role: slot.semantic_role } : {}),
+  };
+}
+
 function summarizeTemplate(
   { entry, snapshot }: ResolvedTemplate,
   includeSlots: boolean,
@@ -157,13 +172,8 @@ function summarizeTemplate(
       total: slots.length,
       required: slots.filter((slot) => slot.required).length,
       kinds: [...new Set(slots.map((slot) => slot.kind))].sort(compareTemplateNames),
-      required_slots: slots
-        .filter((slot) => slot.required)
-        .map((slot) => ({
-          slot_id: slot.slot_id,
-          kind: slot.kind,
-          ...(slot.semantic_role ? { semantic_role: slot.semantic_role } : {}),
-        })),
+      required_slots: slots.filter((slot) => slot.required).map(summarizeCompactSlot),
+      optional_slots: slots.filter((slot) => !slot.required).map(summarizeCompactSlot),
     },
     ...(includeSlots ? { slots: slots.map(summarizeSlot) } : {}),
   };

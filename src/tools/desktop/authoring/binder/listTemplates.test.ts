@@ -195,12 +195,17 @@ describe('list-templates', () => {
             {
               slot_id: 'field_base_1',
               kind: 'categorical',
+              derivation: 'none',
+              role: ['rows'],
             },
             {
               slot_id: 'field_base_2',
               kind: 'quantitative',
+              derivation: 'sum',
+              role: ['cols'],
             },
           ],
+          optional_slots: [],
         },
       },
     ]);
@@ -285,19 +290,57 @@ describe('list-templates', () => {
         {
           slot_id: 'field_base_1',
           kind: 'quantitative',
+          derivation: 'sum',
+          role: ['color'],
         },
         {
           slot_id: 'field_base_2',
           kind: 'geo',
+          derivation: 'none',
+          role: ['lod'],
           semantic_role: '[Country].[ISO3166_2]',
         },
         {
           slot_id: 'field_base_3',
           kind: 'geo',
+          derivation: 'none',
+          role: ['lod'],
           semantic_role: '[State].[Name]',
         },
       ]),
     );
+  });
+
+  it('includes axis roles and optional encodings in a compact real bubble-template result', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const body = await getBody({ query: 'correlation-bubble-chart', limit: 1 });
+
+    expect(body.templates).toHaveLength(1);
+    expect(body.templates[0].slot_signature).toMatchObject({
+      required_slots: expect.arrayContaining([
+        {
+          slot_id: 'field_base_1',
+          kind: 'quantitative',
+          derivation: 'avg',
+          role: ['rows'],
+        },
+        {
+          slot_id: 'field_base_2',
+          kind: 'quantitative',
+          derivation: 'sum',
+          role: ['cols'],
+        },
+      ]),
+      optional_slots: expect.arrayContaining([
+        {
+          slot_id: 'field_base_3',
+          kind: 'quantitative',
+          derivation: 'sum',
+          role: ['size'],
+        },
+      ]),
+    });
   });
 
   it('filters on eligibility computed from the TBM instead of catalog policy', async () => {
