@@ -229,7 +229,11 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
             id: 'op-read-2',
             kind: 'workbook.listWorksheets',
             state: 'SUCCEEDED',
-            result: { worksheets: [{ id: 'sheet-sales', name: 'Sales by Region', hidden: false }] },
+            result: {
+              worksheets: [
+                { id: 'sheet-sales', name: 'Sales by Region', hidden: false, isActiveSheet: true },
+              ],
+            },
           },
         ],
       });

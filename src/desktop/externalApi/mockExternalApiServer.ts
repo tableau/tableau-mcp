@@ -81,6 +81,8 @@ const DEFAULT_WORKSHEETS = [
     name: 'Sales by Region',
     type: 'WORKSHEET',
     hidden: false,
+    isActiveSheet: true,
+    isAutoUpdatesPaused: false,
     index: 0,
     datasources: ['Sample - Superstore'],
   },
@@ -89,6 +91,8 @@ const DEFAULT_WORKSHEETS = [
     name: 'Profit by Category',
     type: 'WORKSHEET',
     hidden: false,
+    isActiveSheet: false,
+    isAutoUpdatesPaused: true,
     index: 1,
     datasources: ['Sample - Superstore'],
   },
@@ -99,6 +103,8 @@ const DEFAULT_DASHBOARDS = [
     name: 'Executive Dashboard',
     type: 'DASHBOARD',
     hidden: false,
+    isActiveSheet: false,
+    isAutoUpdatesPaused: false,
     index: 2,
     containedSheets: ['sheet-sales', 'sheet-profit'],
   },
@@ -109,6 +115,7 @@ const DEFAULT_STORYBOARDS = [
     name: 'QBR Story',
     type: 'STORYBOARD',
     hidden: false,
+    isActiveSheet: false,
     index: 3,
     storyPointCount: 4,
   },
@@ -780,6 +787,17 @@ export async function startMockExternalApiServer(
         return;
       }
       sendOperation(res, 'go-to-sheet');
+      return;
+    }
+
+    // Deliberately no id guard (unlike the sibling :sort/:document routes): AutoUpdates succeeds for
+    // any id, so this never 404s on an unknown sheet.
+    const autoUpdatesMatch = path.match(
+      /^\/v0\/workbook\/(worksheets|dashboards)\/([^/]+):(pause|resume)AutoUpdates$/,
+    );
+    if (method === 'POST' && autoUpdatesMatch) {
+      const [, , , action] = autoUpdatesMatch;
+      sendOperation(res, `${action}-auto-updates`);
       return;
     }
 

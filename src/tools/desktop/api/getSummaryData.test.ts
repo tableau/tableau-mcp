@@ -306,7 +306,15 @@ describe('getSummaryDataTool', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          worksheets: [{ id: 'sheet-empty', name: 'Empty Sheet', hidden: false, datasources: [] }],
+          worksheets: [
+            {
+              id: 'sheet-empty',
+              name: 'Empty Sheet',
+              hidden: false,
+              isActiveSheet: false,
+              datasources: [],
+            },
+          ],
         }),
       });
     });
@@ -496,7 +504,15 @@ describe('getSummaryDataTool', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          worksheets: [{ id: 'sheet-empty', name: 'Empty Sheet', hidden: false, datasources: [] }],
+          worksheets: [
+            {
+              id: 'sheet-empty',
+              name: 'Empty Sheet',
+              hidden: false,
+              isActiveSheet: false,
+              datasources: [],
+            },
+          ],
         }),
       });
     });
@@ -822,7 +838,9 @@ describe('getSummaryDataTool', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          worksheets: [{ id: 'sheet-only', name: 'Only Sheet', hidden: false }],
+          worksheets: [
+            { id: 'sheet-only', name: 'Only Sheet', hidden: false, isActiveSheet: true },
+          ],
         }),
       });
       server.setOverride('GET /v0/workbook/worksheets/sheet-only/summaryData', {
@@ -876,8 +894,8 @@ describe('getSummaryDataTool', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           worksheets: [
-            { id: 'sheet-a', name: 'Regional Sales', hidden: false },
-            { id: 'sheet-b', name: 'Regional Sales', hidden: false },
+            { id: 'sheet-a', name: 'Regional Sales', hidden: false, isActiveSheet: false },
+            { id: 'sheet-b', name: 'Regional Sales', hidden: false, isActiveSheet: false },
           ],
         }),
       });

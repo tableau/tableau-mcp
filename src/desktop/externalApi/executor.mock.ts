@@ -55,6 +55,10 @@ export function makeExecutorMock(
     renameSheet: vi.fn(),
     sortWorksheet: vi.fn(),
     goToSheet: vi.fn(),
+    pauseWorksheetAutoUpdates: vi.fn(),
+    resumeWorksheetAutoUpdates: vi.fn(),
+    pauseDashboardAutoUpdates: vi.fn(),
+    resumeDashboardAutoUpdates: vi.fn(),
   };
   return { ...defaults, ...overrides } as ExternalApiToolExecutor;
 }

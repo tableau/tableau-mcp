@@ -216,7 +216,11 @@ describe('ExternalApiHttp', () => {
           id: 'op-ws',
           kind: 'workbook.listWorksheets',
           state: 'SUCCEEDED',
-          result: { worksheets: [{ id: 'sheet-sales', name: 'Sales by Region', hidden: false }] },
+          result: {
+            worksheets: [
+              { id: 'sheet-sales', name: 'Sales by Region', hidden: false, isActiveSheet: true },
+            ],
+          },
         },
       ],
     });

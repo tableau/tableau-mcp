@@ -30,6 +30,8 @@ export const EXTERNAL_API_ROUTES = {
   dashboardImage: '/v0/workbook/dashboards/{id}/image',
   dashboardDelete: '/v0/workbook/dashboards/{id}:delete',
   dashboardRename: '/v0/workbook/dashboards/{id}:rename',
+  dashboardPauseAutoUpdates: '/v0/workbook/dashboards/{id}:pauseAutoUpdates',
+  dashboardResumeAutoUpdates: '/v0/workbook/dashboards/{id}:resumeAutoUpdates',
   storyboardById: '/v0/workbook/storyboards/{id}',
   storyboardDocument: '/v0/workbook/storyboards/{id}/document',
   storyboardDelete: '/v0/workbook/storyboards/{id}:delete',
@@ -43,6 +45,8 @@ export const EXTERNAL_API_ROUTES = {
   worksheetDelete: '/v0/workbook/worksheets/{id}:delete',
   worksheetRename: '/v0/workbook/worksheets/{id}:rename',
   worksheetSort: '/v0/workbook/worksheets/{id}:sort',
+  worksheetPauseAutoUpdates: '/v0/workbook/worksheets/{id}:pauseAutoUpdates',
+  worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   site: '/v0/site',
   siteDatasources: '/v0/site/datasources',
   siteWorkbooks: '/v0/site/workbooks',
@@ -165,6 +169,22 @@ export function sheetActionRoute(sheet: SheetRef, action: 'rename' | 'delete'): 
 
 export function worksheetSortRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:sort`;
+}
+
+export function worksheetPauseAutoUpdatesRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}:pauseAutoUpdates`;
+}
+
+export function worksheetResumeAutoUpdatesRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}:resumeAutoUpdates`;
+}
+
+export function dashboardPauseAutoUpdatesRoute(dashboardId: string): string {
+  return `${dashboardRoute(dashboardId)}:pauseAutoUpdates`;
+}
+
+export function dashboardResumeAutoUpdatesRoute(dashboardId: string): string {
+  return `${dashboardRoute(dashboardId)}:resumeAutoUpdates`;
 }
 
 export function worksheetLogicalTablesRoute(worksheetId: string): string {
@@ -393,6 +413,8 @@ export const worksheetItemSchema = z
     name: z.string(),
     type: z.string().optional(),
     hidden: z.boolean(),
+    isActiveSheet: z.boolean(),
+    isAutoUpdatesPaused: z.boolean().optional(),
     index: z.number().int().optional(),
     datasources: z.array(z.string()).optional(),
   })
@@ -414,6 +436,8 @@ export const dashboardItemSchema = z
     name: z.string(),
     type: z.string().optional(),
     hidden: z.boolean(),
+    isActiveSheet: z.boolean(),
+    isAutoUpdatesPaused: z.boolean().optional(),
     index: z.number().int().optional(),
     containedSheets: z.array(z.string()).optional(),
   })
@@ -435,6 +459,7 @@ export const storyboardItemSchema = z
     name: z.string(),
     type: z.string().optional(),
     hidden: z.boolean(),
+    isActiveSheet: z.boolean(),
     index: z.number().int().optional(),
     storyPointCount: z.number().int().optional(),
   })

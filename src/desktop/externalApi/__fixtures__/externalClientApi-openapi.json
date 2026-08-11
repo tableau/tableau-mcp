@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.4",
+    "version": "0.2.5",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -816,6 +816,73 @@
         }
       }
     },
+    "/v0/workbook/dashboards/{id}:pauseAutoUpdates": {
+      "post": {
+        "summary": "Pause dashboard auto-updates",
+        "description": "Pauses automatic query execution for a dashboard so several edits can be batched before the next refresh.",
+        "operationId": "pauseDashboardAutoUpdates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pauses automatic query execution for a dashboard so several edits can be batched before the next refresh.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/v0/workbook/dashboards/{id}:rename": {
       "post": {
         "summary": "Rename a dashboard",
@@ -877,6 +944,73 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}:resumeAutoUpdates": {
+      "post": {
+        "summary": "Resume dashboard auto-updates",
+        "description": "Resumes automatic query execution for a dashboard.",
+        "operationId": "resumeDashboardAutoUpdates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumes automatic query execution for a dashboard.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
@@ -1985,7 +2119,7 @@
             "name": "columnsToIncludeByFieldName",
             "in": "query",
             "required": false,
-            "description": "Field name to restrict the returned columns; repeat the parameter to include several (values are not comma-split, so a field name may contain a comma).",
+            "description": "Restricts the returned columns. Each value is a base source-column name qualified by the datasource caption (e.g. \"[Sample - Superstore].[Sales]\"). A value that matches no column is silently ignored. Repeat the parameter to name several; values are not comma-split, so a name may contain a comma.",
             "schema": {
               "type": "string"
             }
@@ -2074,7 +2208,7 @@
             "name": "columnsToIncludeByFieldName",
             "in": "query",
             "required": false,
-            "description": "Field name to restrict the returned columns; repeat the parameter to include several (values are not comma-split, so a field name may contain a comma).",
+            "description": "Restricts the returned columns. Each value is a column-instance name qualified by the datasource caption, as it appears in the worksheet's <cols>/<rows> (e.g. \"[Sample - Superstore].[none:Ship Mode:nk]\"). A value that matches no column is silently ignored. Repeat the parameter to name several; values are not comma-split, so a name may contain a comma.",
             "schema": {
               "type": "string"
             }
@@ -2185,6 +2319,73 @@
         }
       }
     },
+    "/v0/workbook/worksheets/{id}:pauseAutoUpdates": {
+      "post": {
+        "summary": "Pause worksheet auto-updates",
+        "description": "Pauses automatic query execution for a worksheet so several edits can be batched before the next refresh.",
+        "operationId": "pauseWorksheetAutoUpdates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pauses automatic query execution for a worksheet so several edits can be batched before the next refresh.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/v0/workbook/worksheets/{id}:rename": {
       "post": {
         "summary": "Rename a worksheet",
@@ -2246,6 +2447,73 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}:resumeAutoUpdates": {
+      "post": {
+        "summary": "Resume worksheet auto-updates",
+        "description": "Resumes automatic query execution for a worksheet.",
+        "operationId": "resumeWorksheetAutoUpdates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumes automatic query execution for a worksheet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
@@ -2698,7 +2966,8 @@
         "required": [
           "id",
           "name",
-          "hidden"
+          "hidden",
+          "isActiveSheet"
         ],
         "properties": {
           "id": {
@@ -2718,8 +2987,14 @@
           "hidden": {
             "type": "boolean"
           },
+          "isActiveSheet": {
+            "type": "boolean"
+          },
           "index": {
             "type": "integer"
+          },
+          "isAutoUpdatesPaused": {
+            "type": "boolean"
           },
           "datasources": {
             "type": "array",
@@ -2735,7 +3010,8 @@
         "required": [
           "id",
           "name",
-          "hidden"
+          "hidden",
+          "isActiveSheet"
         ],
         "properties": {
           "id": {
@@ -2755,8 +3031,14 @@
           "hidden": {
             "type": "boolean"
           },
+          "isActiveSheet": {
+            "type": "boolean"
+          },
           "index": {
             "type": "integer"
+          },
+          "isAutoUpdatesPaused": {
+            "type": "boolean"
           },
           "containedSheets": {
             "type": "array",
@@ -2772,7 +3054,8 @@
         "required": [
           "id",
           "name",
-          "hidden"
+          "hidden",
+          "isActiveSheet"
         ],
         "properties": {
           "id": {
@@ -2790,6 +3073,9 @@
             ]
           },
           "hidden": {
+            "type": "boolean"
+          },
+          "isActiveSheet": {
             "type": "boolean"
           },
           "index": {
