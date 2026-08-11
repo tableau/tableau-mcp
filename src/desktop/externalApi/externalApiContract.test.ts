@@ -71,8 +71,6 @@ const declaredKeys = (schema: z.AnyZodObject): Array<string> => Object.keys(sche
 const requiredKeys = (schema: z.AnyZodObject): Array<string> =>
   declaredKeys(schema).filter((key) => !(schema.shape[key] as z.ZodTypeAny).isOptional());
 
-// Desktop API 0.2.4 omits this field from live sheet-list items; 0.2.5 marks it required.
-// Keep only this version-compatibility delta loose while every other field stays exact.
 const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly string[]>> = {
   DashboardItem: ['isActiveSheet'],
   StoryboardItem: ['isActiveSheet'],
