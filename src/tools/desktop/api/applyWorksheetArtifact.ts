@@ -3,6 +3,7 @@ import {
   type TemplateArtifactReserveResult,
   type TemplateArtifactStore,
   type TemplateArtifactUnavailableReason,
+  type TemplateWorksheetArtifact,
 } from '../../../desktop/templates/templateArtifactStore.js';
 import type { ReadbackVerificationResult } from '../../../desktop/validation/readback-verify.js';
 import { loadWorksheetXml } from '../../../desktop/wrappers/loadWorksheetXml.js';
@@ -25,6 +26,13 @@ export interface ArtifactApplyReceipt {
   artifactId: string;
   title: string;
   verification: ReadbackVerificationResult;
+}
+
+export interface ApplyWorksheetArtifactPayloadArgs {
+  artifact: Readonly<TemplateWorksheetArtifact>;
+  executor: ExternalApiToolExecutor;
+  signal: AbortSignal;
+  dispatchState?: { attempted: boolean };
 }
 
 export type WorksheetArtifactOutcome =
@@ -59,45 +67,61 @@ export async function applyWorksheetArtifact({
   };
 
   try {
-    const result = await loadWorksheetXml({
-      worksheetName: reservation.artifact.title,
-      xml: reservation.artifact.worksheetXml,
-      focus: { navigate: 'artifact', sheetName: reservation.artifact.title },
+    const outcome = await applyWorksheetArtifactPayload({
+      artifact: reservation.artifact,
       executor,
       signal,
-      artifactApply: {
-        windowXml: reservation.artifact.windowXml,
-        expectedTargetState: reservation.artifact.targetState,
-        expectedInstanceId: reservation.artifact.instanceId,
-        dispatchState,
-      },
+      dispatchState,
     });
     finalize();
-
-    if (result.isErr()) {
-      const error = toMcpToolError(result.error, dispatchState.attempted);
-      return dispatchState.attempted
-        ? { state: 'unknown', retrySafe: false, error }
-        : { state: 'failed', retrySafe: true, error };
-    }
-
-    return {
-      state: 'applied',
-      retrySafe: false,
-      receipt: {
-        artifactId,
-        title: reservation.artifact.title,
-        verification: result.value.readbackVerification ?? {
-          ok: true,
-          status: 'skipped',
-          message: 'Post-apply workbook readback was unavailable.',
-        },
-      },
-    };
+    if (outcome.state !== 'applied') return outcome;
+    return { ...outcome, receipt: { ...outcome.receipt, artifactId } };
   } catch (error) {
     finalize();
     throw error;
   }
+}
+
+export async function applyWorksheetArtifactPayload({
+  artifact,
+  executor,
+  signal,
+  dispatchState = { attempted: false },
+}: ApplyWorksheetArtifactPayloadArgs): Promise<WorksheetArtifactOutcome> {
+  const result = await loadWorksheetXml({
+    worksheetName: artifact.title,
+    xml: artifact.worksheetXml,
+    focus: { navigate: 'artifact', sheetName: artifact.title },
+    executor,
+    signal,
+    artifactApply: {
+      windowXml: artifact.windowXml,
+      expectedTargetState: artifact.targetState,
+      expectedInstanceId: artifact.instanceId,
+      dispatchState,
+    },
+  });
+
+  if (result.isErr()) {
+    const error = toMcpToolError(result.error, dispatchState.attempted);
+    return dispatchState.attempted
+      ? { state: 'unknown', retrySafe: false, error }
+      : { state: 'failed', retrySafe: true, error };
+  }
+
+  return {
+    state: 'applied',
+    retrySafe: false,
+    receipt: {
+      artifactId: artifact.id,
+      title: artifact.title,
+      verification: result.value.readbackVerification ?? {
+        ok: true,
+        status: 'skipped',
+        message: 'Post-apply workbook readback was unavailable.',
+      },
+    },
+  };
 }
 
 function toMcpToolError(

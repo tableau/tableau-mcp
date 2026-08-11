@@ -2016,6 +2016,7 @@ function setupAutoApplyMocks({
 } = {}): {
   executeCommand: ReturnType<typeof vi.fn>;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
+  getWorkbookDocument: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
 } {
   let liveXml = workbookReads[0] ?? XML;
@@ -2052,8 +2053,8 @@ function setupAutoApplyMocks({
   );
   vi.mocked(readTemplate).mockReturnValue('<template/>');
   vi.mocked(buildInjectedWorkbookXml).mockReturnValue(inject);
-  vi.mocked(validationRegistry.runValidation).mockReturnValue(
-    validationValid
+  vi.mocked(validationRegistry.runValidation).mockImplementation((xml) =>
+    validationValid || xml !== (inject.ok ? inject.xml : '')
       ? { valid: true, issues: [] }
       : { valid: false, issues: [{ ruleId: 'r', severity: 'error', message: 'boom' }] },
   );
@@ -2065,11 +2066,19 @@ function setupAutoApplyMocks({
     }
     return dispatch;
   });
+  const getWorkbookDocument = vi.fn(async () =>
+    Ok({
+      xml: liveXml,
+      applicationVersion: undefined,
+      xsdPayloadVersion: undefined,
+    }),
+  );
   const getExecutor = vi.fn().mockResolvedValue({
     executeCommand,
+    getWorkbookDocument,
     applyWorkbookDocument,
   });
-  return { executeCommand, applyWorkbookDocument, getExecutor };
+  return { executeCommand, applyWorkbookDocument, getWorkbookDocument, getExecutor };
 }
 
 // Route per-sheet readback through the whole-workbook fallback used by older Desktop hosts.
@@ -2082,10 +2091,12 @@ const routeMissing = (): ReturnType<typeof Err> =>
 function readbackExecutor(base: {
   executeCommand: ReturnType<typeof vi.fn>;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
+  getWorkbookDocument: ReturnType<typeof vi.fn>;
 }): TableauDesktopToolContext['getExecutor'] {
   return vi.fn().mockResolvedValue({
     executeCommand: base.executeCommand,
     applyWorkbookDocument: base.applyWorkbookDocument,
+    getWorkbookDocument: base.getWorkbookDocument,
     listWorksheets: vi.fn(routeMissing),
   });
 }
@@ -2094,6 +2105,7 @@ function summaryRowsExecutor(
   base: {
     executeCommand: ReturnType<typeof vi.fn>;
     applyWorkbookDocument: ReturnType<typeof vi.fn>;
+    getWorkbookDocument: ReturnType<typeof vi.fn>;
   },
   summary:
     | { columns: Array<Record<string, unknown>>; rows: unknown[][] }
@@ -2113,6 +2125,7 @@ function summaryRowsExecutor(
   return vi.fn().mockResolvedValue({
     executeCommand: base.executeCommand,
     applyWorkbookDocument: base.applyWorkbookDocument,
+    getWorkbookDocument: base.getWorkbookDocument,
     listWorksheets: vi.fn().mockResolvedValue(
       Ok({
         worksheets: [
@@ -3685,8 +3698,9 @@ describe('bindTemplateTool auto_apply gate', () => {
       getExecutor,
     });
 
-    expect(validationRegistry.runValidation).toHaveBeenCalledTimes(1);
+    expect(validationRegistry.runValidation).toHaveBeenCalledTimes(2);
     expect(validationRegistry.runValidation).toHaveBeenCalledWith('<workbook/>', 'workbook');
+    expect(validationRegistry.runValidation).toHaveBeenCalledWith(XML, 'workbook');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     const validationOrder = vi.mocked(validationRegistry.runValidation).mock.invocationCallOrder[0];
     const dispatchOrder = applyWorkbookDocument.mock.invocationCallOrder[0];
@@ -3852,6 +3866,63 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     // 5 = the three user-visible calls plus one context-measure dry re-classify
     // per bound Call-2 proposal (both dries no-op: the base mock is already bound).
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(5);
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(2);
+  });
+
+  it('admits one same-signature retry after workbook drift prevents dispatch', async () => {
+    const { applyWorkbookDocument, getWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+    });
+    getWorkbookDocument.mockResolvedValue(
+      Ok({
+        xml: '<workbook changed="true"/>',
+        applicationVersion: undefined,
+        xsdPayloadVersion: undefined,
+      }),
+    );
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(boundViaProposalResult)
+      .mockResolvedValueOnce(boundViaProposalResult);
+    const ask = 'bar chart of Revenue by Region';
+
+    await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
+    const drifted = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    const admittedRetry = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposalTitleOnlyChange,
+      auto_apply: true,
+      getExecutor,
+    });
+    const blockedRepeat = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(drifted.isError).toBe(true);
+    invariant(drifted.content[0].type === 'text');
+    expect(JSON.parse(drifted.content[0].text).apply_error).toContain(
+      'The workbook changed before the authoring write.',
+    );
+    expect(admittedRetry.isError).toBe(true);
+    invariant(admittedRetry.content[0].type === 'text');
+    expect(JSON.parse(admittedRetry.content[0].text).apply_error).toContain('apply failed');
+    invariant(blockedRepeat.content[0].type === 'text');
+    expect(JSON.parse(blockedRepeat.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'unchanged_proposal',
+    });
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
     expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(2);
   });
 

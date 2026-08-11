@@ -197,6 +197,37 @@ describe('ExternalApiHttp', () => {
     expect(last?.path).toBe('/v0/workbook/worksheets');
   });
 
+  it('accepts the live 0.2.4 worksheet item shape without 0.2.5 state fields', async () => {
+    server.setOverride('GET /v0/workbook/worksheets', {
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        worksheets: [
+          {
+            datasources: ['Sample - Superstore'],
+            hidden: false,
+            id: 'sheet-sales',
+            index: 0,
+            name: 'Sales by Region',
+          },
+        ],
+      }),
+    });
+
+    const result = await http.getJson(EXTERNAL_API_ROUTES.workbookWorksheets, worksheetListSchema);
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().worksheets).toEqual([
+      {
+        datasources: ['Sample - Superstore'],
+        hidden: false,
+        id: 'sheet-sales',
+        index: 0,
+        name: 'Sales by Region',
+      },
+    ]);
+  });
+
   it('polls an overflowed (202) JSON read and returns the terminal result body', async () => {
     server.setOverride('GET /v0/workbook/worksheets', {
       status: 202,

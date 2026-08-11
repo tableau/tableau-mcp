@@ -62,6 +62,7 @@ import {
 } from '../../../../desktop/validation/readback-verify.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
+  describeLoadWorkbookXmlError,
   loadWorkbookXml,
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
@@ -949,6 +950,9 @@ function describeApplyError(
     if (inner.type === 'load-rejected') {
       return `Tableau rejected the load: ${inner.message}`;
     }
+    if (inner.type === 'workbook-drift') {
+      return describeLoadWorkbookXmlError(inner);
+    }
     return 'invalid workbook content';
   }
   return `workbook load command failed: ${JSON.stringify(error.error)}`;
@@ -963,7 +967,9 @@ function applyFailureDisposition(
 ): AutoApplyFailureDisposition {
   if (
     error.type === 'load-workbook-xml-error' &&
-    (error.error.type === 'invalid-xml' || error.error.type === 'validation-failed')
+    (error.error.type === 'invalid-xml' ||
+      error.error.type === 'validation-failed' ||
+      error.error.type === 'workbook-drift')
   ) {
     return 'pre-dispatch';
   }
@@ -1534,6 +1540,8 @@ async function performAutoApply({
   const applyStart = Date.now();
   const applyResult = await loadWorkbookXml({
     xml: appliedWorkbookXml,
+    baselineXml: workbookXml,
+    expectedWorkbookXml: workbookXml,
     focus: { navigate: 'artifact', sheetName: literalTitle },
     executor,
     signal,

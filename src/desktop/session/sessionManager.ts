@@ -2,6 +2,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { getDesktopConfig } from '../../config.desktop.js';
 import { log } from '../../logging/logger.js';
+import { currentEpisodeId, emitEpisodeEvent } from '../episode-events.js';
 import { discoverInstances } from '../externalApi/discovery.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { parseSessionPid } from './parseSessionPid.js';
@@ -63,6 +64,17 @@ export class SessionManager {
         pid,
         discover,
         clientOptions: { timeoutMs: config.desktopCallTimeoutMs },
+        onRpc: async (event) => {
+          await emitEpisodeEvent(config, {
+            type: 'desktop_rpc',
+            session_id: sessionId,
+            episode_id: currentEpisodeId(sessionId),
+            operation: event.operation,
+            duration_ms: event.durationMs,
+            transport_success: event.transportSuccess,
+            rescan_count: event.rescanCount,
+          });
+        },
       });
       await executor.start();
       if (!executor.isAvailable()) {

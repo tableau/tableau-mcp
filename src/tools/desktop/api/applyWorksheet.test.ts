@@ -4,10 +4,15 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as episodeEvents from '../../../desktop/episode-events.js';
-import { TemplateArtifactStore } from '../../../desktop/templates/templateArtifactStore.js';
+import type { WorksheetTemplatePlan } from '../../../desktop/templates/buildTemplateWorksheetArtifact.js';
+import {
+  TemplateArtifactStore,
+  type TemplateWorksheetArtifact,
+} from '../../../desktop/templates/templateArtifactStore.js';
 import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
 import * as loadWorksheetXmlModule from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
+  ArgsValidationError,
   DesktopCommandExecutionError,
   FileReadError,
   WorksheetXmlLoadFailedError,
@@ -74,18 +79,156 @@ describe('applyWorksheetTool', () => {
     const tool = getApplyWorksheetTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-worksheet');
     expect(tool.description).toBe(
-      'Apply a template artifact or a modified cached worksheet file to Desktop.',
+      'Build and apply an exact template plan, apply a template artifact, or update a cached worksheet file.',
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
       worksheetFile: expect.any(Object),
       artifactId: expect.any(Object),
+      templatePlan: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
       openWorldHint: false,
     });
+  });
+
+  it('applies an exact template plan once without storing a reusable artifact', async () => {
+    const artifact = templateArtifact('direct-plan');
+    const store = new TemplateArtifactStore();
+    const put = vi.spyOn(store, 'put');
+    const buildArtifact = vi.fn().mockReturnValue(Ok({ artifact, provenance: 'protected' }));
+    const mockLoadWorksheetXml = vi
+      .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockImplementation(async (args) => {
+        expect(args.artifactApply).toMatchObject({
+          expectedInstanceId: 'inst-build',
+          expectedTargetState: artifact.targetState,
+        });
+        args.artifactApply!.dispatchState.attempted = true;
+        return Ok({
+          readbackWarnings: [],
+          readbackVerification: { ok: true, status: 'passed' },
+        });
+      });
+    const executor = {
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: '<workbook><worksheets/><windows/></workbook>',
+          instanceId: 'inst-build',
+        }),
+      ),
+    };
+
+    const result = await getDirectTemplateToolResult({
+      buildArtifact,
+      getExecutor: vi.fn().mockResolvedValue(executor),
+      store,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      title: 'Artifact Sheet',
+      applied: true,
+      retrySafe: false,
+      verification: { ok: true, status: 'passed' },
+    });
+    expect(mockLoadWorksheetXml).toHaveBeenCalledOnce();
+    expect(buildArtifact).toHaveBeenCalledOnce();
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['invalid template', new ArgsValidationError('Template "missing" is not available.')],
+    ['invalid datasource', new ArgsValidationError('Datasource "wrong" does not match.')],
+    ['invalid binding', new ArgsValidationError('Missing required template field.')],
+  ])('does not dispatch a direct plan with %s', async (_label, buildError) => {
+    const result = await getDirectTemplateToolResult({
+      buildArtifact: vi.fn().mockReturnValue(buildError.toErr()),
+      getExecutor: vi.fn().mockResolvedValue({
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: '<workbook><worksheets/><windows/></workbook>',
+            instanceId: 'inst-build',
+          }),
+        ),
+      }),
+    });
+
+    expect(result.isError).toBe(true);
+    expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
+  });
+
+  it('keeps post-dispatch direct-plan uncertainty non-retryable', async () => {
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      return Err({
+        type: 'execute-command-error',
+        error: { type: 'unknown', error: 'connection lost after POST' },
+      });
+    });
+
+    const result = await getDirectTemplateToolResult({
+      buildArtifact: vi
+        .fn()
+        .mockReturnValue(
+          Ok({ artifact: templateArtifact('direct-plan'), provenance: 'protected' }),
+        ),
+      getExecutor: vi.fn().mockResolvedValue({
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: '<workbook><worksheets/><windows/></workbook>',
+            instanceId: 'inst-build',
+          }),
+        ),
+      }),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Do not retry');
+  });
+
+  it.each([
+    {
+      artifactId: 'artifact-1',
+      templatePlan: directTemplatePlan(),
+      worksheetName: undefined,
+      worksheetFile: undefined,
+    },
+    {
+      artifactId: undefined,
+      templatePlan: directTemplatePlan(),
+      worksheetName: 'Sheet 1',
+      worksheetFile: '/cache/sheet.xml',
+    },
+    {
+      artifactId: undefined,
+      templatePlan: undefined,
+      worksheetName: 'Sheet 1',
+      worksheetFile: undefined,
+    },
+    {
+      artifactId: undefined,
+      templatePlan: undefined,
+      worksheetName: undefined,
+      worksheetFile: undefined,
+    },
+  ])('rejects ambiguous or incomplete apply modes before resolving Desktop', async (args) => {
+    const getExecutor = vi.fn();
+    const tool = getApplyWorksheetTool(new DesktopMcpServer());
+    const callback = await Provider.from(tool.callback);
+
+    const result = await callback({ session: '12345', ...args } as any, {
+      ...getMockRequestHandlerExtra(),
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(getExecutor).not.toHaveBeenCalled();
+    expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
   });
 
   it('should successfully apply worksheet XML in inline mode', async () => {
@@ -530,6 +673,7 @@ describe('applyWorksheetTool', () => {
       {
         session: '99999',
         artifactId: 'artifact-1',
+        templatePlan: undefined,
         worksheetName: undefined,
         worksheetFile: undefined,
       },
@@ -549,6 +693,7 @@ describe('applyWorksheetTool', () => {
       {
         session: '12345',
         artifactId: 'artifact-1',
+        templatePlan: undefined,
         worksheetName: undefined,
         worksheetFile: undefined,
       },
@@ -618,11 +763,72 @@ async function getArtifactToolResult(
   const tool = getApplyWorksheetTool(new DesktopMcpServer(), { store });
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { session, artifactId, worksheetName: undefined, worksheetFile: undefined },
+    {
+      session,
+      artifactId,
+      templatePlan: undefined,
+      worksheetName: undefined,
+      worksheetFile: undefined,
+    },
     {
       ...getMockRequestHandlerExtra(),
       getExecutor: vi.fn().mockResolvedValue({}),
     },
+  );
+}
+
+const directTemplatePlan = (): WorksheetTemplatePlan => ({
+  templateName: 'pulse-bar',
+  title: 'Artifact Sheet',
+  datasource: 'target.ds',
+  fieldMapping: { field_base_1: '[target.ds].[sum:Revenue:qk]' },
+});
+
+function templateArtifact(id: string): TemplateWorksheetArtifact {
+  return {
+    id,
+    sessionId: '12345',
+    instanceId: 'inst-build',
+    templateName: 'pulse-bar',
+    templateSourceHash: 'source-hash',
+    title: 'Artifact Sheet',
+    datasource: 'target.ds',
+    fieldMapping: { field_base_1: '[target.ds].[sum:Revenue:qk]' },
+    worksheetXml: '<worksheet name="Artifact Sheet"><table /></worksheet>',
+    windowXml: '<window class="worksheet" name="Artifact Sheet" />',
+    targetState: {
+      worksheetName: 'Artifact Sheet',
+      target: { state: 'absent' as const },
+      targetWindow: { state: 'absent' as const },
+      dependenciesSha256: 'dependencies',
+    },
+  };
+}
+
+async function getDirectTemplateToolResult({
+  buildArtifact,
+  getExecutor,
+  store,
+}: {
+  buildArtifact: ReturnType<typeof vi.fn>;
+  getExecutor: TableauDesktopToolContext['getExecutor'];
+  store?: TemplateArtifactStore;
+}): Promise<CallToolResult> {
+  const tool = (getApplyWorksheetTool as any)(new DesktopMcpServer(), {
+    buildArtifact,
+    createId: () => 'direct-plan',
+    store,
+  });
+  const callback = await Provider.from(tool.callback);
+  return await callback(
+    {
+      session: '12345',
+      artifactId: undefined,
+      templatePlan: directTemplatePlan(),
+      worksheetName: undefined,
+      worksheetFile: undefined,
+    },
+    { ...getMockRequestHandlerExtra(), getExecutor },
   );
 }
 
@@ -661,5 +867,8 @@ async function getToolResult({
   };
   extra.config = { ...extra.config, ...configOverrides };
 
-  return await callback({ session, artifactId: undefined, worksheetName, worksheetFile }, extra);
+  return await callback(
+    { session, artifactId: undefined, templatePlan: undefined, worksheetName, worksheetFile },
+    extra,
+  );
 }

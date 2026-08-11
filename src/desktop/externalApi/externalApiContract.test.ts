@@ -71,6 +71,12 @@ const declaredKeys = (schema: z.AnyZodObject): Array<string> => Object.keys(sche
 const requiredKeys = (schema: z.AnyZodObject): Array<string> =>
   declaredKeys(schema).filter((key) => !(schema.shape[key] as z.ZodTypeAny).isOptional());
 
+const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly string[]>> = {
+  DashboardItem: ['isActiveSheet'],
+  StoryboardItem: ['isActiveSheet'],
+  WorksheetItem: ['isActiveSheet'],
+};
+
 describe('external client API contract (captured openapi fixture)', () => {
   describe('Operation ↔ operationEnvelopeSchema', () => {
     const operation = specSchema('Operation');
@@ -136,10 +142,38 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['LogicalTableList', logicalTableListSchema],
       ['WindowInfo', windowInfoSchema],
       ['ValidationResult', validationResultSchema],
-    ] as const)('%s: properties and required set match', (name, schema) => {
-      const component = specSchema(name);
-      expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
-      expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
+    ] as const)(
+      '%s: properties and required set match except known version deltas',
+      (name, schema) => {
+        const component = specSchema(name);
+        expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
+        const exceptions = new Set(KNOWN_READ_REQUIREDNESS_EXCEPTIONS[name] ?? []);
+        expect(requiredKeys(schema).sort()).toEqual(
+          [...(component.required ?? [])].filter((key) => !exceptions.has(key)).sort(),
+        );
+      },
+    );
+
+    it('pins the complete 0.2.4 requiredness exception set', () => {
+      expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
+        DashboardItem: ['isActiveSheet'],
+        StoryboardItem: ['isActiveSheet'],
+        WorksheetItem: ['isActiveSheet'],
+      });
+      for (const [name, exceptions] of Object.entries(KNOWN_READ_REQUIREDNESS_EXCEPTIONS)) {
+        const component = specSchema(name);
+        expect(exceptions.every((key) => component.required?.includes(key))).toBe(true);
+      }
+    });
+
+    it.each([
+      ['WorksheetItem', worksheetItemSchema],
+      ['DashboardItem', dashboardItemSchema],
+      ['StoryboardItem', storyboardItemSchema],
+    ] as const)('%s accepts a 0.2.4 item without isActiveSheet', (_name, schema) => {
+      expect(schema.safeParse({ id: 'sheet-1', name: 'Sheet 1', hidden: false }).success).toBe(
+        true,
+      );
     });
   });
 

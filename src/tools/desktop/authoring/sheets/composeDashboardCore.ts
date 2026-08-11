@@ -1,3 +1,5 @@
+import { DOMParser, type Element as XmlElement } from '@xmldom/xmldom';
+
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
 import {
   deleteDashboard,
@@ -17,6 +19,7 @@ import {
   loadWorkbookXml,
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { xmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
@@ -46,11 +49,58 @@ export interface ComposeDashboardReceipt {
   verification: { status: 'passed'; issues: [] };
 }
 
+export interface BuildDashboardCandidateXmlArgs {
+  baselineXml: string;
+  dashboardName: string;
+  canonicalWorksheetNames: string[];
+  title?: ComposeDashboardCoreArgs['title'];
+  layout?: ComposeDashboardCoreArgs['layout'];
+}
+
 export type ComposeDashboardOutcome =
   | { state: 'applied'; retrySafe: false; receipt: ComposeDashboardReceipt }
   | { state: 'failed'; retrySafe: true; stage: string; error: McpToolError }
-  | { state: 'partial'; retrySafe: false; stage: string; error: McpToolError }
   | { state: 'unknown'; retrySafe: false; stage: string; error: McpToolError };
+
+export function buildDashboardCandidateXml({
+  baselineXml,
+  dashboardName,
+  canonicalWorksheetNames,
+  title,
+  layout,
+}: BuildDashboardCandidateXmlArgs): string {
+  const zones = computeZones(title, {
+    kpis: [],
+    charts: canonicalWorksheetNames,
+    layoutType: layout?.layoutType ?? 'auto-grid',
+    gridColumns: layout?.gridColumns,
+  });
+  const dashboardXml = buildDashboardXml(dashboardName, zones);
+  const wrapperXml = `<workbook><dashboards>${dashboardXml}</dashboards><windows><window class="dashboard" name="${escapeXml(dashboardName)}"/></windows></workbook>`;
+  const candidateXml = injectTemplate(baselineXml, wrapperXml, 'dashboard');
+  return injectViewpoints(candidateXml, dashboardName, canonicalWorksheetNames);
+}
+
+export function dashboardCandidateReadbackIssues(
+  readbackXml: string,
+  candidateXml: string,
+  dashboardName: string,
+  worksheetNames: string[],
+): string[] {
+  const issues = targetDashboardInvariantIssues(readbackXml, dashboardName, worksheetNames).map(
+    (issue) => issue.message,
+  );
+  if (issues.length > 0) return issues;
+
+  const expectedShape = dashboardShape(candidateXml, dashboardName);
+  const actualShape = dashboardShape(readbackXml, dashboardName);
+  if (expectedShape && actualShape && expectedShape !== actualShape) {
+    issues.push(
+      `Dashboard "${dashboardName}" readback did not match the requested title and layout.`,
+    );
+  }
+  return issues;
+}
 
 export async function composeDashboardCore({
   dashboardName,
@@ -84,88 +134,25 @@ export async function composeDashboardCore({
     xmlNamesEqual(name, dashboardName),
   );
 
-  if (!existingDashboardName) {
-    return await createDashboard({
-      baselineXml: pristineXml,
-      expectedWorkbookXml: pristineXml,
-      dashboardName,
-      worksheetNames: canonicalWorksheetNames,
-      title,
-      layout,
-      executor,
-      signal,
-      replaced: false,
-    });
-  }
-
-  const deleteCandidateXml = deleteDashboard(pristineXml, existingDashboardName);
-  const deleteResult = await loadWorkbookXml({
-    xml: deleteCandidateXml,
-    baselineXml: pristineXml,
-    expectedWorkbookXml: pristineXml,
-    focus: { navigate: 'none', reason: 'intermediate-leg' },
-    executor,
-    signal,
-  });
-  if (deleteResult.isErr()) {
-    return loadFailureOutcome({
-      error: deleteResult.error,
-      dashboardName,
-      worksheetNames: canonicalWorksheetNames,
-      retryableStage: 'pre-dispatch-workbook-drift',
-      uncertainStage: 'replace-delete',
-    });
-  }
-
-  const deleteReadback = await getWorkbookXml({ executor, signal });
-  if (deleteReadback.isErr()) {
-    return unknown(
-      'replace-delete-readback',
-      recoveryError({
-        applied: 'unknown',
-        retrySafe: false,
-        dashboard: dashboardName,
-        worksheets: canonicalWorksheetNames,
-        stage: 'replace-delete-readback',
-        apply_error: JSON.stringify(deleteReadback.error),
-        guidance:
-          'The old dashboard was deleted, but its readback failed. Inspect live state before rebuilding it.',
-      }),
-    );
-  }
-
-  const absenceIssues = dashboardAbsenceIssues(deleteReadback.value, dashboardName);
-  if (absenceIssues.length > 0) {
-    return unknown(
-      'replace-delete-readback',
-      recoveryError({
-        applied: 'unknown',
-        retrySafe: false,
-        dashboard: dashboardName,
-        worksheets: canonicalWorksheetNames,
-        stage: 'replace-delete-readback',
-        verificationIssues: absenceIssues,
-        guidance:
-          'The delete completed but readback still contains the old dashboard. Inspect live state before retrying.',
-      }),
-    );
-  }
-
   return await createDashboard({
-    baselineXml: deleteReadback.value,
-    expectedWorkbookXml: deleteReadback.value,
+    candidateBaselineXml: existingDashboardName
+      ? deleteDashboard(pristineXml, existingDashboardName)
+      : pristineXml,
+    validationBaselineXml: pristineXml,
+    expectedWorkbookXml: pristineXml,
     dashboardName,
     worksheetNames: canonicalWorksheetNames,
     title,
     layout,
     executor,
     signal,
-    replaced: true,
+    replaced: existingDashboardName !== undefined,
   });
 }
 
 async function createDashboard({
-  baselineXml,
+  candidateBaselineXml,
+  validationBaselineXml,
   expectedWorkbookXml,
   dashboardName,
   worksheetNames,
@@ -175,41 +162,26 @@ async function createDashboard({
   signal,
   replaced,
 }: Omit<ComposeDashboardCoreArgs, 'worksheetNames'> & {
-  baselineXml: string;
+  candidateBaselineXml: string;
+  validationBaselineXml: string;
   expectedWorkbookXml: string;
   worksheetNames: string[];
   replaced: boolean;
 }): Promise<ComposeDashboardOutcome> {
   let candidateXml: string;
   try {
-    const zones = computeZones(title, {
-      kpis: [],
-      charts: worksheetNames,
-      layoutType: layout?.layoutType ?? 'auto-grid',
-      gridColumns: layout?.gridColumns,
+    candidateXml = buildDashboardCandidateXml({
+      baselineXml: candidateBaselineXml,
+      dashboardName,
+      canonicalWorksheetNames: worksheetNames,
+      title,
+      layout,
     });
-    const dashboardXml = buildDashboardXml(dashboardName, zones);
-    const wrapperXml = `<workbook><dashboards>${dashboardXml}</dashboards><windows><window class="dashboard" name="${escapeXml(dashboardName)}"/></windows></workbook>`;
-    candidateXml = injectTemplate(baselineXml, wrapperXml, 'dashboard');
-    candidateXml = injectViewpoints(candidateXml, dashboardName, worksheetNames);
   } catch (error) {
     const composeError = new ArgsValidationError(
       `Could not compose dashboard candidate: ${getExceptionMessage(error)}`,
     );
-    if (!replaced) return failed('candidate-build', composeError);
-    return partial(
-      'replace-create',
-      recoveryError({
-        applied: 'partial',
-        retrySafe: false,
-        dashboard: dashboardName,
-        worksheets: worksheetNames,
-        stage: 'replace-create',
-        apply_error: composeError.message,
-        guidance:
-          'The old dashboard was deleted, but the replacement could not be built. Inspect live state before any retry.',
-      }),
-    );
+    return failed('candidate-build', composeError);
   }
 
   const candidateIssues = targetDashboardInvariantIssues(
@@ -218,41 +190,28 @@ async function createDashboard({
     worksheetNames,
   );
   if (candidateIssues.length > 0) {
-    const error = recoveryError({
-      applied: replaced ? 'partial' : false,
-      retrySafe: !replaced,
-      dashboard: dashboardName,
-      worksheets: worksheetNames,
-      stage: replaced ? 'replace-create' : 'preflight-invariant',
-      verificationIssues: candidateIssues.map((issue) => issue.message),
-    });
-    return replaced ? partial('replace-create', error) : failed('preflight-invariant', error);
+    return failed(
+      'preflight-invariant',
+      recoveryError({
+        applied: false,
+        retrySafe: true,
+        dashboard: dashboardName,
+        worksheets: worksheetNames,
+        stage: 'preflight-invariant',
+        verificationIssues: candidateIssues.map((issue) => issue.message),
+      }),
+    );
   }
 
   const applyResult = await loadWorkbookXml({
     xml: candidateXml,
-    baselineXml,
+    baselineXml: validationBaselineXml,
     expectedWorkbookXml,
     focus: { navigate: 'artifact', sheetName: dashboardName },
     executor,
     signal,
   });
   if (applyResult.isErr()) {
-    if (replaced) {
-      return partial(
-        'replace-create',
-        recoveryError({
-          applied: 'partial',
-          retrySafe: false,
-          dashboard: dashboardName,
-          worksheets: worksheetNames,
-          stage: 'replace-create',
-          apply_error: describeApplyError(applyResult.error),
-          guidance:
-            'The old dashboard was deleted, but recreation did not complete. Inspect live state before any retry.',
-        }),
-      );
-    }
     return loadFailureOutcome({
       error: applyResult.error,
       dashboardName,
@@ -262,47 +221,46 @@ async function createDashboard({
     });
   }
 
-  const readbackResult = await getWorkbookXml({ executor, signal });
-  if (readbackResult.isErr()) {
+  const readbackResult = await pollReadback({
+    read: () => getWorkbookXml({ executor, signal }),
+    settled: (xml) =>
+      dashboardCandidateReadbackIssues(xml, candidateXml, dashboardName, worksheetNames).length ===
+      0,
+    signal,
+  });
+  if (!readbackResult.ok) {
     const error = recoveryError({
-      applied: replaced ? 'partial' : 'unknown',
+      applied: 'unknown',
       retrySafe: false,
       dashboard: dashboardName,
       worksheets: worksheetNames,
-      stage: replaced ? 'replace-create' : 'post-apply-read',
-      apply_error: JSON.stringify(readbackResult.error),
+      stage: 'post-apply-read',
+      apply_error: new DesktopCommandExecutionError(readbackResult.error).getErrorText(),
       guidance:
         'Inspect the live workbook before retrying; the dashboard write may already have landed.',
     });
-    return replaced ? partial('replace-create', error) : unknown('post-apply-read', error);
+    return unknown('post-apply-read', error);
   }
 
-  const readbackIssues = targetDashboardInvariantIssues(
+  const readbackIssues = dashboardCandidateReadbackIssues(
     readbackResult.value,
+    candidateXml,
     dashboardName,
     worksheetNames,
-  ).map((issue) => issue.message);
-  const targetCount = listWorkbookDashboards(readbackResult.value).filter((name) =>
-    xmlNamesEqual(name, dashboardName),
-  ).length;
-  if (targetCount !== 1) {
-    readbackIssues.push(
-      `Expected exactly one dashboard named "${dashboardName}" after apply; found ${targetCount}.`,
-    );
-  }
-  if (readbackIssues.length > 0) {
+  );
+  if (!readbackResult.settled || readbackIssues.length > 0) {
     const error = recoveryError({
-      applied: replaced ? 'partial' : 'unknown',
+      applied: 'unknown',
       retrySafe: false,
       dashboard: dashboardName,
       worksheets: worksheetNames,
-      stage: replaced ? 'replace-create' : 'readback-verification',
+      stage: 'readback-verification',
       apply_error: 'Post-apply structural verification did not match the request.',
       verificationIssues: readbackIssues,
       guidance:
         'Call list-dashboards and get-workbook-inventory to inspect live state before retrying; use activate-sheet to inspect the target dashboard.',
     });
-    return replaced ? partial('replace-create', error) : unknown('readback-verification', error);
+    return unknown('readback-verification', error);
   }
 
   return {
@@ -315,6 +273,67 @@ async function createDashboard({
       verification: { status: 'passed', issues: [] },
     },
   };
+}
+
+const DASHBOARD_SHAPE_ATTRIBUTES = [
+  'id',
+  'type-v2',
+  'name',
+  'x',
+  'y',
+  'w',
+  'h',
+  'sizing-mode',
+  'minwidth',
+  'minheight',
+  'maxwidth',
+  'maxheight',
+  'bold',
+  'fontalignment',
+  'fontcolor',
+  'fontname',
+  'fontsize',
+] as const;
+
+function dashboardShape(workbookXml: string, dashboardName: string): string | null {
+  const doc = new DOMParser({ errorHandler: () => {} }).parseFromString(
+    workbookXml.trim() || '<empty/>',
+    'text/xml',
+  );
+  const dashboards = doc.getElementsByTagName('dashboard');
+  let dashboard: XmlElement | null = null;
+  for (let index = 0; index < dashboards.length; index++) {
+    const candidate = dashboards.item(index);
+    const name = candidate?.getAttribute('name');
+    if (candidate && name && xmlNamesEqual(name, dashboardName)) {
+      dashboard = candidate;
+      break;
+    }
+  }
+  if (!dashboard) return null;
+
+  const elements = ['size', 'zone', 'run'].flatMap((tagName) => {
+    const found = dashboard!.getElementsByTagName(tagName);
+    const values: Array<{ tagName: string; attributes: Record<string, string>; text?: string }> =
+      [];
+    for (let index = 0; index < found.length; index++) {
+      const element = found.item(index);
+      if (!element) continue;
+      const attributes: Record<string, string> = {};
+      for (const attributeName of DASHBOARD_SHAPE_ATTRIBUTES) {
+        if (element.hasAttribute(attributeName)) {
+          attributes[attributeName] = element.getAttribute(attributeName) ?? '';
+        }
+      }
+      values.push({
+        tagName,
+        attributes,
+        ...(tagName === 'run' ? { text: element.textContent ?? '' } : {}),
+      });
+    }
+    return values;
+  });
+  return JSON.stringify(elements);
 }
 
 function loadFailureOutcome({
@@ -365,27 +384,6 @@ function loadFailureOutcome({
         'Call list-dashboards and get-workbook-inventory to inspect live state before retrying; use activate-sheet to inspect the target dashboard.',
     }),
   );
-}
-
-function dashboardAbsenceIssues(workbookXml: string, dashboardName: string): string[] {
-  const issues: string[] = [];
-  const dashboards = listWorkbookDashboards(workbookXml).filter((name) =>
-    xmlNamesEqual(name, dashboardName),
-  );
-  if (dashboards.length > 0) {
-    issues.push(`Dashboard "${dashboardName}" still exists after its delete apply.`);
-  }
-  const workbook = parseXML(workbookXml);
-  const windows = normalizeArray<ParsedWindow>(workbook.workbook?.windows?.window).filter(
-    (window) =>
-      window['@_class'] === 'dashboard' &&
-      typeof window['@_name'] === 'string' &&
-      xmlNamesEqual(window['@_name'], dashboardName),
-  );
-  if (windows.length > 0) {
-    issues.push(`Dashboard window "${dashboardName}" still exists after its delete apply.`);
-  }
-  return issues;
 }
 
 export function validateComposeDashboardInput(
@@ -445,10 +443,6 @@ function recoveryError(payload: Record<string, unknown>): McpToolError {
 
 function failed(stage: string, error: McpToolError): ComposeDashboardOutcome {
   return { state: 'failed', retrySafe: true, stage, error };
-}
-
-function partial(stage: string, error: McpToolError): ComposeDashboardOutcome {
-  return { state: 'partial', retrySafe: false, stage, error };
 }
 
 function unknown(stage: string, error: McpToolError): ComposeDashboardOutcome {

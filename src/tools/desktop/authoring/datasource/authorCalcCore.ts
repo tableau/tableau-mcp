@@ -10,13 +10,14 @@ import {
 import { WithExecutorAndAbortSignal } from '../../../../desktop/externalApi/executorTypes.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import { applyWorkbookText } from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
+import { workbookLoadToolError } from './workbookLoadToolError.js';
 
 export const roleSchema = z.enum(['measure', 'dimension']);
 export const datatypeSchema = z.enum(['real', 'integer', 'string', 'boolean', 'date', 'datetime']);
@@ -88,14 +89,16 @@ export async function authorCalculationsInWorkbook({
 
   // A calc is not something the user looks at, and this helper also runs as an early leg of
   // bind-template, where the apply that follows names the chart it built.
-  const loadResult = await applyWorkbookText({
+  const loadResult = await loadWorkbookXml({
     xml: prepared.value.editedXml,
+    baselineXml: workbookXml,
+    expectedWorkbookXml: workbookXml,
     focus: { navigate: 'restore' },
     executor,
     signal,
   });
   if (loadResult.isErr()) {
-    return new DesktopCommandExecutionError(loadResult.error).toErr();
+    return workbookLoadToolError(loadResult.error).toErr();
   }
 
   const readback = await pollReadback({

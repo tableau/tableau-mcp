@@ -43,14 +43,12 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
     'loadWorkbookXml:artifact',
   ],
   'src/tools/desktop/api/applyWorksheetArtifact.ts': ['loadWorksheetXml:artifact'],
-  'src/tools/desktop/authoring/sheets/composeDashboardCore.ts': [
-    'loadWorkbookXml:none',
-    'loadWorkbookXml:artifact',
-  ],
-  'src/tools/desktop/authoring/datasource/authorAction.ts': ['applyWorkbookText:restore'],
-  'src/tools/desktop/authoring/datasource/authorCalcCore.ts': ['applyWorkbookText:restore'],
-  'src/tools/desktop/authoring/datasource/authorSet.ts': ['applyWorkbookText:restore'],
-  'src/tools/desktop/authoring/datasource/formatLabels.ts': ['applyWorkbookText:artifact'],
+  'src/tools/desktop/authoring/sheets/composeDashboardCore.ts': ['loadWorkbookXml:artifact'],
+  'src/tools/desktop/authoring/sheets/runDashboardBatch.ts': ['loadWorkbookXml:none'],
+  'src/tools/desktop/authoring/datasource/authorAction.ts': ['loadWorkbookXml:restore'],
+  'src/tools/desktop/authoring/datasource/authorCalcCore.ts': ['loadWorkbookXml:restore'],
+  'src/tools/desktop/authoring/datasource/authorSet.ts': ['loadWorkbookXml:restore'],
+  'src/tools/desktop/authoring/datasource/formatLabels.ts': ['loadWorkbookXml:artifact'],
   'src/tools/desktop/api/applyWorkbook.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/api/applyWorksheet.ts': ['loadWorksheetXml:artifact'],
   'src/tools/desktop/authoring/sheets/refineWorksheet.ts': ['loadWorksheetXml:artifact'],
@@ -83,6 +81,32 @@ function seamCalls(source: string): string[] {
   visit(sourceFile);
 
   return found;
+}
+
+function unguardedDerivedWorkbookCalls(source: string): number {
+  const sourceFile = ts.createSourceFile('source.ts', source, ts.ScriptTarget.Latest, true);
+  let count = 0;
+  function visit(node: ts.Node): void {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'loadWorkbookXml'
+    ) {
+      const [arg] = node.arguments;
+      const guarded =
+        arg &&
+        ts.isObjectLiteralExpression(arg) &&
+        arg.properties.some(
+          (property) =>
+            (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) &&
+            property.name.getText(sourceFile) === 'expectedWorkbookXml',
+        );
+      if (!guarded) count += 1;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return count;
 }
 
 function disposition(call: ts.CallExpression): string {
@@ -138,5 +162,24 @@ describe('apply focus dispositions', () => {
 
   it('leaves no seam call site out of the table', { timeout: 30_000 }, () => {
     expect(filesCallingASeam()).toEqual(Object.keys(DISPOSITIONS).sort());
+  });
+
+  it('keeps raw whole-workbook dispatch inside the locking wrappers', () => {
+    const outsideWrappers = Object.entries(DISPOSITIONS).flatMap(([file, expected]) =>
+      file.startsWith('src/desktop/wrappers/')
+        ? []
+        : expected.filter((call) => call.startsWith('applyWorkbookText:')).map(() => file),
+    );
+    expect(outsideWrappers).toEqual([]);
+  });
+
+  it('guards every derived whole-workbook candidate against its live baseline', () => {
+    const unconditionalTool = 'src/tools/desktop/api/applyWorkbook.ts';
+    const unguarded = filesCallingASeam().flatMap((file) => {
+      if (file.startsWith('src/desktop/wrappers/') || file === unconditionalTool) return [];
+      const count = unguardedDerivedWorkbookCalls(readFileSync(join(REPO_ROOT, file), 'utf8'));
+      return Array.from({ length: count }, () => file);
+    });
+    expect(unguarded).toEqual([]);
   });
 });

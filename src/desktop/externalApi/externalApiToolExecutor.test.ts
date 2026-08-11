@@ -605,6 +605,75 @@ describe('ExternalApiToolExecutor', () => {
   });
 
   describe('401 rescan-once', () => {
+    it('emits one logical RPC event across a successful read', async () => {
+      const onRpc = vi.fn();
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token')],
+        onRpc,
+      });
+      await executor.start();
+
+      const result = await executor.getWorkbookDocument(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(onRpc).toHaveBeenCalledOnce();
+      expect(onRpc).toHaveBeenCalledWith({
+        operation: 'read',
+        durationMs: expect.any(Number),
+        transportSuccess: true,
+        rescanCount: 0,
+      });
+    });
+
+    it('emits one logical RPC event when a read rescans after a 401', async () => {
+      const onRpc = vi.fn();
+      const discover = vi
+        .fn()
+        .mockReturnValueOnce([instanceFor(server, 'stale-token')])
+        .mockReturnValue([instanceFor(server, 'valid-token')]);
+      const executor = new ExternalApiToolExecutor({ discover, onRpc });
+      await executor.start();
+
+      const result = await executor.getWorkbookDocument(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(onRpc).toHaveBeenCalledOnce();
+      expect(onRpc).toHaveBeenCalledWith(
+        expect.objectContaining({ operation: 'read', transportSuccess: true, rescanCount: 1 }),
+      );
+    });
+
+    it('does not let a telemetry callback failure change the RPC result', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token')],
+        onRpc: () => {
+          throw new Error('telemetry sink failed');
+        },
+      });
+      await executor.start();
+
+      const result = await executor.getWorkbookDocument(signal);
+
+      expect(result.isOk()).toBe(true);
+    });
+
+    it('does not wait for a telemetry callback that never settles', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token')],
+        onRpc: () => new Promise(() => undefined),
+      });
+      await executor.start();
+
+      const result = await Promise.race([
+        executor.getWorkbookDocument(signal),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('RPC waited for telemetry')), 100),
+        ),
+      ]);
+
+      expect(result.isOk()).toBe(true);
+    });
+
     it('rediscovers once on a 401 and retries with the fresh token', async () => {
       const discover = vi
         .fn()
@@ -713,7 +782,11 @@ describe('ExternalApiToolExecutor', () => {
           { id: 'op-x', kind: 'tabdoc:sort', state: 'SUCCEEDED', result: { sorted: true } },
         ],
       });
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      const onRpc = vi.fn();
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        onRpc,
+      });
       await executor.start();
 
       const result = await executor.executeCommand({
@@ -725,6 +798,14 @@ describe('ExternalApiToolExecutor', () => {
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().status).toBe('completed');
       expect(result.unwrap().result).toEqual({ sorted: true });
+      expect(onRpc).toHaveBeenCalledOnce();
+      expect(onRpc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: 'command',
+          transportSuccess: true,
+          rescanCount: 0,
+        }),
+      );
     });
 
     it('reports a still-running operation as running, never completed', async () => {

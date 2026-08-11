@@ -1,9 +1,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
-import { CallToolResult, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolResult,
+  ListToolsRequestSchema,
+  Tool as McpTool,
+} from '@modelcontextprotocol/sdk/types.js';
 
 import * as configModule from './config.desktop.js';
+import * as episodeEvents from './desktop/episode-events.js';
 import {
   buildDesktopInstructions,
   SESSION_RESOLUTION_TEXT_PINNED,
@@ -115,6 +120,45 @@ describe('DesktopMcpServer', () => {
       .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
     expect(listToolsCall).toBeUndefined();
   });
+
+  it('records the bounded registered schema surface without recording schemas', async () => {
+    const base = configModule.getDesktopConfig();
+    const configSpy = vi.spyOn(configModule, 'getDesktopConfig').mockReturnValue({
+      ...base,
+      episodeEventsEnabled: false,
+      toolProfile: 'unexpected-profile',
+    });
+    const emitSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
+
+    try {
+      const server = getServer();
+      const instructions = buildDesktopInstructions({
+        sessionPinned: base.desktopSessionId !== undefined,
+        profile: 'unexpected-profile',
+      });
+
+      await server.registerTools();
+      const listToolsCall = vi
+        .mocked(server.mcpServer.server.setRequestHandler)
+        .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
+      const listResult = await listToolsCall![1]({} as never, {} as never);
+      const listedTools = (listResult as { tools: McpTool[] }).tools;
+
+      expect(emitSpy).toHaveBeenCalledWith(expect.anything(), {
+        type: 'tool_schemas_registered',
+        surface: 'desktop',
+        profile: 'unknown',
+        tool_count: listedTools.length,
+        schemas_json_chars: JSON.stringify(listedTools).length,
+        instructions_chars: instructions.length,
+      });
+      const event = emitSpy.mock.calls.at(-1)?.[1];
+      expect(JSON.stringify(event)).not.toContain(String(listedTools[0]?.description));
+    } finally {
+      configSpy.mockRestore();
+      emitSpy.mockRestore();
+    }
+  });
 });
 
 describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
@@ -158,8 +202,11 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-07: added delete-sheet, rename-sheet, sort-worksheet,
 // list-worksheet-logical-tables, and get-worksheet-underlying-data over the External
 // Client API sheet-action and logical-table routes, and dropped delete-worksheet.
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 30_627;
-const FULL_TOOL_SURFACE_BUDGET = 50_323;
+// Re-pinned 2026-08-10: apply-worksheet gained the direct templatePlan mode so an
+// explicit single-view request can build+apply in one call without widening the tool set.
+// The combined surface moves 30_627 -> 31_485; full moves 50_323 -> 51_101.
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 31_485;
+const FULL_TOOL_SURFACE_BUDGET = 51_101;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -182,8 +229,9 @@ describe('desktop tools/list serialized surface', () => {
 
     // The default served surface includes instructions. Full-profile tool schemas are
     // pinned separately so intentional route prose does not fund schema growth.
-    // Re-pinned 2026-08-07: the batch derives new sheet names and accepts only live names.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_111);
+    // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
+    // preview/no-change requests retain the read-only artifact path.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_191);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(fullToolSurfaceTotal).toBeLessThanOrEqual(FULL_TOOL_SURFACE_BUDGET);
   });
@@ -251,6 +299,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['bind-template', 2585], // raised 2026-08-10 (#734 review fold): +skip_validation, the server-gated trust flag for the deterministic build_viz path — a genuinely new param (name + boolean schema, description dropped since the LLM must never set it), ~118B over the prior cap so shrinking prose could not fund it; ratcheted to the measured 2585 (down from a transient 2675) once the description was removed; earlier raise with sign-off (2026-08-05): agreed UI-label title 'Matching template' costs a few bytes over 'Bind Template'; earlier raise (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
     ['add-field', 1438], // raised with sign-off (2026-08-05): agreed UI-label title 'Adding field'; provenance-style describes (from field resolution, never invented)
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
+    ['apply-worksheet', 1610], // raised 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1466], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow

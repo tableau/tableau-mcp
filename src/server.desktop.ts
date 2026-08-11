@@ -15,6 +15,7 @@ import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
 import { createCallDeadline } from './desktop/callDeadline.js';
+import { emitEpisodeEvent, type ToolSchemaProfile } from './desktop/episode-events.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
 import {
   getKnowledgeCorpusEntryCount,
@@ -241,6 +242,7 @@ export class DesktopMcpServer extends Server {
   registerTools = async (): Promise<void> => {
     const config = getDesktopConfig();
     const tools = await this._getToolsToRegister();
+    const listedTools = await Promise.all(tools.map(getDesktopToolListEntry));
 
     log({
       message: 'Desktop transport ACTIVE: External Client API (Athena V0)',
@@ -290,11 +292,23 @@ export class DesktopMcpServer extends Server {
       );
     }
 
+    const instructions = buildDesktopInstructions({
+      sessionPinned: config.desktopSessionId !== undefined,
+      profile: config.toolProfile,
+    });
+    await emitEpisodeEvent(config, {
+      type: 'tool_schemas_registered',
+      surface: 'desktop',
+      profile: normalizeToolSchemaProfile(config.toolProfile),
+      tool_count: listedTools.length,
+      schemas_json_chars: JSON.stringify(listedTools).length,
+      instructions_chars: instructions.length,
+    });
+
     // Slim tools/list (no $schema dialect tags): only when this server owns the
     // McpServer. On the combined variant's shared server, overriding tools/list
     // would hide the web half's tools (including ones combined-lean registers late).
     if (this.ownsMcpServer) {
-      const listedTools = await Promise.all(tools.map(getDesktopToolListEntry));
       this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
         tools: listedTools,
       }));
@@ -359,6 +373,19 @@ export class DesktopMcpServer extends Server {
       mimeType: 'text/markdown',
     });
   };
+}
+
+function normalizeToolSchemaProfile(profile: string): ToolSchemaProfile {
+  if (profile === '' || profile === 'dynamic-authoring') return 'dynamic-authoring';
+  if (
+    profile === 'demo' ||
+    profile === 'spec-loop' ||
+    profile === 'full' ||
+    profile === 'combined-lean'
+  ) {
+    return profile;
+  }
+  return 'unknown';
 }
 
 export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<McpTool> {

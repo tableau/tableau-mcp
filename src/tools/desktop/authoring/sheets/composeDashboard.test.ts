@@ -98,7 +98,7 @@ describe('composeDashboardTool', () => {
     expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
   });
 
-  it('reports structured partial state when replacement candidate construction fails after delete', async () => {
+  it('leaves the live dashboard untouched when replacement candidate construction fails', async () => {
     const harness = setupHarness();
     vi.spyOn(injectTemplateModule, 'injectTemplate').mockImplementationOnce(() => {
       throw new Error('candidate failed');
@@ -107,15 +107,8 @@ describe('composeDashboardTool', () => {
     const result = await getToolResult({ getExecutor: harness.getExecutor });
 
     expect(result.isError).toBe(true);
-    expect(bodyOf(result)).toMatchObject({
-      applied: 'partial',
-      retrySafe: false,
-      dashboard: 'Sales Dashboard',
-      worksheets: ['Sales', 'Profit'],
-      stage: 'replace-create',
-    });
-    expect(textOf(result)).toContain('Inspect live state before any retry');
-    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(textOf(result)).toContain('Could not compose dashboard candidate');
+    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
   });
 
   it('replaces only the same-named dashboard', async () => {
@@ -183,7 +176,7 @@ describe('composeDashboardTool', () => {
     const result = await getToolResult({ getExecutor: harness.getExecutor });
 
     expect(result.isError).toBe(false);
-    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledTimes(1);
     expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledWith(
       expect.objectContaining({ baselineXml: pristineXml, expectedWorkbookXml: pristineXml }),
     );

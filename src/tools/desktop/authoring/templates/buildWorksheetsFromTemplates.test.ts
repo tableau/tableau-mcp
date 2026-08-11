@@ -204,6 +204,7 @@ describe('build-worksheets-from-templates', () => {
       {
         session: '12345',
         artifactId: 'artifact-A',
+        templatePlan: undefined,
         worksheetName: undefined,
         worksheetFile: undefined,
       },
@@ -223,6 +224,7 @@ describe('build-worksheets-from-templates', () => {
           {
             session: '12345',
             artifactId: 'artifact-B',
+            templatePlan: undefined,
             worksheetName: undefined,
             worksheetFile: undefined,
           },

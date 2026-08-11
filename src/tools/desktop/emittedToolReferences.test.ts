@@ -33,6 +33,7 @@ const NON_TOOL_VOCABULARY = [
   'auto-apply',
   'auto-detect',
   'auto-grid',
+  'auto-updates',
   'base-column-conflict',
   'border-color',
   'border-style',
@@ -136,6 +137,7 @@ const NON_TOOL_VOCABULARY = [
   'quantitative-or-categorical',
   'ranking-ordered-bar',
   're-call',
+  're-enables',
   're-inject',
   're-pinned',
   're-planning',
@@ -149,9 +151,6 @@ const NON_TOOL_VOCABULARY = [
   // Health-check repair-primitive codes, not tools the model can call.
   'reinject-from-template',
   'render-diagnostics',
-  'replace-create',
-  'replace-delete',
-  'replace-delete-readback',
   'request-failed',
   'row-level',
   'safe-by-construction',
@@ -204,7 +203,6 @@ const NON_TOOL_VOCABULARY = [
   'zone-delete',
   'zone-style',
   'zone-surgery',
-  'zone-text',
 ] as const;
 
 const TOOL_NAME_CANDIDATE_RE = /\b[a-z][a-z0-9]*(?:-[a-z0-9]+)+\b/g;

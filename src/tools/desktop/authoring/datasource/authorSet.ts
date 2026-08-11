@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import { applyWorkbookText } from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
@@ -15,6 +15,7 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
+import { workbookLoadToolError } from './workbookLoadToolError.js';
 
 const endSchema = z.enum(['top', 'bottom']);
 const modeSchema = z.enum(['top-n', 'empty']);
@@ -143,14 +144,16 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
             return new ArgsValidationError(validation.message).toErr();
           }
 
-          const loadResult = await applyWorkbookText({
+          const loadResult = await loadWorkbookXml({
             xml: editedXml,
+            baselineXml: liveXml,
+            expectedWorkbookXml: liveXml,
             focus: { navigate: 'restore' },
             executor,
             signal: extra.signal,
           });
           if (loadResult.isErr()) {
-            return new DesktopCommandExecutionError(loadResult.error).toErr();
+            return workbookLoadToolError(loadResult.error).toErr();
           }
 
           const findReadbackGroup = (xml: string): string | undefined => {

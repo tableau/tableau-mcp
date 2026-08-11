@@ -3,7 +3,11 @@ import { Err, Ok } from 'ts-results-es';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import * as loadWorkbookXmlModule from '../../../../desktop/wrappers/loadWorkbookXml.js';
-import { composeDashboardCore, type ComposeDashboardCoreArgs } from './composeDashboardCore.js';
+import {
+  buildDashboardCandidateXml,
+  composeDashboardCore,
+  type ComposeDashboardCoreArgs,
+} from './composeDashboardCore.js';
 
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
@@ -30,9 +34,37 @@ const WITH_EXISTING = PRISTINE.replace(
   '<window class="dashboard" name="Sales Dashboard"><viewpoints><viewpoint name="Sales"/></viewpoints></window></windows>',
 );
 
+describe('buildDashboardCandidateXml', () => {
+  it('builds an escaped dashboard with layout zones and viewpoints into the baseline workbook', () => {
+    const candidateXml = buildDashboardCandidateXml({
+      baselineXml: PRISTINE,
+      dashboardName: 'Sales & "Profit"',
+      canonicalWorksheetNames: ['Sales', 'Profit'],
+      title: 'Executive <Overview>',
+      layout: { layoutType: 'columns' },
+    });
+
+    expect(candidateXml).toContain('<dashboard name="Keep"');
+    expect(candidateXml).toContain('name="Sales &amp; &quot;Profit&quot;"');
+    expect(candidateXml).toContain('Executive &lt;Overview&gt;');
+    expect(candidateXml).toContain('name="Sales" w="50000" x="0" y="8000"');
+    expect(candidateXml).toContain('name="Profit" w="50000" x="50000" y="8000"');
+    expect(candidateXml).toContain(
+      '<viewpoint name="Sales"><zoom type="entire-view"/></viewpoint>',
+    );
+    expect(candidateXml).toContain(
+      '<viewpoint name="Profit"><zoom type="entire-view"/></viewpoint>',
+    );
+  });
+});
+
 describe('composeDashboardCore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('returns applied only after invariant readback passes', async () => {
@@ -91,56 +123,64 @@ describe('composeDashboardCore', () => {
     });
   });
 
-  it('deletes and verifies an existing dashboard before recreating it', async () => {
+  it('replaces an existing dashboard in memory with one guarded write', async () => {
     const harness = setupHarness({ pristineXml: WITH_EXISTING });
 
     const outcome = await composeDashboardCore(validArgs(harness.executor));
 
-    expect(harness.postedXml).toHaveLength(2);
-    expect(harness.postedXml[0]).not.toContain('name="Sales Dashboard"');
-    expect(harness.postedXml[1]).toContain('name="Sales Dashboard"');
-    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(3);
+    expect(harness.postedXml).toHaveLength(1);
+    expect(harness.postedXml[0]).toContain('name="Keep"');
+    expect(harness.postedXml[0]?.match(/name="Sales Dashboard"/g)).toHaveLength(2);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
     expect(outcome).toMatchObject({
       state: 'applied',
       receipt: { replaced: true },
     });
-    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenNthCalledWith(
-      1,
+    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledWith(
       expect.objectContaining({
+        baselineXml: WITH_EXISTING,
         expectedWorkbookXml: WITH_EXISTING,
-        focus: { navigate: 'none', reason: 'intermediate-leg' },
-      }),
-    );
-    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        expectedWorkbookXml: harness.postedXml[0],
         focus: { navigate: 'artifact', sheetName: 'Sales Dashboard' },
       }),
     );
   });
 
-  it('stops when delete readback still contains the old dashboard', async () => {
+  it('waits past a stale same-name readback before accepting the replacement', async () => {
+    vi.useFakeTimers();
     const harness = setupHarness({
       pristineXml: WITH_EXISTING,
       readbackResults: [Ok(WITH_EXISTING)],
     });
 
+    const outcomePromise = composeDashboardCore(validArgs(harness.executor));
+    await vi.runAllTimersAsync();
+    const outcome = await outcomePromise;
+
+    expect(outcome).toMatchObject({ state: 'applied', receipt: { replaced: true } });
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(3);
+  });
+
+  it('refuses a stale replacement before any live delete can happen', async () => {
+    const harness = setupHarness({
+      pristineXml: WITH_EXISTING,
+      applyResults: [Err({ type: 'load-workbook-xml-error', error: { type: 'workbook-drift' } })],
+    });
+
     const outcome = await composeDashboardCore(validArgs(harness.executor));
 
     expect(outcome).toMatchObject({
-      state: 'unknown',
-      retrySafe: false,
-      stage: 'replace-delete-readback',
+      state: 'failed',
+      retrySafe: true,
+      stage: 'pre-dispatch-workbook-drift',
     });
     expect(harness.postedXml).toHaveLength(1);
+    expect(harness.postedXml[0]).toContain('name="Sales Dashboard"');
   });
 
-  it('reports partial when delete lands but recreation fails', async () => {
+  it('reports an uncertain one-write replacement as unknown, never partial', async () => {
     const harness = setupHarness({
       pristineXml: WITH_EXISTING,
       applyResults: [
-        Ok({ validationWarnings: [] }),
         Err({
           type: 'load-workbook-xml-error',
           error: { type: 'load-rejected', message: 'Desktop rejected replacement' },
@@ -151,10 +191,11 @@ describe('composeDashboardCore', () => {
     const outcome = await composeDashboardCore(validArgs(harness.executor));
 
     expect(outcome).toMatchObject({
-      state: 'partial',
+      state: 'unknown',
       retrySafe: false,
-      stage: 'replace-create',
+      stage: 'apply',
     });
+    expect(harness.postedXml).toHaveLength(1);
   });
 });
 
