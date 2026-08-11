@@ -1,5 +1,6 @@
 import { getConfirmDeleteContentTool } from './_lib/confirmDeleteContent.js';
 import { getDeleteContentTool } from './_lib/deleteContent.js';
+import { getAboutTheTeamTool } from './aboutUs/team.js';
 import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
@@ -40,6 +41,7 @@ import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 
 export const webToolFactories = [
+  getAboutTheTeamTool,
   getGetDatasourceMetadataTool,
   getEmbedTokenTool,
   getRecordEventTool,
