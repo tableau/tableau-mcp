@@ -98,14 +98,15 @@ function asRecord(v: unknown): Record<string, unknown> | undefined {
 /** Inject the matched metric sentiment into a bundle request, in place. Reads
  *  the caption (`input.metadata.name`) and localName
  *  (`input.metric.definition.basic_specification.measure.field`), matches them
- *  against `map`, and on a hit merges `sentiment_type` into an *already-present*
+ *  against `map`, and on a hit merges `sentiment_type` into
  *  `input.metric.representation_options` — a sibling of `metric.definition` per
- *  `pulseBundleRequestSchema`, not a child of it. If `representation_options` is
- *  absent, this is a no-op: we never fabricate it, since
- *  `pulseRepresentationOptionsSchema.type` is required and we don't know the
- *  correct value for an arbitrary metric — the card simply degrades to neutral.
- *  Any missing node or empty map is likewise a silent no-op — fail closed, never
- *  throw. */
+ *  `pulseBundleRequestSchema`, not a child of it. The live insights skill builds
+ *  requests WITHOUT `representation_options`, so on a match we create the node,
+ *  defaulting the schema-required `type` to `NUMBER_FORMAT_TYPE_NUMBER`; an
+ *  already-present `type` is authoritative and is preserved. The fabricated node
+ *  is always schema-valid, so the outgoing request never fails Zodios validation.
+ *  No match, missing metric node, or empty map is a silent no-op (the card stays
+ *  neutral) — fail closed, never throw. */
 export function applySentimentToBundleRequest(bundleRequest: unknown, map: SentimentMap): void {
   const root = asRecord(bundleRequest);
   const input = asRecord(root?.bundle_request)?.input;
@@ -123,7 +124,16 @@ export function applySentimentToBundleRequest(bundleRequest: unknown, map: Senti
   const token = matchSentiment(map, caption, localName);
   if (token === undefined) return;
 
-  const existing = asRecord(metric.representation_options);
-  if (existing === undefined) return; // no representation_options to merge into — fail closed, stay neutral
-  metric.representation_options = { ...existing, sentiment_type: token };
+  // Merge the matched sentiment into representation_options, creating the node
+  // when the request omits it (the live insights skill builds requests without
+  // one). `type` is required by the schema, so default it to NUMBER — a real,
+  // already-present `type` is authoritative and is preserved. Number formatting
+  // is not our concern to derive; NUMBER is the safe default and a future
+  // format map can supply it the same way the sentiment map does.
+  const existing = asRecord(metric.representation_options) ?? {};
+  metric.representation_options = {
+    type: 'NUMBER_FORMAT_TYPE_NUMBER',
+    ...existing,
+    sentiment_type: token,
+  };
 }

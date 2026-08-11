@@ -86,19 +86,22 @@ function reqWith(
 describe('applySentimentToBundleRequest', () => {
   const MAP = sentimentMapSchema.parse({ ARR: 'SENTIMENT_TYPE_UP_IS_GOOD' });
 
-  it('is a no-op on a match when representation_options is absent (never fabricates it)', () => {
+  it('on a match with no representation_options, creates one with the default number format type', () => {
     const req = reqWith('ARR', 'arr');
     applySentimentToBundleRequest(req, MAP);
-    expect(
-      (req.bundle_request.input.metric as Record<string, any>).representation_options,
-    ).toBeUndefined();
+    const ro = (req.bundle_request.input.metric as Record<string, any>).representation_options;
+    // Fabricated schema-valid: `type` is required, so default it to NUMBER;
+    // the point of the injection is to carry the matched sentiment_type.
+    expect(ro.type).toBe('NUMBER_FORMAT_TYPE_NUMBER');
+    expect(ro.sentiment_type).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
   });
 
-  it('merges into an existing representation_options, preserving other fields', () => {
-    const req = reqWith('ARR', 'arr', { type: 'NUMBER_FORMAT_TYPE_NUMBER' });
+  it('merges into an existing representation_options, preserving its real type', () => {
+    const req = reqWith('ARR', 'arr', { type: 'NUMBER_FORMAT_TYPE_CURRENCY' });
     applySentimentToBundleRequest(req, MAP);
     const ro = (req.bundle_request.input.metric as Record<string, any>).representation_options;
-    expect(ro.type).toBe('NUMBER_FORMAT_TYPE_NUMBER');
+    // An already-present type is authoritative and must NOT be overwritten by the default.
+    expect(ro.type).toBe('NUMBER_FORMAT_TYPE_CURRENCY');
     expect(ro.sentiment_type).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
   });
 
@@ -123,7 +126,7 @@ describe('applySentimentToBundleRequest', () => {
     ).toBeUndefined();
   });
 
-  it('no-ops (stays schema-valid) when the matched metric has no representation_options', () => {
+  it('stays schema-valid when it fabricates representation_options for a matched metric', () => {
     const map = sentimentMapSchema.parse({ ARR: 'SENTIMENT_TYPE_UP_IS_GOOD' });
     // Full, schema-shaped bundle request that MATCHES (caption 'ARR') but omits
     // metric.representation_options entirely (it's `.optional()` in the schema).
@@ -160,7 +163,7 @@ describe('applySentimentToBundleRequest', () => {
               },
               comparison: { comparison: 'TIME_COMPARISON_PREVIOUS_PERIOD' },
             },
-            // No representation_options here — this is the case that must stay a no-op.
+            // No representation_options here — the injector must fabricate one.
           },
         },
       },
@@ -168,7 +171,12 @@ describe('applySentimentToBundleRequest', () => {
 
     applySentimentToBundleRequest(request, map);
 
-    // Must not have fabricated an invalid representation_options (missing required `type`):
+    // The fabricated representation_options carries the required `type`, so the
+    // whole request still satisfies the wire schema (Zodios never throws on it).
+    const ro = ((request as any).bundle_request.input.metric as Record<string, any>)
+      .representation_options;
+    expect(ro.type).toBe('NUMBER_FORMAT_TYPE_NUMBER');
+    expect(ro.sentiment_type).toBe('SENTIMENT_TYPE_UP_IS_GOOD');
     expect(() => pulseBundleRequestSchema.parse(request)).not.toThrow();
   });
 });
