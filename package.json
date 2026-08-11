@@ -64,6 +64,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1095.0",
+    "@aws-sdk/lib-storage": "^3.1095.0",
     "@aws-sdk/s3-request-presigner": "^3.1095.0",
     "@modelcontextprotocol/ext-apps": "^1.7.2",
     "@modelcontextprotocol/sdk": "^1.26.0",
@@ -77,6 +78,7 @@
     "jose": "^6.0.12",
     "ssrfcheck": "^1.2.0",
     "ts-results-es": "^7.1.0",
+    "unzipper": "^0.12.5",
     "uuid": "^14.0.1",
     "xpath": "^0.0.34",
     "zod": "^3.24.3",
@@ -95,6 +97,7 @@
     "@types/fast-levenshtein": "^0.0.1",
     "@types/node": "^22.15.3",
     "@types/supertest": "^6.0.3",
+    "@types/unzipper": "^0.10.11",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
     "@vitest/coverage-v8": "^3.1.3",

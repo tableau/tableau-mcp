@@ -1,9 +1,56 @@
 import { AxiosInstance } from 'axios';
+import { Readable } from 'stream';
 import { describe, expect, it, vi } from 'vitest';
 
 import WorkbooksMethods from './workbooksMethods.js';
 
 describe('WorkbooksMethods', () => {
+  describe('downloadWorkbook', () => {
+    it('streams workbook content and returns response metadata', async () => {
+      const workbookBytes = Buffer.from('<workbook />');
+      const mockGet = vi.fn().mockResolvedValue({
+        data: Readable.from(workbookBytes),
+        headers: {
+          'content-disposition': 'name="tableau_workbook"; filename="Downloaded.twb"',
+          'content-type': 'application/xml',
+        },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        axios: {
+          get: mockGet,
+          defaults: { baseURL: 'http://test' },
+        } as unknown as AxiosInstance,
+      };
+
+      const result = await workbooksMethods.downloadWorkbook({
+        siteId: 'site-1',
+        workbookId: 'workbook-1',
+        includeExtract: false,
+      });
+
+      expect(mockGet).toHaveBeenCalledWith(
+        'http://test/sites/site-1/workbooks/workbook-1/content',
+        {
+          params: { includeExtract: false },
+          headers: { Authorization: 'Bearer test' },
+          responseType: 'stream',
+        },
+      );
+      expect(result.contentDisposition).toBe('name="tableau_workbook"; filename="Downloaded.twb"');
+      expect(result.contentType).toBe('application/xml');
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of result.content) chunks.push(Buffer.from(chunk));
+      expect(Buffer.concat(chunks)).toEqual(workbookBytes);
+    });
+  });
+
   describe('publishWorkbook', () => {
     it('POSTs a single-part multipart/mixed body containing the tsRequest XML', async () => {
       const mockPost = vi.fn().mockResolvedValue({

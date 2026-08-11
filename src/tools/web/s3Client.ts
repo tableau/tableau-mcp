@@ -1,5 +1,7 @@
+import { Readable } from 'stream';
+
 /**
- * Shared S3 upload core.
+ * Shared S3 buffer/stream upload core.
  *
  * This module holds the format-agnostic pieces used by every S3-offload path
  * (rendered view images, view CSV data, ...): the lazily-created, cached S3
@@ -153,6 +155,59 @@ export async function uploadBufferToS3(
   return await getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), {
     expiresIn: presignTtlSeconds,
   });
+}
+
+/**
+ * Streams a payload to S3 using the SDK's managed multipart uploader, then
+ * returns a short-lived presigned GET URL for the resulting object.
+ */
+export async function uploadStreamToS3(
+  body: Readable,
+  {
+    key,
+    contentType,
+    contentDisposition,
+    contentLength,
+    bucket,
+    region,
+    presignTtlSeconds,
+  }: {
+    key: string;
+    contentType: string;
+    contentDisposition?: string;
+    contentLength?: number;
+    bucket: string;
+    region: string;
+    presignTtlSeconds: number;
+  },
+): Promise<string> {
+  const { client, GetObjectCommand, getSignedUrl } = await getS3Bundle(region);
+  const { Upload } = await import('@aws-sdk/lib-storage');
+
+  const upload = new Upload({
+    client,
+    leavePartsOnError: false,
+    params: {
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+      ...(contentDisposition ? { ContentDisposition: contentDisposition } : {}),
+      ...(contentLength !== undefined ? { ContentLength: contentLength } : {}),
+    },
+  });
+  await upload.done();
+
+  return await getSignedUrl(
+    client,
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ...(contentDisposition ? { ResponseContentDisposition: contentDisposition } : {}),
+      ResponseContentType: contentType,
+    }),
+    { expiresIn: presignTtlSeconds },
+  );
 }
 
 export const exportedForTesting = {

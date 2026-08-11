@@ -1,4 +1,5 @@
 import { Zodios } from '@zodios/core';
+import { Readable } from 'stream';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
@@ -8,6 +9,12 @@ import { Pagination } from '../types/pagination.js';
 import { Workbook, workbookSchema } from '../types/workbook.js';
 import { WorkbookValidationResult } from '../types/workbookValidation.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
+
+export type DownloadedWorkbook = {
+  content: Readable;
+  contentDisposition?: string;
+  contentType?: string;
+};
 
 /**
  * Workbooks methods of the Tableau Server REST API
@@ -43,6 +50,42 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
         ...this.authHeader,
       })
     ).workbook;
+  };
+
+  /**
+   * Downloads a workbook in TWB or TWBX format. The response is streamed so packaged
+   * workbooks and extracts do not need to be buffered in memory.
+   *
+   * Required scopes: `tableau:workbooks:download`
+   *
+   * @param workbookId - The ID of the workbook to download.
+   * @param siteId - The Tableau site ID.
+   * @param includeExtract - Whether to include workbook extracts in the download.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook
+   */
+  downloadWorkbook = async ({
+    workbookId,
+    siteId,
+    includeExtract,
+  }: {
+    workbookId: string;
+    siteId: string;
+    includeExtract?: boolean;
+  }): Promise<DownloadedWorkbook> => {
+    const response = await this._apiClient.axios.get(
+      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks/${workbookId}/content`,
+      {
+        params: { includeExtract },
+        headers: this.authHeader.headers,
+        responseType: 'stream',
+      },
+    );
+
+    return {
+      content: response.data as Readable,
+      contentDisposition: getHeader(response.headers, 'content-disposition'),
+      contentType: getHeader(response.headers, 'content-type'),
+    };
   };
 
   /**
@@ -210,4 +253,11 @@ function escapeXmlAttribute(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function getHeader(headers: unknown, name: string): string | undefined {
+  if (!headers || typeof headers !== 'object') return undefined;
+
+  const value = (headers as Record<string, unknown>)[name];
+  return typeof value === 'string' ? value : undefined;
 }

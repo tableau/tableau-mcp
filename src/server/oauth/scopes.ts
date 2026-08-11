@@ -52,6 +52,7 @@ export type TableauApiScope =
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
+  | 'tableau:workbooks:download'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
@@ -245,6 +246,10 @@ const toolScopeMap: Record<
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'download-workbook': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   // Commits an already-staged file upload session as a published workbook. Does NOT validate the
   // workbook first (that is a separate, opt-in step). Publishing is the only Tableau REST call, so

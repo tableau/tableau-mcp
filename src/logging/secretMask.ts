@@ -70,6 +70,14 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
 };
 
 export const maskResponse = (response: ResponseInterceptorConfig): MaskedResponse => {
+  if (isWorkbookDownloadResponse(response.url)) {
+    const { data: _data, ...responseWithoutData } = response;
+    if (shouldNotifyWhenLevelIsAtLeast('debug')) return responseWithoutData;
+
+    const { headers: _headers, ...responseWithoutHeaders } = responseWithoutData;
+    return responseWithoutHeaders;
+  }
+
   const result = clone<MaskedResponse>(response);
   if (result.isErr()) {
     return response;
@@ -91,6 +99,10 @@ export const maskResponse = (response: ResponseInterceptorConfig): MaskedRespons
 
   return maskedData;
 };
+
+function isWorkbookDownloadResponse(url: string): boolean {
+  return /\/workbooks\/[^/]+\/content(?:\?|$)/i.test(url);
+}
 
 function redactUploadSessionIdFromUrl(url: string): string {
   return url.replace(/(\/fileUploads\/)[^/?]+/gi, '$1<redacted>');
