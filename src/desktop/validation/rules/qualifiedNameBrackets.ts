@@ -17,9 +17,9 @@
  * Severity: ERROR. A mismatched-bracket qualified name is never intentional — it
  * always fails to load.
  *
- * Precision over recall: only values that are a SINGLE pure qualified-name
- * reference are validated (see isQualifiedNameCandidate). Formula bodies, captions
- * and multi-pill shelf expressions — which legitimately contain unbalanced
+ * Precision over recall: the rule validates one pure qualified name or an
+ * unambiguous line-separated list (see getQualifiedNameCandidates). Formula bodies,
+ * captions and multi-pill shelf expressions — which legitimately contain unbalanced
  * brackets inside string literals — are deliberately skipped so this rule never
  * false-rejects valid content (e.g. a bundled template).
  */
@@ -62,6 +62,66 @@ function isQualifiedNameCandidate(value: string): boolean {
   // never a single qualified name. (Chars valid INSIDE a name — spaces, '-', '.',
   // ':', '&', etc. — are intentionally allowed.)
   return !/["()\n\r\t/+*,=<>]/.test(value);
+}
+
+const LINE_SEPARATOR = /(?:\r\n|[\r\n]|&#(?:0*(?:10|13)|x0*[ad]);)/i;
+const NORMALIZED_LINE_SEPARATOR = /(?<=\]) +(?=\[)/;
+
+function hasNestedSegmentOpener(value: string): boolean {
+  let i = 0;
+  while (i < value.length) {
+    if (value[i] !== '[') return false;
+    if (value[i + 1] === '[') return true;
+    i += 1;
+
+    let closed = false;
+    while (i < value.length) {
+      if (value[i] !== ']') {
+        i += 1;
+        continue;
+      }
+      if (value[i + 1] === ']') {
+        i += 2;
+        continue;
+      }
+      i += 1;
+      closed = true;
+      break;
+    }
+
+    if (!closed || i === value.length) return false;
+    if (value[i] !== '.') return false;
+    i += 1;
+  }
+  return false;
+}
+
+/**
+ * Tableau can serialize a list of field references with either a real line
+ * break or a still-encoded numeric line break. Treat the list as compound only
+ * when every non-empty item is itself a qualified-name candidate; otherwise
+ * preserve the precision-first behavior for formulas and free text.
+ */
+function getQualifiedNameCandidates(value: string): string[] {
+  const trimmed = value.trim();
+  const parts = trimmed
+    .split(NORMALIZED_LINE_SEPARATOR)
+    .flatMap((part) => part.split(LINE_SEPARATOR))
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const hasUnambiguousListSplit =
+    (parts.length > 1 || LINE_SEPARATOR.test(trimmed)) &&
+    parts.length > 0 &&
+    parts.every(isQualifiedNameCandidate);
+  const wholeIsWellFormed = isWellFormedQualifiedName(trimmed);
+
+  if (hasUnambiguousListSplit) {
+    if (!wholeIsWellFormed) return parts;
+    return parts.filter((part) => hasNestedSegmentOpener(part) && !isWellFormedQualifiedName(part));
+  }
+
+  if (wholeIsWellFormed) return [];
+  return isQualifiedNameCandidate(trimmed) ? [trimmed] : [];
 }
 
 /**
@@ -182,12 +242,12 @@ export const qualifiedNameBracketsRule: ValidationRule = {
       }
 
       if (!value) continue;
-      const trimmed = value.trim();
-      if (!isQualifiedNameCandidate(trimmed)) continue;
-      if (isWellFormedQualifiedName(trimmed)) continue;
-      if (seen.has(trimmed)) continue;
-      seen.add(trimmed);
-      issues.push(issueFor(trimmed));
+      for (const candidate of getQualifiedNameCandidates(value)) {
+        if (isWellFormedQualifiedName(candidate)) continue;
+        if (seen.has(candidate)) continue;
+        seen.add(candidate);
+        issues.push(issueFor(candidate));
+      }
     }
 
     return issues;

@@ -53,6 +53,93 @@ describe('qualified-name-brackets rule', () => {
     expect(qualifiedNameBracketsRule.validate(xml)).toHaveLength(0);
   });
 
+  it.each(['&#10;', '&amp;#10;', '&amp;#13;', '&amp;#010;', '&amp;#xA;', '&amp;#xD;'])(
+    'validates each reference in a line-separated list (%s)',
+    (separator) => {
+      const xml =
+        '<workbook><worksheet><encodings>' +
+        `<color column="[Orders].[none:Segment:nk]${separator}[Orders].[none:Forecast Indicator:nk]" />` +
+        '</encodings></worksheet></workbook>';
+
+      expect(qualifiedNameBracketsRule.validate(xml)).toHaveLength(0);
+    },
+  );
+
+  it('passes a valid list whose raw attribute newline was normalized to a space', () => {
+    const xml = `<workbook><worksheet><encodings><color column="[Orders].[none:Segment:nk]
+[Orders].[none:Forecast Indicator:nk]" /></encodings></worksheet></workbook>`;
+
+    expect(qualifiedNameBracketsRule.validate(xml)).toHaveLength(0);
+  });
+
+  it('does not split a valid escaped bracket followed by a literal opening bracket', () => {
+    const xml = '<workbook><column-instance column="[Orders].[none:a]] [b:nk]" /></workbook>';
+
+    expect(qualifiedNameBracketsRule.validate(xml)).toHaveLength(0);
+  });
+
+  it('does not split a decoded line break inside one escaped bracket identifier', () => {
+    const xml = '<workbook><column-instance column="[Orders].[none:a]]&#10;[b:nk]" /></workbook>';
+
+    expect(qualifiedNameBracketsRule.validate(xml)).toHaveLength(0);
+  });
+
+  it.each([
+    ['normalized space', ' '],
+    ['encoded newline', '&#10;'],
+  ])(
+    'ignores a nested-opener lookalike inside one escaped identifier (%s)',
+    (_label, separator) => {
+      const xml = `<workbook><column-instance column="[D].[a]]${separator}[.[[b]] [c]" /></workbook>`;
+
+      expect(qualifiedNameBracketsRule.validate(xml)).toHaveLength(0);
+    },
+  );
+
+  it.each(['&#10;', '&amp;#10;'])(
+    'still flags a malformed reference within a line-separated list (%s)',
+    (separator) => {
+      const xml =
+        '<workbook><worksheet><encodings>' +
+        `<color column="[Orders].[none:Segment:nk]${separator}[Orders].[[Forecast Indicator]]" />` +
+        '</encodings></worksheet></workbook>';
+
+      const errors = qualifiedNameBracketsRule.validate(xml).filter((i) => i.severity === 'error');
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0].message).toContain('[Orders].[[Forecast Indicator]]');
+    },
+  );
+
+  it.each([
+    ['encoded newline', '&#10;'],
+    ['raw newline normalized by the DOM', '\n'],
+  ])('flags the exact malformed first member across a %s', (_label, separator) => {
+    const malformed = '[Orders].[[Forecast Indicator]]';
+    const xml =
+      '<workbook><worksheet><encodings>' +
+      `<color column="${malformed}${separator}[Orders].[none:Segment:nk]" />` +
+      '</encodings></worksheet></workbook>';
+
+    const errors = qualifiedNameBracketsRule.validate(xml).filter((i) => i.severity === 'error');
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toContain(`Malformed qualified name ${JSON.stringify(malformed)}`);
+    expect(errors[0].xpath).toBe(`//*[contains(., ${JSON.stringify(malformed)})]`);
+  });
+
+  it.each(['&amp;#10;[Orders].[[Forecast Indicator]]', '[Orders].[[Forecast Indicator]]&amp;#10;'])(
+    'still flags a malformed sole reference beside an encoded separator (%s)',
+    (value) => {
+      const xml = `<workbook><column-instance column="${value}" /></workbook>`;
+
+      const errors = qualifiedNameBracketsRule.validate(xml).filter((i) => i.severity === 'error');
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0].message).toContain('[Orders].[[Forecast Indicator]]');
+    },
+  );
+
   it('passes a name that escapes a literal ] as ]] (valid Tableau escaping)', () => {
     // Field literally named `a]b` is written [a]]b]; qualified as [Orders].[none:a]]b:nk].
     const xml = '<workbook><column-instance column="[Orders].[none:a]]b:nk]" /></workbook>';
