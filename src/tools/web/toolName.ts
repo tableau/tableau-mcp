@@ -1,4 +1,5 @@
 export const webToolNames = [
+  'about-the-team',
   'list-datasources',
   'list-extract-refresh-tasks',
   'update-cloud-extract-refresh-task',

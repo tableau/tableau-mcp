@@ -149,6 +149,12 @@ const toolScopeMap: Record<
   WebToolName,
   { mcp: ReadonlyArray<McpScope>; api: ReadonlySet<TableauApiScope> }
 > = {
+  // Static introduction tool: no Tableau REST API call and no MCP scope required — the
+  // response is a hardcoded blurb about a team member.
+  'about-the-team': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
   'list-datasources': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
