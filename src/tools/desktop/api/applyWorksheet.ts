@@ -1,9 +1,15 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'crypto';
 import { Ok, type Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
+import {
+  buildTemplateWorksheetArtifact,
+  type BuiltTemplateWorksheetArtifact,
+  type WorksheetTemplatePlan,
+} from '../../../desktop/templates/buildTemplateWorksheetArtifact.js';
 import {
   getTemplateArtifactStore,
   type TemplateArtifactStore,
@@ -34,8 +40,18 @@ import { DesktopTool } from '../tool.js';
 import { runApplyPreamble } from './applyPreamble.js';
 import {
   applyWorksheetArtifact,
+  applyWorksheetArtifactPayload,
   templateArtifactUnavailableError,
 } from './applyWorksheetArtifact.js';
+
+const templatePlanSchema = z.object({
+  templateName: z.string().trim().min(1).max(128).describe('Worksheet template ID.'),
+  title: z.string().trim().min(1).max(255).describe('Worksheet name to create.'),
+  datasource: z.string().trim().min(1).max(255).describe('Live datasource name.'),
+  fieldMapping: z
+    .record(z.string().trim().min(1).max(128), z.string().trim().min(1).max(255))
+    .describe('Template slot ID to live field reference.'),
+});
 
 const paramsSchema = {
   session: sessionParam({ max: 64 }),
@@ -45,13 +61,16 @@ const paramsSchema = {
     .min(1)
     .max(255)
     .optional()
-    .describe('Template artifact ID; omit for cached-file apply.'),
+    .describe('Template artifact ID; omit for a direct template plan or cached-file apply.'),
+  templatePlan: templatePlanSchema
+    .optional()
+    .describe('Exact template binding to build and apply in this call.'),
   worksheetName: artifactNameParam('worksheet', { min: 1, max: 255 })
     .optional()
-    .describe('Existing worksheet name for cached-file apply; omit with artifactId.'),
+    .describe('Existing worksheet name for cached-file apply; omit with other modes.'),
   worksheetFile: artifactFileParam('worksheet', { max: 4096 })
     .optional()
-    .describe('Cached worksheet path for manual apply; omit with artifactId.'),
+    .describe('Cached worksheet path for manual apply; omit with other modes.'),
 };
 
 const title = 'Updating worksheet';
@@ -59,7 +78,7 @@ const title = 'Updating worksheet';
 type ApplyWorksheetResult =
   | { message: string }
   | {
-      artifactId: string;
+      artifactId?: string;
       title: string;
       applied: true;
       retrySafe: false;
@@ -72,14 +91,21 @@ type ApplyWorksheetResult =
 
 export const getApplyWorksheetTool = (
   server: DesktopMcpServer,
-  dependencies: { store?: TemplateArtifactStore } = {},
+  dependencies: {
+    store?: TemplateArtifactStore;
+    createId?: () => string;
+    buildArtifact?: typeof buildTemplateWorksheetArtifact;
+  } = {},
 ): DesktopTool<typeof paramsSchema> => {
   const artifactStore = dependencies.store ?? getTemplateArtifactStore(server);
+  const createId = dependencies.createId ?? randomUUID;
+  const buildArtifact = dependencies.buildArtifact ?? buildTemplateWorksheetArtifact;
   const applyWorksheetTool = new DesktopTool({
     server,
     name: 'apply-worksheet',
     title,
-    description: 'Apply a template artifact or a modified cached worksheet file to Desktop.',
+    description:
+      'Build and apply an exact template plan, apply a template artifact, or update a cached worksheet file.',
     paramsSchema,
     annotations: {
       readOnlyHint: false, // updates worksheet in workbook
@@ -88,21 +114,32 @@ export const getApplyWorksheetTool = (
       idempotentHint: false,
     },
     callback: async (
-      { session, artifactId, worksheetName, worksheetFile },
+      { session, artifactId, templatePlan, worksheetName, worksheetFile },
       extra,
     ): Promise<CallToolResult> => {
       return await applyWorksheetTool.logAndExecute({
         extra,
-        args: { session, artifactId, worksheetName, worksheetFile },
+        args: { session, artifactId, templatePlan, worksheetName, worksheetFile },
         callback: async (): Promise<
           Result<StructuredResult<ApplyWorksheetResult>, McpToolError>
         > => {
-          if (artifactId) {
-            if (worksheetName !== undefined || worksheetFile !== undefined) {
-              return new ArgsValidationError(
-                'artifactId cannot be combined with worksheetName or worksheetFile.',
-              ).toErr();
-            }
+          const cachedModeSelected = worksheetName !== undefined || worksheetFile !== undefined;
+          const modeCount =
+            Number(artifactId !== undefined) +
+            Number(templatePlan !== undefined) +
+            Number(cachedModeSelected);
+          if (modeCount !== 1) {
+            return new ArgsValidationError(
+              'Provide exactly one apply mode: artifactId, templatePlan, or worksheetName with worksheetFile.',
+            ).toErr();
+          }
+          if (cachedModeSelected && !worksheetName?.trim()) {
+            return new ArgsValidationError(
+              'A worksheetName is required when applying a cached worksheet file.',
+            ).toErr();
+          }
+
+          if (artifactId !== undefined) {
             const sessionResult = resolveSession(session);
             if (sessionResult.isErr()) return sessionResult.error.toErr();
             const resolvedSession = sessionResult.value;
@@ -170,11 +207,77 @@ export const getApplyWorksheetTool = (
             }
           }
 
-          if (!worksheetName?.trim()) {
-            return new ArgsValidationError(
-              'A worksheetName is required when applying a cached worksheet file.',
-            ).toErr();
+          if (templatePlan !== undefined) {
+            const sessionResult = resolveSession(session);
+            if (sessionResult.isErr()) return sessionResult.error.toErr();
+            const resolvedSession = sessionResult.value;
+            const executor = await extra.getExecutor(resolvedSession);
+            const workbookResult = await executor.getWorkbookDocument(extra.signal);
+            if (workbookResult.isErr()) {
+              return new DesktopCommandExecutionError(workbookResult.error).toErr();
+            }
+            const instanceId = workbookResult.value.instanceId;
+            if (!instanceId) {
+              return new DesktopCommandExecutionError({
+                type: 'invalid-response',
+                error: new Error(
+                  'Workbook read did not identify its External Client API instance.',
+                ),
+              }).toErr();
+            }
+
+            const built: Result<BuiltTemplateWorksheetArtifact, McpToolError> = buildArtifact({
+              artifactId: createId(),
+              sessionId: resolvedSession,
+              instanceId,
+              workbookXml: workbookResult.value.xml,
+              plan: templatePlan as WorksheetTemplatePlan,
+            });
+            if (built.isErr()) return built.error.toErr();
+
+            const outcome = await applyWorksheetArtifactPayload({
+              artifact: built.value.artifact,
+              executor,
+              signal: extra.signal,
+            });
+            if (outcome.state !== 'applied') return outcome.error.toErr();
+
+            const verification = outcome.receipt.verification;
+            const verificationRan = verification.status !== 'skipped';
+            return Ok(
+              withNextAction(
+                {
+                  title: outcome.receipt.title,
+                  applied: true as const,
+                  retrySafe: false as const,
+                  verification,
+                },
+                verification.status === 'failed'
+                  ? prefillNextAction('Verification failed — inspect sheet, build again')
+                  : doneNextAction(
+                      receipt({
+                        did: [
+                          `Desktop accepted the direct template apply for worksheet "${outcome.receipt.title}"`,
+                          ...(verificationRan
+                            ? [
+                                `read back the applied worksheet — verification status "${verification.status}"`,
+                              ]
+                            : []),
+                        ],
+                        unverified: verificationRan
+                          ? [
+                              'whether the sheet renders as intended — readback compared workbook structure, not rendered output',
+                            ]
+                          : [
+                              'whether the applied worksheet retained its intended structure — post-apply workbook readback was unavailable',
+                            ],
+                      }),
+                      'Direct template apply dispatched — see verification',
+                    ),
+              ),
+            );
           }
+
           const preamble = runApplyPreamble({
             kind: 'worksheet',
             file: worksheetFile,
@@ -191,9 +294,9 @@ export const getApplyWorksheetTool = (
 
           const executor = await extra.getExecutor(resolvedSession);
           const result = await loadWorksheetXml({
-            worksheetName,
+            worksheetName: worksheetName!,
             xml: worksheetXml,
-            focus: { navigate: 'artifact', sheetName: worksheetName },
+            focus: { navigate: 'artifact', sheetName: worksheetName! },
             executor,
             signal: extra.signal,
             // apply-worksheet updates an existing worksheet in place via the per-sheet `/document`

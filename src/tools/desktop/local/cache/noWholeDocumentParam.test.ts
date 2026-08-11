@@ -138,7 +138,13 @@ describe('the served profile still has a working edit path with no document para
 
     const applyCb = await Provider.from(getApplyWorksheetTool(new DesktopMcpServer()).callback);
     const applyResult = await applyCb(
-      { session: 's1', artifactId: undefined, worksheetName: 'Sales', worksheetFile: file },
+      {
+        session: 's1',
+        artifactId: undefined,
+        templatePlan: undefined,
+        worksheetName: 'Sales',
+        worksheetFile: file,
+      },
       extra(),
     );
     expect(applyResult.isError).toBeFalsy();

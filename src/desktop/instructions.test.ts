@@ -122,10 +122,15 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
   it('allows direct and open-intent modern template choices', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
+    expect(plainChart?.action).toContain('in parallel');
+    expect(plainChart?.action).toContain('templatePlan');
+    expect(plainChart?.action).toContain('explicit single-view');
     expect(plainChart?.action).toContain(
       'Direct requests may choose, build, and apply immediately.',
     );
     expect(plainChart?.action).toContain('several distinct fresh worksheets');
+    expect(plainChart?.action).toContain('preview');
+    expect(plainChart?.action).toContain('stop before apply-worksheet');
   });
 
   it('does not impose a bind-first or confirmation ceremony', () => {

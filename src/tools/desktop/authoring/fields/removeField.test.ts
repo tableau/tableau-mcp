@@ -600,6 +600,7 @@ async function getApplyResult(params: {
     {
       session,
       artifactId: undefined,
+      templatePlan: undefined,
       worksheetName: params.worksheetName,
       worksheetFile: params.worksheetFile,
     },
