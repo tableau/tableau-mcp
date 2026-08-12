@@ -24,7 +24,10 @@ import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getApplyWorksheetTool } from './applyWorksheet.js';
 
-vi.mock('../../../desktop/wrappers/loadWorksheetXml.js');
+vi.mock('../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof loadWorksheetXmlModule>()),
+  loadWorksheetXml: vi.fn(),
+}));
 vi.mock('fs');
 
 describe('applyWorksheetTool', () => {
@@ -302,6 +305,29 @@ describe('applyWorksheetTool', () => {
 
     expect(existsSync).toHaveBeenCalledWith(mockFilePath);
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
+  });
+
+  it('resolves a worksheet id against the fragment simple-id for cached-file apply', async () => {
+    const mockXml =
+      "<worksheet name='Sales Detail'><simple-id uuid='{SHEET-GUID-9}' /><table></table></worksheet>";
+    const mockLoadWorksheetXml = vi
+      .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockResolvedValue(Ok({ readbackWarnings: [] }));
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: '{SHEET-GUID-9}',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(resultObj.message).toContain('Successfully applied worksheet update for "Sales Detail"');
+    expect(mockLoadWorksheetXml).toHaveBeenCalledWith(
+      expect.objectContaining({ worksheetName: 'Sales Detail' }),
+    );
   });
 
   it('reports skipped readback honestly for inline worksheet XML apply', async () => {

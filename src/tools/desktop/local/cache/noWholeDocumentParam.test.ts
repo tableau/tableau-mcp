@@ -19,7 +19,10 @@ import { getWriteCachedXmlTool } from './writeCachedXml.js';
 
 vi.mock('fs');
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
-vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js');
+vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof loadWorksheetXmlCmd>()),
+  loadWorksheetXml: vi.fn(),
+}));
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 

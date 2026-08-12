@@ -27,7 +27,10 @@ import { getRemoveFieldTool } from './removeField.js';
 vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
-vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js');
+vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof loadWorksheetXmlModule>()),
+  loadWorksheetXml: vi.fn(),
+}));
 vi.mock('../../../../desktop/externalApi/discovery.js');
 vi.mock('fs');
 
