@@ -6,8 +6,12 @@ import {
 } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
-import { extractDashboardXml, listWorkbookDashboards } from '../metadata/dashboards.js';
-import { extractSheetXml, listSheets } from '../metadata/sheets.js';
+import {
+  extractDashboardXml,
+  listDashboardRefs,
+  resolveDashboardRef,
+} from '../metadata/dashboards.js';
+import { extractSheetXml, listWorksheetRefs, resolveWorksheetRef } from '../metadata/sheets.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 
 export type WorkbookReadMode = 'external-api';
@@ -132,16 +136,16 @@ export class WorkbookReadGateway {
       return workbookResult;
     }
 
-    let names: Array<string>;
+    let worksheets: Array<SheetListItem>;
     try {
-      names = listSheets(workbookResult.value);
+      worksheets = listWorksheetRefs(workbookResult.value);
     } catch (error) {
       return Err({ type: 'invalid-response', error });
     }
 
     return Ok({
-      count: names.length,
-      worksheets: names.map((name) => ({ name })),
+      count: worksheets.length,
+      worksheets,
     });
   }
 
@@ -151,16 +155,16 @@ export class WorkbookReadGateway {
       return workbookResult;
     }
 
-    let names: Array<string>;
+    let dashboards: Array<SheetListItem>;
     try {
-      names = listWorkbookDashboards(workbookResult.value);
+      dashboards = listDashboardRefs(workbookResult.value);
     } catch (error) {
       return Err({ type: 'invalid-response', error });
     }
 
     return Ok({
-      count: names.length,
-      dashboards: names.map((name) => ({ name })),
+      count: dashboards.length,
+      dashboards,
     });
   }
 
@@ -227,7 +231,7 @@ export class WorkbookReadGateway {
   }
 
   private async getWorksheetXmlViaWorkbookDocument(
-    worksheetName: string,
+    worksheetRef: string,
   ): Promise<GetWorksheetXmlResult> {
     const workbookResult = await getWorkbookXml({ executor: this.executor, signal: this.signal });
     if (workbookResult.isErr()) {
@@ -236,18 +240,19 @@ export class WorkbookReadGateway {
 
     let worksheetXml: string | null;
     try {
-      worksheetXml = extractSheetXml(workbookResult.value, worksheetName);
+      const resolved = resolveWorksheetRef(workbookResult.value, worksheetRef);
+      worksheetXml = resolved ? extractSheetXml(workbookResult.value, resolved.name) : null;
     } catch (error) {
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }
 
     if (worksheetXml === null) {
-      const didYouMean = await this.worksheetNameSuggestions(worksheetName);
+      const didYouMean = await this.worksheetNameSuggestions(worksheetRef);
       return Err({
         type: 'get-worksheet-xml-error',
         error: {
           type: 'no-worksheet-found',
-          message: `No worksheet found for ${worksheetName}.${didYouMean}`,
+          message: `No worksheet found for ${worksheetRef}.${didYouMean}`,
         },
       });
     }
@@ -256,7 +261,7 @@ export class WorkbookReadGateway {
   }
 
   private async getDashboardXmlViaWorkbookDocument(
-    dashboardName: string,
+    dashboardRef: string,
   ): Promise<GetDashboardXmlResult> {
     const workbookResult = await getWorkbookXml({ executor: this.executor, signal: this.signal });
     if (workbookResult.isErr()) {
@@ -265,7 +270,8 @@ export class WorkbookReadGateway {
 
     let dashboardXml: string | null;
     try {
-      dashboardXml = extractDashboardXml(workbookResult.value, dashboardName);
+      const resolved = resolveDashboardRef(workbookResult.value, dashboardRef);
+      dashboardXml = resolved ? extractDashboardXml(workbookResult.value, resolved.name) : null;
     } catch (error) {
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }
@@ -275,7 +281,7 @@ export class WorkbookReadGateway {
         type: 'get-dashboard-xml-error',
         error: {
           type: 'no-dashboard-found',
-          message: `No dashboard found for "${dashboardName}".`,
+          message: `No dashboard found for "${dashboardRef}".`,
         },
       });
     }

@@ -2,7 +2,9 @@ import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import {
   deleteDashboard,
   extractDashboardXml,
+  listDashboardRefs,
   listWorkbookDashboards,
+  resolveDashboardRef,
   upsertDashboardIntoWorkbook,
 } from './dashboards.js';
 
@@ -123,6 +125,39 @@ describe('upsertDashboardIntoWorkbook', () => {
 describe('listWorkbookDashboards', () => {
   it('lists dashboard names', () => {
     expect(listWorkbookDashboards(WORKBOOK_WITH_USER_NAMESPACE)).toEqual(['Overview']);
+  });
+});
+
+describe('listDashboardRefs / resolveDashboardRef', () => {
+  const WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <dashboards>
+    <dashboard name='Overview'><zones /><simple-id uuid='{DB-0001}' /></dashboard>
+    <dashboard name='P&amp;L'><zones /><simple-id uuid='{DB-0002}' /></dashboard>
+  </dashboards>
+</workbook>`;
+
+  it('pairs each dashboard id with its name', () => {
+    expect(listDashboardRefs(WORKBOOK)).toEqual([
+      { id: '{DB-0001}', name: 'Overview' },
+      { id: '{DB-0002}', name: 'P&L' },
+    ]);
+  });
+
+  it('omits the id when the dashboard carries no simple-id', () => {
+    expect(listDashboardRefs(WORKBOOK_WITH_USER_NAMESPACE)).toEqual([{ name: 'Overview' }]);
+  });
+
+  it('resolves by simple-id first (id identifies across a rename)', () => {
+    expect(resolveDashboardRef(WORKBOOK, '{DB-0002}')).toEqual({ id: '{DB-0002}', name: 'P&L' });
+  });
+
+  it('falls back to the display name, decoding XML entities', () => {
+    expect(resolveDashboardRef(WORKBOOK, 'P&L')).toEqual({ id: '{DB-0002}', name: 'P&L' });
+  });
+
+  it('returns null when neither an id nor a name matches', () => {
+    expect(resolveDashboardRef(WORKBOOK, 'No Such Dashboard')).toBeNull();
   });
 });
 
