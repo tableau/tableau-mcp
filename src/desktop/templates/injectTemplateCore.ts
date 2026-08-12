@@ -28,7 +28,10 @@ import {
   rewriteFieldReferencesWithDiagnostics,
   type TemplateSlotReference,
 } from './fieldReferenceRewriter.js';
-import { spliceBoundGroupDefinitions } from './groupDefinitionSplice.js';
+import {
+  spliceBoundCalcDefinitions,
+  spliceBoundGroupDefinitions,
+} from './groupDefinitionSplice.js';
 import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
 import { type OptionalFieldPruneSpec, pruneUnboundOptionalFields } from './optionalFieldPrune.js';
 import { spliceWaterfallAnchorFilter } from './waterfallAnchorFilter.js';
@@ -366,6 +369,7 @@ export function buildInjectedWorkbookXml({
     processed = rewrite.xml;
     rewriteWarnings.push(...rewrite.droppedOptionalElements);
     processed = spliceBoundGroupDefinitions(processed, fieldMapping, workbookXml);
+    processed = spliceBoundCalcDefinitions(processed, fieldMapping, workbookXml);
     processed = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
   }
 

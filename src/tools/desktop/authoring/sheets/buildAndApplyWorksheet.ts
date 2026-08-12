@@ -21,6 +21,7 @@ import { listAvailableFields } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { spliceBoundFacet } from '../../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferencesWithDiagnostics } from '../../../../desktop/templates/fieldReferenceRewriter.js';
+import { spliceBoundCalcDefinitions } from '../../../../desktop/templates/groupDefinitionSplice.js';
 import { ensureUserNamespace } from '../../../../desktop/templates/injectTemplateCore.js';
 import { pruneUnboundOptionalFields } from '../../../../desktop/templates/optionalFieldPrune.js';
 import { getRuntimeTemplateSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
@@ -423,6 +424,7 @@ export const getBuildAndApplyWorksheetTool = (
           );
           templateXml = rewrite.xml;
           warnings.push(...rewrite.droppedOptionalElements);
+          templateXml = spliceBoundCalcDefinitions(templateXml, fieldMapping, workbookXml);
           // Extract worksheet element
           const worksheetMatch = templateXml.match(/<worksheet(?!s)[^>]*>[\s\S]*?<\/worksheet>/);
           if (!worksheetMatch) {

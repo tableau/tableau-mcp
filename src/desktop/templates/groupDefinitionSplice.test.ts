@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { spliceBoundGroupDefinitions } from './groupDefinitionSplice.js';
+import {
+  spliceBoundCalcDefinitions,
+  spliceBoundGroupDefinitions,
+} from './groupDefinitionSplice.js';
 
 /**
  * A TARGET workbook whose `Sample - Superstore` datasource dictionary defines
@@ -133,6 +136,115 @@ describe('spliceBoundGroupDefinitions', () => {
     // If the sheet somehow already has the body, the hollow regex must not match, so no change.
     const alreadyBodied = spliceBoundGroupDefinitions(HOLLOW_SHEET, GROUP_MAPPING, TARGET_WORKBOOK);
     const twice = spliceBoundGroupDefinitions(alreadyBodied, GROUP_MAPPING, TARGET_WORKBOOK);
+    expect(twice).toBe(alreadyBodied);
+  });
+});
+
+const CALC_WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <datasources>
+    <datasource name='Parameters' hasconnection='false'>
+      <column name='[Parameters].[P1]' datatype='integer' />
+    </datasource>
+    <datasource name='federated.xyz' caption='Superstore'>
+      <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+      <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+      <column datatype='real' name='[Profit Ratio]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' />
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+const HOLLOW_CALC_SHEET = `<worksheet name='chart'>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Superstore' name='[federated.xyz]' />
+      </datasources>
+      <datasource-dependencies datasource='[federated.xyz]'>
+        <column datatype='real' name='[Profit Ratio]' role='measure' type='quantitative' />
+        <column-instance column='[Profit Ratio]' derivation='Sum' name='[sum:Profit Ratio:qk]' type='quantitative' />
+      </datasource-dependencies>
+    </view>
+  </table>
+</worksheet>`;
+
+const CALC_MAPPING = {
+  Measure: '[federated.xyz].[sum:Profit Ratio:qk]',
+};
+
+describe('spliceBoundCalcDefinitions', () => {
+  it('fills a hollow bound calc column with the tableau formula body from the target', () => {
+    const out = spliceBoundCalcDefinitions(HOLLOW_CALC_SHEET, CALC_MAPPING, CALC_WORKBOOK);
+
+    expect(out).toMatch(/class=["']tableau["']/);
+    expect(out).toMatch(/formula=["']SUM\(\[Profit\]\)\/SUM\(\[Sales\]\)["']/);
+    expect(out).not.toMatch(/name=["']\[Profit Ratio\]["'][^>]*\/>/);
+    expect(out).not.toMatch(/name=["']\[Profit Ratio\]["'][^>]*><\/column>/);
+  });
+
+  it('materializes formula-referenced dep columns alongside the calc', () => {
+    const out = spliceBoundCalcDefinitions(HOLLOW_CALC_SHEET, CALC_MAPPING, CALC_WORKBOOK);
+
+    expect(out).toMatch(/<column[^>]*\bname=["']\[Sales\]["']/);
+    expect(out).toMatch(/<column[^>]*\bname=["']\[Profit\]["']/);
+  });
+
+  it('does not duplicate a dep column the sheet already declares', () => {
+    const sheetWithSales = HOLLOW_CALC_SHEET.replace(
+      "<column datatype='real' name='[Profit Ratio]'",
+      "<column datatype='real' name='[Sales]' role='measure' type='quantitative' />\n" +
+        "        <column datatype='real' name='[Profit Ratio]'",
+    );
+    const out = spliceBoundCalcDefinitions(sheetWithSales, CALC_MAPPING, CALC_WORKBOOK);
+    const salesCols = out.match(/<column[^>]*\bname=["']\[Sales\]["']/g) ?? [];
+    expect(salesCols.length).toBe(1);
+  });
+
+  it('does not duplicate the calc when two slots map to the same field', () => {
+    const dupeMapping = {
+      Measure1: '[federated.xyz].[sum:Profit Ratio:qk]',
+      Measure2: '[federated.xyz].[avg:Profit Ratio:qk]',
+    };
+    const out = spliceBoundCalcDefinitions(HOLLOW_CALC_SHEET, dupeMapping, CALC_WORKBOOK);
+    const ratioCols = out.match(/<column[^>]*\bname=["']\[Profit Ratio\]["']/g) ?? [];
+    expect(ratioCols.length).toBe(1);
+  });
+
+  it('is an identity no-op when no bound field is a user calc', () => {
+    const nonCalcMapping = { Level: '[federated.xyz].[sum:Sales:qk]' };
+    expect(spliceBoundCalcDefinitions(HOLLOW_CALC_SHEET, nonCalcMapping, CALC_WORKBOOK)).toBe(
+      HOLLOW_CALC_SHEET,
+    );
+  });
+
+  it('is an identity no-op when the target defines no user calcs', () => {
+    const noCalcWorkbook = CALC_WORKBOOK.replace(
+      /<column datatype='real' name='\[Profit Ratio\]'[\s\S]*?<\/column>/,
+      "<column datatype='real' name='[Units]' role='measure' type='quantitative' />",
+    );
+    expect(spliceBoundCalcDefinitions(HOLLOW_CALC_SHEET, CALC_MAPPING, noCalcWorkbook)).toBe(
+      HOLLOW_CALC_SHEET,
+    );
+  });
+
+  it('is an identity no-op with an empty field mapping', () => {
+    expect(spliceBoundCalcDefinitions(HOLLOW_CALC_SHEET, {}, CALC_WORKBOOK)).toBe(
+      HOLLOW_CALC_SHEET,
+    );
+    expect(spliceBoundCalcDefinitions(HOLLOW_CALC_SHEET, undefined, CALC_WORKBOOK)).toBe(
+      HOLLOW_CALC_SHEET,
+    );
+  });
+
+  it('leaves a calc column that already carries a body untouched', () => {
+    const alreadyBodied = spliceBoundCalcDefinitions(
+      HOLLOW_CALC_SHEET,
+      CALC_MAPPING,
+      CALC_WORKBOOK,
+    );
+    const twice = spliceBoundCalcDefinitions(alreadyBodied, CALC_MAPPING, CALC_WORKBOOK);
     expect(twice).toBe(alreadyBodied);
   });
 });
