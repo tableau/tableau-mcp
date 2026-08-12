@@ -205,8 +205,13 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-10: apply-worksheet gained the direct templatePlan mode so an
 // explicit single-view request can build+apply in one call without widening the tool set.
 // The combined surface moves 30_627 -> 31_485; full moves 50_323 -> 51_101.
+// Re-pinned 2026-08-11: added open-file, save-workbook, add-worksheet, add-dashboard, and
+// add-storyboard over the External Client API 0.2.6 routes, with open-file/save-workbook
+// descriptions carrying the new-window/session-binding and blocking-Save-As caveats the 0.2.6
+// descriptions spell out. All five are full-only, so the served dynamic-authoring surface is
+// unchanged and only the full surface moves 51_101 -> 54_197.
 const DYNAMIC_AUTHORING_SURFACE_BUDGET = 31_485;
-const FULL_TOOL_SURFACE_BUDGET = 51_101;
+const FULL_TOOL_SURFACE_BUDGET = 54_197;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {

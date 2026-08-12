@@ -4,26 +4,31 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * live `/openapi.json` (OpenAPI 3.1, `info.version` 0.1.0, captured 2026-07-20)
- * plus live probes against the running 0.1.0 build. Envelope fields the
- * spec marks required are required here; everything else stays permissive
- * (`.passthrough()` / optional) because the spec is read-complete but write-thin.
+ * live `/openapi.json` (OpenAPI 3.1, `info.version` 0.2.6, captured 2026-08-11).
+ * Envelope fields the spec marks required are required here; everything else stays
+ * permissive (`.passthrough()` / optional) because the spec is read-complete but
+ * write-thin, and an older Desktop build may omit a field a newer spec marks required.
  */
 
 /** Route paths served by the running Desktop loopback host. */
 export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
+  appOpenFile: '/v0/app:openFile',
   root: '/v0/',
   workbook: '/v0/workbook',
   workbookDashboards: '/v0/workbook/dashboards',
+  workbookDashboardsNew: '/v0/workbook/dashboards:new',
   workbookDatasources: '/v0/workbook/datasources',
   workbookDocument: '/v0/workbook/document',
   workbookDocumentValidate: '/v0/workbook/document:validate',
   workbookStoryboards: '/v0/workbook/storyboards',
+  workbookStoryboardsNew: '/v0/workbook/storyboards:new',
   workbookWorksheets: '/v0/workbook/worksheets',
+  workbookWorksheetsNew: '/v0/workbook/worksheets:new',
   workbookUndo: '/v0/workbook:undo',
   workbookRedo: '/v0/workbook:redo',
+  workbookSave: '/v0/workbook:save',
   workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
   dashboardDocument: '/v0/workbook/dashboards/{id}/document',
@@ -96,6 +101,19 @@ export type WorksheetSort = {
   clearSort?: boolean;
 };
 
+/** Body of `POST /v0/app:openFile`. `filePath` is the absolute path of the file to open. */
+export type OpenFileRequest = {
+  filePath: string;
+};
+
+/**
+ * Body of `POST /v0/workbook:save`. Omit `filePath` to save in place at the workbook's
+ * current path; supply one (ending in .twb/.twbx) to save a copy there.
+ */
+export type SaveWorkbookRequest = {
+  filePath?: string;
+};
+
 /** Query accepted by {@link worksheetImageRoute} and {@link dashboardImageRoute}. */
 export type ImageExportQuery = {
   /**
@@ -165,6 +183,23 @@ const SHEET_ROUTE_PREFIX: Record<SheetKind, string> = {
 
 export function sheetActionRoute(sheet: SheetRef, action: 'rename' | 'delete'): string {
   return `${SHEET_ROUTE_PREFIX[sheet.kind]}/${encodeURIComponent(sheet.id)}:${action}`;
+}
+
+// `index` is 0-based; omit it (or pass an out-of-range/negative value) to append the new tab at the end.
+function newSheetIndexSuffix(index?: number): string {
+  return index === undefined ? '' : `?index=${encodeURIComponent(String(index))}`;
+}
+
+export function workbookWorksheetsNewRoute(index?: number): string {
+  return `${EXTERNAL_API_ROUTES.workbookWorksheetsNew}${newSheetIndexSuffix(index)}`;
+}
+
+export function workbookDashboardsNewRoute(index?: number): string {
+  return `${EXTERNAL_API_ROUTES.workbookDashboardsNew}${newSheetIndexSuffix(index)}`;
+}
+
+export function workbookStoryboardsNewRoute(index?: number): string {
+  return `${EXTERNAL_API_ROUTES.workbookStoryboardsNew}${newSheetIndexSuffix(index)}`;
 }
 
 export function worksheetSortRoute(worksheetId: string): string {
@@ -305,7 +340,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.1.0). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.6). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -320,12 +355,15 @@ export const PROBLEM_CODES = [
   'not-found',
   'sheet-not-found',
   'logical-table-not-found',
+  'operation-not-found',
   'operation-pending',
   'method-not-allowed',
   'not-implemented',
   'command-not-found',
   'invalid-command-parameter',
   'invalid-query-parameter',
+  'unsupported-file-type',
+  'file-not-found',
   'operation-failed',
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];

@@ -801,6 +801,54 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.appOpenFile) {
+      let parsed: { filePath?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (typeof parsed.filePath !== 'string' || parsed.filePath.length === 0) {
+        sendProblem(res, 400, 'invalid-request-body', 'openFile requires a string `filePath`.');
+        return;
+      }
+      sendOperation(res, 'open-workbook-file');
+      return;
+    }
+
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookSave) {
+      let parsed: { filePath?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (parsed.filePath !== undefined && typeof parsed.filePath !== 'string') {
+        sendProblem(res, 400, 'invalid-request-body', 'save `filePath` must be a string.');
+        return;
+      }
+      sendOperation(res, 'save-workbook-file');
+      return;
+    }
+
+    if (
+      method === 'POST' &&
+      (path === EXTERNAL_API_ROUTES.workbookWorksheetsNew ||
+        path === EXTERNAL_API_ROUTES.workbookDashboardsNew ||
+        path === EXTERNAL_API_ROUTES.workbookStoryboardsNew)
+    ) {
+      const command =
+        path === EXTERNAL_API_ROUTES.workbookWorksheetsNew
+          ? 'new-worksheet'
+          : path === EXTERNAL_API_ROUTES.workbookDashboardsNew
+            ? 'new-dashboard'
+            : 'new-storyboard';
+      sendOperation(res, command);
+      return;
+    }
+
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',
