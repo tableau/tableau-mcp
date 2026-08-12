@@ -59,6 +59,7 @@ export type LoadWorksheetXmlError =
 
 /** Non-fatal readback warnings surfaced on a successful apply (sort drops/changes). */
 export interface LoadWorksheetXmlOk {
+  appliedName?: string;
   readbackWarnings: ReadbackFinding[];
   readbackVerification?: ReadbackVerificationResult;
   validationWarnings?: ValidationIssue[];
@@ -450,6 +451,7 @@ export async function loadWorksheetXml({
       );
       readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
       return Ok({
+        appliedName: canonicalName,
         readbackWarnings: verification.findings,
         readbackVerification: publicReadbackVerificationResult(verification),
         validationWarnings: [...validation.issues, ...workbookValidation.issues],
@@ -474,13 +476,18 @@ export async function loadWorksheetXml({
       if (outcome.isErr()) {
         return Err({ type: 'execute-command-error', error: outcome.error });
       }
-      if (outcome.value !== 'applied') {
+      if (typeof outcome.value === 'string') {
         return Err({
           type: 'load-worksheet-xml-error',
           error: { type: 'sheet-absent', message: worksheetAbsentMessage(canonicalName) },
         });
       }
-      const verification = await verifyPostApplyWorksheetReadback(targetRef, xml, executor, signal);
+      const verification = await verifyPostApplyWorksheetReadback(
+        outcome.value.id,
+        outcome.value.fragmentXml,
+        executor,
+        signal,
+      );
       readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
       const outcomeResult = readbackOutcome(verification);
       if (outcomeResult.isErr()) {
@@ -488,7 +495,11 @@ export async function loadWorksheetXml({
       }
       // Preflight warnings ride along so apply responses can compute the host
       // verification receipt (W-23447506) without re-running validation.
-      return Ok({ ...outcomeResult.value, validationWarnings: validation.issues });
+      return Ok({
+        ...outcomeResult.value,
+        appliedName: outcome.value.name,
+        validationWarnings: validation.issues,
+      });
     });
   }
 
@@ -505,7 +516,11 @@ export async function loadWorksheetXml({
   }
   // Preflight warnings ride along so apply responses can compute the host
   // verification receipt (W-23447506) without re-running validation.
-  return Ok({ ...result.value, validationWarnings: validation.issues });
+  return Ok({
+    ...result.value,
+    appliedName: canonicalName,
+    validationWarnings: validation.issues,
+  });
 }
 
 async function loadWorksheetXmlViaExternalApi({

@@ -174,6 +174,12 @@ export function listWorkbookDashboards(workbookXml: string): string[] {
   return dashboards.map((db) => db['@_name']).filter((name): name is string => !!name);
 }
 
+export function dashboardFragmentSimpleId(dashboardFragmentXml: string): string | null {
+  const parsed = parseXML(dashboardFragmentXml);
+  const dashboard = normalizeArray(parsed.dashboard as ParsedDashboard | undefined)[0];
+  return dashboard?.['simple-id']?.['@_uuid']?.trim() || null;
+}
+
 // Returns a standalone `<dashboard>` fragment (not a whole workbook), or null if absent.
 export function extractDashboardXml(workbookXml: string, dashboardName: string): string | null {
   const workbook = parseXML(workbookXml);

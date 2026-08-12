@@ -504,9 +504,17 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     });
 
     expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.appliedName).toBe('Renamed Live');
+    }
     // Had it targeted by the fragment name ('Sheet 1' ≠ the live 'Renamed Live'), the route would
-    // have resolved to sheet-absent. The id match proves the apply is keyed off the simple-id.
-    expect(applyWorksheetDocument).toHaveBeenCalledWith(sheetId, fragment, mockSignal);
+    // have resolved to sheet-absent. Desktop also requires the posted fragment's root name to match
+    // the current live name even when the route is addressed by id.
+    expect(applyWorksheetDocument).toHaveBeenCalledWith(
+      sheetId,
+      expect.stringContaining('name="Renamed Live"'),
+      mockSignal,
+    );
   });
 
   it('should return execute-command-error when the workbook fetch fails', async () => {

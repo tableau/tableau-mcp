@@ -4,6 +4,9 @@ import { log } from '../../logging/logger.js';
 import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
+import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
+import type { ParsedDashboard, ParsedWorksheet } from '../metadata/types.js';
+import { xmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
 
 export type PerSheetKind = 'worksheet' | 'dashboard' | 'storyboard';
@@ -16,7 +19,10 @@ export type PerSheetKind = 'worksheet' | 'dashboard' | 'storyboard';
  * resolve to a live sheet (`sheet-absent` — a net-new sheet, or a pre-existing ambiguity the
  * whole-workbook upsert resolves by first-match).
  */
-export type PerSheetApplyOutcome = 'applied' | 'sheet-absent' | 'route-missing';
+export type PerSheetApplyOutcome =
+  | { status: 'applied'; id: string; name: string; fragmentXml: string }
+  | 'sheet-absent'
+  | 'route-missing';
 
 const ITEM_LABEL: Record<PerSheetKind, string> = {
   worksheet: 'Worksheet',
@@ -65,12 +71,18 @@ export async function tryApplyViaPerSheetRoute({
     return Ok('sheet-absent');
   }
 
-  // POST the sheet fragment as-is: Tableau Desktop wraps it into the live workbook on the per-sheet
-  // `/document` route, so the MCP does not build a workbook envelope.
+  const retitledFragment = retitleFragment(kind, fragmentXml, resolved.value.name);
+  if (retitledFragment.isErr()) {
+    return retitledFragment;
+  }
+
+  // The route is addressed by stable id, but Desktop still requires the fragment's root name to
+  // match the sheet's current display name. Reconcile a stale cached name before POST; otherwise a
+  // rename between read and apply opens a blocking "Requested worksheet(s) not found" dialog.
   const applyResult = await applyDocumentForKind(
     kind,
     resolved.value.id,
-    fragmentXml,
+    retitledFragment.value,
     client,
     signal,
   );
@@ -91,9 +103,48 @@ export async function tryApplyViaPerSheetRoute({
 
   // The POST moves the view whether we ask or not, so state where it belongs. Never fails the
   // apply that already landed.
-  await dispatchApplyFocus({ focus, postedXml: fragmentXml, executor, signal });
+  const resolvedFocus: ApplyFocus =
+    focus.navigate === 'artifact' ? { ...focus, sheetName: resolved.value.name } : focus;
+  await dispatchApplyFocus({
+    focus: resolvedFocus,
+    postedXml: retitledFragment.value,
+    executor,
+    signal,
+  });
 
-  return Ok('applied');
+  return Ok({
+    status: 'applied',
+    id: resolved.value.id,
+    name: resolved.value.name,
+    fragmentXml: retitledFragment.value,
+  });
+}
+
+function retitleFragment(
+  kind: PerSheetKind,
+  fragmentXml: string,
+  currentName: string,
+): Result<string, ExecuteCommandError> {
+  try {
+    const parsed = parseXML(fragmentXml);
+    const fragment =
+      kind === 'worksheet'
+        ? normalizeArray(parsed.worksheet as ParsedWorksheet | undefined)[0]
+        : normalizeArray(parsed.dashboard as ParsedDashboard | undefined)[0];
+    if (!fragment?.['@_name']) {
+      return Err({
+        type: 'invalid-response',
+        error: new Error(`The ${kind} fragment has no root name.`),
+      });
+    }
+    if (xmlNamesEqual(fragment['@_name'], currentName)) {
+      return Ok(fragmentXml);
+    }
+    fragment['@_name'] = currentName;
+    return Ok(serializeXML(parsed));
+  } catch (error) {
+    return Err({ type: 'invalid-response', error });
+  }
 }
 
 async function listSheetsOfKind(

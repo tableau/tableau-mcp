@@ -95,7 +95,12 @@ describe('tryApplyViaPerSheetRoute', () => {
 
       expect(result.isOk()).toBe(true);
       if (result.isOk()) {
-        expect(result.value).toBe('applied');
+        expect(result.value).toEqual({
+          status: 'applied',
+          id,
+          name: sheetName,
+          fragmentXml,
+        });
       }
       // The route resolves by id, and the posted body is the sheet fragment as-is (Tableau Desktop
       // wraps it into the live workbook server-side — the MCP does not build a <workbook> envelope).
@@ -104,6 +109,69 @@ describe('tryApplyViaPerSheetRoute', () => {
       expect(postedId).toBe(id);
       expect(postedXml).toBe(fragmentXml);
       expect(postedXml).not.toContain('<workbook>');
+    },
+  );
+
+  it.each([
+    {
+      ...FIXTURES[0],
+      sheetName: 'sheet-1',
+      fragmentXml:
+        "<worksheet name='Old worksheet'><table><rows /></table><simple-id uuid='sheet-1' /></worksheet>",
+      currentName: 'Renamed worksheet',
+      listValue: { worksheets: [{ id: 'sheet-1', name: 'Renamed worksheet' }] },
+    },
+    {
+      ...FIXTURES[1],
+      sheetName: 'dash-1',
+      fragmentXml:
+        "<dashboard name='Old dashboard'><zones /><simple-id uuid='dash-1' /></dashboard>",
+      currentName: 'Renamed dashboard',
+      listValue: { dashboards: [{ id: 'dash-1', name: 'Renamed dashboard' }] },
+    },
+    {
+      ...FIXTURES[2],
+      sheetName: 'story-1',
+      fragmentXml:
+        "<dashboard name='Old story' type='storyboard'><zones /><simple-id uuid='story-1' /></dashboard>",
+      currentName: 'Renamed story',
+      listValue: { storyboards: [{ id: 'story-1', name: 'Renamed story' }] },
+    },
+  ])(
+    'retitles a stale $kind fragment to the current live name before posting by id',
+    async ({
+      kind,
+      sheetName,
+      fragmentXml,
+      listMethod,
+      listValue,
+      applyMethod,
+      id,
+      currentName,
+    }) => {
+      const apply = vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+      const executor = makeExecutorMock({
+        [listMethod]: vi.fn().mockResolvedValue(Ok(listValue)),
+        [applyMethod]: apply,
+      });
+
+      const result = await tryApplyViaPerSheetRoute({
+        kind,
+        sheetName,
+        fragmentXml,
+        focus: NO_FOCUS,
+        executor,
+        signal: mockSignal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(apply).toHaveBeenCalledTimes(1);
+      const [postedId, postedXml] = apply.mock.calls[0];
+      expect(postedId).toBe(id);
+      expect(postedXml).toContain(`name="${currentName}"`);
+      expect(postedXml).toContain(`uuid="${id}"`);
     },
   );
 

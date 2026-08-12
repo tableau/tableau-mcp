@@ -357,6 +357,9 @@ export const getApplyWorksheetTool = (
             });
           }
           const hostVerification = receiptInput ? formatWorksheetPromiseCheck(receiptInput) : '';
+          const appliedWorksheetName = result.isOk()
+            ? (result.value.appliedName ?? canonicalWorksheetName)
+            : canonicalWorksheetName;
 
           // The structured receipt is derived from the same readback outcome the text
           // reports: when the readback ran its status is an observation; when it was
@@ -366,12 +369,12 @@ export const getApplyWorksheetTool = (
           return new Ok(
             withNextAction(
               {
-                message: `Successfully applied worksheet update for "${canonicalWorksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
+                message: `Successfully applied worksheet update for "${appliedWorksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
               },
               doneNextAction(
                 receipt({
                   did: [
-                    `Desktop accepted the worksheet XML apply for "${canonicalWorksheetName}"`,
+                    `Desktop accepted the worksheet XML apply for "${appliedWorksheetName}"`,
                     `preflight validation returned ${receiptInput?.validationWarnings.length ?? 0} warning(s)`,
                     ...(readbackRan
                       ? [

@@ -312,7 +312,7 @@ describe('applyWorksheetTool', () => {
       "<worksheet name='Sales Detail'><simple-id uuid='{SHEET-GUID-9}' /><table></table></worksheet>";
     const mockLoadWorksheetXml = vi
       .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
-      .mockResolvedValue(Ok({ readbackWarnings: [] }));
+      .mockResolvedValue(Ok({ appliedName: 'Renamed Live', readbackWarnings: [] }));
 
     const result = await getToolResult({
       session: '12345',
@@ -324,7 +324,7 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(resultObj.message).toContain('Successfully applied worksheet update for "Sales Detail"');
+    expect(resultObj.message).toContain('Successfully applied worksheet update for "Renamed Live"');
     expect(mockLoadWorksheetXml).toHaveBeenCalledWith(
       expect.objectContaining({ worksheetName: 'Sales Detail' }),
     );
