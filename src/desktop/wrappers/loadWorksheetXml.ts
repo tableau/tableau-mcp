@@ -8,6 +8,7 @@ import {
   extractSheetXml,
   upsertSheetIntoWorkbook,
   upsertWorksheetAndWindowIntoWorkbook,
+  worksheetFragmentSimpleId,
 } from '../metadata/sheets.js';
 import {
   compareTargetWorksheetState,
@@ -233,12 +234,12 @@ function readbackOutcome(
 }
 
 /**
- * Canonical-name gate. The `<worksheet name>` in the authored XML is the identity Tableau
- * applies, so require the caller's `worksheetName` to agree with it before we touch Desktop.
- * Names are compared after trim and Unicode NFC normalization (case-sensitive) so visually
- * identical NFD/NFC spellings do not false-mismatch. Returns the validated canonical name — the
- * name exactly as authored in the XML (trimmed), which is what Tableau stores when it applies the
- * raw XML — for the load and readback, and so upsertSheetIntoWorkbook's own name check still matches.
+ * Canonical-name gate. Require the caller's `worksheetName` to identify the authored fragment —
+ * matching either its stable id (the `<simple-id uuid>`, the External Client API worksheet id) or
+ * its `<worksheet name>` — before we touch Desktop. Names are compared after trim and Unicode NFC
+ * normalization (case-sensitive) so visually identical NFD/NFC spellings do not false-mismatch.
+ * Returns the fragment's name exactly as authored (trimmed) — the identity Tableau stores when it
+ * applies the raw XML, and what upsertSheetIntoWorkbook's own name check matches.
  *
  * Only a single top-level `<worksheet>` fragment is a legal payload here (the same fragment
  * get-worksheet-xml returns and upsertSheetIntoWorkbook requires). A `<workbook>`-wrapped document has
@@ -249,13 +250,15 @@ export function resolveCanonicalWorksheetName(
   worksheetName: string,
   xml: string,
 ): Result<string, Extract<LoadWorksheetXmlError, { type: 'name-mismatch' }>> {
-  const callerName = worksheetName.trim();
+  const callerRef = worksheetName.trim();
   let xmlName = '';
+  let xmlId = '';
   let isWorkbookDocument = false;
   try {
     const parsed = parseXML(xml);
     const worksheet = normalizeArray(parsed.worksheet as ParsedWorksheet | undefined)[0];
     xmlName = worksheet?.['@_name']?.trim() ?? '';
+    xmlId = worksheet?.['simple-id']?.['@_uuid']?.trim() ?? '';
     isWorkbookDocument = !xmlName && Boolean(parsed.workbook);
   } catch {
     xmlName = '';
@@ -268,22 +271,23 @@ export function resolveCanonicalWorksheetName(
       type: 'name-mismatch',
       message: isWorkbookDocument
         ? 'apply-worksheet expects a single <worksheet name="..."> fragment, but the cached file ' +
-          `holds a whole <workbook> document. FIX: read-cached-xml with worksheet="${callerName}" to pull ` +
+          `holds a whole <workbook> document. FIX: read-cached-xml with worksheet="${callerRef}" to pull ` +
           'just that element, write-cached-xml with the same selector to splice your edit back, then ' +
           'apply-worksheet with that file.'
         : 'apply-worksheet could not find a top-level <worksheet name="..."> element in the cached file. ' +
-          `FIX: get-worksheet-xml for "${callerName}" mints a file holding exactly that fragment; edit it ` +
+          `FIX: get-worksheet-xml for "${callerRef}" mints a file holding exactly that fragment; edit it ` +
           'with read-cached-xml/write-cached-xml and pass that path to apply-worksheet.',
     });
   }
 
-  if (!xmlNamesEqual(xmlName, callerName)) {
+  if (!xmlNamesEqual(xmlName, callerRef) && !(xmlId && xmlId === callerRef)) {
     return Err({
       type: 'name-mismatch',
       message:
-        `worksheet_name "${worksheetName}" does not match the <worksheet name> in the XML ("${xmlName}"). ` +
-        `FIX: Retry with worksheet_name set to the XML's name "${xmlName}" — or update the <worksheet name> ` +
-        `attribute in the XML to "${worksheetName}" if the caller name is intended.`,
+        `worksheet_name "${worksheetName}" does not match the <worksheet name> in the XML ("${xmlName}")` +
+        `${xmlId ? ` or its id ("${xmlId}")` : ''}. FIX: Retry with worksheet_name set to the XML's name ` +
+        `"${xmlName}"${xmlId ? ` or id "${xmlId}"` : ''} — or update the <worksheet name> attribute in the ` +
+        `XML to "${worksheetName}" if the caller name is intended.`,
     });
   }
 
@@ -455,9 +459,13 @@ export async function loadWorksheetXml({
 
   if (requireExistingSheet) {
     return withApplyLock(async (): Promise<LoadWorksheetXmlResult> => {
+      // Target the live sheet by the fragment's own simple-id (its External Client API worksheet
+      // id) so the apply lands on the right sheet even if it was renamed after the fragment was
+      // read; fall back to the name only when the fragment carries no id.
+      const targetRef = worksheetFragmentSimpleId(xml) ?? canonicalName;
       const outcome = await tryApplyViaPerSheetRoute({
         kind: 'worksheet',
-        sheetName: canonicalName,
+        sheetName: targetRef,
         fragmentXml: xml,
         focus: canonicalFocus,
         executor,
@@ -472,12 +480,7 @@ export async function loadWorksheetXml({
           error: { type: 'sheet-absent', message: worksheetAbsentMessage(canonicalName) },
         });
       }
-      const verification = await verifyPostApplyWorksheetReadback(
-        canonicalName,
-        xml,
-        executor,
-        signal,
-      );
+      const verification = await verifyPostApplyWorksheetReadback(targetRef, xml, executor, signal);
       readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
       const outcomeResult = readbackOutcome(verification);
       if (outcomeResult.isErr()) {

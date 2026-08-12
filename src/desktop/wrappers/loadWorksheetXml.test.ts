@@ -476,6 +476,39 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
   });
 
+  it('targets the per-sheet route by the fragment simple-id, so an apply lands after a live rename', async () => {
+    const sheetId = '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}';
+    const fragment = `<worksheet name='${worksheetName}'><simple-id uuid='${sheetId}' /><table><rows /></table></worksheet>`;
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(
+        Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
+      );
+    const executor = makeExecutorMock({
+      // The live sheet kept its id but was renamed after the fragment was read: only the id matches.
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ worksheets: [{ id: sheetId, name: 'Renamed Live', hidden: false }] }),
+        ),
+      applyWorksheetDocument,
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: fragment,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    // Had it targeted by the fragment name ('Sheet 1' ≠ the live 'Renamed Live'), the route would
+    // have resolved to sheet-absent. The id match proves the apply is keyed off the simple-id.
+    expect(applyWorksheetDocument).toHaveBeenCalledWith(sheetId, fragment, mockSignal);
+  });
+
   it('should return execute-command-error when the workbook fetch fails', async () => {
     const error = {
       type: 'command-failed' as const,
