@@ -7,8 +7,10 @@ import {
   extractSheetXml,
   extractWorksheetWindowXml,
   listSheets,
+  resolveWorksheetRef,
   upsertSheetIntoWorkbook,
   upsertWorksheetAndWindowIntoWorkbook,
+  worksheetFragmentSimpleId,
 } from './sheets.js';
 
 // Real-world shape: the <workbook> root declares xmlns:user, and a worksheet's level-members
@@ -207,6 +209,46 @@ describe('worksheet plus window artifacts', () => {
 describe('listSheets', () => {
   it('lists worksheet names', () => {
     expect(listSheets(WORKBOOK_WITH_USER_NAMESPACE)).toEqual(['Sales by Region']);
+  });
+});
+
+describe('resolveWorksheetRef', () => {
+  const WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Sales by Region'><table /><simple-id uuid='{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}' /></worksheet>
+    <worksheet name='P&amp;L'><table /><simple-id uuid='{0FD195D1-1111-2222-3333-444455556666}' /></worksheet>
+  </worksheets>
+</workbook>`;
+
+  it('matches by simple-id first (id identifies across a rename)', () => {
+    expect(resolveWorksheetRef(WORKBOOK, '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}')).toEqual({
+      id: '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}',
+      name: 'Sales by Region',
+    });
+  });
+
+  it('falls back to the display name, decoding XML entities', () => {
+    expect(resolveWorksheetRef(WORKBOOK, 'P&L')).toEqual({
+      id: '{0FD195D1-1111-2222-3333-444455556666}',
+      name: 'P&L',
+    });
+  });
+
+  it('returns null when neither an id nor a name matches', () => {
+    expect(resolveWorksheetRef(WORKBOOK, 'No Such Sheet')).toBeNull();
+  });
+});
+
+describe('worksheetFragmentSimpleId', () => {
+  it('reads the simple-id off a standalone worksheet fragment', () => {
+    const fragment =
+      "<worksheet name='Sales'><table /><simple-id uuid='{ABCD-1234}' /></worksheet>";
+    expect(worksheetFragmentSimpleId(fragment)).toBe('{ABCD-1234}');
+  });
+
+  it('returns null when the fragment carries no simple-id', () => {
+    expect(worksheetFragmentSimpleId("<worksheet name='Sales'><table /></worksheet>")).toBeNull();
   });
 });
 
