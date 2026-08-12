@@ -126,9 +126,7 @@ const paramsSchema = {
   workbookFile: z
     .string()
     .optional()
-    .describe(
-      'Cached workbook path returned by field resolution; omit to read the workbook live.',
-    ),
+    .describe('Cached workbook path returned by field resolution; omit to read the workbook live.'),
 };
 
 const title = 'Adding field';
