@@ -35,14 +35,9 @@ export function guardCommand({
   command,
   args,
 }: CommandGuardInput): CommandGuardResult {
-  const externalApiCommandRegistry = lookupExternalApiCommandRegistry(namespace, cmd);
   const commandValidation = validateKnownCommand(command);
   if (!commandValidation.ok) {
-    const admittedByPrivateRegistry =
-      isUnknownCommandRefusal(commandValidation.message) && externalApiCommandRegistry !== null;
-    if (!admittedByPrivateRegistry) {
-      return { refused: true, message: commandValidation.message };
-    }
+    return { refused: true, message: commandValidation.message };
   }
 
   const unvalidatedTargetPolicy = unvalidatedTargetPolicyFor(command);
@@ -70,6 +65,7 @@ export function guardCommand({
 
   let dispatchArgs = args ?? {};
   let warnings: string[] = [];
+  const externalApiCommandRegistry = lookupExternalApiCommandRegistry(namespace, cmd);
   if (externalApiCommandRegistry) {
     const externalApiGuard = validateCommandRegistry({
       command,
@@ -100,10 +96,6 @@ export function guardCommand({
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
-}
-
-function isUnknownCommandRefusal(message: string): boolean {
-  return message.startsWith('Unknown Tableau command "');
 }
 
 function validateCommandRegistry({
