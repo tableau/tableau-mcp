@@ -219,7 +219,22 @@ describe('addFieldToRows dotted and colon refs', () => {
 
 describe('addFieldToRows user derivations', () => {
   it('emits derivation="User" for a usr-prefixed calculated field instance', () => {
-    const modified = addFieldToRows(WORKSHEET_XML, '[Sample].[usr:Calculation_1:qk]');
+    const workbookXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="Sample">
+      <column name="[Calculation_1]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="1"/>
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+    const modified = addFieldToRows(
+      WORKSHEET_XML,
+      '[Sample].[usr:Calculation_1:qk]',
+      undefined,
+      workbookXml,
+    );
 
     expect(modified).toContain(
       '<column-instance name="[usr:Calculation_1:qk]" column="[Calculation_1]" derivation="User"',

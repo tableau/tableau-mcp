@@ -12,11 +12,18 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 
+/** Shared with {@link worksheetEditBuffer.ts} so a sheet name maps to the same cache key everywhere. */
+export function safeWorksheetCacheId(worksheetName: string): string {
+  return worksheetName.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
 /**
  * Fetch an existing worksheet by display name and write it to a new cache file.
  *
  * This intentionally does not look up or reuse an existing cache path: the sidecar
- * proves Desktop instance identity, not workbook-content freshness.
+ * proves Desktop instance identity, not workbook-content freshness. Callers that want
+ * edits to accumulate across name-only calls go through the sticky buffer in
+ * {@link worksheetEditBuffer.ts} instead of calling this directly.
  */
 export async function fetchAndCacheWorksheet({
   worksheetName,
@@ -54,8 +61,9 @@ export async function fetchAndCacheWorksheet({
     }
   }
 
-  const safeName = worksheetName.replace(/[^a-zA-Z0-9]/g, '_');
-  const cacheFile = new DesktopCache().getCacheFilePath({ prefix: `worksheet-${safeName}` });
+  const cacheFile = new DesktopCache().getCacheFilePath({
+    prefix: `worksheet-${safeWorksheetCacheId(worksheetName)}`,
+  });
   writeFileSync(cacheFile, fetched.value, 'utf-8');
   writeSidecar(cacheFile, resolvedSession);
   return Ok(cacheFile);
