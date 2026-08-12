@@ -3,6 +3,7 @@ import { Zodios } from '@zodios/core';
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
 import { RestApiCredentials } from '../restApi.js';
+import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
 import { Pagination } from '../types/pagination.js';
 import { Workbook } from '../types/workbook.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -77,6 +78,41 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
   };
 
   /**
+   * Downloads the specified workbook in twb or twbx format.
+   *
+   * Required scopes (Tableau Cloud): `tableau:workbooks:download`
+   *
+   * @param workbookId - The ID of the workbook to delete.
+   * @param siteId - The Tableau site ID
+   * @param includeExtract - Whether to include the extract in the workbook.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook
+   */
+  downloadWorkbook = async ({
+    workbookId,
+    siteId,
+    includeExtract,
+  }: {
+    workbookId: string;
+    siteId: string;
+    includeExtract?: boolean;
+  }): Promise<DownloadWorkbookResult> => {
+    const response = await this._apiClient.axios.get<ArrayBuffer>(
+      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks/${workbookId}/content`,
+      {
+        params: { includeExtract },
+        ...this.authHeader,
+        responseType: 'arraybuffer',
+      },
+    );
+
+    return {
+      content: Buffer.from(response.data),
+      contentType: getHeader(response.headers, 'content-type'),
+      filename: getFilenameFromContentDisposition(getHeader(response.headers, 'content-disposition')),
+    };
+  };
+
+  /**
    * Deletes the specified workbook from the site.
    *
    * On Tableau Cloud the workbook is moved to the recycle bin and can be restored
@@ -128,4 +164,47 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       },
     );
   };
+}
+
+function getHeader(
+  headers: Record<string, unknown>,
+  name: string,
+): string | undefined {
+  const value = headers[name] ?? headers[name.toLowerCase()];
+  if (Array.isArray(value)) {
+    const first = value[0];
+    return typeof first === 'string' ? first : undefined;
+  }
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getFilenameFromContentDisposition(
+  contentDispositionHeader: string | undefined,
+): string | undefined {
+  if (!contentDispositionHeader) {
+    return undefined;
+  }
+
+  // Supports both filename="foo.twbx" and filename=foo.twbx.
+  const match =
+    /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(contentDispositionHeader);
+  const encodedOrQuotedOrRaw = match?.[1] ?? match?.[2] ?? match?.[3];
+  if (!encodedOrQuotedOrRaw) {
+    return undefined;
+  }
+
+  const filename = encodedOrQuotedOrRaw.trim();
+  if (!filename) {
+    return undefined;
+  }
+
+  if (match?.[1]) {
+    try {
+      return decodeURIComponent(filename);
+    } catch {
+      return filename;
+    }
+  }
+
+  return filename;
 }
