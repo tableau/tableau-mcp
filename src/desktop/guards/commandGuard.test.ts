@@ -65,27 +65,78 @@ describe('guardCommand', () => {
     }
   });
 
-  it('refuses an unknown command before consulting the External API registry', () => {
+  it('refuses a census-unknown command when the External API registry also lacks it', () => {
     enableExternalApiRegistry({
-      'tabdoc:not-a-command': {
-        ...SHOW_ME_REGISTRY_ENTRY,
-        agent_can_invoke: false,
-        opens_blocking_dialog: true,
-      },
+      'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY,
     });
 
     const result = guardCommand({
       namespace: 'tabdoc',
       cmd: 'not-a-command',
       command: 'tabdoc:not-a-command',
-      args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars' },
+      args: {},
     });
 
     expect('refused' in result).toBe(true);
     if (!('refused' in result)) return;
     expect(result.message).toContain('Unknown Tableau command "tabdoc:not-a-command"');
-    expect(result.message).not.toContain('human-blocking dialog');
-    expect(result.message).not.toContain('agent_can_invoke=false');
+  });
+
+  it('admits a census-unknown command when the External API registry has an invocable entry', () => {
+    enableExternalApiRegistry({
+      'tabdoc:add-local-extension': {
+        agent_can_invoke: true,
+        opens_blocking_dialog: false,
+        modifies_state: 'true',
+        in_params: [
+          { local: 'SourceDir', type: 'DPI_SourceDir', required: true, wire: 'source-dir' },
+          {
+            local: 'LocalExtensionType',
+            type: 'DPI_LocalExtensionType',
+            required: true,
+            wire: 'local-extension-type',
+          },
+        ],
+      },
+    });
+
+    const result = guardCommand({
+      namespace: 'tabdoc',
+      cmd: 'add-local-extension',
+      command: 'tabdoc:add-local-extension',
+      args: { SourceDir: '/tmp/ext', LocalExtensionType: 'viz' },
+    });
+
+    expect('ok' in result).toBe(true);
+    if (!('ok' in result)) return;
+    expect(result.dispatchArgs).toEqual({
+      'source-dir': '/tmp/ext',
+      'local-extension-type': 'viz',
+    });
+  });
+
+  it('applies External API registry refusals for census-unknown commands after admission', () => {
+    enableExternalApiRegistry({
+      'tabdoc:add-local-extension': {
+        agent_can_invoke: false,
+        opens_blocking_dialog: true,
+        modifies_state: 'true',
+        in_params: [],
+      },
+    });
+
+    const result = guardCommand({
+      namespace: 'tabdoc',
+      cmd: 'add-local-extension',
+      command: 'tabdoc:add-local-extension',
+      args: {},
+    });
+
+    expect('refused' in result).toBe(true);
+    if (!('refused' in result)) return;
+    expect(result.message).toContain('human-blocking dialog');
+    expect(result.message).toContain('agent_can_invoke=false');
+    expect(result.message).not.toContain('Unknown Tableau command');
   });
 
   it('applies the unconditional dialog blocklist before registry-backed refusal reasons', () => {
