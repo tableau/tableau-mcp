@@ -61,7 +61,7 @@ export const getSaveWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
               // A completed save can still be a no-op: a dismissed Save As dialog reports
               // SUCCEEDED, so confirm the write via unsavedChanges rather than trusting status.
               const inventory = await read(
-                'get-workbook',
+                'workbook inventory',
                 async (executor, signal) => await executor.getWorkbook(signal),
               );
               if (inventory.isErr()) {
