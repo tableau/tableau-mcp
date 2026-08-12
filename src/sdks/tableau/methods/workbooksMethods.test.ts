@@ -4,6 +4,75 @@ import { describe, expect, it, vi } from 'vitest';
 import WorkbooksMethods from './workbooksMethods.js';
 
 describe('WorkbooksMethods', () => {
+  describe('downloadWorkbook', () => {
+    it('downloads workbook bytes and extracts content metadata', async () => {
+      const mockGet = vi.fn().mockResolvedValue({
+        data: Buffer.from('<workbook/>', 'utf-8'),
+        headers: {
+          'content-type': 'application/xml',
+          'content-disposition': 'name="tableau_workbook"; filename="book.twb"',
+        },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        axios: {
+          get: mockGet,
+          defaults: { baseURL: 'http://test' },
+        } as unknown as AxiosInstance,
+      };
+
+      const result = await workbooksMethods.downloadWorkbook({
+        siteId: 'site-1',
+        workbookId: 'workbook-1',
+        includeExtract: false,
+      });
+
+      expect(mockGet).toHaveBeenCalledWith(
+        'http://test/sites/site-1/workbooks/workbook-1/content',
+        expect.objectContaining({
+          params: { includeExtract: false },
+          responseType: 'arraybuffer',
+          headers: { Authorization: 'Bearer test' },
+        }),
+      );
+      expect(result.content.equals(Buffer.from('<workbook/>', 'utf-8'))).toBe(true);
+      expect(result.contentType).toBe('application/xml');
+      expect(result.filename).toBe('book.twb');
+    });
+
+    it('returns undefined filename when content-disposition is absent', async () => {
+      const mockGet = vi.fn().mockResolvedValue({
+        data: Buffer.from([1, 2, 3]),
+        headers: { 'content-type': 'application/octet-stream' },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        axios: {
+          get: mockGet,
+          defaults: { baseURL: 'http://test' },
+        } as unknown as AxiosInstance,
+      };
+
+      const result = await workbooksMethods.downloadWorkbook({
+        siteId: 'site-1',
+        workbookId: 'workbook-1',
+      });
+
+      expect(result.contentType).toBe('application/octet-stream');
+      expect(result.filename).toBeUndefined();
+    });
+  });
+
   describe('publishWorkbook', () => {
     it('POSTs a single-part multipart/mixed body containing the tsRequest XML', async () => {
       const mockPost = vi.fn().mockResolvedValue({
