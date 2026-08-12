@@ -119,9 +119,7 @@ describe('worksheetEditBuffer', () => {
 
     clearStickyWorksheetFile({ session: SESSION, worksheetName: 'Sheet 1  ' });
 
-    expect(
-      getStickyWorksheetFile({ session: SESSION, worksheetName: 'Sheet 1' }),
-    ).toBeUndefined();
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetName: 'Sheet 1' })).toBeUndefined();
   });
 
   it('ignores a pointer whose target file no longer exists', () => {

@@ -91,21 +91,16 @@ describe('metadata/fields — never fabricate a column that exists', () => {
 
   it('refuses when no workbook is supplied to verify against', () => {
     capture();
-    expect(() =>
-      addFieldToCols(WORKBOOK, '[Sample - Superstore].[sum:Unverifiable:qk]'),
-    ).toThrow(/workbook|datasource/i);
+    expect(() => addFieldToCols(WORKBOOK, '[Sample - Superstore].[sum:Unverifiable:qk]')).toThrow(
+      /workbook|datasource/i,
+    );
     expect(events.filter((e) => e.fabricated)).toEqual([]);
   });
 
   it('refuses when the datasource key does not match the workbook', () => {
     capture();
     expect(() =>
-      addFieldToCols(
-        WORKBOOK,
-        '[federated.some-other-key].[sum:Sales:qk]',
-        undefined,
-        WORKBOOK,
-      ),
+      addFieldToCols(WORKBOOK, '[federated.some-other-key].[sum:Sales:qk]', undefined, WORKBOOK),
     ).toThrow(/datasource|federated\.some-other-key/i);
     expect(events.filter((e) => e.fabricated)).toEqual([]);
   });
