@@ -20,11 +20,13 @@ import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getAddFieldTool } from './addField.js';
+import * as refreshWorkbookCacheModule from './refreshWorkbookCache.js';
 
 vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
 vi.mock('../../../../desktop/externalApi/discovery.js');
+vi.mock('./refreshWorkbookCache.js');
 vi.mock('fs');
 
 type EncodingType = 'color' | 'size' | 'lod' | 'detail' | 'text' | 'tooltip' | 'path' | 'angle';
@@ -38,6 +40,7 @@ const resultSchema = z.object({
 const WORKSHEET_FILE = '/cache/worksheet.xml';
 const SESSION = '12345';
 const WORKBOOK_FILE = '/cache/workbook.xml';
+const LIVE_WORKBOOK_XML = '<workbook live="1"/>';
 
 function mockPinnedSession(desktopSessionId: string | undefined): void {
   const base = new configModule.Config();
@@ -54,6 +57,10 @@ describe('addFieldTool', () => {
     vi.clearAllMocks();
     mockPinnedSession(undefined);
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
+    vi.mocked(refreshWorkbookCacheModule.refreshWorkbookCache).mockResolvedValue({
+      ok: true,
+      xml: LIVE_WORKBOOK_XML,
+    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -203,7 +210,7 @@ describe('addFieldTool', () => {
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('does not use the Tableau command channel after a successful field edit', async () => {
+  it('does not use the Tableau command channel when workbookFile is supplied', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
     vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
@@ -221,13 +228,14 @@ describe('addFieldTool', () => {
         columnRef: COLUMN_REF,
         encodingType: undefined,
         index: undefined,
-        workbookFile: undefined,
+        workbookFile: WORKBOOK_FILE,
       },
       extra,
     );
 
     expect(result.isError).toBe(false);
     expect(extra.getExecutor).not.toHaveBeenCalled();
+    expect(refreshWorkbookCacheModule.refreshWorkbookCache).not.toHaveBeenCalled();
   });
 
   // --- name-based path (no prior get-worksheet-xml call) ---
@@ -382,6 +390,10 @@ describe('addFieldTool', () => {
       vi.mocked(readFileSync).mockReturnValue(
         '<worksheet><table><rows>[A] / [B]</rows></table></worksheet>',
       );
+      vi.mocked(refreshWorkbookCacheModule.refreshWorkbookCache).mockResolvedValue({
+        ok: true,
+        xml: LIVE_WORKBOOK_XML,
+      });
 
       const result = await getResult({
         worksheetFile: WORKSHEET_FILE,
@@ -586,7 +598,7 @@ describe('addFieldTool', () => {
       'size',
       COLUMN_REF,
       1,
-      undefined,
+      LIVE_WORKBOOK_XML,
     );
   });
 
@@ -631,7 +643,7 @@ describe('addFieldTool', () => {
       '<worksheet/>',
       COLUMN_REF,
       undefined,
-      undefined,
+      LIVE_WORKBOOK_XML,
     );
     expect(metadataModule.addFieldToEncoding).not.toHaveBeenCalled();
   });
@@ -654,7 +666,7 @@ describe('addFieldTool', () => {
       '<worksheet/>',
       COLUMN_REF,
       undefined,
-      undefined,
+      LIVE_WORKBOOK_XML,
     );
     expect(metadataModule.addFieldToEncoding).not.toHaveBeenCalled();
   });
@@ -695,6 +707,10 @@ describe('add-field columnRef contract', () => {
     vi.mocked(readFileSync).mockImplementation((path) =>
       String(path) === WORKBOOK_FILE ? (WORKBOOK_XML as never) : ('<worksheet/>' as never),
     );
+    vi.mocked(refreshWorkbookCacheModule.refreshWorkbookCache).mockResolvedValue({
+      ok: true,
+      xml: LIVE_WORKBOOK_XML,
+    });
   });
 
   it('documents the format and a worked example on the parameter itself', async () => {
@@ -737,7 +753,9 @@ describe('add-field columnRef contract', () => {
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('points at resolve-field when no workbook is available to suggest from', async () => {
+  it('points at resolve-field when the workbook has no fields to suggest', async () => {
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue([]);
+
     const result = await getResult({
       worksheetFile: WORKSHEET_FILE,
       target: 'cols',

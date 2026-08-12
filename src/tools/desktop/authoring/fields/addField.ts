@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { DesktopCache } from '../../../../desktop/cache.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import {
   type FieldRewriteEvent,
@@ -24,11 +25,14 @@ import {
   ArgsValidationError,
   FileNotFoundError,
   FileReadError,
+  UnknownError,
   XmlModificationError,
   XmlValidationError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { DesktopTool } from '../../tool.js';
+import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 import { fetchAndCacheWorksheet } from './worksheetCache.js';
 
 /** Encoding channels a field can be placed on. */
@@ -123,7 +127,7 @@ const paramsSchema = {
     .string()
     .optional()
     .describe(
-      'Cached workbook path returned by field resolution; omit to add without workbook context.',
+      'Cached workbook path returned by field resolution; omit to read the workbook live.',
     ),
 };
 
@@ -215,12 +219,36 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
           }
 
           let workbookXml: string | undefined;
-          if (workbookFile && existsSync(workbookFile)) {
-            try {
-              workbookXml = readFileSync(workbookFile, 'utf-8');
-            } catch {
-              // Non-fatal — proceed without workbook context
+          const requestedWorkbookFile = workbookFile?.trim() ? workbookFile.trim() : undefined;
+          if (requestedWorkbookFile) {
+            if (!existsSync(requestedWorkbookFile)) {
+              return new FileNotFoundError(requestedWorkbookFile).toErr();
             }
+            try {
+              workbookXml = readFileSync(requestedWorkbookFile, 'utf-8');
+            } catch (error) {
+              return new FileReadError(error).toErr();
+            }
+          } else {
+            const liveWorkbookFile = new DesktopCache().getCacheFilePath({ prefix: 'workbook' });
+            let refresh: Awaited<ReturnType<typeof refreshWorkbookCache>>;
+            try {
+              refresh = await refreshWorkbookCache({
+                extra,
+                workbookFile: liveWorkbookFile,
+                resolvedSession,
+                action: 'adding a field',
+              });
+            } catch (error) {
+              return new UnknownError(
+                `Could not read the current workbook from Tableau: ${getExceptionMessage(error)}. ` +
+                  'Pass workbookFile from field resolution, or check the session with list-instances, then retry.',
+              ).toErr();
+            }
+            if (!refresh.ok) {
+              return refresh.error.toErr();
+            }
+            workbookXml = refresh.xml;
           }
 
           if (index !== undefined) {
@@ -246,18 +274,10 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return new ArgsValidationError(columnRefRejection(columnRef, workbookXml)).toErr();
           }
 
-          // Without workbookXml, a real column that this session's caller failed to
-          // pass through resolves as absent and gets a guessed type instead of a
-          // thrown error (see fields.ts's documented no-workbook fallback). That
-          // guess can disagree with Desktop's own schema and get silently written
-          // to disk here, then rejected by Desktop on apply with no clue why.
-          // Capture those events so a caller who omitted workbookFile finds out now.
           const fabricationEvents: FieldRewriteEvent[] = [];
-          if (!workbookXml) {
-            setFieldRewriteListener((event) => {
-              if (event.fabricated) fabricationEvents.push(event);
-            });
-          }
+          setFieldRewriteListener((event) => {
+            if (event.fabricated) fabricationEvents.push(event);
+          });
 
           let modifiedXml: string;
           let placement: string;
@@ -291,7 +311,16 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
               error instanceof Error ? error.message : String(error),
             ).toErr();
           } finally {
-            if (!workbookXml) setFieldRewriteListener(null);
+            setFieldRewriteListener(null);
+          }
+
+          if (fabricationEvents.length > 0) {
+            return new ArgsValidationError(
+              `Refusing to write fabricated field type(s) for ${fabricationEvents
+                .map((e) => e.requested)
+                .join(', ')}. Pass workbookFile from field resolution (or omit it so ` +
+                'add-field can read the live workbook), then retry before apply-worksheet.',
+            ).toErr();
           }
 
           const issues = wellFormedXmlRule.validate(modifiedXml);
@@ -307,20 +336,9 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return new FileReadError(error).toErr();
           }
 
-          const fabricationWarning =
-            fabricationEvents.length > 0
-              ? ` WARNING: no workbookFile was provided, so ${fabricationEvents
-                  .map((e) => e.requested)
-                  .join(', ')} could not be verified against the real workbook and had its ` +
-                'type guessed (fabricated) instead of read. A guessed type can disagree with ' +
-                'the actual field and Desktop will reject the apply. Pass workbookFile (from ' +
-                'field resolution) and retry before calling apply-worksheet.'
-              : '';
-
           return new Ok({
-            message: `Successfully added field to ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.${fabricationWarning}`,
+            message: `Successfully added field to ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.`,
             file: worksheetFile,
-            ...(fabricationEvents.length > 0 ? { fabricatedFields: fabricationEvents } : {}),
           });
         },
       });

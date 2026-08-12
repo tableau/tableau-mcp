@@ -142,7 +142,7 @@ describe('add-field — an absent column comes back as a tool error, not a crash
     expect(readFileSync(worksheetFile, 'utf-8')).toContain('datatype="date"');
   });
 
-  it('warns, rather than staying silent, when a caller omits workbookFile and a real date column gets fabricated as string', async () => {
+  it('refuses when workbookFile is omitted and live workbook cannot be resolved, without writing fabricated XML', async () => {
     const { worksheetFile } = setup();
 
     const tool = getAddFieldTool(new DesktopMcpServer());
@@ -161,13 +161,9 @@ describe('add-field — an absent column comes back as a tool error, not a crash
       getMockRequestHandlerExtra(),
     );
 
-    // Without workbookFile there is nothing to verify against, so the tool still
-    // writes the field — but it must say so, not fabricate a wrong type silently.
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toMatch(/WARNING/);
-    expect(result.content[0].text).toContain('workbookFile');
-    // The fabricated type must never masquerade as the real one.
-    expect(readFileSync(worksheetFile, 'utf-8')).not.toContain('datatype="date"');
+    expect(result.content[0].text).toMatch(/workbookFile|workbook/i);
+    expect(readFileSync(worksheetFile, 'utf-8')).toBe(WORKSHEET);
   });
 });
