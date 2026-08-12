@@ -256,7 +256,7 @@ export class ExternalApiHttp {
     return this.parseJson(response, operationEnvelopeSchema);
   }
 
-  /** Blocks on the 202's `Location` until a terminal Operation; AWAITING_USER returns `awaiting-user`. */
+  /** Blocks on the 202's `Location` until a terminal Operation; a blocking dialog returns `awaiting-user`. */
   private async pollOperation(
     accepted: Response,
     signal?: AbortSignal,
@@ -296,16 +296,19 @@ export class ExternalApiHttp {
       }
 
       const envelope = parsed.value;
-      const state = envelope.state?.toUpperCase();
-      if (state === 'AWAITING_USER') {
+      if (isTerminalState(envelope.state)) {
+        return Ok(envelope);
+      }
+
+      // The server signals a blocking Desktop dialog with `blockingWindows` on a non-terminal
+      // operation. A person must dismiss it; polling can never clear it, so fail fast.
+      const blockingWindows = envelope.blockingWindows;
+      if (blockingWindows !== undefined && blockingWindows.length > 0) {
         return Err({
           type: 'awaiting-user',
           operationId: envelope.id ?? operationId,
-          blockingWindows: envelope.blockingWindows,
+          blockingWindows,
         });
-      }
-      if (isTerminalState(envelope.state)) {
-        return Ok(envelope);
       }
 
       retryAfterMs = parseRetryAfterMs(res.headers.get(HEADER_RETRY_AFTER));
