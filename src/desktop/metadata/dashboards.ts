@@ -174,6 +174,37 @@ export function listWorkbookDashboards(workbookXml: string): string[] {
   return dashboards.map((db) => db['@_name']).filter((name): name is string => !!name);
 }
 
+// `id` is each dashboard's own `<simple-id uuid>` — the same value the External Client API returns
+// as the dashboard id.
+export function listDashboardRefs(workbookXml: string): Array<{ id?: string; name: string }> {
+  const workbook = parseXML(workbookXml);
+  const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
+  return dashboards
+    .filter((db): db is ParsedDashboard & { '@_name': string } => !!db['@_name'])
+    .map((db) => {
+      const id = db['simple-id']?.['@_uuid'];
+      return { ...(id ? { id } : {}), name: db['@_name'] };
+    });
+}
+
+// Match a caller's ref against the dashboard's `<simple-id uuid>` (its External Client API id)
+// first, then its display name.
+export function resolveDashboardRef(
+  workbookXml: string,
+  ref: string,
+): { id?: string; name: string } | null {
+  const workbook = parseXML(workbookXml);
+  const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
+  const trimmed = ref.trim();
+  const matched =
+    dashboards.find((db) => db['simple-id']?.['@_uuid']?.trim() === trimmed) ??
+    dashboards.find((db) => db['@_name'] && xmlNamesEqual(db['@_name'], ref)) ??
+    null;
+  if (!matched?.['@_name']) return null;
+  const id = matched['simple-id']?.['@_uuid'];
+  return { ...(id ? { id } : {}), name: matched['@_name'] };
+}
+
 // Returns a standalone `<dashboard>` fragment (not a whole workbook), or null if absent.
 export function extractDashboardXml(workbookXml: string, dashboardName: string): string | null {
   const workbook = parseXML(workbookXml);

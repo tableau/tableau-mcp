@@ -139,6 +139,19 @@ export function listSheets(workbookXml: string): string[] {
   return worksheets.map((ws) => ws['@_name']).filter((name): name is string => !!name);
 }
 
+// `id` is each worksheet's own `<simple-id uuid>` — the same value the External Client API returns
+// as the worksheet id.
+export function listWorksheetRefs(workbookXml: string): Array<{ id?: string; name: string }> {
+  const workbook = parseXML(workbookXml);
+  const worksheets = normalizeArray(workbook.workbook?.worksheets?.worksheet);
+  return worksheets
+    .filter((ws): ws is ParsedWorksheet & { '@_name': string } => !!ws['@_name'])
+    .map((ws) => {
+      const id = ws['simple-id']?.['@_uuid'];
+      return { ...(id ? { id } : {}), name: ws['@_name'] };
+    });
+}
+
 // Match a caller's reference against the worksheet's `<simple-id uuid>` (the External Client API
 // worksheet id) first, then its display name. Name is the fallback because the .twb cross-references
 // sheets by name (windows, dashboard zones, story points), so the returned name is what the

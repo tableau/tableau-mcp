@@ -7,6 +7,7 @@ import {
   extractSheetXml,
   extractWorksheetWindowXml,
   listSheets,
+  listWorksheetRefs,
   resolveWorksheetRef,
   upsertSheetIntoWorkbook,
   upsertWorksheetAndWindowIntoWorkbook,
@@ -209,6 +210,27 @@ describe('worksheet plus window artifacts', () => {
 describe('listSheets', () => {
   it('lists worksheet names', () => {
     expect(listSheets(WORKBOOK_WITH_USER_NAMESPACE)).toEqual(['Sales by Region']);
+  });
+});
+
+describe('listWorksheetRefs', () => {
+  const WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Sales by Region'><table /><simple-id uuid='{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}' /></worksheet>
+    <worksheet name='P&amp;L'><table /><simple-id uuid='{0FD195D1-1111-2222-3333-444455556666}' /></worksheet>
+  </worksheets>
+</workbook>`;
+
+  it('pairs each worksheet id with its name, decoding XML entities', () => {
+    expect(listWorksheetRefs(WORKBOOK)).toEqual([
+      { id: '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}', name: 'Sales by Region' },
+      { id: '{0FD195D1-1111-2222-3333-444455556666}', name: 'P&L' },
+    ]);
+  });
+
+  it('omits the id when the worksheet carries no simple-id', () => {
+    expect(listWorksheetRefs(WORKBOOK_WITH_USER_NAMESPACE)).toEqual([{ name: 'Sales by Region' }]);
   });
 });
 
