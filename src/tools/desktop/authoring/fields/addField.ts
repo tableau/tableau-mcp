@@ -6,10 +6,6 @@ import { z } from 'zod';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../../desktop/metadata/field-resolver.js';
-import {
-  type FieldRewriteEvent,
-  setFieldRewriteListener,
-} from '../../../../desktop/metadata/field-rewrite-listener.js';
 import { parseShelfValue } from '../../../../desktop/metadata/fields.js';
 import {
   addFieldToCols,
@@ -291,11 +287,9 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return new ArgsValidationError(columnRefRejection(columnRef, workbookXml)).toErr();
           }
 
-          const fabricationEvents: FieldRewriteEvent[] = [];
-          setFieldRewriteListener((event) => {
-            if (event.fabricated) fabricationEvents.push(event);
-          });
-
+          // fields.ts refuses (throws) rather than fabricating a type whenever the
+          // workbook, datasource, or column can't be resolved — caught below and
+          // surfaced as-is, so no half-built XML is ever written.
           let modifiedXml: string;
           let placement: string;
           try {
@@ -326,17 +320,6 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
           } catch (error) {
             return new XmlModificationError(
               error instanceof Error ? error.message : String(error),
-            ).toErr();
-          } finally {
-            setFieldRewriteListener(null);
-          }
-
-          if (fabricationEvents.length > 0) {
-            return new ArgsValidationError(
-              `Refusing to write fabricated field type(s) for ${fabricationEvents
-                .map((e) => e.requested)
-                .join(', ')}. Pass workbookFile from field resolution (or omit it so ` +
-                'add-field can read the live workbook), then retry before apply-worksheet.',
             ).toErr();
           }
 
