@@ -74,6 +74,11 @@ export const desktopToolNames = [
   'list-knowledge-resources',
   'read-knowledge-resource',
   'search-knowledge',
+  'open-file',
+  'save-workbook',
+  'add-worksheet',
+  'add-dashboard',
+  'add-storyboard',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 

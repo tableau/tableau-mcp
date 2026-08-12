@@ -139,6 +139,11 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'delete-sheet',
     'rename-sheet',
     'sort-worksheet',
+    'add-worksheet',
+    'add-dashboard',
+    'add-storyboard',
+    'open-file',
+    'save-workbook',
     'pause-auto-updates',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.

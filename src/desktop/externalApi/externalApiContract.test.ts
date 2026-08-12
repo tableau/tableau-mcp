@@ -12,6 +12,7 @@ import {
   datasourceListSchema,
   EXTERNAL_API_ROUTES,
   healthSchema,
+  imageResultSchema,
   logicalTableItemSchema,
   logicalTableListSchema,
   operationEnvelopeSchema,
@@ -41,11 +42,12 @@ import {
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.5 — a build
- * adding the per-sheet `:pauseAutoUpdates`/`:resumeAutoUpdates` routes and the
- * `isActiveSheet`/`isAutoUpdatesPaused` sheet-item fields, on top of the 0.2.4 surface
- * (logical-table reads, `:delete`/`:rename`/`:sort`/`:goToSheet`, Operation
- * `blockingWindows`). No hand-edits.
+ * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.6 — a build
+ * adding the `app:openFile`, `workbook:save`, and `worksheets:new`/`dashboards:new`/
+ * `storyboards:new` routes, the `operation-not-found`/`unsupported-file-type`/
+ * `file-not-found` problem codes, and formalized `required` arrays across the read
+ * schemas, on top of the 0.2.5 surface (`:pauseAutoUpdates`/`:resumeAutoUpdates`,
+ * `isActiveSheet`/`isAutoUpdatesPaused`). No hand-edits.
  */
 
 type SpecSchema = {
@@ -71,10 +73,41 @@ const declaredKeys = (schema: z.AnyZodObject): Array<string> => Object.keys(sche
 const requiredKeys = (schema: z.AnyZodObject): Array<string> =>
   declaredKeys(schema).filter((key) => !(schema.shape[key] as z.ZodTypeAny).isOptional());
 
+// Read schemas parse fail-open: each keeps spec-`required` fields optional so an older Desktop
+// build that omits a field a newer spec marks required still parses. Each entry is the set of
+// spec-required keys the matching zod schema leaves optional (spec-required minus zod-required).
 const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly string[]>> = {
-  DashboardItem: ['isActiveSheet'],
+  ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
+  AppInfo: [
+    'applicationVersion',
+    'edition',
+    'build',
+    'os',
+    'locale',
+    'repositoryLocation',
+    'logLocation',
+  ],
+  DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets'],
+  DashboardList: ['dashboards'],
+  DatasourceItem: ['id', 'luid', 'name', 'caption'],
+  DatasourceList: ['datasources'],
+  Health: ['status'],
+  ProtectedResourceMetadata: ['authorization_servers', 'bearer_methods_supported'],
+  Site: ['siteId', 'authenticatedUserId'],
+  SiteWorkbookItem: ['id', 'luid', 'name', 'project'],
+  SiteWorkbookList: ['workbooks'],
+  WorksheetItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'datasources'],
+  WorksheetList: ['worksheets'],
   StoryboardItem: ['isActiveSheet'],
-  WorksheetItem: ['isActiveSheet'],
+  StoryboardList: ['storyboards'],
+  WorkbookInventory: ['location', 'worksheets', 'dashboards', 'storyboards'],
+  SiteDatasourceItem: ['id', 'luid', 'name', 'caption', 'project'],
+  SiteDatasourceList: ['datasources'],
+  SummaryData: ['columns', 'rows'],
+  LogicalTableItem: ['id', 'caption'],
+  LogicalTableList: ['tables'],
+  ValidationResult: ['validationIssues'],
+  ImageExport: ['width', 'height'],
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
@@ -142,6 +175,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['LogicalTableList', logicalTableListSchema],
       ['WindowInfo', windowInfoSchema],
       ['ValidationResult', validationResultSchema],
+      ['ImageExport', imageResultSchema],
     ] as const)(
       '%s: properties and required set match except known version deltas',
       (name, schema) => {
@@ -154,11 +188,39 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.4 requiredness exception set', () => {
+    it('pins the complete 0.2.6 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
-        DashboardItem: ['isActiveSheet'],
+        ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
+        AppInfo: [
+          'applicationVersion',
+          'edition',
+          'build',
+          'os',
+          'locale',
+          'repositoryLocation',
+          'logLocation',
+        ],
+        DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets'],
+        DashboardList: ['dashboards'],
+        DatasourceItem: ['id', 'luid', 'name', 'caption'],
+        DatasourceList: ['datasources'],
+        Health: ['status'],
+        ProtectedResourceMetadata: ['authorization_servers', 'bearer_methods_supported'],
+        Site: ['siteId', 'authenticatedUserId'],
+        SiteWorkbookItem: ['id', 'luid', 'name', 'project'],
+        SiteWorkbookList: ['workbooks'],
+        WorksheetItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'datasources'],
+        WorksheetList: ['worksheets'],
         StoryboardItem: ['isActiveSheet'],
-        WorksheetItem: ['isActiveSheet'],
+        StoryboardList: ['storyboards'],
+        WorkbookInventory: ['location', 'worksheets', 'dashboards', 'storyboards'],
+        SiteDatasourceItem: ['id', 'luid', 'name', 'caption', 'project'],
+        SiteDatasourceList: ['datasources'],
+        SummaryData: ['columns', 'rows'],
+        LogicalTableItem: ['id', 'caption'],
+        LogicalTableList: ['tables'],
+        ValidationResult: ['validationIssues'],
+        ImageExport: ['width', 'height'],
       });
       for (const [name, exceptions] of Object.entries(KNOWN_READ_REQUIREDNESS_EXCEPTIONS)) {
         const component = specSchema(name);
@@ -244,6 +306,11 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.storyboardRename,
       EXTERNAL_API_ROUTES.workbookGoToSheet,
       EXTERNAL_API_ROUTES.dashboardImage,
+      EXTERNAL_API_ROUTES.appOpenFile,
+      EXTERNAL_API_ROUTES.workbookSave,
+      EXTERNAL_API_ROUTES.workbookWorksheetsNew,
+      EXTERNAL_API_ROUTES.workbookDashboardsNew,
+      EXTERNAL_API_ROUTES.workbookStoryboardsNew,
       EXTERNAL_API_ROUTES.operations,
       EXTERNAL_API_ROUTES.operationById,
       EXTERNAL_API_ROUTES.site,

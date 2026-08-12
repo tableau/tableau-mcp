@@ -1,4 +1,7 @@
 import { getActivateSheetTool } from './api/activateSheet.js';
+import { getAddDashboardTool } from './api/addDashboard.js';
+import { getAddStoryboardTool } from './api/addStoryboard.js';
+import { getAddWorksheetTool } from './api/addWorksheet.js';
 import { getApplyDashboardTool } from './api/applyDashboard.js';
 import { getApplyStoryboardTool } from './api/applyStoryboard.js';
 import { getApplyWorkbookTool } from './api/applyWorkbook.js';
@@ -29,10 +32,12 @@ import { getListStoryboardsTool } from './api/listStoryboards.js';
 import { getListWorkbookDatasourcesTool } from './api/listWorkbookDatasources.js';
 import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
 import { getListWorksheetsTool } from './api/listWorksheets.js';
+import { getOpenFileTool } from './api/openFile.js';
 import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
 import { getRedoWorkbookTool } from './api/redoWorkbook.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
+import { getSaveWorkbookTool } from './api/saveWorkbook.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
 import { getUndoWorkbookTool } from './api/undoWorkbook.js';
 import { getValidateWorkbookXmlTool } from './api/validateWorkbookXml.js';
@@ -80,6 +85,11 @@ export const desktopToolFactories = [
   getActivateSheetTool,
   getUndoWorkbookTool,
   getRedoWorkbookTool,
+  getOpenFileTool,
+  getSaveWorkbookTool,
+  getAddWorksheetTool,
+  getAddDashboardTool,
+  getAddStoryboardTool,
   getListWorksheetsTool,
   getListDashboardsTool,
   getGetWorksheetXmlTool,

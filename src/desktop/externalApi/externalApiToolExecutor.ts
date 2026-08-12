@@ -63,8 +63,11 @@ import {
   ValidationResult,
   validationResultSchema,
   WindowInfo,
+  workbookDashboardsNewRoute,
   WorkbookInventory,
   workbookInventorySchema,
+  workbookStoryboardsNewRoute,
+  workbookWorksheetsNewRoute,
   worksheetDocumentRoute,
   worksheetImageRoute,
   WorksheetItem,
@@ -608,6 +611,61 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postEnvelope(dashboardResumeAutoUpdatesRoute(dashboardId), signal),
       'resume-dashboard-auto-updates',
+    );
+  }
+
+  async openFile(
+    filePath: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postJsonEnvelope(EXTERNAL_API_ROUTES.appOpenFile, { filePath }, signal),
+      'open-workbook-file',
+    );
+  }
+
+  async saveWorkbook(
+    filePath: string | undefined,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) =>
+        http.postJsonEnvelope(
+          EXTERNAL_API_ROUTES.workbookSave,
+          filePath !== undefined ? { filePath } : {},
+          signal,
+        ),
+      'save-workbook-file',
+    );
+  }
+
+  async addWorksheet(
+    index: number | undefined,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(workbookWorksheetsNewRoute(index), signal),
+      'new-worksheet',
+    );
+  }
+
+  async addDashboard(
+    index: number | undefined,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(workbookDashboardsNewRoute(index), signal),
+      'new-dashboard',
+    );
+  }
+
+  async addStoryboard(
+    index: number | undefined,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(workbookStoryboardsNewRoute(index), signal),
+      'new-storyboard',
     );
   }
 
