@@ -31,9 +31,11 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 import { fetchAndCacheWorksheet } from './worksheetCache.js';
+import { getStickyWorksheetFile, setStickyWorksheetFile } from './worksheetEditBuffer.js';
 
 /** Encoding channels a field can be placed on. */
 const ENCODING_TYPES = [
@@ -105,13 +107,8 @@ const paramsSchema = {
   worksheetName: z
     .string()
     .optional()
-    .describe('Existing worksheet name; omit when worksheetFile is set.'),
-  worksheetFile: z
-    .string()
-    .optional()
-    .describe(
-      'Cached worksheet path from an earlier field edit; omit to fetch worksheetName from the live workbook.',
-    ),
+    .describe('Sheet name; name-only calls reuse the edit buffer. Omit to pass worksheetFile.'),
+  worksheetFile: z.string().optional().describe('Cached path; omit to reuse the edit buffer.'),
   target: z.enum(FIELD_TARGETS).describe('Rows shelf, cols shelf, or a mark encoding.'),
   columnRef: z
     .string()
@@ -182,19 +179,41 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             ).toErr();
           }
 
-          // Name-based path: no cache file yet — fetch the sheet fragment and mint one. The
-          // returned worksheetFile lets follow-up add-field/remove-field calls accumulate edits
-          // on the same cache before a single apply-worksheet (get-once, edit-many, apply-once).
+          const trimmedWorksheetName = worksheetName?.trim() || undefined;
+
+          // Name-based path: reuse the sticky edit buffer for this sheet if one is open
+          // (an earlier name-only call already fetched and is mid-edit); otherwise fetch
+          // the sheet fragment and mint a new cache file. Either way, later name-only
+          // calls for the same sheet+session keep landing on this same file until
+          // apply-worksheet closes the buffer.
           if (!worksheetFile?.trim()) {
-            const minted = await fetchAndCacheWorksheet({
-              worksheetName: worksheetName!.trim(),
-              resolvedSession,
-              extra,
+            const sticky = getStickyWorksheetFile({
+              session: resolvedSession,
+              worksheetName: trimmedWorksheetName!,
             });
-            if (minted.isErr()) {
-              return minted.error.toErr();
+            if (sticky) {
+              worksheetFile = sticky;
+            } else {
+              const minted = await fetchAndCacheWorksheet({
+                worksheetName: trimmedWorksheetName!,
+                resolvedSession,
+                extra,
+              });
+              if (minted.isErr()) {
+                return minted.error.toErr();
+              }
+              worksheetFile = minted.value;
             }
-            worksheetFile = minted.value;
+          }
+
+          // A worksheetName given alongside an explicit worksheetFile is an override —
+          // point the buffer at it too, so later name-only calls continue from here.
+          if (trimmedWorksheetName) {
+            setStickyWorksheetFile({
+              session: resolvedSession,
+              worksheetName: trimmedWorksheetName,
+              file: worksheetFile,
+            });
           }
 
           if (!existsSync(worksheetFile)) {
@@ -334,11 +353,17 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return new FileReadError(error).toErr();
           }
 
-          return new Ok({
-            message: `Successfully added field to ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.`,
-            file: worksheetFile,
-          });
+          return new Ok(
+            withNextAction(
+              {
+                message: `Successfully added field to ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.`,
+                file: worksheetFile,
+              },
+              prefillNextAction('Apply worksheet edits'),
+            ),
+          );
         },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },
   });

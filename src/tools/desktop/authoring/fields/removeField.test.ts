@@ -22,6 +22,7 @@ import { Provider } from '../../../../utils/provider.js';
 import { getApplyWorksheetTool } from '../../api/applyWorksheet.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getAddFieldTool } from './addField.js';
+import * as refreshWorkbookCacheModule from './refreshWorkbookCache.js';
 import { getRemoveFieldTool } from './removeField.js';
 
 vi.mock('../../../../desktop/metadata/index.js');
@@ -29,6 +30,7 @@ vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js');
 vi.mock('../../../../desktop/externalApi/discovery.js');
+vi.mock('./refreshWorkbookCache.js');
 vi.mock('fs');
 
 type EncodingType = 'color' | 'size' | 'lod' | 'detail' | 'text' | 'tooltip' | 'path' | 'angle';
@@ -254,6 +256,61 @@ describe('removeFieldTool', () => {
     expect(writeFileSync).toHaveBeenCalledWith(body.file, MODIFIED_XML, 'utf-8');
   });
 
+  it('accumulates two name-only calls on the same sticky file (fetches once)', async () => {
+    const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
+    const files = new Map<string, string>();
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
+    vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
+    vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
+    vi.mocked(writeFileSync).mockImplementation((path, data) => {
+      files.set(String(path), String(data));
+    });
+    vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({ ok: true });
+
+    const first = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(first.isError).toBe(false);
+    invariant(first.content[0].type === 'text');
+    const firstBody = resultSchema.parse(JSON.parse(first.content[0].text));
+
+    const second = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(second.isError).toBe(false);
+    invariant(second.content[0].type === 'text');
+    const secondBody = resultSchema.parse(JSON.parse(second.content[0].text));
+
+    expect(secondBody.file).toBe(firstBody.file);
+    expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledOnce();
+  });
+
+  it('mints a fresh sheet when the sticky buffer fails its sidecar/session check', async () => {
+    const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
+    const files = new Map<string, string>();
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
+    vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
+    vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
+    vi.mocked(writeFileSync).mockImplementation((path, data) => {
+      files.set(String(path), String(data));
+    });
+    vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({
+      ok: false,
+      reason: 'session-mismatch',
+    } as never);
+
+    await getResult({ worksheetName: 'Sheet 1', target: 'rows', columnRef: COLUMN_REF });
+    await getResult({ worksheetName: 'Sheet 1', target: 'rows', columnRef: COLUMN_REF });
+
+    expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledTimes(2);
+  });
+
   it('uses a supplied worksheetFile without fetching when worksheetName is also given', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
@@ -350,6 +407,10 @@ describe('removeFieldTool', () => {
     vi.mocked(metadataModule.addFieldToRows).mockReturnValue(addedXml);
     vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(removedXml);
     vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({ ok: true });
+    vi.mocked(refreshWorkbookCacheModule.refreshWorkbookCache).mockResolvedValue({
+      ok: true,
+      xml: '<workbook/>',
+    });
     vi.mocked(loadWorksheetXmlModule.loadWorksheetXml).mockResolvedValue(
       Ok({ readbackWarnings: [] }),
     );

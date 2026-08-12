@@ -333,6 +333,109 @@ describe('addFieldTool', () => {
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
+  // --- sticky worksheet edit buffer ---
+  it('accumulates two name-only calls on the same sticky file (fetches once)', async () => {
+    const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
+    const files = new Map<string, string>();
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
+    vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
+    vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
+    vi.mocked(writeFileSync).mockImplementation((path, data) => {
+      files.set(String(path), String(data));
+    });
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({ ok: true });
+
+    const first = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(first.isError).toBe(false);
+    invariant(first.content[0].type === 'text');
+    const firstBody = resultSchema.parse(JSON.parse(first.content[0].text));
+
+    const second = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(second.isError).toBe(false);
+    invariant(second.content[0].type === 'text');
+    const secondBody = resultSchema.parse(JSON.parse(second.content[0].text));
+
+    // Both name-only calls land on the same minted cache file — the second call never
+    // re-fetches a fresh (blank) sheet from the live workbook.
+    expect(secondBody.file).toBe(firstBody.file);
+    expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledOnce();
+  });
+
+  it('mints a fresh sheet when the sticky buffer fails its sidecar/session check', async () => {
+    const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
+    const files = new Map<string, string>();
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
+    vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
+    vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
+    vi.mocked(writeFileSync).mockImplementation((path, data) => {
+      files.set(String(path), String(data));
+    });
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    // The sidecar check fails on every lookup — as if the buffer belonged to another
+    // Desktop instance/session — so the sticky pointer must never be trusted.
+    vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({
+      ok: false,
+      reason: 'session-mismatch',
+    } as never);
+
+    const first = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(first.isError).toBe(false);
+
+    const second = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(second.isError).toBe(false);
+
+    // Each name-only call re-fetches because the sticky pointer never validates.
+    expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledTimes(2);
+  });
+
+  it('an explicit worksheetFile updates the sticky buffer for later name-only calls', async () => {
+    const files = new Map<string, string>([[WORKSHEET_FILE, '<worksheet/>']]);
+    vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
+    vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
+    vi.mocked(writeFileSync).mockImplementation((path, data) => {
+      files.set(String(path), String(data));
+    });
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({ ok: true });
+
+    // First call names the sheet AND supplies the file explicitly — the override case.
+    const explicit = await getResult({
+      worksheetName: 'Sheet 1',
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(explicit.isError).toBe(false);
+
+    // A later name-only call continues from that same file without any fetch.
+    const nameOnly = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(nameOnly.isError).toBe(false);
+    invariant(nameOnly.content[0].type === 'text');
+    expect(resultSchema.parse(JSON.parse(nameOnly.content[0].text)).file).toBe(WORKSHEET_FILE);
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
+  });
+
   it('prefers worksheetFile over worksheetName when both are given (no fetch)', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<worksheet/>');

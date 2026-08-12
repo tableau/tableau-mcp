@@ -11,11 +11,13 @@ import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import * as worksheetEditBufferModule from '../authoring/fields/worksheetEditBuffer.js';
 import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getGetWorksheetXmlTool } from './getWorksheetXml.js';
 
 vi.mock('../../../desktop/wrappers/getWorksheetXml.js');
+vi.mock('../authoring/fields/worksheetEditBuffer.js');
 vi.mock('fs');
 
 describe('getWorksheetXmlTool', () => {
@@ -103,6 +105,32 @@ describe('getWorksheetXmlTool', () => {
     expect(resultObj.instructions).toBe(
       'Use this file path with apply-worksheet instead of passing content directly.',
     );
+  });
+
+  it('closes the sticky edit buffer for this sheet — an explicit re-read is the new starting point', async () => {
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(
+      Ok('<worksheet name="Sheet 1"/>'),
+    );
+
+    await getToolResult({ session: '12345', worksheetName: 'Sheet 1', mode: 'inline' });
+
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+    });
+  });
+
+  it('does not touch the sticky edit buffer when the fetch fails', async () => {
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(
+      Err({
+        type: 'get-worksheet-xml-error',
+        error: { type: 'no-worksheet-found', message: 'No worksheet found for Sheet 1.' },
+      }),
+    );
+
+    await getToolResult({ session: '12345', worksheetName: 'Sheet 1', mode: 'inline' });
+
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).not.toHaveBeenCalled();
   });
 
   it('should return error when execute-command-error occurs', async () => {
