@@ -166,6 +166,40 @@ describe('listAvailableFieldsTool', () => {
     expect(body.fields[0].column_ref).toBe('[Sample - Superstore].[sum:Profit:qk]');
   });
 
+  it('groups the message by datasource when fields span multiple datasources', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<workbook/>');
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue([
+      { ...mockFields[0], datasource: 'DS One' },
+      { ...mockFields[1], datasource: 'DS Two' },
+    ] as any);
+
+    const result = await getResult({ workbookFile: '/workbook.xml' });
+
+    invariant(result.content[0].type === 'text');
+    const body = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(body.message).toContain('Found 2 fields across 2 datasources:');
+    expect(body.message).toContain('Datasource "DS One" (1):');
+    expect(body.message).toContain('Datasource "DS Two" (1):');
+    expect(body.message).not.toContain('Found 2 fields in "DS One"');
+  });
+
+  it('truncates a name longer than the column width so the table stays aligned', async () => {
+    const longName = 'Calculation_1368249927221915648'; // 31 chars, exceeds the 30-wide column
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<workbook/>');
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue([
+      { ...mockFields[0], columnName: `[${longName}]`, caption: undefined },
+    ] as any);
+
+    const result = await getResult({ workbookFile: '/workbook.xml' });
+
+    invariant(result.content[0].type === 'text');
+    const body = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(body.message).toContain(longName.slice(0, 29) + '…');
+    expect(body.message).not.toContain(longName);
+  });
+
   it('with session re-snapshots live workbook, rewrites cache and sidecar, and lists new fields', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(STALE_XML);

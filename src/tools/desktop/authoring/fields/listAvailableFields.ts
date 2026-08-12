@@ -50,7 +50,8 @@ class WorkbookFileNotFoundError extends McpToolError {
   }
 }
 
-const pad = (str: string, len: number): string => str + ' '.repeat(Math.max(0, len - str.length));
+const pad = (str: string, len: number): string =>
+  str.length > len ? str.slice(0, len - 1) + '…' : str + ' '.repeat(len - str.length);
 
 const typeAbbrev = (type: string): string => {
   if (type === 'quantitative') return 'Q';
@@ -77,6 +78,42 @@ const tableauDatatypeLabel = (datatype?: string): string => {
       return datatype || 'unknown';
   }
 };
+
+type AvailableField = ReturnType<typeof listAvailableFields>[number];
+
+function renderFieldRows(fields: AvailableField[]): string {
+  let output = pad('Name', 30) + ' | ' + pad('Local Name', 30) + ' | Type\n';
+  output += '-'.repeat(30) + '-+-' + '-'.repeat(30) + '-+-' + '-'.repeat(15) + '\n';
+  for (const field of fields) {
+    const displayName = field.caption || field.columnName.replace(/^\[|\]$/g, '');
+    const cleanName = field.columnName.replace(/^\[|\]$/g, '');
+    const localNameDisplay = displayName === cleanName ? '(same)' : cleanName;
+    const typeInfo = `${typeAbbrev(field.type)} (${tableauDatatypeLabel(field.datatype)})`;
+    const aggregated = field.isAggregated ? ' [AGG]' : '';
+    output +=
+      pad(displayName, 30) +
+      ' | ' +
+      pad(localNameDisplay, 30) +
+      ' | ' +
+      typeInfo +
+      aggregated +
+      '\n';
+  }
+  return output;
+}
+
+function renderFieldTable(fields: AvailableField[]): string {
+  const dimensions = fields.filter((f) => f.role === 'dimension');
+  const measures = fields.filter((f) => f.role === 'measure');
+  let output = '';
+  if (dimensions.length > 0) {
+    output += `DIMENSIONS (${dimensions.length}):\n` + renderFieldRows(dimensions) + '\n';
+  }
+  if (measures.length > 0) {
+    output += `MEASURES (${measures.length}):\n` + renderFieldRows(measures) + '\n';
+  }
+  return output;
+}
 
 type ListAvailableFieldsResult =
   | { message: string; fields: ReturnType<typeof listAvailableFields> }
@@ -210,54 +247,19 @@ export const getListAvailableFieldsTool = (
             });
           }
 
-          const dimensions = fields.filter((f) => f.role === 'dimension');
-          const measures = fields.filter((f) => f.role === 'measure');
-          const datasourceName = fields[0].datasource;
+          const datasources = [...new Set(fields.map((f) => f.datasource))];
 
-          let output = `Found ${fields.length} fields in "${datasourceName}":\n\n`;
-
-          if (dimensions.length > 0) {
-            output += `DIMENSIONS (${dimensions.length}):\n`;
-            output += pad('Name', 30) + ' | ' + pad('Local Name', 30) + ' | Type\n';
-            output += '-'.repeat(30) + '-+-' + '-'.repeat(30) + '-+-' + '-'.repeat(15) + '\n';
-            for (const field of dimensions) {
-              const displayName = field.caption || field.columnName.replace(/^\[|\]$/g, '');
-              const cleanName = field.columnName.replace(/^\[|\]$/g, '');
-              const localNameDisplay = displayName === cleanName ? '(same)' : cleanName;
-              const typeInfo = `${typeAbbrev(field.type)} (${tableauDatatypeLabel(field.datatype)})`;
-              const aggregated = field.isAggregated ? ' [AGG]' : '';
-              output +=
-                pad(displayName, 30) +
-                ' | ' +
-                pad(localNameDisplay, 30) +
-                ' | ' +
-                typeInfo +
-                aggregated +
-                '\n';
+          let output: string;
+          if (datasources.length === 1) {
+            output =
+              `Found ${fields.length} fields in "${datasources[0]}":\n\n` +
+              renderFieldTable(fields);
+          } else {
+            output = `Found ${fields.length} fields across ${datasources.length} datasources:\n\n`;
+            for (const ds of datasources) {
+              const dsFields = fields.filter((f) => f.datasource === ds);
+              output += `Datasource "${ds}" (${dsFields.length}):\n\n` + renderFieldTable(dsFields);
             }
-            output += '\n';
-          }
-
-          if (measures.length > 0) {
-            output += `MEASURES (${measures.length}):\n`;
-            output += pad('Name', 30) + ' | ' + pad('Local Name', 30) + ' | Type\n';
-            output += '-'.repeat(30) + '-+-' + '-'.repeat(30) + '-+-' + '-'.repeat(15) + '\n';
-            for (const field of measures) {
-              const displayName = field.caption || field.columnName.replace(/^\[|\]$/g, '');
-              const cleanName = field.columnName.replace(/^\[|\]$/g, '');
-              const localNameDisplay = displayName === cleanName ? '(same)' : cleanName;
-              const typeInfo = `${typeAbbrev(field.type)} (${tableauDatatypeLabel(field.datatype)})`;
-              const aggregated = field.isAggregated ? ' [AGG]' : '';
-              output +=
-                pad(displayName, 30) +
-                ' | ' +
-                pad(localNameDisplay, 30) +
-                ' | ' +
-                typeInfo +
-                aggregated +
-                '\n';
-            }
-            output += '\n';
           }
 
           return new Ok({ message: output, fields });
