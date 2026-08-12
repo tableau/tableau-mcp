@@ -20,6 +20,7 @@ import { safeWorksheetCacheId } from './worksheetCache.js';
 interface WorksheetEditBufferPointer {
   file: string;
   session_id: string;
+  worksheet_name: string;
   updated_at: string;
 }
 
@@ -51,7 +52,8 @@ export function getStickyWorksheetFile({
   session: string;
   worksheetName: string;
 }): string | undefined {
-  const pointerFile = pointerFilePath({ session, worksheetName });
+  const trimmedName = worksheetName.trim();
+  const pointerFile = pointerFilePath({ session, worksheetName: trimmedName });
   if (!existsSync(pointerFile)) {
     return undefined;
   }
@@ -69,13 +71,20 @@ export function getStickyWorksheetFile({
     return undefined;
   }
 
-  if (typeof pointer.file !== 'string' || typeof pointer.session_id !== 'string') {
+  if (
+    typeof pointer.file !== 'string' ||
+    typeof pointer.session_id !== 'string' ||
+    typeof pointer.worksheet_name !== 'string'
+  ) {
     return undefined;
   }
   // The pointer path is already keyed by session, but a session collision after
   // sanitization (two ids that sanitize to the same string) would otherwise bleed one
   // session's buffer into another's — checking the recorded session_id closes that gap.
   if (pointer.session_id !== session) {
+    return undefined;
+  }
+  if (pointer.worksheet_name !== trimmedName) {
     return undefined;
   }
   if (!existsSync(pointer.file)) {
@@ -100,10 +109,12 @@ export function setStickyWorksheetFile({
   worksheetName: string;
   file: string;
 }): void {
-  const pointerFile = pointerFilePath({ session, worksheetName });
+  const trimmedName = worksheetName.trim();
+  const pointerFile = pointerFilePath({ session, worksheetName: trimmedName });
   const pointer: WorksheetEditBufferPointer = {
     file,
     session_id: session,
+    worksheet_name: trimmedName,
     updated_at: new Date().toISOString(),
   };
   try {
@@ -132,7 +143,7 @@ export function clearStickyWorksheetFile({
   session: string;
   worksheetName: string;
 }): void {
-  const pointerFile = pointerFilePath({ session, worksheetName });
+  const pointerFile = pointerFilePath({ session, worksheetName: worksheetName.trim() });
   if (!existsSync(pointerFile)) {
     return;
   }

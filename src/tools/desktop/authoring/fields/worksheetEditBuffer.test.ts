@@ -89,6 +89,41 @@ describe('worksheetEditBuffer', () => {
     );
   });
 
+  it('closes the recorded worksheet_name gap when two sheet names sanitize to the same cache key', () => {
+    files.set(TARGET_FILE, '<worksheet/>');
+    setStickyWorksheetFile({
+      session: SESSION,
+      worksheetName: 'Sales-2024',
+      file: TARGET_FILE,
+    });
+
+    expect(
+      getStickyWorksheetFile({ session: SESSION, worksheetName: 'Sales 2024' }),
+    ).toBeUndefined();
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetName: 'Sales-2024' })).toBe(
+      TARGET_FILE,
+    );
+  });
+
+  it('trims worksheetName so set/get/clear agree when the caller passes surrounding whitespace', () => {
+    files.set(TARGET_FILE, '<worksheet/>');
+    setStickyWorksheetFile({
+      session: SESSION,
+      worksheetName: 'Sheet 1 ',
+      file: TARGET_FILE,
+    });
+
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetName: ' Sheet 1' })).toBe(
+      TARGET_FILE,
+    );
+
+    clearStickyWorksheetFile({ session: SESSION, worksheetName: 'Sheet 1  ' });
+
+    expect(
+      getStickyWorksheetFile({ session: SESSION, worksheetName: 'Sheet 1' }),
+    ).toBeUndefined();
+  });
+
   it('ignores a pointer whose target file no longer exists', () => {
     setStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME, file: TARGET_FILE });
     // TARGET_FILE was never added to `files` — simulates the cache file being deleted
