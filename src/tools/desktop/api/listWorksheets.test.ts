@@ -16,7 +16,7 @@ vi.mock('../../../desktop/wrappers/listWorksheets.js');
 describe('listWorksheetsTool', () => {
   const resultSchema = z.object({
     count: z.number(),
-    worksheets: z.array(z.string()),
+    worksheets: z.array(z.object({ id: z.string().optional(), name: z.string() })),
   });
 
   beforeEach(() => {
@@ -26,9 +26,7 @@ describe('listWorksheetsTool', () => {
   it('should create a tool instance with correct properties', () => {
     const listWorksheetsTool = getListWorksheetsTool(new DesktopMcpServer());
     expect(listWorksheetsTool.name).toBe('list-worksheets');
-    expect(listWorksheetsTool.description).toContain(
-      'Gets a list of all worksheet names in the current workbook',
-    );
+    expect(listWorksheetsTool.description).toContain('stable id and name');
     expect(listWorksheetsTool.paramsSchema).toMatchObject({
       session: expect.any(Object),
     });
@@ -42,7 +40,11 @@ describe('listWorksheetsTool', () => {
     const mockListWorksheets = vi.spyOn(listWorksheetsModule, 'listWorksheets').mockResolvedValue(
       Ok({
         count: 3,
-        worksheets: ['Sheet 1', 'Sales Dashboard', 'Analysis'],
+        worksheets: [
+          { id: 'sheet-1', name: 'Sheet 1' },
+          { id: 'sheet-2', name: 'Sales Dashboard' },
+          { id: 'sheet-3', name: 'Analysis' },
+        ],
       }),
     );
 
@@ -59,7 +61,11 @@ describe('listWorksheetsTool', () => {
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(resultObj).toMatchObject({
       count: 3,
-      worksheets: ['Sheet 1', 'Sales Dashboard', 'Analysis'],
+      worksheets: [
+        { id: 'sheet-1', name: 'Sheet 1' },
+        { id: 'sheet-2', name: 'Sales Dashboard' },
+        { id: 'sheet-3', name: 'Analysis' },
+      ],
     });
 
     expect(mockListWorksheets).toHaveBeenCalledWith(
@@ -142,7 +148,7 @@ describe('listWorksheetsTool', () => {
     const mockListWorksheets = vi.spyOn(listWorksheetsModule, 'listWorksheets').mockResolvedValue(
       Ok({
         count: 1,
-        worksheets: ['Sheet 1'],
+        worksheets: [{ id: 'sheet-1', name: 'Sheet 1' }],
       }),
     );
 

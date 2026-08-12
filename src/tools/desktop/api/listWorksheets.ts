@@ -18,7 +18,7 @@ export const getListWorksheetsTool = (
     server,
     name: 'list-worksheets',
     title,
-    description: 'Gets a list of all worksheet names in the current workbook.',
+    description: "Lists the workbook's worksheets (stable id and name).",
     paramsSchema,
     annotations: {
       readOnlyHint: true,

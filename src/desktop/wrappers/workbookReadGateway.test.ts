@@ -31,7 +31,10 @@ describe('WorkbookReadGateway', () => {
       expect(gateway.mode).toBe('external-api');
       expect(result.isOk()).toBe(true);
       if (result.isOk()) {
-        expect(result.value.worksheets).toEqual(['Sales by Region', 'Profit by Category']);
+        expect(result.value.worksheets).toEqual([
+          { id: 'sheet-sales', name: 'Sales by Region' },
+          { id: 'sheet-profit', name: 'Profit by Category' },
+        ]);
       }
       expect(server.requests.map((request) => request.path)).toEqual(['/v0/workbook/worksheets']);
     } finally {
@@ -71,7 +74,7 @@ describe('WorkbookReadGateway', () => {
     expect(gateway.mode).toBe('external-api');
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
-      expect(result.value.worksheets).toEqual(['Sheet From XML']);
+      expect(result.value.worksheets).toEqual([{ name: 'Sheet From XML' }]);
     }
     expect(getWorkbookDocument).toHaveBeenCalledWith(signal);
   });

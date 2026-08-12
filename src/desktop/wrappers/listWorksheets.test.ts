@@ -21,7 +21,7 @@ describe('listWorksheets', () => {
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
       count: 1,
-      worksheets: ['Sales & Profit'],
+      worksheets: [{ id: 'sheet-1', name: 'Sales & Profit' }],
     });
     expect(executor.executeCommand).not.toHaveBeenCalled();
   });
@@ -51,7 +51,7 @@ describe('listWorksheets', () => {
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
       count: 2,
-      worksheets: ['Sales & Profit', 'Dashboard Source'],
+      worksheets: [{ name: 'Sales & Profit' }, { name: 'Dashboard Source' }],
     });
     expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
   });

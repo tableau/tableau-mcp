@@ -18,7 +18,7 @@ export const getListDashboardsTool = (
     server,
     name: 'list-dashboards',
     title,
-    description: 'Gets a list of all dashboard names in the current workbook.',
+    description: "Lists the workbook's dashboards (stable id and name).",
     paramsSchema,
     annotations: {
       readOnlyHint: true,

@@ -21,7 +21,7 @@ describe('listDashboards', () => {
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
       count: 1,
-      dashboards: ['Executive Overview'],
+      dashboards: [{ id: 'dashboard-1', name: 'Executive Overview' }],
     });
     expect(executor.executeCommand).not.toHaveBeenCalled();
   });
@@ -51,7 +51,7 @@ describe('listDashboards', () => {
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
       count: 2,
-      dashboards: ['Executive & Sales', 'Operations'],
+      dashboards: [{ name: 'Executive & Sales' }, { name: 'Operations' }],
     });
     expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
   });

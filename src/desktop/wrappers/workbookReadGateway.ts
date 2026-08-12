@@ -12,10 +12,12 @@ import { getWorkbookXml } from './getWorkbookXml.js';
 
 export type WorkbookReadMode = 'external-api';
 
+export type SheetListItem = { id?: string; name: string };
+
 export type ListWorksheetsResult = Result<
   {
     count: number;
-    worksheets: Array<string>;
+    worksheets: Array<SheetListItem>;
   },
   ExecuteCommandError
 >;
@@ -23,7 +25,7 @@ export type ListWorksheetsResult = Result<
 export type ListDashboardsResult = Result<
   {
     count: number;
-    dashboards: Array<string>;
+    dashboards: Array<SheetListItem>;
   },
   ExecuteCommandError
 >;
@@ -98,7 +100,10 @@ export class WorkbookReadGateway {
       return result;
     }
 
-    const worksheets = (result.value.worksheets ?? []).map((worksheet) => worksheet.name);
+    const worksheets = (result.value.worksheets ?? []).map((worksheet) => ({
+      id: worksheet.id,
+      name: worksheet.name,
+    }));
     return Ok({
       count: worksheets.length,
       worksheets,
@@ -111,7 +116,10 @@ export class WorkbookReadGateway {
       return result;
     }
 
-    const dashboards = (result.value.dashboards ?? []).map((dashboard) => dashboard.name);
+    const dashboards = (result.value.dashboards ?? []).map((dashboard) => ({
+      id: dashboard.id,
+      name: dashboard.name,
+    }));
     return Ok({
       count: dashboards.length,
       dashboards,
@@ -124,16 +132,16 @@ export class WorkbookReadGateway {
       return workbookResult;
     }
 
-    let worksheets: Array<string>;
+    let names: Array<string>;
     try {
-      worksheets = listSheets(workbookResult.value);
+      names = listSheets(workbookResult.value);
     } catch (error) {
       return Err({ type: 'invalid-response', error });
     }
 
     return Ok({
-      count: worksheets.length,
-      worksheets,
+      count: names.length,
+      worksheets: names.map((name) => ({ name })),
     });
   }
 
@@ -143,16 +151,16 @@ export class WorkbookReadGateway {
       return workbookResult;
     }
 
-    let dashboards: Array<string>;
+    let names: Array<string>;
     try {
-      dashboards = listWorkbookDashboards(workbookResult.value);
+      names = listWorkbookDashboards(workbookResult.value);
     } catch (error) {
       return Err({ type: 'invalid-response', error });
     }
 
     return Ok({
-      count: dashboards.length,
-      dashboards,
+      count: names.length,
+      dashboards: names.map((name) => ({ name })),
     });
   }
 
@@ -279,7 +287,7 @@ export class WorkbookReadGateway {
     try {
       const listed = await this.listWorksheets();
       if (listed.isErr()) return '';
-      const names = listed.value.worksheets.filter((n) => !!n);
+      const names = listed.value.worksheets.map((w) => w.name).filter((n) => !!n);
       if (names.length === 0) return '';
 
       const needle = missName.toLowerCase();
