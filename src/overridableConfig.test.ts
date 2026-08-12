@@ -60,6 +60,7 @@ describe('OverridableConfig', () => {
         'query-datasource',
         'list-workbooks',
         'get-workbook',
+        'download-workbook',
         'start-web-authoring-session',
         'publish-workbook',
       ]);
@@ -80,6 +81,7 @@ describe('OverridableConfig', () => {
         'query-datasource',
         'list-workbooks',
         'get-workbook',
+        'download-workbook',
         'start-web-authoring-session',
         'publish-workbook',
       ]);
