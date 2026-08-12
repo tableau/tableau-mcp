@@ -30,6 +30,7 @@ import {
   WorksheetXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';
 import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
 import {
   doneNextAction,
@@ -162,6 +163,14 @@ export const getApplyWorksheetTool = (
               });
               if (outcome.state !== 'applied') return outcome.error.toErr();
 
+              // A prior add-field/remove-field edit buffer for this sheet+session predates
+              // this apply; whatever it was tracking is now stale, so close it rather than
+              // let a later name-only call silently resume editing on top of it.
+              clearStickyWorksheetFile({
+                session: resolvedSession,
+                worksheetName: outcome.receipt.title,
+              });
+
               // The artifact apply already carries the verification outcome
               // (applyWorksheetArtifact resolves the skipped fallback), so the
               // structured receipt references that same object rather than
@@ -244,6 +253,11 @@ export const getApplyWorksheetTool = (
               signal: extra.signal,
             });
             if (outcome.state !== 'applied') return outcome.error.toErr();
+
+            clearStickyWorksheetFile({
+              session: resolvedSession,
+              worksheetName: outcome.receipt.title,
+            });
 
             const verification = outcome.receipt.verification;
             const verificationRan = verification.status !== 'skipped';
@@ -360,6 +374,10 @@ export const getApplyWorksheetTool = (
           const appliedWorksheetName = result.isOk()
             ? (result.value.appliedName ?? canonicalWorksheetName)
             : canonicalWorksheetName;
+
+          // The edits just landed — close the buffer so a later name-only add-field/
+          // remove-field call starts from a fresh live read instead of resuming this file.
+          clearStickyWorksheetFile({ session: resolvedSession, worksheetName: worksheetName! });
 
           // The structured receipt is derived from the same readback outcome the text
           // reports: when the readback ran its status is an observation; when it was

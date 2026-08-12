@@ -5,16 +5,19 @@ import { join } from 'path';
 
 import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
 import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { UnknownError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getAddFieldTool } from './addField.js';
+import * as refreshWorkbookCacheModule from './refreshWorkbookCache.js';
 
 // Real fs and real metadata here on purpose: the sibling suite mocks both, so it
 // cannot show what add-field writes into a worksheet for a field it could not find.
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/externalApi/discovery.js');
+vi.mock('./refreshWorkbookCache.js');
 
 const SESSION = '12345';
 
@@ -86,6 +89,11 @@ describe('add-field — an absent column comes back as a tool error, not a crash
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
+    vi.mocked(refreshWorkbookCacheModule.refreshWorkbookCache).mockResolvedValue({
+      ok: false,
+      reason: 'live workbook unavailable in this test',
+      error: new UnknownError('live workbook unavailable in this test'),
+    });
   });
 
   afterEach(() => {
@@ -140,5 +148,59 @@ describe('add-field — an absent column comes back as a tool error, not a crash
 
     expect(result.isError).toBe(false);
     expect(readFileSync(worksheetFile, 'utf-8')).toContain('datatype="date"');
+  });
+
+  it('refuses when workbookFile is omitted and live workbook cannot be resolved, without writing fabricated XML', async () => {
+    const { worksheetFile } = setup();
+
+    const tool = getAddFieldTool(new DesktopMcpServer());
+    const callback = await Provider.from(tool.callback);
+    const result = await callback(
+      {
+        session: SESSION,
+        worksheetFile,
+        worksheetName: undefined,
+        encodingType: undefined,
+        index: undefined,
+        workbookFile: undefined,
+        target: 'rows',
+        columnRef: '[Sample - Superstore].[none:Order Date:qk]',
+      },
+      getMockRequestHandlerExtra(),
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toMatch(/workbookFile|workbook/i);
+    expect(readFileSync(worksheetFile, 'utf-8')).toBe(WORKSHEET);
+  });
+
+  it('uses the live workbook when workbookFile is omitted and writes the real datatype', async () => {
+    const { worksheetFile } = setup();
+    vi.mocked(refreshWorkbookCacheModule.refreshWorkbookCache).mockResolvedValue({
+      ok: true,
+      xml: WORKBOOK,
+    });
+
+    const tool = getAddFieldTool(new DesktopMcpServer());
+    const callback = await Provider.from(tool.callback);
+    const result = await callback(
+      {
+        session: SESSION,
+        worksheetFile,
+        worksheetName: undefined,
+        encodingType: undefined,
+        index: undefined,
+        workbookFile: undefined,
+        target: 'rows',
+        columnRef: '[Sample - Superstore].[none:Order Date:qk]',
+      },
+      getMockRequestHandlerExtra(),
+    );
+
+    expect(result.isError).toBe(false);
+    expect(readFileSync(worksheetFile, 'utf-8')).toContain('datatype="date"');
+    expect(readFileSync(worksheetFile, 'utf-8')).not.toContain('datatype="string"');
+    expect(refreshWorkbookCacheModule.refreshWorkbookCache).toHaveBeenCalled();
   });
 });

@@ -9,6 +9,7 @@ import {
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';
 import { artifactNameParam, sessionParam, xmlModeParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';
@@ -74,6 +75,11 @@ export const getGetWorksheetXmlTool = (
               }
             }
           }
+
+          // An explicit re-read is the agent asking for live truth for this sheet — treat
+          // it as the new starting point rather than resuming whatever add-field/
+          // remove-field edit buffer might already be open underneath it.
+          clearStickyWorksheetFile({ session: resolvedSession, worksheetName });
 
           return finishXmlRead({
             kind: 'worksheet',

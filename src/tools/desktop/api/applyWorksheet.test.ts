@@ -20,6 +20,7 @@ import {
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import * as worksheetEditBufferModule from '../authoring/fields/worksheetEditBuffer.js';
 import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getApplyWorksheetTool } from './applyWorksheet.js';
@@ -28,6 +29,7 @@ vi.mock('../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) 
   ...(await importOriginal<typeof loadWorksheetXmlModule>()),
   loadWorksheetXml: vi.fn(),
 }));
+vi.mock('../authoring/fields/worksheetEditBuffer.js');
 vi.mock('fs');
 
 describe('applyWorksheetTool', () => {
@@ -141,6 +143,12 @@ describe('applyWorksheetTool', () => {
     expect(mockLoadWorksheetXml).toHaveBeenCalledOnce();
     expect(buildArtifact).toHaveBeenCalledOnce();
     expect(put).not.toHaveBeenCalled();
+    // A stale add-field/remove-field buffer for this sheet predates the direct-plan
+    // apply and must not survive it.
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+      session: '12345',
+      worksheetName: 'Artifact Sheet',
+    });
   });
 
   it.each([
@@ -446,6 +454,42 @@ describe('applyWorksheetTool', () => {
     );
   });
 
+  it('closes the sticky edit buffer for the applied sheet after a successful cached-file apply', async () => {
+    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Ok({ readbackWarnings: [] }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+    });
+  });
+
+  it('does not close the sticky edit buffer when the cached-file apply fails', async () => {
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Err({ type: 'load-worksheet-xml-error', error: { type: 'invalid-xml' } }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+      worksheetXml: '<worksheet name="Sheet 1"><table></table></worksheet>',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(true);
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).not.toHaveBeenCalled();
+  });
+
   it('should return error when no worksheetFile is given', async () => {
     const mockExecutor = vi.fn().mockResolvedValue({});
 
@@ -628,6 +672,12 @@ describe('applyWorksheetTool', () => {
       label: 'Verification failed — inspect sheet, rebuild artifact',
     });
     expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
+    // Applied (even with a failed readback) — the sheet changed, so any prior
+    // add-field/remove-field buffer for it is stale and must be closed.
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+      session: '12345',
+      worksheetName: 'Artifact Sheet',
+    });
   });
 
   it('keeps a same-pid/new-instance mismatch usable for the correct instance', async () => {
