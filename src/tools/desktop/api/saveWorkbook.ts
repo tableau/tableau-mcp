@@ -39,29 +39,50 @@ export const getSaveWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
       return await saveWorkbookTool.logAndExecute({
         extra,
         args: { session, filePath },
-        callback: async () => {
-          const result = await runExternalApiReadTool({
+        callback: async () =>
+          await runExternalApiReadTool({
             session,
             extra,
-            callback: async (_executor, _signal, read) =>
-              await read(
+            callback: async (_executor, _signal, read) => {
+              const result = await read(
                 'save-workbook',
                 async (executor, signal) => await executor.saveWorkbook(filePath, signal),
-              ),
-          });
-          if (result.isErr()) {
-            return result;
-          }
+              );
+              if (result.isErr()) {
+                return result;
+              }
 
-          const saved =
-            filePath !== undefined ? `Saved a copy to "${filePath}".` : 'Saved the open workbook.';
-          return new Ok({
-            message:
-              result.value.status === 'completed'
-                ? saved
-                : 'Requested saving the workbook; Desktop is still applying it.',
-          });
-        },
+              if (result.value.status !== 'completed') {
+                return new Ok({
+                  message: 'Requested saving the workbook; Desktop is still applying it.',
+                });
+              }
+
+              // A completed save can still be a no-op: a dismissed Save As dialog reports
+              // SUCCEEDED, so confirm the write via unsavedChanges rather than trusting status.
+              const inventory = await read(
+                'get-workbook',
+                async (executor, signal) => await executor.getWorkbook(signal),
+              );
+              if (inventory.isErr()) {
+                return inventory;
+              }
+              if (inventory.value.unsavedChanges) {
+                return new Ok({
+                  message:
+                    'Tableau reported the save as complete, but the workbook still has unsaved ' +
+                    'changes, so it was not saved (the Save As dialog was likely dismissed).',
+                });
+              }
+
+              return new Ok({
+                message:
+                  filePath !== undefined
+                    ? `Saved a copy to "${filePath}".`
+                    : 'Saved the open workbook.',
+              });
+            },
+          }),
       });
     },
   });

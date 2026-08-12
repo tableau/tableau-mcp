@@ -49,6 +49,7 @@ describe('open-file / save-workbook tools', () => {
   it('save-workbook without a path saves in place with an empty body', async () => {
     const harness = await startHarness(getSaveWorkbookTool);
     try {
+      setSaved(harness.server);
       const result = await harness.callTool({});
       expect(result.isError).toBeFalsy();
       expect(messageOf(result)).toBe('Saved the open workbook.');
@@ -66,6 +67,7 @@ describe('open-file / save-workbook tools', () => {
   it('save-workbook with a path saves a copy there', async () => {
     const harness = await startHarness(getSaveWorkbookTool);
     try {
+      setSaved(harness.server);
       const result = await harness.callTool({ filePath: '/Users/me/Copy.twbx' });
       expect(result.isError).toBeFalsy();
       expect(messageOf(result)).toBe('Saved a copy to "/Users/me/Copy.twbx".');
@@ -79,7 +81,29 @@ describe('open-file / save-workbook tools', () => {
       await harness.close();
     }
   });
+
+  it('save-workbook reports the workbook was not saved when unsaved changes remain', async () => {
+    const harness = await startHarness(getSaveWorkbookTool);
+    try {
+      setUnsaved(harness.server);
+      const result = await harness.callTool({});
+      expect(result.isError).toBeFalsy();
+      expect(messageOf(result)).toContain('was not saved');
+    } finally {
+      await harness.close();
+    }
+  });
 });
+
+function setWorkbookUnsavedChanges(server: MockExternalApiServer, unsavedChanges: boolean): void {
+  server.setOverride('GET /v0/workbook', {
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ title: 'Book1', unsavedChanges }),
+  });
+}
+const setSaved = (server: MockExternalApiServer): void => setWorkbookUnsavedChanges(server, false);
+const setUnsaved = (server: MockExternalApiServer): void => setWorkbookUnsavedChanges(server, true);
 
 async function startHarness(makeTool: (server: DesktopMcpServer) => DesktopTool<any>): Promise<{
   server: MockExternalApiServer;
