@@ -170,10 +170,43 @@ describe('tryApplyViaPerSheetRoute', () => {
       expect(apply).toHaveBeenCalledTimes(1);
       const [postedId, postedXml] = apply.mock.calls[0];
       expect(postedId).toBe(id);
-      expect(postedXml).toContain(`name="${currentName}"`);
-      expect(postedXml).toContain(`uuid="${id}"`);
+      expect(postedXml).toContain(`name='${currentName}'`);
+      expect(postedXml).toContain(`uuid='${id}'`);
     },
   );
+
+  it('changes only the root name when a stale fragment contains numeric entities', async () => {
+    const fragmentXml =
+      "<worksheet name='Old worksheet'>" +
+      '<column formula="real:&#13; literal:&amp;#13;" />' +
+      "<simple-id uuid='sheet-1' />" +
+      '</worksheet>';
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: 'Renamed worksheet' }] })),
+      applyWorksheetDocument,
+    });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: 'worksheet',
+      sheetName: 'sheet-1',
+      fragmentXml,
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(applyWorksheetDocument).toHaveBeenCalledWith(
+      'sheet-1',
+      fragmentXml.replace("name='Old worksheet'", "name='Renamed worksheet'"),
+      mockSignal,
+    );
+  });
 
   it.each(FIXTURES)(
     'reports sheet-absent for an unresolved $kind name without posting',

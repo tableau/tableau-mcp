@@ -1,12 +1,11 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
+import { escapeXml } from '../binder/escape.js';
 import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
-import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
-import type { ParsedDashboard, ParsedWorksheet } from '../metadata/types.js';
-import { xmlNamesEqual } from '../xmlElement.js';
+import { parseOuterElement, xmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
 
 export type PerSheetKind = 'worksheet' | 'dashboard' | 'storyboard';
@@ -126,22 +125,33 @@ function retitleFragment(
   currentName: string,
 ): Result<string, ExecuteCommandError> {
   try {
-    const parsed = parseXML(fragmentXml);
-    const fragment =
-      kind === 'worksheet'
-        ? normalizeArray(parsed.worksheet as ParsedWorksheet | undefined)[0]
-        : normalizeArray(parsed.dashboard as ParsedDashboard | undefined)[0];
-    if (!fragment?.['@_name']) {
+    const expectedTag = kind === 'worksheet' ? 'worksheet' : 'dashboard';
+    const outer = parseOuterElement(fragmentXml);
+    if (!outer?.name || outer.tagName !== expectedTag) {
       return Err({
         type: 'invalid-response',
         error: new Error(`The ${kind} fragment has no root name.`),
       });
     }
-    if (xmlNamesEqual(fragment['@_name'], currentName)) {
+    if (xmlNamesEqual(outer.name, currentName)) {
       return Ok(fragmentXml);
     }
-    fragment['@_name'] = currentName;
-    return Ok(serializeXML(parsed));
+
+    const rootTag = new RegExp(`<${expectedTag}\\b[^>]*>`).exec(fragmentXml);
+    const nameAttribute = rootTag ? /(\sname\s*=\s*)(['"])(.*?)\2/.exec(rootTag[0]) : null;
+    if (!rootTag || !nameAttribute) {
+      return Err({
+        type: 'invalid-response',
+        error: new Error(`The ${kind} fragment has no root name.`),
+      });
+    }
+
+    const valueStart =
+      rootTag.index + nameAttribute.index + nameAttribute[1].length + nameAttribute[2].length;
+    const valueEnd = valueStart + nameAttribute[3].length;
+    return Ok(
+      fragmentXml.slice(0, valueStart) + escapeXml(currentName) + fragmentXml.slice(valueEnd),
+    );
   } catch (error) {
     return Err({ type: 'invalid-response', error });
   }

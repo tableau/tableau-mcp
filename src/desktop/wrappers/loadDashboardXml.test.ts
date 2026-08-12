@@ -412,7 +412,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(result.isOk()).toBe(true);
     expect(applyDashboardDocument).toHaveBeenCalledWith(
       dashboardId,
-      expect.stringContaining('name="Renamed Dashboard"'),
+      expect.stringContaining("name='Renamed Dashboard'"),
       mockSignal,
     );
   });

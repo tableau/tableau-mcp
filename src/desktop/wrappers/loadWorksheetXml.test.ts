@@ -512,7 +512,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     // the current live name even when the route is addressed by id.
     expect(applyWorksheetDocument).toHaveBeenCalledWith(
       sheetId,
-      expect.stringContaining('name="Renamed Live"'),
+      expect.stringContaining("name='Renamed Live'"),
       mockSignal,
     );
   });
