@@ -139,7 +139,7 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:flow:read');
     });
 
-    it('should exclude tableau:mcp:workbook:create when upload-validate-publish is disabled', async () => {
+    it('should exclude tableau:mcp:workbook:create when authoring-tools is disabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
@@ -148,9 +148,9 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:workbook:create');
     });
 
-    it('should include tableau:mcp:workbook:create when upload-validate-publish is enabled', async () => {
+    it('should include tableau:mcp:workbook:create when authoring-tools is enabled', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
-        return featureName === 'upload-validate-publish';
+        return featureName === 'authoring-tools';
       });
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -267,7 +267,7 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:flows:read');
     });
 
-    it('should exclude tableau:workbooks:create when upload-validate-publish is disabled', async () => {
+    it('should exclude tableau:workbooks:create when authoring-tools is disabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
@@ -276,9 +276,9 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:workbooks:create');
     });
 
-    it('should include tableau:workbooks:create when upload-validate-publish is enabled', async () => {
+    it('should include tableau:workbooks:create when authoring-tools is enabled', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
-        return featureName === 'upload-validate-publish';
+        return featureName === 'authoring-tools';
       });
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -401,7 +401,7 @@ describe('scopes', () => {
       await expect(isValidScope('tableau:mcp:workbook:read')).resolves.toBe(true);
     });
 
-    it('should return false for tableau:mcp:workbook:create when upload-validate-publish is disabled', async () => {
+    it('should return false for tableau:mcp:workbook:create when authoring-tools is disabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
@@ -409,9 +409,9 @@ describe('scopes', () => {
       await expect(isValidScope('tableau:mcp:workbook:create')).resolves.toBe(false);
     });
 
-    it('should return true for tableau:mcp:workbook:create when upload-validate-publish is enabled', async () => {
+    it('should return true for tableau:mcp:workbook:create when authoring-tools is enabled', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
-        return featureName === 'upload-validate-publish';
+        return featureName === 'authoring-tools';
       });
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,

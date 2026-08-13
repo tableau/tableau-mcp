@@ -389,8 +389,7 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
-  const uploadValidatePublishEnabled =
-    await featureGate.isFeatureEnabled('upload-validate-publish');
+  const authoringToolsEnabled = await featureGate.isFeatureEnabled('authoring-tools');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -425,7 +424,7 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
     enabledTools.delete('list-flow-tasks');
   }
 
-  if (!uploadValidatePublishEnabled) {
+  if (!authoringToolsEnabled) {
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('validate-upload-and-publish-workbook');
   }

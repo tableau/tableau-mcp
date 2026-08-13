@@ -48,7 +48,7 @@ export const getRequestWorkbookUploadTool = (
       openWorldHint: true,
     },
     disabled: new Provider(
-      async () => !(await getFeatureGate().isFeatureEnabled('upload-validate-publish')),
+      async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
     ),
     callback: async ({ fileName, contentType, sizeBytes }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<RequestWorkbookUploadResult>({

@@ -149,7 +149,7 @@ function getStagedUploadSmokeEnv({ s3Bucket }: StagedUploadSmokeConfig): Record<
     FILE_TTL: process.env.FILE_TTL?.trim() || '300',
     FEATURE_GATE_PROVIDER: 'custom',
     FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
-      module: './tests/e2e/fixtures/uploadValidatePublishFeatureGate.cjs',
+      module: './tests/e2e/fixtures/authoringToolsFeatureGate.cjs',
     }),
   };
 

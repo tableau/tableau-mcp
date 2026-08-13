@@ -52,7 +52,7 @@ FILE_TTL=300 \
 npm run test:e2e -- --run tests/e2e/workbooks/validateUploadAndPublishWorkbook.test.ts
 ```
 
-The test starts the MCP server with only the `upload-validate-publish` feature flag enabled, calls
+The test starts the MCP server with only the `authoring-tools` feature flag enabled, calls
 `request-workbook-upload`, uploads the workbook bytes to the returned signed URL, and then calls
 `validate-upload-and-publish-workbook` with the returned `workbookUploadId`.
 

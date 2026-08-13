@@ -70,7 +70,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
       openWorldHint: true,
     },
     disabled: new Provider(
-      async () => !(await getFeatureGate().isFeatureEnabled('upload-validate-publish')),
+      async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
     ),
     callback: async ({ workbookUploadId, name, overwrite }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<ValidateUploadAndPublishWorkbookResult>({

@@ -63,7 +63,7 @@ describe('server', () => {
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
-      // authoring tools are gated off by default (upload-validate-publish feature flag)
+      // authoring tools are gated off by default (authoring-tools feature flag)
       const authoringTools: ReadonlyArray<WebToolName> = [
         'request-workbook-upload',
         'validate-upload-and-publish-workbook',
@@ -91,7 +91,7 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!features['upload-validate-publish']) {
+      if (!features['authoring-tools']) {
         expectedToolNames = expectedToolNames.filter((name) => !authoringTools.includes(name));
       }
 
@@ -184,7 +184,7 @@ describe('server', () => {
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
-      // authoring tools are gated off by default (upload-validate-publish feature flag)
+      // authoring tools are gated off by default (authoring-tools feature flag)
       const authoringTools: ReadonlyArray<WebToolName> = [
         'request-workbook-upload',
         'validate-upload-and-publish-workbook',
@@ -216,7 +216,7 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!features['upload-validate-publish']) {
+      if (!features['authoring-tools']) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !authoringTools.includes(name),
         );

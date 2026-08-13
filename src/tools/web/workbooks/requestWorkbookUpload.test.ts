@@ -52,13 +52,13 @@ describe('requestWorkbookUploadTool', () => {
     });
   });
 
-  it('is disabled when the upload-validate-publish feature flag is OFF', async () => {
+  it('is disabled when the authoring-tools feature flag is OFF', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
 
     const tool = getRequestWorkbookUploadTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('upload-validate-publish');
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
   it('returns a staged upload URL when S3 is configured', async () => {

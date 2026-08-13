@@ -89,20 +89,20 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     expect(tool.description).toContain('site Default project');
   });
 
-  it('is disabled when the upload-validate-publish feature flag is OFF', async () => {
+  it('is disabled when the authoring-tools feature flag is OFF', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
 
     const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('upload-validate-publish');
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
-  it('is enabled when the upload-validate-publish feature flag is ON', async () => {
+  it('is enabled when the authoring-tools feature flag is ON', async () => {
     const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('upload-validate-publish');
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
   it('validates, publishes to the top-level Default project, and returns the published workbook', async () => {
