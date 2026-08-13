@@ -29,6 +29,7 @@ const validArgs = {
   uploadSessionId: 'upload-session-123',
   name: 'My New Workbook',
   projectId: 'ae5e9374-2a58-40ab-93e4-a2fd1b07cf7d',
+  overwrite: undefined,
 };
 
 describe('publishWorkbookTool', () => {
