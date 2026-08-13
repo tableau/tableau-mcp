@@ -184,20 +184,29 @@ describe('listAvailableFieldsTool', () => {
     expect(body.message).not.toContain('Found 2 fields in "DS One"');
   });
 
-  it('truncates a name longer than the column width so the table stays aligned', async () => {
-    const longName = 'Calculation_1368249927221915648'; // 31 chars, exceeds the 30-wide column
+  it('middle-truncates over-width names, keeping the tail so similar ids stay distinct', async () => {
+    // 31 chars, exceeds the 30-wide column; the two differ only in the final digit.
+    const a = 'Calculation_1368249927221915648';
+    const b = 'Calculation_1368249927221915649';
+    const HEAD = 15;
+    const TAIL = 14; // 30-wide column: 15 head + ellipsis + 14 tail
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
     vi.mocked(metadataModule.listAvailableFields).mockReturnValue([
-      { ...mockFields[0], columnName: `[${longName}]`, caption: undefined },
+      { ...mockFields[0], columnName: `[${a}]`, caption: undefined },
+      { ...mockFields[0], columnName: `[${b}]`, caption: undefined },
     ] as any);
 
     const result = await getResult({ workbookFile: '/workbook.xml' });
 
     invariant(result.content[0].type === 'text');
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(body.message).toContain(longName.slice(0, 29) + '…');
-    expect(body.message).not.toContain(longName);
+    const rendered = (s: string): string => s.slice(0, HEAD) + '…' + s.slice(s.length - TAIL);
+    expect(body.message).toContain(rendered(a));
+    expect(body.message).toContain(rendered(b));
+    expect(rendered(a)).not.toBe(rendered(b));
+    expect(body.message).not.toContain(a);
+    expect(body.message).not.toContain(b);
   });
 
   it('with session re-snapshots live workbook, rewrites cache and sidecar, and lists new fields', async () => {

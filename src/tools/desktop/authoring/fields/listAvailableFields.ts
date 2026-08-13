@@ -50,8 +50,17 @@ class WorkbookFileNotFoundError extends McpToolError {
   }
 }
 
-const pad = (str: string, len: number): string =>
-  str.length > len ? str.slice(0, len - 1) + '…' : str + ' '.repeat(len - str.length);
+const pad = (str: string, len: number): string => {
+  if (str.length <= len) {
+    return str + ' '.repeat(len - str.length);
+  }
+  // Truncate in the middle, not the tail: auto-generated names like
+  // Calculation_<id> often differ only in their final digits, so keeping the
+  // tail as well as the head keeps otherwise-identical rows distinguishable.
+  const keep = len - 1;
+  const head = Math.ceil(keep / 2);
+  return str.slice(0, head) + '…' + str.slice(str.length - (keep - head));
+};
 
 const typeAbbrev = (type: string): string => {
   if (type === 'quantitative') return 'Q';
