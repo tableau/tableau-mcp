@@ -116,7 +116,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   // the committed TRIMMED index (~920 KB). Its ~10 MB ungzipped source lives OUTSIDE this
   // dir at src/desktop/data-source/ and is never staged. search-commands (and the name/param
   // guards) no longer read a bundled snapshot here — commandsReference.ts synthesizes their
-  // document from tab-agent-south's live External API registry (EXTERNAL_API_REGISTRY_DIR)
+  // document from tab-agent-south's live External API registry (TABLEAU_COMMANDS_REGISTRY_DIR)
   // at runtime, which is why there is no tableau-desktop-commands-reference.json entry below.
   //
   // VARIANT-GATED: only the desktop tool surface (the `desktop` and `combined` variants)

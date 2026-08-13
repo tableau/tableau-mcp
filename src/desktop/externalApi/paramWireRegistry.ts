@@ -3,7 +3,7 @@ import { join } from 'path';
 
 import { log } from '../../logging/logger.js';
 
-const REGISTRY_DIR_ENV = 'EXTERNAL_API_REGISTRY_DIR';
+const REGISTRY_DIR_ENV = 'TABLEAU_COMMANDS_REGISTRY_DIR';
 const COMMAND_PARAM_REGISTRY_FILE = 'command_param_registry.json';
 const CODEGEN_REGISTRY_FILE = 'codegen_registry.json';
 
@@ -69,7 +69,7 @@ export function lookupExternalApiCommandRegistry(
  * API registry declares, or `null` when no registry is loaded (env unset, or the
  * JSON is missing/unreadable/invalid) — the name guard's (commandNameRegistry.ts)
  * fail-open signal. This is tab-agent-south's live command_param_registry.json
- * materialized to `EXTERNAL_API_REGISTRY_DIR`, so it reflects the Desktop build
+ * materialized to `TABLEAU_COMMANDS_REGISTRY_DIR`, so it reflects the Desktop build
  * that ships alongside this agent, not a snapshot bundled into tableau-mcp.
  */
 export function listExternalApiCommandNames(): Set<string> | null {

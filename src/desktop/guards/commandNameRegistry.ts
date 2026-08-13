@@ -10,7 +10,7 @@ export type CommandValidationResult = { ok: true } | { ok: false; message: strin
 /**
  * The known-command set for name validation, sourced from the External API
  * registry (tab-agent-south's live command_param_registry.json, materialized to
- * `EXTERNAL_API_REGISTRY_DIR`) rather than a bundled snapshot — a snapshot goes
+ * `TABLEAU_COMMANDS_REGISTRY_DIR`) rather than a bundled snapshot — a snapshot goes
  * stale the moment Desktop ships a new command (e.g. tabdoc:add-local-extension),
  * refusing a real command tableau-mcp never even attempts to send.
  *

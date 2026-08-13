@@ -36,7 +36,7 @@ describe('paramWireRegistry', () => {
     }
   });
 
-  it('returns null when EXTERNAL_API_REGISTRY_DIR is unset', async () => {
+  it('returns null when TABLEAU_COMMANDS_REGISTRY_DIR is unset', async () => {
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
 
     expect(lookupExternalApiCommandRegistry('tabdoc', 'show-me')).toBeNull();
@@ -51,7 +51,7 @@ describe('paramWireRegistry', () => {
       JSON.stringify({ param_name: {}, type_of_param: {}, enum_vals: {} }),
       'utf-8',
     );
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
 
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
 
@@ -89,7 +89,7 @@ describe('paramWireRegistry', () => {
         ShowMeCommandType: ['bars', 'lines'],
       },
     });
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
 
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
     const entry = lookupExternalApiCommandRegistry('tabdoc', 'show-me');
@@ -126,7 +126,7 @@ describe('paramWireRegistry', () => {
       typeOfParam: { DPI_TupleEnumType: ['TupleEnum', 'enum'] },
       enumVals: { TupleEnum: ['bar-horiz', 'text'] },
     });
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
 
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
     const entry = lookupExternalApiCommandRegistry('tabdoc', 'show-me');
@@ -145,7 +145,7 @@ describe('paramWireRegistry', () => {
         },
       },
     });
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
 
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
 
@@ -169,7 +169,7 @@ describe('paramWireRegistry', () => {
         },
       },
     });
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
 
     const { listExternalApiCommandRegistryEntries } = await import('./paramWireRegistry.js');
     const entries = listExternalApiCommandRegistryEntries();
@@ -196,7 +196,7 @@ describe('paramWireRegistry', () => {
         },
       },
     });
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
 
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
     expect(lookupExternalApiCommandRegistry('tabdoc', 'show-me')?.invocable).toBe(true);

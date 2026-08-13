@@ -57,7 +57,7 @@ function enableExternalApiRegistry(commands: Record<string, unknown>): void {
   TEST_DIRS.push(dir);
   writeFileSync(join(dir, 'command_param_registry.json'), JSON.stringify(commands), 'utf-8');
   writeFileSync(join(dir, 'codegen_registry.json'), JSON.stringify({}), 'utf-8');
-  vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+  vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
   _resetExternalApiCommandRegistryForTest();
   _resetCommandsReferenceForTest();
 }
@@ -73,7 +73,7 @@ function resetRegistryFixture(): void {
 
 // paramContractGuard.ts memoises its own commandsByName() projection at module scope, on top
 // of commandsReference.ts's and paramWireRegistry.ts's own caches — resetModules is the only
-// way to force it to re-derive from a freshly (un)stubbed EXTERNAL_API_REGISTRY_DIR every test.
+// way to force it to re-derive from a freshly (un)stubbed TABLEAU_COMMANDS_REGISTRY_DIR every test.
 beforeEach(() => {
   vi.resetModules();
 });
@@ -197,14 +197,14 @@ describe('paramContractGuard with no External API registry loaded', () => {
     resetRegistryFixture();
   });
 
-  it('fails open on every command when EXTERNAL_API_REGISTRY_DIR is unset', async () => {
+  it('fails open on every command when TABLEAU_COMMANDS_REGISTRY_DIR is unset', async () => {
     const { validateCommandParams } = await import('./paramContractGuard.js');
 
     expect(validateCommandParams('tabdoc:mock-goto', { Sheet: 'Sheet 1' })).toEqual({ ok: true });
   });
 
   it('fails open when the External API registry directory is unreadable', async () => {
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', join(process.cwd(), 'does-not-exist-registry-dir'));
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', join(process.cwd(), 'does-not-exist-registry-dir'));
     _resetExternalApiCommandRegistryForTest();
     _resetCommandsReferenceForTest();
     const { validateCommandParams } = await import('./paramContractGuard.js');

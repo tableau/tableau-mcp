@@ -25,7 +25,7 @@ function enableExternalApiRegistry(names: string[]): void {
     'utf-8',
   );
   writeFileSync(join(dir, 'codegen_registry.json'), JSON.stringify({}), 'utf-8');
-  vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+  vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
   _resetExternalApiCommandRegistryForTest();
 }
 
@@ -52,7 +52,7 @@ describe('commandNameRegistry', () => {
   });
 
   it('fails open when the External API registry is unreadable', async () => {
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', join(process.cwd(), 'does-not-exist-registry-dir'));
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', join(process.cwd(), 'does-not-exist-registry-dir'));
     _resetExternalApiCommandRegistryForTest();
     const { validateKnownCommand } = await import('./commandNameRegistry.js');
 

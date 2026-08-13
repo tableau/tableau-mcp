@@ -39,7 +39,7 @@ let cache: CommandsReferenceDocument | null | undefined;
 
 /**
  * Clears this module's own memoised document, independent of `paramWireRegistry`'s cache —
- * tests that swap `EXTERNAL_API_REGISTRY_DIR` between cases need both reset, since a dynamic
+ * tests that swap `TABLEAU_COMMANDS_REGISTRY_DIR` between cases need both reset, since a dynamic
  * `import('./commandsReference.js')` resolves to the same cached module instance across every
  * test in a file unless `vi.resetModules()` is called.
  */

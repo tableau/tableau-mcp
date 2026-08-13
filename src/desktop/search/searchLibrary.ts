@@ -13,13 +13,13 @@ let _commandsFuse: Fuse<any> | null = null;
 
 // Unlike the guards (which fail open on a missing reference), search THROWS: a search
 // tool with no corpus should error loudly, not silently return nothing. The reference is
-// synthesized from tab-agent-south's live External API registry (EXTERNAL_API_REGISTRY_DIR),
+// synthesized from tab-agent-south's live External API registry (TABLEAU_COMMANDS_REGISTRY_DIR),
 // not a bundled asset, so a missing reference means no registry is loaded for this run.
 function loadCommandsReference(): any {
   const ref = loadCommandsReferenceDocument();
   if (ref === null) {
     throw new Error(
-      'Commands reference not available: no External API registry loaded (EXTERNAL_API_REGISTRY_DIR unset or unreadable).',
+      'Commands reference not available: no External API registry loaded (TABLEAU_COMMANDS_REGISTRY_DIR unset or unreadable).',
     );
   }
   return ref;

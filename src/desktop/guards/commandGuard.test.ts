@@ -52,7 +52,7 @@ function enableExternalApiRegistry(commands: Record<string, unknown>): void {
     typeOfParam: { DPI_ShowMeCommandType: { enum_name: 'ShowMeCommandType' } },
     enumVals: { ShowMeCommandType: ['bars', 'lines'] },
   });
-  vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+  vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
   _resetExternalApiCommandRegistryForTest();
 }
 

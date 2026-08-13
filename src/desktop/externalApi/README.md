@@ -16,7 +16,7 @@ traffic resumes through this layer once startup completes.
 | `externalApiToolExecutor.ts` | The one tool executor: instance discovery/pinning, 401 rescan, and **every tool endpoint method** |
 | `executorTypes.ts` | Shared executor types (`ExecuteCommand*`, `WorkbookDocument`, …) |
 | `discovery.ts` | Discovery-file scanning (`TABLEAU_EXTERNAL_API_DISCOVERY_DIR` override) |
-| `paramWireRegistry.ts` | Optional `$EXTERNAL_API_REGISTRY_DIR` command/param wire-name registry |
+| `paramWireRegistry.ts` | Optional `$TABLEAU_COMMANDS_REGISTRY_DIR` command/param wire-name registry |
 | `toolUtils.ts` | Error helpers shared with the tool layer (`isRouteMissing`, …) |
 | `mockExternalApiServer.ts` | Real-HTTP mock of the /v0 surface for tests |
 

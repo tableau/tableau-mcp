@@ -15,7 +15,7 @@ function enableExternalApiRegistry(commands: Record<string, unknown>): void {
   TEST_DIRS.push(dir);
   writeFileSync(join(dir, 'command_param_registry.json'), JSON.stringify(commands), 'utf-8');
   writeFileSync(join(dir, 'codegen_registry.json'), JSON.stringify({}), 'utf-8');
-  vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+  vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
   _resetExternalApiCommandRegistryForTest();
   _resetCommandsReferenceForTest();
 }
