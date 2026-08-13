@@ -2,8 +2,8 @@ import {
   carryNamespaceDeclarations,
   generateUUID,
   normalizeArray,
-  parseXMLPreservingNumericEntities,
-  serializeXMLPreservingNumericEntities,
+  parseXML,
+  serializeXML,
 } from '../metadata/parser.js';
 
 export type SheetType = 'worksheet' | 'dashboard' | 'story';
@@ -54,8 +54,8 @@ export function injectTemplate(
 ): string {
   const { container, element, windowClass } = SHEET_CONFIG[sheetType];
 
-  const workbook = parseXMLPreservingNumericEntities(workbookXml);
-  const template = parseXMLPreservingNumericEntities(templateXml);
+  const workbook = parseXML(workbookXml);
+  const template = parseXML(templateXml);
 
   const wb = workbook.workbook;
   if (!wb) throw new Error('Workbook XML has no <workbook> root element');
@@ -116,5 +116,5 @@ export function injectTemplate(
 
   wb.windows.window = (existingWindows.length === 1 ? existingWindows[0] : existingWindows) as any;
 
-  return serializeXMLPreservingNumericEntities(workbook);
+  return serializeXML(workbook);
 }
