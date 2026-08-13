@@ -1,6 +1,7 @@
 import { BucketS3Config } from '../s3Client.js';
 import {
   buildWorkbookUploadS3Key,
+  MAX_STAGED_WORKBOOK_BYTES,
   requestStagedWorkbookUpload,
   resolveStagedWorkbookUpload,
 } from './stagedWorkbookUpload.js';
@@ -45,7 +46,7 @@ describe('requestStagedWorkbookUpload', () => {
       workbookUploadId: uploadId,
       uploadUrl: 'https://s3.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
-      maxSizeBytes: 5 * 1024 * 1024,
+      maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
     });
     expect(mocks.createPresignedPutUrlToS3).toHaveBeenCalledWith({
@@ -71,11 +72,11 @@ describe('requestStagedWorkbookUpload', () => {
     await expect(
       requestStagedWorkbookUpload({
         fileName: 'workbook.twb',
-        sizeBytes: 6 * 1024 * 1024,
+        sizeBytes: MAX_STAGED_WORKBOOK_BYTES + 1,
         config,
         generateUuid: () => uploadId,
       }),
-    ).rejects.toThrow('exceeds the 5242880-byte limit');
+    ).rejects.toThrow(`exceeds the ${MAX_STAGED_WORKBOOK_BYTES}-byte limit`);
   });
 });
 
@@ -96,7 +97,7 @@ describe('resolveStagedWorkbookUpload', () => {
       key: `mcp/workbook-uploads/${uploadId}/workbook.twb`,
       bucket: 'tableau-workbooks',
       region: 'us-east-1',
-      maxBytes: 5 * 1024 * 1024,
+      maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
   });
 

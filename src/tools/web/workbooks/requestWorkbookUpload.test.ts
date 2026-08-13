@@ -6,6 +6,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getRequestWorkbookUploadTool } from './requestWorkbookUpload.js';
+import { MAX_STAGED_WORKBOOK_BYTES } from './stagedWorkbookUpload.js';
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
@@ -31,7 +32,7 @@ describe('requestWorkbookUploadTool', () => {
       workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
       uploadUrl: 'https://s3.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
-      maxSizeBytes: 5 * 1024 * 1024,
+      maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
     });
   });
@@ -73,7 +74,7 @@ describe('requestWorkbookUploadTool', () => {
       workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
       uploadUrl: 'https://s3.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
-      maxSizeBytes: 5 * 1024 * 1024,
+      maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
     });
     expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({

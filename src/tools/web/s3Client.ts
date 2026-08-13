@@ -213,37 +213,57 @@ async function bodyToBufferBounded(body: unknown, maxBytes: number): Promise<Buf
     throw new Error('S3 object did not return a body.');
   }
 
-  if (Buffer.isBuffer(body)) {
-    return assertBufferWithinLimit(body, maxBytes);
+  const directBuffer = staticBodyToBuffer(body);
+  if (directBuffer) {
+    return assertBufferWithinLimit(directBuffer, maxBytes);
   }
-  if (body instanceof Uint8Array) {
-    return assertBufferWithinLimit(Buffer.from(body), maxBytes);
+
+  if (isAsyncIterable(body)) {
+    return await streamToBufferBounded(body, maxBytes);
   }
-  if (typeof body === 'string') {
-    return assertBufferWithinLimit(Buffer.from(body), maxBytes);
-  }
+
   if (hasTransformToByteArray(body)) {
     return assertBufferWithinLimit(Buffer.from(await body.transformToByteArray()), maxBytes);
   }
-  if (isAsyncIterable(body)) {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    for await (const chunk of body) {
-      const buffer = Buffer.isBuffer(chunk)
-        ? chunk
-        : chunk instanceof Uint8Array
-          ? Buffer.from(chunk)
-          : Buffer.from(String(chunk));
-      totalBytes += buffer.byteLength;
-      if (totalBytes > maxBytes) {
-        throw new Error(`S3 object exceeds the ${maxBytes}-byte limit.`);
-      }
-      chunks.push(buffer);
-    }
-    return Buffer.concat(chunks, totalBytes);
-  }
 
   throw new Error('S3 object body type is not supported.');
+}
+
+function staticBodyToBuffer(body: unknown): Buffer | undefined {
+  if (Buffer.isBuffer(body)) {
+    return body;
+  }
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+  if (typeof body === 'string') {
+    return Buffer.from(body);
+  }
+
+  return undefined;
+}
+
+async function streamToBufferBounded(
+  body: AsyncIterable<Buffer | Uint8Array | string>,
+  maxBytes: number,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  for await (const chunk of body) {
+    const buffer = staticBodyToBuffer(chunk);
+    if (!buffer) {
+      throw new Error('S3 object stream returned an unsupported chunk type.');
+    }
+
+    totalBytes += buffer.byteLength;
+    if (totalBytes > maxBytes) {
+      throw new Error(`S3 object exceeds the ${maxBytes}-byte limit.`);
+    }
+    chunks.push(buffer);
+  }
+
+  return Buffer.concat(chunks, totalBytes);
 }
 
 function assertBufferWithinLimit(buffer: Buffer, maxBytes: number): Buffer {

@@ -8,7 +8,7 @@ import {
   joinS3Prefix,
 } from '../s3Client.js';
 
-export const MAX_STAGED_WORKBOOK_BYTES = 5 * 1024 * 1024;
+export const MAX_STAGED_WORKBOOK_BYTES = 100 * 1024 * 1024;
 export const WORKBOOK_UPLOAD_CONTENT_TYPE = 'application/xml';
 export const WORKBOOK_UPLOAD_PREFIX_SEGMENT = 'workbook-uploads';
 
