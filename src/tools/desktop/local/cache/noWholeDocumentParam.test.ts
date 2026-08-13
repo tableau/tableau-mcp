@@ -75,7 +75,8 @@ describe('no served tool accepts a whole document', () => {
 });
 
 describe('the served profile still has a working edit path with no document parameter', () => {
-  const SHEET = "<worksheet name='Sales'><table><rows>[Sales]</rows></table></worksheet>";
+  const SHEET =
+    "<worksheet name='Sales'><table><rows>[Sales]</rows></table><simple-id uuid='{WS-SALES}' /></worksheet>";
 
   beforeEach(() => {
     store.clear();

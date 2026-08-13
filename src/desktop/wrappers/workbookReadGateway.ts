@@ -6,6 +6,7 @@ import {
 } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
+import { type DashboardItem, type WorksheetItem } from '../externalApi/types.js';
 import {
   extractDashboardXml,
   listDashboardRefs,
@@ -16,12 +17,15 @@ import { getWorkbookXml } from './getWorkbookXml.js';
 
 export type WorkbookReadMode = 'external-api';
 
-export type SheetListItem = { id?: string; name: string };
+// Not the full WorksheetItem/DashboardItem: the workbook-document fallback can recover only id+name
+// from the XML, so every field but those two is optional.
+export type WorksheetListItem = Pick<WorksheetItem, 'id' | 'name'> & Partial<WorksheetItem>;
+export type DashboardListItem = Pick<DashboardItem, 'id' | 'name'> & Partial<DashboardItem>;
 
 export type ListWorksheetsResult = Result<
   {
     count: number;
-    worksheets: Array<SheetListItem>;
+    worksheets: Array<WorksheetListItem>;
   },
   ExecuteCommandError
 >;
@@ -29,7 +33,7 @@ export type ListWorksheetsResult = Result<
 export type ListDashboardsResult = Result<
   {
     count: number;
-    dashboards: Array<SheetListItem>;
+    dashboards: Array<DashboardListItem>;
   },
   ExecuteCommandError
 >;
@@ -104,10 +108,7 @@ export class WorkbookReadGateway {
       return result;
     }
 
-    const worksheets = (result.value.worksheets ?? []).map((worksheet) => ({
-      id: worksheet.id,
-      name: worksheet.name,
-    }));
+    const worksheets = result.value.worksheets ?? [];
     return Ok({
       count: worksheets.length,
       worksheets,
@@ -120,10 +121,7 @@ export class WorkbookReadGateway {
       return result;
     }
 
-    const dashboards = (result.value.dashboards ?? []).map((dashboard) => ({
-      id: dashboard.id,
-      name: dashboard.name,
-    }));
+    const dashboards = result.value.dashboards ?? [];
     return Ok({
       count: dashboards.length,
       dashboards,
@@ -136,7 +134,7 @@ export class WorkbookReadGateway {
       return workbookResult;
     }
 
-    let worksheets: Array<SheetListItem>;
+    let worksheets: Array<WorksheetListItem>;
     try {
       worksheets = listWorksheetRefs(workbookResult.value);
     } catch (error) {
@@ -155,7 +153,7 @@ export class WorkbookReadGateway {
       return workbookResult;
     }
 
-    let dashboards: Array<SheetListItem>;
+    let dashboards: Array<DashboardListItem>;
     try {
       dashboards = listDashboardRefs(workbookResult.value);
     } catch (error) {

@@ -144,8 +144,8 @@ describe('listDashboardRefs / resolveDashboardRef', () => {
     ]);
   });
 
-  it('omits the id when the dashboard carries no simple-id', () => {
-    expect(listDashboardRefs(WORKBOOK_WITH_USER_NAMESPACE)).toEqual([{ name: 'Overview' }]);
+  it('drops a dashboard that carries no simple-id — a Desktop document always has one', () => {
+    expect(listDashboardRefs(WORKBOOK_WITH_USER_NAMESPACE)).toEqual([]);
   });
 
   it('resolves by simple-id first (id identifies across a rename)', () => {

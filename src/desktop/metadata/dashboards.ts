@@ -182,15 +182,14 @@ export function dashboardFragmentSimpleId(dashboardFragmentXml: string): string 
 
 // `id` is each dashboard's own `<simple-id uuid>` — the same value the External Client API returns
 // as the dashboard id.
-export function listDashboardRefs(workbookXml: string): Array<{ id?: string; name: string }> {
+export function listDashboardRefs(workbookXml: string): Array<{ id: string; name: string }> {
   const workbook = parseXML(workbookXml);
   const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
-  return dashboards
-    .filter((db): db is ParsedDashboard & { '@_name': string } => !!db['@_name'])
-    .map((db) => {
-      const id = db['simple-id']?.['@_uuid'];
-      return { ...(id ? { id } : {}), name: db['@_name'] };
-    });
+  return dashboards.flatMap((db) => {
+    const id = db['simple-id']?.['@_uuid']?.trim();
+    const name = db['@_name'];
+    return id && name ? [{ id, name }] : [];
+  });
 }
 
 // Match a caller's ref against the dashboard's `<simple-id uuid>` (its External Client API id)

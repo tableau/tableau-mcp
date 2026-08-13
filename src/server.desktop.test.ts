@@ -210,8 +210,12 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // descriptions carrying the new-window/session-binding and blocking-Save-As caveats the 0.2.6
 // descriptions spell out. All five join the dynamic-authoring profile: served moves
 // 31_485 -> 34_581 (still well under the 46k cliff), full moves 51_101 -> 54_197.
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 34_581;
-const FULL_TOOL_SURFACE_BUDGET = 54_197;
+// Re-pinned 2026-08-13: list-worksheets and list-dashboards now return each item's full
+// External Client API payload instead of just id+name, so their descriptions enumerate that
+// per-item state (hidden, index, active sheet, auto-updates, datasources/contained sheets).
+// Both are in the dynamic-authoring profile: served moves 34_581 -> 34_709, full 54_197 -> 54_325.
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 34_709;
+const FULL_TOOL_SURFACE_BUDGET = 54_325;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {

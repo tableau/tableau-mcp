@@ -26,7 +26,7 @@ describe('listDashboardsTool', () => {
   it('should create a tool instance with correct properties', () => {
     const listDashboardsTool = getListDashboardsTool(new DesktopMcpServer());
     expect(listDashboardsTool.name).toBe('list-dashboards');
-    expect(listDashboardsTool.description).toContain('stable id and name');
+    expect(listDashboardsTool.description).toContain('stable id');
     expect(listDashboardsTool.paramsSchema).toMatchObject({
       session: expect.any(Object),
     });

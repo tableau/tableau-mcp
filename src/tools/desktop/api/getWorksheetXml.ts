@@ -80,11 +80,12 @@ export const getGetWorksheetXmlTool = (
           // An explicit re-read is the agent asking for live truth for this sheet — treat
           // it as the new starting point rather than resuming whatever add-field/
           // remove-field edit buffer might already be open underneath it. The buffer keys
-          // on the fragment's simple-id, the id add-field/remove-field opened it under.
-          const bufferWorksheetId = worksheetFragmentSimpleId(result.value);
-          if (bufferWorksheetId) {
-            clearStickyWorksheetFile({ session: resolvedSession, worksheetId: bufferWorksheetId });
-          }
+          // on the fragment's simple-id, the id add-field/remove-field opened it under; a
+          // /document-route worksheet fragment always carries one.
+          clearStickyWorksheetFile({
+            session: resolvedSession,
+            worksheetId: worksheetFragmentSimpleId(result.value)!,
+          });
 
           return finishXmlRead({
             kind: 'worksheet',

@@ -26,7 +26,7 @@ describe('listWorksheetsTool', () => {
   it('should create a tool instance with correct properties', () => {
     const listWorksheetsTool = getListWorksheetsTool(new DesktopMcpServer());
     expect(listWorksheetsTool.name).toBe('list-worksheets');
-    expect(listWorksheetsTool.description).toContain('stable id and name');
+    expect(listWorksheetsTool.description).toContain('stable id');
     expect(listWorksheetsTool.paramsSchema).toMatchObject({
       session: expect.any(Object),
     });

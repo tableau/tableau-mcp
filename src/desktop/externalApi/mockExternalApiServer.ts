@@ -66,15 +66,15 @@ const DEFAULT_WORKSHEET_DOCUMENT_XML =
   '<view><datasources><datasource name="Sample - Superstore" /></datasources></view>' +
   '<rows>[Sample - Superstore].[none:Region:nk]</rows>' +
   '<cols>[Sample - Superstore].[sum:Sales:qk]</cols>' +
-  '</table></worksheet>';
+  '</table><simple-id uuid="sheet-sales" /></worksheet>';
 const DEFAULT_DASHBOARD_DOCUMENT_XML =
   '<?xml version="1.0"?>' +
-  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>';
+  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones><simple-id uuid="dash-exec" /></dashboard>';
 // A storyboard serializes as a `<dashboard type='storyboard'>`, and its /document route returns
 // that bare fragment directly — not a `<storyboard>` element, and not wrapped in a `<workbook>`.
 const DEFAULT_STORYBOARD_DOCUMENT_XML =
   '<?xml version="1.0"?>' +
-  '<dashboard name="QBR Story" type="storyboard"><zones><zone name="Sales by Region" /></zones></dashboard>';
+  '<dashboard name="QBR Story" type="storyboard"><zones><zone name="Sales by Region" /></zones><simple-id uuid="story-qbr" /></dashboard>';
 const DEFAULT_WORKSHEETS = [
   {
     id: 'sheet-sales',

@@ -229,8 +229,8 @@ describe('listWorksheetRefs', () => {
     ]);
   });
 
-  it('omits the id when the worksheet carries no simple-id', () => {
-    expect(listWorksheetRefs(WORKBOOK_WITH_USER_NAMESPACE)).toEqual([{ name: 'Sales by Region' }]);
+  it('drops a worksheet that carries no simple-id — a Desktop document always has one', () => {
+    expect(listWorksheetRefs(WORKBOOK_WITH_USER_NAMESPACE)).toEqual([]);
   });
 });
 

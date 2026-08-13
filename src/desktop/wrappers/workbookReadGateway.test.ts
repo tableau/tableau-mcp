@@ -32,8 +32,26 @@ describe('WorkbookReadGateway', () => {
       expect(result.isOk()).toBe(true);
       if (result.isOk()) {
         expect(result.value.worksheets).toEqual([
-          { id: 'sheet-sales', name: 'Sales by Region' },
-          { id: 'sheet-profit', name: 'Profit by Category' },
+          {
+            id: 'sheet-sales',
+            name: 'Sales by Region',
+            type: 'WORKSHEET',
+            hidden: false,
+            isActiveSheet: true,
+            isAutoUpdatesPaused: false,
+            index: 0,
+            datasources: ['Sample - Superstore'],
+          },
+          {
+            id: 'sheet-profit',
+            name: 'Profit by Category',
+            type: 'WORKSHEET',
+            hidden: false,
+            isActiveSheet: false,
+            isAutoUpdatesPaused: true,
+            index: 1,
+            datasources: ['Sample - Superstore'],
+          },
         ]);
       }
       expect(server.requests.map((request) => request.path)).toEqual(['/v0/workbook/worksheets']);
@@ -46,7 +64,7 @@ describe('WorkbookReadGateway', () => {
   it('falls back to the External API whole-document read when the worksheet list route is missing', async () => {
     const getWorkbookDocument = vi.fn().mockResolvedValue(
       Ok({
-        xml: '<workbook><worksheets><worksheet name="Sheet From XML"><table /></worksheet></worksheets></workbook>',
+        xml: '<workbook><worksheets><worksheet name="Sheet From XML"><table /><simple-id uuid="{GUID-XML}" /></worksheet></worksheets></workbook>',
         applicationVersion: undefined,
         xsdPayloadVersion: undefined,
       }),
@@ -74,7 +92,7 @@ describe('WorkbookReadGateway', () => {
     expect(gateway.mode).toBe('external-api');
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
-      expect(result.value.worksheets).toEqual([{ name: 'Sheet From XML' }]);
+      expect(result.value.worksheets).toEqual([{ id: '{GUID-XML}', name: 'Sheet From XML' }]);
     }
     expect(getWorkbookDocument).toHaveBeenCalledWith(signal);
   });

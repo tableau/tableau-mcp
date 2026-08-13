@@ -44,10 +44,7 @@ export async function resolveWorksheetSimpleId({
     if (listed.isErr()) {
       return undefined;
     }
-    const identified = listed.value.worksheets.filter(
-      (worksheet): worksheet is { id: string; name: string } => typeof worksheet.id === 'string',
-    );
-    const resolved = resolveItemByNameOrId('Worksheet', trimmed, identified);
+    const resolved = resolveItemByNameOrId('Worksheet', trimmed, listed.value.worksheets);
     return resolved.isOk() ? resolved.value.id : undefined;
   } catch {
     return undefined;
