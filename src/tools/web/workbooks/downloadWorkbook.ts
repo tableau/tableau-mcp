@@ -3,9 +3,11 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { DownloadWorkbookResult } from '../../../sdks/tableau/types/downloadWorkbookResult.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import {
@@ -40,6 +42,9 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
       idempotentHint: true,
       openWorldHint: false,
     },
+    disabled: new Provider(
+      async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
+    ),
     callback: async ({ workbookId, includeExtract }, extra): Promise<CallToolResult> => {
       return await downloadWorkbookTool.logAndExecute<WorkbookToolResult>({
         extra,
