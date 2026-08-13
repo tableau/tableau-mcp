@@ -63,6 +63,11 @@ describe('server', () => {
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
+      // authoring tools are gated off by default (upload-validate-publish feature flag)
+      const authoringTools: ReadonlyArray<WebToolName> = [
+        'request-workbook-upload',
+        'validate-upload-and-publish-workbook',
+      ];
 
       let expectedToolNames = [...webToolNames];
 
@@ -84,6 +89,10 @@ describe('server', () => {
       // Filter out insights tools if they are not enabled
       if (process.env.INSIGHTS_TOOLS_ENABLED !== 'true') {
         expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
+      }
+
+      if (!features['upload-validate-publish']) {
+        expectedToolNames = expectedToolNames.filter((name) => !authoringTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
@@ -175,6 +184,11 @@ describe('server', () => {
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
+      // authoring tools are gated off by default (upload-validate-publish feature flag)
+      const authoringTools: ReadonlyArray<WebToolName> = [
+        'request-workbook-upload',
+        'validate-upload-and-publish-workbook',
+      ];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -200,6 +214,12 @@ describe('server', () => {
       // Filter out insights tools if they are not enabled
       if (process.env.INSIGHTS_TOOLS_ENABLED !== 'true') {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
+      }
+
+      if (!features['upload-validate-publish']) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !authoringTools.includes(name),
+        );
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
