@@ -36,7 +36,7 @@ const paramsSchema = {
   name: z.string().describe('The name to give the published workbook.'),
   overwrite: z
     .boolean()
-    .optional()
+    .default(false)
     .describe(
       'Whether to overwrite an existing workbook with the same name in the target project. Defaults to false.',
     ),
@@ -83,7 +83,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
       async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
     ),
     callback: async (
-      { workbookUploadId, workbookFilePath, name, overwrite },
+      { workbookUploadId, workbookFilePath, name, overwrite = false },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute<ValidateUploadAndPublishWorkbookResult>({

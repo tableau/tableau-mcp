@@ -178,11 +178,28 @@ describe('validateUploadAndPublishWorkbookTool', () => {
       name: 'My New Workbook',
       workbookType: 'twb',
       projectId: 'default-project-id',
-      overwrite: undefined,
+      overwrite: false,
     });
   });
 
-  it('passes overwrite through when publishing', async () => {
+  it('defaults overwrite to false when publishing', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      project: { id: 'default-project-id', name: 'Default' },
+    });
+
+    await getToolResult(validArgs);
+
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ overwrite: false }),
+    );
+  });
+
+  it('passes overwrite true through when publishing', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -391,7 +408,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
         workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
         workbookFilePath: undefined,
         name: validArgs.name,
-        overwrite: undefined,
+        overwrite: false,
       },
       getMockRequestHandlerExtra(),
     );
@@ -401,7 +418,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
       workbookUploadId: '<redacted>',
       workbookFilePath: undefined,
       name: validArgs.name,
-      overwrite: undefined,
+      overwrite: false,
     });
     expect(JSON.stringify(loggedArgs)).not.toContain('123e4567-e89b-42d3-a456-426614174000');
   });
@@ -420,7 +437,7 @@ async function getToolResult(params: {
       workbookUploadId: params.workbookUploadId,
       workbookFilePath: params.workbookFilePath,
       name: params.name,
-      overwrite: params.overwrite,
+      overwrite: params.overwrite ?? false,
     },
     getMockExtra(),
   );
