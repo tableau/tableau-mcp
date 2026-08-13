@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -7,7 +7,8 @@ import * as loggerModule from '../../logging/logger.js';
 import type { FingerprintResolver, InstanceFingerprint } from './cacheFingerprint.js';
 import * as cacheFingerprintModule from './cacheFingerprint.js';
 
-const { checkSidecar, sidecarPath, sourceSha256, writeSidecar } = cacheFingerprintModule;
+const { checkSidecar, restampSidecarAfterEdit, sidecarPath, sourceSha256, writeSidecar } =
+  cacheFingerprintModule;
 
 const dirs: string[] = [];
 
@@ -95,6 +96,55 @@ describe('cache fingerprint sidecars', () => {
       ok: true,
       sourceHash: sourceSha256(sourceB),
     });
+  });
+
+  it('preserves sidecar A provenance when session B edits the cache file', () => {
+    const file = tempFile();
+    const sourceHash = 'a'.repeat(64);
+    const sidecar = JSON.stringify(
+      {
+        session_id: '1',
+        pid: 1,
+        instanceId: 'inst-a',
+        created_at: '2026-08-13T12:00:00.000Z',
+        source_sha256: sourceHash,
+      },
+      null,
+      2,
+    );
+    writeFileSync(file, '<workbook edited="true"/>', 'utf-8');
+    writeFileSync(sidecarPath(file), sidecar, 'utf-8');
+
+    restampSidecarAfterEdit(file, '2', resolver({ pid: 2, instanceId: 'inst-b' }));
+
+    expect(readFileSync(sidecarPath(file), 'utf-8')).toBe(sidecar);
+    expect(checkSidecar(file, '2', 'workbook', resolver({ pid: 2, instanceId: 'inst-b' })).ok).toBe(
+      false,
+    );
+    expect(checkSidecar(file, '1', 'workbook', resolver({ pid: 1, instanceId: 'inst-a' }))).toEqual(
+      {
+        ok: true,
+        sourceHash,
+      },
+    );
+  });
+
+  it('does not mint provenance when the sidecar is missing, unreadable, or legacy', () => {
+    const resolveB = resolver({ pid: 2, instanceId: 'inst-b' });
+    const missingFile = tempFile();
+    const unreadableFile = tempFile();
+    const legacyFile = tempFile();
+    const legacySidecar = JSON.stringify({ session_id: '1', pid: 1, created_at: 'legacy' });
+    writeFileSync(sidecarPath(unreadableFile), 'not json', 'utf-8');
+    writeFileSync(sidecarPath(legacyFile), legacySidecar, 'utf-8');
+
+    restampSidecarAfterEdit(missingFile, '2', resolveB);
+    restampSidecarAfterEdit(unreadableFile, '2', resolveB);
+    restampSidecarAfterEdit(legacyFile, '2', resolveB);
+
+    expect(existsSync(sidecarPath(missingFile))).toBe(false);
+    expect(readFileSync(sidecarPath(unreadableFile), 'utf-8')).toBe('not json');
+    expect(readFileSync(sidecarPath(legacyFile), 'utf-8')).toBe(legacySidecar);
   });
 
   it('refuses when the sidecar fingerprint differs from the current session', () => {

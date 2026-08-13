@@ -122,13 +122,13 @@ export function writeSidecar(
   }
 }
 
-/** Restamp an edited cache file without losing the live-source baseline it was read from. */
+/** Preserve the live-source provenance that existed before an in-place cache edit. */
 export function restampSidecarAfterEdit(
-  cacheFile: string,
-  sessionId: string,
-  resolve: FingerprintResolver = defaultFingerprintResolver,
+  _cacheFile: string,
+  _sessionId: string,
+  _resolve: FingerprintResolver = defaultFingerprintResolver,
 ): void {
-  writeSidecar(cacheFile, sessionId, readSourceHash(sidecarPath(cacheFile)), resolve);
+  // The existing sidecar already identifies the live source and instance that produced the cache.
 }
 
 export function checkSidecar(
@@ -206,15 +206,6 @@ export function checkSidecar(
 
 function sameFingerprint(a: InstanceFingerprint, b: InstanceFingerprint): boolean {
   return a.pid === b.pid && a.instanceId === b.instanceId;
-}
-
-function readSourceHash(metaFile: string): string | undefined {
-  try {
-    const meta = JSON.parse(readFileSync(metaFile, 'utf-8')) as Partial<CacheSidecarMeta>;
-    return validSourceHash(meta.source_sha256) ? meta.source_sha256 : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function validSourceHash(value: unknown): value is string {
