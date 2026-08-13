@@ -142,6 +142,13 @@ function escapeXmlValue(_name: string, value: unknown): string {
   return escapeXmlCore(value).replace(/"/g, '&quot;');
 }
 
+function escapeXmlText(_name: string, value: unknown): string {
+  const text = String(value);
+  // Formatting whitespace between XML elements is not Tableau content. Keeping it literal
+  // avoids turning every pretty-printed line break into a numeric character reference.
+  return /^\s+$/.test(text) ? text : escapeXmlCore(text).replace(/"/g, '&quot;');
+}
+
 const builderOptions = {
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
@@ -157,24 +164,13 @@ const numericEntityPreservingBuilderOptions = {
   ...builderOptions,
   processEntities: false,
   attributeValueProcessor: escapeXmlValue,
-  tagValueProcessor: escapeXmlValue,
+  tagValueProcessor: escapeXmlText,
 };
 
 const parser = new XMLParser(parserOptions);
-const builder = new XMLBuilder(builderOptions);
 const numericEntityPreservingBuilder = new XMLBuilder(numericEntityPreservingBuilderOptions);
 
 export function parseXML(xmlString: string): ParsedWorkbook {
-  try {
-    return parser.parse(xmlString) as ParsedWorkbook;
-  } catch (error) {
-    throw new Error(
-      `Failed to parse XML: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-export function parseXMLPreservingNumericEntities(xmlString: string): ParsedWorkbook {
   try {
     const { protectedXml, sentinel } = protectNumericEntities(xmlString);
     const parsed = parser.parse(protectedXml) as ParsedWorkbook;
@@ -188,20 +184,6 @@ export function parseXMLPreservingNumericEntities(xmlString: string): ParsedWork
 }
 
 export function serializeXML(obj: any): string {
-  try {
-    const result = builder.build(obj);
-    if (typeof result === 'string') {
-      return result.trim();
-    }
-    throw new Error('XMLBuilder returned an object instead of a string');
-  } catch (error) {
-    throw new Error(
-      `Failed to serialize XML: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-export function serializeXMLPreservingNumericEntities(obj: any): string {
   try {
     const result = numericEntityPreservingBuilder.build(obj);
     if (typeof result === 'string') {
