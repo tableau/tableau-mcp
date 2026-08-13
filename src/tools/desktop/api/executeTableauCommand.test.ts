@@ -128,6 +128,10 @@ describe('executeTableauCommandTool', () => {
   });
 
   it('should return error for an unknown command before resolving an executor', async () => {
+    // The name guard fails OPEN with no External API registry loaded (a standalone
+    // tableau-mcp without tab-agent-south); enable one here to exercise the
+    // fail-CLOSED path tab-agent-south always runs under in production.
+    enableExternalApiRegistry({ 'tabdoc:save': { agent_can_invoke: true, in_params: [] } });
     const extra = getMockRequestHandlerExtra();
     extra.getExecutor = vi.fn();
 
@@ -138,6 +142,19 @@ describe('executeTableauCommandTool', () => {
     expect(result.content[0].text).toContain('Unknown Tableau command "tabdoc:not-a-command"');
     expect(result.content[0].text).toContain('Did you mean:');
     expect(extra.getExecutor).not.toHaveBeenCalled();
+  });
+
+  it('fails open on an unrecognized command name when no External API registry is loaded', async () => {
+    // Without tab-agent-south (no materialized registry), the name guard has no
+    // known-command set to check against and lets the call through by name — the
+    // External Client API itself is the backstop for a truly bogus command.
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:not-a-command' }, extra);
+
+    expect(result.isError).toBeFalsy();
+    expect(extra.getExecutor).toHaveBeenCalled();
   });
 
   it('should return error for a crash-prone command before resolving an executor', async () => {
@@ -565,7 +582,21 @@ describe('executeTableauCommandTool', () => {
       expect(extra.getExecutor).not.toHaveBeenCalled();
     });
 
-    it('gives a stricter message for an unknown param key on an opens_blocking_dialog command', async () => {
+    it('refuses a command flagged opens_blocking_dialog=true in a loaded registry regardless of its param keys', async () => {
+      // Once an External API registry is loaded, guardCommand's registry-primary path
+      // (commandGuard.ts's validateCommandRegistry) refuses any blockingDialog=true command
+      // outright, before ever inspecting its param keys — paramContractGuard.ts's own stricter
+      // "unknown param on a blocking-dialog command" message is unreachable here because that
+      // fallback only fires for a command ABSENT from the loaded registry, and a command flagged
+      // opens_blocking_dialog=true is, by construction, present in it.
+      enableExternalApiRegistry({
+        'tabui:copy-sheet-image-u-i': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: true,
+          modifies_state: 'false',
+          in_params: [{ local: 'Sheet', type: 'DPI_SheetName', required: true, wire: 'sheet' }],
+        },
+      });
       const extra = getMockRequestHandlerExtra();
       extra.getExecutor = vi.fn();
 
@@ -576,13 +607,8 @@ describe('executeTableauCommandTool', () => {
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain(
-        'Unknown parameter(s) for Tableau command "tabui:copy-sheet-image-u-i"',
-      );
+      expect(result.content[0].text).toContain('human-blocking dialog');
       expect(result.content[0].text).toContain('opens_blocking_dialog=true');
-      expect(result.content[0].text).toContain(
-        "pops a blocking modal error dialog on the user's screen",
-      );
       expect(extra.getExecutor).not.toHaveBeenCalled();
     });
 
@@ -822,7 +848,18 @@ describe('executeTableauCommandTool', () => {
     });
 
     it('refuses live-observed dialog commands whenever a valid registry is enabled', async () => {
-      enableExternalApiRegistry({ 'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY });
+      enableExternalApiRegistry({
+        'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY,
+        // Present so the name guard recognizes it; the static dialog blocklist
+        // (commandPolicy.ts) still fires unconditionally ahead of the registry's
+        // own agent_can_invoke/opens_blocking_dialog flags.
+        'tabui:workgroup-change-site': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          in_params: [],
+        },
+      });
       const extra = getMockRequestHandlerExtra();
       extra.getExecutor = vi.fn();
 
@@ -1022,6 +1059,14 @@ describe('executeTableauCommandTool', () => {
   });
 
   describe('deleted command refusal', () => {
+    // These commands no longer exist in Desktop, so a real materialized registry
+    // (tab-agent-south's live command_param_registry.json) would never contain
+    // them; enabling one here exercises that fail-CLOSED production path rather
+    // than the no-registry fail-open default.
+    beforeEach(() => {
+      enableExternalApiRegistry({ 'tabdoc:save': { agent_can_invoke: true, in_params: [] } });
+    });
+
     it('rejects the deleted document load command before dispatching it', async () => {
       const executeCommand = vi
         .fn()

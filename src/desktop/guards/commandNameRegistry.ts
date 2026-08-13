@@ -1,31 +1,26 @@
 import levenshtein from 'fast-levenshtein';
 
+import { listExternalApiCommandNames } from '../externalApi/paramWireRegistry.js';
 import { crashPronePolicyFor } from './commandPolicy.js';
-import { loadCommandsReference } from './commandsReference.js';
 
 const MAX_SUGGESTIONS = 3;
 
 export type CommandValidationResult = { ok: true } | { ok: false; message: string };
 
-let knownCommandsCache: Set<string> | null | undefined;
-
+/**
+ * The known-command set for name validation, sourced from the External API
+ * registry (tab-agent-south's live command_param_registry.json, materialized to
+ * `EXTERNAL_API_REGISTRY_DIR`) rather than a bundled snapshot — a snapshot goes
+ * stale the moment Desktop ships a new command (e.g. tabdoc:add-local-extension),
+ * refusing a real command tableau-mcp never even attempts to send.
+ *
+ * `null` when no registry is loaded (env unset/unreadable): fail OPEN, same as
+ * the historical missing-asset behavior, so a standalone tableau-mcp run without
+ * tab-agent-south keeps working with no name check at all. Delegates to
+ * `paramWireRegistry`'s own memoized load, so no separate cache is kept here.
+ */
 export function knownCommands(): Set<string> | null {
-  if (knownCommandsCache !== undefined) {
-    return knownCommandsCache;
-  }
-
-  const entries = loadCommandsReference();
-  if (entries === null) {
-    knownCommandsCache = null;
-    return knownCommandsCache;
-  }
-
-  knownCommandsCache = new Set(
-    entries
-      .map((entry) => entry.fully_qualified_serialized_name)
-      .filter((name): name is string => typeof name === 'string' && name.length > 0),
-  );
-  return knownCommandsCache;
+  return listExternalApiCommandNames();
 }
 
 export function validateKnownCommand(command: string): CommandValidationResult {

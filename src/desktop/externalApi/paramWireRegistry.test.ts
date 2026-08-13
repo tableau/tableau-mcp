@@ -97,6 +97,7 @@ describe('paramWireRegistry', () => {
     expect(entry).not.toBeNull();
     expect(entry?.invocable).toBe(true);
     expect(entry?.blockingDialog).toBe(false);
+    expect(entry?.modifiesWorkbookState).toBe(false);
     expect(entry?.requiredParams.map((param) => param.wire)).toEqual([
       'show-me-command-type',
       'worksheet',
@@ -131,6 +132,57 @@ describe('paramWireRegistry', () => {
     const entry = lookupExternalApiCommandRegistry('tabdoc', 'show-me');
 
     expect(entry?.enumValuesForParamType.get('DPI_TupleEnumType')).toEqual(['bar-horiz', 'text']);
+  });
+
+  it('maps the string-encoded modifies_state flag to a boolean', async () => {
+    const dir = writeRegistry({
+      commands: {
+        'tabdoc:show-me': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [],
+        },
+      },
+    });
+    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+
+    const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
+
+    expect(lookupExternalApiCommandRegistry('tabdoc', 'show-me')?.modifiesWorkbookState).toBe(true);
+  });
+
+  it('lists every registry entry keyed by fully-qualified command name', async () => {
+    const dir = writeRegistry({
+      commands: {
+        'tabdoc:show-me': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          in_params: [],
+        },
+        'tabdoc:sort': {
+          agent_can_invoke: false,
+          opens_blocking_dialog: true,
+          modifies_state: 'true',
+          in_params: [],
+        },
+      },
+    });
+    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+
+    const { listExternalApiCommandRegistryEntries } = await import('./paramWireRegistry.js');
+    const entries = listExternalApiCommandRegistryEntries();
+
+    expect(entries).not.toBeNull();
+    expect([...entries!.keys()].sort()).toEqual(['tabdoc:show-me', 'tabdoc:sort']);
+    expect(entries!.get('tabdoc:sort')?.blockingDialog).toBe(true);
+  });
+
+  it('returns null from listExternalApiCommandRegistryEntries when no registry is loaded', async () => {
+    const { listExternalApiCommandRegistryEntries } = await import('./paramWireRegistry.js');
+
+    expect(listExternalApiCommandRegistryEntries()).toBeNull();
   });
 
   it('parses the files once for a stable env dir', async () => {

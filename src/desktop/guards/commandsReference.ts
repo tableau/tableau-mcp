@@ -1,17 +1,29 @@
-// One loader for the bundled tableau-desktop-commands-reference.json (~956KB).
-// commandNameRegistry.ts, paramContractGuard.ts and search/searchLibrary.ts each project
-// their own view from this single memoised read+parse instead of loading the asset
-// three times. Failure is cached tri-state like the guards always did: undefined =
-// not yet attempted, null = load/parse/shape failure (cached, never retried).
+// One loader for the commands-reference document consumed by commandNameRegistry.ts (name
+// guard), paramContractGuard.ts (param-shape guard, standalone fallback) and search/searchLibrary.ts
+// (search-commands). Synthesized from tab-agent-south's live External API registry
+// (paramWireRegistry.ts's `listExternalApiCommandRegistryEntries`) rather than a bundled JSON
+// snapshot — a snapshot goes stale the moment Desktop ships a new command. Memoised tri-state like
+// the guards always did: undefined = not yet attempted, null = no registry loaded (env
+// unset/unreadable), cached and never retried until `_resetExternalApiCommandRegistryForTest`.
+//
+// `description` and `value_to_users` are absent here (the registry carries no prose today), so
+// search-commands results synthesized from it have no human-readable blurb until tab-agent-south's
+// registry gains one; every structural field consumers rely on (fully_qualified_serialized_name,
+// command_name, parameters[], agent_can_invoke, opens_blocking_dialog, modifies_workbook_state) is
+// present.
 
-import { readDataAsset } from '../assets.js';
-
-export const COMMANDS_REFERENCE_ASSET = 'tableau-desktop-commands-reference.json';
+import {
+  type ExternalApiCommandRegistryEntry,
+  listExternalApiCommandRegistryEntries,
+} from '../externalApi/paramWireRegistry.js';
 
 export type CommandReferenceEntry = {
   fully_qualified_serialized_name?: unknown;
+  command_name?: unknown;
   parameters?: unknown;
+  agent_can_invoke?: unknown;
   opens_blocking_dialog?: unknown;
+  modifies_workbook_state?: unknown;
 };
 
 /**
@@ -25,35 +37,53 @@ export type CommandsReferenceDocument = {
 
 let cache: CommandsReferenceDocument | null | undefined;
 
-/** Memoised full document: null when the asset is missing, unparsable, or has no commands array. */
+/**
+ * Clears this module's own memoised document, independent of `paramWireRegistry`'s cache —
+ * tests that swap `EXTERNAL_API_REGISTRY_DIR` between cases need both reset, since a dynamic
+ * `import('./commandsReference.js')` resolves to the same cached module instance across every
+ * test in a file unless `vi.resetModules()` is called.
+ */
+export function _resetCommandsReferenceForTest(): void {
+  cache = undefined;
+}
+
+/** Memoised full document: null when no External API registry is loaded this run. */
 export function loadCommandsReferenceDocument(): CommandsReferenceDocument | null {
   if (cache !== undefined) {
     return cache;
   }
 
-  try {
-    const raw = readDataAsset(COMMANDS_REFERENCE_ASSET);
-    if (raw === null) {
-      cache = null;
-      return cache;
-    }
-
-    const parsed = JSON.parse(raw) as CommandsReferenceDocument;
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.commands)) {
-      cache = null;
-      return cache;
-    }
-
-    cache = parsed;
-    return cache;
-  } catch {
+  const entries = listExternalApiCommandRegistryEntries();
+  if (entries === null) {
     cache = null;
     return cache;
   }
+
+  cache = { commands: [...entries.entries()].map(toReferenceEntry) };
+  return cache;
 }
 
 /** Memoised command entries: null on any load failure (callers decide fail-open vs throw). */
 export function loadCommandsReference(): CommandReferenceEntry[] | null {
   const document = loadCommandsReferenceDocument();
   return document === null ? null : (document.commands as CommandReferenceEntry[]);
+}
+
+function toReferenceEntry([fullyQualifiedSerializedName, entry]: readonly [
+  string,
+  ExternalApiCommandRegistryEntry,
+]): CommandReferenceEntry {
+  return {
+    fully_qualified_serialized_name: fullyQualifiedSerializedName,
+    command_name: fullyQualifiedSerializedName.split(':').slice(1).join(':'),
+    agent_can_invoke: entry.invocable,
+    opens_blocking_dialog: entry.blockingDialog,
+    modifies_workbook_state: entry.modifiesWorkbookState,
+    parameters: entry.params.map((param) => ({
+      direction: 'in',
+      local_name: param.local,
+      type_id: param.type,
+      required: param.required,
+    })),
+  };
 }

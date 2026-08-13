@@ -4,10 +4,7 @@ import { join } from 'path';
 
 import { listDataAssetNames, readDataAsset } from '../assets.js';
 import { checkCommandPolicy } from '../guards/commandPolicy.js';
-import {
-  COMMANDS_REFERENCE_ASSET,
-  loadCommandsReferenceDocument,
-} from '../guards/commandsReference.js';
+import { loadCommandsReferenceDocument } from '../guards/commandsReference.js';
 
 // --- Commands reference ---
 
@@ -15,11 +12,15 @@ let _commandsSearchIndex: any = null;
 let _commandsFuse: Fuse<any> | null = null;
 
 // Unlike the guards (which fail open on a missing reference), search THROWS: a search
-// tool with no corpus should error loudly, not silently return nothing.
+// tool with no corpus should error loudly, not silently return nothing. The reference is
+// synthesized from tab-agent-south's live External API registry (EXTERNAL_API_REGISTRY_DIR),
+// not a bundled asset, so a missing reference means no registry is loaded for this run.
 function loadCommandsReference(): any {
   const ref = loadCommandsReferenceDocument();
   if (ref === null) {
-    throw new Error(`Commands reference not available: ${COMMANDS_REFERENCE_ASSET}`);
+    throw new Error(
+      'Commands reference not available: no External API registry loaded (EXTERNAL_API_REGISTRY_DIR unset or unreadable).',
+    );
   }
   return ref;
 }

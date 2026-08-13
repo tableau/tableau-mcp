@@ -65,7 +65,30 @@ describe('guardCommand', () => {
     }
   });
 
-  it('refuses an unknown command before consulting the External API registry', () => {
+  it('refuses a command absent from a loaded External API registry as unknown (fail-closed)', () => {
+    enableExternalApiRegistry({
+      'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY,
+    });
+
+    const result = guardCommand({
+      namespace: 'tabdoc',
+      cmd: 'not-a-command',
+      command: 'tabdoc:not-a-command',
+      args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars' },
+    });
+
+    expect('refused' in result).toBe(true);
+    if (!('refused' in result)) return;
+    expect(result.message).toContain('Unknown Tableau command "tabdoc:not-a-command"');
+    expect(result.message).not.toContain('human-blocking dialog');
+    expect(result.message).not.toContain('agent_can_invoke=false');
+  });
+
+  it('treats a command present in a loaded External API registry as known, even when not invocable', () => {
+    // tabdoc:add-local-extension-style regression: the name guard must consult the
+    // live registry, not a bundled snapshot that can predate a real Desktop
+    // command. A registry ENTRY (even a refusable one) is known by name, so
+    // this is refused for the agent_can_invoke/dialog reason, never "Unknown".
     enableExternalApiRegistry({
       'tabdoc:not-a-command': {
         ...SHOW_ME_REGISTRY_ENTRY,
@@ -83,9 +106,21 @@ describe('guardCommand', () => {
 
     expect('refused' in result).toBe(true);
     if (!('refused' in result)) return;
-    expect(result.message).toContain('Unknown Tableau command "tabdoc:not-a-command"');
-    expect(result.message).not.toContain('human-blocking dialog');
-    expect(result.message).not.toContain('agent_can_invoke=false');
+    expect(result.message).not.toContain('Unknown Tableau command');
+    expect(result.message).toContain('human-blocking dialog');
+    expect(result.message).toContain('agent_can_invoke=false');
+    expect(result.message).toContain('opens_blocking_dialog=true');
+  });
+
+  it('fails open on an unrecognized command name when no External API registry is loaded', () => {
+    const result = guardCommand({
+      namespace: 'tabdoc',
+      cmd: 'not-a-command',
+      command: 'tabdoc:not-a-command',
+      args: {},
+    });
+
+    expect('ok' in result).toBe(true);
   });
 
   it('applies the unconditional dialog blocklist before registry-backed refusal reasons', () => {

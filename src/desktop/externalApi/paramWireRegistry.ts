@@ -18,6 +18,7 @@ export type ExternalApiRegistryParam = {
 export type ExternalApiCommandRegistryEntry = {
   invocable: boolean;
   blockingDialog: boolean;
+  modifiesWorkbookState: boolean;
   requiredParams: ExternalApiRegistryParam[];
   params: ExternalApiRegistryParam[];
   paramWireByLocal: ReadonlyMap<string, string>;
@@ -37,6 +38,7 @@ type RegistryCache = {
 type RawCommandEntry = {
   agent_can_invoke?: unknown;
   opens_blocking_dialog?: unknown;
+  modifies_state?: unknown;
   in_params?: unknown;
 };
 
@@ -60,6 +62,33 @@ export function lookupExternalApiCommandRegistry(
 ): ExternalApiCommandRegistryEntry | null {
   const registry = loadRegistry();
   return registry?.commands.get(`${namespace}:${command}`) ?? null;
+}
+
+/**
+ * Every fully-qualified command name (`<namespace>:<command>`) the loaded External
+ * API registry declares, or `null` when no registry is loaded (env unset, or the
+ * JSON is missing/unreadable/invalid) — the name guard's (commandNameRegistry.ts)
+ * fail-open signal. This is tab-agent-south's live command_param_registry.json
+ * materialized to `EXTERNAL_API_REGISTRY_DIR`, so it reflects the Desktop build
+ * that ships alongside this agent, not a snapshot bundled into tableau-mcp.
+ */
+export function listExternalApiCommandNames(): Set<string> | null {
+  const registry = loadRegistry();
+  return registry ? new Set(registry.commands.keys()) : null;
+}
+
+/**
+ * The full parsed registry, fqsn -> entry, for callers that need to synthesize
+ * a document over every command (e.g. commandsReference.ts's search/param-shape
+ * projection) rather than look up one command at a time. `null` under the same
+ * conditions as `listExternalApiCommandNames`.
+ */
+export function listExternalApiCommandRegistryEntries(): ReadonlyMap<
+  string,
+  ExternalApiCommandRegistryEntry
+> | null {
+  const registry = loadRegistry();
+  return registry?.commands ?? null;
 }
 
 export function _resetExternalApiCommandRegistryForTest(): void {
@@ -133,6 +162,9 @@ function parseRegistry(
     commands.set(fullyQualifiedCommand, {
       invocable: entry.agent_can_invoke === true,
       blockingDialog: entry.opens_blocking_dialog === true,
+      // Raw value is the string "true"/"false" in tab-agent-south's registry today;
+      // tolerate a real boolean too rather than coupling to one JSON encoding.
+      modifiesWorkbookState: entry.modifies_state === true || entry.modifies_state === 'true',
       requiredParams: params.filter((param) => param.required),
       params,
       paramWireByLocal: new Map(params.map((param) => [param.local, param.wire])),
