@@ -108,7 +108,9 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     return {
       content: Buffer.from(response.data),
       contentType: getHeader(response.headers, 'content-type'),
-      filename: getFilenameFromContentDisposition(getHeader(response.headers, 'content-disposition')),
+      filename: getFilenameFromContentDisposition(
+        getHeader(response.headers, 'content-disposition'),
+      ),
     };
   };
 
@@ -166,10 +168,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
   };
 }
 
-function getHeader(
-  headers: Record<string, unknown>,
-  name: string,
-): string | undefined {
+function getHeader(headers: Record<string, unknown>, name: string): string | undefined {
   const value = headers[name] ?? headers[name.toLowerCase()];
   if (Array.isArray(value)) {
     const first = value[0];
@@ -186,8 +185,9 @@ function getFilenameFromContentDisposition(
   }
 
   // Supports both filename="foo.twbx" and filename=foo.twbx.
-  const match =
-    /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(contentDispositionHeader);
+  const match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(
+    contentDispositionHeader,
+  );
   const encodedOrQuotedOrRaw = match?.[1] ?? match?.[2] ?? match?.[3];
   if (!encodedOrQuotedOrRaw) {
     return undefined;

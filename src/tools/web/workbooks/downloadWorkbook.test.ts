@@ -1,6 +1,5 @@
-import { readFile, rm } from 'fs/promises';
-
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { readFile, rm } from 'fs/promises';
 
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
@@ -126,7 +125,9 @@ describe('downloadWorkbookTool', () => {
       expect.objectContaining({
         contentType: 'application/xml',
         bucket: 'tableau-data',
-        key: expect.stringMatching(/^workbook-files\/96a43833-27db-40b6-aa80-751efc776b9a\/.+\.twb$/),
+        key: expect.stringMatching(
+          /^workbook-files\/96a43833-27db-40b6-aa80-751efc776b9a\/.+\.twb$/,
+        ),
       }),
     );
   });
