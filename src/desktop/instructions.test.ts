@@ -186,6 +186,59 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(editInPlace?.trigger).not.toContain('dashboard');
   });
 
+  it('routes unsupported dashboard edits through the scoped dashboard fallback', () => {
+    const dashboardEdit = routes.find((route) => route.id === 'dashboard-edit-fallback');
+
+    expect(dashboardEdit).toMatchObject({
+      trigger: 'an existing dashboard edit the bounded batch cannot express',
+      toolSequence: ['get-dashboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-dashboard'],
+      stopConditions: ['stay on the scoped dashboard path'],
+    });
+  });
+
+  it('routes story edits through the scoped story fallback', () => {
+    const storyEdit = routes.find((route) => route.id === 'story-edit-fallback');
+
+    expect(storyEdit).toMatchObject({
+      trigger: 'an existing story edit',
+      toolSequence: [
+        'get-storyboard-xml',
+        'read-cached-xml',
+        'write-cached-xml',
+        'apply-storyboard',
+      ],
+      stopConditions: ['stay on the scoped story path'],
+    });
+  });
+
+  it('reserves whole-workbook apply for datasource definitions or cross-artifact changes', () => {
+    const workbookFallback = routes.find((route) => route.id === 'whole-workbook-fallback');
+
+    expect(workbookFallback).toMatchObject({
+      trigger: 'a datasource-definition or cross-artifact change no scoped apply can express',
+      toolSequence: ['get-workbook-xml', 'read-cached-xml', 'write-cached-xml', 'apply-workbook'],
+      stopConditions: [
+        'use only for datasource definitions or cross-artifact changes',
+        'prefer a scoped apply whenever possible',
+      ],
+    });
+  });
+
+  it('verifies consequential authoring with exactly one inline export and never replays mutations on export failure', () => {
+    const renderVerification = routes.find((route) => route.id === 'render-verification');
+
+    expect(renderVerification).toMatchObject({
+      trigger: 'after consequential authoring',
+      toolSequence: ['export-worksheet-image', 'export-dashboard-image'],
+      stopConditions: [
+        'call exactly one export',
+        'omit filePath unless the user asked to save',
+        'never replay the mutation',
+        'not a chat preview',
+      ],
+    });
+  });
+
   it.each(routes)('route "$id" declares a tool sequence and stop conditions', (route) => {
     expect(route.toolSequence.length).toBeGreaterThan(0);
     expect(route.stopConditions.length).toBeGreaterThan(0);

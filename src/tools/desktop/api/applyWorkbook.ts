@@ -28,7 +28,9 @@ export const getApplyWorkbookTool = (
     server,
     name: 'apply-workbook',
     title,
-    description: 'Apply modified workbook content to Tableau.',
+    description:
+      'Apply modified workbook content to Tableau. When the cache has source metadata, ' +
+      'a freshness check rejects workbook changes made since the read.',
     paramsSchema,
     annotations: {
       readOnlyHint: false, // writes cache files and updates workbook
@@ -53,12 +55,14 @@ export const getApplyWorkbookTool = (
           if (preamble.isErr()) {
             return preamble;
           }
-          const { xml: workbookXml, resolvedSession } = preamble.value;
+          const { xml: workbookXml, resolvedSession, sourceHash } = preamble.value;
 
           const executor = await extra.getExecutor(resolvedSession);
           // A whole-workbook apply names no single artifact, so give the user their sheet back.
           const result = await loadWorkbookXml({
             xml: workbookXml,
+            expectedSourceHash: sourceHash,
+            cachedLiveRelative: true,
             focus: { navigate: 'restore' },
             executor,
             signal: extra.signal,

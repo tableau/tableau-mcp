@@ -32,7 +32,7 @@ export function runApplyPreamble({
   emptyPathGuidance: string;
   /** Where to get a path, appended to the missing-file error. */
   notFoundGuidance: string;
-}): Result<{ xml: string; resolvedSession: string }, McpToolError> {
+}): Result<{ xml: string; resolvedSession: string; sourceHash?: string }, McpToolError> {
   // No inline document parameter: the cached file path IS the handle. Making the
   // model retype a document cost ~190s of pure emission across six asks, and
   // inline content carried no cache fingerprint, so it also skipped the
@@ -72,7 +72,7 @@ export function runApplyPreamble({
     return new CacheSessionMismatchError(sidecar.message!).toErr();
   }
 
-  return new Ok({ xml, resolvedSession });
+  return new Ok({ xml, resolvedSession, sourceHash: sidecar.sourceHash });
 }
 
 type NoReadbackApplyKind = 'dashboard' | 'storyboard' | 'workbook';

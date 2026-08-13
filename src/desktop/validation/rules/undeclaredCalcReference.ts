@@ -1,6 +1,12 @@
 import type { ValidationIssue, ValidationRule } from '../types.js';
 
 const CALC_REF = /Calculation_\d{6,}/g;
+const WINDOWS_SUBTREE = /<windows\b[^>]*>[\s\S]*?<\/windows\s*>/gi;
+const BUCKET_CONTENT = /(<bucket\b[^>]*>)[\s\S]*?(<\/bucket\s*>)/gi;
+
+function referenceScanInput(xml: string): string {
+  return xml.replace(WINDOWS_SUBTREE, '').replace(BUCKET_CONTENT, '$1$2');
+}
 
 export const undeclaredCalcReferenceRule: ValidationRule = {
   id: 'undeclared-calc-reference',
@@ -13,8 +19,9 @@ export const undeclaredCalcReferenceRule: ValidationRule = {
 
   validate(xml: string): ValidationIssue[] {
     const s = String(xml ?? '');
+    const referenceInput = referenceScanInput(s);
     const referenced = new Set<string>();
-    for (const match of s.matchAll(CALC_REF)) referenced.add(match[0]);
+    for (const match of referenceInput.matchAll(CALC_REF)) referenced.add(match[0]);
     if (referenced.size === 0) return [];
 
     const issues: ValidationIssue[] = [];

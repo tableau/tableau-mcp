@@ -22,8 +22,8 @@ export class Config extends BaseConfig {
   inlineXmlMaxBytes: number;
 
   /**
-   * Server-enforced ceiling on inline image payloads (decoded bytes). Over it, export-image
-   * tools cache the image to a file and return its path instead of an inline base64 block.
+   * Server-enforced ceiling on encoded inline image payloads. Over it, export-image tools
+   * cache the image to a file and return its path instead of an inline base64 block.
    * Env-overridable via INLINE_IMAGE_MAX_BYTES.
    */
   inlineImageMaxBytes: number;

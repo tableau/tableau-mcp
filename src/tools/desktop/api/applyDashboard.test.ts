@@ -39,6 +39,7 @@ describe('applyDashboardTool', () => {
     const tool = getApplyDashboardTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-dashboard');
     expect(tool.description).toContain('Apply modified dashboard layout to Tableau');
+    expect(tool.description).toContain('freshness check');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       dashboardName: expect.any(Object),
@@ -90,6 +91,10 @@ describe('applyDashboardTool', () => {
 
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+      ok: true,
+      sourceHash: 'b'.repeat(64),
+    });
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
       Ok({ validationWarnings: [] }),
     );
@@ -102,6 +107,10 @@ describe('applyDashboardTool', () => {
     expect(resultObj.message).toContain('Successfully applied dashboard update');
     expect(existsSync).toHaveBeenCalledWith(mockFilePath);
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
+    expect(loadDashboardXmlModule.loadDashboardXml).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedSourceHash: 'b'.repeat(64) }),
+    );
+    sidecarSpy.mockRestore();
   });
 
   it('refuses a file-mode apply when the cache sidecar fingerprint mismatches the session (W9)', async () => {

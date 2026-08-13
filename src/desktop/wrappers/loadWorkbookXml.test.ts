@@ -136,6 +136,34 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it('refuses a source-hash guarded apply before dispatch when the live workbook has drifted', async () => {
+    const applyWorkbookDocument = vi.fn();
+    const getWorkbookDocument = vi.fn().mockResolvedValue(
+      Ok({
+        xml: validXmlWithWindows,
+        applicationVersion: undefined,
+        xsdPayloadVersion: undefined,
+      }),
+    );
+    const executor = makeExecutorMock({ applyWorkbookDocument, getWorkbookDocument });
+
+    const result = await loadWorkbookXml({
+      xml: validXmlWithWindows,
+      expectedSourceHash: '912f06601b9eb97f14293fdbcdc6f3d26c5b6c74735610d61fec30a578f9967c',
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-workbook-xml-error');
+      expect(result.error.error.type).toBe('workbook-drift');
+    }
+    expect(getWorkbookDocument).toHaveBeenCalledOnce();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('returns the guarded read failure and does not dispatch', async () => {
     const readError = { type: 'command-timed-out' as const, error: 'Read timed out' };
     const applyWorkbookDocument = vi.fn();
@@ -270,6 +298,107 @@ describe('loadWorkbookXml (External Client API transport)', () => {
       invariant(result.error.type === 'load-workbook-xml-error');
       expect(result.error.error.type).toBe('validation-failed');
     }
+  });
+
+  it('cached live-relative apply accepts an unchanged preexisting blocker with one live GET', async () => {
+    const existing = { ruleId: 'existing', severity: 'error' as const, message: 'already broken' };
+    vi.spyOn(validationRegistry, 'runValidation')
+      .mockReturnValueOnce({ valid: false, issues: [existing] })
+      .mockReturnValueOnce({ valid: false, issues: [existing] });
+    const applyWorkbookDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
+    const getWorkbookDocument = vi.fn().mockResolvedValue(Ok({ xml: validXml }));
+    const executor = makeExecutorMock({ applyWorkbookDocument, getWorkbookDocument });
+
+    const result = await loadWorkbookXml({
+      xml: validXml,
+      expectedSourceHash: '912f06601b9eb97f14293fdbcdc6f3d26c5b6c74735610d61fec30a578f9967c',
+      cachedLiveRelative: true,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) expect(result.value.validationWarnings).toEqual([]);
+    expect(getWorkbookDocument).toHaveBeenCalledOnce();
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['new', [], [{ ruleId: 'new', severity: 'error' as const, message: 'new blocker' }]],
+    [
+      'worsened',
+      [{ ruleId: 'same', severity: 'error' as const, message: 'same', occurrenceCount: 1 }],
+      [{ ruleId: 'same', severity: 'error' as const, message: 'same', occurrenceCount: 2 }],
+    ],
+  ])(
+    'cached live-relative apply blocks a %s finding before POST',
+    async (_label, liveIssues, candidateIssues) => {
+      vi.spyOn(validationRegistry, 'runValidation')
+        .mockReturnValueOnce({ valid: false, issues: candidateIssues })
+        .mockReturnValueOnce({ valid: liveIssues.length === 0, issues: liveIssues });
+      const applyWorkbookDocument = vi.fn();
+      const getWorkbookDocument = vi.fn().mockResolvedValue(Ok({ xml: validXml }));
+
+      const result = await loadWorkbookXml({
+        xml: validXml,
+        cachedLiveRelative: true,
+        executor: makeExecutorMock({ applyWorkbookDocument, getWorkbookDocument }),
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-workbook-xml-error');
+        expect(result.error.error).toEqual({ type: 'validation-failed', issues: candidateIssues });
+      }
+      expect(getWorkbookDocument).toHaveBeenCalledOnce();
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it('cached live-relative apply checks stale hash before validation and never POSTs', async () => {
+    const validation = vi.spyOn(validationRegistry, 'runValidation');
+    const applyWorkbookDocument = vi.fn();
+    const getWorkbookDocument = vi.fn().mockResolvedValue(Ok({ xml: validXml }));
+
+    const result = await loadWorkbookXml({
+      xml: validXml,
+      expectedSourceHash: '0'.repeat(64),
+      cachedLiveRelative: true,
+      executor: makeExecutorMock({ applyWorkbookDocument, getWorkbookDocument }),
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(getWorkbookDocument).toHaveBeenCalledOnce();
+    expect(validation).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('keeps direct no-baseline validation strict without reading live workbook', async () => {
+    const issue = { ruleId: 'strict', severity: 'error' as const, message: 'block direct' };
+    vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({
+      valid: false,
+      issues: [issue],
+    });
+    const applyWorkbookDocument = vi.fn();
+    const getWorkbookDocument = vi.fn();
+
+    const result = await loadWorkbookXml({
+      xml: validXml,
+      executor: makeExecutorMock({ applyWorkbookDocument, getWorkbookDocument }),
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(getWorkbookDocument).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('should return execute-command-error when the apply POST fails', async () => {

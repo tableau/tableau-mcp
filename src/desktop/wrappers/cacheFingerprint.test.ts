@@ -4,13 +4,10 @@ import { join } from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import * as loggerModule from '../../logging/logger.js';
-import {
-  checkSidecar,
-  type FingerprintResolver,
-  type InstanceFingerprint,
-  sidecarPath,
-  writeSidecar,
-} from './cacheFingerprint.js';
+import type { FingerprintResolver, InstanceFingerprint } from './cacheFingerprint.js';
+import * as cacheFingerprintModule from './cacheFingerprint.js';
+
+const { checkSidecar, sidecarPath, sourceSha256, writeSidecar } = cacheFingerprintModule;
 
 const dirs: string[] = [];
 
@@ -42,6 +39,62 @@ describe('cache fingerprint sidecars', () => {
     const meta = JSON.parse(readFileSync(sidecarPath(file), 'utf-8')) as Record<string, unknown>;
     expect(meta).toMatchObject({ session_id: '1', ...fingerprint });
     expect(checkSidecar(file, '1', 'worksheet', resolve)).toEqual({ ok: true });
+  });
+
+  it('stores a fetched source hash and returns it for a matching apply', () => {
+    const file = tempFile();
+    writeFileSync(file, '<workbook/>', 'utf-8');
+    const resolve = resolver({ pid: 1, instanceId: 'inst-a' });
+    const sourceHash = 'f'.repeat(64);
+
+    writeSidecar(file, '1', sourceHash, resolve);
+
+    const meta = JSON.parse(readFileSync(sidecarPath(file), 'utf-8')) as Record<string, unknown>;
+    expect(meta.source_sha256).toBe(sourceHash);
+    expect(checkSidecar(file, '1', 'workbook', resolve)).toEqual({ ok: true, sourceHash });
+  });
+
+  it('drops an old source hash when a fresh write omits one', () => {
+    const file = tempFile();
+    writeFileSync(file, '<workbook/>', 'utf-8');
+    const resolve = resolver({ pid: 1, instanceId: 'inst-a' });
+    const sourceHash = 'a'.repeat(64);
+    writeSidecar(file, '1', sourceHash, resolve);
+
+    writeSidecar(file, '1', resolve);
+
+    const meta = JSON.parse(readFileSync(sidecarPath(file), 'utf-8')) as Record<string, unknown>;
+    expect(meta.source_sha256).toBeUndefined();
+  });
+
+  it('replaces source A with fresh source B and preserves B across an edit restamp', () => {
+    const file = tempFile();
+    const resolve = resolver({ pid: 1, instanceId: 'inst-a' });
+    const sourceA = '<workbook revision="A"/>';
+    const sourceB = '<workbook revision="B"/>';
+    writeFileSync(file, sourceA, 'utf-8');
+    writeSidecar(file, '1', sourceSha256(sourceA), resolve);
+
+    writeFileSync(file, sourceB, 'utf-8');
+    writeSidecar(file, '1', sourceSha256(sourceB), resolve);
+    writeFileSync(file, '<workbook revision="B" edited="true"/>', 'utf-8');
+    const restampSidecarAfterEdit = (
+      cacheFingerprintModule as typeof cacheFingerprintModule & {
+        restampSidecarAfterEdit?: (
+          cacheFile: string,
+          sessionId: string,
+          resolve: FingerprintResolver,
+        ) => void;
+      }
+    ).restampSidecarAfterEdit;
+    expect(restampSidecarAfterEdit).toBeTypeOf('function');
+    if (restampSidecarAfterEdit === undefined) return;
+    restampSidecarAfterEdit(file, '1', resolve);
+
+    expect(checkSidecar(file, '1', 'workbook', resolve)).toEqual({
+      ok: true,
+      sourceHash: sourceSha256(sourceB),
+    });
   });
 
   it('refuses when the sidecar fingerprint differs from the current session', () => {

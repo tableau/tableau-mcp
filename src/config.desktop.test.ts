@@ -35,9 +35,9 @@ describe('DesktopConfig', () => {
     expect(config.inlineXmlMaxBytes).toBe(16 * 1024);
   });
 
-  it('should default inlineImageMaxBytes to 1 MiB', () => {
+  it('should reserve 256 KiB below the 1 MiB downstream message limit by default', () => {
     const config = new Config();
-    expect(config.inlineImageMaxBytes).toBe(1024 * 1024);
+    expect(config.inlineImageMaxBytes).toBe(768 * 1024);
   });
 
   it('should override inlineImageMaxBytes from INLINE_IMAGE_MAX_BYTES', () => {
@@ -51,7 +51,7 @@ describe('DesktopConfig', () => {
     vi.stubEnv('INLINE_IMAGE_MAX_BYTES', 'not-a-number');
 
     const config = new Config();
-    expect(config.inlineImageMaxBytes).toBe(1024 * 1024);
+    expect(config.inlineImageMaxBytes).toBe(768 * 1024);
   });
 
   it('should default imageExportTimeoutMs to 30 seconds', () => {

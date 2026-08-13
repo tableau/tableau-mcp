@@ -171,6 +171,7 @@ describe('listAvailableFieldsTool', () => {
     vi.mocked(readFileSync).mockReturnValue(STALE_XML);
     vi.mocked(writeFileSync).mockReturnValue(undefined);
     vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
+    vi.mocked(cacheFingerprintModule.sourceSha256).mockReturnValue('d'.repeat(64));
     vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockLiveFields as any);
     const mockExecutor = {} as any;
     const extra = {
@@ -190,7 +191,11 @@ describe('listAvailableFieldsTool', () => {
       signal: extra.signal,
     });
     expect(writeFileSync).toHaveBeenCalledWith(WORKBOOK_FILE, LIVE_XML, 'utf-8');
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKBOOK_FILE, SESSION);
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(
+      WORKBOOK_FILE,
+      SESSION,
+      'd'.repeat(64),
+    );
     expect(metadataModule.listAvailableFields).toHaveBeenCalledWith(LIVE_XML);
   });
 

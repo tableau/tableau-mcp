@@ -146,7 +146,7 @@ describe('injectTemplateTool', () => {
   it('writes a fingerprint sidecar after updating the workbook cache file', async () => {
     await getResult(BASE_PARAMS);
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
       resolve(WORKBOOK_FILE),
       SESSION,
     );
@@ -157,7 +157,7 @@ describe('injectTemplateTool', () => {
 
     await getResult({ ...BASE_PARAMS, session: undefined as unknown as string });
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
       resolve(WORKBOOK_FILE),
       SESSION,
     );
@@ -175,7 +175,7 @@ describe('injectTemplateTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(SESSION);
     expect(result.content[0].text).toContain('list-instances');
-    expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
