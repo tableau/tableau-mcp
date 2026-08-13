@@ -120,11 +120,17 @@ describe('serializeXML', () => {
     expect(output).toContain('Sheet 2');
   });
 
-  it('keeps feature/desktop numeric-entity behavior in the default parser', () => {
+  it('preserves semantic numeric entities and encoded literal text in the default parser', () => {
     const parsed = parseXML('<column formula="real:&#13; literal:&amp;#13;" />') as any;
 
-    expect(parsed.column[0]['@_formula']).toBe('real:&#13; literal:&#13;');
-    expect(serializeXML(parsed)).toContain('formula="real:&amp;#13; literal:&amp;#13;"');
+    expect(parsed.column[0]['@_formula']).toBe('real:\r literal:&#13;');
+    expect(serializeXML(parsed)).toContain('formula="real:&#13; literal:&amp;#13;"');
+  });
+
+  it('keeps formatting whitespace literal instead of creating numeric entity churn', () => {
+    const output = serializeXML(parseXML('<root>\n  <child />\n</root>'));
+
+    expect(output).not.toContain('&#10;');
   });
 
   describe('numeric-entity-preserving template round-trip', () => {

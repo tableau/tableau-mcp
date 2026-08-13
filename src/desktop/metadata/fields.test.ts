@@ -113,6 +113,22 @@ describe('parseShelfValue', () => {
 });
 
 describe('addFieldToRows / removeFieldFromRows', () => {
+  it('preserves an unrelated multiline calculation while adding a field', () => {
+    const worksheetWithMultilineCalc = WORKSHEET_XML.replace(
+      '</datasource-dependencies>',
+      `<column name="[Selected Measure]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="CASE [Parameters].[Parameter 9]&#10;WHEN &apos;Total Values&apos; THEN&#10;MAX([Profit])&#10;END"/>
+      </column></datasource-dependencies>`,
+    );
+
+    const modified = addFieldToRows(worksheetWithMultilineCalc, '[Sample].[sum:Profit:qk]');
+
+    expect(modified).toContain(
+      'formula="CASE [Parameters].[Parameter 9]&#10;WHEN &apos;Total Values&apos; THEN&#10;MAX([Profit])&#10;END"',
+    );
+    expect(modified).not.toContain('&amp;#10;');
+  });
+
   it('should add a field to rows', () => {
     const modified = addFieldToRows(WORKSHEET_XML, '[Sample].[sum:Profit:qk]');
     const fields = listFields(modified);
