@@ -1,8 +1,4 @@
-import {
-  normalizeArray,
-  parseXMLPreservingNumericEntities,
-  serializeXMLPreservingNumericEntities,
-} from '../metadata/parser.js';
+import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
 
 const GROUP_CALC_CLASSES = new Set(['categorical-bin']);
 
@@ -36,14 +32,14 @@ function mappedFieldName(columnInstance: string): string | null {
 }
 
 function serializeElement(tag: string, node: unknown): string {
-  return serializeXMLPreservingNumericEntities({ [tag]: node });
+  return serializeXML({ [tag]: node });
 }
 
 function collectGroupDefinitions(workbookXml: string): Map<string, GroupDefinition> {
   const groups = new Map<string, GroupDefinition>();
   let workbook;
   try {
-    workbook = parseXMLPreservingNumericEntities(workbookXml);
+    workbook = parseXML(workbookXml);
   } catch {
     return groups; // a workbook we cannot parse defines no groups we can trust
   }
@@ -138,7 +134,7 @@ function collectCalcDefinitions(workbookXml: string): Map<string, CalcDefinition
   const calcs = new Map<string, CalcDefinition>();
   let workbook;
   try {
-    workbook = parseXMLPreservingNumericEntities(workbookXml);
+    workbook = parseXML(workbookXml);
   } catch {
     return calcs;
   }

@@ -13,12 +13,7 @@
 // binder's args as-is (matching what the manual inject-template call would receive).
 
 import { listAvailableFields } from '../metadata/field-builder.js';
-import {
-  normalizeArray,
-  parseXML,
-  parseXMLPreservingNumericEntities,
-  serializeXMLPreservingNumericEntities,
-} from '../metadata/parser.js';
+import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
 import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparseTemporalAxis.js';
@@ -271,7 +266,7 @@ export function classifyWorksheetReplaceTarget(
 export function removeSameNamedWorksheet(workbookXml: string, title: string): string {
   let workbook: ParsedWorkbook;
   try {
-    workbook = parseXMLPreservingNumericEntities(workbookXml);
+    workbook = parseXML(workbookXml);
   } catch {
     return workbookXml;
   }
@@ -297,7 +292,7 @@ export function removeSameNamedWorksheet(workbookXml: string, title: string): st
   if (wb.windows && keptWindows.length !== windows.length) {
     wb.windows.window = keptWindows.length === 1 ? keptWindows[0] : keptWindows;
   }
-  return serializeXMLPreservingNumericEntities(workbook);
+  return serializeXML(workbook);
 }
 
 /**

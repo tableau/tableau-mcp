@@ -171,10 +171,6 @@ const parser = new XMLParser(parserOptions);
 const numericEntityPreservingBuilder = new XMLBuilder(numericEntityPreservingBuilderOptions);
 
 export function parseXML(xmlString: string): ParsedWorkbook {
-  return parseXMLPreservingNumericEntities(xmlString);
-}
-
-export function parseXMLPreservingNumericEntities(xmlString: string): ParsedWorkbook {
   try {
     const { protectedXml, sentinel } = protectNumericEntities(xmlString);
     const parsed = parser.parse(protectedXml) as ParsedWorkbook;
@@ -188,10 +184,6 @@ export function parseXMLPreservingNumericEntities(xmlString: string): ParsedWork
 }
 
 export function serializeXML(obj: any): string {
-  return serializeXMLPreservingNumericEntities(obj);
-}
-
-export function serializeXMLPreservingNumericEntities(obj: any): string {
   try {
     const result = numericEntityPreservingBuilder.build(obj);
     if (typeof result === 'string') {
