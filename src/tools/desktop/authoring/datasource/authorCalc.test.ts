@@ -17,6 +17,7 @@ const BASE_XML = [
   '<datasources>',
   "<datasource name='Superstore'>",
   "<column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+  "<column caption='Region' datatype='string' name='[Region]' role='dimension' type='nominal' />",
   '</datasource>',
   '</datasources>',
   "<worksheets><worksheet name='Sheet 1' /></worksheets>",
@@ -129,6 +130,38 @@ describe('authorCalcTool', () => {
     expect(relStart === -1 || relEnd < at).toBe(true);
     expect(at).toBeLessThan(loaded.indexOf('</datasource>', at) + '</datasource>'.length);
     expect(at).toBeLessThan(loaded.indexOf('</datasources>'));
+  });
+
+  it('rejects a fabricated direct-calc field against a live-shaped workbook before dispatch', async () => {
+    const realXml = readFileSync(
+      join(
+        process.cwd(),
+        'src',
+        'tools',
+        'desktop',
+        'authoring',
+        'datasource',
+        '__fixtures__',
+        'real-superstore-document.twb.xml',
+      ),
+      'utf8',
+    );
+
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Unsafe Calc', formula: '[Fabricated] + [Sales]' },
+      initialXml: realXml,
+    });
+
+    expect(result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: expect.stringContaining('field reference [Fabricated] was not found'),
+        },
+      ],
+    });
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('resolves sibling-calc caption references to internal names (live 2026-07-19: 5 of 6 layered calcs broken)', async () => {
