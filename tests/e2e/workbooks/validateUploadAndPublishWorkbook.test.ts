@@ -1,3 +1,4 @@
+import { resolve } from 'path';
 import { z } from 'zod';
 
 import { workbookSchema } from '../../../src/sdks/tableau/types/workbook.js';
@@ -26,6 +27,8 @@ const validateUploadAndPublishWorkbookResultSchema = z.discriminatedUnion('statu
     warnings: z.array(validationFindingSchema),
   }),
 ]);
+
+const defaultWorkbookFilePath = resolve('tests/e2e/fixtures/workbooks/superstore-datasource.twb');
 
 type ValidateUploadPublishSmokeConfig = {
   workbookFilePath: string;
@@ -66,7 +69,7 @@ describe('validate-upload-and-publish-workbook local file', () => {
     const smokeConfig = getValidateUploadPublishSmokeConfig();
     if (!smokeConfig || !client) {
       console.warn(
-        'Skipping validate-upload-and-publish-workbook e2e. Set VALIDATE_UPLOAD_PUBLISH_E2E=true and VALIDATE_UPLOAD_PUBLISH_E2E_FILE to run it.',
+        'Skipping validate-upload-and-publish-workbook e2e. Set VALIDATE_UPLOAD_PUBLISH_E2E=true to run it.',
       );
       return;
     }
@@ -93,13 +96,9 @@ function getValidateUploadPublishSmokeConfig(): ValidateUploadPublishSmokeConfig
     return undefined;
   }
 
-  const workbookFilePath = process.env.VALIDATE_UPLOAD_PUBLISH_E2E_FILE?.trim();
-  if (!workbookFilePath) {
-    return undefined;
-  }
-
   return {
-    workbookFilePath,
+    workbookFilePath:
+      process.env.VALIDATE_UPLOAD_PUBLISH_E2E_FILE?.trim() || defaultWorkbookFilePath,
     workbookName:
       process.env.VALIDATE_UPLOAD_PUBLISH_E2E_NAME?.trim() || 'Codex Validate Publish E2E',
   };

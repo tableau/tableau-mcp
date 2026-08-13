@@ -36,21 +36,6 @@ CONNECTED_APP_SECRET_VALUE=<redacted>
 4. Run `npm run test:e2e` or select the `vitest.config.e2e.ts` config in the [Vitest
    extension][vitest.explorer] and run them from your IDE.
 
-### Validate and publish workbook smoke test
-
-The validate-and-publish workbook E2E is opt-in because it publishes a workbook to the live test
-site. To run only this smoke test, provide a valid `.twb` file on the local filesystem:
-
-```bash
-VALIDATE_UPLOAD_PUBLISH_E2E=true \
-VALIDATE_UPLOAD_PUBLISH_E2E_FILE=/absolute/path/to/workbook.twb \
-VALIDATE_UPLOAD_PUBLISH_E2E_NAME="Codex Validate Publish E2E" \
-npm run test:e2e -- --run tests/e2e/workbooks/validateUploadAndPublishWorkbook.test.ts
-```
-
-The test starts the MCP server with only the `authoring-tools` feature flag enabled, calls
-`validate-upload-and-publish-workbook` with the provided `workbookFilePath`.
-
 ## Running the E2E tests against a different site
 
 To run the E2E tests locally against a different site, you need to:
