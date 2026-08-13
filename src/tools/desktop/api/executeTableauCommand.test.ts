@@ -583,12 +583,8 @@ describe('executeTableauCommandTool', () => {
     });
 
     it('refuses a command flagged opens_blocking_dialog=true in a loaded registry regardless of its param keys', async () => {
-      // Once an External API registry is loaded, guardCommand's registry-primary path
-      // (commandGuard.ts's validateCommandRegistry) refuses any blockingDialog=true command
-      // outright, before ever inspecting its param keys — paramContractGuard.ts's own stricter
-      // "unknown param on a blocking-dialog command" message is unreachable here because that
-      // fallback only fires for a command ABSENT from the loaded registry, and a command flagged
-      // opens_blocking_dialog=true is, by construction, present in it.
+      // Once an External API registry is loaded, guardCommand's registry path
+      // refuses any blockingDialog=true command outright, before inspecting param keys.
       enableExternalApiRegistry({
         'tabui:copy-sheet-image-u-i': {
           agent_can_invoke: true,

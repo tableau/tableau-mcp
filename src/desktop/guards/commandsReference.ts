@@ -1,10 +1,10 @@
 // One loader for the commands-reference document consumed by commandNameRegistry.ts (name
-// guard), paramContractGuard.ts (param-shape guard, standalone fallback) and search/searchLibrary.ts
-// (search-commands). Synthesized from tab-agent-south's live External API registry
-// (paramWireRegistry.ts's `listExternalApiCommandRegistryEntries`) rather than a bundled JSON
-// snapshot — a snapshot goes stale the moment Desktop ships a new command. Memoised tri-state like
-// the guards always did: undefined = not yet attempted, null = no registry loaded (env
-// unset/unreadable), cached and never retried until `_resetExternalApiCommandRegistryForTest`.
+// guard) and search/searchLibrary.ts (search-commands). Synthesized from tab-agent-south's
+// live External API registry (paramWireRegistry.ts's `listExternalApiCommandRegistryEntries`)
+// rather than a bundled JSON snapshot — a snapshot goes stale the moment Desktop ships a new
+// command. Memoised tri-state like the guards always did: undefined = not yet attempted, null
+// = no registry loaded (env unset/unreadable), cached and never retried until
+// `_resetExternalApiCommandRegistryForTest`.
 //
 // `description` and `value_to_users` are absent here (the registry carries no prose today), so
 // search-commands results synthesized from it have no human-readable blurb until tab-agent-south's
@@ -84,6 +84,8 @@ function toReferenceEntry([fullyQualifiedSerializedName, entry]: readonly [
       local_name: param.local,
       type_id: param.type,
       required: param.required,
+      cannot_provide_from_mcp: param.unprovidable,
+      context_filled: param.contextFilled,
     })),
   };
 }

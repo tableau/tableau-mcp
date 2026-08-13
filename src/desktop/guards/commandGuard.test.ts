@@ -199,7 +199,7 @@ describe('guardCommand', () => {
     ]);
   });
 
-  it('fails open to the bundled param-contract guard when the registry is unavailable', () => {
+  it('fails open on param shape when the registry is unavailable', () => {
     const result = guardCommand({
       namespace: 'tabdoc',
       cmd: 'show-me',
@@ -211,5 +211,23 @@ describe('guardCommand', () => {
     if (!('ok' in result)) return;
     expect(result.dispatchArgs).toEqual({ WorksheetName: 'Sheet 1', ShowMeType: 'bars' });
     expect(result.warnings).toEqual([]);
+  });
+
+  it('refuses sort-nested missing live-required params even when no registry is loaded', () => {
+    const result = guardCommand({
+      namespace: 'tabdoc',
+      cmd: 'sort-nested',
+      command: 'tabdoc:sort-nested',
+      args: {
+        DimensionToSort: '[Sample - Superstore].[Category]',
+        Worksheet: 'Sheet 1',
+      },
+    });
+
+    expect('refused' in result).toBe(true);
+    if (!('refused' in result)) return;
+    expect(result.message).toContain(
+      'Missing required parameter(s) for Tableau command "tabdoc:sort-nested": MeasureName, ShelfType',
+    );
   });
 });

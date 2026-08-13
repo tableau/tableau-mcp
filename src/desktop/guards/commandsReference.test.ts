@@ -70,8 +70,22 @@ describe('commandsReference (synthesized from the External API registry)', () =>
       modifies_workbook_state: true,
     });
     expect(sort?.parameters).toEqual([
-      { direction: 'in', local_name: 'FieldName', type_id: 'DPI_GlobalFieldName', required: true },
-      { direction: 'in', local_name: 'ClearSort', type_id: 'DPI_ClearSort', required: false },
+      {
+        direction: 'in',
+        local_name: 'FieldName',
+        type_id: 'DPI_GlobalFieldName',
+        required: true,
+        cannot_provide_from_mcp: false,
+        context_filled: false,
+      },
+      {
+        direction: 'in',
+        local_name: 'ClearSort',
+        type_id: 'DPI_ClearSort',
+        required: false,
+        cannot_provide_from_mcp: false,
+        context_filled: false,
+      },
     ]);
 
     const sortNested = entries?.find(
@@ -82,8 +96,8 @@ describe('commandsReference (synthesized from the External API registry)', () =>
       agent_can_invoke: true,
       opens_blocking_dialog: false,
       modifies_workbook_state: true,
-      parameters: [],
     });
+    expect(sortNested?.parameters).toEqual([]);
   });
 
   it('splits only the namespace off command_name, keeping multi-colon command tails intact', () => {
@@ -99,5 +113,52 @@ describe('commandsReference (synthesized from the External API registry)', () =>
     const [entry] = loadCommandsReference() ?? [];
 
     expect(entry.command_name).toBe('workgroup:change-site');
+  });
+
+  it('projects unprovidable and context_filled flags onto each param', () => {
+    enableExternalApiRegistry({
+      'tabdoc:launch-quantitative-color-dialog': {
+        agent_can_invoke: true,
+        opens_blocking_dialog: false,
+        modifies_state: 'false',
+        in_params: [
+          {
+            local: 'VizID',
+            type: 'DPI_VisualIDPM',
+            required: false,
+            wire: 'visual-id-pres-model',
+            unprovidable: true,
+          },
+          {
+            local: 'Workspace',
+            type: 'UPI_Workspace',
+            required: true,
+            wire: 'workspace',
+            unprovidable: true,
+            context_filled: true,
+          },
+        ],
+      },
+    });
+
+    const [entry] = loadCommandsReference() ?? [];
+    expect(entry.parameters).toEqual([
+      {
+        direction: 'in',
+        local_name: 'VizID',
+        type_id: 'DPI_VisualIDPM',
+        required: false,
+        cannot_provide_from_mcp: true,
+        context_filled: false,
+      },
+      {
+        direction: 'in',
+        local_name: 'Workspace',
+        type_id: 'UPI_Workspace',
+        required: true,
+        cannot_provide_from_mcp: true,
+        context_filled: true,
+      },
+    ]);
   });
 });

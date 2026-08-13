@@ -66,6 +66,81 @@ const FIXTURE_REGISTRY: Record<string, unknown> = {
     modifies_state: 'false',
     in_params: [{ local: 'EditorTarget', type: 'DPI_Worksheet', required: true, wire: 'target' }],
   },
+  // Optional VizID is unprovidable — the color-dialog incident: Desktop still cannot run
+  // this headlessly, so search must not offer it even though agent_can_invoke is true.
+  'tabdoc:launch-quantitative-color-dialog': {
+    agent_can_invoke: true,
+    opens_blocking_dialog: false,
+    modifies_state: 'false',
+    in_params: [
+      {
+        local: 'VizID',
+        type: 'DPI_VisualIDPM',
+        required: false,
+        wire: 'visual-id-pres-model',
+        unprovidable: true,
+      },
+      {
+        local: 'FieldNames',
+        type: 'DPI_EncodingFieldVector',
+        required: true,
+        wire: 'encoding-field-vector',
+      },
+    ],
+  },
+  // Optional FieldVector is unprovidable, but the required params are fillable — keep it.
+  'tabdoc:show-me': {
+    agent_can_invoke: true,
+    opens_blocking_dialog: false,
+    modifies_state: 'true',
+    in_params: [
+      { local: 'WorksheetName', type: 'DPI_Worksheet', required: true, wire: 'worksheet' },
+      {
+        local: 'ShowMeType',
+        type: 'DPI_ShowMeCommandType',
+        required: true,
+        wire: 'show-me-command-type',
+      },
+      {
+        local: 'FieldsSelectedInSchemaViewer',
+        type: 'DPI_FieldVector',
+        required: false,
+        wire: 'field-vector',
+        unprovidable: true,
+      },
+    ],
+  },
+  // Workspace is unprovidable but context-filled by Desktop — keep it.
+  'tabui:new-workbook': {
+    agent_can_invoke: true,
+    opens_blocking_dialog: false,
+    modifies_state: 'true',
+    in_params: [
+      {
+        local: 'Workspace',
+        type: 'UPI_Workspace',
+        required: true,
+        wire: 'workspace',
+        unprovidable: true,
+        context_filled: true,
+      },
+    ],
+  },
+  // Required FieldVector is unprovidable — drop the whole command.
+  'tabdoc:delete-calculation-fields-command': {
+    agent_can_invoke: true,
+    opens_blocking_dialog: false,
+    modifies_state: 'true',
+    in_params: [
+      {
+        local: 'FieldVector',
+        type: 'DPI_FieldVector',
+        required: true,
+        wire: 'field-vector',
+        unprovidable: true,
+      },
+    ],
+  },
 };
 
 function enableExternalApiRegistry(commands: Record<string, unknown>): void {
@@ -117,6 +192,26 @@ describe('search-commands never offers an uninvocable command', () => {
   it('returns ordinary invocable commands for a matching keyword', () => {
     const hits = names(searchCommandsByKeywords(['add-field']));
     expect(hits).toContain('tabdoc:add-field');
+  });
+
+  it('drops a command whose optional VizID is unprovidable', () => {
+    const hits = names(searchCommandsByKeywords(['launch-quantitative-color-dialog']));
+    expect(hits).not.toContain('tabdoc:launch-quantitative-color-dialog');
+  });
+
+  it('still offers show-me when only an optional FieldVector is unprovidable', () => {
+    const hits = names(searchCommandsByKeywords(['show-me']));
+    expect(hits).toContain('tabdoc:show-me');
+  });
+
+  it('still offers a command whose only unprovidable param is context-filled', () => {
+    const hits = names(searchCommandsByKeywords(['new-workbook']));
+    expect(hits).toContain('tabui:new-workbook');
+  });
+
+  it('drops a command with a required unprovidable param', () => {
+    const hits = names(searchCommandsByKeywords(['delete-calculation-fields-command']));
+    expect(hits).not.toContain('tabdoc:delete-calculation-fields-command');
   });
 
   it('never reports a parameter it cannot fill on a returned command', () => {

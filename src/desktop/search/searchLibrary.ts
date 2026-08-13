@@ -25,22 +25,31 @@ function loadCommandsReference(): any {
   return ref;
 }
 
-/**
- * An "in" parameter whose value can never come from MCP — either explicitly flagged
- * `cannot_provide_from_mcp` or typed as one of the reference's non-MCP-friendly types
- * (DPI_VisualIDPM, DPI_ShelfSelectionModel, ...). REQUIRED and OPTIONAL both count: the
- * three color dialogs declare their VizID optional, and Desktop still cannot run them
- * without it, so offering them only costs the agent a round trip (~8.6s in production).
- */
+const UNFILLABLE_PARAM_TYPES = new Set([
+  'DPI_VisualIDPM',
+  'DPI_VisualID',
+  'DPI_ShelfSelectionModel',
+]);
+
+function isContextFilledParam(param: { context_filled?: unknown; type_id?: unknown }): boolean {
+  return (
+    param.context_filled === true ||
+    param.type_id === 'UPI_Workspace' ||
+    param.type_id === 'UPI_IWorkspace'
+  );
+}
+
 function hasUnprovidableInParam(cmd: any, nonMcpTypes: Set<string>): boolean {
   const params = Array.isArray(cmd.parameters) ? cmd.parameters : [];
-  return params.some(
-    (p: any) =>
-      p &&
-      typeof p === 'object' &&
-      p.direction === 'in' &&
-      ((p.type_id && nonMcpTypes.has(p.type_id)) || p.cannot_provide_from_mcp === true),
-  );
+  return params.some((p: any) => {
+    if (!p || typeof p !== 'object' || p.direction !== 'in' || isContextFilledParam(p)) {
+      return false;
+    }
+    const typeId = typeof p.type_id === 'string' ? p.type_id : '';
+    const unfillableType = UNFILLABLE_PARAM_TYPES.has(typeId) || nonMcpTypes.has(typeId);
+    const unprovidable = p.cannot_provide_from_mcp === true || unfillableType;
+    return unprovidable && (p.required === true || unfillableType);
+  });
 }
 
 /**
@@ -153,14 +162,16 @@ function formatCommandSearchResult(cmd: any, blockingNames: Set<string>, score?:
     description: cmd.description,
     module_and_command: cmd.fully_qualified_serialized_name,
     modifies_workbook_state: cmd.modifies_workbook_state,
-    parameters: (Array.isArray(cmd.parameters) ? cmd.parameters : []).map((p: any) => ({
-      direction: p.direction,
-      local_name: p.local_name,
-      type_id: p.type_id,
-      required: !!p.required,
-      comment: p.comment,
-      cannot_provide_from_mcp: !!p.cannot_provide_from_mcp,
-    })),
+    parameters: (Array.isArray(cmd.parameters) ? cmd.parameters : [])
+      .filter((p: any) => !p?.cannot_provide_from_mcp)
+      .map((p: any) => ({
+        direction: p.direction,
+        local_name: p.local_name,
+        type_id: p.type_id,
+        required: !!p.required,
+        comment: p.comment,
+        cannot_provide_from_mcp: false,
+      })),
   };
   if (typeof score === 'number') result.score = Number(score.toExponential(3));
 

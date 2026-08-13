@@ -7,12 +7,16 @@ const REGISTRY_DIR_ENV = 'TABLEAU_COMMANDS_REGISTRY_DIR';
 const COMMAND_PARAM_REGISTRY_FILE = 'command_param_registry.json';
 const CODEGEN_REGISTRY_FILE = 'codegen_registry.json';
 
+const CONTEXT_FILLED_PARAM_TYPES = new Set(['UPI_Workspace', 'UPI_IWorkspace']);
+
 export type ExternalApiRegistryParam = {
   local: string;
   type: string;
   required: boolean;
   wire: string;
   camelToDashed: string;
+  unprovidable: boolean;
+  contextFilled: boolean;
 };
 
 export type ExternalApiCommandRegistryEntry = {
@@ -47,6 +51,8 @@ type RawCommandParam = {
   type?: unknown;
   required?: unknown;
   wire?: unknown;
+  unprovidable?: unknown;
+  context_filled?: unknown;
 };
 
 type RawCodegenRegistry = {
@@ -204,6 +210,8 @@ function parseParams(rawParams: unknown): ExternalApiRegistryParam[] {
         required: param.required === true,
         wire: param.wire,
         camelToDashed: camelToDashed(param.local),
+        unprovidable: param.unprovidable === true,
+        contextFilled: param.context_filled === true || CONTEXT_FILLED_PARAM_TYPES.has(param.type),
       },
     ];
   });

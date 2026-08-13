@@ -105,6 +105,61 @@ describe('paramWireRegistry', () => {
     expect(entry?.paramWireByLocal.get('ShowMeType')).toBe('show-me-command-type');
     expect(entry?.paramWireByCamelToDashed.get('show-me-type')).toBe('show-me-command-type');
     expect(entry?.enumValuesForParamType.get('DPI_ShowMeCommandType')).toEqual(['bars', 'lines']);
+    expect(entry?.params.map((param) => param.unprovidable)).toEqual([false, false]);
+    expect(entry?.params.map((param) => param.contextFilled)).toEqual([false, false]);
+  });
+
+  it('carries unprovidable and context_filled flags from the registry JSON', async () => {
+    const dir = writeRegistry({
+      commands: {
+        'tabdoc:launch-quantitative-color-dialog': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          in_params: [
+            {
+              local: 'VizID',
+              type: 'DPI_VisualIDPM',
+              required: false,
+              wire: 'visual-id-pres-model',
+              unprovidable: true,
+            },
+            {
+              local: 'Workspace',
+              type: 'UPI_IWorkspace',
+              required: true,
+              wire: 'workspace',
+              unprovidable: true,
+            },
+          ],
+        },
+      },
+    });
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
+
+    const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
+    const entry = lookupExternalApiCommandRegistry('tabdoc', 'launch-quantitative-color-dialog');
+
+    expect(entry?.params).toEqual([
+      {
+        local: 'VizID',
+        type: 'DPI_VisualIDPM',
+        required: false,
+        wire: 'visual-id-pres-model',
+        camelToDashed: 'viz-id',
+        unprovidable: true,
+        contextFilled: false,
+      },
+      {
+        local: 'Workspace',
+        type: 'UPI_IWorkspace',
+        required: true,
+        wire: 'workspace',
+        camelToDashed: 'workspace',
+        unprovidable: true,
+        contextFilled: true,
+      },
+    ]);
   });
 
   it('resolves enum names from tuple-shaped type_of_param entries (the shipped registry shape)', async () => {
