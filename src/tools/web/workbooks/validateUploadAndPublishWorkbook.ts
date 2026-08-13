@@ -1,4 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { readFile } from 'fs/promises';
+import { basename, extname } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -20,8 +22,16 @@ const paramsSchema = {
   workbookUploadId: z
     .string()
     .min(1)
+    .optional()
     .describe(
-      'Staged workbook upload id returned by request-workbook-upload for the workbook to validate and publish.',
+      'Staged workbook upload id returned by request-workbook-upload. Use this for hosted clients that cannot pass a local path.',
+    ),
+  workbookFilePath: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Path to a local TWB workbook file on the MCP server filesystem. Use this for local or stdio deployments.',
     ),
   name: z.string().describe('The name to give the published workbook.'),
   overwrite: z
@@ -60,7 +70,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
     server,
     name: 'validate-upload-and-publish-workbook',
     description:
-      'Validates a staged TWB workbook with Tableau, uploads it only when validation succeeds, and immediately publishes it to the site Default project. If validation returns blocking errors, the tool returns those findings and does not publish anything.',
+      'Validates a TWB workbook with Tableau from a local file path or staged upload id, uploads it only when validation succeeds, and immediately publishes it to the site Default project. If validation returns blocking errors, the tool returns those findings and does not publish anything.',
     paramsSchema,
     annotations: {
       title: 'Validate, Upload, and Publish Workbook',
@@ -72,11 +82,15 @@ export const getValidateUploadAndPublishWorkbookTool = (
     disabled: new Provider(
       async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
     ),
-    callback: async ({ workbookUploadId, name, overwrite }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { workbookUploadId, workbookFilePath, name, overwrite },
+      extra,
+    ): Promise<CallToolResult> => {
       return await tool.logAndExecute<ValidateUploadAndPublishWorkbookResult>({
         extra,
         args: {
-          workbookUploadId: workbookUploadId ? '<redacted>' : '<missing>',
+          workbookUploadId: workbookUploadId ? '<redacted>' : undefined,
+          workbookFilePath: workbookFilePath ? '<redacted>' : undefined,
           name,
           overwrite,
         },
@@ -86,6 +100,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
           const resolvedWorkbookFile = await resolveWorkbookInput({
             config: extra.config.bucketS3,
             workbookUploadId,
+            workbookFilePath,
           });
 
           const result = await useRestApi<ValidateUploadAndPublishWorkbookResult>({
@@ -148,13 +163,23 @@ export const getValidateUploadAndPublishWorkbookTool = (
 async function resolveWorkbookInput({
   config,
   workbookUploadId,
+  workbookFilePath,
 }: {
   config: BucketS3Config & { enabled: boolean };
   workbookUploadId?: string;
+  workbookFilePath?: string;
 }): Promise<ResolvedWorkbook> {
+  if (workbookUploadId && workbookFilePath) {
+    throw new UnknownError('Provide either workbookFilePath or workbookUploadId, not both.');
+  }
+
+  if (workbookFilePath) {
+    return await resolveLocalWorkbookFile(workbookFilePath);
+  }
+
   if (!workbookUploadId) {
     throw new UnknownError(
-      'workbookUploadId must be provided. Call request-workbook-upload first.',
+      'Either workbookFilePath or workbookUploadId must be provided. For local MCP servers, pass workbookFilePath. For hosted clients, call request-workbook-upload first and pass workbookUploadId.',
     );
   }
   if (!config.enabled) {
@@ -166,6 +191,20 @@ async function resolveWorkbookInput({
     workbookUploadId,
     config,
   });
+}
+
+async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {
+  const fileName = basename(workbookFilePath);
+  if (extname(fileName).toLowerCase() !== '.twb') {
+    throw new UnknownError('workbookFilePath must point to a .twb file.');
+  }
+
+  const bytes = await readFile(workbookFilePath);
+  if (bytes.byteLength === 0) {
+    throw new UnknownError('workbookFilePath must not point to an empty workbook file.');
+  }
+
+  return { fileName, bytes };
 }
 
 function assertValidateWorkbookAndUploadSupported(): void {

@@ -1,19 +1,9 @@
-import { readFile } from 'fs/promises';
-import { basename } from 'path';
 import { z } from 'zod';
 
 import { workbookSchema } from '../../../src/sdks/tableau/types/workbook.js';
 import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { buildVariant } from '../build.js';
 import { McpClient } from '../mcpClient.js';
-
-const requestWorkbookUploadResultSchema = z.object({
-  workbookUploadId: z.string().uuid(),
-  uploadUrl: z.string().url(),
-  expiresAt: z.string(),
-  maxSizeBytes: z.number().int().positive(),
-  requiredHeaders: z.record(z.string()),
-});
 
 const validationFindingSchema = z.object({
   severity: z.string(),
@@ -37,35 +27,34 @@ const validateUploadAndPublishWorkbookResultSchema = z.discriminatedUnion('statu
   }),
 ]);
 
-type StagedUploadSmokeConfig = {
+type ValidateUploadPublishSmokeConfig = {
   workbookFilePath: string;
   workbookName: string;
-  s3Bucket: string;
 };
 
-describe('validate-upload-and-publish-workbook staged upload', () => {
+describe('validate-upload-and-publish-workbook local file', () => {
   let client: McpClient | undefined;
 
   beforeAll(() => {
-    if (isStagedUploadSmokeRequested()) {
+    if (isValidateUploadPublishSmokeRequested()) {
       setEnv();
     }
   });
 
   afterAll(() => {
-    if (isStagedUploadSmokeRequested()) {
+    if (isValidateUploadPublishSmokeRequested()) {
       resetEnv();
     }
   });
 
   beforeAll(async () => {
-    const smokeConfig = getStagedUploadSmokeConfig();
+    const smokeConfig = getValidateUploadPublishSmokeConfig();
     if (!smokeConfig) {
       return;
     }
 
     await buildVariant('default');
-    client = new McpClient({ env: getStagedUploadSmokeEnv(smokeConfig) });
+    client = new McpClient({ env: getValidateUploadPublishSmokeEnv() });
     await client.connect();
   });
 
@@ -73,39 +62,19 @@ describe('validate-upload-and-publish-workbook staged upload', () => {
     await client?.close();
   });
 
-  it('uploads workbook bytes to S3, resolves them by upload id, and publishes after validation', async () => {
-    const smokeConfig = getStagedUploadSmokeConfig();
+  it('validates and publishes a workbook from a local file path', async () => {
+    const smokeConfig = getValidateUploadPublishSmokeConfig();
     if (!smokeConfig || !client) {
       console.warn(
-        'Skipping staged workbook upload e2e. Set STAGED_WORKBOOK_UPLOAD_E2E=true, STAGED_WORKBOOK_UPLOAD_E2E_FILE, and MCP_S3_BUCKET to run it.',
+        'Skipping validate-upload-and-publish-workbook e2e. Set VALIDATE_UPLOAD_PUBLISH_E2E=true and VALIDATE_UPLOAD_PUBLISH_E2E_FILE to run it.',
       );
       return;
     }
 
-    const workbookBytes = await readFile(smokeConfig.workbookFilePath);
-    const fileName = basename(smokeConfig.workbookFilePath);
-    const uploadRequest = await client.callTool('request-workbook-upload', {
-      schema: requestWorkbookUploadResultSchema,
-      toolArgs: {
-        fileName,
-        contentType: 'application/xml',
-        sizeBytes: workbookBytes.byteLength,
-      },
-    });
-
-    expect(workbookBytes.byteLength).toBeLessThanOrEqual(uploadRequest.maxSizeBytes);
-
-    const uploadResponse = await fetch(uploadRequest.uploadUrl, {
-      method: 'PUT',
-      headers: uploadRequest.requiredHeaders,
-      body: new Uint8Array(workbookBytes),
-    });
-    expect(uploadResponse.ok).toBe(true);
-
     const publishResult = await client.callTool('validate-upload-and-publish-workbook', {
       schema: validateUploadAndPublishWorkbookResultSchema,
       toolArgs: {
-        workbookUploadId: uploadRequest.workbookUploadId,
+        workbookFilePath: smokeConfig.workbookFilePath,
         name: smokeConfig.workbookName,
         overwrite: true,
       },
@@ -119,57 +88,33 @@ describe('validate-upload-and-publish-workbook staged upload', () => {
   });
 });
 
-function getStagedUploadSmokeConfig(): StagedUploadSmokeConfig | undefined {
-  if (!isStagedUploadSmokeRequested()) {
+function getValidateUploadPublishSmokeConfig(): ValidateUploadPublishSmokeConfig | undefined {
+  if (!isValidateUploadPublishSmokeRequested()) {
     return undefined;
   }
 
-  const workbookFilePath = process.env.STAGED_WORKBOOK_UPLOAD_E2E_FILE?.trim();
-  const s3Bucket = process.env.MCP_S3_BUCKET?.trim();
-  if (!workbookFilePath || !s3Bucket) {
+  const workbookFilePath = process.env.VALIDATE_UPLOAD_PUBLISH_E2E_FILE?.trim();
+  if (!workbookFilePath) {
     return undefined;
   }
 
   return {
     workbookFilePath,
-    s3Bucket,
-    workbookName: process.env.STAGED_WORKBOOK_UPLOAD_E2E_NAME?.trim() || 'Codex Staged Upload E2E',
+    workbookName:
+      process.env.VALIDATE_UPLOAD_PUBLISH_E2E_NAME?.trim() || 'Codex Validate Publish E2E',
   };
 }
 
-function isStagedUploadSmokeRequested(): boolean {
-  return process.env.STAGED_WORKBOOK_UPLOAD_E2E === 'true';
+function isValidateUploadPublishSmokeRequested(): boolean {
+  return process.env.VALIDATE_UPLOAD_PUBLISH_E2E === 'true';
 }
 
-function getStagedUploadSmokeEnv({ s3Bucket }: StagedUploadSmokeConfig): Record<string, string> {
-  const env: Record<string, string> = {
+function getValidateUploadPublishSmokeEnv(): Record<string, string> {
+  return {
     ...getDefaultEnv(),
-    MCP_S3_BUCKET: s3Bucket,
-    MCP_IMAGE_PREFIX: process.env.MCP_IMAGE_PREFIX?.trim() || 'tableau-mcp-e2e/',
-    FILE_TTL: process.env.FILE_TTL?.trim() || '300',
     FEATURE_GATE_PROVIDER: 'custom',
     FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
       module: './tests/e2e/fixtures/authoringToolsFeatureGate.cjs',
     }),
   };
-
-  for (const key of [
-    'AWS_DEFAULT_REGION',
-    'AWS_REGION',
-    'AWS_ACCESS_KEY_ID',
-    'AWS_SECRET_ACCESS_KEY',
-    'AWS_SESSION_TOKEN',
-    'AWS_PROFILE',
-    'AWS_SHARED_CREDENTIALS_FILE',
-    'AWS_CONFIG_FILE',
-    'AWS_SDK_LOAD_CONFIG',
-    'HOME',
-  ]) {
-    const value = process.env[key];
-    if (value) {
-      env[key] = value;
-    }
-  }
-
-  return env;
 }
