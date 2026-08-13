@@ -2,5 +2,6 @@
   "mcp-apps": false,
   "view-file-mode": false,
   "view-data-file-mode": false,
-  "workbook-file-mode": true
+  "workbook-file-mode": true,
+  "authoring-tools": true
 }
