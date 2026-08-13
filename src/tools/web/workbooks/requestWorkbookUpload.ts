@@ -59,6 +59,12 @@ export const getRequestWorkbookUploadTool = (
           sizeBytes,
         },
         callback: async () => {
+          if (extra.tableauAuthInfo?.type === 'Passthrough') {
+            throw new UnknownError(
+              'Staged workbook upload is not available for Passthrough authentication. Use OAuth or server-side authentication so the upload flow can enforce MCP authorization before issuing a signed upload URL.',
+            );
+          }
+
           if (!extra.config.bucketS3.enabled) {
             throw new UnknownError(
               'MCP_S3_BUCKET must be configured before requesting staged workbook uploads.',

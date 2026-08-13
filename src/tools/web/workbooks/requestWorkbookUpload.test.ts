@@ -111,6 +111,28 @@ describe('requestWorkbookUploadTool', () => {
     expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
   });
 
+  it('returns an error for Passthrough auth before creating a signed upload URL', async () => {
+    const result = await getToolResult(
+      { fileName: 'BoltBikes Workbook.twb' },
+      {
+        tableauAuthInfo: {
+          type: 'Passthrough',
+          username: 'viewer@example.com',
+          userId: 'test-user-id',
+          server: 'https://tableau.example.com',
+          siteId: 'test-site-id',
+          siteName: 'test-site',
+          raw: 'passthrough-token',
+        },
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Passthrough authentication');
+    expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
+  });
+
   it('redacts no presigned URL from logs because it is only produced after execution', async () => {
     const tool = getRequestWorkbookUploadTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
