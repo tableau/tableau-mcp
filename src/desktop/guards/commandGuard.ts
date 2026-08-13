@@ -5,14 +5,14 @@ import {
 } from '../externalApi/paramWireRegistry.js';
 import { validateKnownCommand } from './commandNameRegistry.js';
 import {
+  checkCommandPolicy,
+  type CommandParamPolicy,
   dialogPolicyFor,
   formatUnvalidatedTargetRefusal,
+  liveParamOverrideFor,
   unvalidatedTargetPolicyFor,
 } from './commandPolicy.js';
 import { validateNotionalSpecArgs } from './notionalSpecGuard.js';
-import { validateCommandParams } from './paramContractGuard.js';
-
-const CONTEXT_FILLED_PARAM_TYPES = new Set(['UPI_Workspace', 'UPI_IWorkspace']);
 
 export type CommandGuardInput = {
   namespace: 'tabui' | 'tabdoc';
@@ -65,6 +65,19 @@ export function guardCommand({
 
   let dispatchArgs = args ?? {};
   let warnings: string[] = [];
+
+  const liveParamOverride = liveParamOverrideFor(command);
+  if (liveParamOverride) {
+    const liveParamGuard = validateLiveParamOverride({
+      command,
+      args: dispatchArgs,
+      override: liveParamOverride,
+    });
+    if (!liveParamGuard.ok) {
+      return { refused: true, message: liveParamGuard.message };
+    }
+  }
+
   const externalApiCommandRegistry = lookupExternalApiCommandRegistry(namespace, cmd);
   if (externalApiCommandRegistry) {
     const externalApiGuard = validateCommandRegistry({
@@ -77,15 +90,8 @@ export function guardCommand({
     }
     dispatchArgs = externalApiGuard.args;
     warnings = externalApiGuard.warnings;
-  } else {
-    // No External-API registry loaded/entry found: preserve today's bundled guard behavior.
-    const paramValidation = validateCommandParams(command, args);
-    if (!paramValidation.ok) {
-      return { refused: true, message: paramValidation.message };
-    }
   }
 
-  // The deeper NotionalSpec payload guard still runs after param normalization.
   const notionalSpecValidation = validateNotionalSpecArgs(command, dispatchArgs);
   if (!notionalSpecValidation.ok) {
     return { refused: true, message: notionalSpecValidation.message };
@@ -96,6 +102,45 @@ export function guardCommand({
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function validateLiveParamOverride({
+  command,
+  args,
+  override,
+}: {
+  command: string;
+  args: Record<string, unknown>;
+  override: CommandParamPolicy;
+}): { ok: true } | { ok: false; message: string } {
+  const providedKeys = Object.keys(args);
+  const unknownKeys = providedKeys.filter((key) => !override.allowed.has(key));
+  if (unknownKeys.length > 0) {
+    const allowed = [...override.allowed].map((key) => `"${key}"`).join(', ');
+    return {
+      ok: false,
+      message:
+        `Unknown parameter(s) for Tableau command "${command}": ${unknownKeys.join(', ')}. NOT sent - ` +
+        "a wrong parameter for this command pops a blocking error dialog on the user's screen " +
+        `(live-verified 2026-07-19). FIX: use exactly ${allowed} (the live-verified /v0 contract).`,
+    };
+  }
+
+  const missing = [...override.required].filter((key) => !(key in args));
+  if (missing.length > 0) {
+    const policy = checkCommandPolicy(command);
+    const missingParams = missing.map((key) => `"${key}"`).join(', ');
+    const fix =
+      policy?.action === 'hint' && policy.fix
+        ? `Live-verified /v0 contract requires ${missingParams}. ${policy.fix}`
+        : `FIX: provide ${missingParams} (live-verified /v0 contract).`;
+    return {
+      ok: false,
+      message: `Missing required parameter(s) for Tableau command "${command}": ${missing.join(', ')}. ${fix}`,
+    };
+  }
+
+  return { ok: true };
 }
 
 function validateCommandRegistry({
@@ -189,7 +234,7 @@ function hasParam(args: Record<string, unknown>, param: ExternalApiRegistryParam
 }
 
 function isContextFilledParam(param: ExternalApiRegistryParam): boolean {
-  return CONTEXT_FILLED_PARAM_TYPES.has(param.type);
+  return param.contextFilled;
 }
 
 function formatRefusalMessage({
