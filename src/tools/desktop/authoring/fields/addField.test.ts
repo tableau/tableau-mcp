@@ -368,6 +368,7 @@ describe('addFieldTool', () => {
     // re-fetches a fresh (blank) sheet from the live workbook.
     expect(secondBody.file).toBe(firstBody.file);
     expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledOnce();
+    expect(vi.mocked(metadataModule.addFieldToRows).mock.calls[1]?.[0]).toBe(MODIFIED_XML);
   });
 
   it('mints a fresh sheet when the sticky buffer fails its sidecar/session check', async () => {

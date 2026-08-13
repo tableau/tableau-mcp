@@ -113,20 +113,24 @@ describe('parseShelfValue', () => {
 });
 
 describe('addFieldToRows / removeFieldFromRows', () => {
-  it('preserves an unrelated multiline calculation while adding a field', () => {
+  it('preserves an unrelated multiline calculation through two distinct field mutations', () => {
+    const formula =
+      'CASE [Parameters].[Parameter 9]&#10;WHEN &apos;Total Values&apos; THEN&#13;MAX([Profit])&#10;END';
     const worksheetWithMultilineCalc = WORKSHEET_XML.replace(
       '</datasource-dependencies>',
       `<column name="[Selected Measure]" datatype="real" role="measure" type="quantitative">
-        <calculation class="tableau" formula="CASE [Parameters].[Parameter 9]&#10;WHEN &apos;Total Values&apos; THEN&#10;MAX([Profit])&#10;END"/>
+        <calculation class="tableau" formula="${formula}"/>
       </column></datasource-dependencies>`,
     );
 
-    const modified = addFieldToRows(worksheetWithMultilineCalc, '[Sample].[sum:Profit:qk]');
+    const rowsModified = addFieldToRows(worksheetWithMultilineCalc, '[Sample].[sum:Profit:qk]');
+    const colsModified = addFieldToCols(rowsModified, '[Sample].[sum:Profit:qk]');
 
-    expect(modified).toContain(
-      'formula="CASE [Parameters].[Parameter 9]&#10;WHEN &apos;Total Values&apos; THEN&#10;MAX([Profit])&#10;END"',
-    );
-    expect(modified).not.toContain('&amp;#10;');
+    for (const modified of [rowsModified, colsModified]) {
+      expect(modified).toContain(`formula="${formula}"`);
+      expect(modified).not.toContain('&amp;#10;');
+      expect(modified).not.toContain('&amp;#13;');
+    }
   });
 
   it('should add a field to rows', () => {
