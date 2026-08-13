@@ -5,21 +5,23 @@ import { z } from 'zod';
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { Project } from '../../../sdks/tableau/types/project.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
+import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
-import { resolveLocalWorkbook } from './localWorkbookFile.js';
+import { type ResolvedWorkbook, resolveStagedWorkbookUpload } from './stagedWorkbookUpload.js';
 
 const paramsSchema = {
-  workbookFilePath: z
+  workbookUploadId: z
     .string()
     .min(1)
     .describe(
-      'Absolute path to a local Tableau workbook (.twb) file accessible to the MCP server.',
+      'Staged workbook upload id returned by request-workbook-upload for the workbook to validate and publish.',
     ),
   name: z.string().describe('The name to give the published workbook.'),
   overwrite: z
@@ -58,7 +60,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
     server,
     name: 'validate-upload-and-publish-workbook',
     description:
-      'Validates a local TWB workbook with Tableau, uploads it only when validation succeeds, and immediately publishes it to the site Default project. If validation returns blocking errors, the tool returns those findings and does not publish anything.',
+      'Validates a staged TWB workbook with Tableau, uploads it only when validation succeeds, and immediately publishes it to the site Default project. If validation returns blocking errors, the tool returns those findings and does not publish anything.',
     paramsSchema,
     annotations: {
       title: 'Validate, Upload, and Publish Workbook',
@@ -70,21 +72,30 @@ export const getValidateUploadAndPublishWorkbookTool = (
     disabled: new Provider(
       async () => !(await getFeatureGate().isFeatureEnabled('upload-validate-publish')),
     ),
-    callback: async ({ workbookFilePath, name, overwrite }, extra): Promise<CallToolResult> => {
+    callback: async ({ workbookUploadId, name, overwrite }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<ValidateUploadAndPublishWorkbookResult>({
         extra,
-        args: { workbookFilePath: '<redacted>', name, overwrite },
+        args: {
+          workbookUploadId: workbookUploadId ? '<redacted>' : '<missing>',
+          name,
+          overwrite,
+        },
         callback: async () => {
-          const workbookFile = await resolveLocalWorkbook(workbookFilePath);
+          assertValidateWorkbookAndUploadSupported();
 
-          const result = await useRestApi({
+          const resolvedWorkbookFile = await resolveWorkbookInput({
+            config: extra.config.bucketS3,
+            workbookUploadId,
+          });
+
+          const result = await useRestApi<ValidateUploadAndPublishWorkbookResult>({
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
               const validation = await restApi.workbooksMethods.validateWorkbookAndUpload({
                 siteId: restApi.siteId,
-                filename: workbookFile.fileName,
-                workbook: workbookFile.bytes,
+                filename: resolvedWorkbookFile.fileName,
+                workbook: resolvedWorkbookFile.bytes,
               });
 
               const errors = (validation.errors ?? []).map(toValidationFinding);
@@ -134,6 +145,37 @@ export const getValidateUploadAndPublishWorkbookTool = (
   return tool;
 };
 
+async function resolveWorkbookInput({
+  config,
+  workbookUploadId,
+}: {
+  config: BucketS3Config & { enabled: boolean };
+  workbookUploadId?: string;
+}): Promise<ResolvedWorkbook> {
+  if (!workbookUploadId) {
+    throw new UnknownError(
+      'workbookUploadId must be provided. Call request-workbook-upload first.',
+    );
+  }
+  if (!config.enabled) {
+    throw new UnknownError(
+      'MCP_S3_BUCKET must be configured before publishing staged workbook uploads.',
+    );
+  }
+  return await resolveStagedWorkbookUpload({
+    workbookUploadId,
+    config,
+  });
+}
+
+function assertValidateWorkbookAndUploadSupported(): void {
+  if (!RestApi.versionIsAtLeast('3.29')) {
+    throw new UnknownError(
+      `validate-upload-and-publish-workbook requires Tableau REST API version 3.29 or later (Tableau Server 2026.2+). The connected server is using REST API version ${RestApi.version}.`,
+    );
+  }
+}
+
 async function getDefaultProject(restApi: {
   siteId: string;
   projectsMethods: {
@@ -151,9 +193,10 @@ async function getDefaultProject(restApi: {
     pageSize: 100,
     pageNumber: 1,
   });
-  const defaultProject = projects.find(
-    (project) => project.name === 'Default' && project.parentProjectId === undefined,
-  );
+  const topLevelProjects = projects.filter((project) => project.parentProjectId === undefined);
+  const defaultProject =
+    topLevelProjects.find((project) => project.name === 'Default') ??
+    topLevelProjects.find((project) => project.name.toLowerCase() === 'default');
 
   if (!defaultProject) {
     throw new UnknownError('Could not find the site Default project to publish the workbook.');

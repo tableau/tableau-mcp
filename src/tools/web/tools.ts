@@ -39,6 +39,7 @@ import { getListViewsTool } from './views/listViews.js';
 import { getDownloadWorkbookTool } from './workbooks/downloadWorkbook.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
+import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
 import { getValidateUploadAndPublishWorkbookTool } from './workbooks/validateUploadAndPublishWorkbook.js';
 
 export const webToolFactories = [
@@ -68,6 +69,7 @@ export const webToolFactories = [
   getGenerateInsightCardsTool,
   getDownloadWorkbookTool,
   getGetWorkbookTool,
+  getRequestWorkbookUploadTool,
   getValidateUploadAndPublishWorkbookTool,
   getGetViewTool,
   getGetViewDataTool,

@@ -58,8 +58,7 @@ export type TableauApiScope =
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
-  | 'tableau:users:update'
-  | 'tableau:file_uploads:create';
+  | 'tableau:users:update';
 
 /**
  * Default scopes supported by the MCP server
@@ -184,6 +183,10 @@ const toolScopeMap: Record<
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
+  'request-workbook-upload': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set([]),
   },
   'validate-upload-and-publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],

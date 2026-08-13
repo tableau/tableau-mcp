@@ -61,7 +61,6 @@ describe('OverridableConfig', () => {
         'list-workbooks',
         'get-workbook',
         'download-workbook',
-        'validate-upload-and-publish-workbook',
       ]);
     });
 
@@ -81,6 +80,15 @@ describe('OverridableConfig', () => {
         'list-workbooks',
         'get-workbook',
         'download-workbook',
+      ]);
+    });
+
+    it('should parse INCLUDE_TOOLS into an array of valid tool names when the authoring group is used', () => {
+      vi.stubEnv('INCLUDE_TOOLS', 'authoring');
+
+      const config = new OverridableConfig({});
+      expect(config.includeTools).toEqual([
+        'request-workbook-upload',
         'validate-upload-and-publish-workbook',
       ]);
     });

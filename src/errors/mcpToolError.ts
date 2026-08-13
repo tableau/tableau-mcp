@@ -185,12 +185,6 @@ export class WorkbookNotFoundError extends McpToolError {
   }
 }
 
-export class LocalWorkbookFileError extends McpToolError {
-  constructor(message: string) {
-    super({ type: 'local-workbook-file', message, statusCode: 400 });
-  }
-}
-
 export class ZodiosValidationError extends McpToolError {
   constructor(error: ZodiosError) {
     super({

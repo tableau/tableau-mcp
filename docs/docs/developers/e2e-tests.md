@@ -36,6 +36,26 @@ CONNECTED_APP_SECRET_VALUE=<redacted>
 4. Run `npm run test:e2e` or select the `vitest.config.e2e.ts` config in the [Vitest
    extension][vitest.explorer] and run them from your IDE.
 
+### Staged workbook upload smoke test
+
+The staged workbook upload E2E is opt-in because it publishes a workbook to the live test site. To
+run only this smoke test, provide a valid `.twb` file and S3 configuration:
+
+```bash
+STAGED_WORKBOOK_UPLOAD_E2E=true \
+STAGED_WORKBOOK_UPLOAD_E2E_FILE=/absolute/path/to/workbook.twb \
+STAGED_WORKBOOK_UPLOAD_E2E_NAME="Codex Staged Upload E2E" \
+MCP_S3_BUCKET=your-test-bucket \
+AWS_DEFAULT_REGION=us-east-1 \
+MCP_IMAGE_PREFIX=tableau-mcp-e2e/ \
+FILE_TTL=300 \
+npm run test:e2e -- --run tests/e2e/workbooks/validateUploadAndPublishWorkbook.test.ts
+```
+
+The test starts the MCP server with only the `upload-validate-publish` feature flag enabled, calls
+`request-workbook-upload`, uploads the workbook bytes to the returned signed URL, and then calls
+`validate-upload-and-publish-workbook` with the returned `workbookUploadId`.
+
 ## Running the E2E tests against a different site
 
 To run the E2E tests locally against a different site, you need to:

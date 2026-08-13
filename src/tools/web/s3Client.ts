@@ -155,6 +155,124 @@ export async function uploadBufferToS3(
   });
 }
 
+export async function createPresignedPutUrlToS3({
+  key,
+  contentType,
+  bucket,
+  region,
+  presignTtlSeconds,
+}: {
+  key: string;
+  contentType: string;
+  bucket: string;
+  region: string;
+  presignTtlSeconds: number;
+}): Promise<string> {
+  const { client, PutObjectCommand, getSignedUrl } = await getS3Bundle(region);
+
+  return await getSignedUrl(
+    client,
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ContentType: contentType,
+    }),
+    { expiresIn: presignTtlSeconds },
+  );
+}
+
+export async function downloadObjectFromS3({
+  key,
+  bucket,
+  region,
+  maxBytes,
+}: {
+  key: string;
+  bucket: string;
+  region: string;
+  maxBytes: number;
+}): Promise<Buffer> {
+  const { client, GetObjectCommand } = await getS3Bundle(region);
+  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+
+  if (response.ContentLength !== undefined) {
+    const contentLength = Number(response.ContentLength);
+    if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
+      throw new Error('S3 object has an invalid byte length.');
+    }
+    if (contentLength > maxBytes) {
+      throw new Error(`S3 object exceeds the ${maxBytes}-byte limit.`);
+    }
+  }
+
+  return await bodyToBufferBounded(response.Body, maxBytes);
+}
+
+async function bodyToBufferBounded(body: unknown, maxBytes: number): Promise<Buffer> {
+  if (!body) {
+    throw new Error('S3 object did not return a body.');
+  }
+
+  if (Buffer.isBuffer(body)) {
+    return assertBufferWithinLimit(body, maxBytes);
+  }
+  if (body instanceof Uint8Array) {
+    return assertBufferWithinLimit(Buffer.from(body), maxBytes);
+  }
+  if (typeof body === 'string') {
+    return assertBufferWithinLimit(Buffer.from(body), maxBytes);
+  }
+  if (hasTransformToByteArray(body)) {
+    return assertBufferWithinLimit(Buffer.from(await body.transformToByteArray()), maxBytes);
+  }
+  if (isAsyncIterable(body)) {
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    for await (const chunk of body) {
+      const buffer = Buffer.isBuffer(chunk)
+        ? chunk
+        : chunk instanceof Uint8Array
+          ? Buffer.from(chunk)
+          : Buffer.from(String(chunk));
+      totalBytes += buffer.byteLength;
+      if (totalBytes > maxBytes) {
+        throw new Error(`S3 object exceeds the ${maxBytes}-byte limit.`);
+      }
+      chunks.push(buffer);
+    }
+    return Buffer.concat(chunks, totalBytes);
+  }
+
+  throw new Error('S3 object body type is not supported.');
+}
+
+function assertBufferWithinLimit(buffer: Buffer, maxBytes: number): Buffer {
+  if (buffer.byteLength > maxBytes) {
+    throw new Error(`S3 object exceeds the ${maxBytes}-byte limit.`);
+  }
+  return buffer;
+}
+
+function hasTransformToByteArray(
+  body: unknown,
+): body is { transformToByteArray: () => Promise<Uint8Array> } {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    'transformToByteArray' in body &&
+    typeof body.transformToByteArray === 'function'
+  );
+}
+
+function isAsyncIterable(body: unknown): body is AsyncIterable<Buffer | Uint8Array | string> {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    Symbol.asyncIterator in body &&
+    typeof body[Symbol.asyncIterator] === 'function'
+  );
+}
+
 export const exportedForTesting = {
   resetS3Bundle: (): void => {
     s3BundlePromise = undefined;
