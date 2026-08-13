@@ -116,6 +116,7 @@ describe('paramWireRegistry', () => {
           agent_can_invoke: true,
           opens_blocking_dialog: false,
           modifies_state: 'false',
+          description: 'Opens the Quantitative Color Hybrid Dialog.',
           in_params: [
             {
               local: 'VizID',
@@ -123,6 +124,7 @@ describe('paramWireRegistry', () => {
               required: false,
               wire: 'visual-id-pres-model',
               unprovidable: true,
+              comment: 'implicit parameter needed to get the visual controller',
             },
             {
               local: 'Workspace',
@@ -140,6 +142,7 @@ describe('paramWireRegistry', () => {
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
     const entry = lookupExternalApiCommandRegistry('tabdoc', 'launch-quantitative-color-dialog');
 
+    expect(entry?.description).toBe('Opens the Quantitative Color Hybrid Dialog.');
     expect(entry?.params).toEqual([
       {
         local: 'VizID',
@@ -149,6 +152,7 @@ describe('paramWireRegistry', () => {
         camelToDashed: 'viz-id',
         unprovidable: true,
         contextFilled: false,
+        comment: 'implicit parameter needed to get the visual controller',
       },
       {
         local: 'Workspace',
@@ -158,6 +162,7 @@ describe('paramWireRegistry', () => {
         camelToDashed: 'workspace',
         unprovidable: true,
         contextFilled: true,
+        comment: null,
       },
     ]);
   });

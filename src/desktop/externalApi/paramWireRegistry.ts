@@ -17,12 +17,14 @@ export type ExternalApiRegistryParam = {
   camelToDashed: string;
   unprovidable: boolean;
   contextFilled: boolean;
+  comment: string | null;
 };
 
 export type ExternalApiCommandRegistryEntry = {
   invocable: boolean;
   blockingDialog: boolean;
   modifiesWorkbookState: boolean;
+  description: string | null;
   requiredParams: ExternalApiRegistryParam[];
   params: ExternalApiRegistryParam[];
   paramWireByLocal: ReadonlyMap<string, string>;
@@ -43,6 +45,7 @@ type RawCommandEntry = {
   agent_can_invoke?: unknown;
   opens_blocking_dialog?: unknown;
   modifies_state?: unknown;
+  description?: unknown;
   in_params?: unknown;
 };
 
@@ -53,6 +56,7 @@ type RawCommandParam = {
   wire?: unknown;
   unprovidable?: unknown;
   context_filled?: unknown;
+  comment?: unknown;
 };
 
 type RawCodegenRegistry = {
@@ -171,6 +175,7 @@ function parseRegistry(
       // Raw value is the string "true"/"false" in tab-agent-south's registry today;
       // tolerate a real boolean too rather than coupling to one JSON encoding.
       modifiesWorkbookState: entry.modifies_state === true || entry.modifies_state === 'true',
+      description: optionalNonEmptyString(entry.description),
       requiredParams: params.filter((param) => param.required),
       params,
       paramWireByLocal: new Map(params.map((param) => [param.local, param.wire])),
@@ -212,6 +217,7 @@ function parseParams(rawParams: unknown): ExternalApiRegistryParam[] {
         camelToDashed: camelToDashed(param.local),
         unprovidable: param.unprovidable === true,
         contextFilled: param.context_filled === true || CONTEXT_FILLED_PARAM_TYPES.has(param.type),
+        comment: optionalNonEmptyString(param.comment),
       },
     ];
   });
@@ -264,6 +270,10 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === 'string')
     : [];
+}
+
+function optionalNonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
 function camelToDashed(value: string): string {

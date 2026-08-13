@@ -5,12 +5,6 @@
 // command. Memoised tri-state like the guards always did: undefined = not yet attempted, null
 // = no registry loaded (env unset/unreadable), cached and never retried until
 // `_resetExternalApiCommandRegistryForTest`.
-//
-// `description` and `value_to_users` are absent here (the registry carries no prose today), so
-// search-commands results synthesized from it have no human-readable blurb until tab-agent-south's
-// registry gains one; every structural field consumers rely on (fully_qualified_serialized_name,
-// command_name, parameters[], agent_can_invoke, opens_blocking_dialog, modifies_workbook_state) is
-// present.
 
 import {
   type ExternalApiCommandRegistryEntry,
@@ -24,6 +18,7 @@ export type CommandReferenceEntry = {
   agent_can_invoke?: unknown;
   opens_blocking_dialog?: unknown;
   modifies_workbook_state?: unknown;
+  description?: unknown;
 };
 
 /**
@@ -79,6 +74,7 @@ function toReferenceEntry([fullyQualifiedSerializedName, entry]: readonly [
     agent_can_invoke: entry.invocable,
     opens_blocking_dialog: entry.blockingDialog,
     modifies_workbook_state: entry.modifiesWorkbookState,
+    description: entry.description,
     parameters: entry.params.map((param) => ({
       direction: 'in',
       local_name: param.local,
@@ -86,6 +82,7 @@ function toReferenceEntry([fullyQualifiedSerializedName, entry]: readonly [
       required: param.required,
       cannot_provide_from_mcp: param.unprovidable,
       context_filled: param.contextFilled,
+      comment: param.comment,
     })),
   };
 }

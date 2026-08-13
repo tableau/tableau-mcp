@@ -77,6 +77,7 @@ describe('commandsReference (synthesized from the External API registry)', () =>
         required: true,
         cannot_provide_from_mcp: false,
         context_filled: false,
+        comment: null,
       },
       {
         direction: 'in',
@@ -85,6 +86,7 @@ describe('commandsReference (synthesized from the External API registry)', () =>
         required: false,
         cannot_provide_from_mcp: false,
         context_filled: false,
+        comment: null,
       },
     ]);
 
@@ -113,6 +115,40 @@ describe('commandsReference (synthesized from the External API registry)', () =>
     const [entry] = loadCommandsReference() ?? [];
 
     expect(entry.command_name).toBe('workgroup:change-site');
+  });
+
+  it('projects description and per-param comments from the live registry', () => {
+    enableExternalApiRegistry({
+      'tabdoc:build-sheet-list-context-menu': {
+        agent_can_invoke: true,
+        opens_blocking_dialog: false,
+        modifies_state: 'false',
+        description: 'Build the context menu for the sheet list.',
+        in_params: [
+          {
+            local: 'SheetName',
+            type: 'DPI_SheetName',
+            required: true,
+            wire: 'sheet-name',
+            comment: 'The name of the sheet.',
+          },
+        ],
+      },
+    });
+
+    const [entry] = loadCommandsReference() ?? [];
+    expect(entry.description).toBe('Build the context menu for the sheet list.');
+    expect(entry.parameters).toEqual([
+      {
+        direction: 'in',
+        local_name: 'SheetName',
+        type_id: 'DPI_SheetName',
+        required: true,
+        cannot_provide_from_mcp: false,
+        context_filled: false,
+        comment: 'The name of the sheet.',
+      },
+    ]);
   });
 
   it('projects unprovidable and context_filled flags onto each param', () => {
@@ -150,6 +186,7 @@ describe('commandsReference (synthesized from the External API registry)', () =>
         required: false,
         cannot_provide_from_mcp: true,
         context_filled: false,
+        comment: null,
       },
       {
         direction: 'in',
@@ -158,6 +195,7 @@ describe('commandsReference (synthesized from the External API registry)', () =>
         required: true,
         cannot_provide_from_mcp: true,
         context_filled: true,
+        comment: null,
       },
     ]);
   });
