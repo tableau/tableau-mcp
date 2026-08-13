@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
+
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Config } from '../../../config.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -32,7 +32,10 @@ export async function buildWorkbookToolResult({
   toolName: string;
   keyPrefixSegment: string;
 }): Promise<WorkbookToolResult> {
-  if (!config.bucketS3.enabled || !(await getFeatureGate().isFeatureEnabled('workbook-file-mode'))) {
+  if (
+    !config.bucketS3.enabled ||
+    !(await getFeatureGate().isFeatureEnabled('workbook-file-mode'))
+  ) {
     return await persistWorkbookToTempPath({ content, mimeType, filename });
   }
 
@@ -85,7 +88,8 @@ export function workbookToolResultToCallToolResult(result: WorkbookToolResult): 
         uri: result.url,
         name: result.filename,
         mimeType: result.mimeType,
-        description: 'Downloaded Tableau workbook content stored in S3. This is a short-lived presigned URL.',
+        description:
+          'Downloaded Tableau workbook content stored in S3. This is a short-lived presigned URL.',
       },
     ],
   };
