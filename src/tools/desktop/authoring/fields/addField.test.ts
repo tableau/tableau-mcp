@@ -8,6 +8,7 @@ import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
 import * as metadataModule from '../../../../desktop/metadata/index.js';
 import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
 import * as getWorksheetXmlModule from '../../../../desktop/wrappers/getWorksheetXml.js';
+import * as listWorksheetsModule from '../../../../desktop/wrappers/listWorksheets.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
@@ -25,6 +26,7 @@ import * as refreshWorkbookCacheModule from './refreshWorkbookCache.js';
 vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
+vi.mock('../../../../desktop/wrappers/listWorksheets.js');
 vi.mock('../../../../desktop/externalApi/discovery.js');
 vi.mock('./refreshWorkbookCache.js');
 vi.mock('fs');
@@ -61,6 +63,11 @@ describe('addFieldTool', () => {
       ok: true,
       xml: LIVE_WORKBOOK_XML,
     });
+    // The edit buffer keys on the sheet's simple-id — the resolver lists the sheet to map
+    // "Sheet 1" to that id, so the sticky-buffer tests exercise the id path, not the fallback.
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Ok({ count: 1, worksheets: [{ id: 'sheet-1-uuid', name: 'Sheet 1' }] }),
+    );
   });
 
   it('should create a tool instance with correct properties', () => {

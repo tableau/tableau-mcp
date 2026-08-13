@@ -107,16 +107,16 @@ describe('getWorksheetXmlTool', () => {
     );
   });
 
-  it('closes the sticky edit buffer for this sheet — an explicit re-read is the new starting point', async () => {
+  it('closes the sticky edit buffer keyed on the fetched fragment simple-id', async () => {
     vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(
-      Ok('<worksheet name="Sheet 1"/>'),
+      Ok('<worksheet name="Sheet 1"><simple-id uuid="sheet-1-uuid" /></worksheet>'),
     );
 
     await getToolResult({ session: '12345', worksheetName: 'Sheet 1', mode: 'inline' });
 
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheetId: 'sheet-1-uuid',
     });
   });
 

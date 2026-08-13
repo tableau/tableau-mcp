@@ -2,8 +2,10 @@ import { writeFileSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
+import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
 import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorksheetXml, isRouteMissing } from '../../../../desktop/wrappers/getWorksheetXml.js';
+import { listWorksheets } from '../../../../desktop/wrappers/listWorksheets.js';
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
@@ -12,9 +14,44 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 
-/** Shared with {@link worksheetEditBuffer.ts} so a sheet name maps to the same cache key everywhere. */
-export function safeWorksheetCacheId(worksheetName: string): string {
-  return worksheetName.replace(/[^a-zA-Z0-9]/g, '_');
+/** Sanitize an id or name into a filesystem-safe cache-key segment (shared with {@link worksheetEditBuffer.ts}). */
+export function safeWorksheetCacheId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+/**
+ * Resolve a caller's worksheet reference (id or display name) to the sheet's stable
+ * `<simple-id uuid>` — the id the edit buffer keys on and the External Client API
+ * addresses the sheet by. Best-effort: returns undefined (never throws) when the sheet
+ * cannot be listed or matched, so callers fall back to the name only as a last resort.
+ */
+export async function resolveWorksheetSimpleId({
+  worksheetRef,
+  resolvedSession,
+  extra,
+}: {
+  worksheetRef: string;
+  resolvedSession: string;
+  extra: TableauDesktopRequestHandlerExtra;
+}): Promise<string | undefined> {
+  const trimmed = worksheetRef.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  try {
+    const executor = await extra.getExecutor(resolvedSession);
+    const listed = await listWorksheets({ executor, signal: extra.signal });
+    if (listed.isErr()) {
+      return undefined;
+    }
+    const identified = listed.value.worksheets.filter(
+      (worksheet): worksheet is { id: string; name: string } => typeof worksheet.id === 'string',
+    );
+    const resolved = resolveItemByNameOrId('Worksheet', trimmed, identified);
+    return resolved.isOk() ? resolved.value.id : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

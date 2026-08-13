@@ -8,6 +8,7 @@ import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
 import * as metadataModule from '../../../../desktop/metadata/index.js';
 import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
 import * as getWorksheetXmlModule from '../../../../desktop/wrappers/getWorksheetXml.js';
+import * as listWorksheetsModule from '../../../../desktop/wrappers/listWorksheets.js';
 import * as loadWorksheetXmlModule from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import {
   ArgsValidationError,
@@ -28,6 +29,7 @@ import { getRemoveFieldTool } from './removeField.js';
 vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
+vi.mock('../../../../desktop/wrappers/listWorksheets.js');
 vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) => ({
   ...(await importOriginal<typeof loadWorksheetXmlModule>()),
   loadWorksheetXml: vi.fn(),
@@ -62,6 +64,11 @@ describe('removeFieldTool', () => {
     vi.clearAllMocks();
     mockPinnedSession(undefined);
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
+    // The edit buffer keys on the sheet's simple-id — the resolver lists the sheet to map
+    // "Sheet 1" to that id, so the sticky-buffer tests exercise the id path, not the fallback.
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Ok({ count: 1, worksheets: [{ id: 'sheet-1-uuid', name: 'Sheet 1' }] }),
+    );
   });
 
   it('should create a tool instance with correct properties', () => {

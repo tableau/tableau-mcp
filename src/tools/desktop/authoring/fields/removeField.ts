@@ -18,11 +18,12 @@ import {
   XmlModificationError,
   XmlValidationError,
 } from '../../../../errors/mcpToolError.js';
+import { log } from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
-import { fetchAndCacheWorksheet } from './worksheetCache.js';
+import { fetchAndCacheWorksheet, resolveWorksheetSimpleId } from './worksheetCache.js';
 import { getStickyWorksheetFile, setStickyWorksheetFile } from './worksheetEditBuffer.js';
 
 /** Encoding channels a field can be removed from. */
@@ -90,6 +91,27 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
 
           const trimmedWorksheetName = worksheetName?.trim() || undefined;
 
+          // Keying the buffer on the display name (rather than the resolved simple-id) is
+          // a latent bug — log it rather than fall through silently.
+          let bufferWorksheetId: string | undefined;
+          if (trimmedWorksheetName) {
+            bufferWorksheetId = await resolveWorksheetSimpleId({
+              worksheetRef: trimmedWorksheetName,
+              resolvedSession,
+              extra,
+            });
+            if (!bufferWorksheetId) {
+              bufferWorksheetId = trimmedWorksheetName;
+              log({
+                message:
+                  'Could not resolve a stable worksheet id; keying the edit buffer on the display name',
+                level: 'warning',
+                logger: 'remove-field',
+                data: { worksheetName: trimmedWorksheetName },
+              });
+            }
+          }
+
           // Name-based path: reuse the sticky edit buffer for this sheet if one is open,
           // otherwise fetch fresh and mint a new cache file. Either way, later name-only
           // calls for the same sheet+session keep landing on this file until
@@ -97,7 +119,7 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
           if (!worksheetFile?.trim()) {
             const sticky = getStickyWorksheetFile({
               session: resolvedSession,
-              worksheetName: trimmedWorksheetName!,
+              worksheetId: bufferWorksheetId!,
             });
             if (sticky) {
               worksheetFile = sticky;
@@ -116,10 +138,10 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
 
           // A worksheetName given alongside an explicit worksheetFile is an override —
           // point the buffer at it too, so later name-only calls continue from here.
-          if (trimmedWorksheetName) {
+          if (bufferWorksheetId) {
             setStickyWorksheetFile({
               session: resolvedSession,
-              worksheetName: trimmedWorksheetName,
+              worksheetId: bufferWorksheetId,
               file: worksheetFile,
             });
           }

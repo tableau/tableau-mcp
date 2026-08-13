@@ -25,12 +25,13 @@ import {
   XmlModificationError,
   XmlValidationError,
 } from '../../../../errors/mcpToolError.js';
+import { log } from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
-import { fetchAndCacheWorksheet } from './worksheetCache.js';
+import { fetchAndCacheWorksheet, resolveWorksheetSimpleId } from './worksheetCache.js';
 import { getStickyWorksheetFile, setStickyWorksheetFile } from './worksheetEditBuffer.js';
 
 /** Encoding channels a field can be placed on. */
@@ -177,6 +178,27 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
 
           const trimmedWorksheetName = worksheetName?.trim() || undefined;
 
+          // Keying the buffer on the display name (rather than the resolved simple-id) is
+          // a latent bug — log it rather than fall through silently.
+          let bufferWorksheetId: string | undefined;
+          if (trimmedWorksheetName) {
+            bufferWorksheetId = await resolveWorksheetSimpleId({
+              worksheetRef: trimmedWorksheetName,
+              resolvedSession,
+              extra,
+            });
+            if (!bufferWorksheetId) {
+              bufferWorksheetId = trimmedWorksheetName;
+              log({
+                message:
+                  'Could not resolve a stable worksheet id; keying the edit buffer on the display name',
+                level: 'warning',
+                logger: 'add-field',
+                data: { worksheetName: trimmedWorksheetName },
+              });
+            }
+          }
+
           // Name-based path: reuse the sticky edit buffer for this sheet if one is open
           // (an earlier name-only call already fetched and is mid-edit); otherwise fetch
           // the sheet fragment and mint a new cache file. Either way, later name-only
@@ -185,7 +207,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
           if (!worksheetFile?.trim()) {
             const sticky = getStickyWorksheetFile({
               session: resolvedSession,
-              worksheetName: trimmedWorksheetName!,
+              worksheetId: bufferWorksheetId!,
             });
             if (sticky) {
               worksheetFile = sticky;
@@ -204,10 +226,10 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
 
           // A worksheetName given alongside an explicit worksheetFile is an override —
           // point the buffer at it too, so later name-only calls continue from here.
-          if (trimmedWorksheetName) {
+          if (bufferWorksheetId) {
             setStickyWorksheetFile({
               session: resolvedSession,
-              worksheetName: trimmedWorksheetName,
+              worksheetId: bufferWorksheetId,
               file: worksheetFile,
             });
           }

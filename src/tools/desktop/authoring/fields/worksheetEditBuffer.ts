@@ -1,14 +1,19 @@
 /**
- * Sticky worksheet edit buffer — lets name-only add-field/remove-field calls accumulate
- * edits on one cache file instead of each minting a fresh (blank) fetch from the live
- * workbook. Diagnosed from chat 6b0b4355: five name-only add-field calls each fetched a
- * fresh sheet, so only the LAST edit survived to apply-worksheet.
+ * Sticky worksheet edit buffer — lets add-field/remove-field calls that name a sheet
+ * accumulate edits on one cache file instead of each minting a fresh (blank) fetch from
+ * the live workbook. Without it, five name-only add-field calls each fetched a fresh
+ * sheet, so only the LAST edit survived to apply-worksheet.
  *
- * One pointer file per (session, worksheetName), stored under DesktopCache so it
- * survives an MCP process restart within the same Desktop session. The pointer is
- * intentionally the only source of truth for "is there an open edit buffer for this
- * sheet" — no in-memory map, since two server instances/restarts must see the same
- * state a Desktop-side edit would.
+ * Keyed by `worksheetId` — the sheet's `<simple-id uuid>`, which is also the id the
+ * External Client API addresses the live sheet by. Display names are never the key: a
+ * rename would strand the buffer, and two sheets can transiently share a name mid-edit.
+ * Callers resolve the id before opening the buffer.
+ *
+ * One pointer file per (session, worksheetId), stored under DesktopCache so it survives
+ * an MCP process restart within the same Desktop session. The pointer is intentionally
+ * the only source of truth for "is there an open edit buffer for this sheet" — no
+ * in-memory map, since two server instances/restarts must see the same state a
+ * Desktop-side edit would.
  */
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 
@@ -20,20 +25,20 @@ import { safeWorksheetCacheId } from './worksheetCache.js';
 interface WorksheetEditBufferPointer {
   file: string;
   session_id: string;
-  worksheet_name: string;
+  worksheet_id: string;
   updated_at: string;
 }
 
 function pointerFilePath({
   session,
-  worksheetName,
+  worksheetId,
 }: {
   session: string;
-  worksheetName: string;
+  worksheetId: string;
 }): string {
   return new DesktopCache().getCacheFilePath({
     prefix: 'worksheet-edit-buffer',
-    id: `${safeWorksheetCacheId(worksheetName)}-${safeWorksheetCacheId(session)}`,
+    id: `${safeWorksheetCacheId(worksheetId)}-${safeWorksheetCacheId(session)}`,
     extension: 'json',
   });
 }
@@ -47,13 +52,13 @@ function pointerFilePath({
  */
 export function getStickyWorksheetFile({
   session,
-  worksheetName,
+  worksheetId,
 }: {
   session: string;
-  worksheetName: string;
+  worksheetId: string;
 }): string | undefined {
-  const trimmedName = worksheetName.trim();
-  const pointerFile = pointerFilePath({ session, worksheetName: trimmedName });
+  const trimmedId = worksheetId.trim();
+  const pointerFile = pointerFilePath({ session, worksheetId: trimmedId });
   if (!existsSync(pointerFile)) {
     return undefined;
   }
@@ -74,7 +79,7 @@ export function getStickyWorksheetFile({
   if (
     typeof pointer.file !== 'string' ||
     typeof pointer.session_id !== 'string' ||
-    typeof pointer.worksheet_name !== 'string'
+    typeof pointer.worksheet_id !== 'string'
   ) {
     return undefined;
   }
@@ -84,7 +89,7 @@ export function getStickyWorksheetFile({
   if (pointer.session_id !== session) {
     return undefined;
   }
-  if (pointer.worksheet_name !== trimmedName) {
+  if (pointer.worksheet_id !== trimmedId) {
     return undefined;
   }
   if (!existsSync(pointer.file)) {
@@ -102,19 +107,19 @@ export function getStickyWorksheetFile({
 /** Point the sticky buffer for this sheet+session at `file` (minted, reused, or caller-supplied). */
 export function setStickyWorksheetFile({
   session,
-  worksheetName,
+  worksheetId,
   file,
 }: {
   session: string;
-  worksheetName: string;
+  worksheetId: string;
   file: string;
 }): void {
-  const trimmedName = worksheetName.trim();
-  const pointerFile = pointerFilePath({ session, worksheetName: trimmedName });
+  const trimmedId = worksheetId.trim();
+  const pointerFile = pointerFilePath({ session, worksheetId: trimmedId });
   const pointer: WorksheetEditBufferPointer = {
     file,
     session_id: session,
-    worksheet_name: trimmedName,
+    worksheet_id: trimmedId,
     updated_at: new Date().toISOString(),
   };
   try {
@@ -138,12 +143,12 @@ export function setStickyWorksheetFile({
  */
 export function clearStickyWorksheetFile({
   session,
-  worksheetName,
+  worksheetId,
 }: {
   session: string;
-  worksheetName: string;
+  worksheetId: string;
 }): void {
-  const pointerFile = pointerFilePath({ session, worksheetName: worksheetName.trim() });
+  const pointerFile = pointerFilePath({ session, worksheetId: worksheetId.trim() });
   if (!existsSync(pointerFile)) {
     return;
   }

@@ -10,6 +10,7 @@ import {
   type TemplateWorksheetArtifact,
 } from '../../../desktop/templates/templateArtifactStore.js';
 import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
+import * as listWorksheetsModule from '../../../desktop/wrappers/listWorksheets.js';
 import * as loadWorksheetXmlModule from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
   ArgsValidationError,
@@ -30,6 +31,7 @@ vi.mock('../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) 
   loadWorksheetXml: vi.fn(),
 }));
 vi.mock('../authoring/fields/worksheetEditBuffer.js');
+vi.mock('../../../desktop/wrappers/listWorksheets.js');
 vi.mock('fs');
 
 describe('applyWorksheetTool', () => {
@@ -74,6 +76,9 @@ describe('applyWorksheetTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Ok({ count: 1, worksheets: [{ id: 'artifact-sheet-uuid', name: 'Artifact Sheet' }] }),
+    );
   });
 
   afterEach(() => {
@@ -147,7 +152,7 @@ describe('applyWorksheetTool', () => {
     // apply and must not survive it.
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
-      worksheetName: 'Artifact Sheet',
+      worksheetId: 'artifact-sheet-uuid',
     });
   });
 
@@ -455,7 +460,8 @@ describe('applyWorksheetTool', () => {
   });
 
   it('closes the sticky edit buffer for the applied sheet after a successful cached-file apply', async () => {
-    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    const mockXml =
+      '<worksheet name="Sheet 1"><simple-id uuid="sheet-1-uuid" /><table></table></worksheet>';
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
       Ok({ readbackWarnings: [] }),
     );
@@ -470,7 +476,7 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(false);
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheetId: 'sheet-1-uuid',
     });
   });
 
@@ -676,7 +682,7 @@ describe('applyWorksheetTool', () => {
     // add-field/remove-field buffer for it is stale and must be closed.
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
-      worksheetName: 'Artifact Sheet',
+      worksheetId: 'artifact-sheet-uuid',
     });
   });
 

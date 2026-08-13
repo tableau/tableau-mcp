@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { endpointNotInThisBuild } from '../../../desktop/externalApi/toolUtils.js';
+import { worksheetFragmentSimpleId } from '../../../desktop/metadata/sheets.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { getWorksheetXml, isRouteMissing } from '../../../desktop/wrappers/getWorksheetXml.js';
 import {
@@ -78,8 +79,12 @@ export const getGetWorksheetXmlTool = (
 
           // An explicit re-read is the agent asking for live truth for this sheet — treat
           // it as the new starting point rather than resuming whatever add-field/
-          // remove-field edit buffer might already be open underneath it.
-          clearStickyWorksheetFile({ session: resolvedSession, worksheetName });
+          // remove-field edit buffer might already be open underneath it. The buffer keys
+          // on the fragment's simple-id, the id add-field/remove-field opened it under.
+          const bufferWorksheetId = worksheetFragmentSimpleId(result.value);
+          if (bufferWorksheetId) {
+            clearStickyWorksheetFile({ session: resolvedSession, worksheetId: bufferWorksheetId });
+          }
 
           return finishXmlRead({
             kind: 'worksheet',
