@@ -7,7 +7,7 @@ import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
 const serverVersion = pkg.version;
-const workbookFileModeEnabled = Boolean(features['workbook-file-mode']);
+const authoringToolsEnabled = Boolean(features['authoring-tools']);
 
 describe('server', () => {
   beforeAll(setEnv);
@@ -88,7 +88,7 @@ describe('server', () => {
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedToolNames = expectedToolNames.filter((name) => !mcpAppsTools.includes(name));
-      if (!workbookFileModeEnabled) {
+      if (!authoringToolsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => name !== 'download-workbook');
       }
 
@@ -204,7 +204,7 @@ describe('server', () => {
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
-      if (!workbookFileModeEnabled) {
+      if (!authoringToolsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter((name) => name !== 'download-workbook');
       }
 
