@@ -111,11 +111,13 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   // ONLY the entries below, so a large asset can never silently ride into the npm tarball.
   // The earlier blanket `copyDirectory('./src/desktop/data', ...)` defeated this list and was
   // removed. Every entry is resolved package-relative via DATA_ROOT and feeds a shipped
-  // search tool: tableau-desktop-commands-reference.json (search-commands),
-  // workbook-schema-reference.json (lookup-workbook-schema), corpus.json + examples/
-  // (search-examples / search-workbook-examples), and twb-example-index.json — the committed
-  // TRIMMED index (~920 KB). Its ~10 MB ungzipped source lives OUTSIDE this dir at
-  // src/desktop/data-source/ and is never staged.
+  // search tool: workbook-schema-reference.json (lookup-workbook-schema), corpus.json +
+  // examples/ (search-examples / search-workbook-examples), and twb-example-index.json —
+  // the committed TRIMMED index (~920 KB). Its ~10 MB ungzipped source lives OUTSIDE this
+  // dir at src/desktop/data-source/ and is never staged. search-commands (and the name/param
+  // guards) no longer read a bundled snapshot here — commandsReference.ts synthesizes their
+  // document from tab-agent-south's live External API registry (TABLEAU_COMMANDS_REGISTRY_DIR)
+  // at runtime, which is why there is no tableau-desktop-commands-reference.json entry below.
   //
   // VARIANT-GATED: only the desktop tool surface (the `desktop` and `combined` variants)
   // ever resolves `build/desktop/data` at runtime. The `default` variant's server
@@ -126,7 +128,6 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     const desktopDataSrc = './src/desktop/data';
     const desktopDataOut = './build/desktop/data';
     const stagedDesktopData = [
-      'tableau-desktop-commands-reference.json', // searchLibrary COMMANDS_REFERENCE_PATH — search-commands
       'workbook-schema-reference.json', // searchLibrary SCHEMA_REFERENCE_PATH — lookup-workbook-schema
       'corpus.json', // searchExamples/searchWorkbookExamples CORPUS_PATH
       'twb-example-index.json', // searchLibrary TWB_INDEX_PATH — committed trimmed index (~920 KB)

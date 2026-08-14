@@ -81,6 +81,7 @@ export const getAuthorCalcTool = (server: DesktopMcpServer): DesktopTool<typeof 
             executor,
             signal: extra.signal,
             labelErrors: false,
+            resolveLooseReferences: true,
           });
           if (authored.isErr()) {
             return authored.error.toErr();

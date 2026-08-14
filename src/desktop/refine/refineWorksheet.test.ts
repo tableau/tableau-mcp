@@ -98,12 +98,29 @@ describe('planTopN — happy path', () => {
     expect(filterIdx).toBeGreaterThan(r.xml.indexOf('</datasource-dependencies>'));
   });
 
-  it('emits end=bottom direction=ASC for a bottom-N ask', () => {
+  it('keeps the ordered-list head with direction=ASC for a bottom-N ask', () => {
     const r = planTopN(BASE, { n: 3, end: 'bottom' });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.xml).toMatch(/function='end'\s+end='bottom'\s+count='3'/);
+    expect(r.xml).toMatch(/function='end'\s+end='top'\s+count='3'/);
     expect(r.xml).toContain("function='order' direction='ASC'");
+  });
+
+  it('ranks a regular calculated measure used on the worksheet', () => {
+    const xml = withDeps(
+      REGION_COL +
+        "<column caption='Attrition Value' datatype='real' name='[Calculation_1]' role='measure' type='quantitative'>" +
+        "<calculation class='tableau' formula='FLOAT([Attrition Text])' />" +
+        '</column>' +
+        REGION_CI +
+        "<column-instance column='[Calculation_1]' derivation='Sum' name='[sum:Calculation_1:qk]' pivot='key' type='quantitative' />",
+    );
+
+    const r = planTopN(xml, { n: 10, end: 'bottom' });
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.xml).toContain("direction='ASC' expression='SUM([Calculation_1])'");
   });
 
   it('emits the minimum count of 1', () => {

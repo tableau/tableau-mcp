@@ -36,7 +36,7 @@ describe('paramWireRegistry', () => {
     }
   });
 
-  it('returns null when EXTERNAL_API_REGISTRY_DIR is unset', async () => {
+  it('returns null when TABLEAU_COMMANDS_REGISTRY_DIR is unset', async () => {
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
 
     expect(lookupExternalApiCommandRegistry('tabdoc', 'show-me')).toBeNull();
@@ -51,7 +51,7 @@ describe('paramWireRegistry', () => {
       JSON.stringify({ param_name: {}, type_of_param: {}, enum_vals: {} }),
       'utf-8',
     );
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
 
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
 
@@ -89,7 +89,7 @@ describe('paramWireRegistry', () => {
         ShowMeCommandType: ['bars', 'lines'],
       },
     });
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
 
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
     const entry = lookupExternalApiCommandRegistry('tabdoc', 'show-me');
@@ -97,6 +97,7 @@ describe('paramWireRegistry', () => {
     expect(entry).not.toBeNull();
     expect(entry?.invocable).toBe(true);
     expect(entry?.blockingDialog).toBe(false);
+    expect(entry?.modifiesWorkbookState).toBe(false);
     expect(entry?.requiredParams.map((param) => param.wire)).toEqual([
       'show-me-command-type',
       'worksheet',
@@ -104,6 +105,66 @@ describe('paramWireRegistry', () => {
     expect(entry?.paramWireByLocal.get('ShowMeType')).toBe('show-me-command-type');
     expect(entry?.paramWireByCamelToDashed.get('show-me-type')).toBe('show-me-command-type');
     expect(entry?.enumValuesForParamType.get('DPI_ShowMeCommandType')).toEqual(['bars', 'lines']);
+    expect(entry?.params.map((param) => param.unprovidable)).toEqual([false, false]);
+    expect(entry?.params.map((param) => param.contextFilled)).toEqual([false, false]);
+  });
+
+  it('carries unprovidable and context_filled flags from the registry JSON', async () => {
+    const dir = writeRegistry({
+      commands: {
+        'tabdoc:launch-quantitative-color-dialog': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          description: 'Opens the Quantitative Color Hybrid Dialog.',
+          in_params: [
+            {
+              local: 'VizID',
+              type: 'DPI_VisualIDPM',
+              required: false,
+              wire: 'visual-id-pres-model',
+              unprovidable: true,
+              comment: 'implicit parameter needed to get the visual controller',
+            },
+            {
+              local: 'Workspace',
+              type: 'UPI_IWorkspace',
+              required: true,
+              wire: 'workspace',
+              unprovidable: true,
+            },
+          ],
+        },
+      },
+    });
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
+
+    const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
+    const entry = lookupExternalApiCommandRegistry('tabdoc', 'launch-quantitative-color-dialog');
+
+    expect(entry?.description).toBe('Opens the Quantitative Color Hybrid Dialog.');
+    expect(entry?.params).toEqual([
+      {
+        local: 'VizID',
+        type: 'DPI_VisualIDPM',
+        required: false,
+        wire: 'visual-id-pres-model',
+        camelToDashed: 'viz-id',
+        unprovidable: true,
+        contextFilled: false,
+        comment: 'implicit parameter needed to get the visual controller',
+      },
+      {
+        local: 'Workspace',
+        type: 'UPI_IWorkspace',
+        required: true,
+        wire: 'workspace',
+        camelToDashed: 'workspace',
+        unprovidable: true,
+        contextFilled: true,
+        comment: null,
+      },
+    ]);
   });
 
   it('resolves enum names from tuple-shaped type_of_param entries (the shipped registry shape)', async () => {
@@ -125,12 +186,63 @@ describe('paramWireRegistry', () => {
       typeOfParam: { DPI_TupleEnumType: ['TupleEnum', 'enum'] },
       enumVals: { TupleEnum: ['bar-horiz', 'text'] },
     });
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
 
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
     const entry = lookupExternalApiCommandRegistry('tabdoc', 'show-me');
 
     expect(entry?.enumValuesForParamType.get('DPI_TupleEnumType')).toEqual(['bar-horiz', 'text']);
+  });
+
+  it('maps the string-encoded modifies_state flag to a boolean', async () => {
+    const dir = writeRegistry({
+      commands: {
+        'tabdoc:show-me': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [],
+        },
+      },
+    });
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
+
+    const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
+
+    expect(lookupExternalApiCommandRegistry('tabdoc', 'show-me')?.modifiesWorkbookState).toBe(true);
+  });
+
+  it('lists every registry entry keyed by fully-qualified command name', async () => {
+    const dir = writeRegistry({
+      commands: {
+        'tabdoc:show-me': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          in_params: [],
+        },
+        'tabdoc:sort': {
+          agent_can_invoke: false,
+          opens_blocking_dialog: true,
+          modifies_state: 'true',
+          in_params: [],
+        },
+      },
+    });
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
+
+    const { listExternalApiCommandRegistryEntries } = await import('./paramWireRegistry.js');
+    const entries = listExternalApiCommandRegistryEntries();
+
+    expect(entries).not.toBeNull();
+    expect([...entries!.keys()].sort()).toEqual(['tabdoc:show-me', 'tabdoc:sort']);
+    expect(entries!.get('tabdoc:sort')?.blockingDialog).toBe(true);
+  });
+
+  it('returns null from listExternalApiCommandRegistryEntries when no registry is loaded', async () => {
+    const { listExternalApiCommandRegistryEntries } = await import('./paramWireRegistry.js');
+
+    expect(listExternalApiCommandRegistryEntries()).toBeNull();
   });
 
   it('parses the files once for a stable env dir', async () => {
@@ -144,7 +256,7 @@ describe('paramWireRegistry', () => {
         },
       },
     });
-    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+    vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
 
     const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
     expect(lookupExternalApiCommandRegistry('tabdoc', 'show-me')?.invocable).toBe(true);
