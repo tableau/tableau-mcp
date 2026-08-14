@@ -33,8 +33,8 @@ Example: `true`
 
 The tool returns one of two result shapes:
 
-- **S3 file mode enabled:** returns a `resource_link` with a short-lived presigned URL to the workbook file.
-- **S3 file mode disabled or upload failure:** writes the workbook to a local temporary directory and returns a JSON object containing a local file path.
+- **`MCP_S3_BUCKET` set:** returns a `resource_link` with a short-lived presigned URL to the workbook file.
+- **`MCP_S3_BUCKET` unset or upload failure:** writes the workbook to a local temporary directory and returns a JSON object containing a local file path.
 
 The tool preserves Tableau response metadata when present:
 

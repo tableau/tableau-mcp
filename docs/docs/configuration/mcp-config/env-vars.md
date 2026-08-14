@@ -626,19 +626,22 @@ This allows embedding Tableau visualizations from custom Tableau Server domains 
 
 ## `MCP_S3_BUCKET`
 
-Enables offloading rendered view images to Amazon S3. When set, the `get-view-image` and
-`get-custom-view-image` tools upload the rendered image to this bucket and return a short-lived
-presigned URL (as a `resource_link` content block) instead of inlining the image as base64. The
-client fetches the image bytes directly from S3, so the image never streams back through the MCP
+Enables offloading large tool payloads to Amazon S3. When set, the following tools upload the
+payload to this bucket and return a short-lived presigned URL (as a `resource_link` content block)
+instead of inlining it:
+
+- `get-view-image` / `get-custom-view-image` — rendered image (otherwise inline base64)
+- `get-view-data` / `get-custom-view-data` — CSV data (otherwise inline text)
+- `download-workbook` — workbook file (otherwise a local temp-file path)
+
+The client fetches the files directly from S3, so the payload never streams back through the MCP
 server on read.
 
-- Requires the `view-file-mode` feature flag to be enabled (see `features.json`). When the flag is
-  disabled, this variable has no effect and the tools return inline base64.
-- Default: unset (feature disabled — tools return inline base64, the original behavior).
+- Default: unset (tools return the payload inline or as a local temp path, the original behavior).
 - When set, must be a valid S3 bucket name (lowercase letters, numbers, dots, and hyphens only).
 - AWS credentials are resolved via the default AWS SDK credential chain (IAM role / instance
   profile / standard `AWS_*` environment variables); no credentials are read from the MCP config.
-- If an upload fails, the tool falls back to returning inline base64 and logs a warning, so image
+- If an upload fails, the tool falls back to the inline/temp-file result and logs a warning, so
   retrieval never hard-fails.
 
 **Example:**
@@ -651,7 +654,7 @@ MCP_S3_BUCKET=tableau-images
 
 ## `AWS_DEFAULT_REGION`
 
-The AWS region of the S3 bucket used for image offload.
+The AWS region of the S3 bucket used for payload offload.
 
 - Default: unset. If not set, the AWS SDK resolves the region from the environment via its standard
   credential/region chain.
@@ -667,17 +670,18 @@ AWS_DEFAULT_REGION=us-east-1
 
 ## `MCP_IMAGE_PREFIX`
 
-The base key prefix (folder path) under which uploaded images are stored in the bucket. Each
-view-image tool appends its own segment to this base, so images are namespaced per tool. Slashes are
+The base key prefix (folder path) under which uploaded payloads are stored in the bucket. Each
+tool appends its own segment to this base, so objects are namespaced per tool. Slashes are
 normalized automatically.
 
 - Default: unset (empty). When unset, each tool uses only its own segment.
 - Per-tool segments: `get-view-image` → `view-images/`, `get-custom-view-image` →
-  `custom-view-images/`.
+  `custom-view-images/`, `get-view-data` → `view-data/`, `get-custom-view-data` →
+  `custom-view-data/`, `download-workbook` → `workbook-files/`.
 - Objects are keyed as `<base><tool-segment><resourceId>/<uuid>.<ext>`. For example, with
-  `MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under `tableau/view-images/...` and a custom
-  view image under `tableau/custom-view-images/...`. Unset, they are keyed under `view-images/...`
-  and `custom-view-images/...` respectively.
+  `MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under `tableau/view-images/...` and a
+  workbook under `tableau/workbook-files/...`. Unset, they are keyed under `view-images/...`
+  and `workbook-files/...` respectively.
 - Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
 
 **Example:**

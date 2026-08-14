@@ -6,7 +6,6 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { Config } from '../../../config.js';
-import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
@@ -32,10 +31,7 @@ export async function buildWorkbookToolResult({
   toolName: string;
   keyPrefixSegment: string;
 }): Promise<WorkbookToolResult> {
-  if (
-    !config.bucketS3.enabled ||
-    !(await getFeatureGate().isFeatureEnabled('workbook-file-mode'))
-  ) {
+  if (!config.bucketS3.enabled) {
     return await persistWorkbookToTempPath({ content, mimeType, filename });
   }
 
