@@ -12,7 +12,6 @@ import { getValidateUploadAndPublishWorkbookTool } from './validateUploadAndPubl
 const mocks = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
   mockPublishWorkbook: vi.fn(),
-  mockQueryProjects: vi.fn(),
   mockValidateWorkbookAndUpload: vi.fn(),
   mockResolveStagedWorkbookUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
@@ -28,9 +27,6 @@ vi.mock('../../../restApiInstance.js', () => ({
       workbooksMethods: {
         validateWorkbookAndUpload: mocks.mockValidateWorkbookAndUpload,
         publishWorkbook: mocks.mockPublishWorkbook,
-      },
-      projectsMethods: {
-        queryProjects: mocks.mockQueryProjects,
       },
       siteId: 'test-site-id',
     }),
@@ -64,7 +60,6 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     stubDefaultEnvVars();
     RestApi.version = '3.29';
     mocks.mockPublishWorkbook.mockReset();
-    mocks.mockQueryProjects.mockReset();
     mocks.mockValidateWorkbookAndUpload.mockReset();
     mocks.mockResolveStagedWorkbookUpload.mockReset();
     mocks.mockReadFile.mockReset();
@@ -73,10 +68,6 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twb',
       bytes: Buffer.from('<workbook source="new" />'),
-    });
-    mocks.mockQueryProjects.mockResolvedValue({
-      pagination: { totalAvailable: 1 },
-      projects: [{ id: 'target-project-id', name: 'Marketing Analytics' }],
     });
     mocks.mockPublishWorkbook.mockResolvedValue({
       ...mockWorkbook,
@@ -166,12 +157,6 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId: validArgs.workbookUploadId,
       config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
-    });
-    expect(mocks.mockQueryProjects).toHaveBeenCalledWith({
-      siteId: 'test-site-id',
-      filter: '',
-      pageSize: 1000,
-      pageNumber: 1,
     });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -337,23 +322,6 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('not allowed by this MCP server');
-    expect(mocks.mockQueryProjects).not.toHaveBeenCalled();
-    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
-    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
-    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
-  });
-
-  it('returns an error before validation when the requested project is not visible', async () => {
-    mocks.mockQueryProjects.mockResolvedValue({
-      pagination: { totalAvailable: 1 },
-      projects: [{ id: 'different-project-id', name: 'Different Project' }],
-    });
-
-    const result = await getToolResult(validArgs);
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Could not find project with LUID target-project-id');
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
@@ -389,40 +357,6 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
-  });
-
-  it('finds the requested project across project pages', async () => {
-    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
-      timestamp: '2026-06-10T14:32:18.456Z',
-      uploadId: 'validated-upload-id',
-    });
-    mocks.mockQueryProjects
-      .mockResolvedValueOnce({
-        pagination: { totalAvailable: 1001 },
-        projects: [{ id: 'different-project-id', name: 'Different Project' }],
-      })
-      .mockResolvedValueOnce({
-        pagination: { totalAvailable: 1001 },
-        projects: [{ id: 'target-project-id', name: 'Marketing Analytics' }],
-      });
-
-    await getToolResult(validArgs);
-
-    expect(mocks.mockQueryProjects).toHaveBeenNthCalledWith(1, {
-      siteId: 'test-site-id',
-      filter: '',
-      pageSize: 1000,
-      pageNumber: 1,
-    });
-    expect(mocks.mockQueryProjects).toHaveBeenNthCalledWith(2, {
-      siteId: 'test-site-id',
-      filter: '',
-      pageSize: 1000,
-      pageNumber: 2,
-    });
-    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: 'target-project-id' }),
-    );
   });
 
   it('redacts staged workbookUploadId details passed to shared logging', async () => {

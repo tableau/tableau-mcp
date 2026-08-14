@@ -9,7 +9,6 @@ import { getFeatureGate } from '../../../features/init.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
-import { Project } from '../../../sdks/tableau/types/project.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -111,7 +110,6 @@ export const getValidateUploadAndPublishWorkbookTool = (
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
-              await getVisibleProjectById(restApi, projectId);
               const resolvedWorkbookFile = await resolveWorkbookInput({
                 config: extra.config.bucketS3,
                 workbookUploadId,
@@ -235,43 +233,6 @@ function assertProjectAllowedByBoundedContext(
       `Publishing to project with LUID ${projectId} is not allowed by this MCP server's bounded project context.`,
     );
   }
-}
-
-async function getVisibleProjectById(
-  restApi: {
-    siteId: string;
-    projectsMethods: {
-      queryProjects: (args: {
-        siteId: string;
-        filter: string;
-        pageSize?: number;
-        pageNumber?: number;
-      }) => Promise<{ pagination: { totalAvailable: number }; projects: Project[] }>;
-    };
-  },
-  projectId: string,
-): Promise<Project> {
-  const pageSize = 1000;
-  let pageNumber = 1;
-  let totalAvailable = pageSize;
-
-  while ((pageNumber - 1) * pageSize < totalAvailable) {
-    const { pagination, projects } = await restApi.projectsMethods.queryProjects({
-      siteId: restApi.siteId,
-      filter: '',
-      pageSize,
-      pageNumber,
-    });
-    totalAvailable = pagination.totalAvailable;
-    const project = projects.find((candidate) => candidate.id === projectId);
-    if (project) return project;
-    pageNumber += 1;
-  }
-
-  throw new UnknownError(
-    `Could not find project with LUID ${projectId}. Use list-projects to choose a project visible to the current user.`,
-    404,
-  );
 }
 
 function toValidationFinding(issue: ValidationIssue): ValidationFinding {
