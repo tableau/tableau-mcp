@@ -126,6 +126,28 @@ describe('notification', () => {
       );
     });
 
+    it('should not reject when the underlying transport is already closed (e.g. the client ended the session while a request was in flight)', async () => {
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
+      vi.mocked(server.mcpServer.server.notification).mockRejectedValueOnce(
+        new Error('Not connected'),
+      );
+
+      await expect(
+        notifier.error(server.mcpServer, 'test message', { notifier: 'rest-api' }),
+      ).resolves.not.toThrow();
+    });
+
+    it('should still reject for errors other than a closed transport', async () => {
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
+      vi.mocked(server.mcpServer.server.notification).mockRejectedValueOnce(new Error('boom'));
+
+      await expect(
+        notifier.error(server.mcpServer, 'test message', { notifier: 'rest-api' }),
+      ).rejects.toThrow('boom');
+    });
+
     it('should not send logging message when level is below current level', async () => {
       const server = new WebMcpServer();
       setNotificationLevel(server.mcpServer, 'warning', { silent: true });

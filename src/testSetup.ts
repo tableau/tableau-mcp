@@ -9,7 +9,10 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
     ...(await importOriginal()),
     McpServer: vi.fn().mockImplementation(() => ({
       server: {
-        notification: vi.fn(),
+        // notification() is async on the real SDK and always returns a Promise —
+        // match that here so tests exercising rejection/.catch() behavior don't
+        // need per-test overrides just to get a thenable back.
+        notification: vi.fn().mockResolvedValue(undefined),
         setRequestHandler: vi.fn(),
         getClientVersion: vi.fn().mockReturnValue({
           version: '1.0.0',
