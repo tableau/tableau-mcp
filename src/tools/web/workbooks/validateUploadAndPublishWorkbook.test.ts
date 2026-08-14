@@ -185,6 +185,25 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     );
   });
 
+  it('returns an error without overwriting when Tableau rejects a duplicate workbook name', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockPublishWorkbook.mockRejectedValue(
+      new Error('A workbook named My New Workbook already exists in the target project.'),
+    );
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('already exists in the target project');
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'My New Workbook', overwrite: false }),
+    );
+  });
+
   it('passes overwrite true through when publishing', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
