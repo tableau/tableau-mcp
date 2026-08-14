@@ -1,16 +1,14 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import * as loggerModule from '../../logging/logger.js';
-import {
-  checkSidecar,
-  type FingerprintResolver,
-  type InstanceFingerprint,
-  sidecarPath,
-  writeSidecar,
-} from './cacheFingerprint.js';
+import type { FingerprintResolver, InstanceFingerprint } from './cacheFingerprint.js';
+import * as cacheFingerprintModule from './cacheFingerprint.js';
+
+const { checkSidecar, restampSidecarAfterEdit, sidecarPath, sourceSha256, writeSidecar } =
+  cacheFingerprintModule;
 
 const dirs: string[] = [];
 
@@ -42,6 +40,111 @@ describe('cache fingerprint sidecars', () => {
     const meta = JSON.parse(readFileSync(sidecarPath(file), 'utf-8')) as Record<string, unknown>;
     expect(meta).toMatchObject({ session_id: '1', ...fingerprint });
     expect(checkSidecar(file, '1', 'worksheet', resolve)).toEqual({ ok: true });
+  });
+
+  it('stores a fetched source hash and returns it for a matching apply', () => {
+    const file = tempFile();
+    writeFileSync(file, '<workbook/>', 'utf-8');
+    const resolve = resolver({ pid: 1, instanceId: 'inst-a' });
+    const sourceHash = 'f'.repeat(64);
+
+    writeSidecar(file, '1', sourceHash, resolve);
+
+    const meta = JSON.parse(readFileSync(sidecarPath(file), 'utf-8')) as Record<string, unknown>;
+    expect(meta.source_sha256).toBe(sourceHash);
+    expect(checkSidecar(file, '1', 'workbook', resolve)).toEqual({ ok: true, sourceHash });
+  });
+
+  it('drops an old source hash when a fresh write omits one', () => {
+    const file = tempFile();
+    writeFileSync(file, '<workbook/>', 'utf-8');
+    const resolve = resolver({ pid: 1, instanceId: 'inst-a' });
+    const sourceHash = 'a'.repeat(64);
+    writeSidecar(file, '1', sourceHash, resolve);
+
+    writeSidecar(file, '1', resolve);
+
+    const meta = JSON.parse(readFileSync(sidecarPath(file), 'utf-8')) as Record<string, unknown>;
+    expect(meta.source_sha256).toBeUndefined();
+  });
+
+  it('replaces source A with fresh source B and preserves B across an edit restamp', () => {
+    const file = tempFile();
+    const resolve = resolver({ pid: 1, instanceId: 'inst-a' });
+    const sourceA = '<workbook revision="A"/>';
+    const sourceB = '<workbook revision="B"/>';
+    writeFileSync(file, sourceA, 'utf-8');
+    writeSidecar(file, '1', sourceSha256(sourceA), resolve);
+
+    writeFileSync(file, sourceB, 'utf-8');
+    writeSidecar(file, '1', sourceSha256(sourceB), resolve);
+    writeFileSync(file, '<workbook revision="B" edited="true"/>', 'utf-8');
+    const restampSidecarAfterEdit = (
+      cacheFingerprintModule as typeof cacheFingerprintModule & {
+        restampSidecarAfterEdit?: (
+          cacheFile: string,
+          sessionId: string,
+          resolve: FingerprintResolver,
+        ) => void;
+      }
+    ).restampSidecarAfterEdit;
+    expect(restampSidecarAfterEdit).toBeTypeOf('function');
+    if (restampSidecarAfterEdit === undefined) return;
+    restampSidecarAfterEdit(file, '1', resolve);
+
+    expect(checkSidecar(file, '1', 'workbook', resolve)).toEqual({
+      ok: true,
+      sourceHash: sourceSha256(sourceB),
+    });
+  });
+
+  it('preserves sidecar A provenance when session B edits the cache file', () => {
+    const file = tempFile();
+    const sourceHash = 'a'.repeat(64);
+    const sidecar = JSON.stringify(
+      {
+        session_id: '1',
+        pid: 1,
+        instanceId: 'inst-a',
+        created_at: '2026-08-13T12:00:00.000Z',
+        source_sha256: sourceHash,
+      },
+      null,
+      2,
+    );
+    writeFileSync(file, '<workbook edited="true"/>', 'utf-8');
+    writeFileSync(sidecarPath(file), sidecar, 'utf-8');
+
+    restampSidecarAfterEdit(file, '2', resolver({ pid: 2, instanceId: 'inst-b' }));
+
+    expect(readFileSync(sidecarPath(file), 'utf-8')).toBe(sidecar);
+    expect(checkSidecar(file, '2', 'workbook', resolver({ pid: 2, instanceId: 'inst-b' })).ok).toBe(
+      false,
+    );
+    expect(checkSidecar(file, '1', 'workbook', resolver({ pid: 1, instanceId: 'inst-a' }))).toEqual(
+      {
+        ok: true,
+        sourceHash,
+      },
+    );
+  });
+
+  it('does not mint provenance when the sidecar is missing, unreadable, or legacy', () => {
+    const resolveB = resolver({ pid: 2, instanceId: 'inst-b' });
+    const missingFile = tempFile();
+    const unreadableFile = tempFile();
+    const legacyFile = tempFile();
+    const legacySidecar = JSON.stringify({ session_id: '1', pid: 1, created_at: 'legacy' });
+    writeFileSync(sidecarPath(unreadableFile), 'not json', 'utf-8');
+    writeFileSync(sidecarPath(legacyFile), legacySidecar, 'utf-8');
+
+    restampSidecarAfterEdit(missingFile, '2', resolveB);
+    restampSidecarAfterEdit(unreadableFile, '2', resolveB);
+    restampSidecarAfterEdit(legacyFile, '2', resolveB);
+
+    expect(existsSync(sidecarPath(missingFile))).toBe(false);
+    expect(readFileSync(sidecarPath(unreadableFile), 'utf-8')).toBe('not json');
+    expect(readFileSync(sidecarPath(legacyFile), 'utf-8')).toBe(legacySidecar);
   });
 
   it('refuses when the sidecar fingerprint differs from the current session', () => {

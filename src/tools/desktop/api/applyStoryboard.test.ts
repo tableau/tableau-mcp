@@ -39,6 +39,7 @@ describe('applyStoryboardTool', () => {
     const tool = getApplyStoryboardTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-storyboard');
     expect(tool.description).toContain('Apply modified storyboard document to Tableau');
+    expect(tool.description).toContain('freshness check');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       storyboardName: expect.any(Object),
@@ -82,6 +83,27 @@ describe('applyStoryboardTool', () => {
         'whether the applied storyboard retained its intended structure — no structural readback ran (storyboard applies have none)',
       ],
     });
+  });
+
+  it('passes the cached source hash to the storyboard apply', async () => {
+    const mockXml = '<dashboard name="QBR Story" type="storyboard"><zones></zones></dashboard>';
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(mockXml);
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+      ok: true,
+      sourceHash: 'c'.repeat(64),
+    });
+    const loadSpy = vi
+      .spyOn(loadDashboardXmlModule, 'loadStoryboardXml')
+      .mockResolvedValue(Ok({ validationWarnings: [] }));
+
+    const result = await getToolResult({ storyboardFile: '/path/to/storyboard.xml' });
+
+    expect(result.isError).toBe(false);
+    expect(loadSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedSourceHash: 'c'.repeat(64) }),
+    );
+    sidecarSpy.mockRestore();
   });
 
   it('refuses a file-mode apply when the cache sidecar fingerprint mismatches the session (W9)', async () => {

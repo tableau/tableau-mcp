@@ -4,6 +4,36 @@ import { runValidation } from '../registry.js';
 import { undeclaredCalcReferenceRule } from './undeclaredCalcReference.js';
 
 describe('undeclared-calc-reference rule', () => {
+  const liveWorkbookWithStaleHistory = (worksheetBinding = ''): string => `<workbook>
+    <datasources>
+      <datasource name="federated.live">
+        <column caption="Sales" name="[Sales]" datatype="real" role="measure" type="quantitative"/>
+      </datasource>
+    </datasources>
+    <worksheets>
+      <worksheet name="Sales">
+        <table>
+          <rows>[federated.live].[sum:Sales:qk]</rows>
+          ${worksheetBinding}
+          <style>
+            <style-rule element="legend">
+              <format attr="col-width" field="[federated.live].[none:Category:nk]">
+                <bucket>&quot;[federated.live].[none:Calculation_1111111111111:nk]&quot;</bucket>
+              </format>
+            </style-rule>
+          </style>
+        </table>
+      </worksheet>
+    </worksheets>
+    <windows>
+      <window class="worksheet" name="Retired Sheet">
+        <cards>
+          <card type="color" field="[federated.live].[none:Calculation_2222222222222:nk]"/>
+        </cards>
+      </window>
+    </windows>
+  </workbook>`;
+
   it('errors on an auto-named calc referenced but never declared', () => {
     const xml = `<worksheet><table>
       <rows>[Sample - Superstore].[none:Calculation_1782866300000:nk]</rows>
@@ -48,6 +78,26 @@ describe('undeclared-calc-reference rule', () => {
     </worksheet>`;
 
     expect(undeclaredCalcReferenceRule.validate(xml)).toHaveLength(0);
+  });
+
+  it('ignores stale calc references confined to legend buckets and window history', () => {
+    expect(undeclaredCalcReferenceRule.validate(liveWorkbookWithStaleHistory())).toEqual([]);
+  });
+
+  it('still blocks exactly the undeclared calc bound on a worksheet shelf', () => {
+    const issues = undeclaredCalcReferenceRule.validate(
+      liveWorkbookWithStaleHistory(
+        '<cols>[federated.live].[none:Calculation_3333333333333:nk]</cols>',
+      ),
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({
+      ruleId: 'undeclared-calc-reference',
+      severity: 'error',
+    });
+    expect(issues[0].message).toContain('Calculation_3333333333333');
+    expect(issues[0].message).not.toMatch(/Calculation_(1111111111111|2222222222222)/);
   });
 
   it('returns nothing for empty or clean XML', () => {

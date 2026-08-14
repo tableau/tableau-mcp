@@ -2,6 +2,8 @@ import { Err, Ok } from 'ts-results-es';
 
 import * as loggerModule from '../../logging/logger.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
+import * as validationRegistry from '../validation/registry.js';
+import { sourceSha256 } from './cacheFingerprint.js';
 import { type PerSheetKind, tryApplyViaPerSheetRoute } from './perSheetDocumentApply.js';
 
 // Focus is a required argument at every write seam; suites not about navigation pass the
@@ -24,6 +26,7 @@ type KindFixture = {
   listMethod: 'listWorksheets' | 'listDashboards' | 'listStoryboards';
   listValue: Record<string, Array<{ id: string; name: string }>>;
   applyMethod: 'applyWorksheetDocument' | 'applyDashboardDocument' | 'applyStoryboardDocument';
+  getMethod: 'getWorksheetDocument' | 'getDashboardDocument' | 'getStoryboardDocument';
   id: string;
 };
 
@@ -35,6 +38,7 @@ const FIXTURES: KindFixture[] = [
     listMethod: 'listWorksheets',
     listValue: { worksheets: [{ id: 'sheet-1', name: 'Sheet 1' }] },
     applyMethod: 'applyWorksheetDocument',
+    getMethod: 'getWorksheetDocument',
     id: 'sheet-1',
   },
   {
@@ -44,6 +48,7 @@ const FIXTURES: KindFixture[] = [
     listMethod: 'listDashboards',
     listValue: { dashboards: [{ id: 'dash-1', name: 'Sales Dashboard' }] },
     applyMethod: 'applyDashboardDocument',
+    getMethod: 'getDashboardDocument',
     id: 'dash-1',
   },
   {
@@ -53,6 +58,7 @@ const FIXTURES: KindFixture[] = [
     listMethod: 'listStoryboards',
     listValue: { storyboards: [{ id: 'story-1', name: 'QBR Story' }] },
     applyMethod: 'applyStoryboardDocument',
+    getMethod: 'getStoryboardDocument',
     id: 'story-1',
   },
 ];
@@ -104,6 +110,173 @@ describe('tryApplyViaPerSheetRoute', () => {
       expect(postedId).toBe(id);
       expect(postedXml).toBe(fragmentXml);
       expect(postedXml).not.toContain('<workbook>');
+    },
+  );
+
+  it('accepts an unchanged preexisting blocker using one live target GET', async () => {
+    const fixture = FIXTURES[0];
+    const issue = { ruleId: 'existing', severity: 'error' as const, message: 'already broken' };
+    vi.spyOn(validationRegistry, 'runValidation')
+      .mockReturnValueOnce({ valid: false, issues: [issue] })
+      .mockReturnValueOnce({ valid: false, issues: [issue] });
+    const getDocument = vi.fn().mockResolvedValue(Ok({ xml: fixture.fragmentXml }));
+    const apply = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      [fixture.listMethod]: vi.fn().mockResolvedValue(Ok(fixture.listValue)),
+      [fixture.getMethod]: getDocument,
+      [fixture.applyMethod]: apply,
+    });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: fixture.kind,
+      sheetName: fixture.sheetName,
+      fragmentXml: fixture.fragmentXml,
+      expectedSourceHash: sourceSha256(fixture.fragmentXml),
+      validationContext: 'worksheet',
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk() && result.value).toBe('applied');
+    expect(getDocument).toHaveBeenCalledOnce();
+    expect(apply).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['new', [], [{ ruleId: 'new', severity: 'error' as const, message: 'new blocker' }]],
+    [
+      'worsened',
+      [{ ruleId: 'same', severity: 'error' as const, message: 'same', occurrenceCount: 1 }],
+      [{ ruleId: 'same', severity: 'error' as const, message: 'same', occurrenceCount: 2 }],
+    ],
+  ])(
+    'returns validation-failed before POST for a %s blocker',
+    async (_label, liveIssues, candidateIssues) => {
+      const fixture = FIXTURES[0];
+      vi.spyOn(validationRegistry, 'runValidation')
+        .mockReturnValueOnce({ valid: liveIssues.length === 0, issues: liveIssues })
+        .mockReturnValueOnce({ valid: false, issues: candidateIssues });
+      const apply = vi.fn();
+      const getDocument = vi.fn().mockResolvedValue(Ok({ xml: fixture.fragmentXml }));
+      const executor = makeExecutorMock({
+        [fixture.listMethod]: vi.fn().mockResolvedValue(Ok(fixture.listValue)),
+        [fixture.getMethod]: getDocument,
+        [fixture.applyMethod]: apply,
+      });
+
+      const result = await tryApplyViaPerSheetRoute({
+        kind: fixture.kind,
+        sheetName: fixture.sheetName,
+        fragmentXml: fixture.fragmentXml,
+        validationContext: 'worksheet',
+        focus: NO_FOCUS,
+        executor,
+        signal: mockSignal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) {
+        expect(result.value).toEqual({ type: 'validation-failed', issues: candidateIssues });
+      }
+      expect(getDocument).toHaveBeenCalledOnce();
+      expect(apply).not.toHaveBeenCalled();
+    },
+  );
+
+  it('checks source hash before differential validation and never posts stale input', async () => {
+    const fixture = FIXTURES[0];
+    const validation = vi.spyOn(validationRegistry, 'runValidation');
+    const apply = vi.fn();
+    const getDocument = vi.fn().mockResolvedValue(Ok({ xml: fixture.fragmentXml }));
+    const executor = makeExecutorMock({
+      [fixture.listMethod]: vi.fn().mockResolvedValue(Ok(fixture.listValue)),
+      [fixture.getMethod]: getDocument,
+      [fixture.applyMethod]: apply,
+    });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: fixture.kind,
+      sheetName: fixture.sheetName,
+      fragmentXml: fixture.fragmentXml,
+      expectedSourceHash: '0'.repeat(64),
+      validationContext: 'worksheet',
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk() && result.value).toBe('source-drift');
+    expect(getDocument).toHaveBeenCalledOnce();
+    expect(validation).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it.each(FIXTURES.filter(({ kind }) => kind !== 'worksheet'))(
+    'refuses a stale $kind source before posting the target fragment',
+    async ({ kind, sheetName, fragmentXml, listMethod, listValue, applyMethod, getMethod }) => {
+      const apply = vi.fn();
+      const getDocument = vi.fn().mockResolvedValue(Ok({ xml: `${fragmentXml}<!-- changed -->` }));
+      const executor = makeExecutorMock({
+        [listMethod]: vi.fn().mockResolvedValue(Ok(listValue)),
+        [getMethod]: getDocument,
+        [applyMethod]: apply,
+      });
+
+      const result = await tryApplyViaPerSheetRoute({
+        kind,
+        sheetName,
+        fragmentXml,
+        expectedSourceHash: '0'.repeat(64),
+        focus: NO_FOCUS,
+        executor,
+        signal: mockSignal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) expect(result.value).toBe('source-drift');
+      expect(getDocument).toHaveBeenCalledOnce();
+      expect(apply).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(FIXTURES.filter(({ kind }) => kind !== 'worksheet'))(
+    'allows a $kind apply when its target is unchanged even if an unrelated sheet changed',
+    async ({ kind, sheetName, fragmentXml, listMethod, listValue, applyMethod, getMethod }) => {
+      const apply = vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+      const getWorkbookDocument = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ xml: '<workbook><worksheet name="Unrelated changed"/></workbook>' }),
+        );
+      const executor = makeExecutorMock({
+        [listMethod]: vi.fn().mockResolvedValue(Ok(listValue)),
+        [getMethod]: vi.fn().mockResolvedValue(Ok({ xml: fragmentXml })),
+        [applyMethod]: apply,
+        getWorkbookDocument,
+      });
+
+      const result = await tryApplyViaPerSheetRoute({
+        kind,
+        sheetName,
+        fragmentXml,
+        expectedSourceHash:
+          kind === 'dashboard'
+            ? '8eb05f71faec6763ba147ca53b742f12613cc296459438470cc1f084c128cf68'
+            : 'ee506c8c5138212a5b0af8c9ef394dd2efa8ecbf74a103a7609cf1c2716cc877',
+        focus: NO_FOCUS,
+        executor,
+        signal: mockSignal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) expect(result.value).toBe('applied');
+      expect(getWorkbookDocument).not.toHaveBeenCalled();
+      expect(apply).toHaveBeenCalledOnce();
     },
   );
 

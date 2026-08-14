@@ -133,7 +133,10 @@ describe('add-field — an absent column comes back as a tool error, not a crash
 
     expect(success.isError).toBe(false);
     expect(readFileSync(worksheetFile, 'utf-8')).toContain('[sum:Profit:qk]');
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(worksheetFile, SESSION);
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+      worksheetFile,
+      SESSION,
+    );
   });
 
   it('resolves a field that lives only in a nested relation, through the tool', async () => {

@@ -2,7 +2,7 @@ import { writeFileSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
-import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorksheetXml, isRouteMissing } from '../../../../desktop/wrappers/getWorksheetXml.js';
 import {
   DesktopCommandExecutionError,
@@ -65,6 +65,6 @@ export async function fetchAndCacheWorksheet({
     prefix: `worksheet-${safeWorksheetCacheId(worksheetName)}`,
   });
   writeFileSync(cacheFile, fetched.value, 'utf-8');
-  writeSidecar(cacheFile, resolvedSession);
+  writeSidecar(cacheFile, resolvedSession, sourceSha256(fetched.value));
   return Ok(cacheFile);
 }
