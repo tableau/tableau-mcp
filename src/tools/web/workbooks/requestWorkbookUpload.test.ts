@@ -48,7 +48,6 @@ describe('requestWorkbookUploadTool', () => {
     expect(tool.description).toContain('staged upload URL');
     expect(tool.paramsSchema).toMatchObject({
       fileName: expect.any(Object),
-      contentType: expect.any(Object),
     });
   });
 
@@ -77,7 +76,6 @@ describe('requestWorkbookUploadTool', () => {
     });
     expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
       fileName: 'BoltBikes Workbook.twb',
-      contentType: 'application/xml',
       config: expect.objectContaining({
         enabled: true,
         bucket: 'tableau-workbooks',
@@ -141,7 +139,6 @@ describe('requestWorkbookUploadTool', () => {
     await callback(
       {
         fileName: 'BoltBikes Workbook.twb',
-        contentType: undefined,
       },
       getMockExtra(),
     );
@@ -154,7 +151,7 @@ describe('requestWorkbookUploadTool', () => {
 });
 
 async function getToolResult(
-  params: { fileName: string; contentType?: string },
+  params: { fileName: string },
   extraOverrides: Parameters<typeof getMockExtra>[0] = {},
 ): Promise<CallToolResult> {
   const tool = getRequestWorkbookUploadTool(new WebMcpServer());
@@ -162,7 +159,6 @@ async function getToolResult(
   return await callback(
     {
       fileName: params.fileName,
-      contentType: params.contentType,
     },
     getMockExtra(extraOverrides),
   );

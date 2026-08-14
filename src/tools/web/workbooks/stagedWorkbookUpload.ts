@@ -27,7 +27,6 @@ export type RequestWorkbookUploadResult = {
 
 type WorkbookUploadOptions = {
   fileName: string;
-  contentType?: string;
   config: BucketS3Config;
   generateUuid?: () => string;
   now?: () => Date;
@@ -42,7 +41,6 @@ type ResolveWorkbookUploadOptions = {
 
 export async function requestStagedWorkbookUpload({
   fileName,
-  contentType = WORKBOOK_UPLOAD_CONTENT_TYPE,
   config,
   generateUuid = randomUUID,
   now = () => new Date(),
@@ -54,7 +52,7 @@ export async function requestStagedWorkbookUpload({
   assertWorkbookUploadId(workbookUploadId);
   const uploadUrl = await createPresignedPutUrlToS3({
     key: buildWorkbookUploadS3Key(config.keyPrefix, workbookUploadId),
-    contentType,
+    contentType: WORKBOOK_UPLOAD_CONTENT_TYPE,
     bucket: config.bucket,
     region: config.region,
     presignTtlSeconds: config.presignTtlSeconds,
@@ -65,7 +63,7 @@ export async function requestStagedWorkbookUpload({
     uploadUrl,
     expiresAt: new Date(now().getTime() + config.presignTtlSeconds * 1000).toISOString(),
     maxSizeBytes: maxBytes,
-    requiredHeaders: { 'Content-Type': contentType },
+    requiredHeaders: { 'Content-Type': WORKBOOK_UPLOAD_CONTENT_TYPE },
   };
 }
 

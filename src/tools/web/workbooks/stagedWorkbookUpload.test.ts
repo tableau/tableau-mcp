@@ -35,7 +35,6 @@ describe('requestStagedWorkbookUpload', () => {
   it('returns a presigned PUT URL and workbook upload id', async () => {
     const result = await requestStagedWorkbookUpload({
       fileName: 'BoltBikes Workbook.twb',
-      contentType: 'application/xml',
       config,
       generateUuid: () => uploadId,
       now: () => new Date('2026-08-12T18:00:00.000Z'),

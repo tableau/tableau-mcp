@@ -18,11 +18,6 @@ const paramsSchema = {
     .string()
     .min(1)
     .describe('Name of the Tableau workbook file to upload. Must end in .twb.'),
-  contentType: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Content-Type header the client will send to the presigned upload URL.'),
 };
 
 export const getRequestWorkbookUploadTool = (
@@ -44,12 +39,12 @@ export const getRequestWorkbookUploadTool = (
     disabled: new Provider(
       async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
     ),
-    callback: async ({ fileName, contentType }, extra): Promise<CallToolResult> => {
+    callback: async ({ fileName }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<RequestWorkbookUploadResult>({
         extra,
         args: {
           fileName,
-          contentType: contentType ?? WORKBOOK_UPLOAD_CONTENT_TYPE,
+          contentType: WORKBOOK_UPLOAD_CONTENT_TYPE,
         },
         callback: async () => {
           if (extra.tableauAuthInfo?.type === 'Passthrough') {
@@ -66,7 +61,6 @@ export const getRequestWorkbookUploadTool = (
 
           const result = await requestStagedWorkbookUpload({
             fileName,
-            contentType: contentType ?? WORKBOOK_UPLOAD_CONTENT_TYPE,
             config: extra.config.bucketS3,
           });
           return new Ok(result);
