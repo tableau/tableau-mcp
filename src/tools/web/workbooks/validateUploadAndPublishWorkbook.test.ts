@@ -91,6 +91,8 @@ describe('validateUploadAndPublishWorkbookTool', () => {
       projectId: expect.any(Object),
       overwrite: expect.any(Object),
     });
+    expect(tool.annotations.destructiveHint).toBe(true);
+    expect(tool.paramsSchema.name.safeParse('').success).toBe(false);
     expect(tool.description).toContain('specified Tableau project');
   });
 

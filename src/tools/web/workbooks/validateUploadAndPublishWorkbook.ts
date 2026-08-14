@@ -33,7 +33,7 @@ const paramsSchema = {
     .describe(
       'Path to a local TWB workbook file on the MCP server filesystem. Use this for local or stdio deployments.',
     ),
-  name: z.string().describe('The name to give the published workbook.'),
+  name: z.string().min(1).describe('The name to give the published workbook.'),
   projectId: z
     .string()
     .min(1)
@@ -81,7 +81,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
     annotations: {
       title: 'Validate, Upload, and Publish Workbook',
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
       openWorldHint: true,
     },
