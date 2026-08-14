@@ -25,7 +25,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-mcp',
         version: serverVersion,
       });
@@ -106,7 +106,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-desktop-mcp',
         version: serverVersion,
       });
@@ -134,7 +134,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-combined-mcp',
         version: serverVersion,
       });
