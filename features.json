@@ -3,6 +3,5 @@
   "authoring-tools": false,
   "view-file-mode": false,
   "view-data-file-mode": false,
-  "workbook-file-mode": true,
-  "authoring-tools": false
+  "workbook-file-mode": true
 }
