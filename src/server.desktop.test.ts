@@ -214,8 +214,11 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // External Client API payload instead of just id+name, so their descriptions enumerate that
 // per-item state (hidden, index, active sheet, auto-updates, datasources/contained sheets).
 // Both are in the dynamic-authoring profile: served moves 34_581 -> 34_709, full 54_197 -> 54_325.
+// Re-pinned 2026-08-13: list-storyboards' description was aligned to the same enumerated style
+// for consistency. It is not in the dynamic-authoring profile, so only the full surface moves:
+// 54_325 -> 54_432.
 const DYNAMIC_AUTHORING_SURFACE_BUDGET = 34_709;
-const FULL_TOOL_SURFACE_BUDGET = 54_325;
+const FULL_TOOL_SURFACE_BUDGET = 54_432;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
