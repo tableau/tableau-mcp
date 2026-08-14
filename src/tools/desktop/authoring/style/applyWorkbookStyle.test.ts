@@ -81,6 +81,7 @@ describe('apply-workbook-style', () => {
     const body = bodyOf(result);
 
     expect(result.isError).toBe(false);
+    expect(harness.readOrder.slice(0, 2)).toEqual(['document', 'inventory']);
     expect(harness.executor.getWorkbook).toHaveBeenCalledOnce();
     expect(harness.executor.getWorkbookDocument).toHaveBeenCalledTimes(3);
     expect(harness.posts).toHaveLength(1);
@@ -117,6 +118,25 @@ describe('apply-workbook-style', () => {
         promise_outcome: 'verified',
       }),
     );
+  });
+
+  it('rejects a workbook mutation caused by inventory after the baseline read', async () => {
+    const inventoryMutation = baselineXml.replace(
+      '</workbook>',
+      '<preferences><preference name="post-baseline-race"/></preferences></workbook>',
+    );
+    const harness = makeHarness({ inventoryReadMutation: inventoryMutation });
+
+    const result = await callTool(harness.executor);
+
+    expect(harness.readOrder.slice(0, 3)).toEqual(['document', 'inventory', 'document']);
+    expect(harness.posts).toEqual([]);
+    expect(bodyOf(result)).toMatchObject({
+      applied: false,
+      retrySafe: true,
+      changedEligibleIds: ['styled-id'],
+      verification: { status: 'not-run', analyticalFingerprint: 'passed' },
+    });
   });
 
   it('dispatches and verifies a live-shaped eligible dashboard title style change', async () => {
@@ -425,6 +445,7 @@ function makeHarness({
   readbackError = false,
   readbackTransform,
   inventoryOverride = inventory,
+  inventoryReadMutation,
 }: {
   baseline?: string;
   driftXml?: string;
@@ -432,16 +453,20 @@ function makeHarness({
   readbackError?: boolean;
   readbackTransform?: (xml: string) => string;
   inventoryOverride?: typeof inventory;
+  inventoryReadMutation?: string;
 } = {}): {
   executor: ExternalApiToolExecutor;
   posts: string[];
+  readOrder: string[];
   applyOptions: ApplyWorkbookDocumentOptions | undefined;
 } {
   let liveXml = baseline;
   let documentReads = 0;
   const posts: string[] = [];
+  const readOrder: string[] = [];
   let applyOptions: ApplyWorkbookDocumentOptions | undefined;
   const getWorkbookDocument = vi.fn(async () => {
+    readOrder.push('document');
     documentReads += 1;
     if (documentReads === 2 && driftXml) {
       return Ok({
@@ -463,7 +488,11 @@ function makeHarness({
     });
   });
   const executor = makeExecutorMock({
-    getWorkbook: vi.fn().mockResolvedValue(Ok(inventoryOverride)),
+    getWorkbook: vi.fn(async () => {
+      readOrder.push('inventory');
+      if (inventoryReadMutation !== undefined) liveXml = inventoryReadMutation;
+      return Ok(inventoryOverride);
+    }),
     getWorkbookDocument,
     applyWorkbookDocument: vi.fn(
       async (xml: string, _signal: AbortSignal, options?: ApplyWorkbookDocumentOptions) => {
@@ -481,6 +510,7 @@ function makeHarness({
   return {
     executor,
     posts,
+    readOrder,
     get applyOptions() {
       return applyOptions;
     },

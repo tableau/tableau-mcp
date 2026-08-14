@@ -97,6 +97,7 @@ function canonicalizeElement(
   )
     .filter((attribute): attribute is XmlAttr => Boolean(attribute))
     .filter((attribute) => !isNamespaceDeclaration(attribute))
+    .filter((attribute) => !isVolatileWindowAttribute(element, attribute))
     .filter(
       (attribute) =>
         !isSupportedPresentationAttribute(element, attribute, ancestors, eligibleArtifactKeys),
@@ -340,6 +341,14 @@ function expandedName(node: XmlElement | XmlAttr): string {
 
 function isNamespaceDeclaration(attribute: XmlAttr): boolean {
   return attribute.name === 'xmlns' || attribute.prefix === 'xmlns';
+}
+
+function isVolatileWindowAttribute(element: XmlElement, attribute: XmlAttr): boolean {
+  return (
+    isUnnamespacedNamed(element, 'window') &&
+    isUnnamespaced(attribute) &&
+    (attribute.nodeName === 'active' || attribute.nodeName === 'maximized')
+  );
 }
 
 function isUnnamespaced(node: XmlElement | XmlAttr): boolean {

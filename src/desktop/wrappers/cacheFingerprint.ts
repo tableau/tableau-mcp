@@ -70,7 +70,17 @@ export function defaultFingerprintResolver(sessionId: string): InstanceFingerpri
 }
 
 export function sourceSha256(xml: string): string {
-  return createHash('sha256').update(xml).digest('hex');
+  return createHash('sha256').update(stripVolatileWindowState(xml)).digest('hex');
+}
+
+// Navigation (activate-sheet / goto / the focus dispatch that follows any apply) flips the
+// active/maximized flags on <window> tags without changing content. Those bytes must not count as
+// drift, but the rest of the <windows> subtree (cards, viewpoints, simple-id) is real structure the
+// guard must still catch — so strip only these two attributes, not the subtree.
+function stripVolatileWindowState(xml: string): string {
+  return xml.replace(/<window\b[^>]*>/gi, (tag) =>
+    tag.replace(/\s+(?:active|maximized)\s*=\s*(["']).*?\1/gi, ''),
+  );
 }
 
 export function writeSidecar(

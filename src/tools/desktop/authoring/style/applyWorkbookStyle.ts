@@ -93,13 +93,13 @@ export const getApplyWorkbookStyleTool = (
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
 
-          const inventoryResult = await executor.getWorkbook(extra.signal);
-          if (inventoryResult.isErr()) {
-            return preDispatchFailure(commandErrorText(inventoryResult.error));
-          }
           const baselineResult = await executor.getWorkbookDocument(extra.signal);
           if (baselineResult.isErr()) {
             return preDispatchFailure(commandErrorText(baselineResult.error));
+          }
+          const inventoryResult = await executor.getWorkbook(extra.signal);
+          if (inventoryResult.isErr()) {
+            return preDispatchFailure(commandErrorText(inventoryResult.error));
           }
 
           let parsedPack: TableauStylePackV2;

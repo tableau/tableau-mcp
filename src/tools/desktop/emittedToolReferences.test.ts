@@ -28,6 +28,7 @@ const NON_TOOL_VOCABULARY = [
   'agg-type',
   'aggregation-level-mismatch',
   'ambiguous-field',
+  'arity-mismatch',
   'as-is',
   'async-settle',
   'auto-apply',

@@ -247,7 +247,6 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       routeIds.indexOf('whole-workbook-fallback'),
     );
   });
-
   it.each(routes)('route "$id" declares a tool sequence and stop conditions', (route) => {
     expect(route.toolSequence.length).toBeGreaterThan(0);
     expect(route.stopConditions.length).toBeGreaterThan(0);

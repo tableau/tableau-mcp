@@ -372,7 +372,53 @@ describe('analyticalFingerprint', () => {
     const normalized = first.replace('active="true"', 'active="false"');
 
     expect(workbookStyleStateFingerprint(normalized)).toBe(workbookStyleStateFingerprint(first));
-    expect(analyticalFingerprint(normalized)).not.toBe(analyticalFingerprint(first));
+    expect(analyticalFingerprint(normalized)).toBe(analyticalFingerprint(first));
+  });
+
+  it('ignores unnamespaced active and maximized flips only on unnamespaced window elements', () => {
+    const before = supportedStyleXml.replace(
+      '</workbook>',
+      '<windows><window active="true" maximized="false" name="Visible"/></windows></workbook>',
+    );
+    const after = before
+      .replace('active="true"', 'active="false"')
+      .replace('maximized="false"', 'maximized="true"');
+
+    expect(analyticalFingerprint(after)).toBe(analyticalFingerprint(before));
+    expect(eligibleStyleScopeFingerprint(after, [])).toBe(
+      eligibleStyleScopeFingerprint(before, []),
+    );
+  });
+
+  it.each([
+    [
+      'namespaced attribute',
+      '<windows><window ext:active="true"/></windows>',
+      '<windows><window ext:active="false"/></windows>',
+    ],
+    [
+      'namespaced element',
+      '<windows><ext:window active="true"/></windows>',
+      '<windows><ext:window active="false"/></windows>',
+    ],
+    [
+      'non-window element',
+      '<windows><pane active="true"/></windows>',
+      '<windows><pane active="false"/></windows>',
+    ],
+    [
+      'case-distinct attribute',
+      '<windows><window Active="true"/></windows>',
+      '<windows><window Active="false"/></windows>',
+    ],
+  ])('retains a %s change in guarded fingerprints', (_label, beforeNode, afterNode) => {
+    const before = supportedStyleXml.replace('</workbook>', `${beforeNode}</workbook>`);
+    const after = supportedStyleXml.replace('</workbook>', `${afterNode}</workbook>`);
+
+    expect(analyticalFingerprint(after)).not.toBe(analyticalFingerprint(before));
+    expect(eligibleStyleScopeFingerprint(after, [])).not.toBe(
+      eligibleStyleScopeFingerprint(before, []),
+    );
   });
 
   it.each([
