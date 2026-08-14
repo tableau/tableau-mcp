@@ -10,10 +10,15 @@ import { mockWorkbook } from './mockWorkbook.js';
 import { getValidateUploadAndPublishWorkbookTool } from './validateUploadAndPublishWorkbook.js';
 
 const mocks = vi.hoisted(() => ({
+  mockReadFile: vi.fn(),
   mockPublishWorkbook: vi.fn(),
   mockValidateWorkbookAndUpload: vi.fn(),
   mockResolveStagedWorkbookUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('fs/promises', () => ({
+  readFile: mocks.mockReadFile,
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -42,6 +47,12 @@ const validArgs = {
   projectId: 'target-project-id',
 };
 
+const validLocalArgs = {
+  workbookFilePath: '/tmp/source-superstore.twb',
+  name: 'My New Workbook',
+  projectId: 'target-project-id',
+};
+
 describe('validateUploadAndPublishWorkbookTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,7 +62,9 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     mocks.mockPublishWorkbook.mockReset();
     mocks.mockValidateWorkbookAndUpload.mockReset();
     mocks.mockResolveStagedWorkbookUpload.mockReset();
+    mocks.mockReadFile.mockReset();
     mocks.mockIsFeatureEnabled.mockReset();
+    mocks.mockReadFile.mockResolvedValue(Buffer.from('<workbook source="local" />'));
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twb',
       bytes: Buffer.from('<workbook source="new" />'),
@@ -70,9 +83,10 @@ describe('validateUploadAndPublishWorkbookTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
     expect(tool.name).toBe('validate-upload-and-publish-workbook');
-    expect(tool.description).toContain('Validates a staged TWB workbook upload');
+    expect(tool.description).toContain('Validates a TWB workbook');
     expect(tool.paramsSchema).toMatchObject({
       workbookUploadId: expect.any(Object),
+      workbookFilePath: expect.any(Object),
       name: expect.any(Object),
       projectId: expect.any(Object),
       overwrite: expect.any(Object),
@@ -237,6 +251,55 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     });
   });
 
+  it('validates and publishes a local workbook file path', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      project: { id: 'target-project-id', name: 'Marketing Analytics' },
+    });
+
+    const result = await getToolResult(validLocalArgs);
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.twb');
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      filename: 'source-superstore.twb',
+      workbook: Buffer.from('<workbook source="local" />'),
+    });
+  });
+
+  it('returns an error when both local path and staged upload id are provided', async () => {
+    const result = await getToolResult({
+      ...validLocalArgs,
+      workbookUploadId: validArgs.workbookUploadId,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'Provide either workbookFilePath or workbookUploadId, not both',
+    );
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+  });
+
+  it('returns an error when neither local path nor staged upload id is provided', async () => {
+    const result = await getToolResult({ name: validArgs.name, projectId: validArgs.projectId });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Either workbookFilePath or workbookUploadId');
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+  });
+
   it('returns validation errors and does not publish when the workbook is invalid', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
@@ -327,6 +390,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     await callback(
       {
         workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
+        workbookFilePath: undefined,
         name: validArgs.name,
         projectId: validArgs.projectId,
         overwrite: false,
@@ -337,6 +401,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     const loggedArgs = logAndExecute.mock.calls[0][0].args;
     expect(loggedArgs).toEqual({
       workbookUploadId: '<redacted>',
+      workbookFilePath: undefined,
       name: validArgs.name,
       projectId: validArgs.projectId,
       overwrite: false,
@@ -347,7 +412,8 @@ describe('validateUploadAndPublishWorkbookTool', () => {
 
 async function getToolResult(
   params: {
-    workbookUploadId: string;
+    workbookUploadId?: string;
+    workbookFilePath?: string;
     name: string;
     projectId: string;
     overwrite?: boolean;
@@ -359,6 +425,7 @@ async function getToolResult(
   return await callback(
     {
       workbookUploadId: params.workbookUploadId,
+      workbookFilePath: params.workbookFilePath,
       name: params.name,
       projectId: params.projectId,
       overwrite: params.overwrite ?? false,

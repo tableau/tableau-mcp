@@ -1,5 +1,4 @@
-import { readFile } from 'fs/promises';
-import { basename, resolve } from 'path';
+import { resolve } from 'path';
 import { z } from 'zod';
 
 import { workbookSchema } from '../../../src/sdks/tableau/types/workbook.js';
@@ -29,14 +28,6 @@ const validateUploadAndPublishWorkbookResultSchema = z.discriminatedUnion('statu
   }),
 ]);
 
-const requestWorkbookUploadResultSchema = z.object({
-  workbookUploadId: z.string(),
-  uploadUrl: z.string(),
-  expiresAt: z.string(),
-  maxSizeBytes: z.number(),
-  requiredHeaders: z.record(z.string(), z.string()),
-});
-
 const defaultWorkbookFilePath = resolve('tests/e2e/fixtures/workbooks/superstore-datasource.twb');
 
 type ValidateUploadPublishSmokeConfig = {
@@ -45,7 +36,7 @@ type ValidateUploadPublishSmokeConfig = {
   projectId: string;
 };
 
-describe('validate-upload-and-publish-workbook staged upload', () => {
+describe('validate-upload-and-publish-workbook local file', () => {
   let client: McpClient | undefined;
 
   beforeAll(() => {
@@ -75,7 +66,7 @@ describe('validate-upload-and-publish-workbook staged upload', () => {
     await client?.close();
   });
 
-  it('validates and publishes a staged workbook upload', async () => {
+  it('validates and publishes a workbook from a local file path', async () => {
     const smokeConfig = getValidateUploadPublishSmokeConfig();
     if (!smokeConfig || !client) {
       console.warn(
@@ -84,25 +75,10 @@ describe('validate-upload-and-publish-workbook staged upload', () => {
       return;
     }
 
-    const workbookBytes = await readFile(smokeConfig.workbookFilePath);
-    const uploadResult = await client.callTool('request-workbook-upload', {
-      schema: requestWorkbookUploadResultSchema,
-      toolArgs: {
-        fileName: basename(smokeConfig.workbookFilePath),
-      },
-    });
-
-    const uploadResponse = await fetch(uploadResult.uploadUrl, {
-      method: 'PUT',
-      headers: uploadResult.requiredHeaders,
-      body: workbookBytes,
-    });
-    expect(uploadResponse.ok).toBe(true);
-
     const publishResult = await client.callTool('validate-upload-and-publish-workbook', {
       schema: validateUploadAndPublishWorkbookResultSchema,
       toolArgs: {
-        workbookUploadId: uploadResult.workbookUploadId,
+        workbookFilePath: smokeConfig.workbookFilePath,
         name: smokeConfig.workbookName,
         projectId: smokeConfig.projectId,
         overwrite: true,
