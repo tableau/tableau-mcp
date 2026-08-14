@@ -210,8 +210,13 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // descriptions carrying the new-window/session-binding and blocking-Save-As caveats the 0.2.6
 // descriptions spell out. All five join the dynamic-authoring profile: served moves
 // 31_485 -> 34_581 (still well under the 46k cliff), full moves 51_101 -> 54_197.
+// Re-pinned 2026-08-14: added export-storyboard-image over the External Client API storyboard
+// image route, mirroring export-worksheet-image and export-dashboard-image. Like those two it
+// stays out of DYNAMIC_AUTHORING_TOOL_PROFILE, so that ratchet is unchanged; full moves
+// 54_197 -> 55_076. Its description states the deliberate V0 scope — only the active story point
+// renders; other points are not included and cannot be selected.
 const DYNAMIC_AUTHORING_SURFACE_BUDGET = 34_581;
-const FULL_TOOL_SURFACE_BUDGET = 54_197;
+const FULL_TOOL_SURFACE_BUDGET = 55_076;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {

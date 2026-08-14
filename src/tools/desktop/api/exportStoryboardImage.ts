@@ -39,7 +39,8 @@ export const exportStoryboardImageTool = (
     server,
     name: 'export-storyboard-image',
     title,
-    description: "Render one storyboard's active story point as an image.",
+    description:
+      "Render a storyboard's active story point as an image. Only the active point is rendered; other story points are not included and cannot be selected.",
     paramsSchema,
     annotations: {
       readOnlyHint: false,
