@@ -110,15 +110,13 @@ function assertUniqueEligibleNames(
 }
 
 function sameNames(left: string[], right: string[]): boolean {
-  const normalize = (names: string[]): string[] =>
-    names
-      .map((name) => normalizeDecodedName(name))
-      .sort((first, second) => (first < second ? -1 : first > second ? 1 : 0));
+  const normalize = (names: string[]): Set<string> =>
+    new Set(names.map((name) => normalizeDecodedName(name)));
   const normalizedLeft = normalize(left);
   const normalizedRight = normalize(right);
   return (
-    normalizedLeft.length === normalizedRight.length &&
-    normalizedLeft.every((name, index) => name === normalizedRight[index])
+    normalizedLeft.size === normalizedRight.size &&
+    [...normalizedLeft].every((name) => normalizedRight.has(name))
   );
 }
 

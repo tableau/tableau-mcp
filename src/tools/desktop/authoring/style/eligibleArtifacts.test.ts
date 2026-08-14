@@ -123,11 +123,15 @@ describe('eligibleStyleArtifacts', () => {
     );
   });
 
-  it('fails when dashboard membership disagrees between inventory and XML', () => {
-    const staleDashboardXml = workbookXml.replace(
+  it.each([
+    ['a missing distinct sheet', '<zone name="Hidden Used"/>', ''],
+    [
+      'an extra distinct sheet',
       '<zone name="Hidden Used"/>',
-      '<zone name="Hidden Orphan"/>',
-    );
+      '<zone name="Hidden Used"/><zone name="Hidden Orphan"/>',
+    ],
+  ])('fails when dashboard XML has %s', (_label, before, after) => {
+    const staleDashboardXml = workbookXml.replace(before, after);
 
     expect(() => eligibleStyleArtifacts(inventory, staleDashboardXml)).toThrow(
       'dashboard "Visible Dashboard" (dash-visible) membership differs between inventory and workbook XML',
@@ -179,7 +183,20 @@ describe('eligibleStyleArtifacts', () => {
     ).toEqual(['ws-visible', 'ws-hidden-used', 'dash-visible']);
   });
 
-  it('preserves dashboard membership multiplicity when comparing inventory with XML', () => {
+  it('accepts repeated identical worksheet membership across dashboard layout variants', () => {
+    const liveShapedLayouts = workbookXml.replace(
+      '<zones><zone name="Visible Sheet"/><zone name="Hidden Used"/></zones>',
+      '<layouts><layout><zones><zone name="Visible Sheet"/><zone name="Hidden Used"/></zones></layout><layout><zones><zone name="Visible Sheet"/><zone name="Hidden Used"/></zones></layout></layouts>',
+    );
+
+    expect(eligibleStyleArtifacts(inventory, liveShapedLayouts)).toEqual([
+      { kind: 'worksheet', id: 'ws-visible', name: 'Visible Sheet', hidden: false },
+      { kind: 'worksheet', id: 'ws-hidden-used', name: 'Hidden Used', hidden: true },
+      { kind: 'dashboard', id: 'dash-visible', name: 'Visible Dashboard', hidden: false },
+    ]);
+  });
+
+  it('compares inventory and XML membership as normalized unique sets', () => {
     const duplicateMembershipInventory: WorkbookInventory = {
       ...inventory,
       dashboards: [
@@ -192,9 +209,9 @@ describe('eligibleStyleArtifacts', () => {
       ],
     };
 
-    expect(() => eligibleStyleArtifacts(duplicateMembershipInventory, workbookXml)).toThrow(
-      'dashboard "Visible Dashboard" (dash-visible) membership differs between inventory and workbook XML',
-    );
+    expect(
+      eligibleStyleArtifacts(duplicateMembershipInventory, workbookXml).map(({ id }) => id),
+    ).toEqual(['ws-visible', 'ws-hidden-used', 'dash-visible']);
   });
 
   it('fails closed on malformed eligibility XML', () => {
