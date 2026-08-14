@@ -1,4 +1,5 @@
 import pkg from '../../package.json';
+import features from '../../features.json';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
 import { resetEnv, setEnv } from '../testEnv.js';
@@ -6,6 +7,7 @@ import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
 const serverVersion = pkg.version;
+const workbookFileModeEnabled = Boolean(features['workbook-file-mode']);
 
 describe('server', () => {
   beforeAll(setEnv);
@@ -86,6 +88,9 @@ describe('server', () => {
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedToolNames = expectedToolNames.filter((name) => !mcpAppsTools.includes(name));
+      if (!workbookFileModeEnabled) {
+        expectedToolNames = expectedToolNames.filter((name) => name !== 'download-workbook');
+      }
 
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
@@ -199,6 +204,9 @@ describe('server', () => {
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
+      if (!workbookFileModeEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => name !== 'download-workbook');
+      }
 
       const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
