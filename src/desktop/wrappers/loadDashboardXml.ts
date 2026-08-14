@@ -27,6 +27,7 @@ export type LoadDashboardXmlError =
   // rejected the actual document load (surfaced in the response payload, not in
   // `status`). `message` carries Desktop's own error text.
   | { type: 'load-rejected'; message: string }
+  | { type: 'source-drift'; message: string }
   // Only surfaced when a caller opts in with `requireExistingSheet` (apply-dashboard, apply-storyboard);
   // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
   | { type: 'sheet-absent'; message: string };
@@ -115,6 +116,7 @@ export async function loadDashboardXml({
   signal,
   kind = 'dashboard',
   requireExistingSheet = false,
+  expectedSourceHash,
 }: {
   dashboardName: string;
   xml: string;
@@ -127,6 +129,7 @@ export async function loadDashboardXml({
   // Off/False (build-and-apply-dashboard, apply-dashboard-with-viewpoints): the dashboard may be net-new, so
   // the whole-workbook re-post upserts it (appending when absent). That is the create path.
   requireExistingSheet?: boolean;
+  expectedSourceHash?: string;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -134,7 +137,8 @@ export async function loadDashboardXml({
   }
 
   const validation = runValidation(xml, 'dashboard');
-  const blockingIssues = blockingValidationIssues(validation.issues);
+  const cachedApply = requireExistingSheet;
+  const blockingIssues = cachedApply ? [] : blockingValidationIssues(validation.issues);
   if (blockingIssues.length > 0) {
     log({
       level: 'error',
@@ -188,6 +192,8 @@ export async function loadDashboardXml({
         kind,
         sheetName: canonicalName,
         fragmentXml: xml,
+        expectedSourceHash,
+        validationContext: cachedApply ? 'dashboard' : undefined,
         focus: canonicalFocus,
         executor,
         signal,
@@ -195,6 +201,26 @@ export async function loadDashboardXml({
     );
     if (perSheetResult.isErr()) {
       return Err({ type: 'execute-command-error', error: perSheetResult.error });
+    }
+    if (perSheetResult.value === 'source-drift') {
+      return Err({
+        type: 'load-dashboard-xml-error',
+        error: {
+          type: 'source-drift',
+          message:
+            `The ${kind} changed since this cache was read. Re-read it with get-${kind}-xml, ` +
+            `reapply your edit to the new cache file, then retry apply-${kind}. No changes were sent to Tableau.`,
+        },
+      });
+    }
+    if (
+      typeof perSheetResult.value === 'object' &&
+      perSheetResult.value.type === 'validation-failed'
+    ) {
+      return Err({
+        type: 'load-dashboard-xml-error',
+        error: { type: 'validation-failed', issues: perSheetResult.value.issues },
+      });
     }
     if (perSheetResult.value !== 'applied') {
       return Err({
@@ -204,7 +230,9 @@ export async function loadDashboardXml({
     }
     // Preflight warnings ride along so apply responses can compute the host
     // verification receipt (W-23447506) without re-running validation.
-    return Ok({ validationWarnings: validation.issues });
+    return Ok({
+      validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
+    });
   }
 
   const result = await loadDashboardXmlViaExternalApi({
@@ -233,11 +261,13 @@ export async function loadStoryboardXml({
   executor,
   signal,
   requireExistingSheet = false,
+  expectedSourceHash,
 }: {
   storyboardName: string;
   xml: string;
   focus: ApplyFocus;
   requireExistingSheet?: boolean;
+  expectedSourceHash?: string;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
   return loadDashboardXml({
     dashboardName: storyboardName,
@@ -247,6 +277,7 @@ export async function loadStoryboardXml({
     signal,
     kind: 'storyboard',
     requireExistingSheet,
+    expectedSourceHash,
   });
 }
 

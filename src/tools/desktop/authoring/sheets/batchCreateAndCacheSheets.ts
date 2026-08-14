@@ -8,7 +8,7 @@ import { currentEpisodeId, emitEpisodeEvent } from '../../../../desktop/episode-
 import { addDashboard, addSheet } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { formatWorkbookPromiseCheck } from '../../../../desktop/validation/promise-check.js';
-import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getDashboardXml } from '../../../../desktop/wrappers/getDashboardXml.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { getWorksheetXml } from '../../../../desktop/wrappers/getWorksheetXml.js';
@@ -123,15 +123,24 @@ export const getBatchCreateAndCacheSheetsTool = (
             }
           }
 
+          const acceptedWorkbookResult = await getWorkbookXml({ executor, signal });
+          if (acceptedWorkbookResult.isErr()) {
+            return new DesktopCommandExecutionError(
+              acceptedWorkbookResult.error,
+              'Post-apply workbook readback failed. The requested worksheets and dashboard may already exist in Tableau. Inspect Tableau before continuing; do not replay or retry Phase 1 automatically.',
+            ).toErr();
+          }
+          const acceptedWorkbookXml = acceptedWorkbookResult.value;
+
           // Cache workbook
           const workbookFile = cache.getCacheFilePath({
             prefix: 'workbook',
             id: 'for-parallel-build',
           });
-          writeFileSync(workbookFile, workbookXml, 'utf-8');
+          writeFileSync(workbookFile, acceptedWorkbookXml, 'utf-8');
           // Fingerprint the cache with the producing Desktop instance so a Phase-2 apply
           // can refuse a cache from a different (or restarted) Desktop session (W9).
-          writeSidecar(workbookFile, resolvedSession);
+          writeSidecar(workbookFile, resolvedSession, sourceSha256(acceptedWorkbookXml));
 
           // Fetch and cache all worksheet working copies.
           const worksheetFiles: Record<string, string> = {};
@@ -149,7 +158,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             const file = cache.getCacheFilePath({ prefix: 'worksheet', id: safeWsName });
             try {
               writeFileSync(file, wsResult.value, 'utf-8');
-              writeSidecar(file, resolvedSession);
+              writeSidecar(file, resolvedSession, sourceSha256(wsResult.value));
             } catch (error) {
               worksheetFailures.push({
                 name,
@@ -174,7 +183,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             const file = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });
             try {
               writeFileSync(file, dashResult.value, 'utf-8');
-              writeSidecar(file, resolvedSession);
+              writeSidecar(file, resolvedSession, sourceSha256(dashResult.value));
               dashboardFile = file;
             } catch (error) {
               dashboardFailures.push({
@@ -204,9 +213,8 @@ export const getBatchCreateAndCacheSheetsTool = (
           msg += hasArtifactFailures
             ? '\n\nPhase 2 is not ready. Retry the failed fetch/cache steps before continuing.'
             : '\n\nReady for Phase 2 parallel execution.';
-          // Host verification receipt (W-23447506): this whole-workbook apply has
-          // no structural readback, so say so honestly instead of implying full
-          // re-verification happened.
+          // Host verification receipt (W-23447506): the accepted live readback seeds Phase 2,
+          // but it is not a structural comparison against the full requested intent.
           msg += applyResult.isOk()
             ? formatWorkbookPromiseCheck(applyResult.value.validationWarnings)
             : '';

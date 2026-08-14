@@ -51,6 +51,7 @@ export type LoadWorksheetXmlError =
   // changed an intent-bearing node (the silently-dropped-pill killer, W4). `message`
   // carries the agent-facing fix recipe; `findings` the structured evidence.
   | { type: 'readback-failed'; findings: ReadbackFinding[]; message: string }
+  | { type: 'source-drift'; message: string }
   // Only surfaced when a caller opts in with `requireExistingSheet` (apply-worksheet);
   // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
   | { type: 'sheet-absent'; message: string }
@@ -306,6 +307,8 @@ export async function loadWorksheetXml({
   readbackVerificationOut,
   requireExistingSheet = false,
   artifactApply,
+  expectedSourceHash,
+  callerPreflightsBlockingIssues = false,
 }: {
   worksheetName: string;
   xml: string;
@@ -319,6 +322,8 @@ export async function loadWorksheetXml({
   // whole-workbook re-post upserts it (appending when absent). That is the create path.
   requireExistingSheet?: boolean;
   artifactApply?: ArtifactWorksheetApplyOptions;
+  expectedSourceHash?: string;
+  callerPreflightsBlockingIssues?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -326,7 +331,8 @@ export async function loadWorksheetXml({
   }
 
   const validation = runValidation(xml, 'worksheet');
-  const blockingIssues = blockingValidationIssues(validation.issues);
+  const cachedApply = requireExistingSheet;
+  const blockingIssues = cachedApply ? [] : blockingValidationIssues(validation.issues);
   if (blockingIssues.length > 0) {
     log({
       level: 'error',
@@ -459,12 +465,30 @@ export async function loadWorksheetXml({
         kind: 'worksheet',
         sheetName: canonicalName,
         fragmentXml: xml,
+        expectedSourceHash,
+        validationContext: cachedApply && !callerPreflightsBlockingIssues ? 'worksheet' : undefined,
         focus: canonicalFocus,
         executor,
         signal,
       });
       if (outcome.isErr()) {
         return Err({ type: 'execute-command-error', error: outcome.error });
+      }
+      if (typeof outcome.value === 'object' && outcome.value.type === 'validation-failed') {
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: { type: 'validation-failed', issues: outcome.value.issues },
+        });
+      }
+      if (outcome.value === 'source-drift') {
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: {
+            type: 'source-drift',
+            message:
+              'The worksheet changed since this cache was read. Re-read it with get-worksheet-xml, reapply your edit to the new cache file, then retry apply-worksheet. No changes were sent to Tableau.',
+          },
+        });
       }
       if (outcome.value !== 'applied') {
         return Err({
@@ -485,7 +509,10 @@ export async function loadWorksheetXml({
       }
       // Preflight warnings ride along so apply responses can compute the host
       // verification receipt (W-23447506) without re-running validation.
-      return Ok({ ...outcomeResult.value, validationWarnings: validation.issues });
+      return Ok({
+        ...outcomeResult.value,
+        validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
+      });
     });
   }
 
