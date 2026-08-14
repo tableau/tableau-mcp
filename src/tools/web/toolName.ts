@@ -64,11 +64,7 @@ export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
 export const webToolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
-  workbook: [
-    'list-workbooks',
-    'get-workbook',
-    'download-workbook',
-  ],
+  workbook: ['list-workbooks', 'get-workbook', 'download-workbook'],
   project: ['list-projects'],
   view: [
     'list-views',
