@@ -49,7 +49,6 @@ describe('requestWorkbookUploadTool', () => {
     expect(tool.paramsSchema).toMatchObject({
       fileName: expect.any(Object),
       contentType: expect.any(Object),
-      sizeBytes: expect.any(Object),
     });
   });
 
@@ -65,7 +64,6 @@ describe('requestWorkbookUploadTool', () => {
   it('returns a staged upload URL when S3 is configured', async () => {
     const result = await getToolResult({
       fileName: 'BoltBikes Workbook.twb',
-      sizeBytes: 1024,
     });
 
     expect(result.isError).toBe(false);
@@ -80,7 +78,6 @@ describe('requestWorkbookUploadTool', () => {
     expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
       fileName: 'BoltBikes Workbook.twb',
       contentType: 'application/xml',
-      sizeBytes: 1024,
       config: expect.objectContaining({
         enabled: true,
         bucket: 'tableau-workbooks',
@@ -145,7 +142,6 @@ describe('requestWorkbookUploadTool', () => {
       {
         fileName: 'BoltBikes Workbook.twb',
         contentType: undefined,
-        sizeBytes: undefined,
       },
       getMockExtra(),
     );
@@ -153,13 +149,12 @@ describe('requestWorkbookUploadTool', () => {
     expect(logAndExecute.mock.calls[0][0].args).toEqual({
       fileName: 'BoltBikes Workbook.twb',
       contentType: 'application/xml',
-      sizeBytes: undefined,
     });
   });
 });
 
 async function getToolResult(
-  params: { fileName: string; contentType?: string; sizeBytes?: number },
+  params: { fileName: string; contentType?: string },
   extraOverrides: Parameters<typeof getMockExtra>[0] = {},
 ): Promise<CallToolResult> {
   const tool = getRequestWorkbookUploadTool(new WebMcpServer());
@@ -168,7 +163,6 @@ async function getToolResult(
     {
       fileName: params.fileName,
       contentType: params.contentType,
-      sizeBytes: params.sizeBytes,
     },
     getMockExtra(extraOverrides),
   );

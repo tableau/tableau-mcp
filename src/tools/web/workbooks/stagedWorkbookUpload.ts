@@ -28,7 +28,6 @@ export type RequestWorkbookUploadResult = {
 type WorkbookUploadOptions = {
   fileName: string;
   contentType?: string;
-  sizeBytes?: number;
   config: BucketS3Config;
   generateUuid?: () => string;
   now?: () => Date;
@@ -44,19 +43,12 @@ type ResolveWorkbookUploadOptions = {
 export async function requestStagedWorkbookUpload({
   fileName,
   contentType = WORKBOOK_UPLOAD_CONTENT_TYPE,
-  sizeBytes,
   config,
   generateUuid = randomUUID,
   now = () => new Date(),
   maxBytes = MAX_STAGED_WORKBOOK_BYTES,
 }: WorkbookUploadOptions): Promise<RequestWorkbookUploadResult> {
   assertWorkbookUploadFileName(fileName);
-  if (sizeBytes !== undefined && (!Number.isSafeInteger(sizeBytes) || sizeBytes <= 0)) {
-    throw new Error('Workbook upload sizeBytes must be a positive integer when provided.');
-  }
-  if (sizeBytes !== undefined && sizeBytes > maxBytes) {
-    throw new Error(`Workbook upload exceeds the ${maxBytes}-byte limit.`);
-  }
 
   const workbookUploadId = generateUuid();
   assertWorkbookUploadId(workbookUploadId);

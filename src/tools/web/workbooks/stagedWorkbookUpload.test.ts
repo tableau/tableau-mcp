@@ -36,7 +36,6 @@ describe('requestStagedWorkbookUpload', () => {
     const result = await requestStagedWorkbookUpload({
       fileName: 'BoltBikes Workbook.twb',
       contentType: 'application/xml',
-      sizeBytes: 1024,
       config,
       generateUuid: () => uploadId,
       now: () => new Date('2026-08-12T18:00:00.000Z'),
@@ -66,17 +65,6 @@ describe('requestStagedWorkbookUpload', () => {
         generateUuid: () => uploadId,
       }),
     ).rejects.toThrow('filename must end in .twb');
-  });
-
-  it('rejects sizes above the workbook byte limit', async () => {
-    await expect(
-      requestStagedWorkbookUpload({
-        fileName: 'workbook.twb',
-        sizeBytes: MAX_STAGED_WORKBOOK_BYTES + 1,
-        config,
-        generateUuid: () => uploadId,
-      }),
-    ).rejects.toThrow(`exceeds the ${MAX_STAGED_WORKBOOK_BYTES}-byte limit`);
   });
 });
 

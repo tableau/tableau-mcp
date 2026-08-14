@@ -23,12 +23,6 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe('Content-Type header the client will send to the presigned upload URL.'),
-  sizeBytes: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Optional expected workbook file size in bytes.'),
 };
 
 export const getRequestWorkbookUploadTool = (
@@ -50,13 +44,12 @@ export const getRequestWorkbookUploadTool = (
     disabled: new Provider(
       async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
     ),
-    callback: async ({ fileName, contentType, sizeBytes }, extra): Promise<CallToolResult> => {
+    callback: async ({ fileName, contentType }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<RequestWorkbookUploadResult>({
         extra,
         args: {
           fileName,
           contentType: contentType ?? WORKBOOK_UPLOAD_CONTENT_TYPE,
-          sizeBytes,
         },
         callback: async () => {
           if (extra.tableauAuthInfo?.type === 'Passthrough') {
@@ -74,7 +67,6 @@ export const getRequestWorkbookUploadTool = (
           const result = await requestStagedWorkbookUpload({
             fileName,
             contentType: contentType ?? WORKBOOK_UPLOAD_CONTENT_TYPE,
-            sizeBytes,
             config: extra.config.bucketS3,
           });
           return new Ok(result);
