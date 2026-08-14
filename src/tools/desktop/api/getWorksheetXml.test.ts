@@ -52,7 +52,7 @@ describe('getWorksheetXmlTool', () => {
   });
 
   it('reads worksheet structure before the first authoring attempt', async () => {
-    const mockXml = '<worksheet name="Sheet 1"/>';
+    const mockXml = '<worksheet name="Sheet 1"><simple-id uuid="sheet-1-uuid" /></worksheet>';
     vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(
       Ok({ xml: mockXml, name: 'Sheet 1' }),
     );
@@ -70,7 +70,8 @@ describe('getWorksheetXmlTool', () => {
   });
 
   it('should return worksheet XML inline when mode is inline', async () => {
-    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    const mockXml =
+      '<worksheet name="Sheet 1"><simple-id uuid="sheet-1-uuid" /><table></table></worksheet>';
     vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(
       Ok({ xml: mockXml, name: 'Sheet 1' }),
     );
@@ -91,7 +92,8 @@ describe('getWorksheetXmlTool', () => {
   });
 
   it('should write to file and return path when mode is file', async () => {
-    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    const mockXml =
+      '<worksheet name="Sheet 1"><simple-id uuid="sheet-1-uuid" /><table></table></worksheet>';
     vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(
       Ok({ xml: mockXml, name: 'Sheet 1' }),
     );
@@ -139,6 +141,28 @@ describe('getWorksheetXmlTool', () => {
 
     await getToolResult({ session: '12345', worksheetName: 'Sheet 1', mode: 'inline' });
 
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).not.toHaveBeenCalled();
+  });
+
+  it('returns a malformed-document error when the fragment has no simple-id', async () => {
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(
+      Ok({ xml: '<worksheet name="Sheet 1"><table></table></worksheet>', name: 'Sheet 1' }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+      mode: 'inline',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      new GetWorksheetXmlFailedError({
+        type: 'malformed-worksheet-fragment',
+        message: 'Worksheet "Sheet 1" has no <simple-id>; the workbook document is malformed.',
+      }).message,
+    );
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).not.toHaveBeenCalled();
   });
 
@@ -205,7 +229,12 @@ describe('getWorksheetXmlTool', () => {
   it('should pass the abort signal to getWorksheetXml', async () => {
     const mockGetWorksheetXml = vi
       .spyOn(getWorksheetXmlModule, 'getWorksheetXml')
-      .mockResolvedValue(Ok({ xml: '<worksheet name="Sheet 1"/>', name: 'Sheet 1' }));
+      .mockResolvedValue(
+        Ok({
+          xml: '<worksheet name="Sheet 1"><simple-id uuid="sheet-1-uuid" /></worksheet>',
+          name: 'Sheet 1',
+        }),
+      );
 
     const customSignal = new AbortController().signal;
 
@@ -225,7 +254,10 @@ describe('getWorksheetXmlTool', () => {
   });
 
   it('forces file mode when inline XML exceeds the cap, regardless of requested mode', async () => {
-    const overCapXml = '<worksheet name="Sales">' + 'x'.repeat(20000) + '</worksheet>';
+    const overCapXml =
+      '<worksheet name="Sales"><simple-id uuid="sales-uuid" />' +
+      'x'.repeat(20000) +
+      '</worksheet>';
     vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(
       Ok({ xml: overCapXml, name: 'Sales' }),
     );
@@ -249,7 +281,10 @@ describe('getWorksheetXmlTool', () => {
 
   it('logs a cap-hit receipt when the cap fires', async () => {
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
-    const overCapXml = '<worksheet name="Sales">' + 'x'.repeat(20000) + '</worksheet>';
+    const overCapXml =
+      '<worksheet name="Sales"><simple-id uuid="sales-uuid" />' +
+      'x'.repeat(20000) +
+      '</worksheet>';
     vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(
       Ok({ xml: overCapXml, name: 'Sales' }),
     );
@@ -265,7 +300,7 @@ describe('getWorksheetXmlTool', () => {
   });
 
   it('respects a smaller cap overridden via config', async () => {
-    const smallXml = '<worksheet name="Sales"><a/></worksheet>';
+    const smallXml = '<worksheet name="Sales"><simple-id uuid="sales-uuid" /><a/></worksheet>';
     vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(
       Ok({ xml: smallXml, name: 'Sales' }),
     );

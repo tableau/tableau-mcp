@@ -77,14 +77,21 @@ export const getGetWorksheetXmlTool = (
             }
           }
 
-          // An explicit re-read is the agent asking for live truth for this sheet — treat
-          // it as the new starting point rather than resuming whatever add-field/
-          // remove-field edit buffer might already be open underneath it. The buffer keys
-          // on the fragment's simple-id, the id add-field/remove-field opened it under; a
-          // /document-route worksheet fragment always carries one.
+          // An explicit re-read is the agent asking for live truth for this sheet — treat it
+          // as the new starting point rather than resuming whatever add-field/remove-field
+          // edit buffer might already be open underneath it. The buffer keys on the fragment's
+          // simple-id; a well-formed fragment always carries one, so a missing id means a
+          // malformed document, not a sheet to silently skip.
+          const bufferWorksheetId = worksheetFragmentSimpleId(result.value.xml);
+          if (!bufferWorksheetId) {
+            return new GetWorksheetXmlFailedError({
+              type: 'malformed-worksheet-fragment',
+              message: `Worksheet "${result.value.name}" has no <simple-id>; the workbook document is malformed.`,
+            }).toErr();
+          }
           clearStickyWorksheetFile({
             session: resolvedSession,
-            worksheetId: worksheetFragmentSimpleId(result.value.xml)!,
+            worksheetId: bufferWorksheetId,
           });
 
           return finishXmlRead({

@@ -41,6 +41,7 @@ export type ListDashboardsResult = Result<
 export type GetWorksheetXmlError = (
   | { type: 'no-worksheet-found' }
   | { type: 'multiple-worksheets-found' }
+  | { type: 'malformed-worksheet-fragment' }
 ) & { message: string };
 
 export type GetWorksheetXmlResult = Result<
