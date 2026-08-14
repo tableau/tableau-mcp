@@ -265,7 +265,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
       project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
 
-    const result = await getToolResult(validLocalArgs);
+    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
 
     expect(result.isError).toBe(false);
     expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.twb');
@@ -275,6 +275,46 @@ describe('validateUploadAndPublishWorkbookTool', () => {
       filename: 'source-superstore.twb',
       workbook: Buffer.from('<workbook source="local" />'),
     });
+  });
+
+  it('rejects local workbook file paths when staged S3 uploads are configured', async () => {
+    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: true });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'workbookFilePath is only supported when staged S3 uploads are not configured',
+    );
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+  });
+
+  it('returns an args-validation error when local workbook path is not a twb', async () => {
+    const result = await getToolResult(
+      {
+        ...validLocalArgs,
+        workbookFilePath: '/tmp/source-superstore.twbx',
+      },
+      { bucketS3Enabled: false },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('workbookFilePath must point to a .twb file');
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+  });
+
+  it('returns an args-validation error when local workbook file is empty', async () => {
+    mocks.mockReadFile.mockResolvedValue(Buffer.from(''));
+
+    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('workbookFilePath must not point to an empty');
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
   });
 
   it('returns an error when both local path and staged upload id are provided', async () => {
@@ -422,7 +462,7 @@ async function getToolResult(
     projectId: string;
     overwrite?: boolean;
   },
-  options: { boundedProjectIds?: Set<string> | null } = {},
+  options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
 ): Promise<CallToolResult> {
   const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -440,8 +480,10 @@ async function getToolResult(
 
 function getMockExtra({
   boundedProjectIds = null,
+  bucketS3Enabled = true,
 }: {
   boundedProjectIds?: Set<string> | null;
+  bucketS3Enabled?: boolean;
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
   const extra = getMockRequestHandlerExtra();
   return {
@@ -458,7 +500,7 @@ function getMockExtra({
     config: {
       ...extra.config,
       bucketS3: {
-        enabled: true,
+        enabled: bucketS3Enabled,
         bucket: 'tableau-workbooks',
         region: 'us-east-1',
         keyPrefix: 'mcp/',

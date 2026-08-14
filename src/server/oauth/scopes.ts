@@ -190,7 +190,7 @@ const toolScopeMap: Record<
   },
   'validate-upload-and-publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
-    api: new Set(['tableau:content:read', 'tableau:workbooks:create']),
+    api: new Set(['tableau:workbooks:create']),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],

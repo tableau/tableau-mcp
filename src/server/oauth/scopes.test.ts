@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import * as configModule from '../../config.js';
 import {
+  getRequiredApiScopesForTool,
   getSupportedApiScopes,
   getSupportedMcpScopes,
   getSupportedScopes,
@@ -286,6 +287,13 @@ describe('scopes', () => {
 
       const scopes = await getSupportedApiScopes();
       expect(scopes).toContain('tableau:workbooks:create');
+    });
+
+    it('should not require content read for validate-upload-and-publish-workbook', () => {
+      const scopes = getRequiredApiScopesForTool('validate-upload-and-publish-workbook');
+
+      expect(scopes).toEqual(['tableau:workbooks:create']);
+      expect(scopes).not.toContain('tableau:content:read');
     });
 
     it('should include tableau:users:update when adminToolsEnabled is true', async () => {

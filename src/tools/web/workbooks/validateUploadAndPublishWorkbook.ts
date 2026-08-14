@@ -4,7 +4,11 @@ import { basename } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ProjectNotAllowedError, UnknownError } from '../../../errors/mcpToolError.js';
+import {
+  ArgsValidationError,
+  ProjectNotAllowedError,
+  UnknownError,
+} from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -35,7 +39,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Path to a local TWB workbook file on the MCP server filesystem. Use this for local or stdio deployments.',
+      'Path to a local TWB workbook file on the MCP server filesystem. Only supported when staged S3 uploads are not configured.',
     ),
   name: z.string().min(1).describe('The name to give the published workbook.'),
   projectId: z
@@ -182,15 +186,20 @@ async function resolveWorkbookInput({
   workbookFilePath?: string;
 }): Promise<ResolvedWorkbook> {
   if (workbookUploadId && workbookFilePath) {
-    throw new UnknownError('Provide either workbookFilePath or workbookUploadId, not both.');
+    throw new ArgsValidationError('Provide either workbookFilePath or workbookUploadId, not both.');
   }
 
   if (workbookFilePath) {
+    if (config.enabled) {
+      throw new ArgsValidationError(
+        'workbookFilePath is only supported when staged S3 uploads are not configured. Call request-workbook-upload first and pass workbookUploadId.',
+      );
+    }
     return await resolveLocalWorkbookFile(workbookFilePath);
   }
 
   if (!workbookUploadId) {
-    throw new UnknownError(
+    throw new ArgsValidationError(
       'Either workbookFilePath or workbookUploadId must be provided. For local MCP servers, pass workbookFilePath. For hosted clients, call request-workbook-upload first and pass workbookUploadId.',
     );
   }
@@ -208,12 +217,12 @@ async function resolveWorkbookInput({
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {
   const fileName = basename(workbookFilePath);
   if (!isTwbFileName(fileName)) {
-    throw new UnknownError('workbookFilePath must point to a .twb file.');
+    throw new ArgsValidationError('workbookFilePath must point to a .twb file.');
   }
 
   const bytes = await readFile(workbookFilePath);
   if (bytes.byteLength === 0) {
-    throw new UnknownError('workbookFilePath must not point to an empty workbook file.');
+    throw new ArgsValidationError('workbookFilePath must not point to an empty workbook file.');
   }
 
   return { fileName, bytes };
