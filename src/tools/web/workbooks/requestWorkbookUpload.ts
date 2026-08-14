@@ -10,7 +10,6 @@ import { WebTool } from '../tool.js';
 import {
   requestStagedWorkbookUpload,
   RequestWorkbookUploadResult,
-  WORKBOOK_UPLOAD_CONTENT_TYPE,
 } from './stagedWorkbookUpload.js';
 
 const paramsSchema = {
@@ -44,7 +43,6 @@ export const getRequestWorkbookUploadTool = (
         extra,
         args: {
           fileName,
-          contentType: WORKBOOK_UPLOAD_CONTENT_TYPE,
         },
         callback: async () => {
           if (extra.tableauAuthInfo?.type === 'Passthrough') {

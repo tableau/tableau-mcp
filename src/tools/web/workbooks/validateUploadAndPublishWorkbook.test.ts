@@ -80,19 +80,22 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     vi.unstubAllEnvs();
   });
 
-  it('should create a tool instance with correct properties', () => {
+  it('should create a tool instance with correct properties', async () => {
     const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
+    const annotations = await Provider.from(tool.annotations);
+    const paramsSchema = await Provider.from(tool.paramsSchema);
+
     expect(tool.name).toBe('validate-upload-and-publish-workbook');
     expect(tool.description).toContain('Validates a TWB workbook');
-    expect(tool.paramsSchema).toMatchObject({
+    expect(paramsSchema).toMatchObject({
       workbookUploadId: expect.any(Object),
       workbookFilePath: expect.any(Object),
       name: expect.any(Object),
       projectId: expect.any(Object),
       overwrite: expect.any(Object),
     });
-    expect(tool.annotations.destructiveHint).toBe(true);
-    expect(tool.paramsSchema.name.safeParse('').success).toBe(false);
+    expect(annotations.destructiveHint).toBe(true);
+    expect(paramsSchema.name.safeParse('').success).toBe(false);
     expect(tool.description).toContain('specified Tableau project');
   });
 

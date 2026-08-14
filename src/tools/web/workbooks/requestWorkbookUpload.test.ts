@@ -145,7 +145,6 @@ describe('requestWorkbookUploadTool', () => {
 
     expect(logAndExecute.mock.calls[0][0].args).toEqual({
       fileName: 'BoltBikes Workbook.twb',
-      contentType: 'application/xml',
     });
   });
 });
