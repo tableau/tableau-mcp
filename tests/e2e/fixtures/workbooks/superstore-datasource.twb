@@ -1,9 +1,10 @@
 <?xml version='1.0' encoding='utf-8' ?>
 
 <!-- build 20262.26.0804.1806                               -->
-<workbook _.fcp.WorkbookFingerprinting.true...author-id='e6352fbc7f837649c7a5ce16beb7b7f0774a504263a1d9191de490ca3a1d0ba3' _.fcp.WorkbookFingerprinting.true...creator-author-id='e6352fbc7f837649c7a5ce16beb7b7f0774a504263a1d9191de490ca3a1d0ba3' _.fcp.WorkbookFingerprinting.true...creator-license-type='creator' _.fcp.WorkbookFingerprinting.true...creator-site-id='6727b85e28d5fcb1d446a1171660c0414264d1790320333baac5a06e2c1ba077' _.fcp.WorkbookFingerprinting.true...license-type='creator' _.fcp.WorkbookFingerprinting.true...site-id='6727b85e28d5fcb1d446a1171660c0414264d1790320333baac5a06e2c1ba077' original-version='18.1' source-build='2026.2.5 (20262.26.0804.1806)' version='18.1' xml:base='http://prod-ca-a.online.tableau.com' xmlns:user='http://www.tableausoftware.com/xml/user'>
+<workbook _.fcp.WorkbookFingerprinting.true...author-id='005f7d57f986e22bc31f6ae40bc79265272b75c003fe60a07d34f096c17da117' _.fcp.WorkbookFingerprinting.true...creator-author-id='005f7d57f986e22bc31f6ae40bc79265272b75c003fe60a07d34f096c17da117' _.fcp.WorkbookFingerprinting.true...creator-license-type='creator' _.fcp.WorkbookFingerprinting.true...creator-site-id='fad94c1d2e49c13bc40b825caca1f6a85ed6063571f703e383e7eac58532946d' _.fcp.WorkbookFingerprinting.true...license-type='creator' _.fcp.WorkbookFingerprinting.true...site-id='fad94c1d2e49c13bc40b825caca1f6a85ed6063571f703e383e7eac58532946d' original-version='18.1' source-build='2026.2.5 (20262.26.0804.1806)' version='18.1' xml:base='http://10ax.online.tableau.com' xmlns:user='http://www.tableausoftware.com/xml/user'>
   <document-format-change-manifest>
     <AnimationOnByDefault />
+    <_.fcp.ExtendedPublishedDataSourceUI.true...ExtendedPublishedDataSourceUI />
     <ISO8601DefaultCalendarPref />
     <MarkAnimation />
     <ObjectModelEncapsulateLegacy />
@@ -13,7 +14,7 @@
     <WindowsPersistSimpleIdentifiers />
     <_.fcp.WorkbookFingerprinting.true...WorkbookFingerprinting />
   </document-format-change-manifest>
-  <repository-location derived-from='http://localhost:9100/t/mcp-caa-test/workbooks/workbook?rev=1.0' id='workbook' path='/t/mcp-caa-test/workbooks' revision='1.0' site='mcp-caa-test' />
+  <repository-location derived-from='http://localhost:9100/t/mcp-test/workbooks/twb?rev=1.0' id='twb' path='/t/mcp-test/workbooks' revision='1.0' site='mcp-test' />
   <preferences />
   <datasources>
     <datasource hasconnection='false' inline='true' name='Parameters' version='18.1'>
@@ -27,13 +28,13 @@
         <range granularity='50' max='200' min='50' />
       </column>
     </datasource>
-    <datasource caption='Superstore Datasource' inline='true' name='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' version='18.1'>
-      <repository-location derived-from='http://localhost:9100/t/mcp-caa-test/datasources/SuperstoreDatasource?rev=1.0' id='SuperstoreDatasource' path='/t/mcp-caa-test/datasources' revision='1.0' site='mcp-caa-test' />
-      <connection channel='http' class='sqlproxy' composed-connection-name='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' dbname='SuperstoreDatasource' directory='dataserver' port='80' server='prod-ca-a.online.tableau.com' server-ds-friendly-name='Superstore Datasource' username=''>
+    <datasource caption='Superstore Datasource' inline='true' name='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' version='18.1'>
+      <repository-location derived-from='http://localhost:9100/t/mcp-test/datasources/SuperstoreDatasource?rev=1.0' id='SuperstoreDatasource' path='/t/mcp-test/datasources' revision='1.0' site='mcp-test' />
+      <connection _.fcp.ExtendedPublishedDataSourceUI.true...composed-connection-name='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' channel='http' class='sqlproxy' dbname='SuperstoreDatasource' directory='dataserver' port='80' server='10ax.online.tableau.com' server-ds-friendly-name='Superstore Datasource' username=''>
         <relation type='collection'>
-          <relation connection='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' name='sqlproxy' table='[sqlproxy]' type='table' />
-          <relation connection='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' name='sqlproxy' table='[sqlproxy]' type='table' />
-          <relation connection='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' name='sqlproxy' table='[sqlproxy]' type='table' />
+          <relation connection='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' name='sqlproxy' table='[sqlproxy]' type='table' />
+          <relation connection='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' name='sqlproxy' table='[sqlproxy]' type='table' />
+          <relation connection='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' name='sqlproxy' table='[sqlproxy]' type='table' />
         </relation>
         <calculations>
           <calculation column='[Calculation_1368249927221915648]' formula='SUM([Profit])/SUM([Sales])' />
@@ -2471,13 +2472,14 @@ END&quot;</attribute>
 
 <datasource :source-version='18.1' formatted-name='Sample - Superstore' inline='true' version='18.1' xml:base='http://localhost' xmlns:user='http://www.tableausoftware.com/xml/user'>
   <document-format-change-manifest>
+    <_.fcp.ExtendedPublishedDataSourceUI.true...ExtendedPublishedDataSourceUI />
     <ObjectModelEncapsulateLegacy />
     <ObjectModelTableType />
     <SchemaViewerObjectModel />
   </document-format-change-manifest>
-  <repository-location derived-from='http://localhost/t/mcp-caa-test/datasources/SuperstoreDatasource?rev=1.0' id='SuperstoreDatasource' path='/t/mcp-caa-test/datasources' revision='1.0' site='mcp-caa-test' />
-  <connection channel='http' class='sqlproxy' dbname='SuperstoreDatasource' directory='dataserver' port='8080' server='localhost'>
-    <relation connection='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' name='sqlproxy' table='[sqlproxy]' type='table' />
+  <repository-location derived-from='http://localhost/t/mcp-test/datasources/SuperstoreDatasource?rev=1.0' id='SuperstoreDatasource' path='/t/mcp-test/datasources' revision='1.0' site='mcp-test' />
+  <connection :databaseVariables='' channel='http' class='sqlproxy' dbname='SuperstoreDatasource' local-dataserver='true' port='8080' server='localhost'>
+    <relation connection='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' name='sqlproxy' table='[sqlproxy]' type='table' />
     <cols>
       <map key='[Calculation_1368249927221915648]' value='[sqlproxy].[Calculation_1368249927221915648]' />
       <map key='[Category]' value='[sqlproxy].[Category]' />
@@ -4762,8 +4764,8 @@ END&quot;</attribute>
   </group>
   <drill-paths>
     <drill-path name='Location'>
-      <field>[Country/Region]</field>
       <field>[Region]</field>
+      <field>[Country/Region]</field>
       <field>[State/Province]</field>
       <field>[City]</field>
       <field>[Postal Code]</field>
@@ -4791,19 +4793,19 @@ END&quot;</attribute>
   </datasource-dependencies>
   <object-graph>
     <objects>
-      <object caption='Orders' id='Orders_ECFCA1FB690A41FE803BC071773BA862'>
+      <object _.fcp.ExtendedPublishedDataSourceUI.true...origin-pds='Sample - Superstore' caption='Orders' id='Orders_ECFCA1FB690A41FE803BC071773BA862'>
         <properties context=''>
-          <relation connection='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' name='sqlproxy' table='[sqlproxy]' type='table' />
+          <relation connection='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' name='sqlproxy' table='[sqlproxy]' type='table' />
         </properties>
       </object>
-      <object caption='People' id='People_D73023733B004CC1B3CB1ACF62F4A965'>
+      <object _.fcp.ExtendedPublishedDataSourceUI.true...origin-pds='Sample - Superstore' caption='People' id='People_D73023733B004CC1B3CB1ACF62F4A965'>
         <properties context=''>
-          <relation connection='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' name='sqlproxy' table='[sqlproxy]' type='table' />
+          <relation connection='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' name='sqlproxy' table='[sqlproxy]' type='table' />
         </properties>
       </object>
-      <object caption='Returns' id='Returns_2AA0FE4D737A4F63970131D0E7480A03'>
+      <object _.fcp.ExtendedPublishedDataSourceUI.true...origin-pds='Sample - Superstore' caption='Returns' id='Returns_2AA0FE4D737A4F63970131D0E7480A03'>
         <properties context=''>
-          <relation connection='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' name='sqlproxy' table='[sqlproxy]' type='table' />
+          <relation connection='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' name='sqlproxy' table='[sqlproxy]' type='table' />
         </properties>
       </object>
     </objects>
@@ -4826,6 +4828,62 @@ END&quot;</attribute>
       </relationship>
     </relationships>
   </object-graph>
+  <_.fcp.ExtendedPublishedDataSourceUI.true...data-source-tree>
+    <pds caption='' datasource-url='' name='' name-in-immediate-child=''>
+      <parents>
+        <pds caption='Superstore Datasource' datasource-url='SuperstoreDatasource' name='Sample - Superstore' name-in-immediate-child='Sample - Superstore' />
+      </parents>
+    </pds>
+    <name-persistence-map>
+      <relation-alias-map>
+        <map alias-in-genesis-datasource='Orders' current-alias='Orders' genesis-datasource-name='Sample - Superstore' />
+        <map alias-in-genesis-datasource='People' current-alias='People' genesis-datasource-name='Sample - Superstore' />
+        <map alias-in-genesis-datasource='Returns' current-alias='Returns' genesis-datasource-name='Sample - Superstore' />
+      </relation-alias-map>
+      <object-id-map>
+        <map current-id='Orders_ECFCA1FB690A41FE803BC071773BA862' genesis-datasource-name='Sample - Superstore' id-in-genesis-datasource='Orders_ECFCA1FB690A41FE803BC071773BA862' />
+        <map current-id='People_D73023733B004CC1B3CB1ACF62F4A965' genesis-datasource-name='Sample - Superstore' id-in-genesis-datasource='People_D73023733B004CC1B3CB1ACF62F4A965' />
+        <map current-id='Returns_2AA0FE4D737A4F63970131D0E7480A03' genesis-datasource-name='Sample - Superstore' id-in-genesis-datasource='Returns_2AA0FE4D737A4F63970131D0E7480A03' />
+      </object-id-map>
+      <user-created-column-name-map>
+        <map current-name='[Calculation_1368249927221915648]' name-in-origin-datasource='[Calculation_1368249927221915648]' origin-datasource-name='Sample - Superstore' />
+        <map current-name='[Product Name (group)]' name-in-origin-datasource='[Product Name (group)]' origin-datasource-name='Sample - Superstore' />
+        <map current-name='[Profit (bin)]' name-in-origin-datasource='[Profit (bin)]' origin-datasource-name='Sample - Superstore' />
+        <map current-name='[Top Customers by Profit]' name-in-origin-datasource='[Top Customers by Profit]' origin-datasource-name='Sample - Superstore' />
+      </user-created-column-name-map>
+      <parameter-name-map>
+        <map current-name='[Parameter 1]' name-in-origin-datasource='[Parameter 1]' origin-datasource-name='Sample - Superstore' />
+        <map current-name='[Parameter 2]' name-in-origin-datasource='[Parameter 2]' origin-datasource-name='Sample - Superstore' />
+      </parameter-name-map>
+      <database-column-name-map>
+        <map current-name='[Category]' name-in-remote-database='[Category]' relation-current-alias='Orders' />
+        <map current-name='[City]' name-in-remote-database='[City]' relation-current-alias='Orders' />
+        <map current-name='[Country/Region]' name-in-remote-database='[Country/Region]' relation-current-alias='Orders' />
+        <map current-name='[Customer ID]' name-in-remote-database='[Customer ID]' relation-current-alias='Orders' />
+        <map current-name='[Customer Name]' name-in-remote-database='[Customer Name]' relation-current-alias='Orders' />
+        <map current-name='[Discount]' name-in-remote-database='[Discount]' relation-current-alias='Orders' />
+        <map current-name='[Order Date]' name-in-remote-database='[Order Date]' relation-current-alias='Orders' />
+        <map current-name='[Order ID (Returns)]' name-in-remote-database='[Order ID]' relation-current-alias='Returns' />
+        <map current-name='[Order ID]' name-in-remote-database='[Order ID]' relation-current-alias='Orders' />
+        <map current-name='[Postal Code]' name-in-remote-database='[Postal Code]' relation-current-alias='Orders' />
+        <map current-name='[Product ID]' name-in-remote-database='[Product ID]' relation-current-alias='Orders' />
+        <map current-name='[Product Name]' name-in-remote-database='[Product Name]' relation-current-alias='Orders' />
+        <map current-name='[Profit]' name-in-remote-database='[Profit]' relation-current-alias='Orders' />
+        <map current-name='[Quantity]' name-in-remote-database='[Quantity]' relation-current-alias='Orders' />
+        <map current-name='[Region (People)]' name-in-remote-database='[Region]' relation-current-alias='People' />
+        <map current-name='[Region]' name-in-remote-database='[Region]' relation-current-alias='Orders' />
+        <map current-name='[Regional Manager]' name-in-remote-database='[Regional Manager]' relation-current-alias='People' />
+        <map current-name='[Returned]' name-in-remote-database='[Returned]' relation-current-alias='Returns' />
+        <map current-name='[Row ID]' name-in-remote-database='[Row ID]' relation-current-alias='Orders' />
+        <map current-name='[Sales]' name-in-remote-database='[Sales]' relation-current-alias='Orders' />
+        <map current-name='[Segment]' name-in-remote-database='[Segment]' relation-current-alias='Orders' />
+        <map current-name='[Ship Date]' name-in-remote-database='[Ship Date]' relation-current-alias='Orders' />
+        <map current-name='[Ship Mode]' name-in-remote-database='[Ship Mode]' relation-current-alias='Orders' />
+        <map current-name='[State/Province]' name-in-remote-database='[State/Province]' relation-current-alias='Orders' />
+        <map current-name='[Sub-Category]' name-in-remote-database='[Sub-Category]' relation-current-alias='Orders' />
+      </database-column-name-map>
+    </name-persistence-map>
+  </_.fcp.ExtendedPublishedDataSourceUI.true...data-source-tree>
 </datasource>
 ]]>&quot;</attribute>
               <attribute datatype='string' name='dialect-definition'>&quot;<![CDATA[<dialect-definition>
@@ -7108,8 +7166,8 @@ END&quot;</attribute>
       </group>
       <drill-paths>
         <drill-path layered='true' name='Location'>
-          <field>[Country/Region]</field>
           <field>[Region]</field>
+          <field>[Country/Region]</field>
           <field>[State/Province]</field>
           <field>[City]</field>
           <field>[Postal Code]</field>
@@ -7137,19 +7195,19 @@ END&quot;</attribute>
       </datasource-dependencies>
       <object-graph>
         <objects>
-          <object caption='Orders' id='Orders_ECFCA1FB690A41FE803BC071773BA862'>
+          <object _.fcp.ExtendedPublishedDataSourceUI.true...origin-pds='Sample - Superstore' caption='Orders' id='Orders_ECFCA1FB690A41FE803BC071773BA862'>
             <properties context=''>
-              <relation connection='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' name='sqlproxy' table='[sqlproxy]' type='table' />
+              <relation connection='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' name='sqlproxy' table='[sqlproxy]' type='table' />
             </properties>
           </object>
-          <object caption='People' id='People_D73023733B004CC1B3CB1ACF62F4A965'>
+          <object _.fcp.ExtendedPublishedDataSourceUI.true...origin-pds='Sample - Superstore' caption='People' id='People_D73023733B004CC1B3CB1ACF62F4A965'>
             <properties context=''>
-              <relation connection='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' name='sqlproxy' table='[sqlproxy]' type='table' />
+              <relation connection='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' name='sqlproxy' table='[sqlproxy]' type='table' />
             </properties>
           </object>
-          <object caption='Returns' id='Returns_2AA0FE4D737A4F63970131D0E7480A03'>
+          <object _.fcp.ExtendedPublishedDataSourceUI.true...origin-pds='Sample - Superstore' caption='Returns' id='Returns_2AA0FE4D737A4F63970131D0E7480A03'>
             <properties context=''>
-              <relation connection='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' name='sqlproxy' table='[sqlproxy]' type='table' />
+              <relation connection='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' name='sqlproxy' table='[sqlproxy]' type='table' />
             </properties>
           </object>
         </objects>
@@ -7172,18 +7230,76 @@ END&quot;</attribute>
           </relationship>
         </relationships>
       </object-graph>
+      <_.fcp.ExtendedPublishedDataSourceUI.true...data-source-tree>
+        <pds caption='' datasource-url='' name='' name-in-immediate-child=''>
+          <parents>
+            <pds caption='Superstore Datasource' datasource-url='SuperstoreDatasource' name='Sample - Superstore' name-in-immediate-child='Sample - Superstore' />
+          </parents>
+        </pds>
+        <name-persistence-map>
+          <relation-alias-map>
+            <map alias-in-genesis-datasource='Orders' current-alias='Orders' genesis-datasource-name='Sample - Superstore' />
+            <map alias-in-genesis-datasource='People' current-alias='People' genesis-datasource-name='Sample - Superstore' />
+            <map alias-in-genesis-datasource='Returns' current-alias='Returns' genesis-datasource-name='Sample - Superstore' />
+          </relation-alias-map>
+          <object-id-map>
+            <map current-id='Orders_ECFCA1FB690A41FE803BC071773BA862' genesis-datasource-name='Sample - Superstore' id-in-genesis-datasource='Orders_ECFCA1FB690A41FE803BC071773BA862' />
+            <map current-id='People_D73023733B004CC1B3CB1ACF62F4A965' genesis-datasource-name='Sample - Superstore' id-in-genesis-datasource='People_D73023733B004CC1B3CB1ACF62F4A965' />
+            <map current-id='Returns_2AA0FE4D737A4F63970131D0E7480A03' genesis-datasource-name='Sample - Superstore' id-in-genesis-datasource='Returns_2AA0FE4D737A4F63970131D0E7480A03' />
+          </object-id-map>
+          <user-created-column-name-map>
+            <map current-name='[Calculation_1368249927221915648]' name-in-origin-datasource='[Calculation_1368249927221915648]' origin-datasource-name='Sample - Superstore' />
+            <map current-name='[Product Name (group)]' name-in-origin-datasource='[Product Name (group)]' origin-datasource-name='Sample - Superstore' />
+            <map current-name='[Profit (bin)]' name-in-origin-datasource='[Profit (bin)]' origin-datasource-name='Sample - Superstore' />
+            <map current-name='[Top Customers by Profit]' name-in-origin-datasource='[Top Customers by Profit]' origin-datasource-name='Sample - Superstore' />
+          </user-created-column-name-map>
+          <parameter-name-map>
+            <map current-name='[Parameter 1]' name-in-origin-datasource='[Parameter 1]' origin-datasource-name='Sample - Superstore' />
+            <map current-name='[Parameter 2]' name-in-origin-datasource='[Parameter 2]' origin-datasource-name='Sample - Superstore' />
+          </parameter-name-map>
+          <database-column-name-map>
+            <map current-name='[Category]' name-in-remote-database='[Category]' relation-current-alias='Orders' />
+            <map current-name='[City]' name-in-remote-database='[City]' relation-current-alias='Orders' />
+            <map current-name='[Country/Region]' name-in-remote-database='[Country/Region]' relation-current-alias='Orders' />
+            <map current-name='[Customer ID]' name-in-remote-database='[Customer ID]' relation-current-alias='Orders' />
+            <map current-name='[Customer Name]' name-in-remote-database='[Customer Name]' relation-current-alias='Orders' />
+            <map current-name='[Discount]' name-in-remote-database='[Discount]' relation-current-alias='Orders' />
+            <map current-name='[Order Date]' name-in-remote-database='[Order Date]' relation-current-alias='Orders' />
+            <map current-name='[Order ID (Returns)]' name-in-remote-database='[Order ID]' relation-current-alias='Returns' />
+            <map current-name='[Order ID]' name-in-remote-database='[Order ID]' relation-current-alias='Orders' />
+            <map current-name='[Postal Code]' name-in-remote-database='[Postal Code]' relation-current-alias='Orders' />
+            <map current-name='[Product ID]' name-in-remote-database='[Product ID]' relation-current-alias='Orders' />
+            <map current-name='[Product Name]' name-in-remote-database='[Product Name]' relation-current-alias='Orders' />
+            <map current-name='[Profit]' name-in-remote-database='[Profit]' relation-current-alias='Orders' />
+            <map current-name='[Quantity]' name-in-remote-database='[Quantity]' relation-current-alias='Orders' />
+            <map current-name='[Region (People)]' name-in-remote-database='[Region]' relation-current-alias='People' />
+            <map current-name='[Region]' name-in-remote-database='[Region]' relation-current-alias='Orders' />
+            <map current-name='[Regional Manager]' name-in-remote-database='[Regional Manager]' relation-current-alias='People' />
+            <map current-name='[Returned]' name-in-remote-database='[Returned]' relation-current-alias='Returns' />
+            <map current-name='[Row ID]' name-in-remote-database='[Row ID]' relation-current-alias='Orders' />
+            <map current-name='[Sales]' name-in-remote-database='[Sales]' relation-current-alias='Orders' />
+            <map current-name='[Segment]' name-in-remote-database='[Segment]' relation-current-alias='Orders' />
+            <map current-name='[Ship Date]' name-in-remote-database='[Ship Date]' relation-current-alias='Orders' />
+            <map current-name='[Ship Mode]' name-in-remote-database='[Ship Mode]' relation-current-alias='Orders' />
+            <map current-name='[State/Province]' name-in-remote-database='[State/Province]' relation-current-alias='Orders' />
+            <map current-name='[Sub-Category]' name-in-remote-database='[Sub-Category]' relation-current-alias='Orders' />
+          </database-column-name-map>
+        </name-persistence-map>
+      </_.fcp.ExtendedPublishedDataSourceUI.true...data-source-tree>
     </datasource>
   </datasources>
   <worksheets>
     <worksheet name='Sheet 1'>
-      <repository-location derived-from='http://localhost:9100/t/mcp-caa-test/workbooks/workbook/Sheet1?rev=' id='8158765' path='/t/mcp-caa-test/workbooks/workbook' revision='' site='mcp-caa-test' />
+      <repository-location derived-from='http://localhost:9100/t/mcp-test/workbooks/twb/Sheet1?rev=' id='7679443' path='/t/mcp-test/workbooks/twb' revision='' site='mcp-test' />
       <table>
         <view>
           <datasources>
-            <datasource caption='Superstore Datasource' name='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0' />
+            <datasource caption='Superstore Datasource' name='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5' />
           </datasources>
-          <datasource-dependencies datasource='sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0'>
+          <datasource-dependencies datasource='sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5'>
             <column aggregation='Sum' datatype='real' default-type='quantitative' layered='true' name='[Profit]' pivot='key' role='measure' type='quantitative' user-datatype='real' visual-totals='Default' />
+            <column aggregate-role-from='[State/Province]' aggregation='Count' datatype='string' default-type='nominal' layered='true' name='[Region]' pivot='key' role='dimension' type='nominal' user-datatype='string' visual-totals='Default' />
+            <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
             <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
           </datasource-dependencies>
           <aggregation value='true' />
@@ -7192,15 +7308,33 @@ END&quot;</attribute>
         <panes>
           <pane selection-relaxation-option='selection-relaxation-allow'>
             <view>
-              <breakdown value='auto' />
+              <breakdown value='on' />
             </view>
             <mark class='Automatic' />
+            <encodings>
+              <size column='[sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5].[sum:Profit:qk]' />
+              <color column='[sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5].[sum:Profit:qk]' />
+              <text column='[sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5].[none:Region:nk]' />
+            </encodings>
+            <style>
+              <style-rule element='mark'>
+                <format attr='mark-labels-show' value='true' />
+                <format attr='mark-labels-cull' value='true' />
+                <format attr='mark-labels-line-first' value='true' />
+                <format attr='mark-labels-line-last' value='true' />
+                <format attr='mark-labels-range-min' value='true' />
+                <format attr='mark-labels-range-max' value='true' />
+                <format attr='mark-labels-mode' value='all' />
+                <format attr='mark-labels-range-scope' value='pane' />
+                <format attr='mark-labels-range-field' value='' />
+              </style-rule>
+            </style>
           </pane>
         </panes>
         <rows />
-        <cols>[sqlproxy.0r0h7rn1fgyij61f3fmuz0apbxw0].[sum:Profit:qk]</cols>
+        <cols />
       </table>
-      <simple-id uuid='{56097881-2E74-4B77-AE77-97F9F062B66B}' />
+      <simple-id uuid='{067F7390-19A3-4B6C-BF3F-BAC6003EC75A}' />
     </worksheet>
   </worksheets>
   <windows>
@@ -7224,8 +7358,21 @@ END&quot;</attribute>
             <card type='title' />
           </strip>
         </edge>
+        <edge name='right'>
+          <strip size='160'>
+            <card param='[sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5].[sum:Profit:qk]' type='color' />
+            <card param='[sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5].[sum:Profit:qk]' type='size' />
+          </strip>
+        </edge>
       </cards>
-      <simple-id uuid='{D950C4D0-D455-4E62-B2F7-382B772259ED}' />
+      <viewpoint>
+        <highlight>
+          <color-one-way>
+            <field>[sqlproxy.0mdpe3b0pxyg9515cqplt1bbb1z5].[none:Region:nk]</field>
+          </color-one-way>
+        </highlight>
+      </viewpoint>
+      <simple-id uuid='{F5F90668-2ABA-45B2-8BFB-5EDEA268ECCD}' />
     </window>
   </windows>
 </workbook>
