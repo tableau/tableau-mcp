@@ -5,6 +5,7 @@ import * as episodeEvents from '../../../../desktop/episode-events.js';
 import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.js';
 import type { ApplyWorkbookDocumentOptions } from '../../../../desktop/externalApi/executorTypes.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
+import type { DashboardItem } from '../../../../desktop/externalApi/types.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -52,7 +53,7 @@ const inventory = {
     { id: 'styled-id', name: 'Styled', hidden: false },
     { id: 'plain-id', name: 'Plain', hidden: false },
   ],
-  dashboards: [],
+  dashboards: [] as DashboardItem[],
 };
 
 describe('apply-workbook-style', () => {
@@ -118,6 +119,38 @@ describe('apply-workbook-style', () => {
     );
   });
 
+  it('dispatches and verifies a live-shaped eligible dashboard title style change', async () => {
+    const dashboardBaseline =
+      '<workbook><worksheets/><dashboards><dashboard name="Sales and Profit Overview"><style/><zones><zone type-v2="layout-basic"><zone type-v2="text"><formatted-text><run fontcolor="#1f77b4" fontname="Tableau Light">Sales and Profit Overview</run></formatted-text></zone></zone></zones></dashboard></dashboards></workbook>';
+    const harness = makeHarness({
+      baseline: dashboardBaseline,
+      inventoryOverride: {
+        ...inventory,
+        worksheets: [],
+        dashboards: [
+          {
+            id: 'dashboard-id',
+            name: 'Sales and Profit Overview',
+            hidden: false,
+            containedSheets: [],
+          },
+        ],
+      },
+    });
+
+    const result = await callTool(harness.executor);
+
+    expect(result.isError).toBe(false);
+    expect(harness.posts).toHaveLength(1);
+    expect(harness.posts[0]).toContain('fontname="Tableau Semibold"');
+    expect(harness.posts[0]).toContain('fontcolor="#171321"');
+    expect(bodyOf(result)).toMatchObject({
+      applied: true,
+      changedEligibleIds: ['dashboard-id'],
+      verification: { status: 'passed', analyticalFingerprint: 'passed', idempotence: 'passed' },
+    });
+  });
+
   it('returns a terminal no-op with zero POST when every eligible style value already matches', async () => {
     const matching = baselineXml
       .replace('Tableau Light', 'Tableau Semibold')
@@ -139,12 +172,23 @@ describe('apply-workbook-style', () => {
     });
     expect(result.structuredContent?.nextAction).toMatchObject({
       kind: 'done',
+      label: 'No supported style changes needed',
       receipt: {
-        did: [expect.stringContaining('already matched')],
-        didNot: expect.any(Array),
+        did: [
+          expect.stringMatching(
+            /no supported style changes.*existing targets already matched.*no supported target/i,
+          ),
+        ],
+        didNot: expect.arrayContaining([
+          expect.stringContaining('not yet automated by apply-workbook-style'),
+        ]),
         unverified: [expect.stringContaining('rendered appearance')],
       },
     });
+    expect(JSON.stringify(result.structuredContent)).not.toMatch(/\bv1\b/i);
+    expect(JSON.stringify(result.structuredContent)).not.toMatch(
+      /(?:pack|schema|tableau build|style engine).*(?:incompatib|unsupported|not supported)/i,
+    );
   });
 
   it('rejects an invalid pack before any POST', async () => {
@@ -348,6 +392,12 @@ describe('apply-workbook-style', () => {
       verification: { status: 'passed' },
       nextAction: { kind: 'done', receipt: expect.any(Object) },
     });
+    expect(
+      JSON.stringify({ findings: body.findings, receipt: result.structuredContent }),
+    ).not.toMatch(/\bv1\b/i);
+    expect(JSON.stringify(result.structuredContent)).toContain(
+      'not yet automated by apply-workbook-style',
+    );
     expect(JSON.stringify(result)).not.toMatch(/render(?:ed|ing) (?:verified|confirmed)/i);
   });
 });

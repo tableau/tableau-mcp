@@ -65,10 +65,11 @@ export function applyWorkbookStyle(
   const findingCollector = new FindingCollector();
 
   for (const { artifact, element } of targets) {
-    if (
-      artifact.kind === 'worksheet' &&
-      styleWorksheet(element, artifact, stylePack, findingCollector)
-    ) {
+    const changed =
+      artifact.kind === 'worksheet'
+        ? styleWorksheet(element, artifact, stylePack, findingCollector)
+        : styleDashboard(element, stylePack);
+    if (changed) {
       changedIds.push(artifact.id);
     }
   }
@@ -191,6 +192,15 @@ function styleWorksheet(
   return changed;
 }
 
+function styleDashboard(dashboard: XmlElement, stylePack: TableauStylePackV2): boolean {
+  let changed = false;
+  for (const run of dashboardTitleRuns(dashboard)) {
+    changed = setExistingAttribute(run, 'fontname', stylePack.typography.titleFont) || changed;
+    changed = setExistingAttribute(run, 'fontcolor', stylePack.palette.text) || changed;
+  }
+  return changed;
+}
+
 function addPackFindings(
   document: XmlDocument,
   targets: Array<{ artifact: EligibleStyleArtifact; element: XmlElement }>,
@@ -199,55 +209,55 @@ function addPackFindings(
 ): void {
   findings.add({
     code: 'brand-primary-unsupported',
-    message: `brandPrimary ${stylePack.palette.brandPrimary} is unsupported in v1; no XML was invented`,
+    message: `brandPrimary ${stylePack.palette.brandPrimary} is not yet automated by apply-workbook-style; no workbook XML was invented`,
   });
   findings.add({
     code: 'currency-format-unsupported',
-    message: `Currency format ${stylePack.formats.currency} is unsupported in v1`,
+    message: `Currency format ${stylePack.formats.currency} is not yet automated by apply-workbook-style; no workbook XML was invented`,
   });
   findings.add({
     code: 'date-format-unsupported',
-    message: `Date format ${stylePack.formats.date} is unsupported in v1`,
+    message: `Date format ${stylePack.formats.date} is not yet automated by apply-workbook-style; no workbook XML was invented`,
   });
   findings.add({
     code: 'time-format-unsupported',
-    message: `Time format ${stylePack.formats.time} is unsupported in v1`,
+    message: `Time format ${stylePack.formats.time} is not yet automated by apply-workbook-style; no workbook XML was invented`,
   });
   findings.add({
     code: 'fiscal-quarter-format-unsupported',
-    message: `Fiscal quarter format ${stylePack.formats.fiscalQuarter} is unsupported in v1`,
+    message: `Fiscal quarter format ${stylePack.formats.fiscalQuarter} is not yet automated by apply-workbook-style; no workbook XML was invented`,
   });
   findings.add({
     code: 'fiscal-year-format-unsupported',
-    message: `Fiscal year format ${stylePack.formats.fiscalYear} is unsupported in v1`,
+    message: `Fiscal year format ${stylePack.formats.fiscalYear} is not yet automated by apply-workbook-style; no workbook XML was invented`,
   });
   findings.add({
     code: 'fiscal-year-quarter-format-unsupported',
-    message: `Fiscal year-quarter format ${stylePack.formats.fiscalYearQuarter} is unsupported in v1`,
+    message: `Fiscal year-quarter format ${stylePack.formats.fiscalYearQuarter} is not yet automated by apply-workbook-style; no workbook XML was invented`,
   });
 
   const dashboardTargets = targets.filter(({ artifact }) => artifact.kind === 'dashboard');
   if (dashboardTargets.length > 0) {
     findings.add({
       code: 'dashboard-outer-padding-unsupported',
-      message: `Dashboard outer padding ${stylePack.dashboard.outerPadding} is unsupported in v1`,
+      message: `Dashboard outer padding ${stylePack.dashboard.outerPadding} is not yet automated by apply-workbook-style; no workbook XML was invented`,
     });
     findings.add({
       code: 'dashboard-inner-spacing-unsupported',
-      message: `Dashboard inner spacing ${stylePack.dashboard.innerSpacing} is unsupported in v1`,
+      message: `Dashboard inner spacing ${stylePack.dashboard.innerSpacing} is not yet automated by apply-workbook-style; no workbook XML was invented`,
     });
     findings.add({
       code: 'dashboard-title-alignment-unsupported',
-      message: `Dashboard title alignment ${stylePack.dashboard.titleAlignment} is unsupported in v1`,
+      message: `Dashboard title alignment ${stylePack.dashboard.titleAlignment} is not yet automated by apply-workbook-style; no workbook XML was invented`,
     });
   }
   const styledDashboardIds = dashboardTargets
-    .filter(({ element }) => directChildren(element, 'style').length > 0)
+    .filter(({ element }) => directChildren(element, 'style').some(hasMeaningfulStyleContent))
     .map(({ artifact }) => artifact.id);
   if (styledDashboardIds.length > 0) {
     findings.add({
       code: 'dashboard-style-unsupported',
-      message: `${styledDashboardIds.length} eligible dashboards have existing styling; dashboard styling is unsupported in v1`,
+      message: `${styledDashboardIds.length} eligible dashboards have existing styling that is not yet automated by apply-workbook-style; existing workbook XML was preserved`,
       ...boundedArtifactSummary(styledDashboardIds),
     });
   }
@@ -255,7 +265,8 @@ function addPackFindings(
   if (hasGlobalDatasourceStyle(document)) {
     findings.add({
       code: 'global-datasource-style-unsupported',
-      message: 'Existing global datasource styles are unsupported in v1 and were preserved',
+      message:
+        'Existing global datasource styles are not yet automated by apply-workbook-style; existing workbook XML was preserved',
     });
   }
   if (stylePack.advisoryRules.avoidPieCharts) {
@@ -278,6 +289,40 @@ function hasGlobalDatasourceStyle(document: XmlDocument): boolean {
   for (const datasources of directChildren(root, 'datasources')) {
     for (const datasource of directChildren(datasources, 'datasource')) {
       if (directChildren(datasource, 'style').length > 0) return true;
+    }
+  }
+  return false;
+}
+
+function dashboardTitleRuns(dashboard: XmlElement): XmlElement[] {
+  const dashboardName = normalizeName(unnamespacedAttribute(dashboard, 'name')?.value ?? '');
+  if (dashboardName === '') return [];
+  const matches: XmlElement[] = [];
+  for (const zones of directChildren(dashboard, 'zones')) {
+    for (const layoutZone of directChildren(zones, 'zone')) {
+      if (unnamespacedAttribute(layoutZone, 'type-v2')?.value !== 'layout-basic') continue;
+      for (const textZone of directChildren(layoutZone, 'zone')) {
+        if (unnamespacedAttribute(textZone, 'type-v2')?.value !== 'text') continue;
+        for (const formattedText of directChildren(textZone, 'formatted-text')) {
+          const runs = directChildren(formattedText, 'run');
+          const text = normalizeName(runs.map((run) => run.textContent ?? '').join(''));
+          if (text === dashboardName) matches.push(...runs);
+        }
+      }
+    }
+  }
+  return matches;
+}
+
+function hasMeaningfulStyleContent(style: XmlElement): boolean {
+  for (let index = 0; index < style.attributes.length; index += 1) {
+    const attribute = style.attributes.item(index);
+    if (attribute && attribute.name !== 'xmlns' && attribute.prefix !== 'xmlns') return true;
+  }
+  for (let child: XmlNode | null = style.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType === 1 || child.nodeType === 7) return true;
+    if ((child.nodeType === 3 || child.nodeType === 4) && (child.nodeValue ?? '').trim() !== '') {
+      return true;
     }
   }
   return false;

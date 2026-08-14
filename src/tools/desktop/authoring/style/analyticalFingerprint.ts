@@ -8,6 +8,8 @@ import {
   Node as XmlNode,
 } from '@xmldom/xmldom';
 
+import type { EligibleStyleArtifact } from './eligibleArtifacts.js';
+
 type CanonicalNode = [kind: string, ...parts: unknown[]];
 
 export function analyticalFingerprint(xml: string): string {
@@ -16,11 +18,13 @@ export function analyticalFingerprint(xml: string): string {
 
 export function eligibleStyleScopeFingerprint(
   xml: string,
-  eligibleWorksheetNames: readonly string[],
+  eligibleArtifacts: readonly EligibleStyleArtifact[],
 ): string {
   return fingerprint(
     xml,
-    new Set(eligibleWorksheetNames.map((name) => name.trim().normalize('NFC'))),
+    new Set(
+      eligibleArtifacts.map(({ kind, name }) => `${kind}\u0000${name.trim().normalize('NFC')}`),
+    ),
   );
 }
 
@@ -31,18 +35,29 @@ export function workbookStyleStateFingerprint(xml: string): string {
   const worksheets = directChildren(root, 'worksheets').flatMap((collection) =>
     directChildren(collection, 'worksheet'),
   );
-  const presentation = worksheets.map((worksheet) => [
-    unnamespacedAttributeValue(worksheet, 'name')?.trim().normalize('NFC') ?? null,
-    supportedPresentationValues(worksheet),
-  ]);
+  const dashboards = directChildren(root, 'dashboards').flatMap((collection) =>
+    directChildren(collection, 'dashboard'),
+  );
+  const presentation = [
+    ...worksheets.map((worksheet) => [
+      'worksheet',
+      unnamespacedAttributeValue(worksheet, 'name')?.trim().normalize('NFC') ?? null,
+      supportedPresentationValues(worksheet),
+    ]),
+    ...dashboards.map((dashboard) => [
+      'dashboard',
+      unnamespacedAttributeValue(dashboard, 'name')?.trim().normalize('NFC') ?? null,
+      supportedPresentationValues(dashboard),
+    ]),
+  ];
   return createHash('sha256').update(JSON.stringify(presentation)).digest('hex');
 }
 
-function fingerprint(xml: string, eligibleWorksheetNames?: ReadonlySet<string>): string {
+function fingerprint(xml: string, eligibleArtifactKeys?: ReadonlySet<string>): string {
   const document = parseWorkbook(xml);
   const root = document.documentElement;
   if (!root) throw new Error('Cannot fingerprint an empty workbook XML document');
-  const canonical = canonicalizeElement(root, [], eligibleWorksheetNames);
+  const canonical = canonicalizeElement(root, [], eligibleArtifactKeys);
   if (!canonical) throw new Error('Cannot fingerprint an empty workbook XML document');
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
@@ -75,7 +90,7 @@ function assertWorkbookRoot(document: XmlDocument): void {
 function canonicalizeElement(
   element: XmlElement,
   ancestors: XmlElement[],
-  eligibleWorksheetNames?: ReadonlySet<string>,
+  eligibleArtifactKeys?: ReadonlySet<string>,
 ): CanonicalNode | undefined {
   const attributes = Array.from({ length: element.attributes.length }, (_, index) =>
     element.attributes.item(index),
@@ -84,14 +99,14 @@ function canonicalizeElement(
     .filter((attribute) => !isNamespaceDeclaration(attribute))
     .filter(
       (attribute) =>
-        !isSupportedPresentationAttribute(element, attribute, ancestors, eligibleWorksheetNames),
+        !isSupportedPresentationAttribute(element, attribute, ancestors, eligibleArtifactKeys),
     )
     .map((attribute) => [expandedName(attribute), attribute.value] as const)
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
 
   const children: CanonicalNode[] = [];
   let text = '';
-  const ignoreText = isSupportedPaletteColorLeaf(element, ancestors, eligibleWorksheetNames);
+  const ignoreText = isSupportedPaletteColorLeaf(element, ancestors, eligibleArtifactKeys);
   const flushText = (): void => {
     if (!ignoreText && text.trim() !== '') children.push(['text', text]);
     text = '';
@@ -107,7 +122,7 @@ function canonicalizeElement(
       const canonicalChild = canonicalizeElement(
         child as XmlElement,
         [...ancestors, element],
-        eligibleWorksheetNames,
+        eligibleArtifactKeys,
       );
       if (canonicalChild) children.push(canonicalChild);
     } else if (child.nodeType === 7) {
@@ -123,15 +138,16 @@ function isSupportedPresentationAttribute(
   element: XmlElement,
   attribute: XmlAttr,
   ancestors: XmlElement[],
-  eligibleWorksheetNames?: ReadonlySet<string>,
+  eligibleArtifactKeys?: ReadonlySet<string>,
 ): boolean {
   if (!isUnnamespaced(element) || !isUnnamespaced(attribute)) return false;
-  if (!presentationCanChange(ancestors, eligibleWorksheetNames)) return false;
+  if (!presentationCanChange(ancestors, eligibleArtifactKeys)) return false;
 
   if (
     isUnnamespacedNamed(element, 'run') &&
     (attribute.nodeName === 'fontname' || attribute.nodeName === 'fontcolor') &&
-    hasDirectPath(ancestors, ['worksheet', 'layout-options', 'title', 'formatted-text'])
+    (hasDirectPath(ancestors, ['worksheet', 'layout-options', 'title', 'formatted-text']) ||
+      isDashboardTitleRun(element, ancestors))
   ) {
     return true;
   }
@@ -171,9 +187,9 @@ function isSupportedPresentationAttribute(
 function isSupportedPaletteColorLeaf(
   element: XmlElement,
   ancestors: XmlElement[],
-  eligibleWorksheetNames?: ReadonlySet<string>,
+  eligibleArtifactKeys?: ReadonlySet<string>,
 ): boolean {
-  if (!presentationCanChange(ancestors, eligibleWorksheetNames)) return false;
+  if (!presentationCanChange(ancestors, eligibleArtifactKeys)) return false;
   if (
     !isUnnamespacedNamed(element, 'color') ||
     element.attributes.length !== 0 ||
@@ -206,15 +222,20 @@ function isSupportedPaletteColorLeaf(
 
 function presentationCanChange(
   ancestors: XmlElement[],
-  eligibleWorksheetNames?: ReadonlySet<string>,
+  eligibleArtifactKeys?: ReadonlySet<string>,
 ): boolean {
-  if (!eligibleWorksheetNames) return true;
-  const worksheet = ancestors.find((ancestor) => isUnnamespacedNamed(ancestor, 'worksheet'));
-  const name = unnamespacedAttributeValue(worksheet, 'name');
-  return name !== undefined && eligibleWorksheetNames.has(name.trim().normalize('NFC'));
+  if (!eligibleArtifactKeys) return true;
+  const artifact = ancestors.find(
+    (ancestor) =>
+      isUnnamespacedNamed(ancestor, 'worksheet') || isUnnamespacedNamed(ancestor, 'dashboard'),
+  );
+  const name = unnamespacedAttributeValue(artifact, 'name');
+  if (!artifact || name === undefined) return false;
+  const kind = artifact.nodeName as EligibleStyleArtifact['kind'];
+  return eligibleArtifactKeys.has(`${kind}\u0000${name.trim().normalize('NFC')}`);
 }
 
-function supportedPresentationValues(worksheet: XmlElement): unknown[] {
+function supportedPresentationValues(artifact: XmlElement): unknown[] {
   const values: unknown[] = [];
   const visit = (parent: XmlElement, ancestors: XmlElement[], parentPath: string): void => {
     const siblingCounts = new Map<string, number>();
@@ -242,8 +263,35 @@ function supportedPresentationValues(worksheet: XmlElement): unknown[] {
       visit(child, [...ancestors, child], path);
     }
   };
-  visit(worksheet, [worksheet], 'worksheet');
+  visit(artifact, [artifact], artifact.nodeName);
   return values;
+}
+
+function isDashboardTitleRun(run: XmlElement, ancestors: XmlElement[]): boolean {
+  if (
+    !hasDirectPath(ancestors, ['dashboard', 'zones', 'zone', 'zone', 'formatted-text']) ||
+    !isUnnamespacedNamed(run, 'run')
+  ) {
+    return false;
+  }
+  const dashboard = ancestors.at(-5);
+  const layoutZone = ancestors.at(-3);
+  const textZone = ancestors.at(-2);
+  const formattedText = ancestors.at(-1);
+  if (
+    unnamespacedAttributeValue(layoutZone, 'type-v2') !== 'layout-basic' ||
+    unnamespacedAttributeValue(textZone, 'type-v2') !== 'text'
+  ) {
+    return false;
+  }
+  const dashboardName = unnamespacedAttributeValue(dashboard, 'name');
+  if (dashboardName === undefined || !formattedText) return false;
+  const titleText = directChildren(formattedText, 'run')
+    .map((titleRun) => titleRun.textContent ?? '')
+    .join('')
+    .trim()
+    .normalize('NFC');
+  return titleText === dashboardName.trim().normalize('NFC');
 }
 
 function directChildren(parent: XmlNode, name?: string): XmlElement[] {

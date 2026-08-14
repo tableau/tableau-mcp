@@ -78,6 +78,19 @@ function worksheet(xml: string, name: string): XmlElement {
   return match;
 }
 
+function dashboard(xml: string, name: string): XmlElement {
+  const document = new DOMParser().parseFromString(xml, 'text/xml');
+  const root = document.documentElement;
+  if (!root) throw new Error('Missing workbook root');
+  const dashboards = directElements(root, 'dashboards')[0];
+  if (!dashboards) throw new Error('Missing dashboards collection');
+  const match = directElements(dashboards, 'dashboard').find(
+    (element) => element.getAttribute('name') === name,
+  );
+  if (!match) throw new Error(`Missing dashboard ${name}`);
+  return match;
+}
+
 describe('applyWorkbookStyle', () => {
   it('updates every supported existing style value only inside eligible worksheets', () => {
     const result = applyWorkbookStyle(workbookXml, stylePack, eligibleArtifacts);
@@ -103,6 +116,70 @@ describe('applyWorkbookStyle', () => {
       ).toEqual(['#F1ECFF', '#7759C2', '#D63939', '#FFFFFF', '#108548']);
     }
     expect(worksheet(result.workbookXml, 'Hidden Orphan').toString()).toContain('Old Title');
+  });
+
+  it('styles only the live-shaped eligible dashboard title text zone without inventing run attributes', () => {
+    const liveDashboardXml = `<workbook xmlns:ext="urn:test"><worksheets/><dashboards>
+      <dashboard name="Sales and Profit Overview"><style/><zones><zone h="100000" id="9" type-v2="layout-basic" w="100000" x="0" y="0">
+        <zone h="8000" id="10" type-v2="text" w="100000" x="0" y="0"><formatted-text><run bold="true" fontcolor="#1f77b4" fontname="Tableau Light" fontsize="16">Sales and </run><run ext:fontcolor="#keep" fontname="Tableau Light">Profit Overview</run></formatted-text></zone>
+        <zone h="8000" id="11" type-v2="text" w="100000" x="0" y="8000"><formatted-text><run fontcolor="#1f77b4" fontname="Tableau Light">Read the footnote</run></formatted-text></zone>
+      </zone></zones></dashboard>
+      <dashboard name="Plain"><style/></dashboard>
+      <dashboard name="Ineligible"><zones><zone type-v2="layout-basic"><zone type-v2="text"><formatted-text><run fontcolor="#1f77b4" fontname="Tableau Light">Ineligible</run></formatted-text></zone></zone></zones></dashboard>
+    </dashboards></workbook>`;
+    const eligibleDashboards: EligibleStyleArtifact[] = [
+      {
+        kind: 'dashboard',
+        id: 'sales-dashboard-id',
+        name: 'Sales and Profit Overview',
+        hidden: false,
+      },
+      { kind: 'dashboard', id: 'plain-dashboard-id', name: 'Plain', hidden: false },
+    ];
+
+    const first = applyWorkbookStyle(liveDashboardXml, stylePack, eligibleDashboards);
+    const transformed = dashboard(first.workbookXml, 'Sales and Profit Overview');
+    const runs = Array.from(transformed.getElementsByTagName('run'));
+
+    expect(first.changedEligibleIds).toEqual(['sales-dashboard-id']);
+    expect(first.unchangedEligibleIds).toEqual(['plain-dashboard-id']);
+    expect(runs[0].getAttribute('fontname')).toBe('Tableau Semibold');
+    expect(runs[0].getAttribute('fontcolor')).toBe('#171321');
+    expect(runs[1].getAttribute('fontname')).toBe('Tableau Semibold');
+    expect(runs[1].hasAttribute('fontcolor')).toBe(false);
+    expect(runs[1].getAttribute('ext:fontcolor')).toBe('#keep');
+    expect(runs[2].getAttribute('fontname')).toBe('Tableau Light');
+    expect(runs[2].getAttribute('fontcolor')).toBe('#1f77b4');
+    expect(dashboard(first.workbookXml, 'Ineligible').toString()).toContain(
+      'fontname="Tableau Light"',
+    );
+
+    const second = applyWorkbookStyle(first.workbookXml, stylePack, eligibleDashboards);
+    expect(second.workbookXml).toBe(first.workbookXml);
+    expect(second.changedEligibleIds).toEqual([]);
+    expect(second.unchangedEligibleIds).toEqual(['sales-dashboard-id', 'plain-dashboard-id']);
+  });
+
+  it('reports only meaningful existing dashboard style content as unsupported', () => {
+    const xml =
+      '<workbook><worksheets/><dashboards>' +
+      '<dashboard name="Empty"><style/></dashboard>' +
+      '<dashboard name="Meaningful"><style><style-rule element="dashboard"/></style></dashboard>' +
+      '</dashboards></workbook>';
+    const artifacts: EligibleStyleArtifact[] = [
+      { kind: 'dashboard', id: 'empty-id', name: 'Empty', hidden: false },
+      { kind: 'dashboard', id: 'meaningful-id', name: 'Meaningful', hidden: false },
+    ];
+
+    const result = applyWorkbookStyle(xml, stylePack, artifacts);
+
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        code: 'dashboard-style-unsupported',
+        eligibleArtifactIds: ['meaningful-id'],
+        affectedArtifactCount: 1,
+      }),
+    );
   });
 
   it('updates shared categorical colors one-to-one without changing map buckets, attributes, or order', () => {
@@ -320,6 +397,15 @@ describe('applyWorkbookStyle', () => {
       ]),
     );
     expect(result.findings.length).toBeLessThanOrEqual(32);
+    const userFacingFindings = result.findings.map(({ message }) => message).join('\n');
+    expect(userFacingFindings).not.toMatch(/\bv1\b/i);
+    expect(userFacingFindings).not.toMatch(
+      /(?:pack|schema|tableau build|style engine).*(?:incompatib|unsupported|not supported)/i,
+    );
+    for (const finding of result.findings.filter(({ code }) => code.endsWith('-unsupported'))) {
+      expect(finding.message).toContain('not yet automated by apply-workbook-style');
+      expect(finding.message).toMatch(/no workbook XML was invented|workbook XML was preserved/);
+    }
     expect(result.workbookXml).toContain('<datasource name="ds"><style>');
     expect(result.workbookXml).toContain('<dashboard name="Overview"><style>');
   });
@@ -344,7 +430,8 @@ describe('applyWorkbookStyle', () => {
   it('keeps a worksheet arity finding ahead of 25 styled-dashboard summaries', () => {
     const dashboards = Array.from(
       { length: 25 },
-      (_, index) => `<dashboard name="Dashboard ${index}"><style/></dashboard>`,
+      (_, index) =>
+        `<dashboard name="Dashboard ${index}"><style><style-rule element="dashboard"/></style></dashboard>`,
     ).join('');
     const xml = `<workbook><worksheets>${styledWorksheet('Mismatch')}</worksheets><dashboards>${dashboards}</dashboards></workbook>`;
     const artifacts: EligibleStyleArtifact[] = [

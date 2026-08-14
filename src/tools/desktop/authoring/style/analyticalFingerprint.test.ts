@@ -5,6 +5,7 @@ import {
   eligibleStyleScopeFingerprint,
   workbookStyleStateFingerprint,
 } from './analyticalFingerprint.js';
+import type { EligibleStyleArtifact } from './eligibleArtifacts.js';
 
 const baseXml = `<?xml version="1.0"?>
 <workbook xmlns:ext="urn:tableau:test">
@@ -161,6 +162,23 @@ describe('analyticalFingerprint', () => {
     expect(analyticalFingerprint(restyledTitle)).not.toBe(analyticalFingerprint(titled));
   });
 
+  it('ignores only live-shaped dashboard title run presentation values', () => {
+    const restyledTitle = supportedDashboardTitleXml
+      .replace('fontname="Tableau Light"', 'fontname="Tableau Semibold"')
+      .replace('fontcolor="#1f77b4"', 'fontcolor="#171321"');
+    const restyledArbitraryText = supportedDashboardTitleXml.replace(
+      'fontname="Arbitrary Light"',
+      'fontname="Arbitrary Bold"',
+    );
+
+    expect(analyticalFingerprint(restyledTitle)).toBe(
+      analyticalFingerprint(supportedDashboardTitleXml),
+    );
+    expect(analyticalFingerprint(restyledArbitraryText)).not.toBe(
+      analyticalFingerprint(supportedDashboardTitleXml),
+    );
+  });
+
   it('preserves non-owned run attributes and text as analytical by default', () => {
     const titled = baseXml.replace(
       '<dashboard name="Overview">',
@@ -301,14 +319,34 @@ describe('analyticalFingerprint', () => {
     expect(analyticalFingerprint(changedColor)).not.toBe(analyticalFingerprint(supportedStyleXml));
   });
 
-  it('exempts supported presentation only on named eligible worksheets', () => {
+  it('exempts supported presentation only on named eligible artifacts', () => {
     const changed = supportedStyleXml.replace('fontname="Old Title"', 'fontname="New Title"');
+    const eligible: EligibleStyleArtifact[] = [
+      { kind: 'worksheet', id: 'visible-id', name: 'Visible', hidden: false },
+    ];
 
-    expect(eligibleStyleScopeFingerprint(changed, ['Visible'])).toBe(
-      eligibleStyleScopeFingerprint(supportedStyleXml, ['Visible']),
+    expect(eligibleStyleScopeFingerprint(changed, eligible)).toBe(
+      eligibleStyleScopeFingerprint(supportedStyleXml, eligible),
     );
     expect(eligibleStyleScopeFingerprint(changed, [])).not.toBe(
       eligibleStyleScopeFingerprint(supportedStyleXml, []),
+    );
+  });
+
+  it('scopes the dashboard title presentation exemption to the eligible dashboard', () => {
+    const changed = supportedDashboardTitleXml.replace(
+      'fontname="Tableau Light"',
+      'fontname="Tableau Semibold"',
+    );
+    const eligible: EligibleStyleArtifact[] = [
+      { kind: 'dashboard', id: 'overview-id', name: 'Sales and Profit Overview', hidden: false },
+    ];
+
+    expect(eligibleStyleScopeFingerprint(changed, eligible)).toBe(
+      eligibleStyleScopeFingerprint(supportedDashboardTitleXml, eligible),
+    );
+    expect(eligibleStyleScopeFingerprint(changed, [])).not.toBe(
+      eligibleStyleScopeFingerprint(supportedDashboardTitleXml, []),
     );
   });
 
@@ -348,6 +386,17 @@ describe('analyticalFingerprint', () => {
     );
   });
 
+  it('retains supported dashboard title values in workbook style state', () => {
+    const changed = supportedDashboardTitleXml.replace(
+      'fontcolor="#1f77b4"',
+      'fontcolor="#171321"',
+    );
+
+    expect(workbookStyleStateFingerprint(changed)).not.toBe(
+      workbookStyleStateFingerprint(supportedDashboardTitleXml),
+    );
+  });
+
   it.each([
     [
       'unknown encoding type',
@@ -377,3 +426,6 @@ describe('analyticalFingerprint', () => {
 
 const supportedStyleXml =
   '<workbook xmlns:ext="urn:test"><worksheets><worksheet name="Visible"><layout-options><title><formatted-text><run fontname="Old Title" fontcolor="#010101" ext:fontname="keep">Title</run></formatted-text></title></layout-options><table><style><ext:before/><style-rule element="all"><format attr="font-family" value="Old Body"/><format attr="color" value="#020202"/></style-rule><style-rule element="table"><format attr="background-color" value="#030303"/></style-rule><style-rule element="mark" ext:semantic="keep"><encoding attr="color" field="[Category]" type="palette"><map marker="a" to="#111111" ext:to="keep"><bucket>&quot;A&quot;</bucket></map><map marker="b" to="#222222"><bucket>&quot;B&quot;</bucket></map></encoding><encoding attr="color" field="[Sales]" type="custom-interpolated"><color-palette custom="true" type="ordered-sequential"><color>#eeeeee</color><color>#111111</color></color-palette></encoding><encoding attr="color" field="[Profit]" type="custom-interpolated"><color-palette custom="true" type="ordered-diverging"><color>#aa0000</color><color>#ffffff</color><color>#00aa00</color><ext:color>#semantic</ext:color></color-palette></encoding></style-rule></style></table></worksheet></worksheets><dashboards/></workbook>';
+
+const supportedDashboardTitleXml =
+  '<workbook xmlns:ext="urn:test"><worksheets/><dashboards><dashboard name="Sales and Profit Overview"><zones><zone type-v2="layout-basic"><zone type-v2="text"><formatted-text><run fontcolor="#1f77b4" fontname="Tableau Light">Sales and Profit Overview</run></formatted-text></zone><zone type-v2="text"><formatted-text><run fontcolor="#222222" fontname="Arbitrary Light">Read the footnote</run></formatted-text></zone></zone></zones></dashboard></dashboards></workbook>';

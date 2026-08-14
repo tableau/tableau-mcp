@@ -113,7 +113,7 @@ export const getApplyWorkbookStyleTool = (
             baselineFingerprint = analyticalFingerprint(baselineResult.value.xml);
             baselineStyleScopeFingerprint = eligibleStyleScopeFingerprint(
               baselineResult.value.xml,
-              eligibleWorksheetNames(eligible),
+              eligible,
             );
             transformed = applyWorkbookStyle(baselineResult.value.xml, parsedPack, eligible);
           } catch (error) {
@@ -137,10 +137,8 @@ export const getApplyWorkbookStyleTool = (
             ).toErr();
           }
           if (
-            eligibleStyleScopeFingerprint(
-              transformed.workbookXml,
-              eligibleWorksheetNames(eligible),
-            ) !== baselineStyleScopeFingerprint
+            eligibleStyleScopeFingerprint(transformed.workbookXml, eligible) !==
+            baselineStyleScopeFingerprint
           ) {
             return new IncompleteOperationError(
               payloadFrom(transformed, false, true, {
@@ -168,12 +166,12 @@ export const getApplyWorkbookStyleTool = (
                 doneNextAction(
                   receipt({
                     did: [
-                      'Eligible workbook style values already matched the supplied style pack.',
+                      'No supported style changes were needed: existing targets already matched, or this workbook had no supported target for those values.',
                     ],
-                    didNot: unsupportedFindingReceipts(transformed.findings),
+                    didNot: findingReceiptLines(transformed.findings),
                     unverified: UNVERIFIED,
                   }),
-                  'Workbook style already matched',
+                  'No supported style changes needed',
                 ),
               ),
             );
@@ -254,7 +252,7 @@ export const getApplyWorkbookStyleTool = (
                     'Sent one guarded workbook style update and observed a settled readback.',
                     'Matched the settled readback to the original analytical fingerprint and zero remaining eligible style changes.',
                   ],
-                  didNot: unsupportedFindingReceipts(transformed.findings),
+                  didNot: findingReceiptLines(transformed.findings),
                   unverified: UNVERIFIED,
                 }),
                 'Workbook style applied and verified',
@@ -283,10 +281,6 @@ function readbackMatches(
   } catch {
     return false;
   }
-}
-
-function eligibleWorksheetNames(eligible: EligibleStyleArtifact[]): string[] {
-  return eligible.filter(({ kind }) => kind === 'worksheet').map(({ name }) => name);
 }
 
 function payloadFrom(
@@ -346,8 +340,17 @@ function unknownFailure(
   ).toErr();
 }
 
-function unsupportedFindingReceipts(findings: WorkbookStyleFinding[]): string[] {
-  return findings.map(({ code }) => `Unsupported style rule not applied: ${code}`);
+function findingReceiptLines(findings: WorkbookStyleFinding[]): string[] {
+  return findings.map(({ code, message }) => {
+    if (code.endsWith('-unsupported')) return `${message} (${code})`;
+    if (code.endsWith('-advisory')) {
+      return `Advisory only (${code}); no semantic workbook rewrite was attempted`;
+    }
+    if (code.endsWith('-arity-mismatch')) {
+      return `Skipped by apply-workbook-style (${code}); existing palette arity did not match`;
+    }
+    return `Additional style finding (${code}); inspect the bounded finding details`;
+  });
 }
 
 function boundedMessage(message: string): string {
