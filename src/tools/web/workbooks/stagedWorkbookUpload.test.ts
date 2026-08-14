@@ -29,26 +29,32 @@ const uploadId = '123e4567-e89b-42d3-a456-426614174000';
 describe('requestStagedWorkbookUpload', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-12T18:00:00.000Z'));
     mocks.createPresignedPutUrlToS3.mockResolvedValue('https://s3.example.com/signed-put');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('returns a presigned PUT URL and workbook upload id', async () => {
     const result = await requestStagedWorkbookUpload({
       fileName: 'BoltBikes Workbook.twb',
       config,
-      generateUuid: () => uploadId,
-      now: () => new Date('2026-08-12T18:00:00.000Z'),
     });
 
-    expect(result).toEqual({
-      workbookUploadId: uploadId,
+    expect(result).toMatchObject({
       uploadUrl: 'https://s3.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
     });
+    expect(result.workbookUploadId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
     expect(mocks.createPresignedPutUrlToS3).toHaveBeenCalledWith({
-      key: `mcp/workbook-uploads/${uploadId}/workbook.twb`,
+      key: `mcp/workbook-uploads/${result.workbookUploadId}/workbook.twb`,
       contentType: 'application/xml',
       bucket: 'tableau-workbooks',
       region: 'us-east-1',
@@ -61,7 +67,6 @@ describe('requestStagedWorkbookUpload', () => {
       requestStagedWorkbookUpload({
         fileName: 'workbook.xml',
         config,
-        generateUuid: () => uploadId,
       }),
     ).rejects.toThrow('filename must end in .twb');
   });
