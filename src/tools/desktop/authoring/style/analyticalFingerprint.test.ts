@@ -50,7 +50,7 @@ describe('analyticalFingerprint', () => {
     expect(analyticalFingerprint(baseXml)).toBe(analyticalFingerprint(serialized));
   });
 
-  it('ignores only style-owned presentation changes', () => {
+  it('keeps unsupported dashboard style and geometry changes analytical', () => {
     const restyled = baseXml
       .replace('#111111', '#ff0000')
       .replace(
@@ -59,7 +59,7 @@ describe('analyticalFingerprint', () => {
       )
       .replace('x="0" y="0" w="50000" h="50000"', 'x="500" y="1000" w="49000" h="48000"');
 
-    expect(analyticalFingerprint(restyled)).toBe(analyticalFingerprint(baseXml));
+    expect(analyticalFingerprint(restyled)).not.toBe(analyticalFingerprint(baseXml));
   });
 
   it.each([
@@ -135,17 +135,17 @@ describe('analyticalFingerprint', () => {
     expect(analyticalFingerprint(missingValue)).not.toBe(analyticalFingerprint(missingFormat));
   });
 
-  it('ignores a presentation leaf value owned by zone-style', () => {
+  it('keeps unsupported zone-style values analytical', () => {
     const padded = baseXml.replace(
       '<dashboard name="Overview">',
       '<dashboard name="Overview"><zone-style><format attr="padding" value="8"/></zone-style>',
     );
     const repadded = padded.replace('attr="padding" value="8"', 'attr="padding" value="16"');
 
-    expect(analyticalFingerprint(repadded)).toBe(analyticalFingerprint(padded));
+    expect(analyticalFingerprint(repadded)).not.toBe(analyticalFingerprint(padded));
   });
 
-  it('ignores style-owned run attributes while preserving the run itself', () => {
+  it('does not ignore title run attributes outside the supported worksheet path', () => {
     const titled = baseXml.replace(
       '<dashboard name="Overview">',
       '<dashboard name="Overview"><layout-options><title><formatted-text><run fontname="Tableau Regular" fontcolor="#111111">Overview</run></formatted-text></title></layout-options>',
@@ -154,7 +154,7 @@ describe('analyticalFingerprint', () => {
       .replace('fontname="Tableau Regular"', 'fontname="Tableau Semibold"')
       .replace('fontcolor="#111111"', 'fontcolor="#ff0000"');
 
-    expect(analyticalFingerprint(restyledTitle)).toBe(analyticalFingerprint(titled));
+    expect(analyticalFingerprint(restyledTitle)).not.toBe(analyticalFingerprint(titled));
   });
 
   it('preserves non-owned run attributes and text as analytical by default', () => {
@@ -231,4 +231,98 @@ describe('analyticalFingerprint', () => {
       'Cannot fingerprint malformed workbook XML',
     );
   });
+
+  it.each([
+    ['worksheet title font', 'fontname="Old Title"', 'fontname="Tableau Semibold"'],
+    ['worksheet title color', 'fontcolor="#010101"', 'fontcolor="#171321"'],
+    [
+      'worksheet body font',
+      'attr="font-family" value="Old Body"',
+      'attr="font-family" value="Tableau Regular"',
+    ],
+    ['worksheet text color', 'attr="color" value="#020202"', 'attr="color" value="#171321"'],
+    [
+      'worksheet background',
+      'attr="background-color" value="#030303"',
+      'attr="background-color" value="#FFFFFF"',
+    ],
+    ['categorical map color', 'marker="a" to="#111111"', 'marker="a" to="#7759C2"'],
+    ['sequential color', '<color>#eeeeee</color>', '<color>#F1ECFF</color>'],
+    ['diverging color', '<color>#aa0000</color>', '<color>#D63939</color>'],
+  ])('ignores the supported %s presentation value', (_label, before, after) => {
+    expect(analyticalFingerprint(supportedStyleXml.replace(before, after))).toBe(
+      analyticalFingerprint(supportedStyleXml),
+    );
+  });
+
+  it.each([
+    ['format selector', 'attr="font-family"', 'attr="font-size"'],
+    ['style-rule selector', 'element="table"', 'element="cell"'],
+    [
+      'encoding selector',
+      'attr="color" field="[Category]" type="palette"',
+      'attr="size" field="[Category]" type="palette"',
+    ],
+    ['encoding field', 'field="[Category]"', 'field="[Segment]"'],
+    ['categorical bucket', '<bucket>&quot;A&quot;</bucket>', '<bucket>&quot;B&quot;</bucket>'],
+    [
+      'categorical map order',
+      '<map marker="a" to="#111111" ext:to="keep"><bucket>&quot;A&quot;</bucket></map><map marker="b" to="#222222"><bucket>&quot;B&quot;</bucket></map>',
+      '<map marker="b" to="#222222"><bucket>&quot;B&quot;</bucket></map><map marker="a" to="#111111" ext:to="keep"><bucket>&quot;A&quot;</bucket></map>',
+    ],
+    [
+      'palette count',
+      '<color>#111111</color></color-palette>',
+      '<color>#111111</color><color>#222222</color></color-palette>',
+    ],
+    ['unknown attribute', 'marker="a"', 'marker="changed"'],
+    ['namespaced attribute', 'ext:semantic="keep"', 'ext:semantic="changed"'],
+    ['unknown sibling order', '<ext:before/><style-rule', '<style-rule'],
+  ])('changes for semantic %s changes', (_label, before, after) => {
+    expect(analyticalFingerprint(supportedStyleXml.replace(before, after))).not.toBe(
+      analyticalFingerprint(supportedStyleXml),
+    );
+  });
+
+  it('does not ignore namespaced collisions at supported presentation paths', () => {
+    const changedRun = supportedStyleXml.replace('ext:fontname="keep"', 'ext:fontname="changed"');
+    const changedMap = supportedStyleXml.replace('ext:to="keep"', 'ext:to="changed"');
+    const changedColor = supportedStyleXml.replace(
+      '<ext:color>#semantic</ext:color>',
+      '<ext:color>#changed</ext:color>',
+    );
+
+    expect(analyticalFingerprint(changedRun)).not.toBe(analyticalFingerprint(supportedStyleXml));
+    expect(analyticalFingerprint(changedMap)).not.toBe(analyticalFingerprint(supportedStyleXml));
+    expect(analyticalFingerprint(changedColor)).not.toBe(analyticalFingerprint(supportedStyleXml));
+  });
+
+  it.each([
+    [
+      'unknown encoding type',
+      'type="custom-interpolated"><color-palette custom="true" type="ordered-sequential"',
+      'type="semantic-unknown"><color-palette custom="true" type="ordered-sequential"',
+    ],
+    [
+      'missing custom marker',
+      '<color-palette custom="true" type="ordered-sequential">',
+      '<color-palette type="ordered-sequential">',
+    ],
+    [
+      'false custom marker',
+      '<color-palette custom="true" type="ordered-sequential">',
+      '<color-palette custom="false" type="ordered-sequential">',
+    ],
+  ])(
+    'keeps color values analytical for an interpolated palette with %s',
+    (_label, before, after) => {
+      const unsupported = supportedStyleXml.replace(before, after);
+      const changedColor = unsupported.replace('<color>#eeeeee</color>', '<color>#changed</color>');
+
+      expect(analyticalFingerprint(changedColor)).not.toBe(analyticalFingerprint(unsupported));
+    },
+  );
 });
+
+const supportedStyleXml =
+  '<workbook xmlns:ext="urn:test"><worksheets><worksheet name="Visible"><layout-options><title><formatted-text><run fontname="Old Title" fontcolor="#010101" ext:fontname="keep">Title</run></formatted-text></title></layout-options><table><style><ext:before/><style-rule element="all"><format attr="font-family" value="Old Body"/><format attr="color" value="#020202"/></style-rule><style-rule element="table"><format attr="background-color" value="#030303"/></style-rule><style-rule element="mark" ext:semantic="keep"><encoding attr="color" field="[Category]" type="palette"><map marker="a" to="#111111" ext:to="keep"><bucket>&quot;A&quot;</bucket></map><map marker="b" to="#222222"><bucket>&quot;B&quot;</bucket></map></encoding><encoding attr="color" field="[Sales]" type="custom-interpolated"><color-palette custom="true" type="ordered-sequential"><color>#eeeeee</color><color>#111111</color></color-palette></encoding><encoding attr="color" field="[Profit]" type="custom-interpolated"><color-palette custom="true" type="ordered-diverging"><color>#aa0000</color><color>#ffffff</color><color>#00aa00</color><ext:color>#semantic</ext:color></color-palette></encoding></style-rule></style></table></worksheet></worksheets><dashboards/></workbook>';

@@ -5,43 +5,10 @@ import {
   Document as XmlDocument,
   DOMParser,
   Element as XmlElement,
+  Node as XmlNode,
 } from '@xmldom/xmldom';
 
 type CanonicalNode = [kind: string, ...parts: unknown[]];
-
-const PRESENTATION_FORMAT_ATTRIBUTES = new Set([
-  'background',
-  'border-color',
-  'color',
-  'fill',
-  'font',
-  'font-color',
-  'font-face',
-  'font-size',
-  'font-weight',
-  'margin',
-  'padding',
-  'text-align',
-]);
-
-const STYLE_CONTAINER_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
-  style: new Set(),
-  'style-rule': new Set(['element']),
-  'zone-style': new Set(),
-};
-
-const STYLE_OWNED_ELEMENT_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
-  zone: new Set(['h', 'w', 'x', 'y']),
-  run: new Set([
-    'bold',
-    'fontalignment',
-    'fontcolor',
-    'fontname',
-    'fontsize',
-    'italic',
-    'underline',
-  ]),
-};
 
 export function analyticalFingerprint(xml: string): string {
   const document = parseWorkbook(xml);
@@ -81,25 +48,24 @@ function canonicalizeElement(
   element: XmlElement,
   ancestors: XmlElement[],
 ): CanonicalNode | undefined {
-  if (isIgnoredPresentationFormat(element, ancestors)) return undefined;
-
   const attributes = Array.from({ length: element.attributes.length }, (_, index) =>
     element.attributes.item(index),
   )
     .filter((attribute): attribute is XmlAttr => Boolean(attribute))
     .filter((attribute) => !isNamespaceDeclaration(attribute))
-    .filter((attribute) => !isStyleOwnedElementAttribute(element, attribute))
+    .filter((attribute) => !isSupportedPresentationAttribute(element, attribute, ancestors))
     .map((attribute) => [expandedName(attribute), attribute.value] as const)
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
 
   const children: CanonicalNode[] = [];
   let text = '';
+  const ignoreText = isSupportedPaletteColorLeaf(element, ancestors);
   const flushText = (): void => {
-    if (text.trim() !== '') children.push(['text', text]);
+    if (!ignoreText && text.trim() !== '') children.push(['text', text]);
     text = '';
   };
 
-  for (let child = element.firstChild; child; child = child.nextSibling) {
+  for (let child: XmlNode | null = element.firstChild; child; child = child.nextSibling) {
     if (child.nodeType === 3 || child.nodeType === 4) {
       text += child.nodeValue ?? '';
       continue;
@@ -114,60 +80,107 @@ function canonicalizeElement(
   }
   flushText();
 
-  if (isEmptyStyleContainer(element, attributes, children)) return undefined;
   return ['element', expandedName(element), attributes, children];
 }
 
-function isIgnoredPresentationFormat(element: XmlElement, ancestors: XmlElement[]): boolean {
-  if (!isUnnamespacedNamed(element, 'format')) return false;
+function isSupportedPresentationAttribute(
+  element: XmlElement,
+  attribute: XmlAttr,
+  ancestors: XmlElement[],
+): boolean {
+  if (!isUnnamespaced(element) || !isUnnamespaced(attribute)) return false;
+
   if (
-    !ancestors.some(
-      (ancestor) =>
-        isUnnamespacedNamed(ancestor, 'style') || isUnnamespacedNamed(ancestor, 'zone-style'),
-    )
+    isUnnamespacedNamed(element, 'run') &&
+    (attribute.nodeName === 'fontname' || attribute.nodeName === 'fontcolor') &&
+    hasDirectPath(ancestors, ['worksheet', 'layout-options', 'title', 'formatted-text'])
+  ) {
+    return true;
+  }
+
+  if (
+    isUnnamespacedNamed(element, 'format') &&
+    attribute.nodeName === 'value' &&
+    hasDirectPath(ancestors, ['worksheet', 'table', 'style', 'style-rule'])
+  ) {
+    const selector = unnamespacedAttributeValue(element, 'attr');
+    if (selector === 'font-family' || selector === 'color') return true;
+    const styleRule = ancestors.at(-1);
+    return (
+      selector === 'background-color' &&
+      isUnnamespacedNamed(styleRule ?? null, 'style-rule') &&
+      unnamespacedAttributeValue(styleRule, 'element') === 'table'
+    );
+  }
+
+  if (
+    isUnnamespacedNamed(element, 'map') &&
+    attribute.nodeName === 'to' &&
+    hasDirectPath(ancestors, ['worksheet', 'table', 'style', 'style-rule', 'encoding'])
+  ) {
+    const styleRule = ancestors.at(-2);
+    const encoding = ancestors.at(-1);
+    return (
+      unnamespacedAttributeValue(styleRule, 'element') === 'mark' &&
+      unnamespacedAttributeValue(encoding, 'attr') === 'color' &&
+      unnamespacedAttributeValue(encoding, 'type') === 'palette'
+    );
+  }
+
+  return false;
+}
+
+function isSupportedPaletteColorLeaf(element: XmlElement, ancestors: XmlElement[]): boolean {
+  if (
+    !isUnnamespacedNamed(element, 'color') ||
+    element.attributes.length !== 0 ||
+    !hasDirectPath(ancestors, [
+      'worksheet',
+      'table',
+      'style',
+      'style-rule',
+      'encoding',
+      'color-palette',
+    ])
   ) {
     return false;
   }
-  const formatAttribute = element.getAttribute('attr');
-  if (!formatAttribute || !PRESENTATION_FORMAT_ATTRIBUTES.has(formatAttribute)) return false;
-
-  const attributeNames = Array.from(
-    { length: element.attributes.length },
-    (_, index) => element.attributes.item(index)?.name,
-  ).filter((name): name is string => Boolean(name));
-  return (
-    attributeNames.length === 2 &&
-    attributeNames.includes('attr') &&
-    attributeNames.includes('value') &&
-    hasNoMeaningfulChildren(element)
-  );
+  const styleRule = ancestors.at(-3);
+  const encoding = ancestors.at(-2);
+  const palette = ancestors.at(-1);
+  const paletteType = unnamespacedAttributeValue(palette, 'type');
+  if (
+    unnamespacedAttributeValue(styleRule, 'element') !== 'mark' ||
+    unnamespacedAttributeValue(encoding, 'attr') !== 'color' ||
+    unnamespacedAttributeValue(encoding, 'type') !== 'custom-interpolated' ||
+    unnamespacedAttributeValue(palette, 'custom') !== 'true' ||
+    (paletteType !== 'ordered-sequential' && paletteType !== 'ordered-diverging')
+  ) {
+    return false;
+  }
+  return hasOnlyText(element);
 }
 
-function hasNoMeaningfulChildren(element: XmlElement): boolean {
-  for (let child = element.firstChild; child; child = child.nextSibling) {
-    if (child.nodeType === 1 || child.nodeType === 7) return false;
-    if ((child.nodeType === 3 || child.nodeType === 4) && (child.nodeValue ?? '').trim() !== '') {
-      return false;
-    }
+function hasOnlyText(element: XmlElement): boolean {
+  if (!element.firstChild) return false;
+  for (let child: XmlNode | null = element.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType !== 3 && child.nodeType !== 4) return false;
   }
   return true;
 }
 
-function isStyleOwnedElementAttribute(element: XmlElement, attribute: XmlAttr): boolean {
-  if (!isUnnamespaced(element) || !isUnnamespaced(attribute)) return false;
-  const owned = STYLE_OWNED_ELEMENT_ATTRIBUTES[element.localName ?? element.nodeName];
-  return Boolean(owned?.has(attribute.localName ?? attribute.nodeName));
+function hasDirectPath(ancestors: XmlElement[], path: string[]): boolean {
+  if (ancestors.length < path.length) return false;
+  const offset = ancestors.length - path.length;
+  return path.every((name, index) => isUnnamespacedNamed(ancestors[offset + index], name));
 }
 
-function isEmptyStyleContainer(
-  element: XmlElement,
-  attributes: ReadonlyArray<readonly [string, string]>,
-  children: CanonicalNode[],
-): boolean {
-  if (!isUnnamespaced(element)) return false;
-  const allowedAttributes = STYLE_CONTAINER_ATTRIBUTES[element.localName ?? element.nodeName];
-  if (!allowedAttributes || children.length !== 0) return false;
-  return attributes.every(([name]) => allowedAttributes.has(name));
+function unnamespacedAttributeValue(
+  element: XmlElement | undefined,
+  name: string,
+): string | undefined {
+  const attribute = element?.getAttributeNode(name);
+  return attribute && isUnnamespaced(attribute) ? attribute.value : undefined;
 }
 
 function expandedName(node: XmlElement | XmlAttr): string {
