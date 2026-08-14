@@ -230,7 +230,9 @@ export async function loadDashboardXml({
     }
     // Preflight warnings ride along so apply responses can compute the host
     // verification receipt (W-23447506) without re-running validation.
-    return Ok({ validationWarnings: validation.issues });
+    return Ok({
+      validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
+    });
   }
 
   const result = await loadDashboardXmlViaExternalApi({

@@ -28,6 +28,37 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
+describe('sourceSha256', () => {
+  it('ignores navigation-only active and maximized window attributes', () => {
+    const beforeNavigation =
+      '<workbook><windows><window class="worksheet" name="Sheet 1" active="true" maximized="true"><cards /></window></windows></workbook>';
+    const afterNavigation =
+      '<workbook><windows><window class="worksheet" name="Sheet 1" active="false" maximized="false"><cards /></window></windows></workbook>';
+
+    expect(sourceSha256(afterNavigation)).toBe(sourceSha256(beforeNavigation));
+  });
+
+  it('still hashes structural content inside windows', () => {
+    const beforeChange =
+      '<workbook><windows><window class="dashboard" name="Dashboard 1" active="true"><simple-id uuid="{A}" /></window></windows></workbook>';
+    const afterChange =
+      '<workbook><windows><window class="dashboard" name="Dashboard 1" active="false"><simple-id uuid="{B}" /></window></windows></workbook>';
+
+    expect(sourceSha256(afterChange)).not.toBe(sourceSha256(beforeChange));
+  });
+
+  it('still hashes the <active> child element of a window (distinct from the active attribute)', () => {
+    const before =
+      '<workbook><windows><window class="dashboard" name="Dashboard 1" active="true"><active id="1" /></window></windows></workbook>';
+    const after =
+      '<workbook><windows><window class="dashboard" name="Dashboard 1" active="true"><active id="2" /></window></windows></workbook>';
+
+    // The active="true" attribute is identical in both; only the <active id> child differs.
+    // The scrub must leave that child intact so a real structural edit is still detected.
+    expect(sourceSha256(after)).not.toBe(sourceSha256(before));
+  });
+});
+
 describe('cache fingerprint sidecars', () => {
   it('writes sidecar metadata and accepts the same current instance', () => {
     const file = tempFile();

@@ -6,6 +6,7 @@ import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import { ExternalApiToolExecutor } from '../externalApi/executorTypes.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedWindow } from '../metadata/types.js';
+import * as validationRegistry from '../validation/registry.js';
 import { loadDashboardXml } from './loadDashboardXml.js';
 
 // Focus is a required argument at every write seam. Suites that are not about
@@ -269,6 +270,41 @@ describe('loadDashboardXml (External Client API transport)', () => {
     );
     return { executor, calls };
   }
+
+  it('omits a pre-existing error from cached dashboard validation warnings', async () => {
+    const existingIssue = {
+      ruleId: 'existing',
+      severity: 'error' as const,
+      message: 'already broken',
+    };
+    vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({
+      valid: false,
+      issues: [existingIssue],
+    });
+    const applyDashboardDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      listDashboards: vi
+        .fn()
+        .mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: dashboardName }] })),
+      getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: validXml })),
+      applyDashboardDocument,
+    });
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) expect(result.value.validationWarnings).toEqual([]);
+    expect(applyDashboardDocument).toHaveBeenCalledOnce();
+  });
 
   it('surfaces sheet-absent (no whole-workbook fallback) when requireExistingSheet is set', async () => {
     const { executor, calls } = absentDashboardExecutor(['Some Other DB']);

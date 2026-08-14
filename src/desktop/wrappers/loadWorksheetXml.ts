@@ -308,6 +308,7 @@ export async function loadWorksheetXml({
   requireExistingSheet = false,
   artifactApply,
   expectedSourceHash,
+  callerPreflightsBlockingIssues = false,
 }: {
   worksheetName: string;
   xml: string;
@@ -322,6 +323,7 @@ export async function loadWorksheetXml({
   requireExistingSheet?: boolean;
   artifactApply?: ArtifactWorksheetApplyOptions;
   expectedSourceHash?: string;
+  callerPreflightsBlockingIssues?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -464,7 +466,7 @@ export async function loadWorksheetXml({
         sheetName: canonicalName,
         fragmentXml: xml,
         expectedSourceHash,
-        validationContext: cachedApply ? 'worksheet' : undefined,
+        validationContext: cachedApply && !callerPreflightsBlockingIssues ? 'worksheet' : undefined,
         focus: canonicalFocus,
         executor,
         signal,
@@ -507,7 +509,10 @@ export async function loadWorksheetXml({
       }
       // Preflight warnings ride along so apply responses can compute the host
       // verification receipt (W-23447506) without re-running validation.
-      return Ok({ ...outcomeResult.value, validationWarnings: validation.issues });
+      return Ok({
+        ...outcomeResult.value,
+        validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
+      });
     });
   }
 
