@@ -224,21 +224,6 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     });
   });
 
-  it('verifies consequential authoring with exactly one inline export and never replays mutations on export failure', () => {
-    const renderVerification = routes.find((route) => route.id === 'render-verification');
-
-    expect(renderVerification).toMatchObject({
-      trigger: 'after consequential authoring',
-      toolSequence: ['export-worksheet-image', 'export-dashboard-image'],
-      stopConditions: [
-        'call exactly one export',
-        'omit filePath unless the user asked to save',
-        'never replay the mutation',
-        'not a chat preview',
-      ],
-    });
-  });
-
   it.each(routes)('route "$id" declares a tool sequence and stop conditions', (route) => {
     expect(route.toolSequence.length).toBeGreaterThan(0);
     expect(route.stopConditions.length).toBeGreaterThan(0);

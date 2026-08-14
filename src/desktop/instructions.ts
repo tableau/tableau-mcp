@@ -140,21 +140,6 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
-    id: 'render-verification',
-    trigger: 'after consequential authoring',
-    action:
-      'call exactly one export: export-worksheet-image for a worksheet, or export-dashboard-image for a dashboard; omit filePath unless the user asked to save. If export fails, never replay the mutation. Use the result to verify the authored viz, not a chat preview.',
-    toolSequence: ['export-worksheet-image', 'export-dashboard-image'],
-    stopConditions: [
-      'call exactly one export',
-      'omit filePath unless the user asked to save',
-      'never replay the mutation',
-      'not a chat preview',
-    ],
-    requiredEvidence: ['one rendered worksheet or dashboard after the mutation'],
-  },
-  {
-    kind: 'route',
     id: 'data-value-question',
     trigger: 'a data-value question',
     action: 'on a populated worksheet, call get-summary-data; answer only from returned rows.',

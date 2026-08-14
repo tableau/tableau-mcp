@@ -82,18 +82,15 @@ export function buildSheetImageToolResult({
   // Label SOLELY from the server-declared actual format. The render format is constrained to
   // image/png or image/svg+xml, so SVG only when the field says so (case/whitespace-insensitive);
   // anything else — png, absent, blank — is png. No byte-sniff fallback. All downstream
-  // sizing/labelling uses this. The bytes are still decoded for SVG text emission and cache write.
+  // sizing/labelling uses this. The bytes are still decoded for the footprint calc and cache write.
   const decoded = Buffer.from(imageBase64, 'base64');
   const normalized = (image.effectiveMimeType ?? '').trim().toLowerCase();
   const actualMimeType = normalized === 'image/svg+xml' ? 'image/svg+xml' : 'image/png';
 
   const capBytes = config.inlineImageMaxBytes;
-  const decodedText = actualMimeType === 'image/svg+xml' ? decoded.toString('utf-8') : undefined;
-  const inlineBytes = inlineImageFootprintBytes(
-    imageBase64,
-    actualMimeType,
-    decodedText === undefined ? 0 : Buffer.byteLength(JSON.stringify(decodedText), 'utf8') - 2,
-  );
+  // Bytes that actually ride inline: raster is one base64 block, but SVG is dual-emitted
+  // (decoded text + base64 image block), so it costs ~2x its decoded size.
+  const inlineBytes = inlineImageFootprintBytes(decoded.length, actualMimeType);
 
   // (3) Over the cap: write the decoded bytes to a cache file and return its path.
   if (isOverInlineImageCap(inlineBytes, capBytes)) {
@@ -124,7 +121,7 @@ export function buildSheetImageToolResult({
     return {
       isError: false,
       content: [
-        { type: 'text', text: decodedText ?? '' },
+        { type: 'text', text: decoded.toString('utf-8') },
         { type: 'image', data: imageBase64, mimeType: actualMimeType },
       ],
     };

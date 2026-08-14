@@ -154,10 +154,10 @@ describe('export-image tools', () => {
     }
   });
 
-  it('keeps an inline image whose emitted base64 length is exactly at the cap', async () => {
-    // SAMPLE_IMAGE_BASE64 is 92 characters; equality stays inline (`>` cap).
+  it('keeps an inline image whose decoded size is exactly at the cap (inclusive floor)', async () => {
+    // SAMPLE_IMAGE_BASE64 decodes to 69 bytes; a cap of exactly 69 must stay inline (`>` cap).
     const harness = await startHarness(exportWorksheetImageTool, undefined, {
-      inlineImageMaxBytes: 92,
+      inlineImageMaxBytes: 69,
     });
     try {
       const result = await harness.callTool({ worksheetName: 'sheet-sales' });
@@ -170,36 +170,12 @@ describe('export-image tools', () => {
     }
   });
 
-  it('files a three-byte PNG when its four-character base64 payload exceeds the cap', async () => {
-    const imageBase64 = Buffer.alloc(3).toString('base64');
-    const harness = await startHarness(
-      exportWorksheetImageTool,
-      (server) => {
-        server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ imageBase64, effectiveMimeType: 'image/png' }),
-        });
-      },
-      { inlineImageMaxBytes: 3 },
-    );
-    try {
-      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
-
-      expect(result.isError).toBe(false);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('is 4 bytes, over the 3-byte inline cap');
-      expect(vi.mocked(writeFileSync)).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('uses base64 length plus decoded text bytes for an inline SVG footprint', async () => {
+  it('downgrades an SVG whose doubled inline footprint exceeds the cap even though its decoded size does not', async () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>';
     const svgBase64 = Buffer.from(svg).toString('base64');
-    const expectedFootprint = svgBase64.length + Buffer.byteLength(JSON.stringify(svg), 'utf8') - 2;
-    const cap = expectedFootprint - 1;
+    const svgBytes = Buffer.byteLength(svg);
+    // Cap sits above the decoded size but below the SVG's doubled text+image footprint.
+    const cap = svgBytes + 1;
     const harness = await startHarness(
       exportWorksheetImageTool,
       (server) => {
@@ -226,87 +202,9 @@ describe('export-image tools', () => {
       expect(result.content).toHaveLength(1);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain(`over the ${cap}-byte inline cap`);
-      expect(result.content[0].text).toContain(`is ${expectedFootprint} bytes`);
+      // The reported size is the doubled inline footprint, not the decoded size.
+      expect(result.content[0].text).toContain(`is ${svgBytes * 2} bytes`);
       expect(result.content[0].text).toMatch(/worksheet-image-.*\.svg/);
-      expect(vi.mocked(writeFileSync)).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('files a backslash-heavy SVG whose JSON-escaped text would exceed the downstream limit', async () => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg"><text>${'\\'.repeat(325_000)}</text></svg>`;
-    const svgBase64 = Buffer.from(svg).toString('base64');
-    const rawFootprint = svgBase64.length + Buffer.byteLength(svg);
-    const serializedFootprint =
-      svgBase64.length + Buffer.byteLength(JSON.stringify(svg), 'utf8') - 2;
-    expect(rawFootprint).toBeLessThan(768 * 1024);
-    expect(serializedFootprint).toBeGreaterThan(1024 * 1024);
-
-    const harness = await startHarness(exportWorksheetImageTool, (server) => {
-      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ imageBase64: svgBase64, effectiveMimeType: 'image/svg+xml' }),
-      });
-    });
-    try {
-      const result = await harness.callTool({
-        worksheetName: 'sheet-sales',
-        mimeType: 'image/svg+xml',
-      });
-
-      expect(result.isError).toBe(false);
-      expect(result.content).toHaveLength(1);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain(`is ${serializedFootprint} bytes`);
-      expect(result.content[0].text).toMatch(/worksheet-image-.*\.svg/);
-      expect(vi.mocked(writeFileSync)).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it.each([
-    { label: 'equal to', payloadLength: 768 * 1024, expectedType: 'image' },
-    { label: 'one byte over', payloadLength: 768 * 1024 + 1, expectedType: 'text' },
-  ])(
-    'keeps payloads $label the default 768 KiB cap on the correct side of the boundary',
-    async ({ payloadLength, expectedType }) => {
-      const imageBase64 = 'A'.repeat(payloadLength);
-      const harness = await startHarness(exportWorksheetImageTool, (server) => {
-        server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ imageBase64, effectiveMimeType: 'image/png' }),
-        });
-      });
-      try {
-        const result = await harness.callTool({ worksheetName: 'sheet-sales' });
-
-        expect(result.isError).toBe(false);
-        expect(result.content[0].type).toBe(expectedType);
-      } finally {
-        await harness.close();
-      }
-    },
-  );
-
-  it('files a 1 MiB base64 image under the default cap before TAS receives it', async () => {
-    const imageBase64 = 'A'.repeat(1024 * 1024);
-    const harness = await startHarness(exportWorksheetImageTool, (server) => {
-      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ imageBase64, effectiveMimeType: 'image/png' }),
-      });
-    });
-    try {
-      const result = await harness.callTool({ worksheetName: 'sheet-sales' });
-
-      expect(result.isError).toBe(false);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('over the 786432-byte inline cap');
       expect(vi.mocked(writeFileSync)).toHaveBeenCalledTimes(1);
     } finally {
       await harness.close();

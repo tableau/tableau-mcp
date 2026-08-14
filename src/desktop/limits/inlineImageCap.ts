@@ -1,10 +1,10 @@
 import { log } from '../../logging/logger.js';
 
-// Ceiling on the encoded image payload that may ride inline in a tool result. The 768 KiB
-// default leaves 256 KiB for MCP JSON framing and surrounding tool content before TAS's 1 MiB
-// message limit. Above it, export-image writes the image to a cache file and returns its path.
-// Env-overridable via INLINE_IMAGE_MAX_BYTES.
-export const DEFAULT_INLINE_IMAGE_MAX_BYTES = 768 * 1024;
+// Ceiling on decoded image bytes that may ride inline (as a base64 MCP image block) in a
+// tool result. Above it, the export-image tools write the image to a cache file and return
+// its path, keeping multi-megabyte dashboard PNGs out of the conversation. Default for
+// config.desktop.ts `inlineImageMaxBytes` (env-overridable via INLINE_IMAGE_MAX_BYTES).
+export const DEFAULT_INLINE_IMAGE_MAX_BYTES = 1024 * 1024;
 
 // Deadline (ms) applied to the image-render call only (not the sheet-list call that precedes
 // it). The first image call after Desktop launches can hang forever when Desktop is showing a
@@ -18,16 +18,14 @@ export function isOverInlineImageCap(bytes: number, capBytes: number): boolean {
 }
 
 /**
- * Encoded payload bytes that actually ride inline for a given MIME type. Base64 is ASCII, so
- * its string length is its emitted byte length. SVG is dual-emitted as JSON-escaped decoded
- * text and as a base64 image block, so its footprint includes both representations.
+ * Decoded image bytes that actually ride inline for a given MIME type. Raster formats emit
+ * one base64 block, so the footprint equals the decoded size. SVG is dual-emitted — once as
+ * a decoded text block AND once as a base64 image block (mirrors the web image builder) — so
+ * it puts ~2x its decoded size into the conversation. Capping on this keeps the "large images
+ * out of the conversation" invariant honest for SVG instead of undercounting by half.
  */
-export function inlineImageFootprintBytes(
-  imageBase64: string,
-  mimeType: string | undefined,
-  serializedTextBytes = 0,
-): number {
-  return imageBase64.length + (mimeType === 'image/svg+xml' ? serializedTextBytes : 0);
+export function inlineImageFootprintBytes(bytes: number, mimeType: string | undefined): number {
+  return mimeType === 'image/svg+xml' ? bytes * 2 : bytes;
 }
 
 /** Cache-file extension for an image MIME type. Everything non-SVG is written as `.png`. */
