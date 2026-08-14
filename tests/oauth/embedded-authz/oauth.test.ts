@@ -141,6 +141,7 @@ describe('OAuth', () => {
         'tableau:mcp:content:read',
         'tableau:mcp:datasource:read',
         'tableau:mcp:workbook:read',
+        'tableau:workbooks:download',
         'tableau:mcp:view:read',
         'tableau:mcp:view:download',
         'tableau:mcp:pulse:read',
@@ -153,7 +154,7 @@ describe('OAuth', () => {
         'tableau:mcp:content:delete',
       ]),
     );
-    expect(response.body.scopes_supported).toHaveLength(13);
+    expect(response.body.scopes_supported).toHaveLength(14);
   });
 
   it('should provide a authorization server metadata endpoint for the OAuth 2.1 flow', async () => {
@@ -179,6 +180,7 @@ describe('OAuth', () => {
         'tableau:mcp:content:read',
         'tableau:mcp:datasource:read',
         'tableau:mcp:workbook:read',
+        'tableau:workbooks:download',
         'tableau:mcp:view:read',
         'tableau:mcp:view:download',
         'tableau:mcp:pulse:read',
@@ -191,7 +193,7 @@ describe('OAuth', () => {
         'tableau:mcp:content:delete',
       ]),
     );
-    expect(response.body.scopes_supported).toHaveLength(13);
+    expect(response.body.scopes_supported).toHaveLength(14);
     expect(response.body.token_endpoint_auth_methods_supported).toEqual([
       'none',
       'client_secret_basic',
@@ -222,6 +224,7 @@ describe('OAuth', () => {
         'tableau:mcp:content:read',
         'tableau:mcp:datasource:read',
         'tableau:mcp:workbook:read',
+        'tableau:workbooks:download',
         'tableau:mcp:view:read',
         'tableau:mcp:view:download',
         'tableau:mcp:pulse:read',
@@ -234,7 +237,7 @@ describe('OAuth', () => {
         'tableau:mcp:content:delete',
       ]),
     );
-    expect(response.body.scopes_supported).toHaveLength(13);
+    expect(response.body.scopes_supported).toHaveLength(14);
     expect(response.body.token_endpoint_auth_methods_supported).toEqual(['none']);
     expect(response.body.subject_types_supported).toEqual(['public']);
     expect(response.body.client_id_metadata_document_supported).toBe(true);
