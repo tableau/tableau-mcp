@@ -33,7 +33,8 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('./stagedWorkbookUpload.js', () => ({
+vi.mock('./stagedWorkbookUpload.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./stagedWorkbookUpload.js')>()),
   resolveStagedWorkbookUpload: mocks.mockResolveStagedWorkbookUpload,
 }));
 

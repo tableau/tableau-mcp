@@ -89,9 +89,13 @@ export function buildWorkbookUploadS3Key(keyPrefix: string, workbookUploadId: st
 }
 
 function assertWorkbookUploadFileName(fileName: string): void {
-  if (extname(fileName).toLowerCase() !== '.twb') {
+  if (!isTwbFileName(fileName)) {
     throw new Error('Workbook upload filename must end in .twb.');
   }
+}
+
+export function isTwbFileName(fileName: string): boolean {
+  return extname(fileName).toLowerCase() === '.twb';
 }
 
 function assertWorkbookUploadId(workbookUploadId: string): void {

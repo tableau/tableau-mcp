@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readFile } from 'fs/promises';
-import { basename, extname } from 'path';
+import { basename } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -16,7 +16,11 @@ import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
-import { type ResolvedWorkbook, resolveStagedWorkbookUpload } from './stagedWorkbookUpload.js';
+import {
+  isTwbFileName,
+  type ResolvedWorkbook,
+  resolveStagedWorkbookUpload,
+} from './stagedWorkbookUpload.js';
 
 const paramsSchema = {
   workbookUploadId: z
@@ -203,7 +207,7 @@ async function resolveWorkbookInput({
 
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {
   const fileName = basename(workbookFilePath);
-  if (extname(fileName).toLowerCase() !== '.twb') {
+  if (!isTwbFileName(fileName)) {
     throw new UnknownError('workbookFilePath must point to a .twb file.');
   }
 
