@@ -114,7 +114,7 @@ export async function verifyPostApplyWorksheetReadback(
     const polled = await pollReadback({
       read: () => getWorksheetXml({ worksheetName, executor, signal }),
       settled: (fragment) =>
-        !verifyWorksheetReadback(intendedXml, fragment).some((f) => f.severity === 'error'),
+        !verifyWorksheetReadback(intendedXml, fragment.xml).some((f) => f.severity === 'error'),
       signal,
     });
 
@@ -132,7 +132,7 @@ export async function verifyPostApplyWorksheetReadback(
       return { ok: true, status: 'skipped', findings: [], message };
     }
 
-    const findings = verifyWorksheetReadback(intendedXml, polled.value);
+    const findings = verifyWorksheetReadback(intendedXml, polled.value.xml);
     if (findings.some((f) => f.severity === 'error')) {
       return { ok: false, status: 'failed', findings };
     }

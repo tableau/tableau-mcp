@@ -96,9 +96,9 @@ export async function fetchAndCacheWorksheet({
   }
 
   const cacheFile = new DesktopCache().getCacheFilePath({
-    prefix: `worksheet-${safeWorksheetCacheId(worksheetName)}`,
+    prefix: `worksheet-${safeWorksheetCacheId(fetched.value.name)}`,
   });
-  writeFileSync(cacheFile, fetched.value, 'utf-8');
+  writeFileSync(cacheFile, fetched.value.xml, 'utf-8');
   writeSidecar(cacheFile, resolvedSession);
   return Ok(cacheFile);
 }

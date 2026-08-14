@@ -84,19 +84,19 @@ export const getGetWorksheetXmlTool = (
           // /document-route worksheet fragment always carries one.
           clearStickyWorksheetFile({
             session: resolvedSession,
-            worksheetId: worksheetFragmentSimpleId(result.value)!,
+            worksheetId: worksheetFragmentSimpleId(result.value.xml)!,
           });
 
           return finishXmlRead({
             kind: 'worksheet',
             artifactKind: 'worksheet',
-            label: `Worksheet "${worksheetName}"`,
+            label: `Worksheet "${result.value.name}"`,
             inlineKey: 'worksheetXml',
             toolName: 'get-worksheet-xml',
             applyTool: 'apply-worksheet',
             pathParam: 'worksheetFile',
-            cacheName: worksheetName,
-            xml: result.value,
+            cacheName: result.value.name,
+            xml: result.value.xml,
             mode,
             capBytes: extra.config.inlineXmlMaxBytes,
             resolvedSession,

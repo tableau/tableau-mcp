@@ -44,7 +44,7 @@ export type GetWorksheetXmlError = (
 ) & { message: string };
 
 export type GetWorksheetXmlResult = Result<
-  string,
+  { xml: string; name: string },
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'get-worksheet-xml-error'; error: GetWorksheetXmlError }
 >;
@@ -55,7 +55,7 @@ export type GetDashboardXmlError = (
 ) & { message: string };
 
 export type GetDashboardXmlResult = Result<
-  string,
+  { xml: string; name: string },
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'get-dashboard-xml-error'; error: GetDashboardXmlError }
 >;
@@ -194,7 +194,7 @@ export class WorkbookReadGateway {
       return Err({ type: 'execute-command-error', error: documentResult.error });
     }
 
-    return Ok(documentResult.value.xml);
+    return Ok({ xml: documentResult.value.xml, name: worksheetResult.value.name });
   }
 
   private async getDashboardXmlViaExternalApi(
@@ -225,7 +225,7 @@ export class WorkbookReadGateway {
       return Err({ type: 'execute-command-error', error: documentResult.error });
     }
 
-    return Ok(documentResult.value.xml);
+    return Ok({ xml: documentResult.value.xml, name: dashboardResult.value.name });
   }
 
   private async getWorksheetXmlViaWorkbookDocument(
@@ -237,14 +237,16 @@ export class WorkbookReadGateway {
     }
 
     let worksheetXml: string | null;
+    let resolvedName: string | undefined;
     try {
       const resolved = resolveWorksheetRef(workbookResult.value, worksheetRef);
       worksheetXml = resolved ? extractSheetXml(workbookResult.value, resolved.name) : null;
+      resolvedName = resolved?.name;
     } catch (error) {
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }
 
-    if (worksheetXml === null) {
+    if (worksheetXml === null || resolvedName === undefined) {
       const didYouMean = await this.worksheetNameSuggestions(worksheetRef);
       return Err({
         type: 'get-worksheet-xml-error',
@@ -255,7 +257,7 @@ export class WorkbookReadGateway {
       });
     }
 
-    return Ok(worksheetXml);
+    return Ok({ xml: worksheetXml, name: resolvedName });
   }
 
   private async getDashboardXmlViaWorkbookDocument(
@@ -267,14 +269,16 @@ export class WorkbookReadGateway {
     }
 
     let dashboardXml: string | null;
+    let resolvedName: string | undefined;
     try {
       const resolved = resolveDashboardRef(workbookResult.value, dashboardRef);
       dashboardXml = resolved ? extractDashboardXml(workbookResult.value, resolved.name) : null;
+      resolvedName = resolved?.name;
     } catch (error) {
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }
 
-    if (dashboardXml === null) {
+    if (dashboardXml === null || resolvedName === undefined) {
       return Err({
         type: 'get-dashboard-xml-error',
         error: {
@@ -284,7 +288,7 @@ export class WorkbookReadGateway {
       });
     }
 
-    return Ok(dashboardXml);
+    return Ok({ xml: dashboardXml, name: resolvedName });
   }
 
   private async worksheetNameSuggestions(missName: string): Promise<string> {

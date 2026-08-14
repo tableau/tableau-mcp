@@ -39,7 +39,6 @@ import {
   READBACK_POLL_INTERVAL_MS,
   READBACK_POLL_MAX_ATTEMPTS,
 } from '../../../../desktop/wrappers/pollReadback.js';
-import { parseOuterElement } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -190,9 +189,8 @@ export const getRefineWorksheetTool = (
               }
             }
           }
-          const sourceXml = fetched.value;
-          const canonicalWorksheetName =
-            parseOuterElement(sourceXml)?.name?.trim() || worksheetName;
+          const sourceXml = fetched.value.xml;
+          const canonicalWorksheetName = fetched.value.name;
 
           // 2. Pure minimal patch + the readback confirmation target for this operation.
           let patched: string;
@@ -319,7 +317,7 @@ export const getRefineWorksheetTool = (
                 executor,
                 signal: extra.signal,
               }),
-            settled: (fragment) => confirm(fragment),
+            settled: (fragment) => confirm(fragment.xml),
             signal: extra.signal,
           });
           if (!readback.ok) {
@@ -343,7 +341,7 @@ export const getRefineWorksheetTool = (
               message: `Applied ${operation} to worksheet "${canonicalWorksheetName}" and confirmed the ${nodeLabel} on readback.`,
             });
           }
-          const lastReadback = readback.value;
+          const lastReadback = readback.value.xml;
 
           // The confirm never matched across the full poll budget. If the sort node DID land
           // but with a direction other than requested (Desktop reverted DESC to ASC), report

@@ -242,7 +242,9 @@ describe('removeFieldTool', () => {
 
   it('fetches and caches the sheet by name when no worksheetFile is given, then edits it', async () => {
     const fragment = '<worksheet name="Sheet 1"><table/></worksheet>';
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(fragment));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: fragment, name: 'Sheet 1' }),
+    );
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(fragment);
     vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
@@ -269,7 +271,9 @@ describe('removeFieldTool', () => {
   it('accumulates two name-only calls on the same sticky file (fetches once)', async () => {
     const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
     const files = new Map<string, string>();
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: baseXml, name: 'Sheet 1' }),
+    );
     vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
     vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
     vi.mocked(writeFileSync).mockImplementation((path, data) => {
@@ -303,7 +307,9 @@ describe('removeFieldTool', () => {
   it('mints a fresh sheet when the sticky buffer fails its sidecar/session check', async () => {
     const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
     const files = new Map<string, string>();
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: baseXml, name: 'Sheet 1' }),
+    );
     vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
     vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
     vi.mocked(writeFileSync).mockImplementation((path, data) => {
@@ -408,7 +414,9 @@ describe('removeFieldTool', () => {
     const addedXml = '<worksheet name="Sheet 1"><table><rows>[Profit]</rows></table></worksheet>';
     const removedXml = '<worksheet name="Sheet 1"><table><rows/></table></worksheet>';
     const files = new Map<string, string>();
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: baseXml, name: 'Sheet 1' }),
+    );
     vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
     vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
     vi.mocked(writeFileSync).mockImplementation((path, data) => {

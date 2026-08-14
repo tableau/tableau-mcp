@@ -38,8 +38,10 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(addSheet).mockReturnValue(WORKBOOK_XML);
   vi.mocked(addDashboard).mockReturnValue(WORKBOOK_XML);
   vi.mocked(loadWorkbookXml).mockResolvedValue(new Ok({ validationWarnings: [] }));
-  vi.mocked(getWorksheetXml).mockResolvedValue(new Ok(WORKSHEET_XML));
-  vi.mocked(getDashboardXml).mockResolvedValue(new Ok(DASHBOARD_XML));
+  vi.mocked(getWorksheetXml).mockResolvedValue(new Ok({ xml: WORKSHEET_XML, name: 'Sheet1' }));
+  vi.mocked(getDashboardXml).mockResolvedValue(
+    new Ok({ xml: DASHBOARD_XML, name: 'My Dashboard' }),
+  );
   vi.mocked(writeFileSync).mockImplementation(() => {});
   vi.mocked(writeSidecar).mockImplementation(() => {});
   return extra;
@@ -167,7 +169,7 @@ describe('batchCreateAndCacheSheetsTool', () => {
   it('should aggregate partial worksheet and dashboard cache failures', async () => {
     const extra = makeExtra();
     vi.mocked(getWorksheetXml)
-      .mockResolvedValueOnce(new Ok(WORKSHEET_XML))
+      .mockResolvedValueOnce(new Ok({ xml: WORKSHEET_XML, name: 'Sheet1' }))
       .mockResolvedValueOnce(
         new Err({
           type: 'get-worksheet-xml-error',

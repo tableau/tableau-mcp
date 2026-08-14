@@ -248,7 +248,9 @@ describe('addFieldTool', () => {
   // --- name-based path (no prior get-worksheet-xml call) ---
   it('fetches + caches the sheet by name when no worksheetFile is given, then edits it', async () => {
     const FRAGMENT = '<worksheet name="Sheet 1"><table/></worksheet>';
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(FRAGMENT));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: FRAGMENT, name: 'Sheet 1' }),
+    );
     // The minted cache file exists after the internal write; the edit reads it back.
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(FRAGMENT);
@@ -344,7 +346,9 @@ describe('addFieldTool', () => {
   it('accumulates two name-only calls on the same sticky file (fetches once)', async () => {
     const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
     const files = new Map<string, string>();
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: baseXml, name: 'Sheet 1' }),
+    );
     vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
     vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
     vi.mocked(writeFileSync).mockImplementation((path, data) => {
@@ -380,7 +384,9 @@ describe('addFieldTool', () => {
   it('mints a fresh sheet when the sticky buffer fails its sidecar/session check', async () => {
     const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
     const files = new Map<string, string>();
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: baseXml, name: 'Sheet 1' }),
+    );
     vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
     vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
     vi.mocked(writeFileSync).mockImplementation((path, data) => {
