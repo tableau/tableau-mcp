@@ -19,7 +19,9 @@ const toolMentionsInFirstMentionOrder = (text: string): string[] =>
   desktopToolNames
     .map((tool) => ({
       tool,
-      index: text.search(new RegExp(`(?<![a-z0-9-])${tool}(?![a-z0-9-])`)),
+      index: text
+        .replaceAll(`never use ${tool}`, '')
+        .search(new RegExp(`(?<![a-z0-9-])${tool}(?![a-z0-9-])`)),
     }))
     .filter(({ index }) => index !== -1)
     .sort((a, b) => a.index - b.index)
@@ -222,6 +224,28 @@ describe('DESKTOP_ROUTE_TABLE', () => {
         'prefer a scoped apply whenever possible',
       ],
     });
+  });
+
+  it('routes an exact attached style pack once without generic workbook apply', () => {
+    const styleRoute = routes.find((route) => route.id === 'workbook-style-pack');
+    const routeIds = routes.map((route) => route.id);
+
+    expect(styleRoute).toMatchObject({
+      toolSequence: ['apply-workbook-style'],
+      stopConditions: [
+        'pass the exact stylePack once',
+        'never use apply-workbook for styling',
+        'never retry an unknown result',
+      ],
+    });
+    expect(styleRoute?.trigger).toMatch(/attached|provided/);
+    expect(styleRoute?.trigger).toContain('tableau.style-pack/v2');
+    expect(styleRoute?.action).toContain('pass the exact stylePack once');
+    expect(styleRoute?.action).toContain('never use apply-workbook for styling');
+    expect(styleRoute?.action).toContain('never retry an unknown result');
+    expect(routeIds.indexOf('workbook-style-pack')).toBeLessThan(
+      routeIds.indexOf('whole-workbook-fallback'),
+    );
   });
 
   it.each(routes)('route "$id" declares a tool sequence and stop conditions', (route) => {

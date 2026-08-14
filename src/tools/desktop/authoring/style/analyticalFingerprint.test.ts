@@ -1,6 +1,10 @@
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
-import { analyticalFingerprint } from './analyticalFingerprint.js';
+import {
+  analyticalFingerprint,
+  eligibleStyleScopeFingerprint,
+  workbookStyleStateFingerprint,
+} from './analyticalFingerprint.js';
 
 const baseXml = `<?xml version="1.0"?>
 <workbook xmlns:ext="urn:tableau:test">
@@ -295,6 +299,53 @@ describe('analyticalFingerprint', () => {
     expect(analyticalFingerprint(changedRun)).not.toBe(analyticalFingerprint(supportedStyleXml));
     expect(analyticalFingerprint(changedMap)).not.toBe(analyticalFingerprint(supportedStyleXml));
     expect(analyticalFingerprint(changedColor)).not.toBe(analyticalFingerprint(supportedStyleXml));
+  });
+
+  it('exempts supported presentation only on named eligible worksheets', () => {
+    const changed = supportedStyleXml.replace('fontname="Old Title"', 'fontname="New Title"');
+
+    expect(eligibleStyleScopeFingerprint(changed, ['Visible'])).toBe(
+      eligibleStyleScopeFingerprint(supportedStyleXml, ['Visible']),
+    );
+    expect(eligibleStyleScopeFingerprint(changed, [])).not.toBe(
+      eligibleStyleScopeFingerprint(supportedStyleXml, []),
+    );
+  });
+
+  it('canonicalizes but retains supported presentation in workbook style state', () => {
+    const changed = supportedStyleXml.replace('to="#111111"', 'to="#999999"');
+    const serialized = new XMLSerializer().serializeToString(
+      new DOMParser().parseFromString(supportedStyleXml, 'text/xml'),
+    );
+
+    expect(workbookStyleStateFingerprint(serialized)).toBe(
+      workbookStyleStateFingerprint(supportedStyleXml),
+    );
+    expect(workbookStyleStateFingerprint(changed)).not.toBe(
+      workbookStyleStateFingerprint(supportedStyleXml),
+    );
+  });
+
+  it('excludes unrelated window and focus metadata from workbook style state', () => {
+    const first = supportedStyleXml.replace(
+      '</workbook>',
+      '<windows><window name="Visible" active="true"/></windows></workbook>',
+    );
+    const normalized = first.replace('active="true"', 'active="false"');
+
+    expect(workbookStyleStateFingerprint(normalized)).toBe(workbookStyleStateFingerprint(first));
+    expect(analyticalFingerprint(normalized)).not.toBe(analyticalFingerprint(first));
+  });
+
+  it.each([
+    ['title font', 'fontname="Old Title"', 'fontname="New Title"'],
+    ['text color', 'value="#020202"', 'value="#999999"'],
+    ['categorical color', 'to="#111111"', 'to="#999999"'],
+    ['sequential color', '<color>#eeeeee</color>', '<color>#999999</color>'],
+  ])('retains supported %s in workbook style state', (_label, before, after) => {
+    expect(workbookStyleStateFingerprint(supportedStyleXml.replace(before, after))).not.toBe(
+      workbookStyleStateFingerprint(supportedStyleXml),
+    );
   });
 
   it.each([

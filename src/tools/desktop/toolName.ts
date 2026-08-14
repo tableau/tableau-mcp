@@ -2,6 +2,7 @@ export const desktopToolNames = [
   'list-instances',
   'get-workbook-xml',
   'apply-workbook',
+  'apply-workbook-style',
   'activate-sheet',
   'undo-workbook',
   'redo-workbook',

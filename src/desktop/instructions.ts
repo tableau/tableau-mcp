@@ -127,6 +127,20 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
+    id: 'workbook-style-pack',
+    trigger: 'an attached or provided tableau.style-pack/v2 style pack',
+    action:
+      'pass the exact stylePack once to apply-workbook-style; never use apply-workbook for styling, and never retry an unknown result; inspect the live workbook instead.',
+    toolSequence: ['apply-workbook-style'],
+    stopConditions: [
+      'pass the exact stylePack once',
+      'never use apply-workbook for styling',
+      'never retry an unknown result',
+    ],
+    requiredEvidence: ['structured style receipt and settled readback verification'],
+  },
+  {
+    kind: 'route',
     id: 'whole-workbook-fallback',
     trigger: 'a datasource-definition or cross-artifact change no scoped apply can express',
     action:
