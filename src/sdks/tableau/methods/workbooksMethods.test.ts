@@ -88,6 +88,43 @@ describe('WorkbooksMethods', () => {
       expect(body.toString('utf-8')).toContain('<workbook name="A &amp; B">');
     });
 
+    it('escapes an apostrophe in the workbook name as the numeric entity, not &apos;', async () => {
+      const mockPost = vi.fn().mockResolvedValue({
+        data: {
+          workbook: {
+            id: 'wb-1',
+            name: "O'Brien's Sales",
+            contentUrl: 'OBriensSales',
+            showTabs: false,
+            tags: {},
+          },
+        },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        axios: {
+          post: mockPost,
+          defaults: { baseURL: 'http://test' },
+        } as unknown as AxiosInstance,
+      };
+
+      await workbooksMethods.publishWorkbook({
+        siteId: 'site-1',
+        uploadSessionId: 'session-1',
+        workbookType: 'twbx',
+        name: "O'Brien's Sales",
+        projectId: 'project-1',
+      });
+
+      const body = mockPost.mock.calls[0][1];
+      expect(body.toString('utf-8')).toContain('<workbook name="O&#39;Brien&#39;s Sales">');
+    });
+
     it('passes overwrite through as a query param when provided', async () => {
       const mockPost = vi.fn().mockResolvedValue({
         data: {
