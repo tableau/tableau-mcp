@@ -48,11 +48,13 @@ vi.mock('../../../features/init.js', () => ({
 const validArgs = {
   workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
   name: 'My New Workbook',
+  projectId: 'target-project-id',
 };
 
 const validLocalArgs = {
   workbookFilePath: '/tmp/source-superstore.twb',
   name: 'My New Workbook',
+  projectId: 'target-project-id',
 };
 
 describe('validateUploadAndPublishWorkbookTool', () => {
@@ -73,14 +75,12 @@ describe('validateUploadAndPublishWorkbookTool', () => {
       bytes: Buffer.from('<workbook source="new" />'),
     });
     mocks.mockQueryProjects.mockResolvedValue({
-      projects: [
-        { id: 'nested-default-project-id', name: 'Default', parentProjectId: 'parent-id' },
-        { id: 'default-project-id', name: 'Default' },
-      ],
+      pagination: { totalAvailable: 1 },
+      projects: [{ id: 'target-project-id', name: 'Marketing Analytics' }],
     });
     mocks.mockPublishWorkbook.mockResolvedValue({
       ...mockWorkbook,
-      project: { id: 'default-project-id', name: 'Default' },
+      project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
@@ -97,9 +97,10 @@ describe('validateUploadAndPublishWorkbookTool', () => {
       workbookUploadId: expect.any(Object),
       workbookFilePath: expect.any(Object),
       name: expect.any(Object),
+      projectId: expect.any(Object),
       overwrite: expect.any(Object),
     });
-    expect(tool.description).toContain('site Default project');
+    expect(tool.description).toContain('specified Tableau project');
   });
 
   it('is disabled when the authoring-tools feature flag is OFF', async () => {
@@ -118,7 +119,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
-  it('validates, publishes to the top-level Default project, and returns the published workbook', async () => {
+  it('validates, publishes to the requested project, and returns the published workbook', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -134,7 +135,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     });
     mocks.mockPublishWorkbook.mockResolvedValue({
       ...mockWorkbook,
-      project: { id: 'default-project-id', name: 'Default' },
+      project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
 
     const result = await getToolResult(validArgs);
@@ -168,8 +169,8 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     });
     expect(mocks.mockQueryProjects).toHaveBeenCalledWith({
       siteId: 'test-site-id',
-      filter: 'name:eq:Default',
-      pageSize: 100,
+      filter: '',
+      pageSize: 1000,
       pageNumber: 1,
     });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
@@ -177,7 +178,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
       uploadSessionId: 'validated-upload-id',
       name: 'My New Workbook',
       workbookType: 'twb',
-      projectId: 'default-project-id',
+      projectId: 'target-project-id',
       overwrite: false,
     });
   });
@@ -189,7 +190,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     });
     mocks.mockPublishWorkbook.mockResolvedValue({
       ...mockWorkbook,
-      project: { id: 'default-project-id', name: 'Default' },
+      project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
 
     await getToolResult(validArgs);
@@ -206,7 +207,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     });
     mocks.mockPublishWorkbook.mockResolvedValue({
       ...mockWorkbook,
-      project: { id: 'default-project-id', name: 'Default' },
+      project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
 
     await getToolResult({ ...validArgs, overwrite: true });
@@ -223,11 +224,15 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     });
     mocks.mockPublishWorkbook.mockResolvedValue({
       ...mockWorkbook,
-      project: { id: 'default-project-id', name: 'Default' },
+      project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
     const workbookUploadId = '123e4567-e89b-42d3-a456-426614174000';
 
-    await getToolResult({ workbookUploadId, name: 'My New Workbook' });
+    await getToolResult({
+      workbookUploadId,
+      name: 'My New Workbook',
+      projectId: 'target-project-id',
+    });
 
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId,
@@ -247,7 +252,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     });
     mocks.mockPublishWorkbook.mockResolvedValue({
       ...mockWorkbook,
-      project: { id: 'default-project-id', name: 'Default' },
+      project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
 
     const result = await getToolResult(validLocalArgs);
@@ -279,7 +284,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
   });
 
   it('returns an error when neither local path nor staged upload id is provided', async () => {
-    const result = await getToolResult({ name: validArgs.name });
+    const result = await getToolResult({ name: validArgs.name, projectId: validArgs.projectId });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -324,25 +329,34 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
-  it('falls back to a lowercase top-level default project', async () => {
-    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
-      timestamp: '2026-06-10T14:32:18.456Z',
-      uploadId: 'validated-upload-id',
+  it('returns an error before validation when the requested project is outside bounded context', async () => {
+    const result = await getToolResult(validArgs, {
+      boundedProjectIds: new Set(['different-project-id']),
     });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('not allowed by this MCP server');
+    expect(mocks.mockQueryProjects).not.toHaveBeenCalled();
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('returns an error before validation when the requested project is not visible', async () => {
     mocks.mockQueryProjects.mockResolvedValue({
-      projects: [
-        { id: 'nested-default-project-id', name: 'Default', parentProjectId: 'parent-id' },
-        { id: 'lowercase-default-project-id', name: 'default' },
-      ],
+      pagination: { totalAvailable: 1 },
+      projects: [{ id: 'different-project-id', name: 'Different Project' }],
     });
 
-    await getToolResult(validArgs);
+    const result = await getToolResult(validArgs);
 
-    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectId: 'lowercase-default-project-id',
-      }),
-    );
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Could not find project with LUID target-project-id');
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
   it('returns an error and does not publish when Tableau does not return an upload id', async () => {
@@ -377,23 +391,38 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
-  it('returns an error and does not publish when the top-level Default project cannot be found', async () => {
+  it('finds the requested project across project pages', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
     });
-    mocks.mockQueryProjects.mockResolvedValue({
-      projects: [
-        { id: 'nested-default-project-id', name: 'Default', parentProjectId: 'parent-id' },
-      ],
+    mocks.mockQueryProjects
+      .mockResolvedValueOnce({
+        pagination: { totalAvailable: 1001 },
+        projects: [{ id: 'different-project-id', name: 'Different Project' }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { totalAvailable: 1001 },
+        projects: [{ id: 'target-project-id', name: 'Marketing Analytics' }],
+      });
+
+    await getToolResult(validArgs);
+
+    expect(mocks.mockQueryProjects).toHaveBeenNthCalledWith(1, {
+      siteId: 'test-site-id',
+      filter: '',
+      pageSize: 1000,
+      pageNumber: 1,
     });
-
-    const result = await getToolResult(validArgs);
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Could not find the site Default project');
-    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    expect(mocks.mockQueryProjects).toHaveBeenNthCalledWith(2, {
+      siteId: 'test-site-id',
+      filter: '',
+      pageSize: 1000,
+      pageNumber: 2,
+    });
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'target-project-id' }),
+    );
   });
 
   it('redacts staged workbookUploadId details passed to shared logging', async () => {
@@ -408,6 +437,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
         workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
         workbookFilePath: undefined,
         name: validArgs.name,
+        projectId: validArgs.projectId,
         overwrite: false,
       },
       getMockRequestHandlerExtra(),
@@ -418,18 +448,23 @@ describe('validateUploadAndPublishWorkbookTool', () => {
       workbookUploadId: '<redacted>',
       workbookFilePath: undefined,
       name: validArgs.name,
+      projectId: validArgs.projectId,
       overwrite: false,
     });
     expect(JSON.stringify(loggedArgs)).not.toContain('123e4567-e89b-42d3-a456-426614174000');
   });
 });
 
-async function getToolResult(params: {
-  workbookUploadId?: string;
-  workbookFilePath?: string;
-  name: string;
-  overwrite?: boolean;
-}): Promise<CallToolResult> {
+async function getToolResult(
+  params: {
+    workbookUploadId?: string;
+    workbookFilePath?: string;
+    name: string;
+    projectId: string;
+    overwrite?: boolean;
+  },
+  options: { boundedProjectIds?: Set<string> | null } = {},
+): Promise<CallToolResult> {
   const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
@@ -437,16 +472,30 @@ async function getToolResult(params: {
       workbookUploadId: params.workbookUploadId,
       workbookFilePath: params.workbookFilePath,
       name: params.name,
+      projectId: params.projectId,
       overwrite: params.overwrite ?? false,
     },
-    getMockExtra(),
+    getMockExtra(options),
   );
 }
 
-function getMockExtra(): ReturnType<typeof getMockRequestHandlerExtra> {
+function getMockExtra({
+  boundedProjectIds = null,
+}: {
+  boundedProjectIds?: Set<string> | null;
+} = {}): ReturnType<typeof getMockRequestHandlerExtra> {
   const extra = getMockRequestHandlerExtra();
   return {
     ...extra,
+    getConfigWithOverrides: vi.fn().mockResolvedValue({
+      boundedContext: {
+        projectIds: boundedProjectIds,
+        datasourceIds: null,
+        workbookIds: null,
+        viewIds: null,
+        tags: null,
+      },
+    }),
     config: {
       ...extra.config,
       bucketS3: {

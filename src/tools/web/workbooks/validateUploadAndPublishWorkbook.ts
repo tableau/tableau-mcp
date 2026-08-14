@@ -4,8 +4,9 @@ import { basename, extname } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { UnknownError } from '../../../errors/mcpToolError.js';
+import { ProjectNotAllowedError, UnknownError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
+import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { Project } from '../../../sdks/tableau/types/project.js';
@@ -34,6 +35,12 @@ const paramsSchema = {
       'Path to a local TWB workbook file on the MCP server filesystem. Use this for local or stdio deployments.',
     ),
   name: z.string().describe('The name to give the published workbook.'),
+  projectId: z
+    .string()
+    .min(1)
+    .describe(
+      'The Tableau project LUID to publish the workbook into. Use list-projects to discover available project IDs.',
+    ),
   overwrite: z
     .boolean()
     .default(false)
@@ -70,7 +77,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
     server,
     name: 'validate-upload-and-publish-workbook',
     description:
-      'Validates a TWB workbook with Tableau from a local file path or staged upload id, uploads it only when validation succeeds, and immediately publishes it to the site Default project. If validation returns blocking errors, the tool returns those findings and does not publish anything.',
+      'Validates a TWB workbook with Tableau from a local file path or staged upload id, uploads it only when validation succeeds, and immediately publishes it to the specified Tableau project. Use list-projects to discover project IDs. If validation returns blocking errors, the tool returns those findings and does not publish anything.',
     paramsSchema,
     annotations: {
       title: 'Validate, Upload, and Publish Workbook',
@@ -83,7 +90,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
       async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
     ),
     callback: async (
-      { workbookUploadId, workbookFilePath, name, overwrite = false },
+      { workbookUploadId, workbookFilePath, name, projectId, overwrite = false },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute<ValidateUploadAndPublishWorkbookResult>({
@@ -92,21 +99,25 @@ export const getValidateUploadAndPublishWorkbookTool = (
           workbookUploadId: workbookUploadId ? '<redacted>' : undefined,
           workbookFilePath: workbookFilePath ? '<redacted>' : undefined,
           name,
+          projectId,
           overwrite,
         },
         callback: async () => {
           assertValidateWorkbookAndUploadSupported();
-
-          const resolvedWorkbookFile = await resolveWorkbookInput({
-            config: extra.config.bucketS3,
-            workbookUploadId,
-            workbookFilePath,
-          });
+          const configWithOverrides = await extra.getConfigWithOverrides();
+          assertProjectAllowedByBoundedContext(projectId, configWithOverrides.boundedContext);
 
           const result = await useRestApi<ValidateUploadAndPublishWorkbookResult>({
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
+              await getVisibleProjectById(restApi, projectId);
+              const resolvedWorkbookFile = await resolveWorkbookInput({
+                config: extra.config.bucketS3,
+                workbookUploadId,
+                workbookFilePath,
+              });
+
               const validation = await restApi.workbooksMethods.validateWorkbookAndUpload({
                 siteId: restApi.siteId,
                 filename: resolvedWorkbookFile.fileName,
@@ -126,13 +137,12 @@ export const getValidateUploadAndPublishWorkbookTool = (
                 );
               }
 
-              const defaultProject = await getDefaultProject(restApi);
               const publishedWorkbook = await restApi.workbooksMethods.publishWorkbook({
                 siteId: restApi.siteId,
                 uploadSessionId: validation.uploadId,
                 name,
                 workbookType: 'twb',
-                projectId: defaultProject.id,
+                projectId,
                 overwrite,
               });
 
@@ -215,33 +225,53 @@ function assertValidateWorkbookAndUploadSupported(): void {
   }
 }
 
-async function getDefaultProject(restApi: {
-  siteId: string;
-  projectsMethods: {
-    queryProjects: (args: {
-      siteId: string;
-      filter: string;
-      pageSize?: number;
-      pageNumber?: number;
-    }) => Promise<{ projects: Project[] }>;
-  };
-}): Promise<Project> {
-  const { projects } = await restApi.projectsMethods.queryProjects({
-    siteId: restApi.siteId,
-    filter: 'name:eq:Default',
-    pageSize: 100,
-    pageNumber: 1,
-  });
-  const topLevelProjects = projects.filter((project) => project.parentProjectId === undefined);
-  const defaultProject =
-    topLevelProjects.find((project) => project.name === 'Default') ??
-    topLevelProjects.find((project) => project.name.toLowerCase() === 'default');
+function assertProjectAllowedByBoundedContext(
+  projectId: string,
+  boundedContext: BoundedContext,
+): void {
+  const { projectIds } = boundedContext;
+  if (projectIds && !projectIds.has(projectId)) {
+    throw new ProjectNotAllowedError(
+      `Publishing to project with LUID ${projectId} is not allowed by this MCP server's bounded project context.`,
+    );
+  }
+}
 
-  if (!defaultProject) {
-    throw new UnknownError('Could not find the site Default project to publish the workbook.');
+async function getVisibleProjectById(
+  restApi: {
+    siteId: string;
+    projectsMethods: {
+      queryProjects: (args: {
+        siteId: string;
+        filter: string;
+        pageSize?: number;
+        pageNumber?: number;
+      }) => Promise<{ pagination: { totalAvailable: number }; projects: Project[] }>;
+    };
+  },
+  projectId: string,
+): Promise<Project> {
+  const pageSize = 1000;
+  let pageNumber = 1;
+  let totalAvailable = pageSize;
+
+  while ((pageNumber - 1) * pageSize < totalAvailable) {
+    const { pagination, projects } = await restApi.projectsMethods.queryProjects({
+      siteId: restApi.siteId,
+      filter: '',
+      pageSize,
+      pageNumber,
+    });
+    totalAvailable = pagination.totalAvailable;
+    const project = projects.find((candidate) => candidate.id === projectId);
+    if (project) return project;
+    pageNumber += 1;
   }
 
-  return defaultProject;
+  throw new UnknownError(
+    `Could not find project with LUID ${projectId}. Use list-projects to choose a project visible to the current user.`,
+    404,
+  );
 }
 
 function toValidationFinding(issue: ValidationIssue): ValidationFinding {

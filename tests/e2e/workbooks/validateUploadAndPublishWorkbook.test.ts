@@ -33,6 +33,7 @@ const defaultWorkbookFilePath = resolve('tests/e2e/fixtures/workbooks/superstore
 type ValidateUploadPublishSmokeConfig = {
   workbookFilePath: string;
   workbookName: string;
+  projectId: string;
 };
 
 describe('validate-upload-and-publish-workbook local file', () => {
@@ -79,6 +80,7 @@ describe('validate-upload-and-publish-workbook local file', () => {
       toolArgs: {
         workbookFilePath: smokeConfig.workbookFilePath,
         name: smokeConfig.workbookName,
+        projectId: smokeConfig.projectId,
         overwrite: true,
       },
     });
@@ -95,12 +97,20 @@ function getValidateUploadPublishSmokeConfig(): ValidateUploadPublishSmokeConfig
   if (!isValidateUploadPublishSmokeRequested()) {
     return undefined;
   }
+  const projectId = process.env.VALIDATE_UPLOAD_PUBLISH_E2E_PROJECT_ID?.trim();
+  if (!projectId) {
+    console.warn(
+      'Skipping validate-upload-and-publish-workbook e2e. Set VALIDATE_UPLOAD_PUBLISH_E2E_PROJECT_ID to the destination project LUID.',
+    );
+    return undefined;
+  }
 
   return {
     workbookFilePath:
       process.env.VALIDATE_UPLOAD_PUBLISH_E2E_FILE?.trim() || defaultWorkbookFilePath,
     workbookName:
       process.env.VALIDATE_UPLOAD_PUBLISH_E2E_NAME?.trim() || 'Codex Validate Publish E2E',
+    projectId,
   };
 }
 
