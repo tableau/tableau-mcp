@@ -25,7 +25,6 @@ import {
 import {
   ApiRoot,
   AppInfo,
-  CreatedSheets,
   DashboardItem,
   DashboardList,
   DatasourceList,
@@ -311,22 +310,31 @@ export class ExternalApiToolExecutor extends ToolExecutor {
   async createBlankWorksheet(
     index: number | undefined,
     signal: AbortSignal,
-  ): Promise<Result<CreatedSheets, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.createBlankWorksheet(index, signal));
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (client) => client.createBlankWorksheet(index, signal),
+      'create-worksheet-blank',
+    );
   }
 
   async createBlankDashboard(
     index: number | undefined,
     signal: AbortSignal,
-  ): Promise<Result<CreatedSheets, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.createBlankDashboard(index, signal));
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (client) => client.createBlankDashboard(index, signal),
+      'create-dashboard-blank',
+    );
   }
 
   async createBlankStoryboard(
     index: number | undefined,
     signal: AbortSignal,
-  ): Promise<Result<CreatedSheets, ExecuteCommandError>> {
-    return this.readExternalApi((client) => client.createBlankStoryboard(index, signal));
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (client) => client.createBlankStoryboard(index, signal),
+      'create-storyboard-blank',
+    );
   }
 
   async health(signal: AbortSignal): Promise<Result<{ healthy: boolean }, ExecuteCommandError>> {

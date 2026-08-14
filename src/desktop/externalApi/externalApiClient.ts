@@ -6,8 +6,6 @@ import {
   apiRootSchema,
   AppInfo,
   appInfoSchema,
-  CreatedSheets,
-  createdSheetsSchema,
   DashboardItem,
   dashboardItemSchema,
   DashboardList,
@@ -258,42 +256,40 @@ export class ExternalApiClient {
     return this.parseEnvelope(response, signal);
   }
 
-  // The three `:new` routes create ONE blank sheet of the route kind and return a bare `CreatedSheets`
-  // body (not an operation envelope) — so parse with `parseJson`, not `parseEnvelope`.
   async createBlankWorksheet(
     index: number | undefined,
     signal?: AbortSignal,
-  ): Promise<Result<CreatedSheets, ExternalApiError>> {
+  ): Promise<Result<OperationEnvelope, ExternalApiError>> {
     const response = await this.request(
       'POST',
       buildNewSheetRoute(EXTERNAL_API_ROUTES.workbookWorksheetsNew, index),
       { signal },
     );
-    return this.parseJson(response, createdSheetsSchema, signal);
+    return this.parseEnvelope(response, signal);
   }
 
   async createBlankDashboard(
     index: number | undefined,
     signal?: AbortSignal,
-  ): Promise<Result<CreatedSheets, ExternalApiError>> {
+  ): Promise<Result<OperationEnvelope, ExternalApiError>> {
     const response = await this.request(
       'POST',
       buildNewSheetRoute(EXTERNAL_API_ROUTES.workbookDashboardsNew, index),
       { signal },
     );
-    return this.parseJson(response, createdSheetsSchema, signal);
+    return this.parseEnvelope(response, signal);
   }
 
   async createBlankStoryboard(
     index: number | undefined,
     signal?: AbortSignal,
-  ): Promise<Result<CreatedSheets, ExternalApiError>> {
+  ): Promise<Result<OperationEnvelope, ExternalApiError>> {
     const response = await this.request(
       'POST',
       buildNewSheetRoute(EXTERNAL_API_ROUTES.workbookStoryboardsNew, index),
       { signal },
     );
-    return this.parseJson(response, createdSheetsSchema, signal);
+    return this.parseEnvelope(response, signal);
   }
 
   async fetchOpenApi(signal?: AbortSignal): Promise<Result<unknown, ExternalApiError>> {

@@ -183,11 +183,11 @@ export type OperationWarning = z.infer<typeof operationWarningSchema>;
 
 /**
  * Operation envelope returned by `POST /v0/workbook/document`, `POST /v0/app:invokeCommand`,
- * and the `GET /v0/operations/{id}` poll route. Only `id`/`kind`/`state` are required here even
- * though the 0.2.0 spec also lists `createdAt`/`updatedAt`/`warnings`: the executor reads those
- * fail-open (`createdAt ?? now`, `warnings` only when present), so a partial or slightly-older
- * envelope must still parse rather than error. `result` rides only a SUCCEEDED envelope with
- * non-null command output.
+ * `POST /v0/workbook/{worksheets,dashboards,storyboards}:new`, and the `GET /v0/operations/{id}`
+ * poll route. Only `id`/`kind`/`state` are required here even though the 0.2.0 spec also lists
+ * `createdAt`/`updatedAt`/`warnings`: the executor reads those fail-open (`createdAt ?? now`,
+ * `warnings` only when present), so a partial or slightly-older envelope must still parse rather
+ * than error. `result` rides only a SUCCEEDED envelope with non-null command output.
  */
 export const operationEnvelopeSchema = z
   .object({
@@ -376,24 +376,6 @@ export const validationResultSchema = z
   })
   .passthrough();
 export type ValidationResult = z.infer<typeof validationResultSchema>;
-
-/**
- * Body returned by the `POST /v0/workbook/{worksheets,dashboards,storyboards}:new` routes: the
- * stable id and (possibly auto-generated) name of each created sheet.
- */
-export const createdSheetsSchema = z
-  .object({
-    createdSheets: z.array(
-      z
-        .object({
-          id: z.string(),
-          name: z.string(),
-        })
-        .passthrough(),
-    ),
-  })
-  .passthrough();
-export type CreatedSheets = z.infer<typeof createdSheetsSchema>;
 
 /**
  * Image export result returned by `GET /v0/workbook/worksheets/{id}/image` and

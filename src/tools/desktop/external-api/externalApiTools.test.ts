@@ -268,42 +268,37 @@ describe('External API coverage tools', () => {
     {
       makeTool: getCreateWorksheetBlankTool,
       newPath: '/v0/workbook/worksheets:new',
-      expectedName: 'Worksheet 1',
+      expectedMessage: 'Created a blank worksheet.',
     },
     {
       makeTool: getCreateDashboardBlankTool,
       newPath: '/v0/workbook/dashboards:new',
-      expectedName: 'Dashboard 1',
+      expectedMessage: 'Created a blank dashboard.',
     },
     {
       makeTool: getCreateStoryboardBlankTool,
       newPath: '/v0/workbook/storyboards:new',
-      expectedName: 'Storyboard 1',
+      expectedMessage: 'Created a blank storyboard.',
     },
-  ])(
-    '$newPath creates a blank sheet and returns its id/name',
-    async ({ makeTool, newPath, expectedName }) => {
-      const harness = await startHarness(makeTool);
-      try {
-        const result = await harness.callTool({});
+  ])('$newPath creates a blank sheet', async ({ makeTool, newPath, expectedMessage }) => {
+    const harness = await startHarness(makeTool);
+    try {
+      const result = await harness.callTool({});
 
-        expect(result.isError).toBe(false);
-        const parsed = z
-          .object({ createdSheet: z.object({ id: z.string(), name: z.string() }) })
-          .parse(parseResult(result));
-        expect(parsed.createdSheet.name).toBe(expectedName);
-        const last = harness.server.requests.at(-1);
-        expect(last?.method).toBe('POST');
-        expect(last?.path).toBe(newPath);
-        // No index arg -> bare route so the server appends at the end.
-        expect(last?.searchParams).toEqual({});
-        // No request body — the :new routes reject a non-empty body with 400.
-        expect(last?.body).toBe('');
-      } finally {
-        await harness.close();
-      }
-    },
-  );
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(expectedMessage);
+      const last = harness.server.requests.at(-1);
+      expect(last?.method).toBe('POST');
+      expect(last?.path).toBe(newPath);
+      // No index arg -> bare route so the server appends at the end.
+      expect(last?.searchParams).toEqual({});
+      // The client never sends a body for the :new routes.
+      expect(last?.body).toBe('');
+    } finally {
+      await harness.close();
+    }
+  });
 
   it('forwards the index arg to the blank worksheet create route', async () => {
     const harness = await startHarness(getCreateWorksheetBlankTool);

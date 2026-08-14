@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { DesktopCommandExecutionError, UnknownError } from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 import { endpointNotInThisBuild, isRouteMissing } from './externalApiToolUtils.js';
@@ -58,14 +58,11 @@ export const getCreateStoryboardBlankTool = (
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 
-          const createdSheet = result.value.createdSheets[0];
-          if (!createdSheet) {
-            return new UnknownError('Create blank storyboard returned no created sheet.').toErr();
-          }
-
           return new Ok({
-            message: `Created blank storyboard "${createdSheet.name}".`,
-            createdSheet,
+            message:
+              result.value.status === 'completed'
+                ? 'Created a blank storyboard.'
+                : 'Requested a new blank storyboard; Desktop is still creating it.',
           });
         },
       });

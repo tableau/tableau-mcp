@@ -662,18 +662,18 @@ export async function startMockExternalApiServer(
             ? 'storyboard'
             : undefined;
     if (newSheetKind) {
-      if (body.trim().length > 0) {
-        sendProblem(res, 400, 'invalid-request-body', 'The :new routes accept no request body.');
-        return;
-      }
       const rawIndex = searchParams['index'];
       if (rawIndex !== undefined && !/^-?\d+$/.test(rawIndex)) {
         sendProblem(res, 400, 'invalid-query-parameter', `Non-numeric index: ${rawIndex}`);
         return;
       }
-      const capitalized = newSheetKind.charAt(0).toUpperCase() + newSheetKind.slice(1);
+      // The :new routes ignore any request body and return a bare Operation envelope.
       sendJson(res, 200, {
-        createdSheets: [{ id: `${newSheetKind}-new-1`, name: `${capitalized} 1` }],
+        id: `op-${newSheetKind}-new-1`,
+        kind: 'sheet.new',
+        state: 'succeeded',
+        createdAt: '2026-07-07T10:00:00Z',
+        completedAt: '2026-07-07T10:00:01Z',
       });
       return;
     }
