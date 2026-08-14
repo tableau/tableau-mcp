@@ -43,6 +43,7 @@ Slack channel in the Tableau #DataDev workspace.
 | [list-flows](tools/flows/list-flows.md)                                                                               | Retrieves a list of Tableau Prep flows from a specified Tableau site ([REST API][list-flows])                       | All SKUs     |
 | [get-datasource-metadata](tools/data-qna/get-datasource-metadata.md)                                                  | Fetches datasource metadata including table relationships, datasource and field descriptions, field roles and types, calculation strings, and parameters for the specified datasource ([Metadata API][meta] & [VDS API][vds])                         | All SKUs\*   |
 | [get-workbook](tools/workbooks/get-workbook.md)                                                                       | Retrieves information about a workbook for a specified workbook on a Tableau site ([REST API][get-workbook])                        | All SKUs     |
+| [download-workbook](tools/workbooks/download-workbook.md)                                                             | Downloads workbook content as TWB (XML) or TWBX (packaged) and returns a file link ([REST API][download-workbook])                 | All SKUs     |
 | [get-flow](tools/flows/get-flow.md)                                                                                   | Retrieves information on a Tableau Prep flow including output steps and recent runs ([REST API][get-flow])                          | All SKUs     |
 | [list-flow-runs](tools/flows/list-flow-runs.md)                                                                       | Retrieves the run history (executions) of Tableau Prep flows on a site ([REST API][list-flow-runs])                                 | All SKUs     |
 | [list-flow-tasks](tools/flows/list-flow-tasks.md)                                                                     | Retrieves the scheduled flow run tasks (schedules) for Tableau Prep flows on a site ([REST API][list-flow-tasks])                   | All SKUs     |
@@ -83,6 +84,8 @@ Slack channel in the Tableau #DataDev workspace.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#query_flows_for_site
 [get-workbook]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook
+[download-workbook]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook
 [get-flow]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#query_flow
 [list-flow-runs]:

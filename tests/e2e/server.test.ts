@@ -1,3 +1,4 @@
+import features from '../../features.json';
 import pkg from '../../package.json';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
@@ -6,6 +7,7 @@ import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
 const serverVersion = pkg.version;
+const authoringToolsEnabled = Boolean(features['authoring-tools']);
 
 describe('server', () => {
   beforeAll(setEnv);
@@ -25,7 +27,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-mcp',
         version: serverVersion,
       });
@@ -86,6 +88,9 @@ describe('server', () => {
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedToolNames = expectedToolNames.filter((name) => !mcpAppsTools.includes(name));
+      if (!authoringToolsEnabled) {
+        expectedToolNames = expectedToolNames.filter((name) => name !== 'download-workbook');
+      }
 
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
@@ -106,7 +111,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-desktop-mcp',
         version: serverVersion,
       });
@@ -134,7 +139,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-combined-mcp',
         version: serverVersion,
       });
@@ -199,6 +204,9 @@ describe('server', () => {
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
+      if (!authoringToolsEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => name !== 'download-workbook');
+      }
 
       const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));

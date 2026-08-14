@@ -49,6 +49,7 @@ export type TableauApiScope =
   | 'tableau:tasks:delete'
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
+  | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
@@ -237,6 +238,10 @@ const toolScopeMap: Record<
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'download-workbook': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
