@@ -1,5 +1,5 @@
-import pkg from '../../package.json';
 import features from '../../features.json';
+import pkg from '../../package.json';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
 import { resetEnv, setEnv } from '../testEnv.js';
