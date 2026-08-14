@@ -144,6 +144,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'add-storyboard',
     'open-file',
     'save-workbook',
+    'workbook-export-as',
     'pause-auto-updates',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.

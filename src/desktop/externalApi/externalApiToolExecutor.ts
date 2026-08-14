@@ -33,6 +33,7 @@ import {
   dashboardRoute,
   DatasourceList,
   datasourceListSchema,
+  ExportAsWorkbookRequest,
   EXTERNAL_API_ROUTES,
   ExternalApiError,
   ExternalApiInstance,
@@ -636,6 +637,16 @@ export class ExternalApiToolExecutor {
           signal,
         ),
       'save-workbook-file',
+    );
+  }
+
+  async exportWorkbookAs(
+    request: ExportAsWorkbookRequest,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postJsonEnvelope(EXTERNAL_API_ROUTES.workbookExportAs, request, signal),
+      'export-workbook-as',
     );
   }
 

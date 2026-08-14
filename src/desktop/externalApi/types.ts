@@ -29,6 +29,7 @@ export const EXTERNAL_API_ROUTES = {
   workbookUndo: '/v0/workbook:undo',
   workbookRedo: '/v0/workbook:redo',
   workbookSave: '/v0/workbook:save',
+  workbookExportAs: '/v0/workbook:exportAs',
   workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
   dashboardDocument: '/v0/workbook/dashboards/{id}/document',
@@ -112,6 +113,21 @@ export type OpenFileRequest = {
  */
 export type SaveWorkbookRequest = {
   filePath?: string;
+};
+
+/** The non-native formats `POST /v0/workbook:exportAs` can render the open workbook to. */
+export type ExportAsFormat = 'pdf' | 'powerpoint' | 'packaged-workbook' | 'prior-version';
+
+/**
+ * Body of `POST /v0/workbook:exportAs`. Exports the open workbook to a non-native format,
+ * leaving the open document unchanged. `filePath` is absolute and its extension must match
+ * `format` (.pdf / .pptx / .twbx / .twb|.twbx). `targetVersion` is required only when
+ * `format` is `prior-version` — the customer-facing release string, e.g. "2026.1".
+ */
+export type ExportAsWorkbookRequest = {
+  format: ExportAsFormat;
+  filePath: string;
+  targetVersion?: string;
 };
 
 /** Query accepted by {@link worksheetImageRoute} and {@link dashboardImageRoute}. */

@@ -53,6 +53,7 @@ export function makeExecutorMock(
     redo: vi.fn(),
     openFile: vi.fn(),
     saveWorkbook: vi.fn(),
+    exportWorkbookAs: vi.fn(),
     addWorksheet: vi.fn(),
     addDashboard: vi.fn(),
     addStoryboard: vi.fn(),

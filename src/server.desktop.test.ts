@@ -210,8 +210,11 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // descriptions carrying the new-window/session-binding and blocking-Save-As caveats the 0.2.6
 // descriptions spell out. All five join the dynamic-authoring profile: served moves
 // 31_485 -> 34_581 (still well under the 46k cliff), full moves 51_101 -> 54_197.
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 34_581;
-const FULL_TOOL_SURFACE_BUDGET = 54_197;
+// Re-pinned 2026-08-14: added workbook-export-as over the External Client API workbook:exportAs
+// route (pdf/powerpoint/packaged-workbook/prior-version, headless write to filePath). It joins
+// the dynamic-authoring profile: served moves 34_581 -> 35_576, full moves 54_197 -> 55_192.
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 35_576;
+const FULL_TOOL_SURFACE_BUDGET = 55_192;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -466,10 +469,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 44-tool modern surface with one dashboard mutation door', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 45-tool modern surface with one dashboard mutation door', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(44);
+    expect(selected).toHaveLength(45);
     expect(selected.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining(['bind-template', 'build-and-apply-worksheet']),
     );
@@ -515,6 +518,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'add-storyboard',
       'open-file',
       'save-workbook',
+      'workbook-export-as',
       // The manual field-edit path's read leg — mints the worksheetFile add-field/
       // remove-field/apply-worksheet consume.
       'get-worksheet-xml',

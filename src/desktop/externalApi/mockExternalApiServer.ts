@@ -833,6 +833,46 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookExportAs) {
+      let parsed: { format?: unknown; filePath?: unknown; targetVersion?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      const formats = ['pdf', 'powerpoint', 'packaged-workbook', 'prior-version'];
+      if (typeof parsed.format !== 'string' || !formats.includes(parsed.format)) {
+        sendProblem(res, 400, 'invalid-request-body', 'exportAs requires a known `format`.');
+        return;
+      }
+      if (typeof parsed.filePath !== 'string' || parsed.filePath.length === 0) {
+        sendProblem(res, 400, 'invalid-request-body', 'exportAs requires a string `filePath`.');
+        return;
+      }
+      // Extension↔format matrix: the live host answers `unsupported-file-type` when they disagree.
+      const ext = (parsed.filePath.match(/\.[^./\\]+$/)?.[0] ?? '').toLowerCase();
+      const okExt =
+        parsed.format === 'pdf'
+          ? ext === '.pdf'
+          : parsed.format === 'powerpoint'
+            ? ext === '.pptx'
+            : parsed.format === 'packaged-workbook'
+              ? ext === '.twbx'
+              : ext === '.twb' || ext === '.twbx'; // prior-version
+      if (!okExt) {
+        sendProblem(
+          res,
+          400,
+          'unsupported-file-type',
+          `filePath extension ${ext} does not match ${parsed.format}.`,
+        );
+        return;
+      }
+      sendOperation(res, 'export-workbook-as');
+      return;
+    }
+
     if (
       method === 'POST' &&
       (path === EXTERNAL_API_ROUTES.workbookWorksheetsNew ||
