@@ -16,7 +16,7 @@ import {
 import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
-import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
@@ -344,7 +344,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
 
           try {
             writeFileSync(worksheetFile, modifiedXml, 'utf-8');
-            writeSidecar(worksheetFile, resolvedSession);
+            restampSidecarAfterEdit(worksheetFile, resolvedSession);
           } catch (error) {
             return new FileReadError(error).toErr();
           }

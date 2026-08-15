@@ -10,6 +10,7 @@ import {
   type TemplateWorksheetArtifact,
 } from '../../../desktop/templates/templateArtifactStore.js';
 import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
+import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as listWorksheetsModule from '../../../desktop/wrappers/listWorksheets.js';
 import * as loadWorksheetXmlModule from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
@@ -296,6 +297,10 @@ describe('applyWorksheetTool', () => {
 
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+      ok: true,
+      sourceHash: 'd'.repeat(64),
+    });
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
       Ok({ readbackWarnings: [] }),
     );
@@ -318,6 +323,10 @@ describe('applyWorksheetTool', () => {
 
     expect(existsSync).toHaveBeenCalledWith(mockFilePath);
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
+    expect(loadWorksheetXmlModule.loadWorksheetXml).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedSourceHash: 'd'.repeat(64) }),
+    );
+    sidecarSpy.mockRestore();
   });
 
   it('resolves a worksheet id against the fragment simple-id for cached-file apply', async () => {

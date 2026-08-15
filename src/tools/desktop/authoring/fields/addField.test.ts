@@ -171,7 +171,10 @@ describe('addFieldTool', () => {
 
     await getResult({ worksheetFile: WORKSHEET_FILE, target: 'rows', columnRef: COLUMN_REF });
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+      WORKSHEET_FILE,
+      SESSION,
+    );
   });
 
   it('stamps the sidecar with the pinned session, not the requested one', async () => {
@@ -188,7 +191,10 @@ describe('addFieldTool', () => {
       session: undefined,
     });
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+      WORKSHEET_FILE,
+      SESSION,
+    );
   });
 
   it('rejects and writes no sidecar when the requested session is not a running instance', async () => {
@@ -250,6 +256,7 @@ describe('addFieldTool', () => {
     vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
       Ok({ xml: FRAGMENT, name: 'Sheet 1' }),
     );
+    vi.mocked(cacheFingerprintModule.sourceSha256).mockReturnValue('e'.repeat(64));
     // The minted cache file exists after the internal write; the edit reads it back.
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(FRAGMENT);
@@ -276,6 +283,12 @@ describe('addFieldTool', () => {
     expect(writeFileSync).toHaveBeenCalledWith(body.file, FRAGMENT, 'utf-8');
     // ...and the modified XML was written back to the same path.
     expect(writeFileSync).toHaveBeenCalledWith(body.file, MODIFIED_XML, 'utf-8');
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(
+      body.file,
+      SESSION,
+      'e'.repeat(64),
+    );
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(body.file, SESSION);
   });
 
   it('rejects a worksheet name that is not in the live list, before any fetch or write', async () => {

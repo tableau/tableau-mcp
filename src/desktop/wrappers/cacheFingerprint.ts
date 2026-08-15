@@ -11,6 +11,7 @@
  * proceed (pre-sidecar caches stay valid), and a fingerprint that cannot be resolved never
  * blocks blind.
  */
+import { createHash } from 'crypto';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 import { log } from '../../logging/logger.js';
@@ -29,11 +30,13 @@ export type CacheArtifactKind = 'worksheet' | 'workbook' | 'dashboard' | 'storyb
 export interface CacheSidecarMeta extends InstanceFingerprint {
   session_id: string;
   created_at: string;
+  source_sha256?: string;
 }
 
 export interface CheckSidecarResult {
   ok: boolean;
   message?: string;
+  sourceHash?: string;
 }
 
 /** Resolves the live fingerprint for a session id. Injectable so tests need no discovery dir. */
@@ -66,11 +69,39 @@ export function defaultFingerprintResolver(sessionId: string): InstanceFingerpri
   return instance ? fingerprintFromInstance(instance) : undefined;
 }
 
+export function sourceSha256(xml: string): string {
+  return createHash('sha256').update(stripVolatileWindowState(xml)).digest('hex');
+}
+
+// Navigation (activate-sheet / goto / the focus dispatch that follows any apply) flips the
+// active/maximized flags on <window> tags without changing content. Those bytes must not count as
+// drift, but the rest of the <windows> subtree (cards, viewpoints, simple-id) is real structure the
+// guard must still catch — so strip only these two attributes, not the subtree.
+function stripVolatileWindowState(xml: string): string {
+  return xml.replace(/<window\b[^>]*>/gi, (tag) =>
+    tag.replace(/\s+(?:active|maximized)\s*=\s*(["']).*?\1/gi, ''),
+  );
+}
+
 export function writeSidecar(
   cacheFile: string,
   sessionId: string,
+  resolve?: FingerprintResolver,
+): void;
+export function writeSidecar(
+  cacheFile: string,
+  sessionId: string,
+  sourceHash?: string,
+  resolve?: FingerprintResolver,
+): void;
+export function writeSidecar(
+  cacheFile: string,
+  sessionId: string,
+  sourceHashOrResolve?: string | FingerprintResolver,
   resolve: FingerprintResolver = defaultFingerprintResolver,
 ): void {
+  const sourceHash = typeof sourceHashOrResolve === 'string' ? sourceHashOrResolve : undefined;
+  if (typeof sourceHashOrResolve === 'function') resolve = sourceHashOrResolve;
   const fingerprint = resolve(sessionId);
   if (!fingerprint) {
     log({
@@ -86,6 +117,7 @@ export function writeSidecar(
     session_id: sessionId,
     ...fingerprint,
     created_at: new Date().toISOString(),
+    ...(sourceHash === undefined ? {} : { source_sha256: sourceHash }),
   };
 
   try {
@@ -98,6 +130,15 @@ export function writeSidecar(
       data: { file: cacheFile, error: String(error) },
     });
   }
+}
+
+/** Preserve the live-source provenance that existed before an in-place cache edit. */
+export function restampSidecarAfterEdit(
+  _cacheFile: string,
+  _sessionId: string,
+  _resolve: FingerprintResolver = defaultFingerprintResolver,
+): void {
+  // The existing sidecar already identifies the live source and instance that produced the cache.
 }
 
 export function checkSidecar(
@@ -153,7 +194,10 @@ export function checkSidecar(
     return { ok: true };
   }
 
-  if (sameFingerprint(meta, current)) return { ok: true };
+  if (sameFingerprint(meta, current)) {
+    const sourceHash = validSourceHash(meta.source_sha256) ? meta.source_sha256 : undefined;
+    return sourceHash === undefined ? { ok: true } : { ok: true, sourceHash };
+  }
 
   const message =
     `Refusing to apply ${kind} cache file from a different Tableau Desktop session: ${cacheFile}\n\n` +
@@ -172,6 +216,10 @@ export function checkSidecar(
 
 function sameFingerprint(a: InstanceFingerprint, b: InstanceFingerprint): boolean {
   return a.pid === b.pid && a.instanceId === b.instanceId;
+}
+
+function validSourceHash(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 }
 
 function formatFingerprint(fingerprint: InstanceFingerprint): string {

@@ -210,15 +210,14 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // descriptions carrying the new-window/session-binding and blocking-Save-As caveats the 0.2.6
 // descriptions spell out. All five join the dynamic-authoring profile: served moves
 // 31_485 -> 34_581 (still well under the 46k cliff), full moves 51_101 -> 54_197.
-// Re-pinned 2026-08-13: list-worksheets and list-dashboards now return each item's full
-// External Client API payload instead of just id+name, so their descriptions enumerate that
-// per-item state (hidden, index, active sheet, auto-updates, datasources/contained sheets).
-// Both are in the dynamic-authoring profile: served moves 34_581 -> 34_709, full 54_197 -> 54_325.
-// Re-pinned 2026-08-13: list-storyboards' description was aligned to the same enumerated style
-// for consistency. It is not in the dynamic-authoring profile, so only the full surface moves:
-// 54_325 -> 54_432.
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 34_709;
-const FULL_TOOL_SURFACE_BUDGET = 54_432;
+// Re-pinned 2026-08-14: the fallback/apply work plus list-worksheets/list-dashboards/list-storyboards
+// returning each item's full External Client API payload (hidden, index, active sheet, auto-updates,
+// datasources/contained sheets). Retain the established 18-character ratchet slack. Image export
+// stays out until its External Client API progress signal is fixed.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 39_069;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 39_087;
+const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
+const FULL_TOOL_SURFACE_BUDGET = 54_759;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -243,8 +242,10 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
     // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_191);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_657);
+    expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
     expect(fullToolSurfaceTotal).toBeLessThanOrEqual(FULL_TOOL_SURFACE_BUDGET);
   });
 });
@@ -473,13 +474,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 44-tool modern surface with one dashboard mutation door', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 50-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(44);
-    expect(selected.map((tool) => tool.name)).not.toEqual(
-      expect.arrayContaining(['bind-template', 'build-and-apply-worksheet']),
-    );
+    expect(selected).toHaveLength(50);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -522,20 +520,23 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'add-storyboard',
       'open-file',
       'save-workbook',
+      'get-workbook-xml',
+      'apply-workbook',
+      'get-dashboard-xml',
+      'apply-dashboard',
+      'get-storyboard-xml',
+      'apply-storyboard',
       // The manual field-edit path's read leg — mints the worksheetFile add-field/
       // remove-field/apply-worksheet consume.
       'get-worksheet-xml',
     ]) {
       expect(selected.map((t) => t.name)).toContain(verb);
     }
-    // Zero agent-visible WHOLE-WORKBOOK round-trip/validation XML tools: the hand-XML
-    // surgery surface stays OUT, including get-workbook-xml + apply-workbook. Navigation gets
-    // only the dedicated atomic activate-sheet fallback. The per-sheet lane is in:
-    // get-worksheet-xml reads, read-cached-xml/write-cached-xml edit the cached slice, and
-    // apply-worksheet applies the file — apply-* takes no document, so this lane is the route.
+    // Keep unrelated info/site/validation and legacy template tools out. The six scoped and
+    // whole-workbook fallbacks above are the complete XML surface added to this profile.
     for (const banished of [
-      'get-workbook-xml',
-      'apply-workbook',
+      'bind-template',
+      'build-and-apply-worksheet',
       'validate-workbook-xml',
       'validate-worksheet-xml',
       'inject-template',
@@ -544,7 +545,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'get-health',
       'get-worksheet-info',
       'list-storyboards',
-      'get-storyboard-xml',
       'get-api-root',
       'get-site-info',
       'get-dashboard-info',
@@ -570,7 +570,9 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     for (const tool of selected) {
       total += (await serializeDesktopToolSurface(tool)).length;
     }
+    expect(total).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
     expect(total).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
+    expect(total).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {

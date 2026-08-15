@@ -3,7 +3,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
-import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorksheetXml, isRouteMissing } from '../../../../desktop/wrappers/getWorksheetXml.js';
 import { listWorksheets } from '../../../../desktop/wrappers/listWorksheets.js';
 import {
@@ -127,6 +127,6 @@ export async function fetchAndCacheWorksheet({
     prefix: `worksheet-${safeWorksheetCacheId(fetched.value.name)}`,
   });
   writeFileSync(cacheFile, fetched.value.xml, 'utf-8');
-  writeSidecar(cacheFile, resolvedSession);
+  writeSidecar(cacheFile, resolvedSession, sourceSha256(fetched.value.xml));
   return Ok(cacheFile);
 }

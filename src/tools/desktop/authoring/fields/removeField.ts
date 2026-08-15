@@ -10,7 +10,7 @@ import {
 } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
-import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
@@ -191,7 +191,7 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
 
           try {
             writeFileSync(worksheetFile, modifiedXml, 'utf-8');
-            writeSidecar(worksheetFile, resolvedSession);
+            restampSidecarAfterEdit(worksheetFile, resolvedSession);
           } catch (error) {
             return new FileReadError(error).toErr();
           }

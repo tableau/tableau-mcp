@@ -169,7 +169,10 @@ describe('removeFieldTool', () => {
 
     await getResult({ worksheetFile: WORKSHEET_FILE, target: 'rows', columnRef: COLUMN_REF });
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+      WORKSHEET_FILE,
+      SESSION,
+    );
   });
 
   it('stamps the sidecar with the pinned session, not the requested one', async () => {
@@ -186,7 +189,10 @@ describe('removeFieldTool', () => {
       session: undefined,
     });
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+      WORKSHEET_FILE,
+      SESSION,
+    );
   });
 
   it('rejects and writes no sidecar when the requested session is not a running instance', async () => {
