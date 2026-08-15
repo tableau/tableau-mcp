@@ -304,7 +304,7 @@ export const getApplyWorksheetTool = (
           if (preamble.isErr()) {
             return preamble;
           }
-          const { xml: worksheetXml, resolvedSession } = preamble.value;
+          const { xml: worksheetXml, resolvedSession, sourceHash } = preamble.value;
 
           const executor = await extra.getExecutor(resolvedSession);
           const result = await loadWorksheetXml({
@@ -317,6 +317,7 @@ export const getApplyWorksheetTool = (
             // route; a name that does not resolve surfaces as an error rather than creating a sheet
             // through the whole-workbook path (build-worksheets-from-templates owns net-new creation).
             requireExistingSheet: true,
+            expectedSourceHash: sourceHash,
           });
 
           if (result.isErr()) {

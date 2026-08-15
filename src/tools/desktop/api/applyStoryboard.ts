@@ -29,7 +29,9 @@ export const getApplyStoryboardTool = (
     server,
     name: 'apply-storyboard',
     title,
-    description: 'Apply modified storyboard document to Tableau.',
+    description:
+      'Apply modified storyboard document to Tableau. When the cache has source metadata, ' +
+      'a freshness check rejects changes to this storyboard since the read.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -57,7 +59,7 @@ export const getApplyStoryboardTool = (
           if (preamble.isErr()) {
             return preamble;
           }
-          const { xml: storyboardXml, resolvedSession } = preamble.value;
+          const { xml: storyboardXml, resolvedSession, sourceHash } = preamble.value;
 
           const executor = await extra.getExecutor(resolvedSession);
           // A storyboard rides the dashboard loader (it serializes as a
@@ -66,6 +68,7 @@ export const getApplyStoryboardTool = (
           const result = await loadStoryboardXml({
             storyboardName,
             xml: storyboardXml,
+            expectedSourceHash: sourceHash,
             focus: { navigate: 'artifact', sheetName: storyboardName },
             executor,
             signal: extra.signal,

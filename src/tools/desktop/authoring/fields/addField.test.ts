@@ -165,7 +165,10 @@ describe('addFieldTool', () => {
 
     await getResult({ worksheetFile: WORKSHEET_FILE, target: 'rows', columnRef: COLUMN_REF });
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+      WORKSHEET_FILE,
+      SESSION,
+    );
   });
 
   it('stamps the sidecar with the pinned session, not the requested one', async () => {
@@ -182,7 +185,10 @@ describe('addFieldTool', () => {
       session: undefined,
     });
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+      WORKSHEET_FILE,
+      SESSION,
+    );
   });
 
   it('rejects and writes no sidecar when the requested session is not a running instance', async () => {
@@ -242,6 +248,7 @@ describe('addFieldTool', () => {
   it('fetches + caches the sheet by name when no worksheetFile is given, then edits it', async () => {
     const FRAGMENT = '<worksheet name="Sheet 1"><table/></worksheet>';
     vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(FRAGMENT));
+    vi.mocked(cacheFingerprintModule.sourceSha256).mockReturnValue('e'.repeat(64));
     // The minted cache file exists after the internal write; the edit reads it back.
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(FRAGMENT);
@@ -268,6 +275,12 @@ describe('addFieldTool', () => {
     expect(writeFileSync).toHaveBeenCalledWith(body.file, FRAGMENT, 'utf-8');
     // ...and the modified XML was written back to the same path.
     expect(writeFileSync).toHaveBeenCalledWith(body.file, MODIFIED_XML, 'utf-8');
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(
+      body.file,
+      SESSION,
+      'e'.repeat(64),
+    );
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(body.file, SESSION);
   });
 
   it('surfaces a fetch error (unknown worksheet) without writing anything', async () => {

@@ -4,7 +4,10 @@ import { log } from '../../logging/logger.js';
 import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
+import { introducedBlockingValidationIssues, runValidation } from '../validation/registry.js';
+import { type ValidationContext, type ValidationIssue } from '../validation/types.js';
 import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
+import { sourceSha256 } from './cacheFingerprint.js';
 
 export type PerSheetKind = 'worksheet' | 'dashboard' | 'storyboard';
 
@@ -16,7 +19,12 @@ export type PerSheetKind = 'worksheet' | 'dashboard' | 'storyboard';
  * resolve to a live sheet (`sheet-absent` — a net-new sheet, or a pre-existing ambiguity the
  * whole-workbook upsert resolves by first-match).
  */
-export type PerSheetApplyOutcome = 'applied' | 'sheet-absent' | 'route-missing';
+export type PerSheetApplyOutcome =
+  | 'applied'
+  | 'sheet-absent'
+  | 'route-missing'
+  | 'source-drift'
+  | { type: 'validation-failed'; issues: ValidationIssue[] };
 
 const ITEM_LABEL: Record<PerSheetKind, string> = {
   worksheet: 'Worksheet',
@@ -36,6 +44,8 @@ export async function tryApplyViaPerSheetRoute({
   kind,
   sheetName,
   fragmentXml,
+  expectedSourceHash,
+  validationContext,
   focus,
   executor,
   signal,
@@ -43,6 +53,8 @@ export async function tryApplyViaPerSheetRoute({
   kind: PerSheetKind;
   sheetName: string;
   fragmentXml: string;
+  expectedSourceHash?: string;
+  validationContext?: ValidationContext;
   focus: ApplyFocus;
 } & WithExecutorAndAbortSignal): Promise<Result<PerSheetApplyOutcome, ExecuteCommandError>> {
   const client = executor as ExternalApiToolExecutor;
@@ -63,6 +75,24 @@ export async function tryApplyViaPerSheetRoute({
     // first-match): report `sheet-absent` and let the caller decide — surface it (in-place apply) or
     // fall back to the whole-workbook apply (create-capable caller).
     return Ok('sheet-absent');
+  }
+
+  if (expectedSourceHash !== undefined || validationContext !== undefined) {
+    const documentResult = await getDocumentForKind(kind, resolved.value.id, client, signal);
+    if (documentResult.isErr()) return Err(documentResult.error);
+    if (
+      expectedSourceHash !== undefined &&
+      sourceSha256(documentResult.value.xml) !== expectedSourceHash
+    ) {
+      return Ok('source-drift');
+    }
+    if (validationContext !== undefined) {
+      const introduced = introducedBlockingValidationIssues(
+        runValidation(documentResult.value.xml, validationContext).issues,
+        runValidation(fragmentXml, validationContext).issues,
+      );
+      if (introduced.length > 0) return Ok({ type: 'validation-failed', issues: introduced });
+    }
   }
 
   // POST the sheet fragment as-is: Tableau Desktop wraps it into the live workbook on the per-sheet
@@ -94,6 +124,22 @@ export async function tryApplyViaPerSheetRoute({
   await dispatchApplyFocus({ focus, postedXml: fragmentXml, executor, signal });
 
   return Ok('applied');
+}
+
+async function getDocumentForKind(
+  kind: PerSheetKind,
+  id: string,
+  client: ExternalApiToolExecutor,
+  signal: AbortSignal,
+): ReturnType<ExternalApiToolExecutor['getWorksheetDocument']> {
+  switch (kind) {
+    case 'worksheet':
+      return client.getWorksheetDocument(id, signal);
+    case 'dashboard':
+      return client.getDashboardDocument(id, signal);
+    case 'storyboard':
+      return client.getStoryboardDocument(id, signal);
+  }
 }
 
 async function listSheetsOfKind(
