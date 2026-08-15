@@ -1,7 +1,7 @@
 import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
+import { AxiosRequestConfig, getStringResponseHeader, isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { viewsApis } from '../apis/viewsApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -11,6 +11,11 @@ import { View } from '../types/view.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 type QueryImageError = { type: 'feature-disabled' } | { type: 'unknown'; message: string };
+
+export type ViewAllDataResponse = {
+  body: Uint8Array;
+  contentType: string;
+};
 
 /**
  * Views methods of the Tableau Server REST API
@@ -234,6 +239,35 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       queries,
       ...this.authHeader,
     });
+  };
+
+  /**
+   * Returns all constituent sheets for a view as a multipart response.
+   *
+   * Required scopes: `tableau:views:download`
+   *
+   * @param {string} viewId The ID of the view to return data for.
+   * @param {string} siteId The Tableau site ID.
+   */
+  getViewAllData = async ({
+    viewId,
+    siteId,
+  }: {
+    viewId: string;
+    siteId: string;
+  }): Promise<ViewAllDataResponse> => {
+    const response = await this._apiClient.axios.get<Uint8Array>(
+      `/sites/${siteId}/views/${viewId}/allData`,
+      {
+        ...this.authHeader,
+        responseType: 'arraybuffer',
+      },
+    );
+
+    return {
+      body: response.data,
+      contentType: getStringResponseHeader(response.headers, 'content-type'),
+    };
   };
 
   /**
