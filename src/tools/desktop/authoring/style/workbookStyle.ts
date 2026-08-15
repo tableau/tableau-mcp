@@ -92,7 +92,7 @@ function styleWorksheet(
   stylePack: TableauStylePackV2,
   findings: FindingCollector,
 ): boolean {
-  let changed = false;
+  let changed = insertCanonicalWorksheetTitle(worksheet, stylePack);
   for (const layout of directChildren(worksheet, 'layout-options')) {
     for (const title of directChildren(layout, 'title')) {
       for (const formattedText of directChildren(title, 'formatted-text')) {
@@ -190,6 +190,38 @@ function styleWorksheet(
     }
   }
   return changed;
+}
+
+function insertCanonicalWorksheetTitle(
+  worksheet: XmlElement,
+  stylePack: TableauStylePackV2,
+): boolean {
+  const tables = directChildren(worksheet, 'table');
+  const name = unnamespacedAttribute(worksheet, 'name')?.value;
+  if (
+    name === undefined ||
+    normalizeName(name) === '' ||
+    directChildren(worksheet, 'layout-options').length !== 0 ||
+    tables.length !== 1 ||
+    hasDirectNamespacedCollision(worksheet, 'layout-options') ||
+    hasDirectNamespacedCollision(worksheet, 'table')
+  ) {
+    return false;
+  }
+  const document = worksheet.ownerDocument;
+  if (!document) return false;
+  const layout = document.createElement('layout-options');
+  const title = document.createElement('title');
+  const formattedText = document.createElement('formatted-text');
+  const run = document.createElement('run');
+  run.setAttribute('fontcolor', stylePack.palette.text);
+  run.setAttribute('fontname', stylePack.typography.titleFont);
+  run.appendChild(document.createTextNode('<Sheet Name>'));
+  formattedText.appendChild(run);
+  title.appendChild(formattedText);
+  layout.appendChild(title);
+  worksheet.insertBefore(layout, tables[0]);
+  return true;
 }
 
 function styleDashboard(dashboard: XmlElement, stylePack: TableauStylePackV2): boolean {
@@ -508,6 +540,15 @@ function directChildren(parent: XmlNode, name: string): XmlElement[] {
     }
   }
   return matches;
+}
+
+function hasDirectNamespacedCollision(parent: XmlNode, localName: string): boolean {
+  for (let child = parent.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType !== 1) continue;
+    const element = child as XmlElement;
+    if (element.localName === localName && !isUnnamespacedElement(element, localName)) return true;
+  }
+  return false;
 }
 
 function unnamespacedAttribute(element: XmlElement, name: string): XmlAttr | null {

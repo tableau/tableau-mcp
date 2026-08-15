@@ -43,7 +43,7 @@ const stylePack: TableauStylePackV2 = {
 const baselineXml =
   '<workbook><worksheets>' +
   '<worksheet name="Styled"><layout-options><title><formatted-text><run fontname="Tableau Light" fontcolor="#000000">Styled</run></formatted-text></title></layout-options><table/></worksheet>' +
-  '<worksheet name="Plain"><table/></worksheet>' +
+  '<worksheet name="Plain"><layout-options/><table/></worksheet>' +
   '</worksheets><dashboards/></workbook>';
 
 const inventory = {
@@ -168,6 +168,39 @@ describe('apply-workbook-style', () => {
       applied: true,
       changedEligibleIds: ['dashboard-id'],
       verification: { status: 'passed', analyticalFingerprint: 'passed', idempotence: 'passed' },
+    });
+  });
+
+  it.each([
+    [
+      'missing inserted title',
+      (xml: string) => xml.replace(/<layout-options>.*?<\/layout-options>/, ''),
+    ],
+    ['altered inserted title color', (xml: string) => xml.replace('#171321', '#999999')],
+    ['static inserted title text', (xml: string) => xml.replace('&lt;Sheet Name&gt;', 'Generated')],
+  ])('rejects readback with %s', async (_label, readbackTransform) => {
+    vi.useFakeTimers();
+    const generatedBaseline =
+      '<workbook><worksheets><worksheet name="Generated"><repository-location derived-from="template"/><table/></worksheet></worksheets><dashboards/></workbook>';
+    const harness = makeHarness({
+      baseline: generatedBaseline,
+      inventoryOverride: {
+        ...inventory,
+        worksheets: [{ id: 'generated-id', name: 'Generated', hidden: false }],
+      },
+      readbackTransform,
+    });
+
+    const pending = callTool(harness.executor);
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(harness.posts).toHaveLength(1);
+    expect(bodyOf(result)).toMatchObject({
+      applied: 'unknown',
+      retrySafe: false,
+      changedEligibleIds: ['generated-id'],
+      verification: { status: 'unknown' },
     });
   });
 

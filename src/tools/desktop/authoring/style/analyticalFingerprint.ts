@@ -92,6 +92,12 @@ function canonicalizeElement(
   ancestors: XmlElement[],
   eligibleArtifactKeys?: ReadonlySet<string>,
 ): CanonicalNode | undefined {
+  if (
+    isCanonicalInsertedWorksheetTitle(element, ancestors) &&
+    presentationCanChange(ancestors, eligibleArtifactKeys)
+  ) {
+    return undefined;
+  }
   const attributes = Array.from({ length: element.attributes.length }, (_, index) =>
     element.attributes.item(index),
   )
@@ -293,6 +299,71 @@ function isDashboardTitleRun(run: XmlElement, ancestors: XmlElement[]): boolean 
     .trim()
     .normalize('NFC');
   return titleText === dashboardName.trim().normalize('NFC');
+}
+
+function isCanonicalInsertedWorksheetTitle(layout: XmlElement, ancestors: XmlElement[]): boolean {
+  if (
+    !isUnnamespacedNamed(layout, 'layout-options') ||
+    layout.attributes.length !== 0 ||
+    !hasDirectPath(ancestors, ['workbook', 'worksheets', 'worksheet'])
+  ) {
+    return false;
+  }
+  const worksheet = ancestors.at(-1);
+  const worksheetName = unnamespacedAttributeValue(worksheet, 'name');
+  if (!worksheet || worksheetName === undefined || worksheetName.trim().normalize('NFC') === '') {
+    return false;
+  }
+  const worksheetChildren = directChildren(worksheet);
+  const layoutIndex = worksheetChildren.indexOf(layout);
+  const tables = directChildren(worksheet, 'table');
+  if (
+    directChildren(worksheet, 'layout-options').length !== 1 ||
+    tables.length !== 1 ||
+    layoutIndex < 0 ||
+    worksheetChildren[layoutIndex + 1] !== tables[0] ||
+    hasDirectNamespacedCollision(worksheet, 'layout-options') ||
+    hasDirectNamespacedCollision(worksheet, 'table')
+  ) {
+    return false;
+  }
+  const title = onlyExactChild(layout, 'title');
+  const formattedText = title && onlyExactChild(title, 'formatted-text');
+  const run = formattedText && onlyExactChild(formattedText, 'run');
+  if (
+    !title ||
+    !formattedText ||
+    !run ||
+    title.attributes.length !== 0 ||
+    formattedText.attributes.length !== 0 ||
+    run.attributes.length !== 2 ||
+    unnamespacedAttributeValue(run, 'fontcolor') === undefined ||
+    unnamespacedAttributeValue(run, 'fontname') === undefined ||
+    run.childNodes.length !== 1 ||
+    (run.firstChild?.nodeType !== 3 && run.firstChild?.nodeType !== 4)
+  ) {
+    return false;
+  }
+  return run.firstChild.nodeValue === '<Sheet Name>';
+}
+
+function onlyExactChild(parent: XmlElement, name: string): XmlElement | undefined {
+  const children = directChildren(parent);
+  if (children.length !== 1 || !isUnnamespacedNamed(children[0], name)) return undefined;
+  for (let child: XmlNode | null = parent.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType === 1) continue;
+    if ((child.nodeType === 3 || child.nodeType === 4) && (child.nodeValue ?? '').trim() === '') {
+      continue;
+    }
+    return undefined;
+  }
+  return children[0];
+}
+
+function hasDirectNamespacedCollision(parent: XmlElement, localName: string): boolean {
+  return directChildren(parent).some(
+    (child) => child.localName === localName && !isUnnamespacedNamed(child, localName),
+  );
 }
 
 function directChildren(parent: XmlNode, name?: string): XmlElement[] {

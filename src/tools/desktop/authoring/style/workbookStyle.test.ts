@@ -54,12 +54,14 @@ const styledWorksheet = (name: string): string => `<worksheet name="${name}">
 
 const workbookXml = `<workbook xmlns:ext="urn:test"><worksheets>${styledWorksheet('Visible')}${styledWorksheet('Hidden Used')}${styledWorksheet('Hidden Orphan')}</worksheets><dashboards><dashboard name="Overview"><zones><zone name="Visible"/></zones></dashboard></dashboards></workbook>`;
 
-function directElements(parent: XmlNode, name: string): XmlElement[] {
+function directElements(parent: XmlNode, name?: string): XmlElement[] {
   const matches: XmlElement[] = [];
   for (let child = parent.firstChild; child; child = child.nextSibling) {
     if (child.nodeType === 1) {
       const element = child as unknown as XmlElement;
-      if (element.nodeName === name && !element.namespaceURI) matches.push(element);
+      if (name === undefined || (element.nodeName === name && !element.namespaceURI)) {
+        matches.push(element);
+      }
     }
   }
   return matches;
@@ -116,6 +118,102 @@ describe('applyWorkbookStyle', () => {
       ).toEqual(['#F1ECFF', '#7759C2', '#D63939', '#FFFFFF', '#108548']);
     }
     expect(worksheet(result.workbookXml, 'Hidden Orphan').toString()).toContain('Old Title');
+  });
+
+  it('inserts one canonical title before the sole table only for an eligible generated worksheet', () => {
+    const generatedXml = `<workbook xmlns:ext="urn:test"><worksheets>
+      <worksheet name="Sales &amp; Profit"><repository-location derived-from="template"/><ext:before/><table><view/></table><ext:after/></worksheet>
+      <worksheet name="Existing"><layout-options><title><formatted-text><run fontcolor="#old" fontname="Old Font">Existing</run></formatted-text></title></layout-options><table/></worksheet>
+      <worksheet name="Incomplete"><layout-options><title/></layout-options><table/></worksheet>
+      <worksheet name="Ambiguous"><table/><table/></worksheet>
+      <worksheet name="Missing Table"><style/></worksheet>
+      <worksheet name="Namespace Collision"><ext:layout-options/><table/></worksheet>
+      <worksheet name="Namespaced Table"><ext:table/></worksheet>
+      <worksheet name=" "><table/></worksheet>
+      <worksheet name="Ineligible"><table/></worksheet>
+    </worksheets><dashboards/></workbook>`;
+    const artifacts: EligibleStyleArtifact[] = [
+      { kind: 'worksheet', id: 'generated-id', name: 'Sales & Profit', hidden: false },
+      { kind: 'worksheet', id: 'existing-id', name: 'Existing', hidden: false },
+      { kind: 'worksheet', id: 'incomplete-id', name: 'Incomplete', hidden: false },
+      { kind: 'worksheet', id: 'ambiguous-id', name: 'Ambiguous', hidden: false },
+      { kind: 'worksheet', id: 'missing-id', name: 'Missing Table', hidden: false },
+      {
+        kind: 'worksheet',
+        id: 'namespace-collision-id',
+        name: 'Namespace Collision',
+        hidden: false,
+      },
+      { kind: 'worksheet', id: 'namespaced-table-id', name: 'Namespaced Table', hidden: false },
+      { kind: 'worksheet', id: 'blank-id', name: ' ', hidden: false },
+    ];
+
+    const first = applyWorkbookStyle(generatedXml, stylePack, artifacts);
+    const generated = worksheet(first.workbookXml, 'Sales & Profit').toString();
+
+    expect(first.changedEligibleIds).toEqual(['generated-id', 'existing-id']);
+    expect(first.unchangedEligibleIds).toEqual([
+      'incomplete-id',
+      'ambiguous-id',
+      'missing-id',
+      'namespace-collision-id',
+      'namespaced-table-id',
+      'blank-id',
+    ]);
+    expect(generated).toContain(
+      '<layout-options><title><formatted-text><run fontcolor="#171321" fontname="Tableau Semibold">&lt;Sheet Name&gt;</run></formatted-text></title></layout-options><table>',
+    );
+    expect(generated).not.toContain('>Sales &amp; Profit</run>');
+    expect(
+      directElements(worksheet(first.workbookXml, 'Sales & Profit'), 'layout-options'),
+    ).toHaveLength(1);
+    expect(generated.indexOf('<ext:before/>')).toBeLessThan(generated.indexOf('<layout-options>'));
+    expect(
+      directElements(worksheet(first.workbookXml, 'Sales & Profit')).map(
+        (element) => element.nodeName,
+      ),
+    ).toEqual(['repository-location', 'ext:before', 'layout-options', 'table', 'ext:after']);
+    expect(directElements(worksheet(first.workbookXml, 'Existing'), 'layout-options')).toHaveLength(
+      1,
+    );
+    expect(worksheet(first.workbookXml, 'Existing').toString()).toContain(
+      '<run fontcolor="#171321" fontname="Tableau Semibold">Existing</run>',
+    );
+    for (const name of [
+      'Incomplete',
+      'Ambiguous',
+      'Missing Table',
+      'Namespace Collision',
+      'Namespaced Table',
+      ' ',
+    ]) {
+      expect(worksheet(first.workbookXml, name).toString()).toBe(
+        worksheet(generatedXml, name).toString(),
+      );
+    }
+    expect(worksheet(first.workbookXml, 'Ineligible').toString()).toBe(
+      worksheet(generatedXml, 'Ineligible').toString(),
+    );
+
+    const second = applyWorkbookStyle(first.workbookXml, stylePack, artifacts);
+    expect(second.workbookXml).toBe(first.workbookXml);
+    expect(second.changedEligibleIds).toEqual([]);
+    expect(second.unchangedEligibleIds).toEqual(artifacts.map(({ id }) => id));
+
+    const renamedXml = first.workbookXml.replace(
+      'name="Sales &amp; Profit"',
+      'name="Renamed Sheet"',
+    );
+    const renamed = applyWorkbookStyle(renamedXml, stylePack, [
+      { kind: 'worksheet', id: 'generated-id', name: 'Renamed Sheet', hidden: false },
+    ]);
+    expect(renamed.changedEligibleIds).toEqual([]);
+    expect(worksheet(renamed.workbookXml, 'Renamed Sheet').toString()).toContain(
+      '<run fontcolor="#171321" fontname="Tableau Semibold">&lt;Sheet Name&gt;</run>',
+    );
+    expect(worksheet(renamed.workbookXml, 'Renamed Sheet').toString()).not.toContain(
+      '>Sales &amp; Profit</run>',
+    );
   });
 
   it('styles only the live-shaped eligible dashboard title text zone without inventing run attributes', () => {

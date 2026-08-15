@@ -350,6 +350,64 @@ describe('analyticalFingerprint', () => {
     );
   });
 
+  it('permits only an exact dynamic canonical title insertion across worksheet renames', () => {
+    const eligible: EligibleStyleArtifact[] = [
+      { kind: 'worksheet', id: 'generated-id', name: 'Generated', hidden: false },
+    ];
+
+    expect(analyticalFingerprint(generatedTitleCandidateXml)).toBe(
+      analyticalFingerprint(generatedTitleBaselineXml),
+    );
+    expect(eligibleStyleScopeFingerprint(generatedTitleCandidateXml, eligible)).toBe(
+      eligibleStyleScopeFingerprint(generatedTitleBaselineXml, eligible),
+    );
+    expect(eligibleStyleScopeFingerprint(generatedTitleCandidateXml, [])).not.toBe(
+      eligibleStyleScopeFingerprint(generatedTitleBaselineXml, []),
+    );
+
+    const renamedBaseline = generatedTitleBaselineXml.replace('name="Generated"', 'name="Renamed"');
+    const renamedCandidate = generatedTitleCandidateXml.replace(
+      'name="Generated"',
+      'name="Renamed"',
+    );
+    expect(analyticalFingerprint(renamedCandidate)).toBe(analyticalFingerprint(renamedBaseline));
+  });
+
+  it.each([
+    ['arbitrary title text', '&lt;Sheet Name&gt;', 'Executive Summary'],
+    [
+      'subtitle run',
+      '</formatted-text>',
+      '<run fontcolor="#171321" fontname="Tableau Semibold">Subtitle</run></formatted-text>',
+    ],
+    ['unknown attribute', '<layout-options>', '<layout-options semantic="unknown">'],
+    ['namespaced layout collision', '<layout-options>', '<ext:layout-options>'],
+  ])('keeps a non-canonical inserted block with %s analytical', (_label, before, after) => {
+    let changed = generatedTitleCandidateXml.replace(before, after);
+    if (_label === 'namespaced layout collision') {
+      changed = changed.replace('</layout-options>', '</ext:layout-options>');
+    }
+
+    expect(analyticalFingerprint(changed)).not.toBe(
+      analyticalFingerprint(generatedTitleBaselineXml),
+    );
+  });
+
+  it('tracks canonical title existence and font/color in workbook style state', () => {
+    const changedFont = generatedTitleCandidateXml.replace('Tableau Semibold', 'Tableau Bold');
+    const changedColor = generatedTitleCandidateXml.replace('#171321', '#999999');
+
+    expect(workbookStyleStateFingerprint(generatedTitleCandidateXml)).not.toBe(
+      workbookStyleStateFingerprint(generatedTitleBaselineXml),
+    );
+    expect(workbookStyleStateFingerprint(changedFont)).not.toBe(
+      workbookStyleStateFingerprint(generatedTitleCandidateXml),
+    );
+    expect(workbookStyleStateFingerprint(changedColor)).not.toBe(
+      workbookStyleStateFingerprint(generatedTitleCandidateXml),
+    );
+  });
+
   it('canonicalizes but retains supported presentation in workbook style state', () => {
     const changed = supportedStyleXml.replace('to="#111111"', 'to="#999999"');
     const serialized = new XMLSerializer().serializeToString(
@@ -475,3 +533,11 @@ const supportedStyleXml =
 
 const supportedDashboardTitleXml =
   '<workbook xmlns:ext="urn:test"><worksheets/><dashboards><dashboard name="Sales and Profit Overview"><zones><zone type-v2="layout-basic"><zone type-v2="text"><formatted-text><run fontcolor="#1f77b4" fontname="Tableau Light">Sales and Profit Overview</run></formatted-text></zone><zone type-v2="text"><formatted-text><run fontcolor="#222222" fontname="Arbitrary Light">Read the footnote</run></formatted-text></zone></zone></zones></dashboard></dashboards></workbook>';
+
+const generatedTitleBaselineXml =
+  '<workbook xmlns:ext="urn:test"><worksheets><worksheet name="Generated"><repository-location derived-from="template"/><table><view/></table></worksheet></worksheets><dashboards/></workbook>';
+
+const generatedTitleCandidateXml = generatedTitleBaselineXml.replace(
+  '<table>',
+  '<layout-options><title><formatted-text><run fontcolor="#171321" fontname="Tableau Semibold">&lt;Sheet Name&gt;</run></formatted-text></title></layout-options><table>',
+);
