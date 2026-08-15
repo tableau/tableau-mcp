@@ -262,16 +262,33 @@ function supportedPresentationValues(artifact: XmlElement): unknown[] {
           return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
         });
       for (const attribute of attributes) {
-        values.push([path, `@${expandedName(attribute)}`, attribute.value]);
+        values.push([
+          path,
+          `@${expandedName(attribute)}`,
+          isSupportedColorValueAttribute(child, attribute)
+            ? normalizeHexColor(attribute.value)
+            : attribute.value,
+        ]);
       }
       if (isSupportedPaletteColorLeaf(child, ancestors)) {
-        values.push([path, '#text', childText(child)]);
+        values.push([path, '#text', normalizeHexColor(childText(child))]);
       }
       visit(child, [...ancestors, child], path);
     }
   };
   visit(artifact, [artifact], artifact.nodeName);
   return values;
+}
+
+function isSupportedColorValueAttribute(element: XmlElement, attribute: XmlAttr): boolean {
+  if (attribute.nodeName === 'fontcolor' || attribute.nodeName === 'to') return true;
+  if (!isUnnamespacedNamed(element, 'format') || attribute.nodeName !== 'value') return false;
+  const selector = unnamespacedAttributeValue(element, 'attr');
+  return selector === 'color' || selector === 'background-color';
+}
+
+function normalizeHexColor(value: string): string {
+  return /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : value;
 }
 
 function isDashboardTitleRun(run: XmlElement, ancestors: XmlElement[]): boolean {

@@ -408,6 +408,42 @@ describe('analyticalFingerprint', () => {
     );
   });
 
+  it('normalizes only six-digit hex case on supported presentation color values', () => {
+    const lowercaseSupportedColors = uppercaseSupportedColorXml
+      .replaceAll('fontcolor="#7A2E8E"', 'fontcolor="#7a2e8e"')
+      .replace('attr="color" value="#7A2E8E"', 'attr="color" value="#7a2e8e"')
+      .replace('attr="background-color" value="#ABCDEF"', 'attr="background-color" value="#abcdef"')
+      .replace('to="#7A2E8E"', 'to="#7a2e8e"')
+      .replace('to="#FC6D26"', 'to="#fc6d26"')
+      .replace('<color>#F1ECFF</color>', '<color>#f1ecff</color>')
+      .replace('<color>#7A2E8E</color>', '<color>#7a2e8e</color>')
+      .replace('<color>#D63939</color>', '<color>#d63939</color>')
+      .replace('<color>#FFFFFF</color>', '<color>#ffffff</color>');
+
+    expect(workbookStyleStateFingerprint(lowercaseSupportedColors)).toBe(
+      workbookStyleStateFingerprint(uppercaseSupportedColorXml),
+    );
+    expect(
+      workbookStyleStateFingerprint(
+        uppercaseSupportedColorXml.replace('Tableau Medium', 'tableau medium'),
+      ),
+    ).not.toBe(workbookStyleStateFingerprint(uppercaseSupportedColorXml));
+    expect(
+      workbookStyleStateFingerprint(
+        uppercaseSupportedColorXml.replace('fontcolor="#7A2E8E"', 'fontcolor="ThemeToken"'),
+      ),
+    ).not.toBe(
+      workbookStyleStateFingerprint(
+        uppercaseSupportedColorXml.replace('fontcolor="#7A2E8E"', 'fontcolor="themetoken"'),
+      ),
+    );
+    expect(
+      analyticalFingerprint(
+        uppercaseSupportedColorXml.replace('ext:unknown="#ABCDEF"', 'ext:unknown="#abcdef"'),
+      ),
+    ).not.toBe(analyticalFingerprint(uppercaseSupportedColorXml));
+  });
+
   it('canonicalizes but retains supported presentation in workbook style state', () => {
     const changed = supportedStyleXml.replace('to="#111111"', 'to="#999999"');
     const serialized = new XMLSerializer().serializeToString(
@@ -541,3 +577,6 @@ const generatedTitleCandidateXml = generatedTitleBaselineXml.replace(
   '<table>',
   '<layout-options><title><formatted-text><run fontcolor="#171321" fontname="Tableau Semibold">&lt;Sheet Name&gt;</run></formatted-text></title></layout-options><table>',
 );
+
+const uppercaseSupportedColorXml =
+  '<workbook xmlns:ext="urn:test"><worksheets><worksheet name="Case Normalized"><layout-options><title><formatted-text><run fontname="Tableau Medium" fontcolor="#7A2E8E">Case Normalized</run></formatted-text></title></layout-options><table><style><style-rule element="all"><format attr="font-family" value="Tableau Regular"/><format attr="color" value="#7A2E8E" ext:unknown="#ABCDEF"/></style-rule><style-rule element="table"><format attr="background-color" value="#ABCDEF"/></style-rule><style-rule element="mark"><encoding attr="color" type="palette"><map to="#7A2E8E"><bucket>A</bucket></map><map to="#FC6D26"><bucket>B</bucket></map></encoding><encoding attr="color" type="custom-interpolated"><color-palette custom="true" type="ordered-sequential"><color>#F1ECFF</color><color>#7A2E8E</color></color-palette></encoding><encoding attr="color" type="custom-interpolated"><color-palette custom="true" type="ordered-diverging"><color>#D63939</color><color>#FFFFFF</color><color>#108548</color></color-palette></encoding></style-rule></style><ext:note>#ABCDEF</ext:note></table></worksheet></worksheets><dashboards><dashboard name="Case Dashboard"><zones><zone type-v2="layout-basic"><zone type-v2="text"><formatted-text><run fontname="Tableau Medium" fontcolor="#7A2E8E">Case Dashboard</run></formatted-text></zone></zone></zones></dashboard></dashboards></workbook>';

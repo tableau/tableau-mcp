@@ -99,7 +99,7 @@ function styleWorksheet(
         for (const run of directChildren(formattedText, 'run')) {
           changed =
             setExistingAttribute(run, 'fontname', stylePack.typography.titleFont) || changed;
-          changed = setExistingAttribute(run, 'fontcolor', stylePack.palette.text) || changed;
+          changed = setExistingColorAttribute(run, 'fontcolor', stylePack.palette.text) || changed;
         }
       }
     }
@@ -110,17 +110,18 @@ function styleWorksheet(
       for (const styleRule of directChildren(style, 'style-rule')) {
         for (const format of directChildren(styleRule, 'format')) {
           const attr = unnamespacedAttribute(format, 'attr')?.value;
-          const target =
-            attr === 'font-family'
-              ? stylePack.typography.bodyFont
-              : attr === 'color'
-                ? stylePack.palette.text
-                : attr === 'background-color' &&
-                    unnamespacedAttribute(styleRule, 'element')?.value === 'table'
-                  ? stylePack.palette.background
-                  : undefined;
-          if (target !== undefined)
-            changed = setExistingAttribute(format, 'value', target) || changed;
+          if (attr === 'font-family') {
+            changed =
+              setExistingAttribute(format, 'value', stylePack.typography.bodyFont) || changed;
+          } else if (attr === 'color') {
+            changed = setExistingColorAttribute(format, 'value', stylePack.palette.text) || changed;
+          } else if (
+            attr === 'background-color' &&
+            unnamespacedAttribute(styleRule, 'element')?.value === 'table'
+          ) {
+            changed =
+              setExistingColorAttribute(format, 'value', stylePack.palette.background) || changed;
+          }
         }
 
         if (unnamespacedAttribute(styleRule, 'element')?.value !== 'mark') continue;
@@ -141,7 +142,7 @@ function styleWorksheet(
                 const to = unnamespacedAttribute(map, 'to');
                 if (!to) continue;
                 const replacement = replacements.get(to.value.toLowerCase());
-                if (replacement !== undefined && to.value !== replacement) {
+                if (replacement !== undefined && !sameHexColor(to.value, replacement)) {
                   to.value = replacement;
                   changed = true;
                 }
@@ -179,7 +180,7 @@ function styleWorksheet(
             if (!replacements || !colors.every(isExactColorLeaf)) continue;
             colors.forEach((color, index) => {
               const text = color.firstChild;
-              if (text && text.nodeValue !== replacements[index]) {
+              if (text && !sameHexColor(text.nodeValue ?? '', replacements[index])) {
                 (text as XmlText).data = replacements[index];
                 changed = true;
               }
@@ -228,7 +229,7 @@ function styleDashboard(dashboard: XmlElement, stylePack: TableauStylePackV2): b
   let changed = false;
   for (const run of dashboardTitleRuns(dashboard)) {
     changed = setExistingAttribute(run, 'fontname', stylePack.typography.titleFont) || changed;
-    changed = setExistingAttribute(run, 'fontcolor', stylePack.palette.text) || changed;
+    changed = setExistingColorAttribute(run, 'fontcolor', stylePack.palette.text) || changed;
   }
   return changed;
 }
@@ -465,6 +466,22 @@ function setExistingAttribute(element: XmlElement, name: string, value: string):
   if (!attribute || attribute.value === value) return false;
   attribute.value = value;
   return true;
+}
+
+function setExistingColorAttribute(element: XmlElement, name: string, value: string): boolean {
+  const attribute = unnamespacedAttribute(element, name);
+  if (!attribute || sameHexColor(attribute.value, value)) return false;
+  attribute.value = value;
+  return true;
+}
+
+function sameHexColor(left: string, right: string): boolean {
+  return (
+    left === right ||
+    (/^#[0-9a-f]{6}$/i.test(left) &&
+      /^#[0-9a-f]{6}$/i.test(right) &&
+      left.toLowerCase() === right.toLowerCase())
+  );
 }
 
 function parseWorkbook(workbookXml: string): XmlDocument {

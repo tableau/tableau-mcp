@@ -115,9 +115,39 @@ describe('applyWorkbookStyle', () => {
       ).toEqual(['#7759C2', '#FC6D26']);
       expect(
         Array.from(transformed.getElementsByTagName('color')).map((color) => color.textContent),
-      ).toEqual(['#F1ECFF', '#7759C2', '#D63939', '#FFFFFF', '#108548']);
+      ).toEqual(['#F1ECFF', '#7759C2', '#D63939', '#ffffff', '#108548']);
     }
     expect(worksheet(result.workbookXml, 'Hidden Orphan').toString()).toContain('Old Title');
+  });
+
+  it('treats lowercase Desktop hex readback as matching uppercase pack colors on every supported path', () => {
+    const uppercasePack: TableauStylePackV2 = {
+      ...stylePack,
+      typography: { titleFont: 'Tableau Medium', bodyFont: 'Tableau Regular' },
+      palette: {
+        ...stylePack.palette,
+        categorical: ['#7A2E8E', '#FC6D26'],
+        sequential: ['#F1ECFF', '#7A2E8E'],
+        diverging: { negative: '#D63939', midpoint: '#FFFFFF', positive: '#108548' },
+        text: '#7A2E8E',
+        background: '#ABCDEF',
+      },
+    };
+    const liveReadback = `<workbook xmlns:ext="urn:test"><worksheets><worksheet name="Case Normalized"><layout-options><title><formatted-text><run fontname="Tableau Medium" fontcolor="#7a2e8e">Case Normalized</run></formatted-text></title></layout-options><table><style>
+      <style-rule element="all"><format attr="font-family" value="Tableau Regular"/><format attr="color" value="#7a2e8e" ext:unknown="#ABCDEF"/></style-rule>
+      <style-rule element="table"><format attr="background-color" value="#abcdef"/></style-rule>
+      <style-rule element="mark"><encoding attr="color" type="palette"><map to="#7a2e8e"><bucket>A</bucket></map><map to="#fc6d26"><bucket>B</bucket></map></encoding><encoding attr="color" type="custom-interpolated"><color-palette custom="true" type="ordered-sequential"><color>#f1ecff</color><color>#7a2e8e</color></color-palette></encoding><encoding attr="color" type="custom-interpolated"><color-palette custom="true" type="ordered-diverging"><color>#d63939</color><color>#ffffff</color><color>#108548</color></color-palette></encoding></style-rule>
+    </style><ext:note>#ABCDEF</ext:note></table></worksheet></worksheets><dashboards><dashboard name="Case Dashboard"><zones><zone type-v2="layout-basic"><zone type-v2="text"><formatted-text><run fontname="Tableau Medium" fontcolor="#7a2e8e">Case Dashboard</run></formatted-text></zone></zone></zones></dashboard></dashboards></workbook>`;
+    const artifacts: EligibleStyleArtifact[] = [
+      { kind: 'worksheet', id: 'case-sheet-id', name: 'Case Normalized', hidden: false },
+      { kind: 'dashboard', id: 'case-dashboard-id', name: 'Case Dashboard', hidden: false },
+    ];
+
+    const result = applyWorkbookStyle(liveReadback, uppercasePack, artifacts);
+
+    expect(result.workbookXml).toBe(liveReadback);
+    expect(result.changedEligibleIds).toEqual([]);
+    expect(result.unchangedEligibleIds).toEqual(['case-sheet-id', 'case-dashboard-id']);
   });
 
   it('inserts one canonical title before the sole table only for an eligible generated worksheet', () => {

@@ -171,6 +171,45 @@ describe('apply-workbook-style', () => {
     });
   });
 
+  it('verifies lowercase Desktop hex readback for uppercase worksheet and dashboard title colors', async () => {
+    vi.useFakeTimers();
+    const uppercasePack: TableauStylePackV2 = {
+      ...stylePack,
+      typography: { ...stylePack.typography, titleFont: 'Tableau Medium' },
+      palette: { ...stylePack.palette, text: '#7A2E8E' },
+    };
+    const caseBaseline =
+      '<workbook><worksheets><worksheet name="Case Sheet"><layout-options><title><formatted-text><run fontname="Tableau Light" fontcolor="#000000">Case Sheet</run></formatted-text></title></layout-options><table/></worksheet></worksheets><dashboards><dashboard name="Case Dashboard"><zones><zone type-v2="layout-basic"><zone type-v2="text"><formatted-text><run fontname="Tableau Light" fontcolor="#000000">Case Dashboard</run></formatted-text></zone></zone></zones></dashboard></dashboards></workbook>';
+    const harness = makeHarness({
+      baseline: caseBaseline,
+      inventoryOverride: {
+        ...inventory,
+        worksheets: [{ id: 'case-sheet-id', name: 'Case Sheet', hidden: false }],
+        dashboards: [
+          {
+            id: 'case-dashboard-id',
+            name: 'Case Dashboard',
+            hidden: false,
+            containedSheets: [],
+          },
+        ],
+      },
+      readbackTransform: (xml) => xml.replaceAll('#7A2E8E', '#7a2e8e'),
+    });
+
+    const pending = callTool(harness.executor, uppercasePack);
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result.isError).toBe(false);
+    expect(harness.posts).toHaveLength(1);
+    expect(bodyOf(result)).toMatchObject({
+      applied: true,
+      changedEligibleIds: ['case-sheet-id', 'case-dashboard-id'],
+      verification: { status: 'passed', analyticalFingerprint: 'passed', idempotence: 'passed' },
+    });
+  });
+
   it.each([
     [
       'missing inserted title',
