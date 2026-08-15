@@ -33,12 +33,56 @@ describe('workbook-export-as tool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('exports a pdf: POSTs format + filePath (no targetVersion) and reports the written path', async () => {
+  // The format→extension matrix, exercised end-to-end: each format POSTs its own body and
+  // reports the written path. prior-version carries targetVersion; the others do not.
+  it.each([
+    {
+      filePath: '/Users/me/Book.pdf',
+      args: { format: 'pdf', filePath: '/Users/me/Book.pdf' },
+      body: { format: 'pdf', filePath: '/Users/me/Book.pdf' },
+    },
+    {
+      filePath: '/Users/me/Book.pptx',
+      args: { format: 'powerpoint', filePath: '/Users/me/Book.pptx' },
+      body: { format: 'powerpoint', filePath: '/Users/me/Book.pptx' },
+    },
+    {
+      filePath: '/Users/me/Book.twbx',
+      args: { format: 'packaged-workbook', filePath: '/Users/me/Book.twbx' },
+      body: { format: 'packaged-workbook', filePath: '/Users/me/Book.twbx' },
+    },
+    {
+      filePath: '/Users/me/Old.twb',
+      args: { format: 'prior-version', filePath: '/Users/me/Old.twb', targetVersion: '2024.1' },
+      body: { format: 'prior-version', filePath: '/Users/me/Old.twb', targetVersion: '2024.1' },
+    },
+  ])(
+    'exports $args.format to its matching extension: POSTs the body and reports the written path',
+    async ({ filePath, args, body }) => {
+      const harness = await startHarness();
+      try {
+        const result = await harness.callTool(args);
+        expect(result.isError).toBeFalsy();
+        expect(messageOf(result)).toBe(`Exported the workbook to "${filePath}".`);
+
+        const posted = exportPosts(harness.server);
+        expect(posted).toHaveLength(1);
+        expect(JSON.parse(posted[0].body)).toEqual(body);
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
+  it('drops targetVersion on a non-prior-version format (it applies only to prior-version)', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ format: 'pdf', filePath: '/Users/me/Book.pdf' });
+      const result = await harness.callTool({
+        format: 'pdf',
+        filePath: '/Users/me/Book.pdf',
+        targetVersion: '2024.1',
+      });
       expect(result.isError).toBeFalsy();
-      expect(messageOf(result)).toBe('Exported the workbook to "/Users/me/Book.pdf".');
 
       const posted = exportPosts(harness.server);
       expect(posted).toHaveLength(1);
@@ -48,39 +92,17 @@ describe('workbook-export-as tool', () => {
     }
   });
 
-  it('exports a prior version: forwards targetVersion in the body', async () => {
-    const harness = await startHarness();
-    try {
-      const result = await harness.callTool({
-        format: 'prior-version',
-        filePath: '/Users/me/Old.twbx',
-        targetVersion: '2024.1',
-      });
-      expect(result.isError).toBeFalsy();
-      expect(messageOf(result)).toBe('Exported the workbook to "/Users/me/Old.twbx".');
-
-      const posted = exportPosts(harness.server);
-      expect(posted).toHaveLength(1);
-      expect(JSON.parse(posted[0].body)).toEqual({
-        format: 'prior-version',
-        filePath: '/Users/me/Old.twbx',
-        targetVersion: '2024.1',
-      });
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('refuses a prior-version export with no targetVersion and never calls the API', async () => {
+  it('rejects a prior-version export with no targetVersion and never calls the API', async () => {
     const harness = await startHarness();
     try {
       const result = await harness.callTool({
         format: 'prior-version',
         filePath: '/Users/me/Old.twbx',
       });
-      expect(result.isError).toBeFalsy();
-      expect(messageOf(result)).toBe(
-        'Exporting to a prior version requires targetVersion (e.g. "2024.1").',
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Exporting to a prior version requires targetVersion',
       );
       expect(exportPosts(harness.server)).toHaveLength(0);
     } finally {

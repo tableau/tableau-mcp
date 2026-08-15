@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { ExportAsWorkbookRequest } from '../../../desktop/externalApi/types.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
@@ -36,7 +37,7 @@ export const getWorkbookExportAsTool = (
       'targetVersion). Writes headlessly to filePath; no dialog, no returned bytes.',
     annotations: {
       readOnlyHint: false,
-      destructiveHint: false, // writes a new artifact; the open document is left unchanged
+      destructiveHint: true, // the required filePath can overwrite an existing file at that path
       idempotentHint: true, // re-running overwrites the same file
       openWorldHint: false,
     },
@@ -49,20 +50,22 @@ export const getWorkbookExportAsTool = (
         extra,
         args: { session, format, filePath, targetVersion },
         callback: async () => {
-          // A prior-version down-save needs the target release. Catch the missing case here so the
-          // caller gets a precise ask instead of a generic server 400. Every other validation
-          // (path shape, extension↔format matrix, unknown version) is the server's — see the tool
-          // docs; a stray targetVersion on another format is forwarded and the server ignores it.
+          // A prior-version down-save needs the target release. Reject the missing case here so the
+          // caller gets a precise, machine-readable ask (args-validation, 400) instead of a generic
+          // server rejection. Every other validation (path shape, extension↔format matrix, unknown
+          // version) is the server's — see the tool docs.
           if (format === 'prior-version' && targetVersion === undefined) {
-            return new Ok({
-              message: 'Exporting to a prior version requires targetVersion (e.g. "2024.1").',
-            });
+            return new ArgsValidationError(
+              'Exporting to a prior version requires targetVersion (e.g. "2024.1").',
+            ).toErr();
           }
 
+          // targetVersion is meaningful only for prior-version, so drop it on every other format
+          // rather than forward a value the server would ignore (matches the param docs).
           const request: ExportAsWorkbookRequest = {
             format,
             filePath,
-            ...(targetVersion !== undefined ? { targetVersion } : {}),
+            ...(format === 'prior-version' ? { targetVersion } : {}),
           };
 
           return await runExternalApiReadTool({
