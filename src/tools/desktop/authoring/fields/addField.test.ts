@@ -13,7 +13,6 @@ import {
   ArgsValidationError,
   FileNotFoundError,
   FileReadError,
-  GetWorksheetXmlFailedError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
@@ -279,13 +278,9 @@ describe('addFieldTool', () => {
     expect(writeFileSync).toHaveBeenCalledWith(body.file, MODIFIED_XML, 'utf-8');
   });
 
-  it('surfaces a fetch error (unknown worksheet) without writing anything', async () => {
-    const fetchErr = {
-      type: 'get-worksheet-xml-error' as const,
-      error: { type: 'no-worksheet-found' as const, message: 'No worksheet found for Ghost.' },
-    };
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Err(fetchErr));
-
+  it('rejects a worksheet name that is not in the live list, before any fetch or write', async () => {
+    // "Ghost" is not in the mocked worksheet list, so the stable-id resolve fails and the
+    // edit stops there — it never falls back to keying the buffer on the raw name.
     const result = await getResult({
       worksheetName: 'Ghost',
       target: 'rows',
@@ -294,9 +289,32 @@ describe('addFieldTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(new GetWorksheetXmlFailedError(fetchErr.error).message);
+    expect(result.content[0].text).toContain('Could not resolve a stable id for worksheet "Ghost"');
+    expect(result.content[0].text).toContain('list-worksheets');
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
     expect(metadataModule.addFieldToRows).not.toHaveBeenCalled();
+  });
+
+  it('fails loudly when the worksheet list cannot be read, rather than keying the buffer on the name', async () => {
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: { code: 'boom', message: 'list unavailable', recoverable: false },
+      }) as never,
+    );
+
+    const result = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Could not resolve a stable id');
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
   });
 
   it('uses in-profile recovery guidance when the worksheet endpoint is absent', async () => {

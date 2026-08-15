@@ -218,6 +218,24 @@ describe('refineWorksheetTool — top_n happy path', () => {
     expect(out).toContain('<slices><column>[Superstore].[none:Region:nk]</column></slices>');
   });
 
+  it('reads back by the fragment simple-id, not the display name', async () => {
+    setupMocks();
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+
+    expect(result.isError).toBe(false);
+    // The initial fetch is by the caller's display name...
+    expect(getMock().mock.calls[0]![0]).toMatchObject({ worksheetName: 'Sales by Region' });
+    // ...but the readback targets the sheet's stable simple-id, so a rename between the fetch
+    // and the readback can't make it miss.
+    expect(getMock().mock.calls[1]![0]).toMatchObject({
+      worksheetName: '00000000-0000-0000-0000-000000000001',
+    });
+  });
+
   it('refines an ampersand-titled worksheet by literal name', async () => {
     setupMocks({ source: AMP_WORKSHEET_SOURCE });
     const result = await getToolResult({

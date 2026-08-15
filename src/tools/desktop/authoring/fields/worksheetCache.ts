@@ -11,6 +11,7 @@ import {
   GetWorksheetXmlFailedError,
   McpToolError,
   UnknownError,
+  WorksheetNotFoundError,
 } from '../../../../errors/mcpToolError.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 
@@ -49,6 +50,33 @@ export async function resolveWorksheetSimpleId({
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Resolve a worksheet reference to the stable `<simple-id uuid>` its sticky edit buffer keys on,
+ * or fail. Keying the buffer on the raw display name instead strands it the instant the sheet is
+ * renamed — the exact bug the buffer exists to prevent — so an unresolvable reference is a hard
+ * error, not a name-keyed fallback.
+ */
+export async function resolveWorksheetBufferId({
+  worksheetRef,
+  resolvedSession,
+  extra,
+}: {
+  worksheetRef: string;
+  resolvedSession: string;
+  extra: TableauDesktopRequestHandlerExtra;
+}): Promise<Result<string, WorksheetNotFoundError>> {
+  const id = await resolveWorksheetSimpleId({ worksheetRef, resolvedSession, extra });
+  if (!id) {
+    return Err(
+      new WorksheetNotFoundError(
+        `Could not resolve a stable id for worksheet "${worksheetRef}". ` +
+          'Confirm the sheet exists with list-worksheets, then retry.',
+      ),
+    );
+  }
+  return Ok(id);
 }
 
 /**

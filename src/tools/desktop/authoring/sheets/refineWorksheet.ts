@@ -14,6 +14,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { worksheetFragmentSimpleId } from '../../../../desktop/metadata/sheets.js';
 import {
   appliedSortByFieldDirection,
   confirmSortByFieldApplied,
@@ -191,6 +192,9 @@ export const getRefineWorksheetTool = (
           }
           const sourceXml = fetched.value.xml;
           const canonicalWorksheetName = fetched.value.name;
+          // Read back by the fragment's stable simple-id, not the display name, so a rename between
+          // this fetch and the readback can't miss.
+          const readbackRef = worksheetFragmentSimpleId(sourceXml) ?? canonicalWorksheetName;
 
           // 2. Pure minimal patch + the readback confirmation target for this operation.
           let patched: string;
@@ -313,7 +317,7 @@ export const getRefineWorksheetTool = (
           const readback = await pollReadback({
             read: () =>
               getWorksheetXml({
-                worksheetName: canonicalWorksheetName,
+                worksheetName: readbackRef,
                 executor,
                 signal: extra.signal,
               }),
