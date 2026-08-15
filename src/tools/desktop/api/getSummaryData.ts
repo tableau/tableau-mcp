@@ -420,7 +420,7 @@ function nextActionForSummaryError(
     return prefillNextAction('Retry get-summary-data once');
   }
   if (reason === 'desktop-blocked') {
-    return prefillNextAction('Dismiss the Tableau dialog, then call list-instances');
+    return prefillNextAction('Dismiss any open Tableau dialog, then call list-instances');
   }
   if (reason === 'endpoint-unavailable') {
     return prefillNextAction('Update Desktop/API and retry');
