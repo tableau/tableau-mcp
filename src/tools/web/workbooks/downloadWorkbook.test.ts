@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   mockDownloadWorkbook: vi.fn(),
   mockUploadBufferToS3: vi.fn(),
   mockLog: vi.fn(),
-  mockIsFeatureEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -34,10 +33,6 @@ vi.mock('../s3Client.js', async (importActual) => ({
   uploadBufferToS3: mocks.mockUploadBufferToS3,
 }));
 
-vi.mock('../../../features/init.js', () => ({
-  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
-}));
-
 vi.mock('../../../logging/logger.js', async (importActual) => ({
   ...(await importActual<typeof import('../../../logging/logger.js')>()),
   log: mocks.mockLog,
@@ -51,7 +46,6 @@ describe('downloadWorkbookTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   afterEach(async () => {
@@ -99,7 +93,7 @@ describe('downloadWorkbookTool', () => {
     expect(mocks.mockUploadBufferToS3).not.toHaveBeenCalled();
   });
 
-  it('should return an S3 resource link when MCP_S3_BUCKET is configured and feature is enabled', async () => {
+  it('should return an S3 resource link when MCP_S3_BUCKET is configured', async () => {
     vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
@@ -115,7 +109,6 @@ describe('downloadWorkbookTool', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('workbook-file-mode');
     invariant(result.content[0].type === 'resource_link');
     expect(result.content[0].uri).toBe('https://s3.example.com/signed-url');
     expect(result.content[0].name).toBe('Superstore.twb');
@@ -158,29 +151,6 @@ describe('downloadWorkbookTool', () => {
         message: expect.stringContaining('access denied'),
       }),
     );
-  });
-
-  it('should return temp path when feature flag is disabled even with MCP_S3_BUCKET', async () => {
-    vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-    const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
-    mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: workbookBytes,
-      contentType: 'application/xml',
-      filename: 'Superstore.twb',
-    });
-
-    const result = await getToolResult({
-      workbookId: '96a43833-27db-40b6-aa80-751efc776b9a',
-    });
-
-    expect(result.isError).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('workbook-file-mode');
-    invariant(result.content[0].type === 'text');
-    const payload = JSON.parse(result.content[0].text);
-    tempPathsToCleanup.push(payload.path);
-    await expect(readFile(payload.path)).resolves.toEqual(workbookBytes);
-    expect(mocks.mockUploadBufferToS3).not.toHaveBeenCalled();
   });
 
   it('should return workbook not allowed error when workbook is not allowed', async () => {
