@@ -484,13 +484,34 @@ export async function loadWorksheetXml({
       if (outcome.isErr()) {
         return Err({ type: 'execute-command-error', error: outcome.error });
       }
-      if (typeof outcome.value === 'object' && 'type' in outcome.value) {
-        return Err({
-          type: 'load-worksheet-xml-error',
-          error: { type: 'validation-failed', issues: outcome.value.issues },
+      const applyOutcome = outcome.value;
+      if (typeof applyOutcome === 'object' && 'status' in applyOutcome) {
+        const verification = await verifyPostApplyWorksheetReadback(
+          applyOutcome.id,
+          applyOutcome.fragmentXml,
+          executor,
+          signal,
+        );
+        readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
+        const outcomeResult = readbackOutcome(verification);
+        if (outcomeResult.isErr()) {
+          return outcomeResult;
+        }
+        // Preflight warnings ride along so apply responses can compute the host
+        // verification receipt without re-running validation.
+        return Ok({
+          ...outcomeResult.value,
+          appliedName: applyOutcome.name,
+          validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
         });
       }
-      if (outcome.value === 'source-drift') {
+      if (typeof applyOutcome === 'object') {
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: { type: 'validation-failed', issues: applyOutcome.issues },
+        });
+      }
+      if (applyOutcome === 'source-drift') {
         return Err({
           type: 'load-worksheet-xml-error',
           error: {
@@ -500,29 +521,9 @@ export async function loadWorksheetXml({
           },
         });
       }
-      if (typeof outcome.value === 'string') {
-        return Err({
-          type: 'load-worksheet-xml-error',
-          error: { type: 'sheet-absent', message: worksheetAbsentMessage(canonicalName) },
-        });
-      }
-      const verification = await verifyPostApplyWorksheetReadback(
-        outcome.value.id,
-        outcome.value.fragmentXml,
-        executor,
-        signal,
-      );
-      readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
-      const outcomeResult = readbackOutcome(verification);
-      if (outcomeResult.isErr()) {
-        return outcomeResult;
-      }
-      // Preflight warnings ride along so apply responses can compute the host
-      // verification receipt (W-23447506) without re-running validation.
-      return Ok({
-        ...outcomeResult.value,
-        appliedName: outcome.value.name,
-        validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
+      return Err({
+        type: 'load-worksheet-xml-error',
+        error: { type: 'sheet-absent', message: worksheetAbsentMessage(canonicalName) },
       });
     });
   }

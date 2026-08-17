@@ -207,13 +207,22 @@ export async function loadDashboardXml({
     if (perSheetResult.isErr()) {
       return Err({ type: 'execute-command-error', error: perSheetResult.error });
     }
-    if (typeof perSheetResult.value === 'object' && 'type' in perSheetResult.value) {
-      return Err({
-        type: 'load-dashboard-xml-error',
-        error: { type: 'validation-failed', issues: perSheetResult.value.issues },
+    const outcome = perSheetResult.value;
+    if (typeof outcome === 'object' && 'status' in outcome) {
+      // Preflight warnings ride along so apply responses can compute the host
+      // verification receipt without re-running validation.
+      return Ok({
+        appliedName: outcome.name,
+        validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
       });
     }
-    if (perSheetResult.value === 'source-drift') {
+    if (typeof outcome === 'object') {
+      return Err({
+        type: 'load-dashboard-xml-error',
+        error: { type: 'validation-failed', issues: outcome.issues },
+      });
+    }
+    if (outcome === 'source-drift') {
       return Err({
         type: 'load-dashboard-xml-error',
         error: {
@@ -224,17 +233,9 @@ export async function loadDashboardXml({
         },
       });
     }
-    if (typeof perSheetResult.value === 'string') {
-      return Err({
-        type: 'load-dashboard-xml-error',
-        error: { type: 'sheet-absent', message: sheetAbsentMessage(kind, canonicalName) },
-      });
-    }
-    // Preflight warnings ride along so apply responses can compute the host
-    // verification receipt (W-23447506) without re-running validation.
-    return Ok({
-      appliedName: perSheetResult.value.name,
-      validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: { type: 'sheet-absent', message: sheetAbsentMessage(kind, canonicalName) },
     });
   }
 
