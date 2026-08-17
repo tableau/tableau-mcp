@@ -2,11 +2,17 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { BLOCKING_DIALOG_GUIDANCE } from '../../../desktop/callDeadline.js';
 import { WorksheetItem } from '../../../desktop/externalApi/types.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
-import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
+import {
+  ArgsValidationError,
+  DesktopCommandExecutionError,
+  McpToolError,
+  UnknownError,
+} from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { deprecatedArtifactAliasParam, resolveArtifactNameArg } from '../params.js';
@@ -252,7 +258,8 @@ type SummaryDataErrorReason =
   | 'columns-not-found'
   | 'session-resolution-failed'
   | 'request-failed'
-  | 'endpoint-unavailable';
+  | 'endpoint-unavailable'
+  | 'desktop-blocked';
 
 class SummaryDataResponseError extends McpToolError {
   readonly structuredContent: WireStructuredContent;
@@ -322,6 +329,11 @@ function summaryDataError(
 function requestError(error: McpToolError): SummaryDataResponseError {
   if (error instanceof SummaryDataResponseError) {
     return error;
+  }
+  // A blocking dialog (awaiting-user) or a hung call never clears on a retry, so keep it off the
+  // transient retry path — telling the agent to retry just wedges Desktop against the same dialog.
+  if (error instanceof DesktopCommandExecutionError && error.blockedByDesktopDialog) {
+    return summaryDataError(error, 'action-required', 'desktop-blocked', BLOCKING_DIALOG_GUIDANCE);
   }
   return error.statusCode >= 500
     ? summaryDataError(error, 'retryable', 'request-failed')
@@ -406,6 +418,9 @@ function nextActionForSummaryError(
   }
   if (status === 'retryable') {
     return prefillNextAction('Retry get-summary-data once');
+  }
+  if (reason === 'desktop-blocked') {
+    return prefillNextAction('Dismiss any open Tableau dialog, then call list-instances');
   }
   if (reason === 'endpoint-unavailable') {
     return prefillNextAction('Update Desktop/API and retry');
