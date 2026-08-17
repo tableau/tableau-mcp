@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   mockDownloadWorkbook: vi.fn(),
   mockUploadBufferToS3: vi.fn(),
   mockLog: vi.fn(),
-  mockIsFeatureEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -34,10 +33,6 @@ vi.mock('../s3Client.js', async (importActual) => ({
   uploadBufferToS3: mocks.mockUploadBufferToS3,
 }));
 
-vi.mock('../../../features/init.js', () => ({
-  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
-}));
-
 vi.mock('../../../logging/logger.js', async (importActual) => ({
   ...(await importActual<typeof import('../../../logging/logger.js')>()),
   log: mocks.mockLog,
@@ -51,7 +46,6 @@ describe('downloadWorkbookTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   afterEach(async () => {
