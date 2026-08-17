@@ -1,6 +1,6 @@
 ---
-
-## sidebar_position: 1
+sidebar_position: 1
+---
 
 # Environment Variables
 
@@ -13,7 +13,7 @@ The URL of the Tableau server.
 - For Tableau Cloud, specify your site's specific pod e.g.
 `https://prod-useast-c.online.tableau.com`
 
----
+<hr />
 
 ## `SITE_NAME`
 
@@ -24,7 +24,7 @@ Content URL `Internal` vs display name `[INTERNAL] My Company`).
 - For Tableau Server, you may leave this value blank to use the default site.
 - Required unless `[AUTH](#auth)` is `oauth`.
 
----
+<hr />
 
 
 
@@ -37,7 +37,7 @@ The MCP transport type to use for the server.
 - For `http`, see [HTTP Server Configuration](http-server.md) for additional variables.
 - See [MCP Transports](https://modelcontextprotocol.io/docs/concepts/transports) for details.
 
----
+<hr />
 
 
 
@@ -50,7 +50,7 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 - See [Authentication](authentication) for additional required variables depending on the desired
 method.
 
----
+<hr />
 
 
 
@@ -81,7 +81,7 @@ MCP clients. Server log output (stderr/console) is controlled separately by
 - Secrets are masked by default in the log files. To reveal them for debugging purposes, set the
 `[DISABLE_LOG_MASKING](#disable_log_masking)` environment variable to `true`.
 
----
+<hr />
 
 
 
@@ -94,7 +94,7 @@ The directory server logs are written to when `[ENABLED_LOGGERS](#enabled_logger
 - The server will attempt to create the directory if it does not exist.
 - There is no cleanup of old log files. The server will continue to create log files indefinitely.
 
----
+<hr />
 
 
 
@@ -121,7 +121,7 @@ any time they want.
 
 Note: this variable was named DEFAULT_LOG_LEVEL until version 2.0.0
 
----
+<hr />
 
 
 
@@ -145,7 +145,7 @@ Log entries with a level below the configured value are silently dropped. This i
 `[DEFAULT_NOTIFICATION_LEVEL](#default_notification_level)`, which controls MCP client
 notifications.
 
----
+<hr />
 
 
 
@@ -155,7 +155,7 @@ Disable masking of credentials in MCP client notifications and server logs. For 
 
 - Default: `false`
 
----
+<hr />
 
 
 
@@ -170,7 +170,7 @@ are redacted or truncated.
 Binary payloads, large SVG/XML payloads, and large base64 image payloads are redacted. Other strings
 larger than this value are truncated.
 
----
+<hr />
 
 
 
@@ -202,7 +202,7 @@ API][tab-ds-connections].
 Future work will include a tool to automate this process. For more information, see [Connect to your
 data source][tab-connect-ds].
 
----
+<hr />
 
 
 
@@ -216,7 +216,7 @@ be available. This variable is site overridable, see [Site Settings](site-settin
 [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/toolName.ts).
 - Mixing tool names and group names is allowed.
 
----
+<hr />
 
 
 
@@ -228,7 +228,7 @@ be available. This variable is site overridable, see [Site Settings](site-settin
 - Default: Empty string (*none* are excluded)
 - Cannot be provided with `INCLUDE_TOOLS`.
 
----
+<hr />
 
 
 
@@ -239,7 +239,7 @@ The maximum timeout for requests to the Tableau Server REST API.
 - Default: `600000` (10 minutes)
 - Must be a positive number between `5000` (5 seconds) and `3600000` (1 hour).
 
----
+<hr />
 
 
 
@@ -260,7 +260,7 @@ Take care when setting this value and be sure to set appropriate tool-specific l
 - Default: Empty string (*no limit*)
 - Must be a positive number.
 
----
+<hr />
 
 
 
@@ -298,7 +298,7 @@ tool can only return up to 1000 results.
 `[MAX_RESULT_LIMIT](#max_result_limit)` variable will be used instead.
 - Each limit must be a positive number, or `*` to indicate unbounded results.
 
----
+<hr />
 
 
 
@@ -313,7 +313,7 @@ query the datasource. This variable is site and request overridable, see
 - When `true`, skips validation of queries against metadata results and validation of SET and MATCH
 filters.
 
----
+<hr />
 
 
 
@@ -328,7 +328,7 @@ Disable validation of SET and MATCH filter values in the
 - Default: `false`
 - When `true`, skips the validation that checks if filter values exist in the target field.
 
----
+<hr />
 
 
 
@@ -346,7 +346,7 @@ metadata.
 `[get-datasource-metadata](../../tools/data-qna/get-datasource-metadata.md)` tool and the Tableau
 Metadata API is not enabled on your Tableau Server.
 
----
+<hr />
 
 
 
@@ -365,7 +365,7 @@ clients to provide that session ID in the `mcp-session-id` header for subsequent
 - Set this to `true` if you are using the HTTP transport and your client does not support or need
 session management.
 
----
+<hr />
 
 
 
@@ -379,7 +379,7 @@ variable.
 - Default: `1` hour
 - Must be a positive number between `1` and `168` (7 days).
 
----
+<hr />
 
 
 
@@ -393,7 +393,7 @@ The telemetry provider to use for metrics collection.
   - `custom` - Use a custom telemetry provider (requires
   `[TELEMETRY_PROVIDER_CONFIG](#telemetry_provider_config)`)
 
----
+<hr />
 
 
 
@@ -415,7 +415,7 @@ TELEMETRY_PROVIDER_CONFIG='{"module": "./my-telemetry-provider.js"}'
 The custom provider module should export a default class (or named export `TelemetryProvider`) that
 implements the `[TelemetryProvider](https://github.com/tableau/tableau-mcp/blob/main/src/telemetry/types.ts)` interface.
 
----
+<hr />
 
 
 
@@ -441,7 +441,7 @@ The custom provider module should export a default class or named export `Featur
 
 :::
 
----
+<hr />
 
 
 
@@ -464,7 +464,7 @@ The `module` field can be:
 FEATURE_GATE_PROVIDER_CONFIG='{"module":"./providers/cloud-feature-gate.js"}'
 ```
 
----
+<hr />
 
 
 
@@ -482,7 +482,7 @@ not tracked).
 LATENCY_METRIC_NAME=http_server_1agg1_request_duration
 ```
 
----
+<hr />
 
 
 
@@ -497,7 +497,7 @@ call, including tool name, request ID, session ID, and site name.
 [https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm](https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm) for more
 information
 
----
+<hr />
 
 
 
@@ -514,7 +514,7 @@ disabled.
 - When enabled, individual flow tools can still be excluded via
 `[EXCLUDE_TOOLS](#exclude_tools)` (e.g. `EXCLUDE_TOOLS=flow`).
 
----
+<hr />
 
 
 
@@ -537,7 +537,7 @@ Enables admin-only tools that require site administrator permissions.
 - Admin tools perform runtime role verification and will return a 403 error if the user does not
 have the required permissions.
 
----
+<hr />
 
 
 
@@ -555,7 +555,7 @@ TTL (in minutes) for caches used by admin-only tools. Affects:
 Tune lower if site role / project metadata changes need to propagate faster. Tune higher under
 memory pressure to reduce REST traffic.
 
----
+<hr />
 
 
 
@@ -573,7 +573,7 @@ the preview.
 Tune lower to shorten the window in which a preview token is valid. Tune higher to give callers more
 time between preview and confirmation.
 
----
+<hr />
 
 
 
@@ -590,7 +590,7 @@ can pass an explicit `minAgeDays` argument to override per-call.
 Overridable per-site via [Site Settings](site-settings.md) and per-request via
 [Request Overrides](request-overrides.md#stale_content_min_age_days).
 
----
+<hr />
 
 
 
@@ -614,7 +614,7 @@ re-running.
 Overridable per-site via [Site Settings](site-settings.md) and per-request via
 [Request Overrides](request-overrides.md#stale_content_max_rows).
 
----
+<hr />
 
 
 
@@ -628,7 +628,7 @@ Callers can pass an explicit `inactiveDays` argument to override per-invocation.
 - Minimum: `1`
 - Maximum: `3650` (10 years)
 
----
+<hr />
 
 
 
@@ -641,7 +641,7 @@ Callers can pass an explicit `roles` argument to override per-invocation.
 - Default: `Creator,Explorer`
 - Values must be valid Tableau site role names (e.g., `Creator`, `Explorer`, `Viewer`).
 
----
+<hr />
 
 
 
@@ -665,7 +665,7 @@ discretion.
 }
 ```
 
----
+<hr />
 
 
 
@@ -685,7 +685,7 @@ CSP_ALLOWED_DOMAINS=https://*.mycompany.tableau.com,https://*.online.tableau.com
 
 This allows embedding Tableau visualizations from custom Tableau Server domains in addition to the default Tableau Cloud domains.
 
----
+<hr />
 
 
 
@@ -716,7 +716,7 @@ retrieval never hard-fails.
 MCP_S3_BUCKET=tableau-images
 ```
 
----
+<hr />
 
 
 
@@ -734,7 +734,7 @@ credential/region chain.
 AWS_DEFAULT_REGION=us-east-1
 ```
 
----
+<hr />
 
 
 
@@ -760,7 +760,7 @@ and `workbook-files/...` respectively.
 MCP_IMAGE_PREFIX=tableau/
 ```
 
----
+<hr />
 
 
 
