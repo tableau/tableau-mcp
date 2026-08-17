@@ -16,11 +16,22 @@
  * Desktop-side edit would.
  */
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { Err, Ok, Result } from 'ts-results-es';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
 import { checkSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import {
+  ArgsValidationError,
+  FileNotFoundError,
+  McpToolError,
+} from '../../../../errors/mcpToolError.js';
 import { log } from '../../../../logging/logger.js';
-import { safeWorksheetCacheId } from './worksheetCache.js';
+import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
+import {
+  fetchAndCacheWorksheet,
+  resolveWorksheetBufferId,
+  safeWorksheetCacheId,
+} from './worksheetCache.js';
 
 interface WorksheetEditBufferPointer {
   file: string;
@@ -162,4 +173,79 @@ export function clearStickyWorksheetFile({
       data: { pointerFile, error: String(error) },
     });
   }
+}
+
+/**
+ * The cache file add-field/remove-field should edit for this sheet+session, minting one from
+ * a live fetch when no buffer is open. Resolves a worksheetName through the sheet's stable id
+ * so a rename cannot strand the buffer, and updates the buffer pointer to the returned file.
+ */
+export async function resolveWorksheetEditFile({
+  worksheetName,
+  worksheetFile,
+  resolvedSession,
+  extra,
+}: {
+  worksheetName: string | undefined;
+  worksheetFile: string | undefined;
+  resolvedSession: string;
+  extra: TableauDesktopRequestHandlerExtra;
+}): Promise<Result<string, McpToolError>> {
+  if (!worksheetFile?.trim() && !worksheetName?.trim()) {
+    return Err(
+      new ArgsValidationError(
+        'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
+      ),
+    );
+  }
+
+  const trimmedWorksheetName = worksheetName?.trim() || undefined;
+
+  let bufferWorksheetId: string | undefined;
+  if (trimmedWorksheetName) {
+    const resolved = await resolveWorksheetBufferId({
+      worksheetRef: trimmedWorksheetName,
+      resolvedSession,
+      extra,
+    });
+    if (resolved.isErr()) {
+      return Err(resolved.error);
+    }
+    bufferWorksheetId = resolved.value;
+  }
+
+  let resolvedFile = worksheetFile?.trim() || undefined;
+  if (!resolvedFile) {
+    const sticky = getStickyWorksheetFile({
+      session: resolvedSession,
+      worksheetId: bufferWorksheetId!,
+    });
+    if (sticky) {
+      resolvedFile = sticky;
+    } else {
+      const minted = await fetchAndCacheWorksheet({
+        worksheetName: trimmedWorksheetName!,
+        resolvedSession,
+        extra,
+      });
+      if (minted.isErr()) {
+        return Err(minted.error);
+      }
+      resolvedFile = minted.value;
+    }
+  }
+
+  if (bufferWorksheetId) {
+    setStickyWorksheetFile({
+      session: resolvedSession,
+      worksheetId: bufferWorksheetId,
+      file: resolvedFile,
+    });
+  }
+
+  if (!existsSync(resolvedFile)) {
+    return Err(new FileNotFoundError(resolvedFile));
+  }
+
+  return Ok(resolvedFile);
 }

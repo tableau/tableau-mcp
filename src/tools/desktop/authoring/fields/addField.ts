@@ -30,8 +30,7 @@ import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
-import { fetchAndCacheWorksheet, resolveWorksheetBufferId } from './worksheetCache.js';
-import { getStickyWorksheetFile, setStickyWorksheetFile } from './worksheetEditBuffer.js';
+import { resolveWorksheetEditFile } from './worksheetEditBuffer.js';
 
 /** Encoding channels a field can be placed on. */
 const ENCODING_TYPES = [
@@ -169,65 +168,16 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
           }
           const resolvedSession = sessionResult.value;
 
-          if (!worksheetFile?.trim() && !worksheetName?.trim()) {
-            return new ArgsValidationError(
-              'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
-            ).toErr();
+          const editFile = await resolveWorksheetEditFile({
+            worksheetName,
+            worksheetFile,
+            resolvedSession,
+            extra,
+          });
+          if (editFile.isErr()) {
+            return editFile.error.toErr();
           }
-
-          const trimmedWorksheetName = worksheetName?.trim() || undefined;
-
-          let bufferWorksheetId: string | undefined;
-          if (trimmedWorksheetName) {
-            const resolved = await resolveWorksheetBufferId({
-              worksheetRef: trimmedWorksheetName,
-              resolvedSession,
-              extra,
-            });
-            if (resolved.isErr()) {
-              return resolved.error.toErr();
-            }
-            bufferWorksheetId = resolved.value;
-          }
-
-          // Name-based path: reuse the sticky edit buffer for this sheet if one is open
-          // (an earlier name-only call already fetched and is mid-edit); otherwise fetch
-          // the sheet fragment and mint a new cache file. Either way, later name-only
-          // calls for the same sheet+session keep landing on this same file until
-          // apply-worksheet closes the buffer.
-          if (!worksheetFile?.trim()) {
-            const sticky = getStickyWorksheetFile({
-              session: resolvedSession,
-              worksheetId: bufferWorksheetId!,
-            });
-            if (sticky) {
-              worksheetFile = sticky;
-            } else {
-              const minted = await fetchAndCacheWorksheet({
-                worksheetName: trimmedWorksheetName!,
-                resolvedSession,
-                extra,
-              });
-              if (minted.isErr()) {
-                return minted.error.toErr();
-              }
-              worksheetFile = minted.value;
-            }
-          }
-
-          // A worksheetName given alongside an explicit worksheetFile is an override —
-          // point the buffer at it too, so later name-only calls continue from here.
-          if (bufferWorksheetId) {
-            setStickyWorksheetFile({
-              session: resolvedSession,
-              worksheetId: bufferWorksheetId,
-              file: worksheetFile,
-            });
-          }
-
-          if (!existsSync(worksheetFile)) {
-            return new FileNotFoundError(worksheetFile).toErr();
-          }
+          worksheetFile = editFile.value;
 
           // encodingType is conditionally required — enforced here (not in the JSON Schema) so
           // the schema stays flat and host-portable.
