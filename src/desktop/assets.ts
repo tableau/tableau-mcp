@@ -206,17 +206,42 @@ export function readResourceAsset(relPath: string): string | null {
   }
 }
 
-// Knowledge module slugs (forward-slash, no .md) under resources/desktop/knowledge.
-// SEA reads the manifest; disk walks the tree.
-export function listKnowledgeSlugs(): string[] {
-  if (runningAsSea()) {
-    const prefix = 'resources/desktop/knowledge/';
-    return listSeaAssetKeys('resources/desktop/knowledge')
-      .filter((key) => key.endsWith('.md'))
-      .map((key) => key.slice(prefix.length).replace(/\.md$/, ''))
-      .sort();
-  }
-  const root = join(getResourcesRoot(), 'knowledge');
+// TABLEAU_KNOWLEDGE_DIR (set by tab-agent-south once it materializes the corpus
+// to <agent-data-dir>/knowledge) points at a tree with the same tiering skills/
+// commands already use: `.vendored/protected` (rebuilt every startup from the
+// vendored source, authoritative), `.vendored/overridable` (operator-editable
+// vendored default), and everything else at the top level (user-authored,
+// excluded from the vendored tiers). When unset, knowledge falls back to the
+// tree this repo ships itself (SEA-embedded or resources/desktop/knowledge on
+// disk) — the pre-external-corpus behavior, kept as a transitional default.
+const KNOWLEDGE_DIR_ENV_NAME = 'TABLEAU_KNOWLEDGE_DIR';
+const VENDORED_DIR_NAME = '.vendored';
+const PROTECTED_DIR_NAME = 'protected';
+const OVERRIDABLE_DIR_NAME = 'overridable';
+
+function externalKnowledgeRoot(): string | undefined {
+  const raw = process.env[KNOWLEDGE_DIR_ENV_NAME]?.trim();
+  return raw ? raw : undefined;
+}
+
+// Precedence order when a slug is claimed by more than one tier: protected is
+// authoritative and always wins; a user file shadows the vendored overridable
+// default; overridable is the fallback when neither above provides the slug.
+function externalKnowledgeRootsByPrecedence(baseDir: string): string[] {
+  return [
+    join(baseDir, VENDORED_DIR_NAME, PROTECTED_DIR_NAME),
+    baseDir,
+    join(baseDir, VENDORED_DIR_NAME, OVERRIDABLE_DIR_NAME),
+  ];
+}
+
+/**
+ * The `.md` slugs (forward-slash, no extension) under `root`, walked
+ * recursively. `skipTopLevelDirNames` excludes named directories one level
+ * below `root` only — used to keep the user-content root from also walking
+ * back into `.vendored`.
+ */
+function walkMarkdownSlugs(root: string, skipTopLevelDirNames: readonly string[] = []): string[] {
   const slugs: string[] = [];
   const walk = (dir: string, prefixParts: string[]): void => {
     let entries;
@@ -226,6 +251,9 @@ export function listKnowledgeSlugs(): string[] {
       return;
     }
     for (const entry of entries) {
+      if (prefixParts.length === 0 && skipTopLevelDirNames.includes(entry.name)) {
+        continue;
+      }
       const next = join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(next, [...prefixParts, entry.name]);
@@ -235,12 +263,61 @@ export function listKnowledgeSlugs(): string[] {
     }
   };
   walk(root, []);
-  return slugs.sort();
+  return slugs;
+}
+
+// Knowledge module slugs (forward-slash, no .md). Reads the external, multi-root
+// tree when TABLEAU_KNOWLEDGE_DIR is set; otherwise falls back to this repo's
+// own shipped copy under resources/desktop/knowledge (SEA reads the manifest,
+// disk walks the tree).
+export function listKnowledgeSlugs(): string[] {
+  const externalRoot = externalKnowledgeRoot();
+  if (externalRoot !== undefined) {
+    const slugs = new Set<string>();
+    for (const root of externalKnowledgeRootsByPrecedence(externalRoot)) {
+      const skip = root === externalRoot ? [VENDORED_DIR_NAME] : [];
+      for (const slug of walkMarkdownSlugs(root, skip)) {
+        slugs.add(slug);
+      }
+    }
+    return [...slugs].sort();
+  }
+  if (runningAsSea()) {
+    const prefix = 'resources/desktop/knowledge/';
+    return listSeaAssetKeys('resources/desktop/knowledge')
+      .filter((key) => key.endsWith('.md'))
+      .map((key) => key.slice(prefix.length).replace(/\.md$/, ''))
+      .sort();
+  }
+  return walkMarkdownSlugs(join(getResourcesRoot(), 'knowledge')).sort();
 }
 
 export function readKnowledgeBySlug(slug: string): string | null {
   if (!slug || slug.includes('..') || slug.includes('\\') || slug.startsWith('/')) {
     return null;
   }
-  return readResourceAsset(`knowledge/${slug}.md`);
+  const externalRoot = externalKnowledgeRoot();
+  if (externalRoot === undefined) {
+    return readResourceAsset(`knowledge/${slug}.md`);
+  }
+  const slugParts = slug.split('/');
+  for (const root of externalKnowledgeRootsByPrecedence(externalRoot)) {
+    // A slug can never legitimately resolve into .vendored via the user root —
+    // listKnowledgeSlugs never produces one, so treat a caller-supplied one
+    // (e.g. from a raw expertise:// URI) the same way.
+    if (root === externalRoot && slugParts[0] === VENDORED_DIR_NAME) {
+      continue;
+    }
+    try {
+      return readFileSync(join(root, ...slugParts) + '.md', 'utf-8');
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/** The configured knowledge root, for display in errors/logs only. */
+export function getConfiguredKnowledgeDir(): string {
+  return externalKnowledgeRoot() ?? join(getResourcesRoot(), 'knowledge');
 }

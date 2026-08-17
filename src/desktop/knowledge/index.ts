@@ -1,7 +1,6 @@
 import Fuse from 'fuse.js';
-import { join } from 'path';
 
-import { getResourcesRoot, listKnowledgeSlugs, readKnowledgeBySlug } from '../assets.js';
+import { getConfiguredKnowledgeDir, listKnowledgeSlugs, readKnowledgeBySlug } from '../assets.js';
 
 export interface KnowledgeResource {
   uri: string;
@@ -11,7 +10,7 @@ export interface KnowledgeResource {
 }
 
 export function getKnowledgeDir(): string {
-  return join(getResourcesRoot(), 'knowledge');
+  return getConfiguredKnowledgeDir();
 }
 
 function knowledgeCorpusEmptyError(): Error {
