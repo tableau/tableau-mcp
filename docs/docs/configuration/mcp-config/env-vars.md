@@ -698,7 +698,7 @@ instead of inlining it:
 - `get-view-image` / `get-custom-view-image` — rendered image (otherwise inline base64)
 - `get-view-data` / `get-custom-view-data` — CSV data (otherwise inline text)
 - `download-workbook` — workbook file (otherwise a local temp-file path)
-- `request-workbook-upload` / `validate-upload-and-publish-workbook`- stage workbook in S3 before publishing,(otherwise a local file path)
+- `request-workbook-upload` / `validate-upload-and-publish-workbook`— stage workbook in S3 before publishing (otherwise a local file path)
 
 The client fetches the files directly from S3, so the payload never streams back through the MCP
 server on read.
