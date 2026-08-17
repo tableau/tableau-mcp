@@ -19,6 +19,7 @@ export type McpScope =
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
   | 'tableau:mcp:workbook:read'
+  | 'tableau:mcp:workbook:create'
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:flow:read'
@@ -51,6 +52,7 @@ export type TableauApiScope =
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
+  | 'tableau:workbooks:create'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
@@ -70,6 +72,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:jobs:read',
   'tableau:mcp:users:read',
   'tableau:mcp:workbook:read',
+  'tableau:mcp:workbook:create',
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
   'tableau:mcp:users:write',
@@ -180,6 +183,14 @@ const toolScopeMap: Record<
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
+  'request-workbook-upload': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set([]),
+  },
+  'validate-upload-and-publish-workbook': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set(['tableau:workbooks:create']),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -331,8 +342,8 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:view:read', 'tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
-  // Dispatches on `kind` to ts-events, ts-users, site-content, job-performance (raw VDS) or
-  // stale-content (server-side anti-join). Union of the scopes required by all kinds.
+  // Dispatches on `kind` to ts-events, site-content, job-performance (raw VDS) or stale-content
+  // (server-side anti-join). Union of the scopes required by all four kinds.
   'query-admin-insights': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set([
@@ -378,6 +389,7 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
+  const authoringToolsEnabled = await featureGate.isFeatureEnabled('authoring-tools');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -410,6 +422,11 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
     enabledTools.delete('get-flow');
     enabledTools.delete('list-flow-runs');
     enabledTools.delete('list-flow-tasks');
+  }
+
+  if (!authoringToolsEnabled) {
+    enabledTools.delete('request-workbook-upload');
+    enabledTools.delete('validate-upload-and-publish-workbook');
   }
 
   return enabledTools;

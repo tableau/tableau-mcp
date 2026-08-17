@@ -179,6 +179,12 @@ export class WorkbookNotAllowedError extends McpToolError {
   }
 }
 
+export class ProjectNotAllowedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'project-not-allowed', message, statusCode: 403 });
+  }
+}
+
 export class WorkbookNotFoundError extends McpToolError {
   constructor(message: string) {
     super({ type: 'workbook-not-found', message, statusCode: 404 });

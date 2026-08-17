@@ -2,10 +2,15 @@ import { Zodios } from '@zodios/core';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
+import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
 import { Pagination } from '../types/pagination.js';
-import { Workbook } from '../types/workbook.js';
+import { Workbook, workbookSchema } from '../types/workbook.js';
+import {
+  WorkbookValidationResult,
+  workbookValidationResultSchema,
+} from '../types/workbookValidation.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
@@ -166,6 +171,121 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       },
     );
   };
+
+  /**
+   * Publishes a workbook on the specified site, committing a file previously uploaded
+   * via `validateWorkbookAndUpload`.
+   * Sends a `multipart/mixed` body, which Zodios cannot construct, so this bypasses the
+   * Zodios-typed client and calls the underlying axios instance directly.
+   *
+   * @param siteId - The Tableau site ID
+   * @param uploadSessionId - The upload session ID returned by `initiateFileUpload`
+   * @param workbookType - `twb` or `twbx`, matching the file uploaded to the session
+   * @param name - The name to give the published workbook
+   * @param projectId - The ID of the project to publish the workbook into
+   * @param overwrite - Whether to overwrite an existing workbook with the same name
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#publish_workbook
+   */
+  publishWorkbook = async ({
+    siteId,
+    uploadSessionId,
+    workbookType,
+    name,
+    projectId,
+    overwrite,
+  }: {
+    siteId: string;
+    uploadSessionId: string;
+    workbookType: 'twb' | 'twbx';
+    name: string;
+    projectId: string;
+    overwrite?: boolean;
+  }): Promise<Workbook> => {
+    const xml =
+      `<tsRequest><workbook name="${escapeXmlAttribute(name)}">` +
+      `<project id="${escapeXmlAttribute(projectId)}"/>` +
+      '</workbook></tsRequest>';
+    const { body, contentType } = buildMultipartMixedBody([
+      { name: 'request_payload', contentType: 'text/xml', data: xml },
+    ]);
+
+    const response = await this._apiClient.axios.post(
+      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks`,
+      body,
+      {
+        params: {
+          uploadSessionId,
+          workbookType,
+          overwrite,
+        },
+        headers: {
+          'Content-Type': contentType,
+          ...this.authHeader.headers,
+        },
+      },
+    );
+
+    return workbookSchema.parse(response.data.workbook);
+  };
+
+  /**
+   * Validates a TWB workbook file and uploads it to a temporary file upload session when validation
+   * succeeds. The returned `uploadId` can be used anywhere Tableau expects an upload session ID.
+   *
+   * Required scopes: `tableau:workbooks:create`
+   *
+   * @param siteId - The Tableau site ID
+   * @param filename - The TWB filename presented to Tableau. Must end with `.twb`.
+   * @param workbook - The raw TWB XML bytes to validate and upload.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#validate_workbook_and_upload
+   */
+  validateWorkbookAndUpload = async ({
+    siteId,
+    filename,
+    workbook,
+  }: {
+    siteId: string;
+    filename: string;
+    workbook: Buffer;
+  }): Promise<WorkbookValidationResult> => {
+    const { body, contentType } = buildMultipartMixedBody([
+      {
+        name: 'tableau_workbook',
+        filename,
+        contentType: 'application/octet-stream',
+        data: workbook,
+        dispositionType: 'form-data',
+      },
+    ]);
+
+    const response = await this._apiClient.axios.post(
+      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks/validateWorkbookAndUpload`,
+      body,
+      {
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': contentType,
+          ...this.authHeader.headers,
+        },
+      },
+    );
+
+    return workbookValidationResultSchema.parse(response.data);
+  };
+}
+
+function escapeXmlAttribute(value: string): string {
+  return (
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      // Numeric char ref, not the named &apos; - &apos; is a valid XML 1.0 entity but is absent from
+      // the HTML predefined set and the Tableau publish endpoint's parser rejects it (a name like
+      // O'Brien then 400s). &#39; is universally accepted.
+      .replace(/'/g, '&#39;')
+  );
 }
 
 function getHeader(headers: Record<string, unknown>, name: string): string | undefined {

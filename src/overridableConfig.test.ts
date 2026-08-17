@@ -83,6 +83,16 @@ describe('OverridableConfig', () => {
       ]);
     });
 
+    it('should parse INCLUDE_TOOLS into an array of valid tool names when the authoring group is used', () => {
+      vi.stubEnv('INCLUDE_TOOLS', 'authoring');
+
+      const config = new OverridableConfig({});
+      expect(config.includeTools).toEqual([
+        'request-workbook-upload',
+        'validate-upload-and-publish-workbook',
+      ]);
+    });
+
     it('should filter out invalid tool names from INCLUDE_TOOLS', () => {
       vi.stubEnv('INCLUDE_TOOLS', 'query-datasource,order-hamburgers');
 
