@@ -54,6 +54,7 @@ import {
   SiteWorkbookList,
   siteWorkbookListSchema,
   storyboardDocumentRoute,
+  storyboardImageRoute,
   StoryboardItem,
   storyboardItemSchema,
   StoryboardList,
@@ -452,6 +453,16 @@ export class ExternalApiToolExecutor {
   ): Promise<Result<ImageResult, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(dashboardImageRoute(dashboardId, query), imageResultSchema, signal),
+    );
+  }
+
+  async exportStoryboardImage(
+    storyboardId: string,
+    query: ImageExportQuery,
+    signal: AbortSignal,
+  ): Promise<Result<ImageResult, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(storyboardImageRoute(storyboardId, query), imageResultSchema, signal),
     );
   }
 

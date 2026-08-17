@@ -9,6 +9,7 @@ import { getApplyWorksheetTool } from './api/applyWorksheet.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { getExecuteTableauCommandTool } from './api/executeTableauCommand.js';
 import { exportDashboardImageTool } from './api/exportDashboardImage.js';
+import { exportStoryboardImageTool } from './api/exportStoryboardImage.js';
 import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
 import { getApiRootTool } from './api/getApiRoot.js';
 import { getAppInfoTool } from './api/getAppInfo.js';
@@ -145,6 +146,7 @@ export const desktopToolFactories = [
   getWorksheetUnderlyingDataTool,
   exportWorksheetImageTool,
   exportDashboardImageTool,
+  exportStoryboardImageTool,
   getWorkbookInventoryTool,
   getListWorkbookDatasourcesTool,
   getListSiteDatasourcesTool,

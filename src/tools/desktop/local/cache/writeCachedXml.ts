@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
-import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { parseOuterElement, replaceElement } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
@@ -163,7 +163,7 @@ export const getWriteCachedXmlTool = (
 
           try {
             writeFileSync(absolutePath, contentToWrite, 'utf-8');
-            writeSidecar(absolutePath, resolvedSession);
+            restampSidecarAfterEdit(absolutePath, resolvedSession);
             return new Ok({
               filePath,
               bytes: contentToWrite.length,

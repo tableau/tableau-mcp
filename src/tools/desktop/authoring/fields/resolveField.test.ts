@@ -222,6 +222,7 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
   it('with session: not_found triggers exactly one live refresh + retry, finds field only in refreshed XML', async () => {
     vi.mocked(readFileSync).mockReturnValue(STALE_XML);
     vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
+    vi.mocked(cacheFingerprintModule.sourceSha256).mockReturnValue('f'.repeat(64));
     vi.mocked(metadataModule.resolveField).mockImplementation((xml) =>
       xml === LIVE_XML ? liveExact : staleNotFound,
     );
@@ -244,7 +245,11 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     expect(body.isError).toBe(false);
     // Cache + sidecar rewritten with the refreshed XML / current session.
     expect(writeFileSync).toHaveBeenCalledWith(WORKBOOK_FILE, LIVE_XML, 'utf-8');
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKBOOK_FILE, SESSION);
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(
+      WORKBOOK_FILE,
+      SESSION,
+      'f'.repeat(64),
+    );
     // Two resolves: once against the stale cache (miss), once against the refresh (hit).
     expect(metadataModule.resolveField).toHaveBeenCalledTimes(2);
   });
@@ -500,13 +505,18 @@ describe('resolve-field workbookFile is optional (self-fetches the current workb
   });
 
   it('returns the cache path it minted so the next call can reuse the snapshot', async () => {
+    vi.mocked(cacheFingerprintModule.sourceSha256).mockReturnValue('f'.repeat(64));
     const result = await getResult({ query: 'Sales', extra: extraWithExecutor() });
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.workbookFile).toMatch(/workbook-.*\.xml$/);
     expect(writeFileSync).toHaveBeenCalledWith(body.workbookFile, LIVE_XML, 'utf-8');
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(body.workbookFile, '4242');
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(
+      body.workbookFile,
+      '4242',
+      'f'.repeat(64),
+    );
   });
 
   it.each(['', '   '])('treats %j as omitted rather than as a path', async (blank) => {

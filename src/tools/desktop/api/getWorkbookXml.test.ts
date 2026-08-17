@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as getWorkbookXmlModule from '../../../desktop/wrappers/getWorkbookXml.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import * as loggerModule from '../../../logging/logger.js';
@@ -13,6 +14,11 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getGetWorkbookXmlTool } from './getWorkbookXml.js';
 
 vi.mock('../../../desktop/wrappers/getWorkbookXml.js');
+vi.mock('../../../desktop/wrappers/cacheFingerprint.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../desktop/wrappers/cacheFingerprint.js')>();
+  return { ...actual, writeSidecar: vi.fn() };
+});
 vi.mock('fs');
 
 describe('getWorkbookXmlTool', () => {
@@ -86,6 +92,11 @@ describe('getWorkbookXmlTool', () => {
     expect(resultObj.message).toContain('cache file');
     expect(resultObj.instructions).toBe(
       'Use this file path with apply-workbook instead of passing content directly.',
+    );
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(
+      resultObj.file,
+      '12345',
+      '861123112f48bbfe5df7d79dd5cbd059f88961d9abe07a0aa28f5e998e15c650',
     );
   });
 

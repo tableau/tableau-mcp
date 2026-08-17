@@ -611,6 +611,17 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const storyboardImageMatch = path.match(/^\/v0\/workbook\/storyboards\/([^/]+)\/image$/);
+    if (method === 'GET' && storyboardImageMatch) {
+      const storyboardId = decodeURIComponent(storyboardImageMatch[1]);
+      if (!DEFAULT_STORYBOARDS.some((storyboard) => storyboard.id === storyboardId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
+        return;
+      }
+      sendImageExport(res, searchParams, 1600, 900);
+      return;
+    }
+
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.site) {
       sendJson(res, 200, {
         siteId: 'site-sales',
