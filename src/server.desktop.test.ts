@@ -210,18 +210,19 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // descriptions carrying the new-window/session-binding and blocking-Save-As caveats the 0.2.6
 // descriptions spell out. All five join the dynamic-authoring profile: served moves
 // 31_485 -> 34_581 (still well under the 46k cliff), full moves 51_101 -> 54_197.
-// Re-pinned 2026-08-13 after the fallback/apply work; retain the established 18-character
-// ratchet slack. Image export stays out until its External Client API progress signal is fixed.
-// Re-pinned 2026-08-14: added export-storyboard-image over the External Client API storyboard
+// Re-pinned 2026-08-14: the fallback/apply work plus list-worksheets/list-dashboards/list-storyboards
+// returning each item's full External Client API payload (hidden, index, active sheet, auto-updates,
+// datasources/contained sheets). Retain the established 18-character ratchet slack.
+// Re-pinned 2026-08-17: added export-storyboard-image over the External Client API storyboard
 // image route, mirroring export-worksheet-image and export-dashboard-image. Like those two it
 // stays out of DYNAMIC_AUTHORING_TOOL_PROFILE, so those ratchets are unchanged; full moves
-// 54_524 -> 55_403 (surface 54_506 -> 55_385, +879 for the tool, retaining the 18-char slack).
+// 54_759 -> 55_656 (surface 54_741 -> 55_638, +897 for the tool, retaining the 18-char slack).
 // Its description states the deliberate V0 scope — only the active story point renders; other
 // points are not included and cannot be selected.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 38_923;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 38_941;
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 39_069;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 39_087;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 55_403;
+const FULL_TOOL_SURFACE_BUDGET = 55_656;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -316,7 +317,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['bind-template', 2585], // raised 2026-08-10 (#734 review fold): +skip_validation, the server-gated trust flag for the deterministic build_viz path — a genuinely new param (name + boolean schema, description dropped since the LLM must never set it), ~118B over the prior cap so shrinking prose could not fund it; ratcheted to the measured 2585 (down from a transient 2675) once the description was removed; earlier raise with sign-off (2026-08-05): agreed UI-label title 'Matching template' costs a few bytes over 'Bind Template'; earlier raise (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
-    ['apply-worksheet', 1610], // raised 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
+    ['apply-worksheet', 1607], // ratcheted down 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1466], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow

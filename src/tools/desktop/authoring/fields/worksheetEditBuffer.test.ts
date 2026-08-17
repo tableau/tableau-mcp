@@ -9,7 +9,7 @@ vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('fs');
 
 const SESSION = '12345';
-const WORKSHEET_NAME = 'Sheet 1';
+const WORKSHEET_ID = 'sheet-1-uuid';
 const TARGET_FILE = '/cache/worksheet-Sheet_1-abc123.xml';
 
 describe('worksheetEditBuffer', () => {
@@ -39,39 +39,35 @@ describe('worksheetEditBuffer', () => {
   });
 
   it('returns undefined when no sticky buffer has been opened for this sheet+session', () => {
-    expect(getStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME })).toBe(
-      undefined,
-    );
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBe(undefined);
   });
 
   it('round-trips: set then get returns the same file', () => {
     files.set(TARGET_FILE, '<worksheet/>');
 
-    setStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME, file: TARGET_FILE });
+    setStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID, file: TARGET_FILE });
 
-    expect(getStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME })).toBe(
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBe(
       TARGET_FILE,
     );
   });
 
-  it('keys the pointer by worksheet name — a different sheet name sees no buffer', () => {
+  it('keys the pointer by worksheet id — a different sheet id sees no buffer', () => {
     files.set(TARGET_FILE, '<worksheet/>');
-    setStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME, file: TARGET_FILE });
+    setStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID, file: TARGET_FILE });
 
     expect(
-      getStickyWorksheetFile({ session: SESSION, worksheetName: 'Some Other Sheet' }),
+      getStickyWorksheetFile({ session: SESSION, worksheetId: 'some-other-sheet-uuid' }),
     ).toBeUndefined();
   });
 
   it('ignores a pointer recorded under a different session (fail-open to a fresh fetch)', () => {
     files.set(TARGET_FILE, '<worksheet/>');
-    setStickyWorksheetFile({ session: '99999', worksheetName: WORKSHEET_NAME, file: TARGET_FILE });
+    setStickyWorksheetFile({ session: '99999', worksheetId: WORKSHEET_ID, file: TARGET_FILE });
 
-    // Same worksheetName, different session — pointer file path differs, so this is
-    // already a miss; this test pins that behavior rather than a session_id check.
-    expect(
-      getStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME }),
-    ).toBeUndefined();
+    // Same worksheetId, different session — pointer file path differs, so this is already
+    // a miss; this test pins that behavior rather than a session_id check.
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBeUndefined();
   });
 
   it('closes the recorded session_id gap when two sessions sanitize to the same cache key', () => {
@@ -79,70 +75,59 @@ describe('worksheetEditBuffer', () => {
     // collide on the same pointer file path — the recorded session_id inside the pointer
     // is what stops one session's buffer from bleeding into the other's.
     files.set(TARGET_FILE, '<worksheet/>');
-    setStickyWorksheetFile({ session: 'abc:1', worksheetName: WORKSHEET_NAME, file: TARGET_FILE });
+    setStickyWorksheetFile({ session: 'abc:1', worksheetId: WORKSHEET_ID, file: TARGET_FILE });
 
-    expect(
-      getStickyWorksheetFile({ session: 'abc/1', worksheetName: WORKSHEET_NAME }),
-    ).toBeUndefined();
-    expect(getStickyWorksheetFile({ session: 'abc:1', worksheetName: WORKSHEET_NAME })).toBe(
+    expect(getStickyWorksheetFile({ session: 'abc/1', worksheetId: WORKSHEET_ID })).toBeUndefined();
+    expect(getStickyWorksheetFile({ session: 'abc:1', worksheetId: WORKSHEET_ID })).toBe(
       TARGET_FILE,
     );
   });
 
-  it('closes the recorded worksheet_name gap when two sheet names sanitize to the same cache key', () => {
+  it('closes the recorded worksheet_id gap when two sheet ids sanitize to the same cache key', () => {
+    // 'sheet:1' and 'sheet/1' both sanitize to 'sheet_1', so they would collide on the
+    // same pointer file path — the recorded worksheet_id inside the pointer is what stops
+    // one sheet's buffer from bleeding into the other's.
     files.set(TARGET_FILE, '<worksheet/>');
-    setStickyWorksheetFile({
-      session: SESSION,
-      worksheetName: 'Sales-2024',
-      file: TARGET_FILE,
-    });
+    setStickyWorksheetFile({ session: SESSION, worksheetId: 'sheet:1', file: TARGET_FILE });
 
-    expect(
-      getStickyWorksheetFile({ session: SESSION, worksheetName: 'Sales 2024' }),
-    ).toBeUndefined();
-    expect(getStickyWorksheetFile({ session: SESSION, worksheetName: 'Sales-2024' })).toBe(
-      TARGET_FILE,
-    );
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: 'sheet/1' })).toBeUndefined();
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: 'sheet:1' })).toBe(TARGET_FILE);
   });
 
-  it('trims worksheetName so set/get/clear agree when the caller passes surrounding whitespace', () => {
+  it('trims worksheetId so set/get/clear agree when the caller passes surrounding whitespace', () => {
     files.set(TARGET_FILE, '<worksheet/>');
     setStickyWorksheetFile({
       session: SESSION,
-      worksheetName: 'Sheet 1 ',
+      worksheetId: `${WORKSHEET_ID} `,
       file: TARGET_FILE,
     });
 
-    expect(getStickyWorksheetFile({ session: SESSION, worksheetName: ' Sheet 1' })).toBe(
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: ` ${WORKSHEET_ID}` })).toBe(
       TARGET_FILE,
     );
 
-    clearStickyWorksheetFile({ session: SESSION, worksheetName: 'Sheet 1  ' });
+    clearStickyWorksheetFile({ session: SESSION, worksheetId: `${WORKSHEET_ID}  ` });
 
-    expect(getStickyWorksheetFile({ session: SESSION, worksheetName: 'Sheet 1' })).toBeUndefined();
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBeUndefined();
   });
 
   it('ignores a pointer whose target file no longer exists', () => {
-    setStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME, file: TARGET_FILE });
+    setStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID, file: TARGET_FILE });
     // TARGET_FILE was never added to `files` — simulates the cache file being deleted
     // out from under the pointer.
 
-    expect(
-      getStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME }),
-    ).toBeUndefined();
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBeUndefined();
   });
 
   it('ignores a pointer when the sidecar fingerprint no longer matches the session', () => {
     files.set(TARGET_FILE, '<worksheet/>');
-    setStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME, file: TARGET_FILE });
+    setStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID, file: TARGET_FILE });
     vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({
       ok: false,
       reason: 'session-mismatch',
     } as never);
 
-    expect(
-      getStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME }),
-    ).toBeUndefined();
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBeUndefined();
   });
 
   it('fails open (returns undefined) when the pointer file is unreadable JSON', async () => {
@@ -151,29 +136,25 @@ describe('worksheetEditBuffer', () => {
     files.set(pointerPath, 'not json');
     vi.mocked(fs.existsSync).mockImplementation((path) => String(path) === pointerPath);
 
-    expect(
-      getStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME }),
-    ).toBeUndefined();
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBeUndefined();
   });
 
   it('clear removes the pointer so a later get sees no buffer', () => {
     files.set(TARGET_FILE, '<worksheet/>');
-    setStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME, file: TARGET_FILE });
-    expect(getStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME })).toBe(
+    setStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID, file: TARGET_FILE });
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBe(
       TARGET_FILE,
     );
 
-    clearStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME });
+    clearStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID });
 
-    expect(
-      getStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME }),
-    ).toBeUndefined();
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBeUndefined();
   });
 
   it('clear is a no-op when there is no open buffer', async () => {
     const fs = await import('fs');
 
-    clearStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME });
+    clearStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID });
 
     expect(fs.unlinkSync).not.toHaveBeenCalled();
   });
@@ -181,7 +162,7 @@ describe('worksheetEditBuffer', () => {
   function pointerPathFor(): string {
     // set once with a throwaway file just to capture the deterministic pointer path
     // writeFileSync mock records the path it was called with.
-    setStickyWorksheetFile({ session: SESSION, worksheetName: WORKSHEET_NAME, file: TARGET_FILE });
+    setStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID, file: TARGET_FILE });
     const [path] = [...files.keys()].filter((p) => p !== TARGET_FILE);
     files.clear();
     return path!;

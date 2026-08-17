@@ -7,12 +7,17 @@ import { listDashboards } from './listDashboards.js';
 describe('listDashboards', () => {
   it('uses the first-class dashboard list endpoint without fetching the workbook document', async () => {
     const signal = new AbortController().signal;
+    const dashboard = {
+      id: 'dashboard-1',
+      name: 'Executive Overview',
+      hidden: false,
+      isActiveSheet: false,
+      isAutoUpdatesPaused: false,
+      index: 2,
+      containedSheets: ['sheet-1', 'sheet-2'],
+    };
     const executor = makeExecutorMock({
-      listDashboards: vi.fn().mockResolvedValue(
-        Ok({
-          dashboards: [{ id: 'dashboard-1', name: 'Executive Overview' }],
-        }),
-      ),
+      listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [dashboard] })),
       executeCommand: vi.fn(),
     });
 
@@ -21,7 +26,7 @@ describe('listDashboards', () => {
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
       count: 1,
-      dashboards: ['Executive Overview'],
+      dashboards: [dashboard],
     });
     expect(executor.executeCommand).not.toHaveBeenCalled();
   });
@@ -37,8 +42,8 @@ describe('listDashboards', () => {
       getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
           xml: `<workbook><dashboards>
-            <dashboard name="Executive &amp; Sales" />
-            <dashboard name="Operations" />
+            <dashboard name="Executive &amp; Sales"><simple-id uuid="{DB-1}" /></dashboard>
+            <dashboard name="Operations"><simple-id uuid="{DB-2}" /></dashboard>
           </dashboards></workbook>`,
           applicationVersion: undefined,
           xsdPayloadVersion: undefined,
@@ -51,7 +56,10 @@ describe('listDashboards', () => {
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
       count: 2,
-      dashboards: ['Executive & Sales', 'Operations'],
+      dashboards: [
+        { id: '{DB-1}', name: 'Executive & Sales' },
+        { id: '{DB-2}', name: 'Operations' },
+      ],
     });
     expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
   });
