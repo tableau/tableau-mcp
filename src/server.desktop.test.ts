@@ -212,12 +212,17 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // 31_485 -> 34_581 (still well under the 46k cliff), full moves 51_101 -> 54_197.
 // Re-pinned 2026-08-14: the fallback/apply work plus list-worksheets/list-dashboards/list-storyboards
 // returning each item's full External Client API payload (hidden, index, active sheet, auto-updates,
-// datasources/contained sheets). Retain the established 18-character ratchet slack. Image export
-// stays out until its External Client API progress signal is fixed.
+// datasources/contained sheets). Retain the established 18-character ratchet slack.
+// Re-pinned 2026-08-17: added export-storyboard-image over the External Client API storyboard
+// image route, mirroring export-worksheet-image and export-dashboard-image. Like those two it
+// stays out of DYNAMIC_AUTHORING_TOOL_PROFILE, so those ratchets are unchanged; full moves
+// 54_759 -> 55_656 (surface 54_741 -> 55_638, +897 for the tool, retaining the 18-char slack).
+// Its description states the deliberate V0 scope — only the active story point renders; other
+// points are not included and cannot be selected.
 const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 39_069;
 const DYNAMIC_AUTHORING_SURFACE_BUDGET = 39_087;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 54_759;
+const FULL_TOOL_SURFACE_BUDGET = 55_656;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {

@@ -44,6 +44,7 @@ export function makeExecutorMock(
     getWorksheetUnderlyingData: vi.fn(),
     exportWorksheetImage: vi.fn(),
     exportDashboardImage: vi.fn(),
+    exportStoryboardImage: vi.fn(),
     validateWorkbookDocument: vi.fn(),
     applyWorkbookDocument: vi.fn(),
     applyWorksheetDocument: vi.fn(),
