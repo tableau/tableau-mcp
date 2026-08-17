@@ -2,7 +2,11 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { log } from '../../logging/logger.js';
-import { desktopCallTimeoutMessage, isDesktopCallTimeout } from '../callDeadline.js';
+import {
+  BLOCKING_DIALOG_GUIDANCE,
+  desktopCallTimeoutMessage,
+  isDesktopCallTimeout,
+} from '../callDeadline.js';
 import {
   noInstanceFoundMessage,
   unknownInstanceUnreachableMessage,
@@ -966,13 +970,12 @@ function mapClientError(
     case 'operation-expired':
       return {
         type: 'command-timed-out',
-        error:
-          'The async operation expired before it completed (polled past the Desktop retention window).',
+        error: `The async operation expired before it completed (polled past the Desktop retention window). ${BLOCKING_DIALOG_GUIDANCE}`,
       };
     case 'poll-timeout':
       return {
         type: 'command-timed-out',
-        error: 'The async operation did not reach a terminal state within the poll deadline.',
+        error: `The async operation did not reach a terminal state within the poll deadline. ${BLOCKING_DIALOG_GUIDANCE}`,
       };
     case 'no-instance':
       return {

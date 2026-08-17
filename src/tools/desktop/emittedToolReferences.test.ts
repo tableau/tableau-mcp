@@ -59,6 +59,7 @@ const NON_TOOL_VOCABULARY = [
   'datatype-customized',
   'default-format',
   'derivation-illegal',
+  'desktop-blocked',
   'diff-corpus',
   'do-nothing',
   'edit-group-action',
