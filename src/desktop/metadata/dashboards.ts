@@ -193,7 +193,9 @@ export function listDashboardRefs(workbookXml: string): Array<{ id: string; name
 }
 
 // Match a caller's ref against the dashboard's `<simple-id uuid>` (its External Client API id)
-// first, then its display name.
+// first, then its display name. Name stays the fallback because the .twb cross-references
+// dashboards by name (window definitions, story points), so the returned name is what the
+// name-keyed surgery in this module keys off.
 export function resolveDashboardRef(
   workbookXml: string,
   ref: string,
