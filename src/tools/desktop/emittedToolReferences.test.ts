@@ -166,6 +166,7 @@ const NON_TOOL_VOCABULARY = [
   'sizing-mode',
   'slot-to-field',
   'source-field',
+  'storyboard-image',
   'style-rule',
   'success-already-present',
   'summary-data',

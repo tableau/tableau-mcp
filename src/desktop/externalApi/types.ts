@@ -39,6 +39,7 @@ export const EXTERNAL_API_ROUTES = {
   dashboardResumeAutoUpdates: '/v0/workbook/dashboards/{id}:resumeAutoUpdates',
   storyboardById: '/v0/workbook/storyboards/{id}',
   storyboardDocument: '/v0/workbook/storyboards/{id}/document',
+  storyboardImage: '/v0/workbook/storyboards/{id}/image',
   storyboardDelete: '/v0/workbook/storyboards/{id}:delete',
   storyboardRename: '/v0/workbook/storyboards/{id}:rename',
   worksheetById: '/v0/workbook/worksheets/{id}',
@@ -114,7 +115,7 @@ export type SaveWorkbookRequest = {
   filePath?: string;
 };
 
-/** Query accepted by {@link worksheetImageRoute} and {@link dashboardImageRoute}. */
+/** Query accepted by {@link worksheetImageRoute}, {@link dashboardImageRoute}, and {@link storyboardImageRoute}. */
 export type ImageExportQuery = {
   /**
    * Absolute path the Desktop host should persist the image to. When set, the response
@@ -275,6 +276,10 @@ export function worksheetImageRoute(worksheetId: string, query: ImageExportQuery
 
 export function dashboardImageRoute(dashboardId: string, query: ImageExportQuery): string {
   return `${dashboardRoute(dashboardId)}/image${imageQuerySuffix(query)}`;
+}
+
+export function storyboardImageRoute(storyboardId: string, query: ImageExportQuery): string {
+  return `${storyboardRoute(storyboardId)}/image${imageQuerySuffix(query)}`;
 }
 
 /**
