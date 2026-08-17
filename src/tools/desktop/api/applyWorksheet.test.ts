@@ -468,9 +468,11 @@ describe('applyWorksheetTool', () => {
     );
   });
 
-  it('closes the sticky edit buffer for the applied sheet after a successful cached-file apply', async () => {
-    const mockXml =
-      '<worksheet name="Sheet 1"><simple-id uuid="sheet-1-uuid" /><table></table></worksheet>';
+  it('closes the sticky edit buffer keyed on the live sheet id after a successful cached-file apply', async () => {
+    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Sheet 1' }] }),
+    );
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
       Ok({ readbackWarnings: [] }),
     );
@@ -485,7 +487,32 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(false);
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
-      worksheetId: 'sheet-1-uuid',
+      worksheetId: 'live-sheet-uuid',
+    });
+  });
+
+  it('closes the buffer for an id-less fragment by resolving the live id from the applied name', async () => {
+    // An id-less cached fragment applies via the name fallback; keying the clear on the
+    // fragment's absent simple-id skipped it, so a later name-only edit resumed the stale buffer.
+    const mockXml = '<worksheet name="Old Name"><table></table></worksheet>';
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Renamed Live' }] }),
+    );
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Ok({ appliedName: 'Renamed Live', readbackWarnings: [] }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Old Name',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+      session: '12345',
+      worksheetId: 'live-sheet-uuid',
     });
   });
 

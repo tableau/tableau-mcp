@@ -4,7 +4,6 @@ import { Ok, type Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
-import { worksheetFragmentSimpleId } from '../../../desktop/metadata/sheets.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import {
   buildTemplateWorksheetArtifact,
@@ -392,10 +391,14 @@ export const getApplyWorksheetTool = (
             ? (result.value.appliedName ?? canonicalWorksheetName)
             : canonicalWorksheetName;
 
-          // The edits just landed — close the buffer, keyed on the fragment's simple-id
-          // (the id add-field/remove-field opened it under) so a later name-only call
-          // starts from a fresh live read instead of resuming this file.
-          const appliedBufferId = worksheetFragmentSimpleId(worksheetXml);
+          // The edits just landed — close the buffer so a later name-only call starts from a
+          // fresh live read. Resolve the id from the live name, not the fragment: a cached
+          // fragment may carry no <simple-id>, and keying the clear on that would skip it.
+          const appliedBufferId = await resolveWorksheetSimpleId({
+            worksheetRef: appliedWorksheetName,
+            resolvedSession,
+            extra,
+          });
           if (appliedBufferId) {
             clearStickyWorksheetFile({ session: resolvedSession, worksheetId: appliedBufferId });
           }

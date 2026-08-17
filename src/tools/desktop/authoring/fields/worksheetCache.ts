@@ -24,7 +24,7 @@ export function safeWorksheetCacheId(value: string): string {
  * Resolve a caller's worksheet reference (id or display name) to the sheet's stable
  * `<simple-id uuid>` — the id the edit buffer keys on and the External Client API
  * addresses the sheet by. Best-effort: returns undefined (never throws) when the sheet
- * cannot be listed or matched, so callers fall back to the name only as a last resort.
+ * cannot be listed or matched.
  */
 export async function resolveWorksheetSimpleId({
   worksheetRef,
