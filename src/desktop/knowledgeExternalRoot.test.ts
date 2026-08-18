@@ -1,10 +1,3 @@
-/**
- * TABLEAU_KNOWLEDGE_DIR points at the tree tab-agent-south materializes to
- * <agent-data-dir>/knowledge: `.vendored/protected`, `.vendored/overridable`,
- * and top-level user content. These tests cover the precedence walk
- * (protected > user > overridable) and slug normalization independent of that
- * materialization — they build the tree by hand.
- */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -33,14 +26,10 @@ describe('external knowledge root (TABLEAU_KNOWLEDGE_DIR)', () => {
     expect(getConfiguredKnowledgeDir()).toBe(root);
   });
 
-  it('merges slugs from all three tiers, normalized (tier prefix stripped)', () => {
-    writeMd(join(root, '.vendored', 'protected'), 'tactics/viz/filters', '# protected');
-    writeMd(root, 'my-notes/onboarding', '# user');
-    writeMd(
-      join(root, '.vendored', 'overridable'),
-      'strategy/viz-design/chart-selection',
-      '# overridable',
-    );
+  it('lists nested markdown slugs under the configured dir', () => {
+    writeMd(root, 'tactics/viz/filters', '# filters');
+    writeMd(root, 'strategy/viz-design/chart-selection', '# charts');
+    writeMd(root, 'my-notes/onboarding', '# notes');
 
     expect(listKnowledgeSlugs()).toEqual([
       'my-notes/onboarding',
@@ -49,43 +38,28 @@ describe('external knowledge root (TABLEAU_KNOWLEDGE_DIR)', () => {
     ]);
   });
 
-  it('excludes .vendored itself from the user-content walk', () => {
-    writeMd(join(root, '.vendored', 'protected'), 'a', '# protected a');
-    writeMd(join(root, '.vendored', 'overridable'), 'b', '# overridable b');
+  it('skips hidden files and directories', () => {
+    writeMd(root, 'tactics/a', '# visible');
+    writeMd(join(root, '.vendored', 'protected'), 'hidden', '# hidden');
+    writeFileSync(join(root, '.DS_Store'), 'skip');
 
-    expect(listKnowledgeSlugs()).toEqual(['a', 'b']);
+    expect(listKnowledgeSlugs()).toEqual(['tactics/a']);
   });
 
-  it('resolves a slug present in only one tier', () => {
-    writeMd(join(root, '.vendored', 'overridable'), 'strategy/x', '# only overridable');
+  it('reads a slug from the configured dir', () => {
+    writeMd(root, 'strategy/x', '# only this');
 
-    expect(readKnowledgeBySlug('strategy/x')).toBe('# only overridable');
+    expect(readKnowledgeBySlug('strategy/x')).toBe('# only this');
   });
 
-  it('protected wins over a same-slug user file', () => {
-    writeMd(join(root, '.vendored', 'protected'), 'shared/topic', '# protected wins');
-    writeMd(root, 'shared/topic', '# user loses');
-
-    expect(readKnowledgeBySlug('shared/topic')).toBe('# protected wins');
-    expect(listKnowledgeSlugs()).toEqual(['shared/topic']);
-  });
-
-  it('a user file shadows the same-slug overridable default', () => {
-    writeMd(root, 'shared/topic', '# user wins');
-    writeMd(join(root, '.vendored', 'overridable'), 'shared/topic', '# overridable loses');
-
-    expect(readKnowledgeBySlug('shared/topic')).toBe('# user wins');
-  });
-
-  it('returns null for a slug that names no file in any tier', () => {
+  it('returns null for a missing slug', () => {
     expect(readKnowledgeBySlug('nope/nothing-here')).toBeNull();
   });
 
-  it('never resolves a caller-supplied slug into .vendored via the user-content root', () => {
-    // Only reachable through the literal .vendored/overridable/secret path — not a
-    // slug listKnowledgeSlugs would ever normalize to and produce.
-    writeMd(join(root, '.vendored', 'overridable'), 'secret', '# should not leak');
+  it('rejects slugs that point at hidden paths or escape the root', () => {
+    writeMd(join(root, '.hidden'), 'secret', '# should not leak');
 
-    expect(readKnowledgeBySlug('.vendored/overridable/secret')).toBeNull();
+    expect(readKnowledgeBySlug('.hidden/secret')).toBeNull();
+    expect(readKnowledgeBySlug('../escape')).toBeNull();
   });
 });
