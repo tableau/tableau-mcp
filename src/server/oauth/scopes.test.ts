@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import * as configModule from '../../config.js';
 import {
+  DEFAULT_SCOPES_SUPPORTED,
   getRequiredApiScopesForTool,
   getSupportedApiScopes,
   getSupportedMcpScopes,
@@ -29,6 +30,16 @@ describe('scopes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+  });
+
+  it('advertises and maps the knowledge read scopes', async () => {
+    mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+    expect(DEFAULT_SCOPES_SUPPORTED).toContain('tableau:mcp:knowledge:read');
+    await expect(getSupportedMcpScopes()).resolves.toContain('tableau:mcp:knowledge:read');
+    await expect(getSupportedApiScopes()).resolves.toContain('tableau:knowledge:read');
+    expect(getRequiredApiScopesForTool('get-knowledge-suggestions' as any)).toEqual([
+      'tableau:knowledge:read',
+    ]);
   });
 
   describe('getSupportedMcpScopes', () => {

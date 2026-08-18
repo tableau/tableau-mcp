@@ -13,6 +13,7 @@ import { getListFlowTasksTool } from './flows/listFlowTasks/listFlowTasks.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getEmbedTokenTool } from './getEmbedToken/getEmbedToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
+import { getGetKnowledgeSuggestionsTool } from './knowledge/getKnowledgeSuggestions.js';
 import { getListProjectsTool } from './projects/listProjects.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
@@ -52,6 +53,7 @@ export const webToolFactories = [
   getUpdateCloudExtractRefreshTaskTool,
   getConfirmUpdateCloudExtractRefreshTaskTool,
   getListJobsTool,
+  getGetKnowledgeSuggestionsTool,
   getListUsersTool,
   getUpdateUserTool,
   getQueryDatasourceTool,

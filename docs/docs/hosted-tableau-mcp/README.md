@@ -37,7 +37,7 @@ See [Popular Client Integrations](./client-integrations.md) for step-by-step ins
     "settings": [
       {
         "key": "EXCLUDE_TOOLS",
-        "value": "admin-insights,content-exploration,datasource,jobs,project,pulse,tasks,token-management,users,view,workbook"
+        "value": "admin-insights,content-exploration,datasource,jobs,knowledge,project,pulse,tasks,token-management,users,view,workbook"
       }
     ]
   }
@@ -49,7 +49,7 @@ See [Popular Client Integrations](./client-integrations.md) for step-by-step ins
     <mcpSiteSettings>
         <settings>
             <key>EXCLUDE_TOOLS</key>
-            <value>admin-insights,content-exploration,datasource,jobs,project,pulse,tasks,token-management,users,view,workbook</value>
+            <value>admin-insights,content-exploration,datasource,jobs,knowledge,project,pulse,tasks,token-management,users,view,workbook</value>
         </settings>
     </mcpSiteSettings>
 </tsRequest>

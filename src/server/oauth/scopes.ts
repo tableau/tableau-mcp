@@ -30,7 +30,8 @@ export type McpScope =
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read'
-  | 'tableau:mcp:users:write';
+  | 'tableau:mcp:users:write'
+  | 'tableau:mcp:knowledge:read';
 
 export type TableauApiScope =
   | 'tableau:content:read'
@@ -58,7 +59,8 @@ export type TableauApiScope =
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
-  | 'tableau:users:update';
+  | 'tableau:users:update'
+  | 'tableau:knowledge:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -81,6 +83,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:flow:read',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
+  'tableau:mcp:knowledge:read',
 ];
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
@@ -171,6 +174,10 @@ const toolScopeMap: Record<
   'list-jobs': {
     mcp: ['tableau:mcp:jobs:read'],
     api: new Set(['tableau:jobs:read', 'tableau:users:read']),
+  },
+  'get-knowledge-suggestions': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
   },
   'list-users': {
     mcp: ['tableau:mcp:users:read'],
