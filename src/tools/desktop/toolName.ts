@@ -77,6 +77,7 @@ export const desktopToolNames = [
   'search-knowledge',
   'open-file',
   'save-workbook',
+  'workbook-export-as',
   'add-worksheet',
   'add-dashboard',
   'add-storyboard',

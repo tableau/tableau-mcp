@@ -222,10 +222,16 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // 54_759 -> 55_656 (surface 54_741 -> 55_638, +897 for the tool, retaining the 18-char slack).
 // Its description states the deliberate V0 scope — only the active story point renders; other
 // points are not included and cannot be selected.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 39_069;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 39_087;
+// Re-pinned 2026-08-18: added workbook-export-as over the External Client API workbook:exportAs
+// route (pdf/powerpoint/packaged-workbook/prior-version, headless write to filePath), gated to a
+// 0.2.7 minApiVersion floor (the gate is server-side metadata, not serialized surface). Unlike the
+// image exports it joins DYNAMIC_AUTHORING_TOOL_PROFILE, so it moves both surfaces by +1012:
+// dynamic authoring 39_069 -> 40_081 (budget 39_087 -> 40_099, keeping the 18-char slack), full
+// surface 55_638 -> 56_650 (budget 55_656 -> 56_668).
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_081;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_099;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 55_656;
+const FULL_TOOL_SURFACE_BUDGET = 56_668;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -482,10 +488,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 50-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 51-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(50);
+    expect(selected).toHaveLength(51);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -528,6 +534,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'add-storyboard',
       'open-file',
       'save-workbook',
+      'workbook-export-as',
       'get-workbook-xml',
       'apply-workbook',
       'get-dashboard-xml',
@@ -709,6 +716,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('add-dashboard')).toBe('0.2.6');
     expect(floors.get('add-storyboard')).toBe('0.2.6');
     expect(floors.get('export-storyboard-image')).toBe('0.2.7');
+    expect(floors.get('workbook-export-as')).toBe('0.2.7');
   });
 
   it('a connected 0.2.5 Desktop hides only the 0.2.6 tools from the profile surface', () => {
@@ -732,7 +740,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     }
   });
 
-  it('a connected 0.2.6 Desktop still hides the 0.2.7 story-image route', () => {
+  it('a connected 0.2.6 Desktop still hides the 0.2.7 export routes', () => {
     const fullTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'full',
@@ -740,8 +748,10 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     const at26 = filterToolsByApiVersion(fullTools, '0.2.6').map((tool) => tool.name);
     const at27 = filterToolsByApiVersion(fullTools, '0.2.7').map((tool) => tool.name);
 
-    expect(at26).not.toContain('export-storyboard-image');
-    expect(at27).toContain('export-storyboard-image');
+    for (const route of ['export-storyboard-image', 'workbook-export-as']) {
+      expect(at26).not.toContain(route);
+      expect(at27).toContain(route);
+    }
   });
 });
 

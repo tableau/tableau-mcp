@@ -42,6 +42,7 @@ import { getSaveWorkbookTool } from './api/saveWorkbook.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
 import { getUndoWorkbookTool } from './api/undoWorkbook.js';
 import { getValidateWorkbookXmlTool } from './api/validateWorkbookXml.js';
+import { getWorkbookExportAsTool } from './api/workbookExportAs.js';
 import { getBindTemplateTool } from './authoring/binder/bindTemplate.js';
 import { getListTemplatesTool } from './authoring/binder/listTemplates.js';
 import { getAuthorActionTool } from './authoring/datasource/authorAction.js';
@@ -88,6 +89,7 @@ export const desktopToolFactories = [
   getRedoWorkbookTool,
   getOpenFileTool,
   getSaveWorkbookTool,
+  getWorkbookExportAsTool,
   getAddWorksheetTool,
   getAddDashboardTool,
   getAddStoryboardTool,
