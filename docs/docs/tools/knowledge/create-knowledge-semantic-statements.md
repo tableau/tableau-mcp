@@ -9,7 +9,7 @@ Creates a semantic context containing business rules for an explicit Tableau Kno
 :::warning[Private Prototype]
 
 This tool mutates the graph directly without a preview or confirmation step. Tableau Knowledge must
-be available for the site.
+be available for the site, and the `knowledge-write-tools` feature flag must be enabled.
 
 :::
 

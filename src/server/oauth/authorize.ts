@@ -21,7 +21,7 @@ import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { matchesRegisteredRedirectUri } from './matchesRegisteredRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
-import { getDefaultScopes, getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
+import { getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
 import { ClientRegistration, PendingAuthorization } from './types.js';
 
 /**
@@ -135,7 +135,7 @@ export function authorize(
       validScopes.length > 0
         ? validScopes
         : enforceScopes
-          ? await getDefaultScopes({ includeApiScopes: advertiseApiScopes })
+          ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
           : [];
 
     // Redirect URI security enforcement for opaque client_ids (runs after baseline param

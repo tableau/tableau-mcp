@@ -9,7 +9,7 @@ Directly replaces statements or changes a semantic context's metadata or attachm
 :::warning[Destructive Private Prototype]
 
 Replacing `statements` or attachments discards the prior values. This tool has no preview or
-confirmation step.
+confirmation step. The `knowledge-write-tools` feature flag must be enabled.
 
 :::
 

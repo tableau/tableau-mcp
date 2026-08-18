@@ -88,11 +88,6 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:knowledge:read',
 ];
 
-const EXPLICIT_ONLY_SCOPES = new Set<string>([
-  'tableau:mcp:knowledge:write',
-  'tableau:knowledge:write',
-]);
-
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:content:read',
   'tableau:mcp_site_settings:read',
@@ -440,6 +435,7 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
   const authoringToolsEnabled = await featureGate.isFeatureEnabled('authoring-tools');
+  const knowledgeWriteToolsEnabled = await featureGate.isFeatureEnabled('knowledge-write-tools');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -477,6 +473,11 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   if (!authoringToolsEnabled) {
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('validate-upload-and-publish-workbook');
+  }
+
+  if (!knowledgeWriteToolsEnabled) {
+    enabledTools.delete('create-knowledge-semantic-statements');
+    enabledTools.delete('update-knowledge-semantic-statements');
   }
 
   return enabledTools;
@@ -520,16 +521,6 @@ export async function getSupportedScopes({
   const mcpScopes = await getSupportedMcpScopes();
   const apiScopes = await getSupportedApiScopes();
   return includeApiScopes ? [...mcpScopes, ...apiScopes] : mcpScopes;
-}
-
-export async function getDefaultScopes({
-  includeApiScopes,
-}: {
-  includeApiScopes: boolean;
-}): Promise<string[]> {
-  return (await getSupportedScopes({ includeApiScopes })).filter(
-    (scope) => !EXPLICIT_ONLY_SCOPES.has(scope),
-  );
 }
 
 /**
