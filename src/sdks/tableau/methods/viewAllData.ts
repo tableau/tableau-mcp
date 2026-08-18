@@ -19,9 +19,7 @@ export function parseViewAllData(body: Uint8Array, contentType: string): ViewAll
         throw new Error('allData response part is missing X-Tableau-Sheet-Name');
       }
 
-      const statusCode = Number(part.headers.get('x-tableau-sheet-status'));
-      const status =
-        Number.isInteger(statusCode) && statusCode >= 200 && statusCode < 300 ? 'OK' : 'ERROR';
+      const status = part.headers.has('x-tableau-sheet-error-code') ? 'ERROR' : 'OK';
       const errorDetail = decodeErrorDetail(part.headers.get('x-tableau-sheet-error-detail'));
       if (status === 'ERROR') {
         return { sheetName, status, errorDetail, columns: [], rows: [] };

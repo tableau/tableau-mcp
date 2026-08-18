@@ -22,6 +22,7 @@ const multipartBody = Buffer.from(
     'Content-Type: text/csv; charset=utf-8',
     'X-Tableau-Sheet-Name: Broken',
     'X-Tableau-Sheet-Status: 422',
+    'X-Tableau-Sheet-Error-Code: 400081',
     'X-Tableau-Sheet-Error-Detail: Sheet+could+not+be+rendered%3A+%C3%A9',
     '',
     ' ',
@@ -59,6 +60,34 @@ describe('parseViewAllData', () => {
     expect(() => parseViewAllData(multipartBody, 'multipart/form-data')).toThrow(
       'missing multipart boundary',
     );
+  });
+
+  it('uses the sheet error code rather than the status range to identify errors', () => {
+    const body = Buffer.from(
+      [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="failed"',
+        'Content-Type: text/csv; charset=utf-8',
+        'X-Tableau-Sheet-Name: Failed',
+        'X-Tableau-Sheet-Status: 200',
+        'X-Tableau-Sheet-Error-Code: 500000',
+        'X-Tableau-Sheet-Error-Detail: Timed+out',
+        '',
+        ' ',
+        `--${boundary}--`,
+        '',
+      ].join('\r\n'),
+    );
+
+    expect(parseViewAllData(body, `multipart/form-data; boundary=${boundary}`)).toEqual([
+      {
+        sheetName: 'Failed',
+        status: 'ERROR',
+        errorDetail: 'Timed out',
+        columns: [],
+        rows: [],
+      },
+    ]);
   });
 });
 
