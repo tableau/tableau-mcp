@@ -458,7 +458,7 @@ export const worksheetItemSchema = z
     hidden: z.boolean(),
     isActiveSheet: z.boolean().optional(),
     isAutoUpdatesPaused: z.boolean().optional(),
-    index: z.number().int().optional(),
+    index: z.number().int().nullish(),
     datasources: z.array(z.string()).optional(),
   })
   .passthrough();
@@ -481,7 +481,7 @@ export const dashboardItemSchema = z
     hidden: z.boolean(),
     isActiveSheet: z.boolean().optional(),
     isAutoUpdatesPaused: z.boolean().optional(),
-    index: z.number().int().optional(),
+    index: z.number().int().nullish(),
     containedSheets: z.array(z.string()).optional(),
   })
   .passthrough();
@@ -503,8 +503,8 @@ export const storyboardItemSchema = z
     type: z.string().optional(),
     hidden: z.boolean(),
     isActiveSheet: z.boolean().optional(),
-    index: z.number().int().optional(),
-    storyPointCount: z.number().int().optional(),
+    index: z.number().int().nullish(),
+    storyPointCount: z.number().int().nullish(),
   })
   .passthrough();
 export type StoryboardItem = z.infer<typeof storyboardItemSchema>;
