@@ -105,6 +105,29 @@ describe('server', () => {
     }
   });
 
+  it('should register knowledge tools alongside existing Tableau tools', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).toContain('list-datasources');
+    expect(registeredToolNames).toContain('list-workbooks');
+    expect(registeredToolNames).toContain('query-datasource');
+    expect(registeredToolNames).toContain('get-knowledge-suggestions');
+    expect(registeredToolNames).toContain('list-knowledge-sources');
+    expect(registeredToolNames).toContain('search-knowledge-nodes');
+    expect(registeredToolNames).toContain('get-knowledge-node');
+    expect(registeredToolNames).toContain('get-knowledge-node-relationships');
+    expect(registeredToolNames).toContain('get-knowledge-lineage');
+    expect(registeredToolNames).toContain('get-knowledge-node-impact');
+    expect(registeredToolNames).toContain('create-knowledge-semantic-statements');
+    expect(registeredToolNames).toContain('list-knowledge-semantic-statements');
+    expect(registeredToolNames).toContain('update-knowledge-semantic-statements');
+  });
+
   it('should use the web variant server name', () => {
     expect(new WebMcpServer().name).toBe(serverName);
   });

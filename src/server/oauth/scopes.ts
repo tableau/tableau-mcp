@@ -31,7 +31,8 @@ export type McpScope =
   | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read'
   | 'tableau:mcp:users:write'
-  | 'tableau:mcp:knowledge:read';
+  | 'tableau:mcp:knowledge:read'
+  | 'tableau:mcp:knowledge:write';
 
 export type TableauApiScope =
   | 'tableau:content:read'
@@ -60,7 +61,8 @@ export type TableauApiScope =
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
   | 'tableau:users:update'
-  | 'tableau:knowledge:read';
+  | 'tableau:knowledge:read'
+  | 'tableau:knowledge:write';
 
 /**
  * Default scopes supported by the MCP server
@@ -85,6 +87,11 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:insight:create',
   'tableau:mcp:knowledge:read',
 ];
+
+const EXPLICIT_ONLY_SCOPES = new Set<string>([
+  'tableau:mcp:knowledge:write',
+  'tableau:knowledge:write',
+]);
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:content:read',
@@ -178,6 +185,42 @@ const toolScopeMap: Record<
   'get-knowledge-suggestions': {
     mcp: ['tableau:mcp:knowledge:read'],
     api: new Set(['tableau:knowledge:read']),
+  },
+  'list-knowledge-sources': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'search-knowledge-nodes': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'get-knowledge-node': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'get-knowledge-node-relationships': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'get-knowledge-lineage': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'get-knowledge-node-impact': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'create-knowledge-semantic-statements': {
+    mcp: ['tableau:mcp:knowledge:write'],
+    api: new Set(['tableau:knowledge:write']),
+  },
+  'list-knowledge-semantic-statements': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'update-knowledge-semantic-statements': {
+    mcp: ['tableau:mcp:knowledge:write'],
+    api: new Set(['tableau:knowledge:write']),
   },
   'list-users': {
     mcp: ['tableau:mcp:users:read'],
@@ -477,6 +520,16 @@ export async function getSupportedScopes({
   const mcpScopes = await getSupportedMcpScopes();
   const apiScopes = await getSupportedApiScopes();
   return includeApiScopes ? [...mcpScopes, ...apiScopes] : mcpScopes;
+}
+
+export async function getDefaultScopes({
+  includeApiScopes,
+}: {
+  includeApiScopes: boolean;
+}): Promise<string[]> {
+  return (await getSupportedScopes({ includeApiScopes })).filter(
+    (scope) => !EXPLICIT_ONLY_SCOPES.has(scope),
+  );
 }
 
 /**

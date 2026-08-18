@@ -107,6 +107,86 @@ describe('secretMask', () => {
     });
   });
 
+  it('masks semantic statements recursively in Knowledge requests and responses', () => {
+    const request = maskRequest({
+      method: 'POST',
+      baseUrl: 'https://example.com/api/v1/knowledge',
+      url: '/graphs/graph-1/semantic-statements',
+      headers: {},
+      data: { statements: [{ statement: 'Revenue excludes refunds.' }] },
+    });
+    const response = maskResponse({
+      status: 200,
+      baseUrl: 'https://example.com/api/v1/knowledge',
+      params: {},
+      url: '/graphs/graph-1/semantic-statements/search',
+      headers: {},
+      data: {
+        result: {
+          properties: { statements: [{ id: 'stmt:1', statement: 'Revenue excludes refunds.' }] },
+        },
+      },
+    });
+
+    expect(request.data).toEqual({ statements: '<redacted>' });
+    expect(response.data).toEqual({
+      result: { properties: { statements: '<redacted>' } },
+    });
+  });
+
+  it('masks semantic statements nested in Knowledge error responses', () => {
+    const response = maskResponse({
+      status: 400,
+      baseUrl: 'https://example.com/api/v1/knowledge',
+      params: {},
+      url: '/graphs/graph-1/semantic-statements/context-1',
+      headers: {},
+      data: {
+        error: {
+          details: { semantic_context: { statements: [{ statement: 'Sensitive rule.' }] } },
+        },
+      },
+    });
+
+    expect(response.data).toEqual({
+      error: { details: { semantic_context: { statements: '<redacted>' } } },
+    });
+  });
+
+  it.each(['/graphs/graph-1/nodes/search', '/graphs/graph-1/nodes/resolve'])(
+    'masks candidate statements in Knowledge response %s',
+    (url) => {
+      const response = maskResponse({
+        status: 200,
+        baseUrl: 'https://example.com/api/v1/knowledge',
+        params: {},
+        url,
+        headers: {},
+        data: {
+          result: { candidates: [{ statements: [{ statement: 'Sensitive rule.' }] }] },
+        },
+      });
+
+      expect(response.data).toEqual({
+        result: { candidates: [{ statements: '<redacted>' }] },
+      });
+    },
+  );
+
+  it('leaves unrelated statements fields untouched', () => {
+    const data = { statements: [{ statement: 'Not a Knowledge semantic statement.' }] };
+
+    expect(
+      maskRequest({
+        method: 'POST',
+        baseUrl: 'https://example.com/api/v1',
+        url: '/unrelated/statements',
+        headers: {},
+        data,
+      }).data,
+    ).toEqual(data);
+  });
+
   it('should not include headers and data in the request if the log level is not debug', () => {
     setNotificationLevel(new WebMcpServer().mcpServer, 'info', { silent: true });
 
