@@ -47,7 +47,7 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
       maskedData.params['user_id'] = '<redacted>';
     }
 
-    if (isKnowledgeRoute(maskedData.baseUrl, maskedData.url)) {
+    if (isKnowledgeRoute(maskedData.baseUrl, maskedData.url ?? '')) {
       maskStatements(maskedData.data);
     }
   } else {
