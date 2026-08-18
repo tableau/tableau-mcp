@@ -27,7 +27,8 @@ describe('getDashboardXml', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toBe('<dashboard name="Sales" />');
+    expect(result.unwrap().xml).toBe('<dashboard name="Sales" />');
+    expect(result.unwrap().name).toBe('Sales');
     expect(executor.getDashboardDocument).toHaveBeenCalledWith(
       'dashboard-2',
       expect.any(AbortSignal),
@@ -116,7 +117,8 @@ describe('getDashboardXml', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toContain('<dashboard name="Sales">');
+    expect(result.unwrap().xml).toContain('<dashboard name="Sales">');
+    expect(result.unwrap().name).toBe('Sales');
     expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
   });
 });

@@ -237,6 +237,27 @@ describe('external client API contract (captured openapi fixture)', () => {
         true,
       );
     });
+
+    it.each([
+      ['WorksheetItem', worksheetItemSchema],
+      ['DashboardItem', dashboardItemSchema],
+      ['StoryboardItem', storyboardItemSchema],
+    ] as const)('%s accepts a hidden sheet with index: null', (_name, schema) => {
+      expect(
+        schema.safeParse({ id: 'sheet-1', name: 'Sheet 1', hidden: true, index: null }).success,
+      ).toBe(true);
+    });
+
+    it('StoryboardItem accepts storyPointCount: null', () => {
+      expect(
+        storyboardItemSchema.safeParse({
+          id: 'story-1',
+          name: 'Story 1',
+          hidden: false,
+          storyPointCount: null,
+        }).success,
+      ).toBe(true);
+    });
   });
 
   describe('Problem ↔ problemResponseSchema', () => {

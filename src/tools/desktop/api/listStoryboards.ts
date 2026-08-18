@@ -18,7 +18,8 @@ export const getListStoryboardsTool = (
     server,
     name: 'list-storyboards',
     title,
-    description: 'List storyboards.',
+    description:
+      "Lists the workbook's storyboards, each with its stable id, name, and state (hidden, index, active sheet, story point count).",
     paramsSchema,
     annotations: {
       readOnlyHint: true,

@@ -420,6 +420,41 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
   });
 
+  it('accepts a dashboard id and retitles a stale fragment before per-dashboard apply', async () => {
+    const dashboardId = '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}';
+    const fragment = `<dashboard name='Old Dashboard'><zones /><simple-id uuid='${dashboardId}' /></dashboard>`;
+    const applyDashboardDocument = vi
+      .fn()
+      .mockResolvedValue(
+        Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
+      );
+    const executor = makeExecutorMock({
+      listDashboards: vi.fn().mockResolvedValue(
+        Ok({
+          dashboards: [{ id: dashboardId, name: 'Renamed Dashboard', hidden: false }],
+        }),
+      ),
+      getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: fragment })),
+      applyDashboardDocument,
+    });
+
+    const result = await loadDashboardXml({
+      dashboardName: dashboardId,
+      xml: fragment,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(applyDashboardDocument).toHaveBeenCalledWith(
+      dashboardId,
+      expect.stringContaining("name='Renamed Dashboard'"),
+      mockSignal,
+    );
+  });
+
   it('should return invalid-xml error when xml is empty', async () => {
     const mockExecutor = makeExecutorMock({ executeCommand: vi.fn() });
 

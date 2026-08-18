@@ -101,7 +101,12 @@ describe('tryApplyViaPerSheetRoute', () => {
 
       expect(result.isOk()).toBe(true);
       if (result.isOk()) {
-        expect(result.value).toBe('applied');
+        expect(result.value).toEqual({
+          status: 'applied',
+          id,
+          name: sheetName,
+          fragmentXml,
+        });
       }
       // The route resolves by id, and the posted body is the sheet fragment as-is (Tableau Desktop
       // wraps it into the live workbook server-side — the MCP does not build a <workbook> envelope).
@@ -112,6 +117,102 @@ describe('tryApplyViaPerSheetRoute', () => {
       expect(postedXml).not.toContain('<workbook>');
     },
   );
+
+  it.each([
+    {
+      ...FIXTURES[0],
+      sheetName: 'sheet-1',
+      fragmentXml:
+        "<worksheet name='Old worksheet'><table><rows /></table><simple-id uuid='sheet-1' /></worksheet>",
+      currentName: 'Renamed worksheet',
+      listValue: { worksheets: [{ id: 'sheet-1', name: 'Renamed worksheet' }] },
+    },
+    {
+      ...FIXTURES[1],
+      sheetName: 'dash-1',
+      fragmentXml:
+        "<dashboard name='Old dashboard'><zones /><simple-id uuid='dash-1' /></dashboard>",
+      currentName: 'Renamed dashboard',
+      listValue: { dashboards: [{ id: 'dash-1', name: 'Renamed dashboard' }] },
+    },
+    {
+      ...FIXTURES[2],
+      sheetName: 'story-1',
+      fragmentXml:
+        "<dashboard name='Old story' type='storyboard'><zones /><simple-id uuid='story-1' /></dashboard>",
+      currentName: 'Renamed story',
+      listValue: { storyboards: [{ id: 'story-1', name: 'Renamed story' }] },
+    },
+  ])(
+    'retitles a stale $kind fragment to the current live name before posting by id',
+    async ({
+      kind,
+      sheetName,
+      fragmentXml,
+      listMethod,
+      listValue,
+      applyMethod,
+      id,
+      currentName,
+    }) => {
+      const apply = vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+      const executor = makeExecutorMock({
+        [listMethod]: vi.fn().mockResolvedValue(Ok(listValue)),
+        [applyMethod]: apply,
+      });
+
+      const result = await tryApplyViaPerSheetRoute({
+        kind,
+        sheetName,
+        fragmentXml,
+        focus: NO_FOCUS,
+        executor,
+        signal: mockSignal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(apply).toHaveBeenCalledTimes(1);
+      const [postedId, postedXml] = apply.mock.calls[0];
+      expect(postedId).toBe(id);
+      expect(postedXml).toContain(`name='${currentName}'`);
+      expect(postedXml).toContain(`uuid='${id}'`);
+    },
+  );
+
+  it('changes only the root name when a stale fragment contains numeric entities', async () => {
+    const fragmentXml =
+      "<worksheet name='Old worksheet'>" +
+      '<column formula="real:&#13; literal:&amp;#13;" />' +
+      "<simple-id uuid='sheet-1' />" +
+      '</worksheet>';
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: 'Renamed worksheet' }] })),
+      applyWorksheetDocument,
+    });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: 'worksheet',
+      sheetName: 'sheet-1',
+      fragmentXml,
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(applyWorksheetDocument).toHaveBeenCalledWith(
+      'sheet-1',
+      fragmentXml.replace("name='Old worksheet'", "name='Renamed worksheet'"),
+      mockSignal,
+    );
+  });
 
   it('accepts an unchanged preexisting blocker using one live target GET', async () => {
     const fixture = FIXTURES[0];
@@ -140,7 +241,8 @@ describe('tryApplyViaPerSheetRoute', () => {
       signal: mockSignal,
     });
 
-    expect(result.isOk() && result.value).toBe('applied');
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) expect(result.value).toMatchObject({ status: 'applied' });
     expect(getDocument).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledOnce();
   });
@@ -274,7 +376,7 @@ describe('tryApplyViaPerSheetRoute', () => {
       });
 
       expect(result.isOk()).toBe(true);
-      if (result.isOk()) expect(result.value).toBe('applied');
+      if (result.isOk()) expect(result.value).toMatchObject({ status: 'applied' });
       expect(getWorkbookDocument).not.toHaveBeenCalled();
       expect(apply).toHaveBeenCalledOnce();
     },

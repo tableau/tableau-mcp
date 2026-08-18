@@ -119,7 +119,9 @@ export const getApplyStoryboardTool = (
           return new Ok(
             acceptedNoReadbackApplyResult({
               kind: 'storyboard',
-              appliedName: storyboardName,
+              appliedName: result.isOk()
+                ? (result.value.appliedName ?? storyboardName)
+                : storyboardName,
               resultWarnings: validationWarnings,
               hostVerification,
             }),

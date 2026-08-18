@@ -472,6 +472,45 @@ describe('getSummaryDataTool', () => {
     }
   });
 
+  it('routes a blocking Desktop dialog to action-required instead of retryable', async () => {
+    const harness = await startHarness((server) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
+        status: 202,
+        headers: { Location: '/v0/operations/op-blocked', 'Retry-After': '0' },
+      });
+      server.setOperation('op-blocked', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'op-blocked',
+            kind: 'worksheet-summary-data',
+            state: 'RUNNING',
+            blockingWindows: [
+              {
+                objectName: 'signIn',
+                title: 'Sign In',
+                className: 'QDialog',
+                messageText: 'Enter your SQL Server password',
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    try {
+      const result = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
+      expect(result.isError).toBe(true);
+      expect(parseJsonResult(result)).toMatchObject({
+        status: 'action-required',
+        reason: 'desktop-blocked',
+        guidance: expect.stringContaining('list-instances'),
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('does not replay a prior success payload for repeated calls', async () => {
     const harness = await startHarness();
     try {

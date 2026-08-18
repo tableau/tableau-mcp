@@ -19,7 +19,10 @@ import {
   formatWorksheetPromiseCheck,
 } from '../../../desktop/validation/promise-check.js';
 import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
-import { loadWorksheetXml } from '../../../desktop/wrappers/loadWorksheetXml.js';
+import {
+  loadWorksheetXml,
+  resolveCanonicalWorksheetName,
+} from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -27,6 +30,7 @@ import {
   WorksheetXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { resolveWorksheetSimpleId } from '../authoring/fields/worksheetCache.js';
 import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';
 import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
 import {
@@ -68,7 +72,7 @@ const paramsSchema = {
     .describe('Exact template binding to build and apply in this call.'),
   worksheetName: artifactNameParam('worksheet', { min: 1, max: 255 })
     .optional()
-    .describe('Existing worksheet name for cached-file apply; omit with other modes.'),
+    .describe('Worksheet id or name for cached-file apply; omit with other modes.'),
   worksheetFile: artifactFileParam('worksheet', { max: 4096 })
     .optional()
     .describe('Cached worksheet path for manual apply; omit with other modes.'),
@@ -163,10 +167,17 @@ export const getApplyWorksheetTool = (
               // A prior add-field/remove-field edit buffer for this sheet+session predates
               // this apply; whatever it was tracking is now stale, so close it rather than
               // let a later name-only call silently resume editing on top of it.
-              clearStickyWorksheetFile({
-                session: resolvedSession,
-                worksheetName: outcome.receipt.title,
+              const artifactBufferId = await resolveWorksheetSimpleId({
+                worksheetRef: outcome.receipt.title,
+                resolvedSession,
+                extra,
               });
+              if (artifactBufferId) {
+                clearStickyWorksheetFile({
+                  session: resolvedSession,
+                  worksheetId: artifactBufferId,
+                });
+              }
 
               // The artifact apply already carries the verification outcome
               // (applyWorksheetArtifact resolves the skipped fallback), so the
@@ -251,10 +262,17 @@ export const getApplyWorksheetTool = (
             });
             if (outcome.state !== 'applied') return outcome.error.toErr();
 
-            clearStickyWorksheetFile({
-              session: resolvedSession,
-              worksheetName: outcome.receipt.title,
+            const templatePlanBufferId = await resolveWorksheetSimpleId({
+              worksheetRef: outcome.receipt.title,
+              resolvedSession,
+              extra,
             });
+            if (templatePlanBufferId) {
+              clearStickyWorksheetFile({
+                session: resolvedSession,
+                worksheetId: templatePlanBufferId,
+              });
+            }
 
             const verification = outcome.receipt.verification;
             const verificationRan = verification.status !== 'skipped';
@@ -306,11 +324,17 @@ export const getApplyWorksheetTool = (
           }
           const { xml: worksheetXml, resolvedSession, sourceHash } = preamble.value;
 
+          const canonical = resolveCanonicalWorksheetName(worksheetName!, worksheetXml);
+          if (canonical.isErr()) {
+            return new WorksheetXmlLoadFailedError(canonical.error).toErr();
+          }
+          const canonicalWorksheetName = canonical.value;
+
           const executor = await extra.getExecutor(resolvedSession);
           const result = await loadWorksheetXml({
-            worksheetName: worksheetName!,
+            worksheetName: canonicalWorksheetName,
             xml: worksheetXml,
-            focus: { navigate: 'artifact', sheetName: worksheetName! },
+            focus: { navigate: 'artifact', sheetName: canonicalWorksheetName },
             executor,
             signal: extra.signal,
             // apply-worksheet updates an existing worksheet in place via the per-sheet `/document`
@@ -363,10 +387,21 @@ export const getApplyWorksheetTool = (
             });
           }
           const hostVerification = receiptInput ? formatWorksheetPromiseCheck(receiptInput) : '';
+          const appliedWorksheetName = result.isOk()
+            ? (result.value.appliedName ?? canonicalWorksheetName)
+            : canonicalWorksheetName;
 
-          // The edits just landed — close the buffer so a later name-only add-field/
-          // remove-field call starts from a fresh live read instead of resuming this file.
-          clearStickyWorksheetFile({ session: resolvedSession, worksheetName: worksheetName! });
+          // The edits just landed — close the buffer so a later name-only call starts from a
+          // fresh live read. Resolve the id from the live name, not the fragment: a cached
+          // fragment may carry no <simple-id>, and keying the clear on that would skip it.
+          const appliedBufferId = await resolveWorksheetSimpleId({
+            worksheetRef: appliedWorksheetName,
+            resolvedSession,
+            extra,
+          });
+          if (appliedBufferId) {
+            clearStickyWorksheetFile({ session: resolvedSession, worksheetId: appliedBufferId });
+          }
 
           // The structured receipt is derived from the same readback outcome the text
           // reports: when the readback ran its status is an observation; when it was
@@ -376,12 +411,12 @@ export const getApplyWorksheetTool = (
           return new Ok(
             withNextAction(
               {
-                message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
+                message: `Successfully applied worksheet update for "${appliedWorksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
               },
               doneNextAction(
                 receipt({
                   did: [
-                    `Desktop accepted the worksheet XML apply for "${worksheetName}"`,
+                    `Desktop accepted the worksheet XML apply for "${appliedWorksheetName}"`,
                     `preflight validation returned ${receiptInput?.validationWarnings.length ?? 0} warning(s)`,
                     ...(readbackRan
                       ? [

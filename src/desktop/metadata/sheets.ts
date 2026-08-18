@@ -1,3 +1,4 @@
+import { xmlNamesEqual } from '../xmlElement.js';
 import {
   carryNamespaceDeclarations,
   findWorksheet,
@@ -136,6 +137,46 @@ export function listSheets(workbookXml: string): string[] {
   const workbook = parseXML(workbookXml);
   const worksheets = normalizeArray(workbook.workbook?.worksheets?.worksheet);
   return worksheets.map((ws) => ws['@_name']).filter((name): name is string => !!name);
+}
+
+// `id` is each worksheet's own `<simple-id uuid>` — the same value the External Client API returns
+// as the worksheet id.
+export function listWorksheetRefs(workbookXml: string): Array<{ id: string; name: string }> {
+  const workbook = parseXML(workbookXml);
+  const worksheets = normalizeArray(workbook.workbook?.worksheets?.worksheet);
+  return worksheets.flatMap((ws) => {
+    const id = ws['simple-id']?.['@_uuid']?.trim();
+    const name = ws['@_name'];
+    return id && name ? [{ id, name }] : [];
+  });
+}
+
+// Match a caller's reference against the worksheet's `<simple-id uuid>` (the External Client API
+// worksheet id) first, then its display name. Name is the fallback because the .twb cross-references
+// sheets by name (windows, dashboard zones, story points), so the returned name is what the
+// name-keyed surgery in this module must key off.
+export function resolveWorksheetRef(
+  workbookXml: string,
+  ref: string,
+): { id?: string; name: string } | null {
+  const workbook = parseXML(workbookXml);
+  const worksheets = normalizeArray(workbook.workbook?.worksheets?.worksheet);
+  const trimmed = ref.trim();
+  const matched =
+    worksheets.find((ws) => ws['simple-id']?.['@_uuid']?.trim() === trimmed) ??
+    worksheets.find((ws) => ws['@_name'] && xmlNamesEqual(ws['@_name'], ref)) ??
+    null;
+  if (!matched?.['@_name']) return null;
+  const id = matched['simple-id']?.['@_uuid'];
+  return { ...(id ? { id } : {}), name: matched['@_name'] };
+}
+
+// The `<simple-id uuid>` of a standalone `<worksheet>` fragment (the id the External Client API
+// addresses the live sheet by), or null when the fragment carries none.
+export function worksheetFragmentSimpleId(worksheetFragmentXml: string): string | null {
+  const parsed = parseXML(worksheetFragmentXml);
+  const worksheet = normalizeArray(parsed.worksheet as ParsedWorksheet | undefined)[0];
+  return worksheet?.['simple-id']?.['@_uuid']?.trim() || null;
 }
 
 // Returns a standalone `<worksheet>` fragment (not a whole workbook), or null if absent.
