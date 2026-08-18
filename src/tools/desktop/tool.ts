@@ -10,6 +10,7 @@ import {
   emitToolErrorEvent,
   episodeSessionIdFromArgs,
 } from '../../desktop/episode-events.js';
+import { ApiVersionFloor } from '../../desktop/externalApi/apiVersion.js';
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
@@ -35,7 +36,7 @@ export type DesktopToolParams<Args extends ZodRawShape | undefined = undefined> 
   TableauDesktopRequestHandlerExtra,
   TableauDesktopToolCallback<Args>,
   Args
-> & { minApiVersion?: string };
+> & { minApiVersion?: ApiVersionFloor };
 
 export class DesktopTool<Args extends ZodRawShape | undefined = undefined> extends Tool<
   DesktopMcpServer,
@@ -48,7 +49,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
    * Minimum External Client API version whose Desktop build serves the endpoint this tool
    * drives; unset means no floor.
    */
-  readonly minApiVersion?: string;
+  readonly minApiVersion?: ApiVersionFloor;
 
   constructor(params: DesktopToolParams<Args>) {
     super(params);

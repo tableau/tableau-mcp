@@ -1,3 +1,5 @@
+export type ApiVersionFloor = `${number}.${number}.${number}`;
+
 /**
  * Numeric SemVer comparison ("0.2.6" >= "0.2.5"). Missing/unparseable parts read as 0,
  * so `undefined` and `""` compare as 0.0.0 — below every real floor.
