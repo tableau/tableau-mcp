@@ -29,6 +29,7 @@ export const getWorkbookExportAsTool = (
   const workbookExportAsTool = new DesktopTool({
     server,
     name: 'workbook-export-as',
+    minApiVersion: '0.2.7',
     title,
     description:
       'Export the open workbook to a file, leaving the open document unchanged. ' +

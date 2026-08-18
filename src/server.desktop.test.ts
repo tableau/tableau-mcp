@@ -716,6 +716,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('add-dashboard')).toBe('0.2.6');
     expect(floors.get('add-storyboard')).toBe('0.2.6');
     expect(floors.get('export-storyboard-image')).toBe('0.2.7');
+    expect(floors.get('workbook-export-as')).toBe('0.2.7');
   });
 
   it('a connected 0.2.5 Desktop hides only the 0.2.6 tools from the profile surface', () => {
@@ -739,7 +740,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     }
   });
 
-  it('a connected 0.2.6 Desktop still hides the 0.2.7 story-image route', () => {
+  it('a connected 0.2.6 Desktop still hides the 0.2.7 export routes', () => {
     const fullTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'full',
@@ -747,8 +748,10 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     const at26 = filterToolsByApiVersion(fullTools, '0.2.6').map((tool) => tool.name);
     const at27 = filterToolsByApiVersion(fullTools, '0.2.7').map((tool) => tool.name);
 
-    expect(at26).not.toContain('export-storyboard-image');
-    expect(at27).toContain('export-storyboard-image');
+    for (const route of ['export-storyboard-image', 'workbook-export-as']) {
+      expect(at26).not.toContain(route);
+      expect(at27).toContain(route);
+    }
   });
 });
 

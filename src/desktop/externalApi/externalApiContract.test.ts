@@ -346,11 +346,6 @@ describe('external client API contract (captured openapi fixture)', () => {
     it('invokeCommand stays deliberately undocumented (hidden route, owned separately)', () => {
       expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
     });
-
-    // workbook:exportAs ships in External Client API 0.2.7, but the captured fixture is still 0.2.6
-    it('workbook:exportAs is absent until the fixture is recaptured at 0.2.7', () => {
-      expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.workbookExportAs);
-    });
   });
 
   describe('envelope wire acceptance', () => {
