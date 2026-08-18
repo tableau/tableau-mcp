@@ -46,6 +46,10 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
     if (maskedData.params?.['user_id']) {
       maskedData.params['user_id'] = '<redacted>';
     }
+
+    if (isKnowledgeRoute(maskedData.baseUrl, maskedData.url)) {
+      maskStatements(maskedData.data);
+    }
   } else {
     delete maskedData.data;
     delete maskedData.headers;
@@ -66,6 +70,10 @@ export const maskResponse = (response: ResponseInterceptorConfig): MaskedRespons
     if (maskedData.data?.credentials) {
       maskedData.data.credentials = '<redacted>';
     }
+
+    if (isKnowledgeRoute(maskedData.baseUrl, maskedData.url)) {
+      maskStatements(maskedData.data);
+    }
   } else {
     delete maskedData.data;
     delete maskedData.headers;
@@ -73,6 +81,29 @@ export const maskResponse = (response: ResponseInterceptorConfig): MaskedRespons
 
   return maskedData;
 };
+
+function isKnowledgeRoute(baseUrl: string, url: string): boolean {
+  return /\/knowledge(?:\/|$)/.test(`${baseUrl}${url}`);
+}
+
+function maskStatements(value: unknown): void {
+  if (Array.isArray(value)) {
+    value.forEach(maskStatements);
+    return;
+  }
+
+  if (value === null || typeof value !== 'object') {
+    return;
+  }
+
+  for (const [key, nestedValue] of Object.entries(value)) {
+    if (key === 'statements') {
+      (value as Record<string, unknown>)[key] = '<redacted>';
+    } else {
+      maskStatements(nestedValue);
+    }
+  }
+}
 
 function clone<T>(obj: T): Result<T, Error> {
   try {

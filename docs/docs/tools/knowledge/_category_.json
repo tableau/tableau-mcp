@@ -3,6 +3,6 @@
   "position": 12,
   "link": {
     "type": "generated-index",
-    "description": "Tools for reading Tableau knowledge graph health and suggestions."
+    "description": "Tools for discovering, traversing, and adding governed context to Tableau Knowledge graphs."
   }
 }

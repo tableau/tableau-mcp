@@ -12,7 +12,13 @@ import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessTok
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { mcpTokenSchema } from './schemas.js';
-import { formatScopes, getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
+import {
+  formatScopes,
+  getDefaultScopes,
+  getSupportedScopes,
+  parseScopes,
+  validateScopes,
+} from './scopes.js';
 import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens } from './types.js';
 
 export const AUDIENCE = 'tableau-mcp-server';
@@ -160,7 +166,7 @@ export function token(
             validScopes.length > 0
               ? validScopes
               : enforceScopes
-                ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+                ? await getDefaultScopes({ includeApiScopes: advertiseApiScopes })
                 : [];
 
           // Generate access token for client credentials grant type.

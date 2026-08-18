@@ -3,6 +3,240 @@ import { describe, expect, it, vi } from 'vitest';
 import KnowledgeMethods from './knowledgeMethods.js';
 
 describe('KnowledgeMethods', () => {
+  it('forwards semantic statement bodies as snake_case with bearer auth', async () => {
+    const createSemanticStatements = vi.fn().mockResolvedValue({});
+    const listSemanticStatements = vi.fn().mockResolvedValue([]);
+    const listNodeSemanticStatements = vi.fn().mockResolvedValue([]);
+    const updateSemanticStatements = vi.fn().mockResolvedValue({});
+    const methods = new KnowledgeMethods(
+      'https://tableau.example/api/v1/knowledge',
+      { type: 'Bearer', token: 'token' },
+      {},
+    );
+    // @ts-expect-error - Mocking private property
+    methods._apiClient = {
+      createSemanticStatements,
+      listSemanticStatements,
+      listNodeSemanticStatements,
+      updateSemanticStatements,
+    };
+
+    await methods.createSemanticStatements({
+      graphId: 'graph-1',
+      statements: [{ statement: 'Revenue excludes refunds.' }],
+      targetNodeId: null,
+      isGlobal: null,
+      name: null,
+    });
+    await (methods as any).listSemanticStatements({ graphId: 'graph-1', isGlobal: true });
+    await (methods as any).listSemanticStatements({
+      graphId: 'graph-1',
+      nodeId: 'field/Revenue Total',
+    });
+    await methods.updateSemanticStatements({
+      graphId: 'graph-1',
+      contextId: 'semctx:rule 1',
+      statements: null,
+      isGlobal: null,
+      name: null,
+      targetNodeId: null,
+    });
+
+    const auth = { headers: { Authorization: 'Bearer token' } };
+    expect(createSemanticStatements).toHaveBeenCalledWith(
+      {
+        statements: [{ statement: 'Revenue excludes refunds.' }],
+        target_node_id: null,
+        is_global: null,
+        name: null,
+      },
+      { params: { graph_id: 'graph-1' }, ...auth },
+    );
+    expect(listSemanticStatements).toHaveBeenCalledWith(
+      { is_global: true },
+      { params: { graph_id: 'graph-1' }, ...auth },
+    );
+    expect(listNodeSemanticStatements).toHaveBeenCalledWith(
+      {},
+      { params: { graph_id: 'graph-1', node_id: 'field%2FRevenue%20Total' }, ...auth },
+    );
+    expect(updateSemanticStatements).toHaveBeenCalledWith(
+      {
+        statements: null,
+        target_node_id: null,
+        is_global: null,
+        name: null,
+      },
+      { params: { graph_id: 'graph-1', ctx_id: 'semctx%3Arule%201' }, ...auth },
+    );
+  });
+
+  it('forwards relationship input as exact snake_case with bearer auth', async () => {
+    const searchNodeRelationships = vi.fn().mockResolvedValue({ edges: [] });
+    const methods = new KnowledgeMethods(
+      'https://tableau.example/api/v1/knowledge',
+      { type: 'Bearer', token: 'token' },
+      {},
+    );
+    // @ts-expect-error - Mocking private property
+    methods._apiClient = { searchNodeRelationships };
+
+    expect((methods as any).getKnowledgeNodeRelationships).toBeTypeOf('function');
+    await (methods as any).getKnowledgeNodeRelationships({
+      graphId: 'graph-1',
+      nodeId: 'field:Sales',
+      edgeType: 'DEPENDS_ON',
+      direction: 'incoming',
+    });
+
+    expect(searchNodeRelationships).toHaveBeenCalledWith(
+      {
+        node_id: 'field:Sales',
+        query: undefined,
+        edge_type: 'DEPENDS_ON',
+        direction: 'incoming',
+      },
+      { params: { graph_id: 'graph-1' }, headers: { Authorization: 'Bearer token' } },
+    );
+  });
+
+  it('forwards lineage and impact path parameters', async () => {
+    const getLineage = vi.fn().mockResolvedValue({ nodes: [], edges: [] });
+    const getNodeImpact = vi.fn().mockResolvedValue({ node_id: 'x', affected_assets: [] });
+    const methods = new KnowledgeMethods(
+      'https://tableau.example/api/v1/knowledge',
+      { type: 'Bearer', token: 'token' },
+      {},
+    );
+    // @ts-expect-error - Mocking private property
+    methods._apiClient = { getLineage, getNodeImpact };
+
+    expect((methods as any).getKnowledgeLineage).toBeTypeOf('function');
+    expect((methods as any).getKnowledgeNodeImpact).toBeTypeOf('function');
+    await (methods as any).getKnowledgeLineage({
+      graphId: 'graph-1',
+      nodeId: 'field:Profit Ratio',
+    });
+    await (methods as any).getKnowledgeNodeImpact({
+      graphId: 'graph-1',
+      nodeId: 'field:Sales',
+    });
+
+    expect(getLineage).toHaveBeenCalledWith({
+      params: { graph_id: 'graph-1', node_id: 'field%3AProfit%20Ratio' },
+      headers: { Authorization: 'Bearer token' },
+    });
+    expect(getNodeImpact).toHaveBeenCalledWith({
+      params: { graph_id: 'graph-1', node_id: 'field%3ASales' },
+      headers: { Authorization: 'Bearer token' },
+    });
+  });
+
+  it('URL-encodes supported lineage and impact node IDs through Zodios', async () => {
+    const requests: any[] = [];
+    const adapter = vi.fn(async (config: any) => {
+      requests.push(config);
+      return {
+        data: config.url.includes('/impact')
+          ? { node_id: 'x', affected_assets: [] }
+          : { nodes: [], edges: [] },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      };
+    });
+    const methods = new KnowledgeMethods(
+      'https://tableau.example/api/v1/knowledge',
+      { type: 'Bearer', token: 'token' },
+      { adapter },
+    );
+
+    await (methods as any).getKnowledgeLineage({
+      graphId: 'graph-1',
+      nodeId: 'field:Profit Ratio',
+    });
+    await (methods as any).getKnowledgeNodeImpact({
+      graphId: 'graph-1',
+      nodeId: 'field:Profit Ratio',
+    });
+
+    expect(requests.map(({ url }) => url)).toEqual([
+      '/graphs/graph-1/lineage/field%3AProfit%20Ratio',
+      '/graphs/graph-1/nodes/field%3AProfit%20Ratio/impact',
+    ]);
+  });
+  it('forwards node search filters and limit with bearer auth', async () => {
+    const searchNodes = vi.fn().mockResolvedValue({ nodes: [] });
+    const methods = new KnowledgeMethods(
+      'https://tableau.example/api/v1/knowledge',
+      { type: 'Bearer', token: 'token' },
+      {},
+    );
+    // @ts-expect-error - Mocking private property
+    methods._apiClient = { searchNodes };
+
+    expect((methods as any).searchKnowledgeNodes).toBeTypeOf('function');
+    await (methods as any).searchKnowledgeNodes({
+      graphId: 'graph-1',
+      query: 'revenue',
+      nodeType: 'FIELD',
+      scopeId: 'pds-1',
+      limit: 12,
+    });
+
+    expect(searchNodes).toHaveBeenCalledWith(
+      { query: 'revenue', node_type: 'FIELD', scope_id: 'pds-1', limit: 12 },
+      { params: { graph_id: 'graph-1' }, headers: { Authorization: 'Bearer token' } },
+    );
+  });
+
+  it('forwards omitted and null node search limits', async () => {
+    const searchNodes = vi.fn().mockResolvedValue({ matches: [] });
+    const methods = new KnowledgeMethods(
+      'https://tableau.example/api/v1/knowledge',
+      { type: 'Bearer', token: 'token' },
+      {},
+    );
+    // @ts-expect-error - Mocking private property
+    methods._apiClient = { searchNodes };
+
+    await methods.searchKnowledgeNodes({ graphId: 'graph-1', query: 'revenue' });
+    await methods.searchKnowledgeNodes({ graphId: 'graph-1', query: 'revenue', limit: null });
+
+    expect(searchNodes.mock.calls.map(([body]) => body.limit)).toEqual([undefined, null]);
+  });
+
+  it('forwards node resolution filters and max candidates', async () => {
+    const resolveNode = vi.fn().mockResolvedValue({ needs_disambiguation: true, node: null });
+    const methods = new KnowledgeMethods(
+      'https://tableau.example/api/v1/knowledge',
+      {
+        type: 'X-Tableau-Auth',
+        token: 'session-token',
+        site: { id: 'site-1' },
+        user: { id: 'user-1' },
+      },
+      {},
+    );
+    // @ts-expect-error - Mocking private property
+    methods._apiClient = { resolveNode };
+
+    expect((methods as any).getKnowledgeNode).toBeTypeOf('function');
+    await (methods as any).getKnowledgeNode({
+      graphId: 'graph-1',
+      query: 'revenue',
+      nodeType: 'FIELD',
+      scopeId: 'pds-1',
+      maxCandidates: 7,
+    });
+
+    expect(resolveNode).toHaveBeenCalledWith(
+      { query: 'revenue', node_type: 'FIELD', scope_id: 'pds-1', max_candidates: 7 },
+      { params: { graph_id: 'graph-1' }, headers: { 'X-Tableau-Auth': 'session-token' } },
+    );
+  });
+
   it('forwards the graph path, snake_case body, and bearer auth', async () => {
     const searchSuggestions = vi.fn().mockResolvedValue({
       stats: { total_nodes: 0, total_relationships: 0, connected_sources: 0, workbooks: 0 },
@@ -54,6 +288,66 @@ describe('KnowledgeMethods', () => {
 
     expect(searchSuggestions).toHaveBeenCalledWith(
       { pds_id: undefined, severity: undefined, type: undefined, limit: undefined },
+      { params: { graph_id: 'graph-1' }, headers: { 'X-Tableau-Auth': 'session-token' } },
+    );
+  });
+
+  it('lists filtered knowledge sources with bearer auth', async () => {
+    const searchSources = vi.fn().mockResolvedValue([]);
+    const methods = new KnowledgeMethods(
+      'https://tableau.example/api/v1/knowledge',
+      { type: 'Bearer', token: 'token' },
+      {},
+    );
+    // @ts-expect-error - Mocking private property
+    methods._apiClient = { searchSources };
+
+    await methods.listKnowledgeSources({ graphId: 'graph-1', nodeType: 'PDS' });
+
+    expect(searchSources).toHaveBeenCalledWith(
+      { node_type: 'PDS' },
+      { params: { graph_id: 'graph-1' }, headers: { Authorization: 'Bearer token' } },
+    );
+  });
+
+  it('forwards arbitrary and null source node type filters', async () => {
+    const searchSources = vi.fn().mockResolvedValue([]);
+    const methods = new KnowledgeMethods(
+      'https://tableau.example/api/v1/knowledge',
+      { type: 'Bearer', token: 'token' },
+      {},
+    );
+    // @ts-expect-error - Mocking private property
+    methods._apiClient = { searchSources };
+
+    await methods.listKnowledgeSources({ graphId: 'graph-1', nodeType: 'CUSTOM_SOURCE' });
+    await methods.listKnowledgeSources({ graphId: 'graph-1', nodeType: null });
+
+    expect(searchSources.mock.calls.map(([body]) => body.node_type)).toEqual([
+      'CUSTOM_SOURCE',
+      null,
+    ]);
+  });
+
+  it('always sends an unfiltered body with X-Tableau-Auth credentials', async () => {
+    const searchSources = vi.fn().mockResolvedValue([]);
+    const methods = new KnowledgeMethods(
+      'https://tableau.example/api/v1/knowledge',
+      {
+        type: 'X-Tableau-Auth',
+        token: 'session-token',
+        site: { id: 'site-1' },
+        user: { id: 'user-1' },
+      },
+      {},
+    );
+    // @ts-expect-error - Mocking private property
+    methods._apiClient = { searchSources };
+
+    await methods.listKnowledgeSources({ graphId: 'graph-1' });
+
+    expect(searchSources).toHaveBeenCalledWith(
+      { node_type: undefined },
       { params: { graph_id: 'graph-1' }, headers: { 'X-Tableau-Auth': 'session-token' } },
     );
   });

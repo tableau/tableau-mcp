@@ -43,6 +43,15 @@ export const webToolNames = [
   'confirm-delete-content',
   'render-interactive-viz',
   'get-knowledge-suggestions',
+  'list-knowledge-sources',
+  'search-knowledge-nodes',
+  'get-knowledge-node',
+  'get-knowledge-node-relationships',
+  'get-knowledge-lineage',
+  'get-knowledge-node-impact',
+  'create-knowledge-semantic-statements',
+  'list-knowledge-semantic-statements',
+  'update-knowledge-semantic-statements',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -104,7 +113,18 @@ export const webToolGroups = {
   'mcp-apps': ['get-embed-token', 'record-event', 'render-interactive-viz'],
   'admin-insights': ['query-admin-insights'],
   content: ['delete-content', 'confirm-delete-content'],
-  knowledge: ['get-knowledge-suggestions'],
+  knowledge: [
+    'get-knowledge-suggestions',
+    'list-knowledge-sources',
+    'search-knowledge-nodes',
+    'get-knowledge-node',
+    'get-knowledge-node-relationships',
+    'get-knowledge-lineage',
+    'get-knowledge-node-impact',
+    'create-knowledge-semantic-statements',
+    'list-knowledge-semantic-statements',
+    'update-knowledge-semantic-statements',
+  ],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
 export function isWebToolName(value: unknown): value is WebToolName {
