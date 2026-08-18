@@ -16,6 +16,9 @@ import { getDesktopConfig } from './config.desktop.js';
 import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
 import { createCallDeadline } from './desktop/callDeadline.js';
 import { emitEpisodeEvent, type ToolSchemaProfile } from './desktop/episode-events.js';
+import { apiVersionAtLeast } from './desktop/externalApi/apiVersion.js';
+import { discoverInstances } from './desktop/externalApi/discovery.js';
+import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
 import {
   getKnowledgeCorpusEntryCount,
@@ -209,6 +212,44 @@ export function selectToolsForProfile<T extends { name: DesktopToolName }>(
   return tools;
 }
 
+/**
+ * Pick the External Client API version to gate against from the discovered instances
+ * (newest-first): the pinned session's instance when pinned, else the newest. Undefined —
+ * which makes the gate fail open — when no instance matches, so a not-yet-written discovery
+ * file never hides tools.
+ *
+ * Interim: the planned `GET /v0/capabilities` endpoint is the eventual source of truth for
+ * whether an endpoint is served, and replaces this discovery-file version read.
+ */
+export function resolveConnectedApiVersion(
+  instances: Array<ExternalApiInstance>,
+  pinnedSessionId: string | undefined,
+): string | undefined {
+  if (pinnedSessionId !== undefined) {
+    return instances.find((instance) => String(instance.pid) === pinnedSessionId)?.apiVersion;
+  }
+  return instances[0]?.apiVersion;
+}
+
+/**
+ * Drop tools whose {@link DesktopTool.minApiVersion} floor exceeds the connected Desktop's
+ * API version. Fails open: an unknown connected version keeps every tool, leaving the
+ * per-call `endpointNotInThisBuild` guard as the backstop.
+ */
+export function filterToolsByApiVersion<T extends { minApiVersion?: string }>(
+  tools: T[],
+  connectedApiVersion: string | undefined,
+): T[] {
+  if (connectedApiVersion === undefined) {
+    return tools;
+  }
+  return tools.filter(
+    (tool) =>
+      tool.minApiVersion === undefined ||
+      apiVersionAtLeast(connectedApiVersion, tool.minApiVersion),
+  );
+}
+
 export { DATA_ROOT, RESOURCES_ROOT };
 
 // Routing guidance every connecting client receives at initialize (W60 adoption P5 —
@@ -332,7 +373,23 @@ export class DesktopMcpServer extends Server {
       ...(config.episodeEventsEnabled ? episodeToolFactories : []),
     ];
     const allTools = factories.map((toolFactory) => toolFactory(this));
-    return selectToolsForProfile(allTools, config.toolProfile);
+    const profileTools = selectToolsForProfile(allTools, config.toolProfile);
+
+    const instances = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir });
+    const connectedApiVersion = resolveConnectedApiVersion(instances, config.desktopSessionId);
+    const gatedTools = filterToolsByApiVersion(profileTools, connectedApiVersion);
+
+    if (gatedTools.length < profileTools.length) {
+      const dropped = profileTools
+        .filter((tool) => !gatedTools.includes(tool))
+        .map((tool) => tool.name);
+      log({
+        message: `Hiding ${dropped.length} tool(s) the connected Desktop API v${connectedApiVersion} does not serve: ${dropped.join(', ')}`,
+        level: 'info',
+        logger: 'DesktopMcpServer',
+      });
+    }
+    return gatedTools;
   };
 
   private _registerKnowledgeResources = (): void => {

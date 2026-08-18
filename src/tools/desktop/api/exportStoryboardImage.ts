@@ -38,6 +38,7 @@ export const exportStoryboardImageTool = (
   const exportStoryboardImage = new DesktopTool({
     server,
     name: 'export-storyboard-image',
+    minApiVersion: '0.2.7',
     title,
     description:
       "Render a storyboard's active story point as an image. Only the active point is rendered; other story points are not included and cannot be selected.",

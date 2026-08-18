@@ -9,6 +9,7 @@ import {
 
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
+import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import {
   buildDesktopInstructions,
   SESSION_RESOLUTION_TEXT_PINNED,
@@ -20,7 +21,9 @@ import {
   DESKTOP_INSTRUCTIONS,
   DesktopMcpServer,
   DYNAMIC_AUTHORING_TOOL_PROFILE,
+  filterToolsByApiVersion,
   getDesktopToolListEntry,
+  resolveConnectedApiVersion,
   selectToolsForProfile,
   SPEC_LOOP_TOOL_PROFILE,
 } from './server.desktop.js';
@@ -613,6 +616,108 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     const selected = selectToolsForProfile(tools, 'bogus');
     expect(selected).toBe(tools);
     expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
+  });
+});
+
+describe('API-version tool gate (interim minApiVersion floor)', () => {
+  const instance = (pid: number, apiVersion?: string): ExternalApiInstance => ({
+    baseUrl: `http://127.0.0.1:${pid}`,
+    token: 't',
+    pid,
+    instanceId: `i-${pid}`,
+    apiVersion,
+  });
+
+  describe('resolveConnectedApiVersion', () => {
+    it('unpinned → the newest instance (the discovery list is newest-first)', () => {
+      expect(
+        resolveConnectedApiVersion([instance(1, '0.2.6'), instance(2, '0.2.5')], undefined),
+      ).toBe('0.2.6');
+    });
+
+    it('pinned → the matching instance version, not the newest', () => {
+      expect(resolveConnectedApiVersion([instance(1, '0.2.6'), instance(2, '0.2.5')], '2')).toBe(
+        '0.2.5',
+      );
+    });
+
+    it('pinned but no match → undefined so the gate fails open', () => {
+      expect(resolveConnectedApiVersion([instance(1, '0.2.6')], '999')).toBeUndefined();
+    });
+
+    it('no instances → undefined', () => {
+      expect(resolveConnectedApiVersion([], undefined)).toBeUndefined();
+      expect(resolveConnectedApiVersion([], '1')).toBeUndefined();
+    });
+  });
+
+  describe('filterToolsByApiVersion', () => {
+    const tools: Array<{ name: string; minApiVersion?: string }> = [
+      { name: 'a', minApiVersion: '0.2.6' },
+      { name: 'b', minApiVersion: '0.2.5' },
+      { name: 'c' },
+    ];
+
+    it('drops tools whose floor exceeds the connected version', () => {
+      expect(filterToolsByApiVersion(tools, '0.2.5').map((t) => t.name)).toEqual(['b', 'c']);
+    });
+
+    it('keeps a tool whose floor equals the connected version', () => {
+      expect(filterToolsByApiVersion(tools, '0.2.6').map((t) => t.name)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('fails open when the connected version is unknown — keeps everything unchanged', () => {
+      expect(filterToolsByApiVersion(tools, undefined)).toBe(tools);
+    });
+  });
+
+  it('the version-gated tools declare the expected floors', () => {
+    const floors = new Map(
+      desktopToolFactories
+        .map((factory) => factory(new DesktopMcpServer()))
+        .map((tool) => [tool.name, tool.minApiVersion]),
+    );
+    expect(floors.get('pause-auto-updates')).toBe('0.2.5');
+    expect(floors.get('resume-auto-updates')).toBe('0.2.5');
+    expect(floors.get('open-file')).toBe('0.2.6');
+    expect(floors.get('save-workbook')).toBe('0.2.6');
+    expect(floors.get('add-worksheet')).toBe('0.2.6');
+    expect(floors.get('add-dashboard')).toBe('0.2.6');
+    expect(floors.get('add-storyboard')).toBe('0.2.6');
+    expect(floors.get('export-storyboard-image')).toBe('0.2.7');
+  });
+
+  it('a connected 0.2.5 Desktop hides only the 0.2.6 tools from the profile surface', () => {
+    const profileTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'dynamic-authoring',
+    );
+    const gated = filterToolsByApiVersion(profileTools, '0.2.5').map((tool) => tool.name);
+
+    for (const dropped of [
+      'open-file',
+      'save-workbook',
+      'add-worksheet',
+      'add-dashboard',
+      'add-storyboard',
+    ]) {
+      expect(gated).not.toContain(dropped);
+    }
+    for (const kept of ['pause-auto-updates', 'resume-auto-updates', 'apply-worksheet']) {
+      expect(gated).toContain(kept);
+    }
+  });
+
+  it('a connected 0.2.6 Desktop still hides the 0.2.7 story-image route', () => {
+    const fullTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'full',
+    );
+    const at26 = filterToolsByApiVersion(fullTools, '0.2.6').map((tool) => tool.name);
+    const at27 = filterToolsByApiVersion(fullTools, '0.2.7').map((tool) => tool.name);
+
+    expect(at26).not.toContain('export-storyboard-image');
+    expect(at27).toContain('export-storyboard-image');
   });
 });
 

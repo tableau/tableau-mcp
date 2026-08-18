@@ -22,6 +22,7 @@ export const getAddDashboardTool = (server: DesktopMcpServer): DesktopTool<typeo
   const addDashboardTool = new DesktopTool({
     server,
     name: 'add-dashboard',
+    minApiVersion: '0.2.6',
     title,
     description: 'Add a blank dashboard to the open workbook.',
     annotations: {

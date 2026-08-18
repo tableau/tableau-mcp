@@ -20,6 +20,7 @@ export const getOpenFileTool = (server: DesktopMcpServer): DesktopTool<typeof pa
   const openFileTool = new DesktopTool({
     server,
     name: 'open-file',
+    minApiVersion: '0.2.6',
     title,
     description:
       'Open a local file in Tableau Desktop by absolute path: a .twb/.twbx opens as a workbook, ' +

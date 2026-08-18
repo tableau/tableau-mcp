@@ -13,7 +13,7 @@ import {
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
-import { LogAndExecuteParams, Tool } from '../tool.js';
+import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { getStructuredContent } from './structuredContent.js';
 import { TableauDesktopRequestHandlerExtra, TableauDesktopToolCallback } from './toolContext.js';
 import { DesktopToolName } from './toolName.js';
@@ -29,6 +29,14 @@ export type DesktopToolLogAndExecuteParams<
   Args extends undefined | ZodRawShapeCompat | AnySchema,
 > = LogAndExecuteParams<T, DesktopMcpServer, TableauDesktopRequestHandlerExtra, Args>;
 
+export type DesktopToolParams<Args extends ZodRawShape | undefined = undefined> = ToolParams<
+  DesktopMcpServer,
+  DesktopToolName,
+  TableauDesktopRequestHandlerExtra,
+  TableauDesktopToolCallback<Args>,
+  Args
+> & { minApiVersion?: string };
+
 export class DesktopTool<Args extends ZodRawShape | undefined = undefined> extends Tool<
   DesktopMcpServer,
   DesktopToolName,
@@ -36,6 +44,17 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
   TableauDesktopToolCallback<Args>,
   Args
 > {
+  /**
+   * Minimum External Client API version whose Desktop build serves the endpoint this tool
+   * drives; unset means no floor.
+   */
+  readonly minApiVersion?: string;
+
+  constructor(params: DesktopToolParams<Args>) {
+    super(params);
+    this.minApiVersion = params.minApiVersion;
+  }
+
   async logAndExecute<T>({
     extra,
     args,

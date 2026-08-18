@@ -24,6 +24,7 @@ export const getResumeAutoUpdatesTool = (
   const resumeAutoUpdatesTool = new DesktopTool({
     server,
     name: 'resume-auto-updates',
+    minApiVersion: '0.2.5',
     title,
     description:
       'Resume automatic query execution paused with pause-auto-updates. Resuming a dashboard re-enables it and every worksheet it contains, not only ones this paused.',
