@@ -12,6 +12,7 @@ import {
   unknownInstanceUnreachableMessage,
   unreachableInstanceMessage,
 } from '../session/unreachableInstance.js';
+import { apiVersionAtLeast } from './apiVersion.js';
 import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandArgs,
@@ -897,11 +898,7 @@ function getTableauErrorCode(error: OperationError | undefined): string | undefi
 }
 
 function supportsOperationResult(apiVersion: string | undefined): boolean {
-  const [major = 0, minor = 0, patch = 0] = (apiVersion ?? '')
-    .split('.')
-    .map((part) => Number.parseInt(part, 10))
-    .map((part) => (Number.isFinite(part) ? part : 0));
-  return major > 0 || (major === 0 && (minor > 1 || (minor === 1 && patch >= 1)));
+  return apiVersionAtLeast(apiVersion, '0.1.1');
 }
 
 function describeBlockingWindows(windows: Array<WindowInfo> | undefined): string {
