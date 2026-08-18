@@ -7,7 +7,6 @@ import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
   formatScopes,
-  getDefaultScopes,
   getRequiredApiScopesForTool,
   getRequiredScopesForTool,
   getSupportedApiScopes,
@@ -161,9 +160,9 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
   };
 }
 
-export async function getRequiredMcpScopesForRequest(body: unknown): Promise<string[]> {
+async function getRequiredMcpScopesForRequest(body: unknown): Promise<string[]> {
   if (isInitializeRequest(body)) {
-    return getDefaultScopes({ includeApiScopes: false });
+    return getSupportedMcpScopes();
   }
 
   const toolName = getToolNameFromRequestBody(body);
@@ -179,7 +178,7 @@ export async function getRequiredMcpScopesForRequest(body: unknown): Promise<str
   return Array.from(scopes);
 }
 
-export async function getRequiredApiScopesForRequest(
+async function getRequiredApiScopesForRequest(
   body: unknown,
   includeApiScopes: boolean,
 ): Promise<string[]> {
@@ -188,12 +187,7 @@ export async function getRequiredApiScopesForRequest(
   }
 
   if (isInitializeRequest(body)) {
-    const [defaultScopes, supportedApiScopes] = await Promise.all([
-      getDefaultScopes({ includeApiScopes: true }),
-      getSupportedApiScopes(),
-    ]);
-    const supportedApiScopeSet = new Set<string>(supportedApiScopes);
-    return defaultScopes.filter((scope) => supportedApiScopeSet.has(scope));
+    return getSupportedApiScopes();
   }
 
   const toolName = getToolNameFromRequestBody(body);

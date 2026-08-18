@@ -105,7 +105,7 @@ describe('server', () => {
     }
   });
 
-  it('should register knowledge tools alongside existing Tableau tools', async () => {
+  it('should register knowledge read tools alongside existing Tableau tools', async () => {
     const server = getServer();
     await server.registerTools();
 
@@ -123,8 +123,23 @@ describe('server', () => {
     expect(registeredToolNames).toContain('get-knowledge-node-relationships');
     expect(registeredToolNames).toContain('get-knowledge-lineage');
     expect(registeredToolNames).toContain('get-knowledge-node-impact');
-    expect(registeredToolNames).toContain('create-knowledge-semantic-statements');
     expect(registeredToolNames).toContain('list-knowledge-semantic-statements');
+    expect(registeredToolNames).not.toContain('create-knowledge-semantic-statements');
+    expect(registeredToolNames).not.toContain('update-knowledge-semantic-statements');
+  });
+
+  it('should register knowledge write tools when knowledge-write-tools is enabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'knowledge-write-tools',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).toContain('create-knowledge-semantic-statements');
     expect(registeredToolNames).toContain('update-knowledge-semantic-statements');
   });
 

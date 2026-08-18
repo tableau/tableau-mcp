@@ -6,7 +6,14 @@ import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { webToolFactories } from '../tools.js';
 
-const mocks = vi.hoisted(() => ({ createSemanticStatements: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  createSemanticStatements: vi.fn(),
+  isFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: () => ({ isFeatureEnabled: mocks.isFeatureEnabled }),
+}));
 
 vi.mock('../../../restApiInstance.js', () => ({
   useRestApi: vi
@@ -17,7 +24,17 @@ vi.mock('../../../restApiInstance.js', () => ({
 }));
 
 describe('createSemanticStatementsTool', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.isFeatureEnabled.mockResolvedValue(true);
+  });
+
+  it('is disabled when knowledge-write-tools is off', async () => {
+    mocks.isFeatureEnabled.mockResolvedValue(false);
+
+    expect(await Provider.from(getTool().disabled)).toBe(true);
+    expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-write-tools');
+  });
 
   it('redacts statement text from invocation telemetry', async () => {
     mocks.createSemanticStatements.mockResolvedValue({ id: 'semctx:1' });

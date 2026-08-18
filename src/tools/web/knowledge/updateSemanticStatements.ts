@@ -2,8 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import {
   knowledgeGraphIdSchema,
@@ -42,6 +44,9 @@ export const getUpdateSemanticStatementsTool = (
       idempotentHint: false,
       openWorldHint: false,
     },
+    disabled: new Provider(
+      async () => !(await getFeatureGate().isFeatureEnabled('knowledge-write-tools')),
+    ),
     callback: async (args, extra): Promise<CallToolResult> => {
       return tool.logAndExecute({
         extra,

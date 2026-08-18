@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import * as configModule from '../../config.js';
 import {
   DEFAULT_SCOPES_SUPPORTED,
-  getDefaultScopes,
   getRequiredApiScopesForTool,
   getRequiredScopesForTool,
   getSupportedApiScopes,
@@ -63,12 +62,24 @@ describe('scopes', () => {
     }
   });
 
-  it('requires explicit knowledge write scope and maps semantic statement tools', async () => {
+  it('excludes knowledge write scopes when knowledge-write-tools is disabled', async () => {
     mockGetConfig.mockReturnValue({
       adminToolsEnabled: false,
       oauth: { enforceScopes: true },
     } as any);
     expect(DEFAULT_SCOPES_SUPPORTED).not.toContain('tableau:mcp:knowledge:write');
+    await expect(getSupportedMcpScopes()).resolves.not.toContain('tableau:mcp:knowledge:write');
+    await expect(getSupportedApiScopes()).resolves.not.toContain('tableau:knowledge:write');
+  });
+
+  it('includes and maps knowledge write scopes when knowledge-write-tools is enabled', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+      return featureName === 'knowledge-write-tools';
+    });
+    mockGetConfig.mockReturnValue({
+      adminToolsEnabled: false,
+      oauth: { enforceScopes: true },
+    } as any);
     await expect(getSupportedMcpScopes()).resolves.toContain('tableau:mcp:knowledge:write');
     await expect(getSupportedApiScopes()).resolves.toContain('tableau:knowledge:write');
     expect(getRequiredScopesForTool('create-knowledge-semantic-statements' as any)).toEqual([
@@ -430,19 +441,6 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:users:read');
       expect(scopes).not.toContain('tableau:mcp:users:write');
       expect(scopes).not.toContain('tableau:users:update');
-    });
-  });
-
-  describe('getDefaultScopes', () => {
-    it('omits explicit-only knowledge write scopes', async () => {
-      mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
-
-      const scopes = await getDefaultScopes({ includeApiScopes: true });
-
-      expect(scopes).toContain('tableau:mcp:knowledge:read');
-      expect(scopes).toContain('tableau:knowledge:read');
-      expect(scopes).not.toContain('tableau:mcp:knowledge:write');
-      expect(scopes).not.toContain('tableau:knowledge:write');
     });
   });
 
