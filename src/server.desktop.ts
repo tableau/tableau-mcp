@@ -213,13 +213,13 @@ export function selectToolsForProfile<T extends { name: DesktopToolName }>(
 }
 
 /**
- * Pick the External Client API version to gate against from the discovered instances
- * (newest-first): the pinned session's instance when pinned, else the newest. Undefined —
- * which makes the gate fail open — when no instance matches, so a not-yet-written discovery
- * file never hides tools.
+ * The External Client API version the registration gate compares tool floors against: the
+ * pinned instance's version when pinned, otherwise the highest version among live instances
+ * (undefined when none is known, which fails the gate open).
  *
- * Interim: the planned `GET /v0/capabilities` endpoint is the eventual source of truth for
- * whether an endpoint is served, and replaces this discovery-file version read.
+ * Unpinned resolves the highest — not the newest-started — so a tool is hidden only when no
+ * running Desktop can serve it; whether the instance a call actually reaches serves it is a
+ * per-call concern, not the gate's.
  */
 export function resolveConnectedApiVersion(
   instances: Array<ExternalApiInstance>,
@@ -228,7 +228,14 @@ export function resolveConnectedApiVersion(
   if (pinnedSessionId !== undefined) {
     return instances.find((instance) => String(instance.pid) === pinnedSessionId)?.apiVersion;
   }
-  return instances[0]?.apiVersion;
+  return instances.reduce<string | undefined>(
+    (highest, instance) =>
+      instance.apiVersion !== undefined &&
+      (highest === undefined || apiVersionAtLeast(instance.apiVersion, highest))
+        ? instance.apiVersion
+        : highest,
+    undefined,
+  );
 }
 
 /**

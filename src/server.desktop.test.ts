@@ -629,13 +629,25 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
   });
 
   describe('resolveConnectedApiVersion', () => {
-    it('unpinned → the newest instance (the discovery list is newest-first)', () => {
+    it('unpinned → the highest version across live instances, not the newest-started', () => {
+      // Discovery is newest-first, so instances[0] here is the LOWER-version build; the gate
+      // must still resolve 0.2.6 so a tool the other running Desktop serves is not hidden.
       expect(
-        resolveConnectedApiVersion([instance(1, '0.2.6'), instance(2, '0.2.5')], undefined),
+        resolveConnectedApiVersion([instance(1, '0.2.5'), instance(2, '0.2.6')], undefined),
       ).toBe('0.2.6');
     });
 
-    it('pinned → the matching instance version, not the newest', () => {
+    it('unpinned → ignores instances with an unknown version when others report one', () => {
+      expect(resolveConnectedApiVersion([instance(1), instance(2, '0.2.6')], undefined)).toBe(
+        '0.2.6',
+      );
+    });
+
+    it('unpinned → undefined when no instance reports a version', () => {
+      expect(resolveConnectedApiVersion([instance(1), instance(2)], undefined)).toBeUndefined();
+    });
+
+    it('pinned → the matching instance version, not the highest', () => {
       expect(resolveConnectedApiVersion([instance(1, '0.2.6'), instance(2, '0.2.5')], '2')).toBe(
         '0.2.5',
       );
@@ -648,6 +660,18 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     it('no instances → undefined', () => {
       expect(resolveConnectedApiVersion([], undefined)).toBeUndefined();
       expect(resolveConnectedApiVersion([], '1')).toBeUndefined();
+    });
+
+    it('unpinned mixed-version fleet → a tool only the newer instance serves stays visible', () => {
+      const version = resolveConnectedApiVersion(
+        [instance(1, '0.2.6'), instance(2, '0.2.7')],
+        undefined,
+      );
+      const tools = [{ name: 'story', minApiVersion: '0.2.7' }, { name: 'plain' }];
+      expect(filterToolsByApiVersion(tools, version).map((t) => t.name)).toEqual([
+        'story',
+        'plain',
+      ]);
     });
   });
 
