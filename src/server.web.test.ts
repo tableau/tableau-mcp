@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   mockRegisterAppTool: vi.fn(),
   mockRegisterAppResource: vi.fn(),
   mockFeatureGate: {
-    isFeatureEnabled: vi.fn(() => false),
+    isFeatureEnabled: vi.fn<(featureName: string) => boolean>(() => false),
   },
   mockReadFile: vi.fn(),
 }));
