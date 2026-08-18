@@ -67,8 +67,11 @@ Slack channel in the Tableau #DataDev workspace.
 | [update-user](tools/users/update-user.md)                                                                             | Admin-only. Confirm-gated update of a user's site role ([REST API][update-user-api])                               | All SKUs     |
 | [query-admin-insights](tools/admin-insights/query-admin-insights.md)                                                 | Admin-only. Dispatches on `kind` to TS Events, TS Users, Site Content, Job Performance, or stale-content report ([VDS API][vds]) | All SKUs     |
 | [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
+| [get-knowledge-suggestions](tools/knowledge/get-knowledge-suggestions.md)                                             | Returns graph health and improvement suggestions for an explicit Tableau Knowledge graph                           | Tableau Cloud\* |
 
 \* The `get-datasource-metadata` tool relies on both the VizQL Data Service and the Metadata API to get rich metadata about a data source. Only sites with Data Management entitlements will be able to execute the Metadata API calls, though the tool will remain functional without it.
+
+\* The `get-knowledge-suggestions` tool requires Tableau Knowledge to be available for the site.
 
 [query]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources

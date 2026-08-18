@@ -11,6 +11,12 @@ import {
 } from './toolName.js';
 
 describe('WebToolName', () => {
+  it('registers get-knowledge-suggestions in the knowledge group', () => {
+    expect(webToolNames).toContain('get-knowledge-suggestions');
+    expect(webToolGroupNames).toContain('knowledge');
+    expect((webToolGroups as any).knowledge).toEqual(['get-knowledge-suggestions']);
+  });
+
   it('should validate each tool belongs to a group', () => {
     const toolNamesToGroups = Object.entries(webToolGroups).reduce(
       (acc, [group, tools]) => {

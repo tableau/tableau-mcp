@@ -48,7 +48,8 @@ type JwtScopes =
   | 'tableau:users:update'
   | 'tableau:flows:read'
   | 'tableau:flow_connections:read'
-  | 'tableau:flow_runs:read';
+  | 'tableau:flow_runs:read'
+  | 'tableau:knowledge:read';
 
 export type RestApiArgs = Pick<
   TableauWebRequestHandlerExtra,
