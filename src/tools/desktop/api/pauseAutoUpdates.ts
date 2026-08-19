@@ -24,6 +24,7 @@ export const getPauseAutoUpdatesTool = (
   const pauseAutoUpdatesTool = new DesktopTool({
     server,
     name: 'pause-auto-updates',
+    minApiVersion: '0.2.5',
     title,
     description:
       'Pause automatic query execution for a worksheet or dashboard to batch edits before the next refresh. Resume with resume-auto-updates.',

@@ -6,16 +6,26 @@ import {
 } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
-import { extractDashboardXml, listWorkbookDashboards } from '../metadata/dashboards.js';
-import { extractSheetXml, listSheets } from '../metadata/sheets.js';
+import { type DashboardItem, type WorksheetItem } from '../externalApi/types.js';
+import {
+  extractDashboardXml,
+  listDashboardRefs,
+  resolveDashboardRef,
+} from '../metadata/dashboards.js';
+import { extractSheetXml, listWorksheetRefs, resolveWorksheetRef } from '../metadata/sheets.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 
 export type WorkbookReadMode = 'external-api';
 
+// Not the full WorksheetItem/DashboardItem: the workbook-document fallback can recover only id+name
+// from the XML, so every field but those two is optional.
+export type WorksheetListItem = Pick<WorksheetItem, 'id' | 'name'> & Partial<WorksheetItem>;
+export type DashboardListItem = Pick<DashboardItem, 'id' | 'name'> & Partial<DashboardItem>;
+
 export type ListWorksheetsResult = Result<
   {
     count: number;
-    worksheets: Array<string>;
+    worksheets: Array<WorksheetListItem>;
   },
   ExecuteCommandError
 >;
@@ -23,7 +33,7 @@ export type ListWorksheetsResult = Result<
 export type ListDashboardsResult = Result<
   {
     count: number;
-    dashboards: Array<string>;
+    dashboards: Array<DashboardListItem>;
   },
   ExecuteCommandError
 >;
@@ -31,10 +41,11 @@ export type ListDashboardsResult = Result<
 export type GetWorksheetXmlError = (
   | { type: 'no-worksheet-found' }
   | { type: 'multiple-worksheets-found' }
+  | { type: 'malformed-worksheet-fragment' }
 ) & { message: string };
 
 export type GetWorksheetXmlResult = Result<
-  string,
+  { xml: string; name: string },
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'get-worksheet-xml-error'; error: GetWorksheetXmlError }
 >;
@@ -45,7 +56,7 @@ export type GetDashboardXmlError = (
 ) & { message: string };
 
 export type GetDashboardXmlResult = Result<
-  string,
+  { xml: string; name: string },
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'get-dashboard-xml-error'; error: GetDashboardXmlError }
 >;
@@ -98,7 +109,7 @@ export class WorkbookReadGateway {
       return result;
     }
 
-    const worksheets = (result.value.worksheets ?? []).map((worksheet) => worksheet.name);
+    const worksheets = result.value.worksheets ?? [];
     return Ok({
       count: worksheets.length,
       worksheets,
@@ -111,7 +122,7 @@ export class WorkbookReadGateway {
       return result;
     }
 
-    const dashboards = (result.value.dashboards ?? []).map((dashboard) => dashboard.name);
+    const dashboards = result.value.dashboards ?? [];
     return Ok({
       count: dashboards.length,
       dashboards,
@@ -124,9 +135,9 @@ export class WorkbookReadGateway {
       return workbookResult;
     }
 
-    let worksheets: Array<string>;
+    let worksheets: Array<WorksheetListItem>;
     try {
-      worksheets = listSheets(workbookResult.value);
+      worksheets = listWorksheetRefs(workbookResult.value);
     } catch (error) {
       return Err({ type: 'invalid-response', error });
     }
@@ -143,9 +154,9 @@ export class WorkbookReadGateway {
       return workbookResult;
     }
 
-    let dashboards: Array<string>;
+    let dashboards: Array<DashboardListItem>;
     try {
-      dashboards = listWorkbookDashboards(workbookResult.value);
+      dashboards = listDashboardRefs(workbookResult.value);
     } catch (error) {
       return Err({ type: 'invalid-response', error });
     }
@@ -184,7 +195,7 @@ export class WorkbookReadGateway {
       return Err({ type: 'execute-command-error', error: documentResult.error });
     }
 
-    return Ok(documentResult.value.xml);
+    return Ok({ xml: documentResult.value.xml, name: worksheetResult.value.name });
   }
 
   private async getDashboardXmlViaExternalApi(
@@ -215,11 +226,11 @@ export class WorkbookReadGateway {
       return Err({ type: 'execute-command-error', error: documentResult.error });
     }
 
-    return Ok(documentResult.value.xml);
+    return Ok({ xml: documentResult.value.xml, name: dashboardResult.value.name });
   }
 
   private async getWorksheetXmlViaWorkbookDocument(
-    worksheetName: string,
+    worksheetRef: string,
   ): Promise<GetWorksheetXmlResult> {
     const workbookResult = await getWorkbookXml({ executor: this.executor, signal: this.signal });
     if (workbookResult.isErr()) {
@@ -227,28 +238,31 @@ export class WorkbookReadGateway {
     }
 
     let worksheetXml: string | null;
+    let resolvedName: string | undefined;
     try {
-      worksheetXml = extractSheetXml(workbookResult.value, worksheetName);
+      const resolved = resolveWorksheetRef(workbookResult.value, worksheetRef);
+      worksheetXml = resolved ? extractSheetXml(workbookResult.value, resolved.name) : null;
+      resolvedName = resolved?.name;
     } catch (error) {
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }
 
-    if (worksheetXml === null) {
-      const didYouMean = await this.worksheetNameSuggestions(worksheetName);
+    if (worksheetXml === null || resolvedName === undefined) {
+      const didYouMean = await this.worksheetNameSuggestions(worksheetRef);
       return Err({
         type: 'get-worksheet-xml-error',
         error: {
           type: 'no-worksheet-found',
-          message: `No worksheet found for ${worksheetName}.${didYouMean}`,
+          message: `No worksheet found for ${worksheetRef}.${didYouMean}`,
         },
       });
     }
 
-    return Ok(worksheetXml);
+    return Ok({ xml: worksheetXml, name: resolvedName });
   }
 
   private async getDashboardXmlViaWorkbookDocument(
-    dashboardName: string,
+    dashboardRef: string,
   ): Promise<GetDashboardXmlResult> {
     const workbookResult = await getWorkbookXml({ executor: this.executor, signal: this.signal });
     if (workbookResult.isErr()) {
@@ -256,30 +270,33 @@ export class WorkbookReadGateway {
     }
 
     let dashboardXml: string | null;
+    let resolvedName: string | undefined;
     try {
-      dashboardXml = extractDashboardXml(workbookResult.value, dashboardName);
+      const resolved = resolveDashboardRef(workbookResult.value, dashboardRef);
+      dashboardXml = resolved ? extractDashboardXml(workbookResult.value, resolved.name) : null;
+      resolvedName = resolved?.name;
     } catch (error) {
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }
 
-    if (dashboardXml === null) {
+    if (dashboardXml === null || resolvedName === undefined) {
       return Err({
         type: 'get-dashboard-xml-error',
         error: {
           type: 'no-dashboard-found',
-          message: `No dashboard found for "${dashboardName}".`,
+          message: `No dashboard found for "${dashboardRef}".`,
         },
       });
     }
 
-    return Ok(dashboardXml);
+    return Ok({ xml: dashboardXml, name: resolvedName });
   }
 
   private async worksheetNameSuggestions(missName: string): Promise<string> {
     try {
       const listed = await this.listWorksheets();
       if (listed.isErr()) return '';
-      const names = listed.value.worksheets.filter((n) => !!n);
+      const names = listed.value.worksheets.map((w) => w.name).filter((n) => !!n);
       if (names.length === 0) return '';
 
       const needle = missName.toLowerCase();

@@ -826,7 +826,14 @@ describe('ExternalApiToolExecutor', () => {
       });
 
       expect(result.isErr()).toBe(true);
-      expect(result.unwrapErr().type).toBe('command-timed-out');
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-timed-out');
+      // A poll-timeout is a hang, most likely a modal Desktop can't clear — surface the same
+      // dismiss-the-dialog / do-not-retry / list-instances guidance the call-deadline path uses.
+      if (error.type === 'command-timed-out') {
+        expect(error.error).toContain('Do not retry');
+        expect(error.error).toContain('list-instances');
+      }
     });
 
     it('maps a CANCELLED terminal operation to a command-failed error', async () => {

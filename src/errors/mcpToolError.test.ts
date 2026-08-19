@@ -28,4 +28,35 @@ describe('DesktopCommandExecutionError', () => {
     expect(error.message).toContain('Access denied to workbook');
     expect(error.message).not.toContain('Do NOT name, guess, or imply a cause');
   });
+
+  it('flags an awaiting-user failure as blocked by a Desktop dialog', () => {
+    const error = new DesktopCommandExecutionError({
+      type: 'command-failed',
+      error: {
+        code: 'awaiting-user',
+        message: 'The operation is blocked on a Tableau Desktop dialog.',
+        recoverable: false,
+      },
+    });
+
+    expect(error.blockedByDesktopDialog).toBe(true);
+  });
+
+  it('flags a timed-out command as blocked by a Desktop dialog', () => {
+    const error = new DesktopCommandExecutionError({
+      type: 'command-timed-out',
+      error: 'Tableau Desktop did not respond within 60s.',
+    });
+
+    expect(error.blockedByDesktopDialog).toBe(true);
+  });
+
+  it('does not flag an ordinary command failure as blocked by a Desktop dialog', () => {
+    const error = new DesktopCommandExecutionError({
+      type: 'command-failed',
+      error: { code: '8F2A4D91', message: 'Unable to complete action', recoverable: false },
+    });
+
+    expect(error.blockedByDesktopDialog).toBe(false);
+  });
 });

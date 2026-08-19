@@ -174,6 +174,44 @@ export function listWorkbookDashboards(workbookXml: string): string[] {
   return dashboards.map((db) => db['@_name']).filter((name): name is string => !!name);
 }
 
+export function dashboardFragmentSimpleId(dashboardFragmentXml: string): string | null {
+  const parsed = parseXML(dashboardFragmentXml);
+  const dashboard = normalizeArray(parsed.dashboard as ParsedDashboard | undefined)[0];
+  return dashboard?.['simple-id']?.['@_uuid']?.trim() || null;
+}
+
+// `id` is each dashboard's own `<simple-id uuid>` — the same value the External Client API returns
+// as the dashboard id.
+export function listDashboardRefs(workbookXml: string): Array<{ id: string; name: string }> {
+  const workbook = parseXML(workbookXml);
+  const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
+  return dashboards.flatMap((db) => {
+    const id = db['simple-id']?.['@_uuid']?.trim();
+    const name = db['@_name'];
+    return id && name ? [{ id, name }] : [];
+  });
+}
+
+// Match a caller's ref against the dashboard's `<simple-id uuid>` (its External Client API id)
+// first, then its display name. Name stays the fallback because the .twb cross-references
+// dashboards by name (window definitions, story points), so the returned name is what the
+// name-keyed surgery in this module keys off.
+export function resolveDashboardRef(
+  workbookXml: string,
+  ref: string,
+): { id?: string; name: string } | null {
+  const workbook = parseXML(workbookXml);
+  const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
+  const trimmed = ref.trim();
+  const matched =
+    dashboards.find((db) => db['simple-id']?.['@_uuid']?.trim() === trimmed) ??
+    dashboards.find((db) => db['@_name'] && xmlNamesEqual(db['@_name'], ref)) ??
+    null;
+  if (!matched?.['@_name']) return null;
+  const id = matched['simple-id']?.['@_uuid'];
+  return { ...(id ? { id } : {}), name: matched['@_name'] };
+}
+
 // Returns a standalone `<dashboard>` fragment (not a whole workbook), or null if absent.
 export function extractDashboardXml(workbookXml: string, dashboardName: string): string | null {
   const workbook = parseXML(workbookXml);

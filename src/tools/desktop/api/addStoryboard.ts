@@ -24,6 +24,7 @@ export const getAddStoryboardTool = (
   const addStoryboardTool = new DesktopTool({
     server,
     name: 'add-storyboard',
+    minApiVersion: '0.2.6',
     title,
     description: 'Add a blank storyboard to the open workbook.',
     annotations: {

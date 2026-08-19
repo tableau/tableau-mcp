@@ -2,19 +2,81 @@ import { writeFileSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
+import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
 import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorksheetXml, isRouteMissing } from '../../../../desktop/wrappers/getWorksheetXml.js';
+import { listWorksheets } from '../../../../desktop/wrappers/listWorksheets.js';
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
   McpToolError,
   UnknownError,
+  WorksheetNotFoundError,
 } from '../../../../errors/mcpToolError.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 
-/** Shared with {@link worksheetEditBuffer.ts} so a sheet name maps to the same cache key everywhere. */
-export function safeWorksheetCacheId(worksheetName: string): string {
-  return worksheetName.replace(/[^a-zA-Z0-9]/g, '_');
+/** Sanitize an id or name into a filesystem-safe cache-key segment (shared with {@link worksheetEditBuffer.ts}). */
+export function safeWorksheetCacheId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+/**
+ * Resolve a caller's worksheet reference (id or display name) to the sheet's stable
+ * `<simple-id uuid>` — the id the edit buffer keys on and the External Client API
+ * addresses the sheet by. Best-effort: returns undefined (never throws) when the sheet
+ * cannot be listed or matched.
+ */
+export async function resolveWorksheetSimpleId({
+  worksheetRef,
+  resolvedSession,
+  extra,
+}: {
+  worksheetRef: string;
+  resolvedSession: string;
+  extra: TableauDesktopRequestHandlerExtra;
+}): Promise<string | undefined> {
+  const trimmed = worksheetRef.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  try {
+    const executor = await extra.getExecutor(resolvedSession);
+    const listed = await listWorksheets({ executor, signal: extra.signal });
+    if (listed.isErr()) {
+      return undefined;
+    }
+    const resolved = resolveItemByNameOrId('Worksheet', trimmed, listed.value.worksheets);
+    return resolved.isOk() ? resolved.value.id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Resolve a worksheet reference to the stable `<simple-id uuid>` its sticky edit buffer keys on,
+ * or fail. Keying the buffer on the raw display name instead strands it the instant the sheet is
+ * renamed — the exact bug the buffer exists to prevent — so an unresolvable reference is a hard
+ * error, not a name-keyed fallback.
+ */
+export async function resolveWorksheetBufferId({
+  worksheetRef,
+  resolvedSession,
+  extra,
+}: {
+  worksheetRef: string;
+  resolvedSession: string;
+  extra: TableauDesktopRequestHandlerExtra;
+}): Promise<Result<string, WorksheetNotFoundError>> {
+  const id = await resolveWorksheetSimpleId({ worksheetRef, resolvedSession, extra });
+  if (!id) {
+    return Err(
+      new WorksheetNotFoundError(
+        `Could not resolve a stable id for worksheet "${worksheetRef}". ` +
+          'Confirm the sheet exists with list-worksheets, then retry.',
+      ),
+    );
+  }
+  return Ok(id);
 }
 
 /**
@@ -62,9 +124,9 @@ export async function fetchAndCacheWorksheet({
   }
 
   const cacheFile = new DesktopCache().getCacheFilePath({
-    prefix: `worksheet-${safeWorksheetCacheId(worksheetName)}`,
+    prefix: `worksheet-${safeWorksheetCacheId(fetched.value.name)}`,
   });
-  writeFileSync(cacheFile, fetched.value, 'utf-8');
-  writeSidecar(cacheFile, resolvedSession, sourceSha256(fetched.value));
+  writeFileSync(cacheFile, fetched.value.xml, 'utf-8');
+  writeSidecar(cacheFile, resolvedSession, sourceSha256(fetched.value.xml));
   return Ok(cacheFile);
 }

@@ -2,12 +2,17 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { log } from '../../logging/logger.js';
-import { desktopCallTimeoutMessage, isDesktopCallTimeout } from '../callDeadline.js';
+import {
+  BLOCKING_DIALOG_GUIDANCE,
+  desktopCallTimeoutMessage,
+  isDesktopCallTimeout,
+} from '../callDeadline.js';
 import {
   noInstanceFoundMessage,
   unknownInstanceUnreachableMessage,
   unreachableInstanceMessage,
 } from '../session/unreachableInstance.js';
+import { apiVersionAtLeast } from './apiVersion.js';
 import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandArgs,
@@ -33,6 +38,7 @@ import {
   dashboardRoute,
   DatasourceList,
   datasourceListSchema,
+  ExportAsWorkbookRequest,
   EXTERNAL_API_ROUTES,
   ExternalApiError,
   ExternalApiInstance,
@@ -53,6 +59,7 @@ import {
   SiteWorkbookList,
   siteWorkbookListSchema,
   storyboardDocumentRoute,
+  storyboardImageRoute,
   StoryboardItem,
   storyboardItemSchema,
   StoryboardList,
@@ -454,6 +461,16 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async exportStoryboardImage(
+    storyboardId: string,
+    query: ImageExportQuery,
+    signal: AbortSignal,
+  ): Promise<Result<ImageResult, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(storyboardImageRoute(storyboardId, query), imageResultSchema, signal),
+    );
+  }
+
   async validateWorkbookDocument(
     xml: string,
     signal: AbortSignal,
@@ -636,6 +653,16 @@ export class ExternalApiToolExecutor {
           signal,
         ),
       'save-workbook-file',
+    );
+  }
+
+  async exportWorkbookAs(
+    request: ExportAsWorkbookRequest,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postJsonEnvelope(EXTERNAL_API_ROUTES.workbookExportAs, request, signal),
+      'export-workbook-as',
     );
   }
 
@@ -882,11 +909,7 @@ function getTableauErrorCode(error: OperationError | undefined): string | undefi
 }
 
 function supportsOperationResult(apiVersion: string | undefined): boolean {
-  const [major = 0, minor = 0, patch = 0] = (apiVersion ?? '')
-    .split('.')
-    .map((part) => Number.parseInt(part, 10))
-    .map((part) => (Number.isFinite(part) ? part : 0));
-  return major > 0 || (major === 0 && (minor > 1 || (minor === 1 && patch >= 1)));
+  return apiVersionAtLeast(apiVersion, '0.1.1');
 }
 
 function describeBlockingWindows(windows: Array<WindowInfo> | undefined): string {
@@ -955,13 +978,12 @@ function mapClientError(
     case 'operation-expired':
       return {
         type: 'command-timed-out',
-        error:
-          'The async operation expired before it completed (polled past the Desktop retention window).',
+        error: `The async operation expired before it completed (polled past the Desktop retention window). ${BLOCKING_DIALOG_GUIDANCE}`,
       };
     case 'poll-timeout':
       return {
         type: 'command-timed-out',
-        error: 'The async operation did not reach a terminal state within the poll deadline.',
+        error: `The async operation did not reach a terminal state within the poll deadline. ${BLOCKING_DIALOG_GUIDANCE}`,
       };
     case 'no-instance':
       return {

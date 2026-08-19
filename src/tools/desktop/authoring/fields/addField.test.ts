@@ -8,11 +8,11 @@ import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
 import * as metadataModule from '../../../../desktop/metadata/index.js';
 import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
 import * as getWorksheetXmlModule from '../../../../desktop/wrappers/getWorksheetXml.js';
+import * as listWorksheetsModule from '../../../../desktop/wrappers/listWorksheets.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
   FileReadError,
-  GetWorksheetXmlFailedError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
@@ -25,6 +25,7 @@ import * as refreshWorkbookCacheModule from './refreshWorkbookCache.js';
 vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
+vi.mock('../../../../desktop/wrappers/listWorksheets.js');
 vi.mock('../../../../desktop/externalApi/discovery.js');
 vi.mock('./refreshWorkbookCache.js');
 vi.mock('fs');
@@ -61,6 +62,11 @@ describe('addFieldTool', () => {
       ok: true,
       xml: LIVE_WORKBOOK_XML,
     });
+    // The edit buffer keys on the sheet's simple-id — the resolver lists the sheet to map
+    // "Sheet 1" to that id, so the sticky-buffer tests exercise the id path, not the fallback.
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Ok({ count: 1, worksheets: [{ id: 'sheet-1-uuid', name: 'Sheet 1' }] }),
+    );
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -247,7 +253,9 @@ describe('addFieldTool', () => {
   // --- name-based path (no prior get-worksheet-xml call) ---
   it('fetches + caches the sheet by name when no worksheetFile is given, then edits it', async () => {
     const FRAGMENT = '<worksheet name="Sheet 1"><table/></worksheet>';
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(FRAGMENT));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: FRAGMENT, name: 'Sheet 1' }),
+    );
     vi.mocked(cacheFingerprintModule.sourceSha256).mockReturnValue('e'.repeat(64));
     // The minted cache file exists after the internal write; the edit reads it back.
     vi.mocked(existsSync).mockReturnValue(true);
@@ -283,13 +291,9 @@ describe('addFieldTool', () => {
     expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(body.file, SESSION);
   });
 
-  it('surfaces a fetch error (unknown worksheet) without writing anything', async () => {
-    const fetchErr = {
-      type: 'get-worksheet-xml-error' as const,
-      error: { type: 'no-worksheet-found' as const, message: 'No worksheet found for Ghost.' },
-    };
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Err(fetchErr));
-
+  it('rejects a worksheet name that is not in the live list, before any fetch or write', async () => {
+    // "Ghost" is not in the mocked worksheet list, so the stable-id resolve fails and the
+    // edit stops there — it never falls back to keying the buffer on the raw name.
     const result = await getResult({
       worksheetName: 'Ghost',
       target: 'rows',
@@ -298,9 +302,32 @@ describe('addFieldTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(new GetWorksheetXmlFailedError(fetchErr.error).message);
+    expect(result.content[0].text).toContain('Could not resolve a stable id for worksheet "Ghost"');
+    expect(result.content[0].text).toContain('list-worksheets');
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
     expect(metadataModule.addFieldToRows).not.toHaveBeenCalled();
+  });
+
+  it('fails loudly when the worksheet list cannot be read, rather than keying the buffer on the name', async () => {
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: { code: 'boom', message: 'list unavailable', recoverable: false },
+      }) as never,
+    );
+
+    const result = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Could not resolve a stable id');
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
   });
 
   it('uses in-profile recovery guidance when the worksheet endpoint is absent', async () => {
@@ -350,7 +377,9 @@ describe('addFieldTool', () => {
   it('accumulates two name-only calls on the same sticky file (fetches once)', async () => {
     const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
     const files = new Map<string, string>();
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: baseXml, name: 'Sheet 1' }),
+    );
     vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
     vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
     vi.mocked(writeFileSync).mockImplementation((path, data) => {
@@ -387,7 +416,9 @@ describe('addFieldTool', () => {
   it('mints a fresh sheet when the sticky buffer fails its sidecar/session check', async () => {
     const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
     const files = new Map<string, string>();
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(baseXml));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: baseXml, name: 'Sheet 1' }),
+    );
     vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
     vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
     vi.mocked(writeFileSync).mockImplementation((path, data) => {
