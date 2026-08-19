@@ -66,7 +66,9 @@ async function getMcpSiteSettings({
           'Internal Server Error: The MCP settings are in a bad state and need to be overwritten.',
         );
       } else if (error.response?.status !== 403) {
-        throw new Error('An unexpected error occurred while getting MCP settings for site.');
+        throw new Error(
+          `An unexpected error occurred while getting MCP settings for site. Status code: ${error.response?.status}`,
+        );
       }
       // else: (403 status code) MCP settings feature flag was disabled on this site,
       // continue and cache with empty settings.

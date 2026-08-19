@@ -20,7 +20,6 @@ const mocks = vi.hoisted(() => ({
   mockGetCustomViewData: vi.fn(),
   mockUploadCsvToS3: vi.fn(),
   mockLog: vi.fn(),
-  mockIsFeatureEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -39,10 +38,6 @@ vi.mock('../../../restApiInstance.js', () => ({
 vi.mock('../uploadDataToS3.js', async (importActual) => ({
   ...(await importActual<typeof import('../uploadDataToS3.js')>()),
   uploadCsvToS3: mocks.mockUploadCsvToS3,
-}));
-
-vi.mock('../../../features/init.js', () => ({
-  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../logging/logger.js', async (importActual) => ({
@@ -143,11 +138,6 @@ describe('getCustomViewDataTool', () => {
   });
 
   describe('S3 data offload', () => {
-    beforeEach(() => {
-      // The S3-offload path is gated behind the `view-data-file-mode` feature flag.
-      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
-    });
-
     it('should return a resource_link (no inline CSV) when MCP_S3_BUCKET is configured', async () => {
       vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
       mocks.mockUploadCsvToS3.mockResolvedValue('https://s3.example.com/signed-url');
@@ -199,18 +189,6 @@ describe('getCustomViewDataTool', () => {
           message: expect.stringContaining('access denied'),
         }),
       );
-    });
-
-    it('should return inline CSV (no S3 upload) when view-data-file-mode is disabled even if MCP_S3_BUCKET is configured', async () => {
-      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
-
-      const result = await getToolResult({ customViewId: mockCustomView.id });
-
-      expect(result.isError).toBe(false);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toBe(JSON.stringify(mockCsv));
-      expect(mocks.mockUploadCsvToS3).not.toHaveBeenCalled();
     });
   });
 });
