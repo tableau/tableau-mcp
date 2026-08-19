@@ -64,6 +64,27 @@ export type Shelf =
   | 'title'
   | 'reference-line';
 
+/** Agent-requestable visual placements. Refinement sites are intentionally excluded. */
+export const TEMPLATE_VISIBLE_CHANNELS = [
+  'rows',
+  'cols',
+  'mark',
+  'color',
+  'size',
+  'text',
+  'label',
+  'detail',
+  'lod',
+  'tooltip',
+  'shape',
+  'path',
+  'geometry',
+  'angle',
+  'wedge-size',
+] as const satisfies readonly Shelf[];
+
+export type TemplateVisibleChannel = (typeof TEMPLATE_VISIBLE_CHANNELS)[number];
+
 /** One `<column>` dictionary entry from the bookmark's donor datasource(s). */
 export interface ColumnDef {
   name: string;
@@ -99,6 +120,10 @@ export interface InferredSlot {
   templateField: string;
   caption: string;
   shelves: Shelf[];
+  /** Placements owned by the bindable field itself, excluding calc placements that consume it. */
+  directShelves?: Shelf[];
+  /** Placements owned by template calculations for which this field is a leaf input. */
+  calculationInputShelves?: Shelf[];
   kind: SlotKind;
   /** Tableau geographic semantic role, when structurally authored on the donor column. */
   semanticRole?: string;

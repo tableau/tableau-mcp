@@ -54,19 +54,25 @@ describe('list-templates', () => {
     process.env['TEMPLATES_DIR'] = root;
   }
 
-  it('is a read-only, caller-neutral catalog tool', () => {
+  it('is a read-only, caller-neutral catalog tool', async () => {
     const tool = getListTemplatesTool(new DesktopMcpServer());
+    const schema = await Provider.from(tool.paramsSchema);
     expect(tool.name).toBe('list-templates');
-    expect(tool.description).toBe('Search available worksheet templates.');
-    expect(tool.paramsSchema).toMatchObject({
+    expect(tool.description).toBe('Search worksheet templates.');
+    expect(schema).toMatchObject({
       query: expect.any(Object),
       cursor: expect.any(Object),
       limit: expect.any(Object),
       includeSlots: expect.any(Object),
       pass1EligibleOnly: expect.any(Object),
+      requiredChannels: expect.any(Object),
     });
-    expect(tool.paramsSchema).not.toHaveProperty('family');
-    expect(tool.paramsSchema).not.toHaveProperty('fastPathOnly');
+    expect(schema).not.toHaveProperty('family');
+    expect(schema).not.toHaveProperty('fastPathOnly');
+    expect(schema.limit.description).toBe('Page size; default 20, max 50.');
+    expect(schema.includeSlots.description).toBe('Include slots; limit must be 1.');
+    expect(schema.pass1EligibleOnly.description).toBe('Only validation-passing templates.');
+    expect(schema.requiredChannels.description).toBe('Visible channels every result must provide.');
     expect(tool.annotations).toMatchObject({
       readOnlyHint: true,
       destructiveHint: false,
@@ -202,6 +208,8 @@ describe('list-templates', () => {
             },
           ],
         },
+        visible_channels: { direct: ['rows', 'cols'], calculated: [] },
+        same_field_groups: [],
       },
     ]);
     expect(JSON.stringify(body)).not.toMatch(
@@ -236,6 +244,123 @@ describe('list-templates', () => {
     expect(result.content[0].text).not.toMatch(
       /Donor Measure Secret|Donor Dimension Secret|Donor Datasource Secret|template_field|hint|formula|<bookmark|<worksheet/i,
     );
+  });
+
+  it('reports truthful visible channels and opaque binding constraints for a calculated-color scatter', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const body = await getBody({
+      query: 'correlation-scatter-plot-chart',
+      includeSlots: true,
+      limit: 1,
+    });
+    const template = body.templates[0];
+
+    expect(template.visible_channels).toEqual({
+      direct: ['rows', 'cols', 'lod'],
+      calculated: [
+        {
+          channel: 'color',
+          dependency_slot_ids: ['field_base_2_none', 'field_base_1_none'],
+        },
+      ],
+    });
+    expect(template.same_field_groups).toEqual([
+      ['field_base_1_sum', 'field_base_1_none'],
+      ['field_base_2_sum', 'field_base_2_none'],
+    ]);
+    expect(template.visible_channels.direct).not.toContain('size');
+
+    for (const slotId of ['field_base_1_none', 'field_base_2_none']) {
+      expect(
+        template.slots.find((slot: { slot_id: string }) => slot.slot_id === slotId),
+      ).toMatchObject({
+        binding_usage: 'calculation-input',
+        role: [],
+        calculation_channels: ['color'],
+      });
+    }
+  });
+
+  it('filters templates by every explicitly required visible channel', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const size = await getBody({
+      query: 'scatter',
+      requiredChannels: ['size'],
+      limit: 50,
+    });
+    const sizeNames = size.templates.map((template: { template: string }) => template.template);
+    expect(sizeNames).toContain(
+      'correlation__bubble-scatter__relate-two-measures-and-encode-a-third-by-size',
+    );
+    expect(sizeNames).not.toContain('correlation-scatter-plot-chart');
+
+    const sizeAndColor = await getBody({
+      query: 'scatter',
+      requiredChannels: ['size', 'color'],
+      limit: 50,
+    });
+    const names = sizeAndColor.templates.map((template: { template: string }) => template.template);
+
+    expect(names).not.toContain('correlation-scatter-plot-chart');
+    for (const template of sizeAndColor.templates) {
+      const channels = [
+        ...template.visible_channels.direct,
+        ...template.visible_channels.calculated.map(({ channel }: { channel: string }) => channel),
+      ];
+      expect(channels).toEqual(expect.arrayContaining(['size', 'color']));
+    }
+  });
+
+  it('paginates over the channel-filtered candidates', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const first = await getBody({ query: 'bar', requiredChannels: ['rows'], limit: 1 });
+    expect(first.candidateCount).toBeGreaterThan(1);
+    expect(first.nextCursor).not.toBeNull();
+    expect(first.templates[0].visible_channels.direct).toContain('rows');
+
+    const second = await getBody({
+      query: 'bar',
+      requiredChannels: ['rows'],
+      cursor: first.nextCursor,
+      limit: 1,
+    });
+    expect(second.candidateCount).toBe(first.candidateCount);
+    expect(second.templates[0].template).not.toBe(first.templates[0].template);
+    expect(second.templates[0].visible_channels.direct).toContain('rows');
+  });
+
+  it('reports a runtime-unreadable channel-filter candidate once without leaking donor data', async () => {
+    catalog(['healthy-chart', 'unreadable-chart']);
+    const tool = getListTemplatesTool(new DesktopMcpServer(), {
+      listCatalog: () => listTemplateCatalog(),
+      resolve: (entry) => {
+        if (entry.template === 'unreadable-chart') return null;
+        const bookmark = readBookmarkFromCatalogEntry(entry);
+        return bookmark === null ? null : createTemplateRuntimeSnapshot(entry.template, bookmark);
+      },
+    });
+
+    const body = await getBodyFromTool(tool, {
+      query: 'chart',
+      requiredChannels: ['rows'],
+      limit: 10,
+    });
+
+    expect(body.templates.map((template: { template: string }) => template.template)).toEqual([
+      'healthy-chart',
+    ]);
+    expect(body.diagnostics).toMatchObject({ count: 1, returned: 1, truncated: false });
+    expect(body.diagnostics.templates).toEqual([
+      {
+        template: 'unreadable-chart',
+        provenance: 'dev-override',
+        issue: 'changed-or-unreadable',
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toMatch(/Donor Measure Secret|Donor Datasource Secret/);
   });
 
   it('defaults a detail lookup to one result when limit is omitted', async () => {
@@ -467,6 +592,7 @@ type ListArgs = {
   limit?: number;
   includeSlots?: boolean;
   pass1EligibleOnly?: boolean;
+  requiredChannels?: string[];
 };
 
 async function getBody(args: ListArgs): Promise<any> {

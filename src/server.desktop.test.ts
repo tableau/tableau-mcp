@@ -228,10 +228,13 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // image exports it joins DYNAMIC_AUTHORING_TOOL_PROFILE, so it moves both surfaces by +1012:
 // dynamic authoring 39_069 -> 40_081 (budget 39_087 -> 40_099, keeping the 18-char slack), full
 // surface 55_638 -> 56_650 (budget 55_656 -> 56_668).
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_081;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_099;
+// Re-pinned 2026-08-19: list-templates now exposes derived template-fit metadata and filters by
+// required visible channels. Its schema adds 149 bytes; tighter route prose removes 131 from the
+// served profile, while the full schema-only surface moves 56_650 -> 56_799.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_099;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_117;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 56_668;
+const FULL_TOOL_SURFACE_BUDGET = 56_817;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -256,7 +259,7 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
     // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_657);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_526);
     expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);

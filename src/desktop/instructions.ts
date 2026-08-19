@@ -49,7 +49,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.)',
     action:
-      'run list-templates and list-available-fields in parallel. For a preview or an explicit no-change request, call build-worksheets-from-templates and stop before apply-worksheet. Built artifacts coexist. For an explicit single-view request to make now, pass the exact binding to apply-worksheet as templatePlan. Direct requests may choose, build, and apply immediately. For open analytical intent, choose and build several distinct fresh worksheets. Apply mutations sequentially. If an apply has a post-dispatch uncertain outcome, do not replay it.',
+      'Run list-templates and list-available-fields in parallel; put named channels in requiredChannels. No fit: use manual worksheet path. Preview/no-change: build-worksheets-from-templates; stop before apply-worksheet; artifacts coexist. For an explicit view, apply exact templatePlan. Direct asks may choose/build/apply. Open intent: build several distinct worksheets. Apply sequentially; never replay uncertain apply.',
     toolSequence: [
       'list-templates',
       'list-available-fields',
@@ -58,8 +58,8 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     ],
     stopConditions: [
       'stop before apply-worksheet',
-      'Apply mutations sequentially',
-      'do not replay it',
+      'Apply sequentially',
+      'never replay uncertain apply',
     ],
     requiredEvidence: ['each applied worksheet returns a success receipt'],
   },

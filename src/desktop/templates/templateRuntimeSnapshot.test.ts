@@ -64,6 +64,14 @@ describe('createTemplateRuntimeSnapshot', () => {
       ],
       calcs: [],
     });
+    expect(snapshot.fit).toEqual({
+      visible_channels: { direct: ['rows', 'cols'], calculated: [] },
+      slot_usage: [
+        expect.objectContaining({ slot_id: 'field_base_1', binding_usage: 'direct' }),
+        expect.objectContaining({ slot_id: 'field_base_2', binding_usage: 'direct' }),
+      ],
+      same_field_groups: [],
+    });
     expect(snapshot.xml).toContain('{{TITLE}}');
     expect(snapshot.xml).toContain('{{DATASOURCE}}');
     expect(snapshot.xml).toContain('{{field_base_1}}');

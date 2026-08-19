@@ -3,6 +3,8 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import type { SlotSpec } from '../../../../desktop/binder/manifest-types.js';
+import { TEMPLATE_VISIBLE_CHANNELS } from '../../../../desktop/templates/bookmarkTemplate.js';
+import type { TemplateFitFacts } from '../../../../desktop/templates/inferSlots.js';
 import {
   listTemplateCatalog,
   readBookmarkFromCatalogEntry,
@@ -20,23 +22,15 @@ import { DesktopTool } from '../../tool.js';
 
 const paramsSchema = {
   query: z.string().trim().min(1).max(256).optional().describe('Search template IDs.'),
-  cursor: z
-    .string()
-    .max(255)
+  cursor: z.string().max(255).optional().describe('Previous nextCursor.'),
+  limit: z.number().int().min(1).max(50).optional().describe('Page size; default 20, max 50.'),
+  includeSlots: z.boolean().optional().describe('Include slots; limit must be 1.'),
+  pass1EligibleOnly: z.boolean().optional().describe('Only validation-passing templates.'),
+  requiredChannels: z
+    .array(z.enum(TEMPLATE_VISIBLE_CHANNELS))
+    .max(TEMPLATE_VISIBLE_CHANNELS.length)
     .optional()
-    .describe('Continuation cursor returned by the previous page.'),
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(50)
-    .optional()
-    .describe('Maximum candidates examined per page; default 20, max 50.'),
-  includeSlots: z.boolean().optional().describe('Include structural slot facts for one template.'),
-  pass1EligibleOnly: z
-    .boolean()
-    .optional()
-    .describe('Return only templates that pass current worksheet-template validation.'),
+    .describe('Visible channels every result must provide.'),
 };
 
 const COMPACT_RESPONSE_LIMIT_BYTES = 16_384;
@@ -61,6 +55,8 @@ interface SlotSummary {
   bindable: boolean;
   derivation: string;
   role: string[];
+  binding_usage: 'direct' | 'calculation-input' | 'both';
+  calculation_channels: string[];
   semantic_role?: string;
   communicative_role?: string;
   purpose?: string;
@@ -82,11 +78,18 @@ interface TemplateSummary {
       semantic_role?: string;
     }>;
   };
+  visible_channels: TemplateFitFacts['visible_channels'];
+  same_field_groups: string[][];
   slots?: SlotSummary[];
 }
 
 function compareTemplateNames(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function fitOf(snapshot: TemplateRuntimeSnapshot): TemplateFitFacts {
+  if (!snapshot.fit) throw new Error(`Missing fit metadata for template '${snapshot.template}'.`);
+  return snapshot.fit;
 }
 
 function canonicalSearchToken(token: string): string {
@@ -128,14 +131,16 @@ function fuzzyQueryScore(template: string, query: string): number {
   return score;
 }
 
-function summarizeSlot(slot: SlotSpec): SlotSummary {
+function summarizeSlot(slot: SlotSpec, usage: TemplateFitFacts['slot_usage'][number]): SlotSummary {
   return {
     slot_id: slot.slot_id,
     kind: slot.kind,
     required: slot.required,
     bindable: slot.bindable,
     derivation: slot.derivation,
-    role: slot.role.slice(),
+    role: usage.direct_roles.slice(),
+    binding_usage: usage.binding_usage,
+    calculation_channels: usage.calculation_channels.slice(),
     ...(slot.semantic_role ? { semantic_role: slot.semantic_role } : {}),
     ...(slot.communicative_role ? { communicative_role: slot.communicative_role } : {}),
     ...(slot.purpose ? { purpose: slot.purpose } : {}),
@@ -147,6 +152,7 @@ function summarizeTemplate(
   includeSlots: boolean,
 ): TemplateSummary {
   const slots = snapshot.descriptor.slots;
+  const fit = fitOf(snapshot);
   return {
     template: entry.template,
     provenance: entry.provenance,
@@ -165,7 +171,17 @@ function summarizeTemplate(
           ...(slot.semantic_role ? { semantic_role: slot.semantic_role } : {}),
         })),
     },
-    ...(includeSlots ? { slots: slots.map(summarizeSlot) } : {}),
+    visible_channels: fit.visible_channels,
+    same_field_groups: fit.same_field_groups,
+    ...(includeSlots
+      ? {
+          slots: slots.map((slot) => {
+            const usage = fit.slot_usage.find(({ slot_id }) => slot_id === slot.slot_id);
+            if (!usage) throw new Error(`Missing fit metadata for slot '${slot.slot_id}'.`);
+            return summarizeSlot(slot, usage);
+          }),
+        }
+      : {}),
   };
 }
 
@@ -203,7 +219,7 @@ export const getListTemplatesTool = (
     server,
     name: 'list-templates',
     title,
-    description: 'Search available worksheet templates.',
+    description: 'Search worksheet templates.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -212,13 +228,27 @@ export const getListTemplatesTool = (
       idempotentHint: true,
     },
     callback: async (
-      { query, cursor, limit, includeSlots = false, pass1EligibleOnly = false },
+      {
+        query,
+        cursor,
+        limit,
+        includeSlots = false,
+        pass1EligibleOnly = false,
+        requiredChannels = [],
+      },
       extra,
     ): Promise<CallToolResult> => {
       const resolvedLimit = limit ?? (includeSlots ? 1 : 20);
       return await listTemplatesTool.logAndExecute({
         extra,
-        args: { query, cursor, limit: resolvedLimit, includeSlots, pass1EligibleOnly },
+        args: {
+          query,
+          cursor,
+          limit: resolvedLimit,
+          includeSlots,
+          pass1EligibleOnly,
+          requiredChannels,
+        },
         getSuccessResult: (payload) => jsonToolResult(payload, { isError: false }),
         callback: async () => {
           if (includeSlots && resolvedLimit !== 1) {
@@ -252,9 +282,38 @@ export const getListTemplatesTool = (
               provenance: entry.provenance,
               issue: entry.discoveryIssue!,
             }));
-          const matchingEntries = catalog.filter(
+          let matchingEntries = catalog.filter(
             (entry) => entry.discoveryIssue === undefined && queryMatches(entry),
           );
+          const resolvedByTemplate = new Map<string, TemplateRuntimeSnapshot | null>();
+          const prefilterRuntimeDiagnostics: DiscoveryDiagnostic[] = [];
+          const resolveOnce = (entry: TemplateCatalogEntry): TemplateRuntimeSnapshot | null => {
+            if (resolvedByTemplate.has(entry.template)) {
+              return resolvedByTemplate.get(entry.template) ?? null;
+            }
+            const snapshot = dependencies.resolve(entry);
+            resolvedByTemplate.set(entry.template, snapshot);
+            return snapshot;
+          };
+          if (requiredChannels.length > 0) {
+            const required = new Set(requiredChannels);
+            matchingEntries = matchingEntries.filter((entry) => {
+              const snapshot = resolveOnce(entry);
+              if (snapshot === null) {
+                prefilterRuntimeDiagnostics.push({
+                  template: entry.template,
+                  provenance: entry.provenance,
+                  issue: 'changed-or-unreadable',
+                });
+                return false;
+              }
+              const available = new Set([
+                ...fitOf(snapshot).visible_channels.direct,
+                ...fitOf(snapshot).visible_channels.calculated.map(({ channel }) => channel),
+              ]);
+              return [...required].every((channel) => available.has(channel));
+            });
+          }
           const bestCanonicalScore =
             normalizedQuery !== undefined && !hasExactIdMatch
               ? matchingEntries
@@ -303,14 +362,25 @@ export const getListTemplatesTool = (
           const selected = candidates.slice(start, start + resolvedLimit);
           const processed = selected.map((entry) => ({
             entry,
-            snapshot: dependencies.resolve(entry),
+            snapshot: resolveOnce(entry),
           }));
           let processedCount = processed.length;
 
           const diagnosticsPayload = (
             runtimeDiagnostics: DiscoveryDiagnostic[],
           ): Record<string, unknown> => {
-            const diagnostics = [...discoveryDiagnostics, ...runtimeDiagnostics];
+            const diagnostics = [
+              ...new Map(
+                [
+                  ...discoveryDiagnostics,
+                  ...prefilterRuntimeDiagnostics,
+                  ...runtimeDiagnostics,
+                ].map((diagnostic) => [
+                  `${diagnostic.template}\u001f${diagnostic.provenance}\u001f${diagnostic.issue}`,
+                  diagnostic,
+                ]),
+              ).values(),
+            ];
             return {
               count: diagnostics.length,
               returned: Math.min(diagnostics.length, MAX_DIAGNOSTICS),
