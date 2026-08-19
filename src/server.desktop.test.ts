@@ -231,7 +231,9 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-19: list-templates now exposes derived template-fit metadata and filters by
 // required visible channels. Its schema adds 149 bytes; tighter route prose removes 131 from the
 // served profile, while the full schema-only surface moves 56_650 -> 56_799.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_099;
+// Re-pinned 2026-08-19: apply-worksheet now infers the target from a cached worksheet fragment, so
+// its worksheetName describe drops the redundant "worksheet" (-3 bytes); dynamic authoring 40_099 -> 40_096.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_096;
 const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_117;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
 const FULL_TOOL_SURFACE_BUDGET = 56_817;
@@ -329,7 +331,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['bind-template', 2585], // raised 2026-08-10 (#734 review fold): +skip_validation, the server-gated trust flag for the deterministic build_viz path — a genuinely new param (name + boolean schema, description dropped since the LLM must never set it), ~118B over the prior cap so shrinking prose could not fund it; ratcheted to the measured 2585 (down from a transient 2675) once the description was removed; earlier raise with sign-off (2026-08-05): agreed UI-label title 'Matching template' costs a few bytes over 'Bind Template'; earlier raise (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
-    ['apply-worksheet', 1607], // ratcheted down 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
+    ['apply-worksheet', 1604], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1466], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow

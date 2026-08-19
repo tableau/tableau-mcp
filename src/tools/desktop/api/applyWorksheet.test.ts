@@ -352,6 +352,80 @@ describe('applyWorksheetTool', () => {
     );
   });
 
+  it('infers the worksheet name from a cached fragment when worksheetName is omitted', async () => {
+    const mockXml = "<worksheet name='Sales &amp; Profit'><table></table></worksheet>";
+    const mockLoadWorksheetXml = vi
+      .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockResolvedValue(Ok({ readbackWarnings: [] }));
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(resultObj.message).toContain(
+      'Successfully applied worksheet update for "Sales & Profit"',
+    );
+    expect(mockLoadWorksheetXml).toHaveBeenCalledWith(
+      expect.objectContaining({ worksheetName: 'Sales & Profit' }),
+    );
+  });
+
+  it('rejects an explicit worksheetName that conflicts with the cached fragment before touching Desktop', async () => {
+    const mockXml = "<worksheet name='Real Name'><table></table></worksheet>";
+    const mockLoadWorksheetXml = vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml');
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Wrong Name',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('does not match the <worksheet name> in the XML');
+    expect(mockLoadWorksheetXml).not.toHaveBeenCalled();
+  });
+
+  it('fails safely on a whole-workbook document even when worksheetName is omitted', async () => {
+    const mockXml = '<workbook><worksheets><worksheet name="Sheet 1" /></worksheets></workbook>';
+    const mockLoadWorksheetXml = vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml');
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('holds a whole <workbook> document');
+    expect(mockLoadWorksheetXml).not.toHaveBeenCalled();
+  });
+
+  it('fails safely on a non-worksheet fragment when worksheetName is omitted', async () => {
+    const mockXml = '<dashboard name="Dash 1"><zones /></dashboard>';
+    const mockLoadWorksheetXml = vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml');
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'could not find a top-level <worksheet name="..."> element',
+    );
+    expect(mockLoadWorksheetXml).not.toHaveBeenCalled();
+  });
+
   it('reports skipped readback honestly for inline worksheet XML apply', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
@@ -960,7 +1034,7 @@ async function getToolResult({
   configOverrides,
 }: {
   session: string;
-  worksheetName: string;
+  worksheetName?: string;
   worksheetFile?: string;
   worksheetXml?: string;
   mockExecutor: TableauDesktopToolContext['getExecutor'];

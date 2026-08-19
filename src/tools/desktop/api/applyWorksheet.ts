@@ -72,7 +72,7 @@ const paramsSchema = {
     .describe('Exact template binding to build and apply in this call.'),
   worksheetName: artifactNameParam('worksheet', { min: 1, max: 255 })
     .optional()
-    .describe('Worksheet id or name for cached-file apply; omit with other modes.'),
+    .describe('Existing worksheet id or name; inferred from a cached fragment.'),
   worksheetFile: artifactFileParam('worksheet', { max: 4096 })
     .optional()
     .describe('Cached worksheet path for manual apply; omit with other modes.'),
@@ -135,12 +135,7 @@ export const getApplyWorksheetTool = (
             Number(cachedModeSelected);
           if (modeCount !== 1) {
             return new ArgsValidationError(
-              'Provide exactly one apply mode: artifactId, templatePlan, or worksheetName with worksheetFile.',
-            ).toErr();
-          }
-          if (cachedModeSelected && !worksheetName?.trim()) {
-            return new ArgsValidationError(
-              'A worksheetName is required when applying a cached worksheet file.',
+              'Provide exactly one apply mode: artifactId, templatePlan, or worksheetFile (worksheetName optional).',
             ).toErr();
           }
 
@@ -324,7 +319,7 @@ export const getApplyWorksheetTool = (
           }
           const { xml: worksheetXml, resolvedSession, sourceHash } = preamble.value;
 
-          const canonical = resolveCanonicalWorksheetName(worksheetName!, worksheetXml);
+          const canonical = resolveCanonicalWorksheetName(worksheetName, worksheetXml);
           if (canonical.isErr()) {
             return new WorksheetXmlLoadFailedError(canonical.error).toErr();
           }

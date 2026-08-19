@@ -236,9 +236,10 @@ function readbackOutcome(
 }
 
 /**
- * Canonical-name gate. Require the caller's `worksheetName` to identify the authored fragment —
- * matching either its stable id (the `<simple-id uuid>`, the External Client API worksheet id) or
- * its `<worksheet name>` — before we touch Desktop. Names are compared after trim and Unicode NFC
+ * Canonical-name gate. When the caller provides `worksheetName`, require it to identify the authored
+ * fragment — matching either its stable id (the `<simple-id uuid>`, the External Client API worksheet
+ * id) or its `<worksheet name>` — before we touch Desktop. When omitted, adopt the fragment's own name
+ * as the target. Names are compared after trim and Unicode NFC
  * normalization (case-sensitive) so visually identical NFD/NFC spellings do not false-mismatch.
  * Returns the fragment's name exactly as authored (trimmed) — the identity Tableau stores when it
  * applies the raw XML, and what upsertSheetIntoWorkbook's own name check matches.
@@ -249,10 +250,10 @@ function readbackOutcome(
  * failing as a misleading mismatch against an empty XML name.
  */
 export function resolveCanonicalWorksheetName(
-  worksheetName: string,
+  worksheetName: string | undefined,
   xml: string,
 ): Result<string, Extract<LoadWorksheetXmlError, { type: 'name-mismatch' }>> {
-  const callerRef = worksheetName.trim();
+  const callerRef = worksheetName?.trim() ?? '';
   let xmlName = '';
   let xmlId = '';
   let isWorkbookDocument = false;
@@ -273,13 +274,18 @@ export function resolveCanonicalWorksheetName(
       type: 'name-mismatch',
       message: isWorkbookDocument
         ? 'apply-worksheet expects a single <worksheet name="..."> fragment, but the cached file ' +
-          `holds a whole <workbook> document. FIX: read-cached-xml with worksheet="${callerRef}" to pull ` +
+          `holds a whole <workbook> document. FIX: read-cached-xml with worksheet="${callerRef || '<sheet name>'}" to pull ` +
           'just that element, write-cached-xml with the same selector to splice your edit back, then ' +
           'apply-worksheet with that file.'
         : 'apply-worksheet could not find a top-level <worksheet name="..."> element in the cached file. ' +
-          `FIX: get-worksheet-xml for "${callerRef}" mints a file holding exactly that fragment; edit it ` +
+          `FIX: get-worksheet-xml for ${callerRef ? `"${callerRef}"` : 'the worksheet'} mints a file holding exactly that fragment; edit it ` +
           'with read-cached-xml/write-cached-xml and pass that path to apply-worksheet.',
     });
+  }
+
+  if (!callerRef) {
+    // No caller ref: the cached fragment names its own target.
+    return Ok(xmlName);
   }
 
   if (!xmlNamesEqual(xmlName, callerRef) && !(xmlId && xmlId === callerRef)) {
