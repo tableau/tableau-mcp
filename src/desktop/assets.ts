@@ -8,7 +8,7 @@
 
 import { createHash } from 'crypto';
 import { existsSync, readdirSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { delimiter, join } from 'path';
 
 import { getDirname } from '../utils/getDirname.js';
 import {
@@ -208,9 +208,18 @@ export function readResourceAsset(relPath: string): string | null {
 
 const KNOWLEDGE_DIR_ENV_NAME = 'TABLEAU_KNOWLEDGE_DIR';
 
-function externalKnowledgeRoot(): string | undefined {
-  const raw = process.env[KNOWLEDGE_DIR_ENV_NAME]?.trim();
-  return raw ? raw : undefined;
+// Ordered by precedence: earlier roots win on a slug collision. tab-agent-south owns what
+// each root physically is (protected/user-content/overridable); this file never learns those
+// names, it just merges whatever ordered list it's handed.
+function externalKnowledgeRoots(): string[] {
+  const raw = process.env[KNOWLEDGE_DIR_ENV_NAME];
+  if (!raw) {
+    return [];
+  }
+  return raw
+    .split(delimiter)
+    .map((root) => root.trim())
+    .filter((root) => root.length > 0);
 }
 
 function isHiddenName(name: string): boolean {
@@ -243,9 +252,15 @@ function walkMarkdownSlugs(root: string): string[] {
 }
 
 export function listKnowledgeSlugs(): string[] {
-  const externalRoot = externalKnowledgeRoot();
-  if (externalRoot !== undefined) {
-    return walkMarkdownSlugs(externalRoot).sort();
+  const externalRoots = externalKnowledgeRoots();
+  if (externalRoots.length > 0) {
+    const slugs = new Set<string>();
+    for (const root of externalRoots) {
+      for (const slug of walkMarkdownSlugs(root)) {
+        slugs.add(slug);
+      }
+    }
+    return [...slugs].sort();
   }
   if (runningAsSea()) {
     const prefix = 'resources/desktop/knowledge/';
@@ -268,17 +283,23 @@ export function readKnowledgeBySlug(slug: string): string | null {
   if (!isSafeKnowledgeSlug(slug)) {
     return null;
   }
-  const externalRoot = externalKnowledgeRoot();
-  if (externalRoot === undefined) {
+  const externalRoots = externalKnowledgeRoots();
+  if (externalRoots.length === 0) {
     return readResourceAsset(`knowledge/${slug}.md`);
   }
-  try {
-    return readFileSync(join(externalRoot, ...slug.split('/')) + '.md', 'utf-8');
-  } catch {
-    return null;
+  for (const root of externalRoots) {
+    try {
+      return readFileSync(join(root, ...slug.split('/')) + '.md', 'utf-8');
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 export function getConfiguredKnowledgeDir(): string {
-  return externalKnowledgeRoot() ?? join(getResourcesRoot(), 'knowledge');
+  const externalRoots = externalKnowledgeRoots();
+  return externalRoots.length > 0
+    ? externalRoots.join(delimiter)
+    : join(getResourcesRoot(), 'knowledge');
 }
