@@ -68,36 +68,6 @@ describe('getStoryboardXmlTool', () => {
     expect(resultObj.storyboardXml).toContain('type="storyboard"');
   });
 
-  it('accepts the deprecated storyboard alias key', async () => {
-    const result = await getToolResult({ storyboard: 'QBR Story', mode: 'inline' });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const resultObj = z
-      .object({ storyboardXml: z.string() })
-      .parse(JSON.parse(result.content[0].text));
-    expect(resultObj.storyboardXml).toContain('name="QBR Story"');
-  });
-
-  it('errors when both storyboardName and its alias are absent', async () => {
-    const result = await getToolResult({});
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain(
-      'storyboardName is required (storyboard is a deprecated alias).',
-    );
-  });
-
-  it('errors when storyboardName and its alias disagree', async () => {
-    const result = await getToolResult({ storyboardName: 'QBR Story', storyboard: 'Other' });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('storyboardName ("QBR Story")');
-    expect(result.content[0].text).toContain('Pass one of them.');
-  });
-
   it('errors when the document route returns no <dashboard> subtree', async () => {
     const result = await getToolResult({ storyboardName: 'QBR Story', emptyDocument: true });
 
@@ -211,7 +181,6 @@ function makeExecutor({
 async function getToolResult(opts: {
   session?: string;
   storyboardName?: string;
-  storyboard?: string;
   mode?: 'file' | 'inline';
   capBytes?: number;
   bigDocument?: string;
@@ -220,14 +189,7 @@ async function getToolResult(opts: {
   emptyDocument?: boolean;
   customSignal?: AbortSignal;
 }): Promise<CallToolResult> {
-  const {
-    session = '12345',
-    storyboardName,
-    storyboard,
-    mode = 'file',
-    capBytes,
-    customSignal,
-  } = opts;
+  const { session = '12345', storyboardName, mode = 'file', capBytes, customSignal } = opts;
   const { executor } = makeExecutor(opts);
   const tool = getStoryboardXmlTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -240,7 +202,7 @@ async function getToolResult(opts: {
     ...(customSignal && { signal: customSignal }),
     ...(capBytes !== undefined && { config: { ...base.config, inlineXmlMaxBytes: capBytes } }),
   };
-  return await callback({ session, storyboardName, storyboard, mode }, extra);
+  return await callback({ session, storyboardName, mode }, extra);
 }
 
 async function getToolCalls(opts: { storyboardName: string; customSignal?: AbortSignal }): Promise<{
@@ -261,7 +223,6 @@ async function getToolCalls(opts: { storyboardName: string; customSignal?: Abort
     {
       session: '12345',
       storyboardName: opts.storyboardName,
-      storyboard: undefined,
       mode: 'inline',
     },
     extra,

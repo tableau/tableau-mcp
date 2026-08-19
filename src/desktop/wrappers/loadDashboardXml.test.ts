@@ -357,6 +357,28 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
   });
 
+  it('names storyboardName (not dashboard_name) when the caller name disagrees with the XML', async () => {
+    const executor = makeExecutorMock({});
+
+    const result = await loadDashboardXml({
+      dashboardName: 'Wrong Name',
+      xml: "<dashboard name='QBR Story' type='storyboard'><zones /></dashboard>",
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      kind: 'storyboard',
+      requireExistingSheet: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-dashboard-xml-error');
+      invariant(result.error.error.type === 'name-mismatch');
+      expect(result.error.error.message).toContain('storyboardName');
+      expect(result.error.error.message).not.toContain('dashboard_name');
+    }
+  });
+
   it('goes straight to the whole-workbook apply for an absent dashboard when requireExistingSheet is off', async () => {
     const { executor, calls } = absentDashboardExecutor(['Some Other DB']);
 

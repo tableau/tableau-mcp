@@ -228,10 +228,15 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // image exports it joins DYNAMIC_AUTHORING_TOOL_PROFILE, so it moves both surfaces by +1012:
 // dynamic authoring 39_069 -> 40_081 (budget 39_087 -> 40_099, keeping the 18-char slack), full
 // surface 55_638 -> 56_650 (budget 55_656 -> 56_668).
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_081;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_099;
+// Re-pinned 2026-08-19: get-storyboard-xml aligned to its get-xml siblings (get-dashboard-xml/
+// get-worksheet-xml) — storyboardName is now required and the deprecated storyboard alias param is
+// dropped; net -51 bytes despite the longer "existing storyboard" description. It is in
+// DYNAMIC_AUTHORING_TOOL_PROFILE, so both surfaces shrink: dynamic authoring 40_081 -> 40_030
+// (budget 40_099 -> 40_048), full surface 56_650 -> 56_599 (budget 56_668 -> 56_617), 18-char slack kept.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_030;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_048;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 56_668;
+const FULL_TOOL_SURFACE_BUDGET = 56_617;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
