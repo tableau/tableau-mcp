@@ -3,76 +3,85 @@ sidebar_position: 2
 ---
 
 # Popular Client Integrations
-This guide walks you through everything you need to use Tableau MCP with popular third-party agents.
+This guide walks you through everything you need to use Tableau MCP with popular third-party agents. These products are evolving quickly and names sometimes change (connectors, plugins, etc), but the notes and instructions here should help you get up and running.
 
 ## Slack
-You can connect Slackbot to Tableau MCP by installing the latest version of the [Tableau Slack app](https://slack-pde.slack.com/marketplace/A026RA4ND1R-tableau) into your workspace. 
+You can connect Slackbot to Tableau MCP by installing the latest version of the [Tableau Slack app](https://slack-pde.slack.com/marketplace/A026RA4ND1R-tableau) into your workspace.
 
 ### First-time Tableau Slack App installation
-If it's your first time installing the Tableau Slack app, go to Tableau site settings for the Tableau site you want to connect Slack to. From site settings, click the `integrations` tab and scroll to the bottom of the page until you see the *Slack Connectivity* section. Click the `Connect to Slack` button and connect to your target Slack workspace by clicking `allow` from the app install dialogue. 
+If it's your first time installing the Tableau Slack app, go to Tableau site settings for the Tableau site you want to connect Slack to. From site settings, click the **Integrations** tab and scroll to the bottom of the page until you see the *Slack Connectivity* section. Click the **Connect to Slack** button. Then, from the app install dialog, click **Allow** to connect to your target Slack workspace.
 
-![Connect to Slack](images/connect_to_slack.png)
+<div style={{maxWidth: '75%', margin: '1rem auto'}}>
+
+<img src={require('./images/connect_to_slack.png').default} alt="Connect to Slack in Tableau site settings" />
 
 <hr style={{margin: '2rem auto', maxWidth: '60%', border: 'none', borderTop: '1px solid var(--ifm-color-emphasis-300, #dadde1)'}} />
 
-<div style={{
-  maxWidth: '380px',
-  margin: '1.5rem auto',
-  padding: '12px',
-  background: 'var(--ifm-background-surface-color, #fff)',
-  border: '1px solid var(--ifm-color-emphasis-300, #dadde1)',
-  borderRadius: '10px',
-  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06)',
-}}>
-
-![Allow Workspace](images/connect_to_workspace.png)
+<img src={require('./images/connect_to_workspace.png').default} alt="Tableau app permissions in Slack workspace" width="600" />
 
 </div>
 
-To confirm that the app installation completed, go to your slack workspace, click tools, apps, and look for Tableau in the list of installed apps. 
+To confirm that the app installation completed, go to your Slack workspace, click **Tools > Apps**, and look for Tableau in the list of installed apps.
 
 :::note 
-This workflow does not block multi-site users from using Slackbot to interact with multiple Tableau sites. Tableau MCP uses a separate OAuth flow from inside Slackbot to connect users to their target site. 
+Multi-site users can still use Slackbot to interact with multiple Tableau sites. Tableau MCP uses a separate OAuth flow from inside Slackbot to connect users to their target site.
 
-Also, you cannot install the Tableau slack app from the Slack marketplace. You have to do it from the Tableau site settings. 
+Also, you cannot install the Tableau Slack app from the Slack marketplace. You have to do it from the Tableau site settings.
 
 :::
 
 ### Using Tableau MCP from Slackbot
-Once you've install the Tableau Slack app, users of the worksapce simply have to click the `apps` button inside Slackbot and connect to their target Tableau site through the built-in [OAuth](/configuration/mcp-config/authentication/oauth.md) flow. 
+Once you've installed the Tableau Slack app, users of the workspace simply have to click the **Apps** button inside Slackbot and connect to their target Tableau site through the built-in [OAuth](/configuration/mcp-config/authentication/oauth.md) flow.
 
-For more information about Slackbot and MCP server support, see [Slackbot documentation](https://docs.slack.dev/ai/slackbot-mcp-client/)
+For more information about Slackbot and MCP server support, see [Connecting an MCP server to the Slackbot MCP Client](https://docs.slack.dev/ai/slackbot-mcp-client/).
+
 <div style={{maxWidth: '75%', margin: '1rem auto'}}>
 
-![Slack connector set up](images/slackbot1.jpeg)
+<img src={require('./images/slackbot1.png').default} alt="Slack connector set up" width="500" />
 
 </div>
 
 ## Claude Product Suite
 ### Tableau Connector for Claude and Cowork
-We'll be adding a Tableau connector to the Anthropic Marketplace soon. In the meantime, you can add Tableau as a custom connector.
+
+Tableau MCP is now available as a connector in the Anthropic Claude directory. To install the connector, follow these steps.
+
+In Claude, go to **Customize** and click on **Connectors**. Click **Add -> Browse connectors**, then search for Tableau. Select the Tableau Cloud connector, then click **Connect to Claude** to start the OAuth flow and authorize access to your Tableau data.
 
 <div style={{maxWidth: '75%', margin: '1rem auto'}}>
 
-![Claude Custom Connector Set Up](images/custom_connector.png)
+<img src={require('./images/claude-connector-listing.png').default} alt="Tableau Cloud connector listing in Claude" width="600" />
+
+</div>
+
+After authorization completes, you’ll be returned to Claude. Start a new chat to experiment with some known data sources like Superstore.
+
+<div style={{maxWidth: '75%', margin: '1rem auto'}}>
+
+<img src={require('./images/claude-connector-example.png').default} alt="Tableau connector example usage in Claude" width="650" />
 
 </div>
 
 ### Claude Desktop Extension
-*The Tableau Extension for Claude Desktop does not actually use the hosted service. Instead, like all Claude Desktop extensions, it is a bundle that contains all the Tableau MCP code and dependencies in a single `.mcpb` package. It uses Claude Desktop's native Node.js runtime. To use the Tableau extension, you must have installed [Claude Desktop](https://claude.ai/download).*
 
-#### Step 1: create a Personal Access Token (PAT)
+:::note
 
-Login to your site, then click your profile in the upper right to bring up My Account Settings.
+The Tableau Extension for Claude Desktop does not use the hosted service. Instead, it runs locally and connects to Tableau Server or Cloud. Claude Desktop extensions are a bundle that contains all the Tableau MCP code and dependencies in a single `.mcpb` package, and it uses Claude Desktop's native Node.js runtime. To use the Tableau extension, you must have installed [Claude Desktop](https://claude.ai/download).
 
-Scroll down to Personal Access Tokens and create a new one. You can use any token name but something
-memorable like "mcp" is suggested to make later configuration easier. Make sure to copy and save the
-value because it's only shown this one time. (Also, be aware that, by default, Tableau PATs will expire after 15
-days of inactivity, so you may need to periodically create a new one.)
+:::
+
+#### Step 1: Create a Personal Access Token (PAT)
+
+Log in to your site, then click your profile in the upper right to bring up My Account Settings.
+
+Scroll down to Personal Access Tokens and create a new one. You can use any token name, but a
+memorable one like "mcp" is recommended to make later configuration easier. Make sure to copy and
+save the value because it's only shown this one time. By default, Tableau PATs expire after 15 days
+of inactivity (see warning below), so you may need to periodically create a new one.
 
 <div style={{maxWidth: '75%', margin: '1rem auto'}}>
 
-![Personal Access Token Config](../getting-started/images/pat.png)
+<img src={require('../getting-started/images/pat.png').default} alt="Personal Access Token Config" width="750" />
 
 </div>
 
@@ -124,21 +133,47 @@ When everything is configured it should look like this:
 
 <div style={{maxWidth: '75%', margin: '1rem auto'}}>
 
-![Claude Desktop Extension configuration](../getting-started/images/dxt-config.png)
+<img src={require('../getting-started/images/dxt-config.png').default} alt="Claude Desktop Extension configuration" width="500" />
 
 </div>
 
 ### Claude Code
-Add Tableau MCP with the CLI:
+Add Tableau MCP to Claude Code with this command:
 
 ```bash
 claude mcp add --transport http Tableau https://mcp.tableau.com
 ```
 
-then restart your claude code session and run `/mcp` inside Claude Code and approve the Tableau sign-in:
+Then start a Claude Code session, type `/mcp`, select **Tableau**, and choose **Authenticate** to approve the Tableau sign-in.
 
-
-Verify with `claude mcp list` or `/mcp`, then select `Tableau` and `authenticate`.
+You can verify the connection at any time with `claude mcp list` or within Claude Code with `/mcp`.
 
 ## OpenAI Product Suite
-A Tableau ChatGPT app and Tableau plugin for Codex is coming soon!
+Tableau MCP is now available as a plugin in the ChatGPT directory. To install the plugin, follow these steps.
+
+In ChatGPT, navigate to **Plugins** and search for Tableau. Click on the Tableau plugin, then click **Install plugin** to start the OAuth flow and authorize access to your Tableau data.
+
+<div style={{maxWidth: '75%', margin: '1rem auto'}}>
+
+<img src={require('./images/chatgpt-plugin-listing.png').default} alt="Tableau plugin listing in ChatGPT" width="650" />
+
+</div>
+
+After authorization completes, you’ll be returned to ChatGPT. Click **Try in chat** to experiment with some known data sources like Superstore.
+
+<div style={{maxWidth: '75%', margin: '1rem auto'}}>
+
+<img src={require('./images/chatgpt-plugin-example.png').default} alt="Tableau plugin example usage in ChatGPT" width="700" />
+
+</div>
+
+## Custom Connector
+For AI applications and agents not listed here, it's often possible to configure a custom MCP connector. For these, you typically just need to point to the Tableau hosted MCP endpoint `https://mcp.tableau.com`, then connect to run the auth flow.
+
+Here's an example of adding a custom connector in Claude:
+
+<div style={{maxWidth: '75%', margin: '1rem auto'}}>
+
+<img src={require('./images/custom_connector.png').default} alt="Claude Custom Connector Set Up" width="500" />
+
+</div>
