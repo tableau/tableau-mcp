@@ -119,12 +119,12 @@ so this does not affect authoring or republishing.
               ...extra,
               jwtScopes: editDataAppTool.requiredApiScopes,
               callback: async (restApi) => {
-                const bytes = await restApi.workbooksMethods.downloadWorkbook({
+                const { content } = await restApi.workbooksMethods.downloadWorkbook({
                   workbookId: args.workbookId,
                   siteId: restApi.siteId,
                   includeExtract: false,
                 });
-                return reconstructWorkspaceFromTwbx(bytes);
+                return reconstructWorkspaceFromTwbx(content);
               },
             });
           } catch (error) {

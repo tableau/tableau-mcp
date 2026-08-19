@@ -8,6 +8,8 @@ export const webToolNames = [
   'list-workbooks',
   'create-and-publish-workbook',
   'validate-workbook-package',
+  'request-workbook-upload',
+  'validate-upload-and-publish-workbook',
   'list-projects',
   'list-views',
   'list-custom-views',
@@ -17,6 +19,7 @@ export const webToolNames = [
   'get-embed-token',
   'record-event',
   'get-workbook',
+  'download-workbook',
   'get-view',
   'get-flow',
   'list-flow-runs',
@@ -54,6 +57,7 @@ export type WebToolName = (typeof webToolNames)[number];
 export const webToolGroupNames = [
   'datasource',
   'workbook',
+  'authoring',
   'project',
   'view',
   'flow',
@@ -76,9 +80,11 @@ export const webToolGroups = {
   workbook: [
     'list-workbooks',
     'get-workbook',
+    'download-workbook',
     'create-and-publish-workbook',
     'validate-workbook-package',
   ],
+  authoring: ['request-workbook-upload', 'validate-upload-and-publish-workbook'],
   project: ['list-projects'],
   view: [
     'list-views',

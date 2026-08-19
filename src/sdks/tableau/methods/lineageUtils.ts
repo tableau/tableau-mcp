@@ -26,54 +26,42 @@ const workbookLineageResponseSchema = z.object({
   }),
 });
 
+const viewLineageNodeSchema = z.object({
+  luid: z.string(),
+  upstreamDatasources: z.array(lineageContentSchema).nullish(),
+  workbook: z
+    .object({
+      luid: z.string(),
+      name: z.string().nullable().optional(),
+      projectLuid: z.string().nullable().optional(),
+      projectName: z.string().nullable().optional(),
+      owner: z
+        .object({
+          luid: z.string().nullable().optional(),
+          name: z.string().nullable().optional(),
+          username: z.string().nullable().optional(),
+        })
+        .nullish(),
+    })
+    .nullish(),
+});
+
+const viewLineageConnectionSchema = z
+  .object({
+    nodes: z.array(viewLineageNodeSchema),
+  })
+  .nullish();
+
 const viewLineageResponseSchema = z.object({
   data: z.object({
-    sheetsConnection: z.object({
-      nodes: z.array(
-        z.object({
-          luid: z.string(),
-          upstreamDatasources: z.array(lineageContentSchema).nullish(),
-          workbook: z
-            .object({
-              luid: z.string(),
-              name: z.string().nullable().optional(),
-              projectLuid: z.string().nullable().optional(),
-              projectName: z.string().nullable().optional(),
-              owner: z
-                .object({
-                  luid: z.string().nullable().optional(),
-                  name: z.string().nullable().optional(),
-                  username: z.string().nullable().optional(),
-                })
-                .nullish(),
-            })
-            .nullish(),
-        }),
-      ),
-    }),
+    // REST "views" include worksheets and dashboards; Metadata API models them separately.
+    sheetsConnection: viewLineageConnectionSchema,
+    dashboardsConnection: viewLineageConnectionSchema,
   }),
 });
 
-export function getWorkbookLineageQuery(workbookLuids: Array<string>): string {
-  return `
-    query workbookLineage {
-      workbooksConnection(filter: { luidWithin: ${toGraphqlStringArray(workbookLuids)} }) {
-        nodes {
-          luid
-          upstreamDatasources {
-            luid
-            name
-          }
-        }
-      }
-    }
-  `;
-}
-
-export function getViewLineageQuery(viewLuids: Array<string>): string {
-  return `
-    query viewLineage {
-      sheetsConnection(filter: { luidWithin: ${toGraphqlStringArray(viewLuids)} }) {
+function getViewLineageConnectionQuery(connectionName: string, viewLuids: Array<string>): string {
+  return `${connectionName}(filter: { luidWithin: ${toGraphqlStringArray(viewLuids)} }) {
         nodes {
           luid
           upstreamDatasources {
@@ -94,7 +82,30 @@ export function getViewLineageQuery(viewLuids: Array<string>): string {
             }
           }
         }
+      }`;
+}
+
+export function getWorkbookLineageQuery(workbookLuids: Array<string>): string {
+  return `
+    query workbookLineage {
+      workbooksConnection(filter: { luidWithin: ${toGraphqlStringArray(workbookLuids)} }) {
+        nodes {
+          luid
+          upstreamDatasources {
+            luid
+            name
+          }
+        }
       }
+    }
+  `;
+}
+
+export function getViewLineageQuery(viewLuids: Array<string>): string {
+  return `
+    query viewLineage {
+      ${getViewLineageConnectionQuery('sheetsConnection', viewLuids)}
+      ${getViewLineageConnectionQuery('dashboardsConnection', viewLuids)}
     }
   `;
 }
@@ -123,28 +134,8 @@ export function getSearchContentLineageQuery({
       }
       ${
         viewLuids.length
-          ? `sheetsConnection(filter: { luidWithin: ${toGraphqlStringArray(viewLuids)} }) {
-        nodes {
-          luid
-          upstreamDatasources {
-            name
-            ... on PublishedDatasource {
-              luid
-            }
-          }
-          workbook {
-            luid
-            name
-            projectLuid
-            projectName
-            owner {
-              luid
-              name
-              username
-            }
-          }
-        }
-      }`
+          ? `${getViewLineageConnectionQuery('sheetsConnection', viewLuids)}
+      ${getViewLineageConnectionQuery('dashboardsConnection', viewLuids)}`
           : ''
       }
     }
@@ -163,8 +154,13 @@ export function getWorkbookLineageByLuid(response: unknown): Map<string, Array<L
 
 export function getViewLineageByLuid(response: unknown): Map<string, ViewLineage> {
   const parsed = viewLineageResponseSchema.parse(response);
+  const nodes = [
+    ...(parsed.data.sheetsConnection?.nodes ?? []),
+    ...(parsed.data.dashboardsConnection?.nodes ?? []),
+  ];
+
   return new Map(
-    parsed.data.sheetsConnection.nodes.map((node) => [
+    nodes.map((node) => [
       node.luid,
       {
         upstreamDatasources: normalizeLineageContents(node.upstreamDatasources),

@@ -106,30 +106,42 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
       return;
     }
 
-    // server.sendNotification doesn't provide a way to provide the relatedRequestId
-    // so we're using server.notification directly.
-    return mcpServer.server.notification(
-      {
-        method: 'notifications/message',
-        params: {
-          level,
-          notifier,
-          data: JSON.stringify(
-            {
-              timestamp: new Date().toISOString(),
-              currentNotificationLevel,
-              notifier,
-              message: sanitizedMessage,
-            },
-            null,
-            2,
-          ),
+    let notificationData: string;
+    try {
+      notificationData = JSON.stringify({
+        timestamp: new Date().toISOString(),
+        currentNotificationLevel,
+        notifier,
+        message: sanitizedMessage,
+      });
+    } catch {
+      notificationData = JSON.stringify({
+        timestamp: new Date().toISOString(),
+        currentNotificationLevel,
+        notifier,
+        message: '[Unable to serialize notification message]',
+      });
+    }
+
+    try {
+      // server.sendNotification doesn't provide a way to provide the relatedRequestId
+      // so we're using server.notification directly.
+      return await mcpServer.server.notification(
+        {
+          method: 'notifications/message',
+          params: {
+            level,
+            notifier,
+            data: notificationData,
+          },
         },
-      },
-      {
-        relatedRequestId: requestId,
-      },
-    );
+        {
+          relatedRequestId: requestId,
+        },
+      );
+    } catch {
+      // Swallow notification failures
+    }
   };
 }
 

@@ -21,6 +21,11 @@ body:has(.mcp-app-error) {
   padding: 0;
 }
 
+.viz-stage {
+  position: relative;
+  width: 100%;
+}
+
 .viz-container {
   width: 100%;
   height: 100%;
@@ -28,36 +33,91 @@ body:has(.mcp-app-error) {
 
 tableau-viz {
   width: 100%;
-  max-height: 1200px;
-  overflow-y: auto;
   display: block;
   transition: height 0.3s ease;
 }
 
-[hidden] {
-  display: none;
+/* Inline (non-fullscreen): cap the embedded viz to a fixed height so the app
+   stays compact in the chat; taller vizzes scroll internally. In fullscreen the
+   `.fullscreen` class is toggled onto `.main` (see fullscreenButton.ts), so this
+   selector no longer matches and the cap is removed — the viz then uses its
+   natural height from the `firstvizsizeknown` handler. This is a plain max-height
+   (no viewport units, no !important) precisely so it never constrains fullscreen. */
+.main:not(.fullscreen) tableau-viz {
+  max-height: 600px;
+  overflow-y: auto;
 }
 
-.open-in-tableau {
-  display: inline-block;
-  margin: 1rem 0 0 0;
-  padding: 0.5rem 0.75rem;
+/* !important so the hidden attribute wins over elements that set an explicit
+   display (e.g. .overlay-group uses display: flex and .overlay-control uses
+   display: inline-flex, which have equal specificity and would otherwise
+   override display: none by source order). */
+[hidden] {
+  display: none !important;
+}
+
+/* Floating pill over the viz's bottom-right corner. Holds both the "Open in
+   Tableau" link and the "Fullscreen" button as one segmented control. Lives in
+   #vizStage (sibling of the viz container) so it survives viz re-embed. */
+.overlay-group {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border: 1px solid #c4c7c9;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 3px 12px rgb(0 0 0 / 18%);
+}
+
+.overlay-control {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #0b5cab;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 0.875rem;
-  color: #0066CC;
-  text-decoration: none;
-  border-radius: 4px;
-  transition: background-color 0.2s ease;
 }
 
-.open-in-tableau:hover {
-  background-color: #f0f0f0;
-  text-decoration: underline;
+/* Segmented divider between the two controls. */
+.overlay-control + .overlay-control {
+  border-left-color: #d9dcdf;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
-.open-in-tableau:focus {
-  outline: 2px solid #0066CC;
+.overlay-control:hover {
+  border-color: #014486;
+  color: #014486;
+  background: #f3f7fb;
+}
+
+.overlay-control:focus {
+  outline: 2px solid #0b5cab;
   outline-offset: 2px;
+}
+
+.viz-control-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .open-in-tableau-error {
@@ -238,4 +298,11 @@ a.pub-card:focus-visible {
   font-size: 12px;
   font-weight: 500;
   color: #6b7280;
+}
+
+.mcp-app-error-cause {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: #8a97a3;
 }

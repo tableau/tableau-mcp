@@ -2,19 +2,35 @@ import { describe, expect, it, vi } from 'vitest';
 
 import * as configModule from '../../config.js';
 import {
+  getRequiredApiScopesForTool,
   getSupportedApiScopes,
   getSupportedMcpScopes,
   getSupportedScopes,
   isValidScope,
 } from './scopes.js';
 
+const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
 vi.mock('../../config.js', () => ({
   getConfig: vi.fn(),
+}));
+
+vi.mock('../../features/init.js', () => ({
+  getFeatureGate: () => ({
+    isFeatureEnabled: mocks.mockIsFeatureEnabled,
+  }),
 }));
 
 const mockGetConfig = vi.mocked(configModule.getConfig);
 
 describe('scopes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+  });
+
   describe('getSupportedMcpScopes', () => {
     it('should include tableau:mcp:tasks:read when adminToolsEnabled is true', async () => {
       mockGetConfig.mockReturnValue({
@@ -124,6 +140,27 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:flow:read');
     });
 
+    it('should exclude tableau:mcp:workbook:create when authoring-tools is disabled', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).not.toContain('tableau:mcp:workbook:create');
+    });
+
+    it('should include tableau:mcp:workbook:create when authoring-tools is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).toContain('tableau:mcp:workbook:create');
+    });
+
     it('should always include other MCP scopes regardless of adminToolsEnabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -229,6 +266,34 @@ describe('scopes', () => {
 
       const scopes = await getSupportedApiScopes();
       expect(scopes).not.toContain('tableau:flows:read');
+    });
+
+    it('should exclude tableau:workbooks:create when authoring-tools is disabled', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).not.toContain('tableau:workbooks:create');
+    });
+
+    it('should include tableau:workbooks:create when authoring-tools is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:workbooks:create');
+    });
+
+    it('should not require content read for validate-upload-and-publish-workbook', () => {
+      const scopes = getRequiredApiScopesForTool('validate-upload-and-publish-workbook');
+
+      expect(scopes).toEqual(['tableau:workbooks:create']);
+      expect(scopes).not.toContain('tableau:content:read');
     });
 
     it('should include tableau:users:update when adminToolsEnabled is true', async () => {
@@ -342,6 +407,25 @@ describe('scopes', () => {
 
       await expect(isValidScope('tableau:mcp:datasource:read')).resolves.toBe(true);
       await expect(isValidScope('tableau:mcp:workbook:read')).resolves.toBe(true);
+    });
+
+    it('should return false for tableau:mcp:workbook:create when authoring-tools is disabled', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      await expect(isValidScope('tableau:mcp:workbook:create')).resolves.toBe(false);
+    });
+
+    it('should return true for tableau:mcp:workbook:create when authoring-tools is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      await expect(isValidScope('tableau:mcp:workbook:create')).resolves.toBe(true);
     });
 
     it('should return false for invalid scopes', async () => {

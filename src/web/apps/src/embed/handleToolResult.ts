@@ -5,25 +5,18 @@ import { z } from 'zod';
 import { extractToolErrorMessage } from '../../../../utils/extractToolErrorMessage.js';
 import { showError } from '../shared/showError.js';
 import { embedTableauViz } from './embedTableauViz.js';
+import { setupFullscreenButton } from './fullscreenButton.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
 import { isPublishedWorkbookResult, renderPublishedWorkbookCard } from './publishedWorkbookCard.js';
 
-const urlSchema = z.object({
-  url: z.string().url(),
+const callToolResultSchema = z.object({
+  content: z.array(z.object({ type: z.literal('text'), text: z.string() })).nonempty(),
 });
 
-const callToolResultSchema = z.object({
-  content: z
-    .array(
-      z.object({
-        type: z.literal('text'),
-        text: z.string(),
-      }),
-    )
-    .nonempty(),
-  isError: z.boolean().optional(),
+const urlSchema = z.object({
+  url: z.string().url(),
 });
 
 /**
@@ -77,11 +70,16 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
   // Parse the payload once so we can dispatch on the optional `appView` discriminator. The shared
   // bundle has no per-tool routing, so this is how we tell a published-workbook result apart from
   // the default embed-a-viz path.
+  // Parse the payload once so we can dispatch on the optional `appView` discriminator. The shared
+  // bundle has no per-tool routing, so this is how we tell a published-workbook result apart from
+  // the default embed-a-viz path. Parse SILENTLY: the host re-fires tool-result on every
+  // re-render/re-mount, and those deliveries are frequently non-viz or unparseable. Those are
+  // "nothing to render", not errors — surfacing PARSE_ERROR here would flood telemetry and could
+  // clobber a good render, so a parse failure no-ops instead.
   let payload: unknown;
   try {
     payload = parseResultPayload(result);
-  } catch (e) {
-    showError('PARSE_ERROR', e, app);
+  } catch {
     return;
   }
 
@@ -98,15 +96,13 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
     return;
   }
 
-  // Default path: embed the Tableau viz at `url`.
-  let viewUrl: string;
-  try {
-    const { url } = urlSchema.parse(payload);
-    viewUrl = url;
-  } catch (e) {
-    showError('PARSE_ERROR', e, app);
+  // Default path: embed the Tableau viz at `url`. A missing, invalid, or empty url is not
+  // embeddable — again "nothing to render" rather than an error — so no-op silently.
+  const parsedUrl = urlSchema.safeParse(payload);
+  if (!parsedUrl.success || !parsedUrl.data.url) {
     return;
   }
+  const viewUrl = parsedUrl.data.url;
 
   // Embedding API load failure
   try {
@@ -125,11 +121,12 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
     return;
   }
 
-  // Auth failure (runtime) - handled by onError callback
-  embedTableauViz(viewUrl, token, () => showError('AUTH_ERROR', undefined, app));
-
   const main = document.querySelector('.main');
   if (main) {
     setupOpenInTableauLink(app, viewUrl, main as HTMLElement);
+    setupFullscreenButton(app, main as HTMLElement);
   }
+
+  // Auth failure (runtime) - handled by onError callback
+  embedTableauViz(viewUrl, token, () => showError('AUTH_ERROR', undefined, app));
 }

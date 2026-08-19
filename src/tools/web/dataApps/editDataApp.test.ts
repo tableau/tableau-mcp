@@ -94,7 +94,11 @@ describe('editDataAppTool', () => {
     setDataAppWorkspaceStore(new FakeWorkspaceStore());
 
     mocks.mockIsWorkbookAllowed.mockResolvedValue({ allowed: true });
-    mocks.mockDownloadWorkbook.mockResolvedValue(dataAppBytes());
+    mocks.mockDownloadWorkbook.mockResolvedValue({
+      content: dataAppBytes(),
+      contentType: 'application/octet-stream',
+      filename: 'My App.twbx',
+    });
   });
 
   it('requires workbook download + content read scopes', () => {
@@ -114,7 +118,11 @@ describe('editDataAppTool', () => {
   });
 
   it('rejects a workbook that is not a data-app package', async () => {
-    mocks.mockDownloadWorkbook.mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
+    mocks.mockDownloadWorkbook.mockResolvedValue({
+      content: new Uint8Array([1, 2, 3, 4]),
+      contentType: 'application/octet-stream',
+      filename: 'not-a-data-app.twbx',
+    });
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);

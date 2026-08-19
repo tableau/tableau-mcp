@@ -7,6 +7,8 @@ sidebar_position: 2
 Retrieves information on a workbook, including information about the views contained in the workbook
 and their usage statistics.
 
+Related tools: [Download Workbook](download-workbook.md), [List Workbooks](list-workbooks.md)
+
 ## APIs called
 
 - [Query Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook)

@@ -53,9 +53,10 @@ describe('query-admin-insights tool', () => {
     // Resolver filters by projectName:eq:Admin Insights (single call) and matches datasets by name
     // client-side, so the mock returns every dataset the resolver might look up in one page.
     mocks.mockListDatasources.mockResolvedValue({
-      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 3 },
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 4 },
       datasources: [
         { id: 'luid-tse', name: 'TS Events' },
+        { id: 'luid-tsu', name: 'TS Users' },
         { id: 'luid-sc', name: 'Site Content' },
         { id: 'luid-jp', name: 'Job Performance' },
       ],
@@ -79,6 +80,17 @@ describe('query-admin-insights tool', () => {
     expect(result.isError).toBeFalsy();
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ datasource: { datasourceLuid: 'luid-tse' } }),
+    );
+  });
+
+  it('dispatches kind=ts-users to the TS Users datasource', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [{ 'User Email': 'a@b.com' }] }));
+
+    const result = await getToolResult({ kind: 'ts-users', query: validQuery });
+
+    expect(result.isError).toBeFalsy();
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({ datasource: { datasourceLuid: 'luid-tsu' } }),
     );
   });
 
@@ -376,7 +388,7 @@ function parseStalePayload(result: CallToolResult): StaleContentPayload {
 }
 
 async function getToolResult(params: {
-  kind: 'ts-events' | 'site-content' | 'job-performance' | 'stale-content';
+  kind: 'ts-events' | 'ts-users' | 'site-content' | 'job-performance' | 'stale-content';
   query?: Query;
   limit?: number;
   minAgeDays?: number;

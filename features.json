@@ -2,5 +2,6 @@
   "mcp-apps": true,
   "data-app-workspaces": true,
   "view-file-mode": false,
-  "view-data-file-mode": false
+  "view-data-file-mode": false,
+  "authoring-tools": false
 }
