@@ -15,7 +15,7 @@ import { buildInjectedWorkbookXml } from '../../../../desktop/templates/injectTe
 import type { OptionalFieldPruneSpec } from '../../../../desktop/templates/optionalFieldPrune.js';
 import { getRuntimeTemplateSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
 import { listTemplateNames } from '../../../../desktop/templates/templatePath.js';
-import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
@@ -187,7 +187,7 @@ export const getInjectTemplateTool = (
             }
 
             writeFileSync(resolve(workbookFile), result.xml, 'utf-8');
-            writeSidecar(resolve(workbookFile), resolvedSession);
+            restampSidecarAfterEdit(resolve(workbookFile), resolvedSession);
 
             return new Ok({
               workbookFile,

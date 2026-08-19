@@ -15,6 +15,7 @@ import { Provider } from '../../../utils/provider.js';
 import { DesktopTool } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { exportDashboardImageTool } from './exportDashboardImage.js';
+import { exportStoryboardImageTool } from './exportStoryboardImage.js';
 import { exportWorksheetImageTool } from './exportWorksheetImage.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
@@ -78,6 +79,23 @@ describe('export-image tools', () => {
       expect(harness.server.requests.map((request) => request.path)).toEqual([
         '/v0/workbook/dashboards',
         '/v0/workbook/dashboards/dash-exec/image',
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('returns a storyboard image inline as a base64 PNG block after resolving by name', async () => {
+    const harness = await startHarness(exportStoryboardImageTool);
+    try {
+      const result = await harness.callTool({ storyboardName: 'QBR Story' });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'image');
+      expect(result.content[0].mimeType).toBe('image/png');
+      expect(harness.server.requests.map((request) => request.path)).toEqual([
+        '/v0/workbook/storyboards',
+        '/v0/workbook/storyboards/story-qbr/image',
       ]);
     } finally {
       await harness.close();
@@ -414,6 +432,13 @@ describe('export-image tools', () => {
       value: 'dash-exec',
       imagePath: '/v0/workbook/dashboards/dash-exec/image',
     },
+    {
+      makeTool: exportStoryboardImageTool,
+      nameKey: 'storyboardName',
+      aliasKey: 'storyboard',
+      value: 'story-qbr',
+      imagePath: '/v0/workbook/storyboards/story-qbr/image',
+    },
   ])(
     'accepts the deprecated $aliasKey alias key and rejects missing or conflicting keys',
     async ({ makeTool, nameKey, aliasKey, value, imagePath }) => {
@@ -471,6 +496,12 @@ describe('export-image tools', () => {
       overrideKey: 'GET /v0/workbook/dashboards/dash-exec/image',
       expectedMessage: 'does not serve the dashboard image endpoint',
     },
+    {
+      makeTool: exportStoryboardImageTool,
+      args: { storyboardName: 'story-qbr' },
+      overrideKey: 'GET /v0/workbook/storyboards/story-qbr/image',
+      expectedMessage: 'does not serve the storyboard image endpoint',
+    },
   ])(
     'reports an honest too-new endpoint 404 for $expectedMessage',
     async ({ makeTool, args, overrideKey, expectedMessage }) => {
@@ -517,6 +548,12 @@ describe('export-image tools', () => {
       makeTool: exportDashboardImageTool,
       args: { dashboardName: 'dash-exec', filePath: 'relative/dash.png' },
       imagePath: '/v0/workbook/dashboards/dash-exec/image',
+    },
+    {
+      label: 'a relative storyboard filePath',
+      makeTool: exportStoryboardImageTool,
+      args: { storyboardName: 'story-qbr', filePath: 'relative/story.png' },
+      imagePath: '/v0/workbook/storyboards/story-qbr/image',
     },
   ])(
     'forwards the raw path and surfaces the Desktop 400 for $label (no client-side refine)',

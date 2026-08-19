@@ -52,7 +52,7 @@ function enableExternalApiRegistry(commands: Record<string, unknown>): void {
     typeOfParam: { DPI_ShowMeCommandType: { enum_name: 'ShowMeCommandType' } },
     enumVals: { ShowMeCommandType: ['bars', 'lines'] },
   });
-  vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+  vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
   _resetExternalApiCommandRegistryForTest();
 }
 
@@ -65,7 +65,30 @@ describe('guardCommand', () => {
     }
   });
 
-  it('refuses an unknown command before consulting the External API registry', () => {
+  it('refuses a command absent from a loaded External API registry as unknown (fail-closed)', () => {
+    enableExternalApiRegistry({
+      'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY,
+    });
+
+    const result = guardCommand({
+      namespace: 'tabdoc',
+      cmd: 'not-a-command',
+      command: 'tabdoc:not-a-command',
+      args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars' },
+    });
+
+    expect('refused' in result).toBe(true);
+    if (!('refused' in result)) return;
+    expect(result.message).toContain('Unknown Tableau command "tabdoc:not-a-command"');
+    expect(result.message).not.toContain('human-blocking dialog');
+    expect(result.message).not.toContain('agent_can_invoke=false');
+  });
+
+  it('treats a command present in a loaded External API registry as known, even when not invocable', () => {
+    // tabdoc:add-local-extension-style regression: the name guard must consult the
+    // live registry, not a bundled snapshot that can predate a real Desktop
+    // command. A registry ENTRY (even a refusable one) is known by name, so
+    // this is refused for the agent_can_invoke/dialog reason, never "Unknown".
     enableExternalApiRegistry({
       'tabdoc:not-a-command': {
         ...SHOW_ME_REGISTRY_ENTRY,
@@ -83,9 +106,21 @@ describe('guardCommand', () => {
 
     expect('refused' in result).toBe(true);
     if (!('refused' in result)) return;
-    expect(result.message).toContain('Unknown Tableau command "tabdoc:not-a-command"');
-    expect(result.message).not.toContain('human-blocking dialog');
-    expect(result.message).not.toContain('agent_can_invoke=false');
+    expect(result.message).not.toContain('Unknown Tableau command');
+    expect(result.message).toContain('human-blocking dialog');
+    expect(result.message).toContain('agent_can_invoke=false');
+    expect(result.message).toContain('opens_blocking_dialog=true');
+  });
+
+  it('fails open on an unrecognized command name when no External API registry is loaded', () => {
+    const result = guardCommand({
+      namespace: 'tabdoc',
+      cmd: 'not-a-command',
+      command: 'tabdoc:not-a-command',
+      args: {},
+    });
+
+    expect('ok' in result).toBe(true);
   });
 
   it('applies the unconditional dialog blocklist before registry-backed refusal reasons', () => {
@@ -164,7 +199,7 @@ describe('guardCommand', () => {
     ]);
   });
 
-  it('fails open to the bundled param-contract guard when the registry is unavailable', () => {
+  it('fails open on param shape when the registry is unavailable', () => {
     const result = guardCommand({
       namespace: 'tabdoc',
       cmd: 'show-me',
@@ -176,5 +211,23 @@ describe('guardCommand', () => {
     if (!('ok' in result)) return;
     expect(result.dispatchArgs).toEqual({ WorksheetName: 'Sheet 1', ShowMeType: 'bars' });
     expect(result.warnings).toEqual([]);
+  });
+
+  it('refuses sort-nested missing live-required params even when no registry is loaded', () => {
+    const result = guardCommand({
+      namespace: 'tabdoc',
+      cmd: 'sort-nested',
+      command: 'tabdoc:sort-nested',
+      args: {
+        DimensionToSort: '[Sample - Superstore].[Category]',
+        Worksheet: 'Sheet 1',
+      },
+    });
+
+    expect('refused' in result).toBe(true);
+    if (!('refused' in result)) return;
+    expect(result.message).toContain(
+      'Missing required parameter(s) for Tableau command "tabdoc:sort-nested": MeasureName, ShelfType',
+    );
   });
 });

@@ -29,7 +29,9 @@ export const getApplyDashboardTool = (
     server,
     name: 'apply-dashboard',
     title,
-    description: 'Apply modified dashboard layout to Tableau.',
+    description:
+      'Apply modified dashboard layout to Tableau. When the cache has source metadata, ' +
+      'a freshness check rejects changes to this dashboard since the read.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -54,12 +56,13 @@ export const getApplyDashboardTool = (
           if (preamble.isErr()) {
             return preamble;
           }
-          const { xml: dashboardXml, resolvedSession } = preamble.value;
+          const { xml: dashboardXml, resolvedSession, sourceHash } = preamble.value;
 
           const executor = await extra.getExecutor(resolvedSession);
           const result = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
+            expectedSourceHash: sourceHash,
             focus: { navigate: 'artifact', sheetName: dashboardName },
             executor,
             signal: extra.signal,
@@ -109,7 +112,9 @@ export const getApplyDashboardTool = (
           return new Ok(
             acceptedNoReadbackApplyResult({
               kind: 'dashboard',
-              appliedName: dashboardName,
+              appliedName: result.isOk()
+                ? (result.value.appliedName ?? dashboardName)
+                : dashboardName,
               resultWarnings: validationWarnings,
               hostVerification,
             }),

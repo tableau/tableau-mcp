@@ -9,7 +9,7 @@ import {
   logInlineXmlCapHit,
   xmlByteLength,
 } from '../../../desktop/limits/inlineXmlCap.js';
-import { writeSidecar } from '../../../desktop/wrappers/cacheFingerprint.js';
+import { sourceSha256, writeSidecar } from '../../../desktop/wrappers/cacheFingerprint.js';
 import { log } from '../../../logging/logger.js';
 
 type XmlReadKind = 'workbook' | 'worksheet' | 'dashboard' | 'storyboard';
@@ -80,7 +80,7 @@ export function finishXmlRead<K extends string>({
   writeFileSync(cacheFile, xml, 'utf-8');
   // Stamp the producing session so the apply tool can refuse a cache from a
   // different (or restarted) Desktop instance — cross-instance bleed guard (W9).
-  writeSidecar(cacheFile, resolvedSession);
+  writeSidecar(cacheFile, resolvedSession, sourceSha256(xml));
 
   if (capFired) {
     logInlineXmlCapHit({ tool: toolName, bytes, capBytes, file: cacheFile });

@@ -60,6 +60,7 @@ export const desktopToolNames = [
   'get-worksheet-underlying-data',
   'export-worksheet-image',
   'export-dashboard-image',
+  'export-storyboard-image',
   'get-workbook-inventory',
   'list-workbook-datasources',
   'list-site-datasources',
@@ -74,6 +75,12 @@ export const desktopToolNames = [
   'list-knowledge-resources',
   'read-knowledge-resource',
   'search-knowledge',
+  'open-file',
+  'save-workbook',
+  'workbook-export-as',
+  'add-worksheet',
+  'add-dashboard',
+  'add-storyboard',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 

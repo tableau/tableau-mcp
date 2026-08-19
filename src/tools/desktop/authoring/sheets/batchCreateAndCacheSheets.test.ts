@@ -18,7 +18,7 @@ vi.mock('fs');
 import { writeFileSync } from 'fs';
 
 import { addDashboard, addSheet } from '../../../../desktop/metadata/index.js';
-import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getDashboardXml } from '../../../../desktop/wrappers/getDashboardXml.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { getWorksheetXml } from '../../../../desktop/wrappers/getWorksheetXml.js';
@@ -28,6 +28,10 @@ import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 const SESSION = 'session-1';
 
 const WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets/></workbook>';
+const SUBMITTED_WORKBOOK_XML =
+  '<?xml version="1.0"?><workbook><worksheets><worksheet name="Sheet1"/></worksheets><dashboards><dashboard name="My Dashboard"/></dashboards></workbook>';
+const ACCEPTED_WORKBOOK_XML =
+  '<?xml version="1.0"?><workbook normalized="true"><worksheets><worksheet name="Sheet1"/></worksheets><dashboards><dashboard name="My Dashboard"/></dashboards></workbook>';
 const WORKSHEET_XML = '<worksheet name="Sheet1"><table/></worksheet>';
 const DASHBOARD_XML = '<dashboard name="My Dashboard"/>';
 
@@ -38,10 +42,17 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(addSheet).mockReturnValue(WORKBOOK_XML);
   vi.mocked(addDashboard).mockReturnValue(WORKBOOK_XML);
   vi.mocked(loadWorkbookXml).mockResolvedValue(new Ok({ validationWarnings: [] }));
-  vi.mocked(getWorksheetXml).mockResolvedValue(new Ok(WORKSHEET_XML));
-  vi.mocked(getDashboardXml).mockResolvedValue(new Ok(DASHBOARD_XML));
+  vi.mocked(getWorksheetXml).mockResolvedValue(new Ok({ xml: WORKSHEET_XML, name: 'Sheet1' }));
+  vi.mocked(getDashboardXml).mockResolvedValue(
+    new Ok({ xml: DASHBOARD_XML, name: 'My Dashboard' }),
+  );
   vi.mocked(writeFileSync).mockImplementation(() => {});
   vi.mocked(writeSidecar).mockImplementation(() => {});
+  vi.mocked(sourceSha256).mockImplementation((xml) => {
+    if (xml === WORKBOOK_XML) return 'a'.repeat(64);
+    if (xml === WORKSHEET_XML) return 'b'.repeat(64);
+    return 'c'.repeat(64);
+  });
   return extra;
 }
 
@@ -135,6 +146,65 @@ describe('batchCreateAndCacheSheetsTool', () => {
     expect(result.isError).toBe(true);
   });
 
+  it('caches and fingerprints the accepted live workbook readback, not the submitted body', async () => {
+    const extra = makeExtra();
+    vi.mocked(getWorkbookXml)
+      .mockResolvedValueOnce(new Ok(WORKBOOK_XML))
+      .mockResolvedValueOnce(new Ok(ACCEPTED_WORKBOOK_XML));
+    vi.mocked(addSheet).mockReturnValue(SUBMITTED_WORKBOOK_XML);
+    vi.mocked(addDashboard).mockReturnValue(SUBMITTED_WORKBOOK_XML);
+    const acceptedHash = 'd'.repeat(64);
+    vi.mocked(sourceSha256).mockImplementation((xml) =>
+      xml === ACCEPTED_WORKBOOK_XML ? acceptedHash : 'e'.repeat(64),
+    );
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    const workbookWrite = vi
+      .mocked(writeFileSync)
+      .mock.calls.find(([, contents]) => contents === ACCEPTED_WORKBOOK_XML);
+    expect(workbookWrite).toBeDefined();
+    expect(writeFileSync).not.toHaveBeenCalledWith(
+      expect.any(String),
+      SUBMITTED_WORKBOOK_XML,
+      'utf-8',
+    );
+    expect(sourceSha256).toHaveBeenCalledWith(ACCEPTED_WORKBOOK_XML);
+    expect(sourceSha256).not.toHaveBeenCalledWith(SUBMITTED_WORKBOOK_XML);
+    expect(writeSidecar).toHaveBeenCalledWith(workbookWrite?.[0], SESSION, acceptedHash);
+  });
+
+  it('does not claim Phase 2 ready when the post-apply workbook readback fails', async () => {
+    const extra = makeExtra();
+    vi.mocked(getWorkbookXml)
+      .mockResolvedValueOnce(new Ok(WORKBOOK_XML))
+      .mockResolvedValueOnce(
+        new Err({
+          type: 'command-failed' as const,
+          error: { code: 'READBACK_FAILED', message: 'live readback failed', recoverable: false },
+        }),
+      );
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('live readback failed');
+    expect(result.content[0].text).toContain(
+      'Post-apply workbook readback failed. The requested worksheets and dashboard may already exist in Tableau. Inspect Tableau before continuing; do not replay or retry Phase 1 automatically.',
+    );
+    expect(result.content[0].text).not.toContain('Ready for Phase 2');
+    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(writeSidecar).not.toHaveBeenCalled();
+  });
+
   it('should return an error naming a worksheet fetch failure', async () => {
     const extra = makeExtra();
     vi.mocked(getWorksheetXml).mockResolvedValue(
@@ -167,7 +237,7 @@ describe('batchCreateAndCacheSheetsTool', () => {
   it('should aggregate partial worksheet and dashboard cache failures', async () => {
     const extra = makeExtra();
     vi.mocked(getWorksheetXml)
-      .mockResolvedValueOnce(new Ok(WORKSHEET_XML))
+      .mockResolvedValueOnce(new Ok({ xml: WORKSHEET_XML, name: 'Sheet1' }))
       .mockResolvedValueOnce(
         new Err({
           type: 'get-worksheet-xml-error',
@@ -268,6 +338,9 @@ describe('batchCreateAndCacheSheetsTool', () => {
     });
 
     expect(writeFileSync).toHaveBeenCalled();
+    expect(writeSidecar).toHaveBeenCalledWith(expect.any(String), SESSION, 'a'.repeat(64));
+    expect(writeSidecar).toHaveBeenCalledWith(expect.any(String), SESSION, 'b'.repeat(64));
+    expect(writeSidecar).toHaveBeenCalledWith(expect.any(String), SESSION, 'c'.repeat(64));
   });
 });
 

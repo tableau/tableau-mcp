@@ -46,8 +46,6 @@ export const getDeleteSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
           }
           const { ref, previousName, worksheetCount } = refResult.value;
 
-          // Tableau workbooks must keep at least one worksheet; the API silently no-ops a
-          // last-worksheet delete, so refuse here to give a clear reason instead of a mute no-op.
           if (ref.kind === 'worksheet' && worksheetCount <= 1) {
             return new Ok({
               deleted: false,

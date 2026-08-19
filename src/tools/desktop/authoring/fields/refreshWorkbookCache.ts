@@ -1,6 +1,6 @@
 import { writeFileSync } from 'fs';
 
-import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { FileReadError, McpToolError, UnknownError } from '../../../../errors/mcpToolError.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
@@ -74,7 +74,7 @@ export async function refreshWorkbookCache({
     const xml = result.value;
     try {
       writeFileSync(workbookFile, xml, 'utf-8');
-      writeSidecar(workbookFile, resolvedSession);
+      writeSidecar(workbookFile, resolvedSession, sourceSha256(xml));
     } catch (error) {
       return { ok: false, reason: getExceptionMessage(error), error: new FileReadError(error) };
     }

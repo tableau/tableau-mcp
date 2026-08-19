@@ -81,7 +81,10 @@ describe('writeCachedXmlTool', () => {
   it('writes a fingerprint sidecar after writing the cache file', async () => {
     await getResult(CACHED_FILE, VALID_XML);
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(resolve(CACHED_FILE), SESSION);
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+      resolve(CACHED_FILE),
+      SESSION,
+    );
   });
 
   it('stamps the sidecar with the pinned session, not the requested one', async () => {
@@ -89,7 +92,10 @@ describe('writeCachedXmlTool', () => {
 
     await getResult(CACHED_FILE, VALID_XML, {}, undefined);
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(resolve(CACHED_FILE), SESSION);
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+      resolve(CACHED_FILE),
+      SESSION,
+    );
   });
 
   it('rejects and writes no sidecar when the requested session is not a running instance', async () => {
@@ -104,7 +110,7 @@ describe('writeCachedXmlTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(SESSION);
     expect(result.content[0].text).toContain('list-instances');
-    expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 

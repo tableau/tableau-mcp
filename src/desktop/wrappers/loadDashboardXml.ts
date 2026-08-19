@@ -3,7 +3,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { log } from '../../logging/logger.js';
 import { sanitizeValue } from '../../logging/sanitize.js';
 import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
-import { upsertDashboardIntoWorkbook } from '../metadata/dashboards.js';
+import { dashboardFragmentSimpleId, upsertDashboardIntoWorkbook } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedDashboard } from '../metadata/types.js';
 import { blockingValidationIssues, runValidation } from '../validation/registry.js';
@@ -27,11 +27,13 @@ export type LoadDashboardXmlError =
   // rejected the actual document load (surfaced in the response payload, not in
   // `status`). `message` carries Desktop's own error text.
   | { type: 'load-rejected'; message: string }
+  | { type: 'source-drift'; message: string }
   // Only surfaced when a caller opts in with `requireExistingSheet` (apply-dashboard, apply-storyboard);
   // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
   | { type: 'sheet-absent'; message: string };
 
 export interface LoadDashboardXmlOk {
+  appliedName?: string;
   validationWarnings: ValidationIssue[];
 }
 
@@ -64,13 +66,15 @@ function resolveCanonicalDashboardName(
   dashboardName: string,
   xml: string,
 ): Result<string, Extract<LoadDashboardXmlError, { type: 'name-mismatch' }>> {
-  const callerName = dashboardName.trim();
+  const callerRef = dashboardName.trim();
   let xmlName = '';
+  let xmlId = '';
   let isWorkbookDocument = false;
   try {
     const parsed = parseXML(xml);
     const dashboard = normalizeArray(parsed.dashboard as ParsedDashboard | undefined)[0];
     xmlName = dashboard?.['@_name']?.trim() ?? '';
+    xmlId = dashboard?.['simple-id']?.['@_uuid']?.trim() ?? '';
     isWorkbookDocument = !xmlName && Boolean(parsed.workbook);
   } catch {
     xmlName = '';
@@ -83,22 +87,23 @@ function resolveCanonicalDashboardName(
       type: 'name-mismatch',
       message: isWorkbookDocument
         ? 'Applying a dashboard needs a single <dashboard name="..."> fragment, but the cached file holds ' +
-          `a whole <workbook> document. FIX: read-cached-xml with dashboard="${callerName}" to pull just ` +
+          `a whole <workbook> document. FIX: read-cached-xml with dashboard="${callerRef}" to pull just ` +
           'that element, write-cached-xml with the same selector to splice your edit back, then apply ' +
           'that file.'
         : 'No top-level <dashboard name="..."> element was found in the cached file. ' +
-          `FIX: the file must hold a single <dashboard name="${callerName}"> fragment. Use read-cached-xml ` +
+          `FIX: the file must hold a single <dashboard name="${callerRef}"> fragment. Use read-cached-xml ` +
           'with that dashboard selector to check what the file actually contains.',
     });
   }
 
-  if (!xmlNamesEqual(xmlName, callerName)) {
+  if (!xmlNamesEqual(xmlName, callerRef) && !(xmlId && xmlId === callerRef)) {
     return Err({
       type: 'name-mismatch',
       message:
-        `dashboard_name "${dashboardName}" does not match the <dashboard name> in the XML ("${xmlName}"). ` +
-        `FIX: Retry with dashboard_name set to the XML's name "${xmlName}" — or update the <dashboard name> ` +
-        `attribute in the XML to "${dashboardName}" if the caller name is intended.`,
+        `dashboard_name "${dashboardName}" does not match the <dashboard name> in the XML ("${xmlName}")` +
+        `${xmlId ? ` or its id ("${xmlId}")` : ''}. FIX: Retry with dashboard_name set to the XML's ` +
+        `name "${xmlName}"${xmlId ? ` or id "${xmlId}"` : ''} — or update the <dashboard name> attribute ` +
+        `in the XML to "${dashboardName}" if the caller name is intended.`,
     });
   }
 
@@ -115,6 +120,7 @@ export async function loadDashboardXml({
   signal,
   kind = 'dashboard',
   requireExistingSheet = false,
+  expectedSourceHash,
 }: {
   dashboardName: string;
   xml: string;
@@ -127,6 +133,7 @@ export async function loadDashboardXml({
   // Off/False (build-and-apply-dashboard, apply-dashboard-with-viewpoints): the dashboard may be net-new, so
   // the whole-workbook re-post upserts it (appending when absent). That is the create path.
   requireExistingSheet?: boolean;
+  expectedSourceHash?: string;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -134,7 +141,8 @@ export async function loadDashboardXml({
   }
 
   const validation = runValidation(xml, 'dashboard');
-  const blockingIssues = blockingValidationIssues(validation.issues);
+  const cachedApply = requireExistingSheet;
+  const blockingIssues = cachedApply ? [] : blockingValidationIssues(validation.issues);
   if (blockingIssues.length > 0) {
     log({
       level: 'error',
@@ -183,11 +191,14 @@ export async function loadDashboardXml({
     focus.navigate === 'artifact' ? { ...focus, sheetName: canonicalName } : focus;
 
   if (requireExistingSheet) {
+    const targetRef = dashboardFragmentSimpleId(xml) ?? canonicalName;
     const perSheetResult = await withApplyLock(() =>
       tryApplyViaPerSheetRoute({
         kind,
-        sheetName: canonicalName,
+        sheetName: targetRef,
         fragmentXml: xml,
+        expectedSourceHash,
+        validationContext: cachedApply ? 'dashboard' : undefined,
         focus: canonicalFocus,
         executor,
         signal,
@@ -196,15 +207,36 @@ export async function loadDashboardXml({
     if (perSheetResult.isErr()) {
       return Err({ type: 'execute-command-error', error: perSheetResult.error });
     }
-    if (perSheetResult.value !== 'applied') {
-      return Err({
-        type: 'load-dashboard-xml-error',
-        error: { type: 'sheet-absent', message: sheetAbsentMessage(kind, canonicalName) },
+    const outcome = perSheetResult.value;
+    if (typeof outcome === 'object' && 'status' in outcome) {
+      // Preflight warnings ride along so apply responses can compute the host
+      // verification receipt without re-running validation.
+      return Ok({
+        appliedName: outcome.name,
+        validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
       });
     }
-    // Preflight warnings ride along so apply responses can compute the host
-    // verification receipt (W-23447506) without re-running validation.
-    return Ok({ validationWarnings: validation.issues });
+    if (typeof outcome === 'object') {
+      return Err({
+        type: 'load-dashboard-xml-error',
+        error: { type: 'validation-failed', issues: outcome.issues },
+      });
+    }
+    if (outcome === 'source-drift') {
+      return Err({
+        type: 'load-dashboard-xml-error',
+        error: {
+          type: 'source-drift',
+          message:
+            `The ${kind} changed since this cache was read. Re-read it with get-${kind}-xml, ` +
+            `reapply your edit to the new cache file, then retry apply-${kind}. No changes were sent to Tableau.`,
+        },
+      });
+    }
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: { type: 'sheet-absent', message: sheetAbsentMessage(kind, canonicalName) },
+    });
   }
 
   const result = await loadDashboardXmlViaExternalApi({
@@ -219,7 +251,7 @@ export async function loadDashboardXml({
   }
   // Preflight warnings ride along so apply responses can compute the host
   // verification receipt (W-23447506) without re-running validation.
-  return Ok({ validationWarnings: validation.issues });
+  return Ok({ appliedName: canonicalName, validationWarnings: validation.issues });
 }
 
 /**
@@ -233,11 +265,13 @@ export async function loadStoryboardXml({
   executor,
   signal,
   requireExistingSheet = false,
+  expectedSourceHash,
 }: {
   storyboardName: string;
   xml: string;
   focus: ApplyFocus;
   requireExistingSheet?: boolean;
+  expectedSourceHash?: string;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
   return loadDashboardXml({
     dashboardName: storyboardName,
@@ -247,6 +281,7 @@ export async function loadStoryboardXml({
     signal,
     kind: 'storyboard',
     requireExistingSheet,
+    expectedSourceHash,
   });
 }
 

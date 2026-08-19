@@ -19,7 +19,7 @@
  *     node at :24). Any richer shape keeps the no-sort refusal.
  *
  * Refusal, not repair: anything outside this tiny envelope (ambiguous dims/measures, n
- * outside 1..50, sets/params/rollups/calcs, an existing Top-N, a nested/multiple
+ * outside 1..50, sets/params/rollups/user-derived column instances, an existing Top-N, a nested/multiple
  * computed-sort, or an absent computed-sort on a shape richer than a simple bar) returns
  * `{ ok: false, reason }` so the caller can hand back to the standard authoring path
  * instead of entering whole-workbook XML surgery.
@@ -242,7 +242,7 @@ function resolveCiByCaption(
  * ("calc"|"set"|"param") or null. Order matters only for the message; all three refuse.
  */
 function unsupportedConstruct(xml: string, cis: ColumnInstance[]): 'calc' | 'set' | 'param' | null {
-  if (cis.some((c) => c.derivation === 'User') || /<calculation\b/.test(xml)) return 'calc';
+  if (cis.some((c) => c.derivation === 'User')) return 'calc';
   // `<group ` / `<group>` is a set/group; `<groupfilter` (no boundary) is NOT matched.
   if (/<group(\s|>)/.test(xml)) return 'set';
   if (/\[Parameters\]/.test(xml) || /\bparam-domain-type=/.test(xml)) return 'param';
@@ -372,7 +372,8 @@ export function planTopN(
   const filterXml = buildTopNFilter({
     filterColumn: escapeXml(filterColumn),
     count: n,
-    end,
+    // Desktop keeps the ordered-list head; ASC vs DESC selects bottom vs top members.
+    end: 'top',
     direction,
     expression: escapeXml(expression),
     level: escapeXml(dim.name),

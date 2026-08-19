@@ -113,6 +113,26 @@ describe('parseShelfValue', () => {
 });
 
 describe('addFieldToRows / removeFieldFromRows', () => {
+  it('preserves an unrelated multiline calculation through two distinct field mutations', () => {
+    const formula =
+      'CASE [Parameters].[Parameter 9]&#10;WHEN &apos;Total Values&apos; THEN&#13;MAX([Profit])&#10;END';
+    const worksheetWithMultilineCalc = WORKSHEET_XML.replace(
+      '</datasource-dependencies>',
+      `<column name="[Selected Measure]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="${formula}"/>
+      </column></datasource-dependencies>`,
+    );
+
+    const rowsModified = addFieldToRows(worksheetWithMultilineCalc, '[Sample].[sum:Profit:qk]');
+    const colsModified = addFieldToCols(rowsModified, '[Sample].[sum:Profit:qk]');
+
+    for (const modified of [rowsModified, colsModified]) {
+      expect(modified).toContain(`formula="${formula}"`);
+      expect(modified).not.toContain('&amp;#10;');
+      expect(modified).not.toContain('&amp;#13;');
+    }
+  });
+
   it('should add a field to rows', () => {
     const modified = addFieldToRows(WORKSHEET_XML, '[Sample].[sum:Profit:qk]');
     const fields = listFields(modified);
@@ -219,7 +239,22 @@ describe('addFieldToRows dotted and colon refs', () => {
 
 describe('addFieldToRows user derivations', () => {
   it('emits derivation="User" for a usr-prefixed calculated field instance', () => {
-    const modified = addFieldToRows(WORKSHEET_XML, '[Sample].[usr:Calculation_1:qk]');
+    const workbookXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="Sample">
+      <column name="[Calculation_1]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="1"/>
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+    const modified = addFieldToRows(
+      WORKSHEET_XML,
+      '[Sample].[usr:Calculation_1:qk]',
+      undefined,
+      workbookXml,
+    );
 
     expect(modified).toContain(
       '<column-instance name="[usr:Calculation_1:qk]" column="[Calculation_1]" derivation="User"',

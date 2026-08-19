@@ -1,157 +1,202 @@
-import { readDataAsset } from '../assets.js';
-import { loadCommandsReference, loadCommandsReferenceDocument } from './commandsReference.js';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
-type ReferenceParameter = {
-  direction?: string;
-  local_name?: string;
-  type_id?: string;
-  required?: boolean;
-  comment?: string;
-};
+import { _resetExternalApiCommandRegistryForTest } from '../externalApi/paramWireRegistry.js';
+import {
+  _resetCommandsReferenceForTest,
+  loadCommandsReference,
+  loadCommandsReferenceDocument,
+} from './commandsReference.js';
 
-type ReferenceCommand = {
-  command_name?: string;
-  fully_qualified_serialized_name?: string;
-  description?: string;
-  value_to_users?: string;
-  parameters?: ReferenceParameter[];
-  opens_blocking_dialog?: boolean;
-  agent_can_invoke?: boolean;
-};
+const TEST_DIRS: string[] = [];
 
-type ParameterTypeEntry = {
-  serialized_param_name?: string;
-};
-
-type CommandsReference = {
-  total_commands?: number;
-  parameter_type_enums?: Record<string, ParameterTypeEntry>;
-  commands?: ReferenceCommand[];
-};
-
-function loadReference(): CommandsReference {
-  const raw = readDataAsset('tableau-desktop-commands-reference.json');
-  if (raw === null) {
-    throw new Error('tableau-desktop-commands-reference.json could not be read');
-  }
-  return JSON.parse(raw) as CommandsReference;
+function enableExternalApiRegistry(commands: Record<string, unknown>): void {
+  const dir = mkdtempSync(join(process.cwd(), 'commands-reference-test-'));
+  TEST_DIRS.push(dir);
+  writeFileSync(join(dir, 'command_param_registry.json'), JSON.stringify(commands), 'utf-8');
+  writeFileSync(join(dir, 'codegen_registry.json'), JSON.stringify({}), 'utf-8');
+  vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
+  _resetExternalApiCommandRegistryForTest();
+  _resetCommandsReferenceForTest();
 }
 
-function command(reference: CommandsReference, name: string): ReferenceCommand {
-  const entry = reference.commands?.find(
-    (candidate) => candidate.fully_qualified_serialized_name === name,
-  );
-  if (!entry) {
-    throw new Error(`missing reference entry for ${name}`);
-  }
-  return entry;
-}
-
-function paramsByLocalName(entry: ReferenceCommand): Map<string, ReferenceParameter> {
-  return new Map((entry.parameters ?? []).map((param) => [param.local_name ?? '', param]));
-}
-
-describe('tableau desktop command reference sort entries', () => {
-  it('pins the generated command count', () => {
-    expect(loadReference().total_commands).toBe(333);
+describe('commandsReference (synthesized from the External API registry)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    _resetExternalApiCommandRegistryForTest();
+    _resetCommandsReferenceForTest();
+    for (const dir of TEST_DIRS.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
-  it('marks tabdoc:sort as dialog-driving and points agents at headless sort alternatives', () => {
-    const reference = loadReference();
-    const sort = command(reference, 'tabdoc:sort');
-    const params = paramsByLocalName(sort);
-
-    expect(sort.command_name).toBe('Sort');
-    expect(sort.description).toContain('setting sort options from the UI dialog');
-    expect(sort.description).toContain('updateSortDialog notification');
-    expect(sort.value_to_users).toContain('Use refine-worksheet operation sort_by_field');
-    expect(sort.value_to_users).toContain('tabdoc:sort-nested');
-    expect(sort.opens_blocking_dialog).toBe(true);
-    expect(sort.agent_can_invoke).toBe(false);
-    expect(reference.parameter_type_enums?.DPI_GlobalFieldName?.serialized_param_name).toBe(
-      'global-field-name',
-    );
-    expect(params.get('FieldName')).toMatchObject({
-      direction: 'in',
-      type_id: 'DPI_GlobalFieldName',
-      required: true,
-      comment: expect.stringContaining("qualified '[datasource].[Field]'"),
-    });
-    expect(params.get('Worksheet')).toMatchObject({ type_id: 'DPI_Worksheet', required: true });
-    expect(params.get('Type')).toMatchObject({
-      type_id: 'DPI_SortType',
-      required: false,
-      comment: expect.stringContaining('required if ClearSort=false'),
-    });
-    expect(params.get('Direction')).toMatchObject({
-      type_id: 'DPI_SortDirection',
-      required: false,
-      comment: expect.stringContaining('default Asc'),
-    });
-    expect(params.get('MeasureName')).toMatchObject({
-      type_id: 'DPI_SortMeasureName',
-      required: false,
-      comment: expect.stringContaining('required if Type=SortType::Computed'),
-    });
-    expect(params.get('ClearSort')).toMatchObject({
-      type_id: 'DPI_ClearSort',
-      required: false,
-      comment: expect.stringContaining('default false'),
-    });
+  it('returns null when no External API registry is loaded', () => {
+    expect(loadCommandsReferenceDocument()).toBeNull();
+    expect(loadCommandsReference()).toBeNull();
   });
 
-  it('pins tabdoc:sort-nested as the non-dialog nested sort command', () => {
-    const sortNested = command(loadReference(), 'tabdoc:sort-nested');
-    const params = paramsByLocalName(sortNested);
+  it('projects one reference entry per registry command, memoised across calls', () => {
+    enableExternalApiRegistry({
+      'tabdoc:sort': {
+        agent_can_invoke: false,
+        opens_blocking_dialog: true,
+        modifies_state: 'true',
+        in_params: [
+          { local: 'FieldName', type: 'DPI_GlobalFieldName', required: true, wire: 'field-name' },
+          { local: 'ClearSort', type: 'DPI_ClearSort', required: false, wire: 'clear-sort' },
+        ],
+      },
+      'tabdoc:sort-nested': {
+        agent_can_invoke: true,
+        opens_blocking_dialog: false,
+        modifies_state: 'true',
+        in_params: [],
+      },
+    });
 
-    expect(sortNested.command_name).toBe('SortNested');
-    expect(sortNested.description).toBe('Applies a nested sort to the viz.');
-    expect(sortNested.opens_blocking_dialog).toBe(false);
-    expect(sortNested.agent_can_invoke).toBe(true);
-    expect(params.get('DimensionToSort')).toMatchObject({
-      type_id: 'DPI_DimensionToSort',
-      required: true,
-    });
-    expect(params.get('Worksheet')).toMatchObject({ type_id: 'DPI_Worksheet', required: true });
-    expect(params.get('MeasureName')).toMatchObject({
-      type_id: 'DPI_SortMeasureName',
-      required: true,
-    });
-    expect(params.get('ShelfType')).toMatchObject({ type_id: 'DPI_ShelfType', required: true });
-    expect(params.get('Direction')).toMatchObject({
-      type_id: 'DPI_SortDirection',
-      required: false,
-      comment: expect.stringContaining('default Asc'),
-    });
-    expect(params.get('ClearSort')).toMatchObject({ type_id: 'DPI_ClearSort', required: false });
-    expect(params.get('Dashboard')).toMatchObject({ type_id: 'DPI_Dashboard', required: false });
-    expect(params.get('LevelNames')).toMatchObject({ type_id: 'DPI_LevelNames', required: false });
-    expect(params.get('MemberValues')).toMatchObject({
-      type_id: 'DPI_MemberValues',
-      required: false,
-    });
-    expect(params.get('KeepFieldFilters')).toMatchObject({
-      type_id: 'DPI_KeepFieldFilters',
-      required: false,
-    });
-  });
-});
-
-describe('shared commands-reference loader', () => {
-  it('loads the bundled document and memoises it', () => {
     const document = loadCommandsReferenceDocument();
     expect(document).not.toBeNull();
-    expect(document?.total_commands).toBe(333);
-    // Memoised: repeated calls return the identical parsed object.
+    // Memoised: repeated calls return the identical parsed object until reset.
     expect(loadCommandsReferenceDocument()).toBe(document);
+
+    const entries = loadCommandsReference();
+    expect(entries).toHaveLength(2);
+
+    const sort = entries?.find((entry) => entry.fully_qualified_serialized_name === 'tabdoc:sort');
+    expect(sort).toMatchObject({
+      command_name: 'sort',
+      agent_can_invoke: false,
+      opens_blocking_dialog: true,
+      modifies_workbook_state: true,
+    });
+    expect(sort?.parameters).toEqual([
+      {
+        direction: 'in',
+        local_name: 'FieldName',
+        type_id: 'DPI_GlobalFieldName',
+        required: true,
+        cannot_provide_from_mcp: false,
+        context_filled: false,
+        comment: null,
+      },
+      {
+        direction: 'in',
+        local_name: 'ClearSort',
+        type_id: 'DPI_ClearSort',
+        required: false,
+        cannot_provide_from_mcp: false,
+        context_filled: false,
+        comment: null,
+      },
+    ]);
+
+    const sortNested = entries?.find(
+      (entry) => entry.fully_qualified_serialized_name === 'tabdoc:sort-nested',
+    );
+    expect(sortNested).toMatchObject({
+      command_name: 'sort-nested',
+      agent_can_invoke: true,
+      opens_blocking_dialog: false,
+      modifies_workbook_state: true,
+    });
+    expect(sortNested?.parameters).toEqual([]);
   });
 
-  it('projects the commands array with one entry per command', () => {
-    const entries = loadCommandsReference();
-    expect(entries).not.toBeNull();
-    expect(entries).toHaveLength(333);
-    expect(
-      entries?.some((entry) => entry.fully_qualified_serialized_name === 'tabdoc:sort-nested'),
-    ).toBe(true);
+  it('splits only the namespace off command_name, keeping multi-colon command tails intact', () => {
+    enableExternalApiRegistry({
+      'tabui:workgroup:change-site': {
+        agent_can_invoke: false,
+        opens_blocking_dialog: false,
+        modifies_state: 'false',
+        in_params: [],
+      },
+    });
+
+    const [entry] = loadCommandsReference() ?? [];
+
+    expect(entry.command_name).toBe('workgroup:change-site');
+  });
+
+  it('projects description and per-param comments from the live registry', () => {
+    enableExternalApiRegistry({
+      'tabdoc:build-sheet-list-context-menu': {
+        agent_can_invoke: true,
+        opens_blocking_dialog: false,
+        modifies_state: 'false',
+        description: 'Build the context menu for the sheet list.',
+        in_params: [
+          {
+            local: 'SheetName',
+            type: 'DPI_SheetName',
+            required: true,
+            wire: 'sheet-name',
+            comment: 'The name of the sheet.',
+          },
+        ],
+      },
+    });
+
+    const [entry] = loadCommandsReference() ?? [];
+    expect(entry.description).toBe('Build the context menu for the sheet list.');
+    expect(entry.parameters).toEqual([
+      {
+        direction: 'in',
+        local_name: 'SheetName',
+        type_id: 'DPI_SheetName',
+        required: true,
+        cannot_provide_from_mcp: false,
+        context_filled: false,
+        comment: 'The name of the sheet.',
+      },
+    ]);
+  });
+
+  it('projects unprovidable and context_filled flags onto each param', () => {
+    enableExternalApiRegistry({
+      'tabdoc:launch-quantitative-color-dialog': {
+        agent_can_invoke: true,
+        opens_blocking_dialog: false,
+        modifies_state: 'false',
+        in_params: [
+          {
+            local: 'VizID',
+            type: 'DPI_VisualIDPM',
+            required: false,
+            wire: 'visual-id-pres-model',
+            unprovidable: true,
+          },
+          {
+            local: 'Workspace',
+            type: 'UPI_Workspace',
+            required: true,
+            wire: 'workspace',
+            unprovidable: true,
+            context_filled: true,
+          },
+        ],
+      },
+    });
+
+    const [entry] = loadCommandsReference() ?? [];
+    expect(entry.parameters).toEqual([
+      {
+        direction: 'in',
+        local_name: 'VizID',
+        type_id: 'DPI_VisualIDPM',
+        required: false,
+        cannot_provide_from_mcp: true,
+        context_filled: false,
+        comment: null,
+      },
+      {
+        direction: 'in',
+        local_name: 'Workspace',
+        type_id: 'UPI_Workspace',
+        required: true,
+        cannot_provide_from_mcp: true,
+        context_filled: true,
+        comment: null,
+      },
+    ]);
   });
 });

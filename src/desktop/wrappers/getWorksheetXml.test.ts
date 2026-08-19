@@ -27,7 +27,8 @@ describe('getWorksheetXml', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toBe('<worksheet name="Profit" />');
+    expect(result.unwrap().xml).toBe('<worksheet name="Profit" />');
+    expect(result.unwrap().name).toBe('Profit');
     expect(executor.getWorksheetDocument).toHaveBeenCalledWith('sheet-2', expect.any(AbortSignal));
     expect(executor.executeCommand).not.toHaveBeenCalled();
   });
@@ -107,7 +108,8 @@ describe('getWorksheetXml', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toContain('<worksheet name="Profit">');
+    expect(result.unwrap().xml).toContain('<worksheet name="Profit">');
+    expect(result.unwrap().name).toBe('Profit');
     expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
   });
 });

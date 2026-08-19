@@ -307,6 +307,10 @@ export class ImageExportTimeoutError extends McpToolError {
 }
 
 export class DesktopCommandExecutionError extends McpToolError {
+  // A timeout counts as dialog-blocked too: a hung Desktop call is almost always wedged behind a
+  // modal it cannot clear over the API, and a retry just hangs against the same dialog.
+  readonly blockedByDesktopDialog: boolean;
+
   constructor(error: ExecuteCommandError, fix?: string) {
     const message = formatDesktopCommandExecutionError(error);
     super({
@@ -314,6 +318,9 @@ export class DesktopCommandExecutionError extends McpToolError {
       message: fix ? `${message}\n${fix}` : message,
       statusCode: 500,
     });
+    this.blockedByDesktopDialog =
+      error.type === 'command-timed-out' ||
+      (error.type === 'command-failed' && error.error?.code === 'awaiting-user');
   }
 }
 

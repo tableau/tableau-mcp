@@ -19,8 +19,10 @@ import {
   formatWorksheetPromiseCheck,
 } from '../../../desktop/validation/promise-check.js';
 import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
-import { loadWorksheetXml } from '../../../desktop/wrappers/loadWorksheetXml.js';
-import { parseOuterElement } from '../../../desktop/xmlElement.js';
+import {
+  loadWorksheetXml,
+  resolveCanonicalWorksheetName,
+} from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -28,6 +30,8 @@ import {
   WorksheetXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { resolveWorksheetSimpleId } from '../authoring/fields/worksheetCache.js';
+import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';
 import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
 import {
   doneNextAction,
@@ -154,6 +158,21 @@ export const getApplyWorksheetTool = (
               });
               if (outcome.state !== 'applied') return outcome.error.toErr();
 
+              // A prior add-field/remove-field edit buffer for this sheet+session predates
+              // this apply; whatever it was tracking is now stale, so close it rather than
+              // let a later name-only call silently resume editing on top of it.
+              const artifactBufferId = await resolveWorksheetSimpleId({
+                worksheetRef: outcome.receipt.title,
+                resolvedSession,
+                extra,
+              });
+              if (artifactBufferId) {
+                clearStickyWorksheetFile({
+                  session: resolvedSession,
+                  worksheetId: artifactBufferId,
+                });
+              }
+
               // The artifact apply already carries the verification outcome
               // (applyWorksheetArtifact resolves the skipped fallback), so the
               // structured receipt references that same object rather than
@@ -237,6 +256,18 @@ export const getApplyWorksheetTool = (
             });
             if (outcome.state !== 'applied') return outcome.error.toErr();
 
+            const templatePlanBufferId = await resolveWorksheetSimpleId({
+              worksheetRef: outcome.receipt.title,
+              resolvedSession,
+              extra,
+            });
+            if (templatePlanBufferId) {
+              clearStickyWorksheetFile({
+                session: resolvedSession,
+                worksheetId: templatePlanBufferId,
+              });
+            }
+
             const verification = outcome.receipt.verification;
             const verificationRan = verification.status !== 'skipped';
             return Ok(
@@ -285,28 +316,26 @@ export const getApplyWorksheetTool = (
           if (preamble.isErr()) {
             return preamble;
           }
-          const { xml: worksheetXml, resolvedSession } = preamble.value;
-          const outerElement = parseOuterElement(worksheetXml);
-          const resolvedWorksheetName =
-            worksheetName?.trim() ||
-            (outerElement?.tagName === 'worksheet' ? outerElement.name?.trim() : undefined);
-          if (!resolvedWorksheetName) {
-            return new ArgsValidationError(
-              'A worksheetName is required unless the cached file is a single named worksheet fragment.',
-            ).toErr();
+          const { xml: worksheetXml, resolvedSession, sourceHash } = preamble.value;
+
+          const canonical = resolveCanonicalWorksheetName(worksheetName, worksheetXml);
+          if (canonical.isErr()) {
+            return new WorksheetXmlLoadFailedError(canonical.error).toErr();
           }
+          const canonicalWorksheetName = canonical.value;
 
           const executor = await extra.getExecutor(resolvedSession);
           const result = await loadWorksheetXml({
-            worksheetName: resolvedWorksheetName,
+            worksheetName: canonicalWorksheetName,
             xml: worksheetXml,
-            focus: { navigate: 'artifact', sheetName: resolvedWorksheetName },
+            focus: { navigate: 'artifact', sheetName: canonicalWorksheetName },
             executor,
             signal: extra.signal,
             // apply-worksheet updates an existing worksheet in place via the per-sheet `/document`
             // route; a name that does not resolve surfaces as an error rather than creating a sheet
             // through the whole-workbook path (build-worksheets-from-templates owns net-new creation).
             requireExistingSheet: true,
+            expectedSourceHash: sourceHash,
           });
 
           if (result.isErr()) {
@@ -352,6 +381,21 @@ export const getApplyWorksheetTool = (
             });
           }
           const hostVerification = receiptInput ? formatWorksheetPromiseCheck(receiptInput) : '';
+          const appliedWorksheetName = result.isOk()
+            ? (result.value.appliedName ?? canonicalWorksheetName)
+            : canonicalWorksheetName;
+
+          // The edits just landed — close the buffer so a later name-only call starts from a
+          // fresh live read. Resolve the id from the live name, not the fragment: a cached
+          // fragment may carry no <simple-id>, and keying the clear on that would skip it.
+          const appliedBufferId = await resolveWorksheetSimpleId({
+            worksheetRef: appliedWorksheetName,
+            resolvedSession,
+            extra,
+          });
+          if (appliedBufferId) {
+            clearStickyWorksheetFile({ session: resolvedSession, worksheetId: appliedBufferId });
+          }
 
           // The structured receipt is derived from the same readback outcome the text
           // reports: when the readback ran its status is an observation; when it was
@@ -361,12 +405,12 @@ export const getApplyWorksheetTool = (
           return new Ok(
             withNextAction(
               {
-                message: `Successfully applied worksheet update for "${resolvedWorksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
+                message: `Successfully applied worksheet update for "${appliedWorksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
               },
               doneNextAction(
                 receipt({
                   did: [
-                    `Desktop accepted the worksheet XML apply for "${resolvedWorksheetName}"`,
+                    `Desktop accepted the worksheet XML apply for "${appliedWorksheetName}"`,
                     `preflight validation returned ${receiptInput?.validationWarnings.length ?? 0} warning(s)`,
                     ...(readbackRan
                       ? [
