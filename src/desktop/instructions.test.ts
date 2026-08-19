@@ -46,6 +46,13 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('Use search-commands ONLY for unlisted commands.');
   });
 
+  it('requires explicit requested encodings to participate in template discovery', () => {
+    const plainChart = routes.find((route) => route.id === 'plain-chart');
+
+    expect(plainChart?.action).toContain('put named channels in requiredChannels');
+    expect(plainChart?.action).toContain('No fit: use manual worksheet path');
+  });
+
   // Live incident (v11 bundle): asked to move "warmer" onto color, the agent had no route
   // for an encoding edit. refine-worksheet does top-N and sort only, so the edit-in-place
   // route has to name the tool pair that can re-encode a sheet.
@@ -124,12 +131,10 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
     expect(plainChart?.action).toContain('in parallel');
     expect(plainChart?.action).toContain('templatePlan');
-    expect(plainChart?.action).toContain('explicit single-view');
-    expect(plainChart?.action).toContain(
-      'Direct requests may choose, build, and apply immediately.',
-    );
-    expect(plainChart?.action).toContain('several distinct fresh worksheets');
-    expect(plainChart?.action).toContain('preview');
+    expect(plainChart?.action).toContain('an explicit view');
+    expect(plainChart?.action).toContain('Direct asks may choose/build/apply.');
+    expect(plainChart?.action).toContain('Open intent: build several distinct worksheets.');
+    expect(plainChart?.action).toContain('Preview/no-change');
     expect(plainChart?.action).toContain('stop before apply-worksheet');
   });
 
@@ -286,12 +291,12 @@ describe('buildDesktopInstructions', () => {
     expect(instructions).toContain(
       'list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet',
     );
-    expect(instructions).toContain('Direct requests may choose, build, and apply immediately.');
-    expect(instructions).toContain('Built artifacts coexist.');
-    expect(instructions).toContain('several distinct fresh worksheets');
+    expect(instructions).toContain('Direct asks may choose/build/apply.');
+    expect(instructions).toContain('artifacts coexist');
+    expect(instructions).toContain('Open intent: build several distinct worksheets.');
     expect(instructions).toContain('stop before apply-worksheet');
-    expect(instructions).toContain('Apply mutations sequentially.');
-    expect(instructions).toContain('do not replay it');
+    expect(instructions).toContain('Apply sequentially');
+    expect(instructions).toContain('never replay uncertain apply');
     expect(instructions).not.toContain('bind-template');
     expect(instructions).not.toMatch(
       /re-list|turn gate|forced confirmation|build-one-then-apply|expiry|same-session invalidation/i,

@@ -28,6 +28,8 @@ import {
   parseInstanceRef,
   parseInstanceRole,
   type Shelf,
+  TEMPLATE_VISIBLE_CHANNELS,
+  type TemplateVisibleChannel,
 } from './bookmarkTemplate.js';
 
 /**
@@ -466,6 +468,19 @@ export function inferFromBookmark(rawXml: string): Inference {
     }
   }
 
+  const directShelvesByPair = new Map(
+    placed.map((placement) => [pairKey(placement.base, placement.derivation), placement.shelves]),
+  );
+  const calculationInputShelvesByPair = new Map<string, Set<Shelf>>();
+  for (const placement of placedCalcs) {
+    for (const leaf of terminalInputsOf(placement.base)) {
+      const key = pairKey(leaf, 'none');
+      const shelves = calculationInputShelvesByPair.get(key) ?? new Set<Shelf>();
+      for (const shelf of placement.shelves) shelves.add(shelf);
+      calculationInputShelvesByPair.set(key, shelves);
+    }
+  }
+
   // A base emitted with >1 DISTINCT derivation needs derivation-qualified slot ids so its
   // two date parts are separate slots; a single-derivation base keeps its bare slot_id
   // byte-for-byte (zero change for the common case). Counts only known-kind pairs — an
@@ -554,6 +569,8 @@ export function inferFromBookmark(rawXml: string): Inference {
       templateField: tokenForBase(e.base),
       caption: def?.caption ?? '',
       shelves: shelf,
+      directShelves: [...(directShelvesByPair.get(key) ?? [])],
+      calculationInputShelves: [...(calculationInputShelvesByPair.get(key) ?? [])],
       kind: k,
       ...(def?.semanticRole ? { semanticRole: def.semanticRole } : {}),
       derivation: e.derivation,
@@ -631,6 +648,77 @@ function parseBookmarkVersion(rawXml: string): string {
 }
 
 export type TemplateBindingDescriptor = TemplateBindingContract;
+
+export type TemplateBindingUsage = 'direct' | 'calculation-input' | 'both';
+
+export interface TemplateFitFacts {
+  visible_channels: {
+    direct: TemplateVisibleChannel[];
+    calculated: Array<{
+      channel: TemplateVisibleChannel;
+      dependency_slot_ids: string[];
+    }>;
+  };
+  slot_usage: Array<{
+    slot_id: string;
+    binding_usage: TemplateBindingUsage;
+    direct_roles: Shelf[];
+    calculation_channels: TemplateVisibleChannel[];
+  }>;
+  /** Slot ids only: the shared donor field identity remains private. */
+  same_field_groups: string[][];
+}
+
+const VISIBLE_CHANNEL_SET = new Set<Shelf>(TEMPLATE_VISIBLE_CHANNELS);
+
+function visibleChannels(shelves: readonly Shelf[]): TemplateVisibleChannel[] {
+  return shelves.filter((shelf): shelf is TemplateVisibleChannel => VISIBLE_CHANNEL_SET.has(shelf));
+}
+
+/** Agent-facing fit facts derived from the same inference used by the binder. */
+export function deriveTemplateFitFacts(
+  inference: Inference,
+  descriptor: TemplateBindingDescriptor,
+): TemplateFitFacts {
+  const direct = [
+    ...new Set(inference.slots.flatMap((slot) => visibleChannels(slot.directShelves ?? []))),
+  ];
+  const calculated = descriptor.calcs.flatMap((calc) =>
+    visibleChannels(calc.role as Shelf[]).map((channel) => ({
+      channel,
+      dependency_slot_ids: calc.depends_on_slots.slice(),
+    })),
+  );
+  const slot_usage = inference.slots.map((slot, index) => {
+    const descriptorSlot = descriptor.slots[index];
+    if (!descriptorSlot) {
+      throw new Error(`Missing binding descriptor slot for inferred slot '${slot.slot_id}'.`);
+    }
+    const directRoles = slot.directShelves ?? [];
+    const calculationInputShelves = slot.calculationInputShelves ?? [];
+    const isDirect = directRoles.length > 0;
+    const isCalculationInput = calculationInputShelves.length > 0;
+    const binding_usage: TemplateBindingUsage =
+      isDirect && isCalculationInput ? 'both' : isCalculationInput ? 'calculation-input' : 'direct';
+    return {
+      slot_id: descriptorSlot.slot_id,
+      binding_usage,
+      direct_roles: directRoles.slice(),
+      calculation_channels: visibleChannels(calculationInputShelves),
+    };
+  });
+  const slotsByTemplateField = new Map<string, string[]>();
+  for (const slot of descriptor.slots) {
+    const group = slotsByTemplateField.get(slot.template_field) ?? [];
+    group.push(slot.slot_id);
+    slotsByTemplateField.set(slot.template_field, group);
+  }
+  return {
+    visible_channels: { direct, calculated },
+    slot_usage,
+    same_field_groups: [...slotsByTemplateField.values()].filter((group) => group.length > 1),
+  };
+}
 
 /** Inferred structural binding facts consumed by the binder; no catalog or readiness policy lives here. */
 export function inferBindingDescriptor(name: string, inf: Inference): TemplateBindingDescriptor {

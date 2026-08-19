@@ -1,10 +1,15 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import { parseInstanceRef } from './bookmarkTemplate.js';
-import { autoPurpose, inferBindingDescriptor, inferFromBookmark } from './inferSlots.js';
+import {
+  autoPurpose,
+  deriveTemplateFitFacts,
+  inferBindingDescriptor,
+  inferFromBookmark,
+} from './inferSlots.js';
 
 // A modern (v10.1) bookmark carrying a real donor <column> dictionary and shelf
 // encodings. Every generic fact a slot exposes (kind / derivation / required / purpose)
@@ -194,6 +199,78 @@ describe('inferFromBookmark — calculated-field dependency graph', () => {
     expect(fields).toContain('Sales');
     expect(fields).not.toContain('Calculation_3464112593755459591');
     expect(fields).not.toContain('Sales +  (copy)_3464112593755500552');
+  });
+});
+
+describe('template-fit metadata — corpus invariants', () => {
+  it('labels a field used directly and as a calculation input without conflating the shelves', () => {
+    const raw =
+      "<?xml version='1.0'?><bookmark version='10.1'>" +
+      "<datasources><datasource name='ds'>" +
+      "<column name='[Sales]' datatype='real' role='measure' type='quantitative'/>" +
+      "<column name='[Ratio]' datatype='real' role='measure' type='quantitative'>" +
+      "<calculation class='tableau' formula='[Sales]'/></column>" +
+      '</datasource></datasources><table><encodings>' +
+      "<tooltip column='[ds].[none:Sales:qk]'/><color column='[ds].[usr:Ratio:qk]'/>" +
+      '</encodings></table></bookmark>';
+    const inference = inferFromBookmark(raw);
+    const descriptor = inferBindingDescriptor('both', inference);
+
+    expect(deriveTemplateFitFacts(inference, descriptor).slot_usage).toEqual([
+      {
+        slot_id: 'field_base_1',
+        binding_usage: 'both',
+        direct_roles: ['tooltip'],
+        calculation_channels: ['color'],
+      },
+    ]);
+    expect(descriptor.slots[0]?.role).toEqual(['tooltip']);
+  });
+
+  it('derives every advertised channel and shared-field constraint from all 135 TBMs', () => {
+    const templatesDir = join(process.cwd(), 'src', 'desktop', 'data', 'templates');
+    const templateFiles = readdirSync(templatesDir).filter((file) => file.endsWith('.tbm'));
+    expect(templateFiles).toHaveLength(135);
+
+    for (const file of templateFiles) {
+      const inference = inferFromBookmark(readFileSync(join(templatesDir, file), 'utf8'));
+      const descriptor = inferBindingDescriptor(file, inference);
+      const fit = deriveTemplateFitFacts(inference, descriptor);
+      for (const channel of fit.visible_channels.direct) {
+        expect(
+          inference.slots.some((slot) => slot.directShelves?.includes(channel)),
+          `${file}: direct ${channel}`,
+        ).toBe(true);
+      }
+      for (const calculated of fit.visible_channels.calculated) {
+        expect(
+          descriptor.calcs.some(
+            (calc) =>
+              calc.role.includes(calculated.channel) &&
+              calculated.dependency_slot_ids.every((slotId) =>
+                calc.depends_on_slots.includes(slotId),
+              ),
+          ),
+          `${file}: calculated ${calculated.channel}`,
+        ).toBe(true);
+      }
+
+      const dependencyIds = new Set(descriptor.calcs.flatMap((calc) => calc.depends_on_slots));
+      for (const usage of fit.slot_usage) {
+        if (dependencyIds.has(usage.slot_id) && usage.direct_roles.length === 0) {
+          expect(usage.binding_usage, `${file}:${usage.slot_id}`).toBe('calculation-input');
+        }
+      }
+
+      const grouped = new Map<string, string[]>();
+      for (const slot of descriptor.slots) {
+        const group = grouped.get(slot.template_field) ?? [];
+        group.push(slot.slot_id);
+        grouped.set(slot.template_field, group);
+      }
+      const expectedGroups = [...grouped.values()].filter((slots) => slots.length > 1);
+      expect(fit.same_field_groups, file).toEqual(expectedGroups);
+    }
   });
 });
 
