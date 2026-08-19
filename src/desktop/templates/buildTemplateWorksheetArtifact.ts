@@ -17,6 +17,13 @@ import { createTemplateRuntimeSnapshot } from './templateRuntimeSnapshot.js';
 
 export const MAX_TEMPLATE_BINDINGS = 32;
 
+function normalizeDatasourceName(name: string): string {
+  const normalized = name.normalize('NFC').trim();
+  const unwrapped =
+    normalized.startsWith('[') && normalized.endsWith(']') ? normalized.slice(1, -1) : normalized;
+  return unwrapped.trim().toLocaleLowerCase();
+}
+
 export interface WorksheetTemplatePlan {
   templateName: string;
   title: string;
@@ -88,7 +95,9 @@ export function buildTemplateWorksheetArtifact({
         formatExplicitBindErrors(plan.templateName, explicitBind.errors),
       ).toErr();
     }
-    if (explicitBind.datasource !== plan.datasource) {
+    if (
+      normalizeDatasourceName(explicitBind.datasource) !== normalizeDatasourceName(plan.datasource)
+    ) {
       return new ArgsValidationError(
         `Datasource "${plan.datasource}" does not match the bound datasource "${explicitBind.datasource}".`,
       ).toErr();
@@ -99,7 +108,7 @@ export function buildTemplateWorksheetArtifact({
       templateXml: snapshot.xml,
       title: plan.title,
       sheetType: 'worksheet',
-      templateParameters: { DATASOURCE: plan.datasource },
+      templateParameters: { DATASOURCE: explicitBind.datasource },
       fieldMapping: explicitBind.fieldMapping,
       templateSlots: explicitBind.templateSlots,
       fieldMetadata: explicitBind.fieldMetadata,
@@ -124,7 +133,7 @@ export function buildTemplateWorksheetArtifact({
         templateName: plan.templateName,
         templateSourceHash: snapshot.sourceHash,
         title: plan.title,
-        datasource: plan.datasource,
+        datasource: explicitBind.datasource,
         fieldMapping: explicitBind.fieldMapping,
         worksheetXml,
         windowXml,

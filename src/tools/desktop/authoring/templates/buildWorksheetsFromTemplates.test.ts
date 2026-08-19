@@ -133,6 +133,86 @@ describe('build-worksheets-from-templates', () => {
     expect(reserved.artifact.instanceId).toBe('inst-build');
   });
 
+  it.each([
+    {
+      label: 'canonically equivalent Unicode',
+      liveDatasource: '슈퍼스토어 - 샘플'.normalize('NFD'),
+      requestedDatasource: '슈퍼스토어 - 샘플',
+    },
+    {
+      label: 'one layer of outer brackets',
+      liveDatasource: 'target.ds',
+      requestedDatasource: '[target.ds]',
+    },
+  ])(
+    'uses the live datasource identity when the requested name differs only by $label',
+    async ({ liveDatasource, requestedDatasource }) => {
+      const store = new TemplateArtifactStore({ capacity: 4 });
+      const executor = makeExecutorMock({
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: LIVE_WORKBOOK.replaceAll('target.ds', liveDatasource),
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+            instanceId: 'inst-build',
+          }),
+        ),
+        applyWorkbookDocument: vi.fn(),
+      });
+      const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+        store,
+        createId: () => 'artifact-unicode',
+      });
+
+      const result = await callTool(
+        tool,
+        {
+          ...EXACT_ARGS,
+          datasource: requestedDatasource,
+          fieldMapping: {
+            field_base_1: `[${liveDatasource}].[none:Segment:nk]`,
+            field_base_2: `[${liveDatasource}].[sum:Revenue:qk]`,
+          },
+        },
+        executor,
+      );
+
+      expect(result.isError).toBe(false);
+      const reserved = store.reserve('artifact-unicode', '12345');
+      expect(reserved.ok).toBe(true);
+      if (!reserved.ok) return;
+      expect(reserved.artifact.datasource).toBe(liveDatasource);
+      expect(reserved.artifact.worksheetXml).toContain(liveDatasource);
+    },
+  );
+
+  it('still rejects a field mapping from a different datasource', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: LIVE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-cross-datasource',
+    });
+
+    const result = await callTool(tool, { ...EXACT_ARGS, datasource: 'other.ds' }, executor);
+
+    expect(result.isError).toBe(true);
+    expect(store.reserve('artifact-cross-datasource', '12345')).toEqual({
+      ok: false,
+      reason: 'unknown',
+    });
+  });
+
   it('keeps two previews built from the same live workbook independently available', async () => {
     const store = new TemplateArtifactStore({ capacity: 4 });
     const ids = ['artifact-A', 'artifact-B'];
