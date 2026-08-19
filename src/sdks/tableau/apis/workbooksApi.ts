@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { paginationSchema } from '../types/pagination.js';
 import { tagsSchema } from '../types/tags.js';
-import { workbookSchema } from '../types/workbook.js';
+import { workbookConnectionSchema, workbookSchema } from '../types/workbook.js';
 import { paginationParameters } from './paginationParameters.js';
 
 const getWorkbookEndpoint = makeEndpoint({
@@ -89,9 +89,23 @@ const addTagsToWorkbookEndpoint = makeEndpoint({
   response: z.object({ tags: tagsSchema }),
 });
 
+const queryWorkbookConnectionsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/workbooks/:workbookId/connections',
+  alias: 'getWorkbookConnections',
+  description:
+    'Returns a list of data connections for the specified workbook, including the datasource each connection points to.',
+  response: z.object({
+    connections: z.object({
+      connection: z.optional(z.array(workbookConnectionSchema)),
+    }),
+  }),
+});
+
 const workbooksApi = makeApi([
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
+  queryWorkbookConnectionsEndpoint,
   deleteWorkbookEndpoint,
   addTagsToWorkbookEndpoint,
 ]);

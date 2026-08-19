@@ -4,6 +4,73 @@ import { describe, expect, it, vi } from 'vitest';
 import WorkbooksMethods from './workbooksMethods.js';
 
 describe('WorkbooksMethods', () => {
+  describe('getWorkbookConnections', () => {
+    it('extracts each connection with its datasource id and name', async () => {
+      const mockGetWorkbookConnections = vi.fn().mockResolvedValue({
+        connections: {
+          connection: [
+            {
+              id: 'conn-1',
+              type: 'sqlserver',
+              datasource: { id: 'ds-1', name: 'Superstore' },
+            },
+            {
+              id: 'conn-2',
+              type: 'postgres',
+              datasource: { id: 'ds-2', name: 'Orders' },
+            },
+          ],
+        },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        getWorkbookConnections: mockGetWorkbookConnections,
+      };
+
+      const connections = await workbooksMethods.getWorkbookConnections({
+        siteId: 'site-1',
+        workbookId: 'wb-1',
+      });
+
+      expect(connections).toEqual([
+        { id: 'conn-1', type: 'sqlserver', datasource: { id: 'ds-1', name: 'Superstore' } },
+        { id: 'conn-2', type: 'postgres', datasource: { id: 'ds-2', name: 'Orders' } },
+      ]);
+      expect(connections.map((c) => c.datasource)).toEqual([
+        { id: 'ds-1', name: 'Superstore' },
+        { id: 'ds-2', name: 'Orders' },
+      ]);
+      expect(mockGetWorkbookConnections).toHaveBeenCalledWith({
+        params: { siteId: 'site-1', workbookId: 'wb-1' },
+        headers: { Authorization: 'Bearer test' },
+      });
+    });
+
+    it('returns an empty array when the workbook has no connections', async () => {
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        getWorkbookConnections: vi.fn().mockResolvedValue({ connections: {} }),
+      };
+
+      const connections = await workbooksMethods.getWorkbookConnections({
+        siteId: 'site-1',
+        workbookId: 'wb-1',
+      });
+
+      expect(connections).toEqual([]);
+    });
+  });
+
   describe('publishWorkbook', () => {
     it('POSTs a single-part multipart/mixed body containing the tsRequest XML', async () => {
       const mockPost = vi.fn().mockResolvedValue({
