@@ -27,7 +27,7 @@ const paramsSchema = {
   datasource: z.string().trim().min(1).max(255).describe('Live datasource name.'),
   fieldMapping: z
     .record(z.string().trim().min(1).max(128), z.string().trim().min(1).max(255))
-    .describe('Template slot ID to live field reference.'),
+    .describe('Map slot ID to exact returned column_ref.'),
 };
 
 interface BuildWorksheetsFromTemplatesDependencies {

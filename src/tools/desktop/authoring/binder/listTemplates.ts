@@ -62,6 +62,17 @@ interface SlotSummary {
   purpose?: string;
 }
 
+type CompactSlotSummary = Pick<
+  SlotSummary,
+  | 'slot_id'
+  | 'kind'
+  | 'derivation'
+  | 'role'
+  | 'binding_usage'
+  | 'calculation_channels'
+  | 'semantic_role'
+>;
+
 interface TemplateSummary {
   template: string;
   provenance: string;
@@ -72,11 +83,8 @@ interface TemplateSummary {
     total: number;
     required: number;
     kinds: string[];
-    required_slots: Array<{
-      slot_id: string;
-      kind: string;
-      semantic_role?: string;
-    }>;
+    required_slots: CompactSlotSummary[];
+    optional_slots: CompactSlotSummary[];
   };
   visible_channels: TemplateFitFacts['visible_channels'];
   same_field_groups: string[][];
@@ -147,6 +155,25 @@ function summarizeSlot(slot: SlotSpec, usage: TemplateFitFacts['slot_usage'][num
   };
 }
 
+function slotUsage(slot: SlotSpec, fit: TemplateFitFacts): TemplateFitFacts['slot_usage'][number] {
+  const usage = fit.slot_usage.find(({ slot_id }) => slot_id === slot.slot_id);
+  if (!usage) throw new Error(`Missing fit metadata for slot '${slot.slot_id}'.`);
+  return usage;
+}
+
+function summarizeCompactSlot(slot: SlotSpec, fit: TemplateFitFacts): CompactSlotSummary {
+  const usage = slotUsage(slot, fit);
+  return {
+    slot_id: slot.slot_id,
+    kind: slot.kind,
+    derivation: slot.derivation,
+    role: usage.direct_roles.slice(),
+    binding_usage: usage.binding_usage,
+    calculation_channels: usage.calculation_channels.slice(),
+    ...(slot.semantic_role ? { semantic_role: slot.semantic_role } : {}),
+  };
+}
+
 function summarizeTemplate(
   { entry, snapshot }: ResolvedTemplate,
   includeSlots: boolean,
@@ -165,21 +192,16 @@ function summarizeTemplate(
       kinds: [...new Set(slots.map((slot) => slot.kind))].sort(compareTemplateNames),
       required_slots: slots
         .filter((slot) => slot.required)
-        .map((slot) => ({
-          slot_id: slot.slot_id,
-          kind: slot.kind,
-          ...(slot.semantic_role ? { semantic_role: slot.semantic_role } : {}),
-        })),
+        .map((slot) => summarizeCompactSlot(slot, fit)),
+      optional_slots: slots
+        .filter((slot) => !slot.required)
+        .map((slot) => summarizeCompactSlot(slot, fit)),
     },
     visible_channels: fit.visible_channels,
     same_field_groups: fit.same_field_groups,
     ...(includeSlots
       ? {
-          slots: slots.map((slot) => {
-            const usage = fit.slot_usage.find(({ slot_id }) => slot_id === slot.slot_id);
-            if (!usage) throw new Error(`Missing fit metadata for slot '${slot.slot_id}'.`);
-            return summarizeSlot(slot, usage);
-          }),
+          slots: slots.map((slot) => summarizeSlot(slot, slotUsage(slot, fit))),
         }
       : {}),
   };

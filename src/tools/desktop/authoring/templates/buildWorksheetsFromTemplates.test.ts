@@ -65,19 +65,21 @@ describe('build-worksheets-from-templates', () => {
     sessionRouteState.clear();
   });
 
-  it('has the singular live-only caller-neutral input contract', () => {
+  it('has the singular live-only caller-neutral input contract', async () => {
     const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer());
+    const schema = await Provider.from(tool.paramsSchema);
     expect(tool.name).toBe('build-worksheets-from-templates');
-    expect(tool.paramsSchema).toMatchObject({
+    expect(schema).toMatchObject({
       session: expect.any(Object),
       templateName: expect.any(Object),
       title: expect.any(Object),
       datasource: expect.any(Object),
       fieldMapping: expect.any(Object),
     });
-    expect(tool.paramsSchema).not.toHaveProperty('templates');
-    expect(tool.paramsSchema).not.toHaveProperty('workbookFile');
-    expect(tool.paramsSchema).not.toHaveProperty('confirmation');
+    expect(schema.fieldMapping.description).toBe('Map slot ID to exact returned column_ref.');
+    expect(schema).not.toHaveProperty('templates');
+    expect(schema).not.toHaveProperty('workbookFile');
+    expect(schema).not.toHaveProperty('confirmation');
     expect(tool.annotations).toMatchObject({ readOnlyHint: true });
   });
 
