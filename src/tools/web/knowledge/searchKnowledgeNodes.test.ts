@@ -34,6 +34,14 @@ describe('searchKnowledgeNodesTool', () => {
     expect(tool.description).toContain('search-content');
     expect(tool.description).toContain('list-datasources');
     expect(tool.description).toContain('get-datasource-metadata');
+    expect(tool.description).toContain('attached semantic statements');
+    expect(tool.description).toContain('limit to 10 or less');
+    expect(tool.description).toContain('treat that evidence as complete');
+    expect(tool.description).toContain('do not call list-knowledge-semantic-statements');
+    expect(tool.description).toContain('not scope evidence');
+    expect(tool.description).toContain('exact id');
+    expect(tool.description).toContain('answer immediately');
+    expect(tool.description).toContain('do not search again');
     expect(tool.description).toContain('ask the user for it');
     expect(tool.description).toContain('do not invent, infer, or default one');
     expect(await Provider.from(tool.annotations)).toMatchObject({
