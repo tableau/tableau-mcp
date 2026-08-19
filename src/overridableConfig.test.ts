@@ -56,7 +56,12 @@ describe('OverridableConfig', () => {
       vi.stubEnv('INCLUDE_TOOLS', 'query-datasource,workbook');
 
       const config = new OverridableConfig({});
-      expect(config.includeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
+      expect(config.includeTools).toEqual([
+        'query-datasource',
+        'list-workbooks',
+        'get-workbook',
+        'download-workbook',
+      ]);
     });
 
     it('should parse EXCLUDE_TOOLS into an array of valid tool names', () => {
@@ -70,7 +75,22 @@ describe('OverridableConfig', () => {
       vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource,workbook');
 
       const config = new OverridableConfig({});
-      expect(config.excludeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
+      expect(config.excludeTools).toEqual([
+        'query-datasource',
+        'list-workbooks',
+        'get-workbook',
+        'download-workbook',
+      ]);
+    });
+
+    it('should parse INCLUDE_TOOLS into an array of valid tool names when the authoring group is used', () => {
+      vi.stubEnv('INCLUDE_TOOLS', 'authoring');
+
+      const config = new OverridableConfig({});
+      expect(config.includeTools).toEqual([
+        'request-workbook-upload',
+        'validate-upload-and-publish-workbook',
+      ]);
     });
 
     it('should filter out invalid tool names from INCLUDE_TOOLS', () => {

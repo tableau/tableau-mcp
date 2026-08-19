@@ -50,6 +50,24 @@ describe('adminInsightsResolver', () => {
     expect(luid).toBe('luid-tse');
   });
 
+  it('resolves the TS Users dataset name to its LUID', async () => {
+    const restApi = makeRestApi({
+      siteId: 'site-tsusers',
+      datasources: [
+        { id: 'luid-tse', name: 'TS Events' },
+        { id: 'luid-tsu', name: 'TS Users' },
+        { id: 'luid-sc', name: 'Site Content' },
+      ],
+    });
+
+    const luid = await adminInsightsResolver.resolveDatasetLuid({
+      restApi,
+      datasetName: ADMIN_INSIGHTS_DATASETS.TS_USERS,
+    });
+
+    expect(luid).toBe('luid-tsu');
+  });
+
   it('caches per-site so repeat lookups skip the REST call', async () => {
     const listSpy = vi.fn().mockResolvedValue({
       pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },

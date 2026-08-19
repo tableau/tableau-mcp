@@ -35,12 +35,16 @@ export abstract class Server {
     serverName: string;
     serverVersion: string;
   }) {
+    const description =
+      'When opening local .twb/.twbx files, derive the full Tableau Desktop app path and choose the newest installed version when multiple are present.';
+
     this.mcpServer =
       mcpServer ??
       new McpServer(
         {
           name: serverName,
           version: serverVersion,
+          description,
         },
         {
           capabilities: {

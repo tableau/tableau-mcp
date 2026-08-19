@@ -4,11 +4,13 @@ sidebar_position: 5
 
 # Query Admin Insights
 
-Queries all three Tableau Cloud Admin Insights datasources and the deterministic stale-content
-report through a single entry point. Dispatches on `kind` to one of four backends:
+Queries the Tableau Cloud Admin Insights datasources and the deterministic stale-content
+report through a single entry point. Dispatches on `kind` to one of five backends:
 
 - `ts-events` — raw VDS query against the `TS Events` datasource (audit events: access, publish,
   update, delete)
+- `ts-users` — raw VDS query against the `TS Users` datasource (per-user activity signals: last
+  login, days since last login, and Tableau Desktop / Prep / Web Authoring last-access dates)
 - `site-content` — raw VDS query against the `Site Content` datasource (content metadata,
   ownership, sizes)
 - `job-performance` — raw VDS query against the `Job Performance` datasource (extract refresh and
@@ -42,13 +44,14 @@ Admin Insights datasource LUIDs are resolved automatically; callers do not pass 
 
 Which admin-insights backend to query:
 - `ts-events` — raw VDS query against TS Events
+- `ts-users` — raw VDS query against TS Users
 - `site-content` — raw VDS query against Site Content
 - `job-performance` — raw VDS query against Job Performance
 - `stale-content` — deterministic stale-content anti-join
 
 ### `query`
 
-**Required when `kind` is `ts-events`, `site-content`, or `job-performance`.**
+**Required when `kind` is `ts-events`, `ts-users`, `site-content`, or `job-performance`.**
 Ignored when `kind` is `stale-content`.
 
 A fully formed VDS [`query`](https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/QueryDatasource)
@@ -83,8 +86,8 @@ Example (TS Events — last-access per item):
 
 ### `limit`
 
-The maximum number of rows to return. Applied when `kind` is `ts-events`, `site-content`, or
-`job-performance`; **ignored** for `stale-content`.
+The maximum number of rows to return. Applied when `kind` is `ts-events`, `ts-users`,
+`site-content`, or `job-performance`; **ignored** for `stale-content`.
 
 The effective row limit is the **tightest** of:
 1. The tool cap (`MAX_RESULT_LIMITS=query-admin-insights:N`)
@@ -170,6 +173,50 @@ This is a **successful** result, not an error — only the row payload is withhe
   "data": [
     { "Item Id": "5092107", "Item Type": "Datasource", "last_access": "2026-04-15T00:00:00Z" },
     { "Item Id": "1412202", "Item Type": "Workbook", "last_access": "2026-05-08T21:12:45Z" }
+  ]
+}
+```
+
+### Raw VDS query (`kind: "ts-users"`)
+
+`TS Users` carries one row per user with per-user activity signals. Useful captions include
+`User Email` (the join key against a REST API user's email), `User Name`, `Last Login Date`,
+`Days Since Last Login`, `Tableau Desktop - Last Access Date`, `Tableau Prep - Last Access Date`,
+and `Web Authoring - Last Access Date`.
+
+:::note
+The Tableau Desktop / Prep last-access dates are populated only when the tenant collects Desktop /
+Prep telemetry. On tenants where that data is unavailable these fields are `null` for every user —
+a `null` value therefore means "no signal", **not** "inactive". Treat a recent non-null value as an
+activity signal, but never treat a `null` as evidence of inactivity.
+:::
+
+```json
+{
+  "kind": "ts-users",
+  "query": {
+    "fields": [
+      { "fieldCaption": "User Email" },
+      { "fieldCaption": "Last Login Date" },
+      { "fieldCaption": "Tableau Desktop - Last Access Date" },
+      { "fieldCaption": "Tableau Prep - Last Access Date" }
+    ]
+  },
+  "limit": 10000
+}
+```
+
+Example result:
+
+```json
+{
+  "data": [
+    {
+      "User Email": "creator@example.com",
+      "Last Login Date": "2026-05-01T12:00:00Z",
+      "Tableau Desktop - Last Access Date": "2026-07-28T09:14:00Z",
+      "Tableau Prep - Last Access Date": null
+    }
   ]
 }
 ```

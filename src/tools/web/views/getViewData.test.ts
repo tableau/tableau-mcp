@@ -19,7 +19,6 @@ const mocks = vi.hoisted(() => ({
   mockQueryViewData: vi.fn(),
   mockUploadCsvToS3: vi.fn(),
   mockLog: vi.fn(),
-  mockIsFeatureEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -37,10 +36,6 @@ vi.mock('../../../restApiInstance.js', () => ({
 vi.mock('../uploadDataToS3.js', async (importActual) => ({
   ...(await importActual<typeof import('../uploadDataToS3.js')>()),
   uploadCsvToS3: mocks.mockUploadCsvToS3,
-}));
-
-vi.mock('../../../features/init.js', () => ({
-  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../logging/logger.js', async (importActual) => ({
@@ -157,8 +152,6 @@ describe('getViewDataTool', () => {
 
   describe('S3 data offload', () => {
     beforeEach(() => {
-      // The S3-offload path is gated behind the `view-data-file-mode` feature flag.
-      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
       mocks.mockQueryViewData.mockResolvedValue(mockViewData);
     });
 
@@ -229,18 +222,6 @@ describe('getViewDataTool', () => {
           message: expect.stringContaining('access denied'),
         }),
       );
-    });
-
-    it('should return inline CSV (no S3 upload) when view-data-file-mode is disabled even if MCP_S3_BUCKET is configured', async () => {
-      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
-
-      const result = await getToolResult({ viewId: mockView.id });
-
-      expect(result.isError).toBe(false);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toBe(JSON.stringify(mockViewData));
-      expect(mocks.mockUploadCsvToS3).not.toHaveBeenCalled();
     });
   });
 });

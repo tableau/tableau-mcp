@@ -1,3 +1,4 @@
+import features from '../../features.json';
 import pkg from '../../package.json';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
@@ -6,6 +7,7 @@ import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
 const serverVersion = pkg.version;
+const authoringToolsEnabled = Boolean(features['authoring-tools']);
 
 describe('server', () => {
   beforeAll(setEnv);
@@ -25,7 +27,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-mcp',
         version: serverVersion,
       });
@@ -60,9 +62,11 @@ describe('server', () => {
         'list-flow-tasks',
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
-      const insightsTools: ReadonlyArray<WebToolName> = [
-        'generate-insight-cards',
-        'resolve-datasource-luid',
+      const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
+      // authoring tools are gated off by default (authoring-tools feature flag)
+      const authoringTools: ReadonlyArray<WebToolName> = [
+        'request-workbook-upload',
+        'validate-upload-and-publish-workbook',
       ];
 
       let expectedToolNames = [...webToolNames];
@@ -87,8 +91,15 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
       }
 
+      if (!features['authoring-tools']) {
+        expectedToolNames = expectedToolNames.filter((name) => !authoringTools.includes(name));
+      }
+
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedToolNames = expectedToolNames.filter((name) => !mcpAppsTools.includes(name));
+      if (!authoringToolsEnabled) {
+        expectedToolNames = expectedToolNames.filter((name) => name !== 'download-workbook');
+      }
 
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
@@ -109,7 +120,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-desktop-mcp',
         version: serverVersion,
       });
@@ -137,7 +148,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-combined-mcp',
         version: serverVersion,
       });
@@ -172,9 +183,11 @@ describe('server', () => {
         'list-flow-tasks',
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
-      const insightsTools: ReadonlyArray<WebToolName> = [
-        'generate-insight-cards',
-        'resolve-datasource-luid',
+      const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
+      // authoring tools are gated off by default (authoring-tools feature flag)
+      const authoringTools: ReadonlyArray<WebToolName> = [
+        'request-workbook-upload',
+        'validate-upload-and-publish-workbook',
       ];
 
       let expectedWebToolNames = [...webToolNames];
@@ -203,8 +216,17 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
       }
 
+      if (!features['authoring-tools']) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !authoringTools.includes(name),
+        );
+      }
+
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
+      if (!authoringToolsEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => name !== 'download-workbook');
+      }
 
       const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));

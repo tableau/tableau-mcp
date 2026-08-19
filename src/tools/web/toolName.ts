@@ -6,16 +6,18 @@ export const webToolNames = [
   'list-jobs',
   'list-users',
   'list-workbooks',
+  'request-workbook-upload',
+  'validate-upload-and-publish-workbook',
   'list-projects',
   'list-views',
   'list-custom-views',
   'list-flows',
   'query-datasource',
   'get-datasource-metadata',
-  'resolve-datasource-luid',
   'get-embed-token',
   'record-event',
   'get-workbook',
+  'download-workbook',
   'get-view',
   'get-flow',
   'list-flow-runs',
@@ -46,6 +48,7 @@ export type WebToolName = (typeof webToolNames)[number];
 export const webToolGroupNames = [
   'datasource',
   'workbook',
+  'authoring',
   'project',
   'view',
   'flow',
@@ -63,13 +66,9 @@ export const webToolGroupNames = [
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
 export const webToolGroups = {
-  datasource: [
-    'list-datasources',
-    'get-datasource-metadata',
-    'resolve-datasource-luid',
-    'query-datasource',
-  ],
-  workbook: ['list-workbooks', 'get-workbook'],
+  datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
+  workbook: ['list-workbooks', 'get-workbook', 'download-workbook'],
+  authoring: ['request-workbook-upload', 'validate-upload-and-publish-workbook'],
   project: ['list-projects'],
   view: [
     'list-views',

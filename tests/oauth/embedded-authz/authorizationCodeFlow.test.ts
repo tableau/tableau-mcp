@@ -203,5 +203,54 @@ describe('authorization code flow', () => {
         });
       });
     });
+
+    describe('opaque client_id security - reject remote https for unknown clients', () => {
+      it('should reject remote https redirect URI for unknown opaque client_id', async () => {
+        const { app } = await startServer();
+
+        const response = await request(app).get('/oauth2/authorize').query({
+          client_id: 'unknown-opaque-client',
+          redirect_uri: 'https://evil.example.com/cb',
+          response_type: 'code',
+          code_challenge: 'test-code-challenge',
+          code_challenge_method: 'S256',
+        });
+
+        expect(response.status).toBe(400);
+        expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+        expect(response.body).toEqual({
+          error: 'invalid_request',
+          error_description: 'Invalid redirect URI: https://evil.example.com/cb',
+        });
+      });
+
+      it('should allow loopback http for unknown opaque client_id', async () => {
+        const { app } = await startServer();
+
+        const response = await request(app).get('/oauth2/authorize').query({
+          client_id: 'unknown-opaque-client',
+          redirect_uri: 'http://localhost:3000',
+          response_type: 'code',
+          code_challenge: 'test-code-challenge',
+          code_challenge_method: 'S256',
+        });
+
+        expect(response.status).toBe(302);
+      });
+
+      it('should allow custom scheme for unknown opaque client_id', async () => {
+        const { app } = await startServer();
+
+        const response = await request(app).get('/oauth2/authorize').query({
+          client_id: 'unknown-opaque-client',
+          redirect_uri: 'cursor://cb',
+          response_type: 'code',
+          code_challenge: 'test-code-challenge',
+          code_challenge_method: 'S256',
+        });
+
+        expect(response.status).toBe(302);
+      });
+    });
   });
 });

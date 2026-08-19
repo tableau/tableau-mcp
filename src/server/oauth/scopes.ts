@@ -19,6 +19,7 @@ export type McpScope =
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
   | 'tableau:mcp:workbook:read'
+  | 'tableau:mcp:workbook:create'
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:flow:read'
@@ -49,7 +50,9 @@ export type TableauApiScope =
   | 'tableau:tasks:delete'
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
+  | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
+  | 'tableau:workbooks:create'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
@@ -69,6 +72,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:jobs:read',
   'tableau:mcp:users:read',
   'tableau:mcp:workbook:read',
+  'tableau:mcp:workbook:create',
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
   'tableau:mcp:users:write',
@@ -180,6 +184,14 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
+  'request-workbook-upload': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set([]),
+  },
+  'validate-upload-and-publish-workbook': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set(['tableau:workbooks:create']),
+  },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
@@ -230,10 +242,6 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  'resolve-datasource-luid': {
-    mcp: ['tableau:mcp:datasource:read'],
-    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
-  },
   'get-embed-token': {
     mcp: [],
     api: new Set<TableauApiScope>(['tableau:views:embed']),
@@ -241,6 +249,10 @@ const toolScopeMap: Record<
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'download-workbook': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
@@ -377,6 +389,7 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
+  const authoringToolsEnabled = await featureGate.isFeatureEnabled('authoring-tools');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -409,6 +422,11 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
     enabledTools.delete('get-flow');
     enabledTools.delete('list-flow-runs');
     enabledTools.delete('list-flow-tasks');
+  }
+
+  if (!authoringToolsEnabled) {
+    enabledTools.delete('request-workbook-upload');
+    enabledTools.delete('validate-upload-and-publish-workbook');
   }
 
   return enabledTools;
