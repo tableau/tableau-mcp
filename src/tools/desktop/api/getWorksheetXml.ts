@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { endpointNotInThisBuild } from '../../../desktop/externalApi/toolUtils.js';
+import { worksheetFragmentSimpleId } from '../../../desktop/metadata/sheets.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { getWorksheetXml, isRouteMissing } from '../../../desktop/wrappers/getWorksheetXml.js';
 import {
@@ -76,21 +77,33 @@ export const getGetWorksheetXmlTool = (
             }
           }
 
-          // An explicit re-read is the agent asking for live truth for this sheet — treat
-          // it as the new starting point rather than resuming whatever add-field/
-          // remove-field edit buffer might already be open underneath it.
-          clearStickyWorksheetFile({ session: resolvedSession, worksheetName });
+          // An explicit re-read is the agent asking for live truth for this sheet — treat it
+          // as the new starting point rather than resuming whatever add-field/remove-field
+          // edit buffer might already be open underneath it. The buffer keys on the fragment's
+          // simple-id; a well-formed fragment always carries one, so a missing id means a
+          // malformed document, not a sheet to silently skip.
+          const bufferWorksheetId = worksheetFragmentSimpleId(result.value.xml);
+          if (!bufferWorksheetId) {
+            return new GetWorksheetXmlFailedError({
+              type: 'malformed-worksheet-fragment',
+              message: `Worksheet "${result.value.name}" has no <simple-id>; the workbook document is malformed.`,
+            }).toErr();
+          }
+          clearStickyWorksheetFile({
+            session: resolvedSession,
+            worksheetId: bufferWorksheetId,
+          });
 
           return finishXmlRead({
             kind: 'worksheet',
             artifactKind: 'worksheet',
-            label: `Worksheet "${worksheetName}"`,
+            label: `Worksheet "${result.value.name}"`,
             inlineKey: 'worksheetXml',
             toolName: 'get-worksheet-xml',
             applyTool: 'apply-worksheet',
             pathParam: 'worksheetFile',
-            cacheName: worksheetName,
-            xml: result.value,
+            cacheName: result.value.name,
+            xml: result.value.xml,
             mode,
             capBytes: extra.config.inlineXmlMaxBytes,
             resolvedSession,

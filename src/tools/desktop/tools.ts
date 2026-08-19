@@ -9,6 +9,7 @@ import { getApplyWorksheetTool } from './api/applyWorksheet.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { getExecuteTableauCommandTool } from './api/executeTableauCommand.js';
 import { exportDashboardImageTool } from './api/exportDashboardImage.js';
+import { exportStoryboardImageTool } from './api/exportStoryboardImage.js';
 import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
 import { getApiRootTool } from './api/getApiRoot.js';
 import { getAppInfoTool } from './api/getAppInfo.js';
@@ -41,6 +42,7 @@ import { getSaveWorkbookTool } from './api/saveWorkbook.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
 import { getUndoWorkbookTool } from './api/undoWorkbook.js';
 import { getValidateWorkbookXmlTool } from './api/validateWorkbookXml.js';
+import { getWorkbookExportAsTool } from './api/workbookExportAs.js';
 import { getBindTemplateTool } from './authoring/binder/bindTemplate.js';
 import { getListTemplatesTool } from './authoring/binder/listTemplates.js';
 import { getAuthorActionTool } from './authoring/datasource/authorAction.js';
@@ -89,6 +91,7 @@ export const desktopToolFactories = [
   getRedoWorkbookTool,
   getOpenFileTool,
   getSaveWorkbookTool,
+  getWorkbookExportAsTool,
   getAddWorksheetTool,
   getAddDashboardTool,
   getAddStoryboardTool,
@@ -145,6 +148,7 @@ export const desktopToolFactories = [
   getWorksheetUnderlyingDataTool,
   exportWorksheetImageTool,
   exportDashboardImageTool,
+  exportStoryboardImageTool,
   getWorkbookInventoryTool,
   getListWorkbookDatasourcesTool,
   getListSiteDatasourcesTool,

@@ -11,6 +11,7 @@ import {
 } from '../../../desktop/templates/templateArtifactStore.js';
 import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
+import * as listWorksheetsModule from '../../../desktop/wrappers/listWorksheets.js';
 import * as loadWorksheetXmlModule from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
   ArgsValidationError,
@@ -26,8 +27,12 @@ import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getApplyWorksheetTool } from './applyWorksheet.js';
 
-vi.mock('../../../desktop/wrappers/loadWorksheetXml.js');
+vi.mock('../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof loadWorksheetXmlModule>()),
+  loadWorksheetXml: vi.fn(),
+}));
 vi.mock('../authoring/fields/worksheetEditBuffer.js');
+vi.mock('../../../desktop/wrappers/listWorksheets.js');
 vi.mock('fs');
 
 describe('applyWorksheetTool', () => {
@@ -72,6 +77,9 @@ describe('applyWorksheetTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Ok({ count: 1, worksheets: [{ id: 'artifact-sheet-uuid', name: 'Artifact Sheet' }] }),
+    );
   });
 
   afterEach(() => {
@@ -145,7 +153,7 @@ describe('applyWorksheetTool', () => {
     // apply and must not survive it.
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
-      worksheetName: 'Artifact Sheet',
+      worksheetId: 'artifact-sheet-uuid',
     });
   });
 
@@ -321,6 +329,29 @@ describe('applyWorksheetTool', () => {
     sidecarSpy.mockRestore();
   });
 
+  it('resolves a worksheet id against the fragment simple-id for cached-file apply', async () => {
+    const mockXml =
+      "<worksheet name='Sales Detail'><simple-id uuid='{SHEET-GUID-9}' /><table></table></worksheet>";
+    const mockLoadWorksheetXml = vi
+      .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockResolvedValue(Ok({ appliedName: 'Renamed Live', readbackWarnings: [] }));
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: '{SHEET-GUID-9}',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(resultObj.message).toContain('Successfully applied worksheet update for "Renamed Live"');
+    expect(mockLoadWorksheetXml).toHaveBeenCalledWith(
+      expect.objectContaining({ worksheetName: 'Sales Detail' }),
+    );
+  });
+
   it('reports skipped readback honestly for inline worksheet XML apply', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
@@ -437,8 +468,11 @@ describe('applyWorksheetTool', () => {
     );
   });
 
-  it('closes the sticky edit buffer for the applied sheet after a successful cached-file apply', async () => {
+  it('closes the sticky edit buffer keyed on the live sheet id after a successful cached-file apply', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Sheet 1' }] }),
+    );
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
       Ok({ readbackWarnings: [] }),
     );
@@ -453,7 +487,32 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(false);
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
-      worksheetName: 'Sheet 1',
+      worksheetId: 'live-sheet-uuid',
+    });
+  });
+
+  it('closes the buffer for an id-less fragment by resolving the live id from the applied name', async () => {
+    // An id-less cached fragment applies via the name fallback; keying the clear on the
+    // fragment's absent simple-id skipped it, so a later name-only edit resumed the stale buffer.
+    const mockXml = '<worksheet name="Old Name"><table></table></worksheet>';
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Ok({ count: 1, worksheets: [{ id: 'live-sheet-uuid', name: 'Renamed Live' }] }),
+    );
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Ok({ appliedName: 'Renamed Live', readbackWarnings: [] }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Old Name',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+      session: '12345',
+      worksheetId: 'live-sheet-uuid',
     });
   });
 
@@ -659,7 +718,7 @@ describe('applyWorksheetTool', () => {
     // add-field/remove-field buffer for it is stale and must be closed.
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
-      worksheetName: 'Artifact Sheet',
+      worksheetId: 'artifact-sheet-uuid',
     });
   });
 

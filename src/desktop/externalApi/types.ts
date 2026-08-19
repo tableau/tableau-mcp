@@ -29,6 +29,7 @@ export const EXTERNAL_API_ROUTES = {
   workbookUndo: '/v0/workbook:undo',
   workbookRedo: '/v0/workbook:redo',
   workbookSave: '/v0/workbook:save',
+  workbookExportAs: '/v0/workbook:exportAs',
   workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
   dashboardDocument: '/v0/workbook/dashboards/{id}/document',
@@ -39,6 +40,7 @@ export const EXTERNAL_API_ROUTES = {
   dashboardResumeAutoUpdates: '/v0/workbook/dashboards/{id}:resumeAutoUpdates',
   storyboardById: '/v0/workbook/storyboards/{id}',
   storyboardDocument: '/v0/workbook/storyboards/{id}/document',
+  storyboardImage: '/v0/workbook/storyboards/{id}/image',
   storyboardDelete: '/v0/workbook/storyboards/{id}:delete',
   storyboardRename: '/v0/workbook/storyboards/{id}:rename',
   worksheetById: '/v0/workbook/worksheets/{id}',
@@ -114,7 +116,22 @@ export type SaveWorkbookRequest = {
   filePath?: string;
 };
 
-/** Query accepted by {@link worksheetImageRoute} and {@link dashboardImageRoute}. */
+/** The non-native formats `POST /v0/workbook:exportAs` can render the open workbook to. */
+export type ExportAsFormat = 'pdf' | 'powerpoint' | 'packaged-workbook' | 'prior-version';
+
+/**
+ * Body of `POST /v0/workbook:exportAs`. Exports the open workbook to a non-native format,
+ * leaving the open document unchanged. `filePath` is absolute and its extension must match
+ * `format` (.pdf / .pptx / .twbx / .twb|.twbx). `targetVersion` is required only when
+ * `format` is `prior-version` — the customer-facing release string, e.g. "2026.1".
+ */
+export type ExportAsWorkbookRequest = {
+  format: ExportAsFormat;
+  filePath: string;
+  targetVersion?: string;
+};
+
+/** Query accepted by {@link worksheetImageRoute}, {@link dashboardImageRoute}, and {@link storyboardImageRoute}. */
 export type ImageExportQuery = {
   /**
    * Absolute path the Desktop host should persist the image to. When set, the response
@@ -275,6 +292,10 @@ export function worksheetImageRoute(worksheetId: string, query: ImageExportQuery
 
 export function dashboardImageRoute(dashboardId: string, query: ImageExportQuery): string {
   return `${dashboardRoute(dashboardId)}/image${imageQuerySuffix(query)}`;
+}
+
+export function storyboardImageRoute(storyboardId: string, query: ImageExportQuery): string {
+  return `${storyboardRoute(storyboardId)}/image${imageQuerySuffix(query)}`;
 }
 
 /**
@@ -453,7 +474,7 @@ export const worksheetItemSchema = z
     hidden: z.boolean(),
     isActiveSheet: z.boolean().optional(),
     isAutoUpdatesPaused: z.boolean().optional(),
-    index: z.number().int().optional(),
+    index: z.number().int().nullish(),
     datasources: z.array(z.string()).optional(),
   })
   .passthrough();
@@ -476,7 +497,7 @@ export const dashboardItemSchema = z
     hidden: z.boolean(),
     isActiveSheet: z.boolean().optional(),
     isAutoUpdatesPaused: z.boolean().optional(),
-    index: z.number().int().optional(),
+    index: z.number().int().nullish(),
     containedSheets: z.array(z.string()).optional(),
   })
   .passthrough();
@@ -498,8 +519,8 @@ export const storyboardItemSchema = z
     type: z.string().optional(),
     hidden: z.boolean(),
     isActiveSheet: z.boolean().optional(),
-    index: z.number().int().optional(),
-    storyPointCount: z.number().int().optional(),
+    index: z.number().int().nullish(),
+    storyPointCount: z.number().int().nullish(),
   })
   .passthrough();
 export type StoryboardItem = z.infer<typeof storyboardItemSchema>;

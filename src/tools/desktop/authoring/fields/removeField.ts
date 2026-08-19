@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -13,7 +13,6 @@ import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellForm
 import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
-  FileNotFoundError,
   FileReadError,
   XmlModificationError,
   XmlValidationError,
@@ -22,8 +21,7 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
-import { fetchAndCacheWorksheet } from './worksheetCache.js';
-import { getStickyWorksheetFile, setStickyWorksheetFile } from './worksheetEditBuffer.js';
+import { resolveWorksheetEditFile } from './worksheetEditBuffer.js';
 
 /** Encoding channels a field can be removed from. */
 const ENCODING_TYPES = [
@@ -82,51 +80,16 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
           }
           const resolvedSession = sessionResult.value;
 
-          if (!worksheetFile?.trim() && !worksheetName?.trim()) {
-            return new ArgsValidationError(
-              'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
-            ).toErr();
+          const editFile = await resolveWorksheetEditFile({
+            worksheetName,
+            worksheetFile,
+            resolvedSession,
+            extra,
+          });
+          if (editFile.isErr()) {
+            return editFile.error.toErr();
           }
-
-          const trimmedWorksheetName = worksheetName?.trim() || undefined;
-
-          // Name-based path: reuse the sticky edit buffer for this sheet if one is open,
-          // otherwise fetch fresh and mint a new cache file. Either way, later name-only
-          // calls for the same sheet+session keep landing on this file until
-          // apply-worksheet closes the buffer.
-          if (!worksheetFile?.trim()) {
-            const sticky = getStickyWorksheetFile({
-              session: resolvedSession,
-              worksheetName: trimmedWorksheetName!,
-            });
-            if (sticky) {
-              worksheetFile = sticky;
-            } else {
-              const minted = await fetchAndCacheWorksheet({
-                worksheetName: trimmedWorksheetName!,
-                resolvedSession,
-                extra,
-              });
-              if (minted.isErr()) {
-                return minted.error.toErr();
-              }
-              worksheetFile = minted.value;
-            }
-          }
-
-          // A worksheetName given alongside an explicit worksheetFile is an override —
-          // point the buffer at it too, so later name-only calls continue from here.
-          if (trimmedWorksheetName) {
-            setStickyWorksheetFile({
-              session: resolvedSession,
-              worksheetName: trimmedWorksheetName,
-              file: worksheetFile,
-            });
-          }
-
-          if (!existsSync(worksheetFile)) {
-            return new FileNotFoundError(worksheetFile).toErr();
-          }
+          worksheetFile = editFile.value;
 
           // encodingType is conditionally required — enforced here (not in the JSON Schema) so
           // the schema stays flat and host-portable.

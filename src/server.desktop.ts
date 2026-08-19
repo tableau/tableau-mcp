@@ -16,6 +16,9 @@ import { getDesktopConfig } from './config.desktop.js';
 import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
 import { createCallDeadline } from './desktop/callDeadline.js';
 import { emitEpisodeEvent, type ToolSchemaProfile } from './desktop/episode-events.js';
+import { apiVersionAtLeast } from './desktop/externalApi/apiVersion.js';
+import { discoverInstances } from './desktop/externalApi/discovery.js';
+import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
 import {
   getKnowledgeCorpusEntryCount,
@@ -104,7 +107,7 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
  * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Fifty-one tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
+ * Fifty-two tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
  * first-class workbook/data reads/navigation, scoped dashboard/story cached-XML fallbacks, and a
  * narrow whole-workbook cached-XML fallback. Standalone validation and unrelated info/site tools
  * stay out. This is the
@@ -150,6 +153,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'add-storyboard',
     'open-file',
     'save-workbook',
+    'workbook-export-as',
     'pause-auto-updates',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.
@@ -208,6 +212,51 @@ export function selectToolsForProfile<T extends { name: DesktopToolName }>(
     });
   }
   return tools;
+}
+
+/**
+ * The External Client API version the registration gate compares tool floors against: the
+ * pinned instance's version when pinned, otherwise the highest version among live instances
+ * (undefined when none is known, which fails the gate open).
+ *
+ * Unpinned resolves the highest — not the newest-started — so a tool is hidden only when no
+ * running Desktop can serve it; whether the instance a call actually reaches serves it is a
+ * per-call concern, not the gate's.
+ */
+export function resolveConnectedApiVersion(
+  instances: Array<ExternalApiInstance>,
+  pinnedSessionId: string | undefined,
+): string | undefined {
+  if (pinnedSessionId !== undefined) {
+    return instances.find((instance) => String(instance.pid) === pinnedSessionId)?.apiVersion;
+  }
+  return instances.reduce<string | undefined>(
+    (highest, instance) =>
+      instance.apiVersion !== undefined &&
+      (highest === undefined || apiVersionAtLeast(instance.apiVersion, highest))
+        ? instance.apiVersion
+        : highest,
+    undefined,
+  );
+}
+
+/**
+ * Drop tools whose {@link DesktopTool.minApiVersion} floor exceeds the connected Desktop's
+ * API version. Fails open: an unknown connected version keeps every tool, leaving the
+ * per-call `endpointNotInThisBuild` guard as the backstop.
+ */
+export function filterToolsByApiVersion<T extends { minApiVersion?: string }>(
+  tools: T[],
+  connectedApiVersion: string | undefined,
+): T[] {
+  if (connectedApiVersion === undefined) {
+    return tools;
+  }
+  return tools.filter(
+    (tool) =>
+      tool.minApiVersion === undefined ||
+      apiVersionAtLeast(connectedApiVersion, tool.minApiVersion),
+  );
 }
 
 export { DATA_ROOT, RESOURCES_ROOT };
@@ -333,7 +382,23 @@ export class DesktopMcpServer extends Server {
       ...(config.episodeEventsEnabled ? episodeToolFactories : []),
     ];
     const allTools = factories.map((toolFactory) => toolFactory(this));
-    return selectToolsForProfile(allTools, config.toolProfile);
+    const profileTools = selectToolsForProfile(allTools, config.toolProfile);
+
+    const instances = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir });
+    const connectedApiVersion = resolveConnectedApiVersion(instances, config.desktopSessionId);
+    const gatedTools = filterToolsByApiVersion(profileTools, connectedApiVersion);
+
+    if (gatedTools.length < profileTools.length) {
+      const dropped = profileTools
+        .filter((tool) => !gatedTools.includes(tool))
+        .map((tool) => tool.name);
+      log({
+        message: `Hiding ${dropped.length} tool(s) the connected Desktop API v${connectedApiVersion} does not serve: ${dropped.join(', ')}`,
+        level: 'info',
+        logger: 'DesktopMcpServer',
+      });
+    }
+    return gatedTools;
   };
 
   private _registerKnowledgeResources = (): void => {

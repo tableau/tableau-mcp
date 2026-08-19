@@ -9,6 +9,7 @@ import {
 
 import * as configModule from './config.desktop.js';
 import * as episodeEvents from './desktop/episode-events.js';
+import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import {
   buildDesktopInstructions,
   SESSION_RESOLUTION_TEXT_PINNED,
@@ -20,7 +21,9 @@ import {
   DESKTOP_INSTRUCTIONS,
   DesktopMcpServer,
   DYNAMIC_AUTHORING_TOOL_PROFILE,
+  filterToolsByApiVersion,
   getDesktopToolListEntry,
+  resolveConnectedApiVersion,
   selectToolsForProfile,
   SPEC_LOOP_TOOL_PROFILE,
 } from './server.desktop.js';
@@ -210,12 +213,29 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // descriptions carrying the new-window/session-binding and blocking-Save-As caveats the 0.2.6
 // descriptions spell out. All five join the dynamic-authoring profile: served moves
 // 31_485 -> 34_581 (still well under the 46k cliff), full moves 51_101 -> 54_197.
-// Re-pinned 2026-08-13 after the fallback/apply work; retain the established 18-character
-// ratchet slack. Image export stays out until its External Client API progress signal is fixed.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_648;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_666;
+// Re-pinned 2026-08-14: the fallback/apply work plus list-worksheets/list-dashboards/list-storyboards
+// returning each item's full External Client API payload (hidden, index, active sheet, auto-updates,
+// datasources/contained sheets). Retain the established 18-character ratchet slack.
+// Re-pinned 2026-08-17: added export-storyboard-image over the External Client API storyboard
+// image route, mirroring export-worksheet-image and export-dashboard-image. Like those two it
+// stays out of DYNAMIC_AUTHORING_TOOL_PROFILE, so those ratchets are unchanged; full moves
+// 54_759 -> 55_656 (surface 54_741 -> 55_638, +897 for the tool, retaining the 18-char slack).
+// Its description states the deliberate V0 scope — only the active story point renders; other
+// points are not included and cannot be selected.
+// Re-pinned 2026-08-18: added workbook-export-as over the External Client API workbook:exportAs
+// route (pdf/powerpoint/packaged-workbook/prior-version, headless write to filePath), gated to a
+// 0.2.7 minApiVersion floor (the gate is server-side metadata, not serialized surface). Unlike the
+// image exports it joins DYNAMIC_AUTHORING_TOOL_PROFILE, so it moves both surfaces by +1012:
+// dynamic authoring 39_069 -> 40_081 (budget 39_087 -> 40_099, keeping the 18-char slack), full
+// surface 55_638 -> 56_650 (budget 55_656 -> 56_668).
+// Re-pinned 2026-08-19: added apply-workbook-style over the workbook:applyStyle route (validated
+// tableau.style-pack/v2 pack applied once, includes canonical worksheet-title styling and
+// hex-color-case-equivalence). It joins DYNAMIC_AUTHORING_TOOL_PROFILE, so it moves both surfaces;
+// measured values below, retaining the established 18-character ratchet slack.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 43_806;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 43_824;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 58_023;
+const FULL_TOOL_SURFACE_BUDGET = 60_167;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -312,7 +332,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['bind-template', 2585], // raised 2026-08-10 (#734 review fold): +skip_validation, the server-gated trust flag for the deterministic build_viz path — a genuinely new param (name + boolean schema, description dropped since the LLM must never set it), ~118B over the prior cap so shrinking prose could not fund it; ratcheted to the measured 2585 (down from a transient 2675) once the description was removed; earlier raise with sign-off (2026-08-05): agreed UI-label title 'Matching template' costs a few bytes over 'Bind Template'; earlier raise (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
-    ['apply-worksheet', 1610], // raised 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
+    ['apply-worksheet', 1607], // ratcheted down 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1466], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
@@ -474,10 +494,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 51-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 52-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(51);
+    expect(selected).toHaveLength(52);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -520,6 +540,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'add-storyboard',
       'open-file',
       'save-workbook',
+      'workbook-export-as',
       'get-workbook-xml',
       'apply-workbook',
       'apply-workbook-style',
@@ -610,6 +631,135 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     const selected = selectToolsForProfile(tools, 'bogus');
     expect(selected).toBe(tools);
     expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
+  });
+});
+
+describe('API-version tool gate (interim minApiVersion floor)', () => {
+  const instance = (pid: number, apiVersion?: string): ExternalApiInstance => ({
+    baseUrl: `http://127.0.0.1:${pid}`,
+    token: 't',
+    pid,
+    instanceId: `i-${pid}`,
+    apiVersion,
+  });
+
+  describe('resolveConnectedApiVersion', () => {
+    it('unpinned → the highest version across live instances, not the newest-started', () => {
+      // Discovery is newest-first, so instances[0] here is the LOWER-version build; the gate
+      // must still resolve 0.2.6 so a tool the other running Desktop serves is not hidden.
+      expect(
+        resolveConnectedApiVersion([instance(1, '0.2.5'), instance(2, '0.2.6')], undefined),
+      ).toBe('0.2.6');
+    });
+
+    it('unpinned → ignores instances with an unknown version when others report one', () => {
+      expect(resolveConnectedApiVersion([instance(1), instance(2, '0.2.6')], undefined)).toBe(
+        '0.2.6',
+      );
+    });
+
+    it('unpinned → undefined when no instance reports a version', () => {
+      expect(resolveConnectedApiVersion([instance(1), instance(2)], undefined)).toBeUndefined();
+    });
+
+    it('pinned → the matching instance version, not the highest', () => {
+      expect(resolveConnectedApiVersion([instance(1, '0.2.6'), instance(2, '0.2.5')], '2')).toBe(
+        '0.2.5',
+      );
+    });
+
+    it('pinned but no match → undefined so the gate fails open', () => {
+      expect(resolveConnectedApiVersion([instance(1, '0.2.6')], '999')).toBeUndefined();
+    });
+
+    it('no instances → undefined', () => {
+      expect(resolveConnectedApiVersion([], undefined)).toBeUndefined();
+      expect(resolveConnectedApiVersion([], '1')).toBeUndefined();
+    });
+
+    it('unpinned mixed-version fleet → a tool only the newer instance serves stays visible', () => {
+      const version = resolveConnectedApiVersion(
+        [instance(1, '0.2.6'), instance(2, '0.2.7')],
+        undefined,
+      );
+      const tools = [{ name: 'story', minApiVersion: '0.2.7' }, { name: 'plain' }];
+      expect(filterToolsByApiVersion(tools, version).map((t) => t.name)).toEqual([
+        'story',
+        'plain',
+      ]);
+    });
+  });
+
+  describe('filterToolsByApiVersion', () => {
+    const tools: Array<{ name: string; minApiVersion?: string }> = [
+      { name: 'a', minApiVersion: '0.2.6' },
+      { name: 'b', minApiVersion: '0.2.5' },
+      { name: 'c' },
+    ];
+
+    it('drops tools whose floor exceeds the connected version', () => {
+      expect(filterToolsByApiVersion(tools, '0.2.5').map((t) => t.name)).toEqual(['b', 'c']);
+    });
+
+    it('keeps a tool whose floor equals the connected version', () => {
+      expect(filterToolsByApiVersion(tools, '0.2.6').map((t) => t.name)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('fails open when the connected version is unknown — keeps everything unchanged', () => {
+      expect(filterToolsByApiVersion(tools, undefined)).toBe(tools);
+    });
+  });
+
+  it('the version-gated tools declare the expected floors', () => {
+    const floors = new Map(
+      desktopToolFactories
+        .map((factory) => factory(new DesktopMcpServer()))
+        .map((tool) => [tool.name, tool.minApiVersion]),
+    );
+    expect(floors.get('pause-auto-updates')).toBe('0.2.5');
+    expect(floors.get('resume-auto-updates')).toBe('0.2.5');
+    expect(floors.get('open-file')).toBe('0.2.6');
+    expect(floors.get('save-workbook')).toBe('0.2.6');
+    expect(floors.get('add-worksheet')).toBe('0.2.6');
+    expect(floors.get('add-dashboard')).toBe('0.2.6');
+    expect(floors.get('add-storyboard')).toBe('0.2.6');
+    expect(floors.get('export-storyboard-image')).toBe('0.2.7');
+    expect(floors.get('workbook-export-as')).toBe('0.2.7');
+  });
+
+  it('a connected 0.2.5 Desktop hides only the 0.2.6 tools from the profile surface', () => {
+    const profileTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'dynamic-authoring',
+    );
+    const gated = filterToolsByApiVersion(profileTools, '0.2.5').map((tool) => tool.name);
+
+    for (const dropped of [
+      'open-file',
+      'save-workbook',
+      'add-worksheet',
+      'add-dashboard',
+      'add-storyboard',
+    ]) {
+      expect(gated).not.toContain(dropped);
+    }
+    for (const kept of ['pause-auto-updates', 'resume-auto-updates', 'apply-worksheet']) {
+      expect(gated).toContain(kept);
+    }
+  });
+
+  it('a connected 0.2.6 Desktop still hides the 0.2.7 export routes', () => {
+    const fullTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'full',
+    );
+    const at26 = filterToolsByApiVersion(fullTools, '0.2.6').map((tool) => tool.name);
+    const at27 = filterToolsByApiVersion(fullTools, '0.2.7').map((tool) => tool.name);
+
+    for (const route of ['export-storyboard-image', 'workbook-export-as']) {
+      expect(at26).not.toContain(route);
+      expect(at27).toContain(route);
+    }
   });
 });
 

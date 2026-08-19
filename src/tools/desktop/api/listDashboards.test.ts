@@ -16,7 +16,7 @@ vi.mock('../../../desktop/wrappers/listDashboards.js');
 describe('listDashboardsTool', () => {
   const resultSchema = z.object({
     count: z.number(),
-    dashboards: z.array(z.string()),
+    dashboards: z.array(z.object({ id: z.string().optional(), name: z.string() })),
   });
 
   beforeEach(() => {
@@ -26,9 +26,7 @@ describe('listDashboardsTool', () => {
   it('should create a tool instance with correct properties', () => {
     const listDashboardsTool = getListDashboardsTool(new DesktopMcpServer());
     expect(listDashboardsTool.name).toBe('list-dashboards');
-    expect(listDashboardsTool.description).toContain(
-      'Gets a list of all dashboard names in the current workbook',
-    );
+    expect(listDashboardsTool.description).toContain('stable id');
     expect(listDashboardsTool.paramsSchema).toMatchObject({
       session: expect.any(Object),
     });
@@ -42,7 +40,10 @@ describe('listDashboardsTool', () => {
     const mockListDashboards = vi.spyOn(listDashboardsModule, 'listDashboards').mockResolvedValue(
       Ok({
         count: 2,
-        dashboards: ['Sales Overview', 'Executive Summary'],
+        dashboards: [
+          { id: 'dashboard-1', name: 'Sales Overview' },
+          { id: 'dashboard-2', name: 'Executive Summary' },
+        ],
       }),
     );
 
@@ -59,7 +60,10 @@ describe('listDashboardsTool', () => {
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(resultObj).toMatchObject({
       count: 2,
-      dashboards: ['Sales Overview', 'Executive Summary'],
+      dashboards: [
+        { id: 'dashboard-1', name: 'Sales Overview' },
+        { id: 'dashboard-2', name: 'Executive Summary' },
+      ],
     });
 
     expect(mockListDashboards).toHaveBeenCalledWith(
@@ -139,7 +143,7 @@ describe('listDashboardsTool', () => {
     const mockListDashboards = vi.spyOn(listDashboardsModule, 'listDashboards').mockResolvedValue(
       Ok({
         count: 1,
-        dashboards: ['Main Dashboard'],
+        dashboards: [{ id: 'dashboard-1', name: 'Main Dashboard' }],
       }),
     );
 

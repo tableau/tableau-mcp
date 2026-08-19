@@ -24,7 +24,7 @@ describe('getWorksheetXmlTool with External Client API transport', () => {
     vi.clearAllMocks();
     server = await startMockExternalApiServer({
       workbookXml:
-        '<?xml version="1.0"?><workbook><worksheets><worksheet name="Sales by Region"><table /></worksheet></worksheets></workbook>',
+        '<?xml version="1.0"?><workbook><worksheets><worksheet name="Sales by Region"><table /><simple-id uuid="sheet-sales" /></worksheet></worksheets></workbook>',
     });
   });
 

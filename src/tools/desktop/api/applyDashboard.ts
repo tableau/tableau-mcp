@@ -112,7 +112,9 @@ export const getApplyDashboardTool = (
           return new Ok(
             acceptedNoReadbackApplyResult({
               kind: 'dashboard',
-              appliedName: dashboardName,
+              appliedName: result.isOk()
+                ? (result.value.appliedName ?? dashboardName)
+                : dashboardName,
               resultWarnings: validationWarnings,
               hostVerification,
             }),

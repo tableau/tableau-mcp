@@ -687,7 +687,7 @@ describe('bindTemplateTool', () => {
       'Desktop process ID; omit to use the pinned or only running instance.',
     );
     expect(paramsSchema['target_worksheet']!.description).toBe(
-      'Worksheet to replace; omit to create.',
+      'Worksheet id or name; omit to create.',
     );
     expect(paramsSchema['auto_apply']!.description).toBe('Apply immediately.');
     expect(paramsSchema['calcs']!.description).toBe('Derived fields to author before binding.');
@@ -4099,6 +4099,43 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
         command: 'goto-sheet',
         args: { Sheet: 'se-eval-scratch' },
       }),
+    );
+  });
+
+  it('resolves a target passed by id to its live name for the classify gate and the title', async () => {
+    const targetWorkbookXml = INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW.replace(
+      /Sales by Region/g,
+      'se-eval-scratch',
+    );
+    const liveWorkbookXml =
+      "<?xml version='1.0' encoding='utf-8'?><workbook><worksheets>" +
+      "<worksheet name='se-eval-scratch'><table /><simple-id uuid='sheet-guid-1' /></worksheet>" +
+      '</worksheets></workbook>';
+    const { getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: targetWorkbookXml },
+      workbookReads: [liveWorkbookXml],
+    });
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      target_worksheet: 'sheet-guid-1',
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const resolved = JSON.parse(result.content[0].text);
+    expect(resolved.applied).toBe(true);
+    expect(resolved.sheet_name).toBe('se-eval-scratch');
+    expect(vi.mocked(classifyWorksheetReplaceTarget)).toHaveBeenCalledWith(
+      liveWorkbookXml,
+      'se-eval-scratch',
+    );
+    expect(vi.mocked(buildInjectedWorkbookXml)).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'se-eval-scratch' }),
     );
   });
 

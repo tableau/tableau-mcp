@@ -66,15 +66,15 @@ const DEFAULT_WORKSHEET_DOCUMENT_XML =
   '<view><datasources><datasource name="Sample - Superstore" /></datasources></view>' +
   '<rows>[Sample - Superstore].[none:Region:nk]</rows>' +
   '<cols>[Sample - Superstore].[sum:Sales:qk]</cols>' +
-  '</table></worksheet>';
+  '</table><simple-id uuid="sheet-sales" /></worksheet>';
 const DEFAULT_DASHBOARD_DOCUMENT_XML =
   '<?xml version="1.0"?>' +
-  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>';
+  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones><simple-id uuid="dash-exec" /></dashboard>';
 // A storyboard serializes as a `<dashboard type='storyboard'>`, and its /document route returns
 // that bare fragment directly — not a `<storyboard>` element, and not wrapped in a `<workbook>`.
 const DEFAULT_STORYBOARD_DOCUMENT_XML =
   '<?xml version="1.0"?>' +
-  '<dashboard name="QBR Story" type="storyboard"><zones><zone name="Sales by Region" /></zones></dashboard>';
+  '<dashboard name="QBR Story" type="storyboard"><zones><zone name="Sales by Region" /></zones><simple-id uuid="story-qbr" /></dashboard>';
 const DEFAULT_WORKSHEETS = [
   {
     id: 'sheet-sales',
@@ -611,6 +611,17 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const storyboardImageMatch = path.match(/^\/v0\/workbook\/storyboards\/([^/]+)\/image$/);
+    if (method === 'GET' && storyboardImageMatch) {
+      const storyboardId = decodeURIComponent(storyboardImageMatch[1]);
+      if (!DEFAULT_STORYBOARDS.some((storyboard) => storyboard.id === storyboardId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
+        return;
+      }
+      sendImageExport(res, searchParams, 1600, 900);
+      return;
+    }
+
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.site) {
       sendJson(res, 200, {
         siteId: 'site-sales',
@@ -830,6 +841,46 @@ export async function startMockExternalApiServer(
         return;
       }
       sendOperation(res, 'save-workbook-file');
+      return;
+    }
+
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookExportAs) {
+      let parsed: { format?: unknown; filePath?: unknown; targetVersion?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      const formats = ['pdf', 'powerpoint', 'packaged-workbook', 'prior-version'];
+      if (typeof parsed.format !== 'string' || !formats.includes(parsed.format)) {
+        sendProblem(res, 400, 'invalid-request-body', 'exportAs requires a known `format`.');
+        return;
+      }
+      if (typeof parsed.filePath !== 'string' || parsed.filePath.length === 0) {
+        sendProblem(res, 400, 'invalid-request-body', 'exportAs requires a string `filePath`.');
+        return;
+      }
+      // Extension↔format matrix: the live host answers `unsupported-file-type` when they disagree.
+      const ext = (parsed.filePath.match(/\.[^./\\]+$/)?.[0] ?? '').toLowerCase();
+      const okExt =
+        parsed.format === 'pdf'
+          ? ext === '.pdf'
+          : parsed.format === 'powerpoint'
+            ? ext === '.pptx'
+            : parsed.format === 'packaged-workbook'
+              ? ext === '.twbx'
+              : ext === '.twb' || ext === '.twbx'; // prior-version
+      if (!okExt) {
+        sendProblem(
+          res,
+          400,
+          'unsupported-file-type',
+          `filePath extension ${ext} does not match ${parsed.format}.`,
+        );
+        return;
+      }
+      sendOperation(res, 'export-workbook-as');
       return;
     }
 

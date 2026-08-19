@@ -157,8 +157,8 @@ export const getBatchCreateAndCacheSheetsTool = (
             const safeWsName = name.replace(/[^a-zA-Z0-9]/g, '_');
             const file = cache.getCacheFilePath({ prefix: 'worksheet', id: safeWsName });
             try {
-              writeFileSync(file, wsResult.value, 'utf-8');
-              writeSidecar(file, resolvedSession, sourceSha256(wsResult.value));
+              writeFileSync(file, wsResult.value.xml, 'utf-8');
+              writeSidecar(file, resolvedSession, sourceSha256(wsResult.value.xml));
             } catch (error) {
               worksheetFailures.push({
                 name,
@@ -182,8 +182,8 @@ export const getBatchCreateAndCacheSheetsTool = (
             const safeDashName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
             const file = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });
             try {
-              writeFileSync(file, dashResult.value, 'utf-8');
-              writeSidecar(file, resolvedSession, sourceSha256(dashResult.value));
+              writeFileSync(file, dashResult.value.xml, 'utf-8');
+              writeSidecar(file, resolvedSession, sourceSha256(dashResult.value.xml));
               dashboardFile = file;
             } catch (error) {
               dashboardFailures.push({
