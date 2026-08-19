@@ -231,12 +231,13 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-19: list-templates now exposes derived template-fit metadata and filters by
 // required visible channels. Its schema adds 149 bytes; tighter route prose removes 131 from the
 // served profile, while the full schema-only surface moves 56_650 -> 56_799.
-// Re-pinned 2026-08-19: apply-worksheet now infers the target from a cached worksheet fragment, so
-// its worksheetName describe drops the redundant "worksheet" (-3 bytes); dynamic authoring 40_099 -> 40_096.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_096;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_117;
+// Re-pinned 2026-08-19: added native Custom Theme apply, inspect, and export tools to the Desktop
+// authoring suite. The later apply-worksheet name inference trims three bytes from both profiles.
+// Dynamic stays below the 46k product ceiling with 18 bytes of ratchet slack.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 41_572;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 41_590;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 56_817;
+const FULL_TOOL_SURFACE_BUDGET = 58_272;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -493,10 +494,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 51-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 54-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(51);
+    expect(selected).toHaveLength(54);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -542,6 +543,9 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'workbook-export-as',
       'get-workbook-xml',
       'apply-workbook',
+      'apply-workbook-style',
+      'inspect-custom-theme',
+      'export-custom-theme',
       'get-dashboard-xml',
       'apply-dashboard',
       'get-storyboard-xml',

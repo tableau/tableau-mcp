@@ -25,6 +25,8 @@ export const desktopToolNames = [
   'remove-field',
   'resolve-field',
   'apply-workbook-style',
+  'inspect-custom-theme',
+  'export-custom-theme',
   'search-examples',
   'search-commands',
   'lookup-workbook-schema',
