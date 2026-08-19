@@ -1,0 +1,12 @@
+{
+  "id": "inactive-users-insights-90d",
+  "name": "JTBD3 — Inactive users >90d via Admin Insights",
+  "description": "Admin read path. Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT. Model should use query-admin-insights (kind=ts-users) filtering on 'Days Since Last Login' >= 90. Trap: TS Users has NO 'Site Role' field (returns 'Unknown Field') — filter on 'User Email' / 'Days Since Last Login' instead. Read-only, no mutation.",
+  "tags": ["admin", "admin-insights", "inactive-users", "read-only", "jtbd3", "real-server"],
+  "prompt": "Which users on this site haven't logged in for more than 90 days? Use Admin Insights. Report the inactive users and the field(s) you filtered on. Do not modify anything.",
+  "expected_tools": ["query-admin-insights"],
+  "budget": {
+    "max_tool_calls": 8,
+    "max_wall_ms": 180000
+  }
+}

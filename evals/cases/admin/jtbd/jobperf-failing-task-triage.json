@@ -1,0 +1,12 @@
+{
+  "id": "jobperf-failing-task-triage",
+  "name": "JTBD2 — Problem refresh triage (jobs + schedule)",
+  "description": "Job-performance JTBD triage path combining two tools. Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT on Tableau Cloud. Model should cross-reference list-jobs (recent failures) with list-extract-refresh-tasks (the task's schedule) to triage the problem refresh. On the test site there are zero failures; the load driver is an hourly cadence on a large extract, not failures. Read-only.",
+  "tags": ["admin", "jobs", "tasks", "job-performance", "read-only", "jtbd2", "cloud", "real-server"],
+  "prompt": "Triage the problem extract refresh on this site: check for recent job failures AND look up the task's schedule to explain the load. Use both list-jobs and list-extract-refresh-tasks. Report whether failures are the issue or whether the schedule cadence is the driver. Do not modify anything.",
+  "expected_tools": ["list-jobs", "list-extract-refresh-tasks"],
+  "budget": {
+    "max_tool_calls": 8,
+    "max_wall_ms": 180000
+  }
+}

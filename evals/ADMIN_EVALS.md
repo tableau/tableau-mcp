@@ -194,6 +194,34 @@ these cases have no gold value.)
 | `delete-content-preview.json` | `delete-content` (preview) | no |
 | `update-extract-refresh-task-preview.json` | `list-extract-refresh-tasks`, `update-cloud-extract-refresh-task` (preview) | no |
 
+### JTBD cases (in `evals/cases/admin/jtbd/`)
+
+End-to-end job-to-be-done cases mapped to the manual eval report (3 JTBDs + 2
+cross-cutting controls). Each JTBD offers multiple tool paths for the same intent.
+The 3 remediation cases are **PREVIEW only** (mutation forbidden in the prompt).
+
+| Case file | Tools exercised | Mutates? |
+|---|---|---|
+| `inactive-users-insights-90d.json` | `query-admin-insights` | no (read) |
+| `inactive-users-listusers-path.json` | `list-users` | no (read) |
+| `inactive-users-threshold-30d.json` | `query-admin-insights` | no (read) |
+| `inactive-users-remediation-preview.json` | `update-user` (preview) | no |
+| `stale-content-insights-90d.json` | `query-admin-insights` | no (read) |
+| `stale-content-search-path.json` | `search-content` | no (read) |
+| `stale-workbooks-listworkbooks.json` | `list-workbooks` | no (read) |
+| `stale-content-threshold-180d.json` | `query-admin-insights` | no (read) |
+| `stale-content-remediation-preview.json` | `delete-content` (preview) | no |
+| `jobperf-insights-slowest.json` | `query-admin-insights` | no (read) |
+| `jobperf-listjobs-failures.json` | `list-jobs` | no (read) |
+| `refresh-tasks-inventory.json` | `list-extract-refresh-tasks` | no (read) |
+| `jobperf-failing-task-triage.json` | `list-jobs`, `list-extract-refresh-tasks` | no (read) |
+| `jobperf-remediation-preview.json` | `list-extract-refresh-tasks`, `update-cloud-extract-refresh-task` (preview) | no |
+| `inactive-users-safety-nomutate.json` | `query-admin-insights` (negative control) | no (read) |
+| `stale-content-empty-graceful.json` | `query-admin-insights` (edge case) | no (read) |
+
+The `jtbd/` mutation-preview cases need the same `EVAL_*_LUID` env targets as §6
+(`EVAL_UPDATE_USER_LUID`, `EVAL_DELETE_WORKBOOK_LUID`, `EVAL_EXTRACT_TASK_LUID`).
+
 ---
 
 ## 8. Produce a report to attach to a PR
