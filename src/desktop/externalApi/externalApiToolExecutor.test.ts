@@ -735,6 +735,38 @@ describe('ExternalApiToolExecutor', () => {
       expect(discover).toHaveBeenCalledTimes(2);
     });
 
+    it('does not retry invokeCommand when a 401 rescan changes instance identity at the same pid', async () => {
+      const discover = vi
+        .fn()
+        .mockReturnValueOnce([
+          { ...instanceFor(server, 'stale-token'), instanceId: 'inst-expected' },
+        ])
+        .mockReturnValue([{ ...instanceFor(server, 'valid-token'), instanceId: 'inst-restarted' }]);
+      const executor = new ExternalApiToolExecutor({ pid: 999, discover });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'apply-theme',
+        expectedInstanceId: 'inst-expected',
+        signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+        ),
+      ).toHaveLength(1);
+      expect(discover).toHaveBeenCalledTimes(2);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('unknown');
+      if (error.type === 'unknown') {
+        expect(String(error.error)).toContain('inst-expected');
+        expect(String(error.error)).toContain('inst-restarted');
+      }
+    });
+
     it('does not retry a workbook POST when a 401 rescan finds a new instance with the same pid', async () => {
       const discover = vi
         .fn()

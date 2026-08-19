@@ -64,6 +64,7 @@ import { getDashboardHealthCheckTool } from './authoring/sheets/dashboardHealthC
 import { getPlanDashboardCreationTool } from './authoring/sheets/planDashboardCreation.js';
 import { getRefineWorksheetTool } from './authoring/sheets/refineWorksheet.js';
 import { getRunDashboardBatchTool } from './authoring/sheets/runDashboardBatch.js';
+import { getApplyWorkbookStyleTool } from './authoring/style/applyWorkbookStyle.js';
 import { getBuildWorksheetsFromTemplatesTool } from './authoring/templates/buildWorksheetsFromTemplates.js';
 import { getInjectTemplateTool } from './authoring/templates/injectTemplate.js';
 import { getAskUserTool } from './local/askUser.js';
@@ -112,6 +113,7 @@ export const desktopToolFactories = [
   getAddFieldTool,
   getRemoveFieldTool,
   getResolveFieldTool,
+  getApplyWorkbookStyleTool,
   getSearchExamplesTool,
   getSearchCommandsTool,
   getLookupWorkbookSchemaTool,
