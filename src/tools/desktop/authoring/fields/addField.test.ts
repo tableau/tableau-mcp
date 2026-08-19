@@ -8,11 +8,11 @@ import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
 import * as metadataModule from '../../../../desktop/metadata/index.js';
 import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
 import * as getWorksheetXmlModule from '../../../../desktop/wrappers/getWorksheetXml.js';
+import * as listWorksheetsModule from '../../../../desktop/wrappers/listWorksheets.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
   FileReadError,
-  GetWorksheetXmlFailedError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
@@ -20,11 +20,14 @@ import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getAddFieldTool } from './addField.js';
+import * as refreshWorkbookCacheModule from './refreshWorkbookCache.js';
 
 vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
+vi.mock('../../../../desktop/wrappers/listWorksheets.js');
 vi.mock('../../../../desktop/externalApi/discovery.js');
+vi.mock('./refreshWorkbookCache.js');
 vi.mock('fs');
 
 type EncodingType = 'color' | 'size' | 'lod' | 'detail' | 'text' | 'tooltip' | 'path' | 'angle';
@@ -38,6 +41,7 @@ const resultSchema = z.object({
 const WORKSHEET_FILE = '/cache/worksheet.xml';
 const SESSION = '12345';
 const WORKBOOK_FILE = '/cache/workbook.xml';
+const LIVE_WORKBOOK_XML = '<workbook live="1"/>';
 
 function mockPinnedSession(desktopSessionId: string | undefined): void {
   const base = new configModule.Config();
@@ -54,6 +58,15 @@ describe('addFieldTool', () => {
     vi.clearAllMocks();
     mockPinnedSession(undefined);
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
+    vi.mocked(refreshWorkbookCacheModule.refreshWorkbookCache).mockResolvedValue({
+      ok: true,
+      xml: LIVE_WORKBOOK_XML,
+    });
+    // The edit buffer keys on the sheet's simple-id — the resolver lists the sheet to map
+    // "Sheet 1" to that id, so the sticky-buffer tests exercise the id path, not the fallback.
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Ok({ count: 1, worksheets: [{ id: 'sheet-1-uuid', name: 'Sheet 1' }] }),
+    );
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -158,7 +171,10 @@ describe('addFieldTool', () => {
 
     await getResult({ worksheetFile: WORKSHEET_FILE, target: 'rows', columnRef: COLUMN_REF });
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+      WORKSHEET_FILE,
+      SESSION,
+    );
   });
 
   it('stamps the sidecar with the pinned session, not the requested one', async () => {
@@ -175,7 +191,10 @@ describe('addFieldTool', () => {
       session: undefined,
     });
 
-    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+      WORKSHEET_FILE,
+      SESSION,
+    );
   });
 
   it('rejects and writes no sidecar when the requested session is not a running instance', async () => {
@@ -203,7 +222,7 @@ describe('addFieldTool', () => {
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('does not use the Tableau command channel after a successful field edit', async () => {
+  it('does not use the Tableau command channel when workbookFile is supplied', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
     vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
@@ -221,19 +240,23 @@ describe('addFieldTool', () => {
         columnRef: COLUMN_REF,
         encodingType: undefined,
         index: undefined,
-        workbookFile: undefined,
+        workbookFile: WORKBOOK_FILE,
       },
       extra,
     );
 
     expect(result.isError).toBe(false);
     expect(extra.getExecutor).not.toHaveBeenCalled();
+    expect(refreshWorkbookCacheModule.refreshWorkbookCache).not.toHaveBeenCalled();
   });
 
   // --- name-based path (no prior get-worksheet-xml call) ---
   it('fetches + caches the sheet by name when no worksheetFile is given, then edits it', async () => {
     const FRAGMENT = '<worksheet name="Sheet 1"><table/></worksheet>';
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Ok(FRAGMENT));
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: FRAGMENT, name: 'Sheet 1' }),
+    );
+    vi.mocked(cacheFingerprintModule.sourceSha256).mockReturnValue('e'.repeat(64));
     // The minted cache file exists after the internal write; the edit reads it back.
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(FRAGMENT);
@@ -260,15 +283,17 @@ describe('addFieldTool', () => {
     expect(writeFileSync).toHaveBeenCalledWith(body.file, FRAGMENT, 'utf-8');
     // ...and the modified XML was written back to the same path.
     expect(writeFileSync).toHaveBeenCalledWith(body.file, MODIFIED_XML, 'utf-8');
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(
+      body.file,
+      SESSION,
+      'e'.repeat(64),
+    );
+    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(body.file, SESSION);
   });
 
-  it('surfaces a fetch error (unknown worksheet) without writing anything', async () => {
-    const fetchErr = {
-      type: 'get-worksheet-xml-error' as const,
-      error: { type: 'no-worksheet-found' as const, message: 'No worksheet found for Ghost.' },
-    };
-    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(Err(fetchErr));
-
+  it('rejects a worksheet name that is not in the live list, before any fetch or write', async () => {
+    // "Ghost" is not in the mocked worksheet list, so the stable-id resolve fails and the
+    // edit stops there — it never falls back to keying the buffer on the raw name.
     const result = await getResult({
       worksheetName: 'Ghost',
       target: 'rows',
@@ -277,9 +302,32 @@ describe('addFieldTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(new GetWorksheetXmlFailedError(fetchErr.error).message);
+    expect(result.content[0].text).toContain('Could not resolve a stable id for worksheet "Ghost"');
+    expect(result.content[0].text).toContain('list-worksheets');
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
     expect(metadataModule.addFieldToRows).not.toHaveBeenCalled();
+  });
+
+  it('fails loudly when the worksheet list cannot be read, rather than keying the buffer on the name', async () => {
+    vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: { code: 'boom', message: 'list unavailable', recoverable: false },
+      }) as never,
+    );
+
+    const result = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Could not resolve a stable id');
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
   });
 
   it('uses in-profile recovery guidance when the worksheet endpoint is absent', async () => {
@@ -323,6 +371,114 @@ describe('addFieldTool', () => {
     );
     expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
+  // --- sticky worksheet edit buffer ---
+  it('accumulates two name-only calls on the same sticky file (fetches once)', async () => {
+    const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
+    const files = new Map<string, string>();
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: baseXml, name: 'Sheet 1' }),
+    );
+    vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
+    vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
+    vi.mocked(writeFileSync).mockImplementation((path, data) => {
+      files.set(String(path), String(data));
+    });
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({ ok: true });
+
+    const first = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(first.isError).toBe(false);
+    invariant(first.content[0].type === 'text');
+    const firstBody = resultSchema.parse(JSON.parse(first.content[0].text));
+
+    const second = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(second.isError).toBe(false);
+    invariant(second.content[0].type === 'text');
+    const secondBody = resultSchema.parse(JSON.parse(second.content[0].text));
+
+    // Both name-only calls land on the same minted cache file — the second call never
+    // re-fetches a fresh (blank) sheet from the live workbook.
+    expect(secondBody.file).toBe(firstBody.file);
+    expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledOnce();
+    expect(vi.mocked(metadataModule.addFieldToRows).mock.calls[1]?.[0]).toBe(MODIFIED_XML);
+  });
+
+  it('mints a fresh sheet when the sticky buffer fails its sidecar/session check', async () => {
+    const baseXml = '<worksheet name="Sheet 1"><table/></worksheet>';
+    const files = new Map<string, string>();
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: baseXml, name: 'Sheet 1' }),
+    );
+    vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
+    vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
+    vi.mocked(writeFileSync).mockImplementation((path, data) => {
+      files.set(String(path), String(data));
+    });
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    // The sidecar check fails on every lookup — as if the buffer belonged to another
+    // Desktop instance/session — so the sticky pointer must never be trusted.
+    vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({
+      ok: false,
+      reason: 'session-mismatch',
+    } as never);
+
+    const first = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(first.isError).toBe(false);
+
+    const second = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(second.isError).toBe(false);
+
+    // Each name-only call re-fetches because the sticky pointer never validates.
+    expect(getWorksheetXmlModule.getWorksheetXml).toHaveBeenCalledTimes(2);
+  });
+
+  it('an explicit worksheetFile updates the sticky buffer for later name-only calls', async () => {
+    const files = new Map<string, string>([[WORKSHEET_FILE, '<worksheet/>']]);
+    vi.mocked(existsSync).mockImplementation((path) => files.has(String(path)));
+    vi.mocked(readFileSync).mockImplementation((path) => files.get(String(path)) ?? '');
+    vi.mocked(writeFileSync).mockImplementation((path, data) => {
+      files.set(String(path), String(data));
+    });
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({ ok: true });
+
+    // First call names the sheet AND supplies the file explicitly — the override case.
+    const explicit = await getResult({
+      worksheetName: 'Sheet 1',
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(explicit.isError).toBe(false);
+
+    // A later name-only call continues from that same file without any fetch.
+    const nameOnly = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+    expect(nameOnly.isError).toBe(false);
+    invariant(nameOnly.content[0].type === 'text');
+    expect(resultSchema.parse(JSON.parse(nameOnly.content[0].text)).file).toBe(WORKSHEET_FILE);
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
   });
 
   it('prefers worksheetFile over worksheetName when both are given (no fetch)', async () => {
@@ -382,6 +538,10 @@ describe('addFieldTool', () => {
       vi.mocked(readFileSync).mockReturnValue(
         '<worksheet><table><rows>[A] / [B]</rows></table></worksheet>',
       );
+      vi.mocked(refreshWorkbookCacheModule.refreshWorkbookCache).mockResolvedValue({
+        ok: true,
+        xml: LIVE_WORKBOOK_XML,
+      });
 
       const result = await getResult({
         worksheetFile: WORKSHEET_FILE,
@@ -586,7 +746,7 @@ describe('addFieldTool', () => {
       'size',
       COLUMN_REF,
       1,
-      undefined,
+      LIVE_WORKBOOK_XML,
     );
   });
 
@@ -631,7 +791,7 @@ describe('addFieldTool', () => {
       '<worksheet/>',
       COLUMN_REF,
       undefined,
-      undefined,
+      LIVE_WORKBOOK_XML,
     );
     expect(metadataModule.addFieldToEncoding).not.toHaveBeenCalled();
   });
@@ -654,7 +814,7 @@ describe('addFieldTool', () => {
       '<worksheet/>',
       COLUMN_REF,
       undefined,
-      undefined,
+      LIVE_WORKBOOK_XML,
     );
     expect(metadataModule.addFieldToEncoding).not.toHaveBeenCalled();
   });
@@ -695,6 +855,10 @@ describe('add-field columnRef contract', () => {
     vi.mocked(readFileSync).mockImplementation((path) =>
       String(path) === WORKBOOK_FILE ? (WORKBOOK_XML as never) : ('<worksheet/>' as never),
     );
+    vi.mocked(refreshWorkbookCacheModule.refreshWorkbookCache).mockResolvedValue({
+      ok: true,
+      xml: LIVE_WORKBOOK_XML,
+    });
   });
 
   it('documents the format and a worked example on the parameter itself', async () => {
@@ -737,7 +901,9 @@ describe('add-field columnRef contract', () => {
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('points at resolve-field when no workbook is available to suggest from', async () => {
+  it('points at resolve-field when the workbook has no fields to suggest', async () => {
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue([]);
+
     const result = await getResult({
       worksheetFile: WORKSHEET_FILE,
       target: 'cols',

@@ -30,7 +30,11 @@ import { ExecuteCommandError } from '../../../../desktop/externalApi/executorTyp
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
 import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { addFieldToEncoding } from '../../../../desktop/metadata/fields.js';
-import { extractSheetXml, upsertSheetIntoWorkbook } from '../../../../desktop/metadata/sheets.js';
+import {
+  extractSheetXml,
+  resolveWorksheetRef,
+  upsertSheetIntoWorkbook,
+} from '../../../../desktop/metadata/sheets.js';
 import {
   planSortByFieldOnCategoricalAxis,
   planTopN,
@@ -117,7 +121,7 @@ const paramsSchema = {
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
-  target_worksheet: z.string().optional().describe('Worksheet to replace; omit to create.'),
+  target_worksheet: z.string().optional().describe('Worksheet id or name; omit to create.'),
   calcs: z
     .array(
       z.object({
@@ -2091,16 +2095,20 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           // or a dashboard-member sheet would make removeSameNamedWorksheet defer and
           // Desktop dedup the inject into a stray "Name (1)" copy, the exact failure
           // this parameter exists to prevent.
+          let resolvedTarget: { id?: string; name: string } | undefined;
+          let canonicalTargetWorksheet = target_worksheet;
           if (target_worksheet !== undefined) {
-            const target = classifyWorksheetReplaceTarget(workbookXml, target_worksheet);
+            resolvedTarget = resolveWorksheetRef(workbookXml, target_worksheet) ?? undefined;
+            canonicalTargetWorksheet = resolvedTarget?.name ?? target_worksheet;
+            const target = classifyWorksheetReplaceTarget(workbookXml, canonicalTargetWorksheet);
             if (target === 'not-found') {
               return new ArgsValidationError(
-                `target_worksheet "${target_worksheet}" not found in the workbook — check list-worksheets, or omit target_worksheet to create a new sheet`,
+                `target_worksheet "${canonicalTargetWorksheet}" not found in the workbook — check list-worksheets, or omit target_worksheet to create a new sheet`,
               ).toErr();
             }
             if (target === 'in-dashboard') {
               return new ArgsValidationError(
-                `target_worksheet "${target_worksheet}" is a dashboard member sheet — replacing it in place could corrupt the dashboard; omit target_worksheet to create a new sheet`,
+                `target_worksheet "${canonicalTargetWorksheet}" is a dashboard member sheet — replacing it in place could corrupt the dashboard; omit target_worksheet to create a new sheet`,
               ).toErr();
             }
           }
@@ -2175,8 +2183,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
             throw e;
           }
-          if (target_worksheet !== undefined && res.status === 'bound') {
-            res = { ...res, args: { ...res.args, title: target_worksheet } };
+          if (canonicalTargetWorksheet !== undefined && res.status === 'bound') {
+            res = { ...res, args: { ...res.args, title: canonicalTargetWorksheet } };
           }
           const bindMs = Date.now() - bindStart;
           const schemaSummary = summarizeSchema(workbookXml);
@@ -2218,7 +2226,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 llmInput: call2ContractInput,
                 session: resolvedSession,
                 ask,
-                targetWorksheet: target_worksheet,
+                targetWorksheet: resolvedTarget?.id ?? target_worksheet,
               })
             : undefined;
           try {

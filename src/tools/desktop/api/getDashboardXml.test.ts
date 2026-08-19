@@ -51,7 +51,9 @@ describe('getDashboardXmlTool', () => {
 
   it('should return dashboard XML inline when mode is inline', async () => {
     const mockXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Ok(mockXml));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(
+      Ok({ xml: mockXml, name: 'Sales Dashboard' }),
+    );
 
     const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
 
@@ -66,7 +68,9 @@ describe('getDashboardXmlTool', () => {
 
   it('should write to file and return path when mode is file', async () => {
     const mockXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Ok(mockXml));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(
+      Ok({ xml: mockXml, name: 'Sales Dashboard' }),
+    );
 
     const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'file' });
 
@@ -133,7 +137,9 @@ describe('getDashboardXmlTool', () => {
   it('should pass the abort signal to getDashboardXml', async () => {
     const mockGetDashboardXml = vi
       .spyOn(getDashboardXmlModule, 'getDashboardXml')
-      .mockResolvedValue(Ok('<dashboard name="Sales Dashboard"/>'));
+      .mockResolvedValue(
+        Ok({ xml: '<dashboard name="Sales Dashboard"/>', name: 'Sales Dashboard' }),
+      );
 
     const customSignal = new AbortController().signal;
     await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline', customSignal });
@@ -146,7 +152,9 @@ describe('getDashboardXmlTool', () => {
   it('forces file mode when inline XML exceeds the cap, regardless of requested mode', async () => {
     const overCapXml =
       '<dashboard name="Sales Dashboard"><zones>' + 'x'.repeat(20000) + '</zones></dashboard>';
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Ok(overCapXml));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(
+      Ok({ xml: overCapXml, name: 'Sales Dashboard' }),
+    );
 
     const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
 
@@ -164,7 +172,9 @@ describe('getDashboardXmlTool', () => {
   it('logs a cap-hit receipt when the cap fires', async () => {
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
     const overCapXml = '<dashboard name="D"><zones>' + 'x'.repeat(20000) + '</zones></dashboard>';
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Ok(overCapXml));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(
+      Ok({ xml: overCapXml, name: 'D' }),
+    );
 
     await getToolResult({ dashboardName: 'D', mode: 'inline' });
 
@@ -178,7 +188,9 @@ describe('getDashboardXmlTool', () => {
 
   it('respects a smaller cap overridden via config', async () => {
     const smallXml = '<dashboard name="D"><zones/></dashboard>';
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Ok(smallXml));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(
+      Ok({ xml: smallXml, name: 'D' }),
+    );
 
     const result = await getToolResult({ dashboardName: 'D', mode: 'inline', capBytes: 8 });
 

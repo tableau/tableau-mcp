@@ -89,23 +89,20 @@ describe('metadata/fields — never fabricate a column that exists', () => {
     expect(events.filter((e) => e.fabricated)).toEqual([]);
   });
 
-  it('still falls back, flagged, when no workbook is supplied to verify against', () => {
+  it('refuses when no workbook is supplied to verify against', () => {
     capture();
-    const out = addFieldToCols(WORKBOOK, '[Sample - Superstore].[sum:Unverifiable:qk]');
-    expect(out).toContain('Unverifiable');
-    expect(events.filter((e) => e.fabricated)).toHaveLength(1);
+    expect(() => addFieldToCols(WORKBOOK, '[Sample - Superstore].[sum:Unverifiable:qk]')).toThrow(
+      /workbook|datasource/i,
+    );
+    expect(events.filter((e) => e.fabricated)).toEqual([]);
   });
 
-  it('still falls back, flagged, when the datasource key does not match the workbook', () => {
+  it('refuses when the datasource key does not match the workbook', () => {
     capture();
-    const out = addFieldToCols(
-      WORKBOOK,
-      '[federated.some-other-key].[sum:Sales:qk]',
-      undefined,
-      WORKBOOK,
-    );
-    expect(out).toContain('Sales');
-    expect(events.filter((e) => e.fabricated)).toHaveLength(1);
+    expect(() =>
+      addFieldToCols(WORKBOOK, '[federated.some-other-key].[sum:Sales:qk]', undefined, WORKBOOK),
+    ).toThrow(/datasource|federated\.some-other-key/i);
+    expect(events.filter((e) => e.fabricated)).toEqual([]);
   });
 
   it('leaves an explicitly declared <column> resolving as before', () => {

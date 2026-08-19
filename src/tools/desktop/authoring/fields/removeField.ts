@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -10,18 +10,18 @@ import {
 } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
-import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
-  FileNotFoundError,
   FileReadError,
   XmlModificationError,
   XmlValidationError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
+import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
-import { fetchAndCacheWorksheet } from './worksheetCache.js';
+import { resolveWorksheetEditFile } from './worksheetEditBuffer.js';
 
 /** Encoding channels a field can be removed from. */
 const ENCODING_TYPES = [
@@ -42,11 +42,11 @@ const paramsSchema = {
   worksheetName: z
     .string()
     .optional()
-    .describe('Sheet to edit (fetched fresh); or pass worksheetFile to stack edits.'),
+    .describe('Sheet to edit; name-only calls continue the open edit buffer.'),
   worksheetFile: z
     .string()
     .optional()
-    .describe('Cached sheet path from a prior edit; stacks edits.'),
+    .describe('Cached sheet path to force an edit target; omit to continue the open edit buffer.'),
   target: z.enum(FIELD_TARGETS).describe('Placement shelf.'),
   columnRef: z.string().describe('Field to remove.'),
   encodingType: z.enum(ENCODING_TYPES).optional().describe('Required when target=encoding.'),
@@ -80,29 +80,16 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
           }
           const resolvedSession = sessionResult.value;
 
-          if (!worksheetFile?.trim() && !worksheetName?.trim()) {
-            return new ArgsValidationError(
-              'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
-            ).toErr();
+          const editFile = await resolveWorksheetEditFile({
+            worksheetName,
+            worksheetFile,
+            resolvedSession,
+            extra,
+          });
+          if (editFile.isErr()) {
+            return editFile.error.toErr();
           }
-
-          // Name-based path: always fetch fresh and mint a new cache file. Follow-up
-          // add-field/remove-field calls should pass the returned worksheetFile to stack edits.
-          if (!worksheetFile?.trim()) {
-            const minted = await fetchAndCacheWorksheet({
-              worksheetName: worksheetName!.trim(),
-              resolvedSession,
-              extra,
-            });
-            if (minted.isErr()) {
-              return minted.error.toErr();
-            }
-            worksheetFile = minted.value;
-          }
-
-          if (!existsSync(worksheetFile)) {
-            return new FileNotFoundError(worksheetFile).toErr();
-          }
+          worksheetFile = editFile.value;
 
           // encodingType is conditionally required — enforced here (not in the JSON Schema) so
           // the schema stays flat and host-portable.
@@ -154,16 +141,22 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
 
           try {
             writeFileSync(worksheetFile, modifiedXml, 'utf-8');
-            writeSidecar(worksheetFile, resolvedSession);
+            restampSidecarAfterEdit(worksheetFile, resolvedSession);
           } catch (error) {
             return new FileReadError(error).toErr();
           }
 
-          return new Ok({
-            message: `Successfully removed field from ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.`,
-            file: worksheetFile,
-          });
+          return new Ok(
+            withNextAction(
+              {
+                message: `Successfully removed field from ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.`,
+                file: worksheetFile,
+              },
+              prefillNextAction('Apply worksheet edits'),
+            ),
+          );
         },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },
   });

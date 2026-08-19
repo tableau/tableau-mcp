@@ -45,6 +45,7 @@ describe('applyWorkbookTool', () => {
     const applyWorkbookTool = getApplyWorkbookTool(new DesktopMcpServer());
     expect(applyWorkbookTool.name).toBe('apply-workbook');
     expect(applyWorkbookTool.description).toContain('Apply modified workbook content to Tableau');
+    expect(applyWorkbookTool.description).toContain('freshness check');
     expect(applyWorkbookTool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       workbookFile: expect.any(Object),
@@ -103,6 +104,10 @@ describe('applyWorkbookTool', () => {
 
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+      ok: true,
+      sourceHash: 'a'.repeat(64),
+    });
     vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
       Ok({ validationWarnings: [] }),
     );
@@ -120,9 +125,23 @@ describe('applyWorkbookTool', () => {
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(resultObj.message).toContain('Successfully applied workbook update');
+    const structured = structuredSchema.parse(result.structuredContent);
+    expect(structured.nextAction.receipt.did).toContain(
+      'preflight validation returned 0 warning(s)',
+    );
+    expect(structured.nextAction.receipt.did).not.toContain(
+      'preflight validation returned 1 warning(s)',
+    );
 
     expect(existsSync).toHaveBeenCalledWith(mockFilePath);
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
+    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedSourceHash: 'a'.repeat(64),
+        cachedLiveRelative: true,
+      }),
+    );
+    sidecarSpy.mockRestore();
   });
 
   it('refuses a file-mode apply when the cache sidecar fingerprint mismatches the session (W9)', async () => {

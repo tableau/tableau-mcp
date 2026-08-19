@@ -146,6 +146,35 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
       }
     });
 
+    it('returns awaiting-user when a RUNNING poll carries blockingWindows (server never sets AWAITING_USER)', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-user-2'));
+      server.setOperation('op-user-2', {
+        poll: [
+          {
+            id: 'op-user-2',
+            kind: 'tabui:open-bookmark',
+            state: 'RUNNING',
+            blockingWindows: [
+              { objectName: 'msgbox', title: 'Discard changes?', className: 'QMessageBox' },
+            ],
+          },
+        ],
+      });
+
+      const result = await http.postJsonEnvelope(
+        EXTERNAL_API_ROUTES.invokeCommand,
+        invokeBody('tabui', 'open-bookmark'),
+      );
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('awaiting-user');
+      if (error.type === 'awaiting-user') {
+        expect(error.blockingWindows).toEqual([
+          { objectName: 'msgbox', title: 'Discard changes?', className: 'QMessageBox' },
+        ]);
+      }
+    });
+
     it('returns operation-expired when the polled operation 404s', async () => {
       server.setOverride('POST /v0/app:invokeCommand', accepted202('op-gone-1'));
       // No setOperation → the poll route 404s operation-not-found.

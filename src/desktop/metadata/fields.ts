@@ -681,8 +681,8 @@ function getColumnFromWorkbook(
 
     // A field Tableau has never customized carries NO <column> element — it exists
     // only under <connection>. listAvailableFields advertises those refs, so this
-    // lookup must read the same sources or a real field reads as missing and gets
-    // fabricated with a datatype guessed from the derivation prefix.
+    // lookup must read the same sources or a real field reads as missing and the
+    // caller is refused instead of getting a guessed datatype.
     return getColumnFromConnection(ds, columnName);
   } catch {
     // If parsing fails, return undefined
@@ -862,48 +862,24 @@ function ensureColumnInstanceInDependencies(
             }
           }
         }
-      } else if (workbookDeclaresDatasource(workbookXml, datasource)) {
-        // The workbook was available, the datasource matched, and the column is in
-        // none of its definitions. A fabricated column paints a blank or wrong view
-        // and Tableau reports no load error, so refuse rather than invent one.
+      } else if (!workbookXml) {
+        throw new Error(
+          `Cannot resolve column ${parsedCorrected.column} without workbook context. ` +
+            'Pass workbookFile from field resolution, or call add-field with a session so it can read the live workbook.',
+        );
+      } else if (!workbookDeclaresDatasource(workbookXml, datasource)) {
+        throw new Error(
+          `Datasource "${datasource}" was not found in the workbook. ` +
+            'Call list-available-fields with the session for a valid columnRef — it re-reads ' +
+            'the live workbook, so a field you just added in Desktop cannot be hidden by a stale cache.',
+        );
+      } else {
         throw new Error(
           `Column ${parsedCorrected.column} does not exist in datasource "${datasource}". ` +
             'Call list-available-fields with the session for a valid columnRef — it re-reads ' +
             'the live workbook, so a field you just added in Desktop cannot be hidden by a ' +
             'stale cache.',
         );
-      } else {
-        // Fallback: create a basic column definition if not found in workbook
-        // Infer type from derivation: Sum/Avg/Min/Max/Count/CountD/User → quantitative, None → nominal
-        const isQuantitative = [
-          'Sum',
-          'Avg',
-          'Min',
-          'Max',
-          'Count',
-          'CountD',
-          'CountDistinct',
-          'Median',
-          'Stdev',
-          'StdevP',
-          'Var',
-          'VarP',
-          'User',
-        ].includes(parsedCorrected.derivation);
-        const newColumn = {
-          '@_name': parsedCorrected.column,
-          '@_role': isQuantitative ? 'measure' : 'dimension',
-          '@_type': isQuantitative ? 'quantitative' : 'nominal',
-          '@_datatype': isQuantitative ? 'real' : 'string',
-        };
-        columns.push(newColumn);
-        emitFieldRewrite({
-          requested: columnInstanceName,
-          applied: correctedInstanceName,
-          reason: `column "${parsedCorrected.column}" not found in workbook; fabricated minimal definition (role=${newColumn['@_role']}, type=${newColumn['@_type']})`,
-          fabricated: true,
-          datasource,
-        });
       }
 
       datasourceDep.column = columns.length === 1 ? columns[0] : columns;

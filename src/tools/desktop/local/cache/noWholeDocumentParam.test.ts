@@ -19,7 +19,10 @@ import { getWriteCachedXmlTool } from './writeCachedXml.js';
 
 vi.mock('fs');
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
-vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js');
+vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof loadWorksheetXmlCmd>()),
+  loadWorksheetXml: vi.fn(),
+}));
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 
@@ -72,7 +75,8 @@ describe('no served tool accepts a whole document', () => {
 });
 
 describe('the served profile still has a working edit path with no document parameter', () => {
-  const SHEET = "<worksheet name='Sales'><table><rows>[Sales]</rows></table></worksheet>";
+  const SHEET =
+    "<worksheet name='Sales'><table><rows>[Sales]</rows></table><simple-id uuid='{WS-SALES}' /></worksheet>";
 
   beforeEach(() => {
     store.clear();
@@ -92,7 +96,9 @@ describe('the served profile still has a working edit path with no document para
   });
 
   it('runs the get -> slice-read -> splice-write -> apply(file) repair path', async () => {
-    vi.spyOn(getWorksheetXmlCmd, 'getWorksheetXml').mockResolvedValue(Ok(SHEET));
+    vi.spyOn(getWorksheetXmlCmd, 'getWorksheetXml').mockResolvedValue(
+      Ok({ xml: SHEET, name: 'Sales' }),
+    );
     const loadSpy = vi
       .spyOn(loadWorksheetXmlCmd, 'loadWorksheetXml')
       .mockResolvedValue(Ok({ validationWarnings: [], readbackWarnings: [] }));

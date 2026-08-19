@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { DesktopCache } from '../../../../desktop/cache.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { parseShelfValue } from '../../../../desktop/metadata/fields.js';
 import {
@@ -15,17 +16,21 @@ import {
 import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
-import { writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
   FileReadError,
+  UnknownError,
   XmlModificationError,
   XmlValidationError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
-import { fetchAndCacheWorksheet } from './worksheetCache.js';
+import { refreshWorkbookCache } from './refreshWorkbookCache.js';
+import { resolveWorksheetEditFile } from './worksheetEditBuffer.js';
 
 /** Encoding channels a field can be placed on. */
 const ENCODING_TYPES = [
@@ -97,13 +102,8 @@ const paramsSchema = {
   worksheetName: z
     .string()
     .optional()
-    .describe('Existing worksheet name; omit when worksheetFile is set.'),
-  worksheetFile: z
-    .string()
-    .optional()
-    .describe(
-      'Cached worksheet path from an earlier field edit; omit to fetch worksheetName from the live workbook.',
-    ),
+    .describe('Sheet name; name-only calls reuse the edit buffer. Omit to pass worksheetFile.'),
+  worksheetFile: z.string().optional().describe('Cached path; omit to reuse the edit buffer.'),
   target: z.enum(FIELD_TARGETS).describe('Rows shelf, cols shelf, or a mark encoding.'),
   columnRef: z
     .string()
@@ -118,9 +118,7 @@ const paramsSchema = {
   workbookFile: z
     .string()
     .optional()
-    .describe(
-      'Cached workbook path returned by field resolution; omit to add without workbook context.',
-    ),
+    .describe('Cached workbook path returned by field resolution; omit to read the workbook live.'),
 };
 
 const title = 'Adding field';
@@ -170,30 +168,16 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
           }
           const resolvedSession = sessionResult.value;
 
-          if (!worksheetFile?.trim() && !worksheetName?.trim()) {
-            return new ArgsValidationError(
-              'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
-            ).toErr();
+          const editFile = await resolveWorksheetEditFile({
+            worksheetName,
+            worksheetFile,
+            resolvedSession,
+            extra,
+          });
+          if (editFile.isErr()) {
+            return editFile.error.toErr();
           }
-
-          // Name-based path: no cache file yet — fetch the sheet fragment and mint one. The
-          // returned worksheetFile lets follow-up add-field/remove-field calls accumulate edits
-          // on the same cache before a single apply-worksheet (get-once, edit-many, apply-once).
-          if (!worksheetFile?.trim()) {
-            const minted = await fetchAndCacheWorksheet({
-              worksheetName: worksheetName!.trim(),
-              resolvedSession,
-              extra,
-            });
-            if (minted.isErr()) {
-              return minted.error.toErr();
-            }
-            worksheetFile = minted.value;
-          }
-
-          if (!existsSync(worksheetFile)) {
-            return new FileNotFoundError(worksheetFile).toErr();
-          }
+          worksheetFile = editFile.value;
 
           // encodingType is conditionally required — enforced here (not in the JSON Schema) so
           // the schema stays flat and host-portable.
@@ -211,12 +195,36 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
           }
 
           let workbookXml: string | undefined;
-          if (workbookFile && existsSync(workbookFile)) {
-            try {
-              workbookXml = readFileSync(workbookFile, 'utf-8');
-            } catch {
-              // Non-fatal — proceed without workbook context
+          const requestedWorkbookFile = workbookFile?.trim() ? workbookFile.trim() : undefined;
+          if (requestedWorkbookFile) {
+            if (!existsSync(requestedWorkbookFile)) {
+              return new FileNotFoundError(requestedWorkbookFile).toErr();
             }
+            try {
+              workbookXml = readFileSync(requestedWorkbookFile, 'utf-8');
+            } catch (error) {
+              return new FileReadError(error).toErr();
+            }
+          } else {
+            const liveWorkbookFile = new DesktopCache().getCacheFilePath({ prefix: 'workbook' });
+            let refresh: Awaited<ReturnType<typeof refreshWorkbookCache>>;
+            try {
+              refresh = await refreshWorkbookCache({
+                extra,
+                workbookFile: liveWorkbookFile,
+                resolvedSession,
+                action: 'adding a field',
+              });
+            } catch (error) {
+              return new UnknownError(
+                `Could not read the current workbook from Tableau: ${getExceptionMessage(error)}. ` +
+                  'Pass workbookFile from field resolution, or check the session with list-instances, then retry.',
+              ).toErr();
+            }
+            if (!refresh.ok) {
+              return refresh.error.toErr();
+            }
+            workbookXml = refresh.xml;
           }
 
           if (index !== undefined) {
@@ -242,6 +250,9 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return new ArgsValidationError(columnRefRejection(columnRef, workbookXml)).toErr();
           }
 
+          // fields.ts refuses (throws) rather than fabricating a type whenever the
+          // workbook, datasource, or column can't be resolved — caught below and
+          // surfaced as-is, so no half-built XML is ever written.
           let modifiedXml: string;
           let placement: string;
           try {
@@ -283,16 +294,22 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
 
           try {
             writeFileSync(worksheetFile, modifiedXml, 'utf-8');
-            writeSidecar(worksheetFile, resolvedSession);
+            restampSidecarAfterEdit(worksheetFile, resolvedSession);
           } catch (error) {
             return new FileReadError(error).toErr();
           }
 
-          return new Ok({
-            message: `Successfully added field to ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.`,
-            file: worksheetFile,
-          });
+          return new Ok(
+            withNextAction(
+              {
+                message: `Successfully added field to ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.`,
+                file: worksheetFile,
+              },
+              prefillNextAction('Apply worksheet edits'),
+            ),
+          );
         },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },
   });

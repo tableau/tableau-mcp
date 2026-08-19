@@ -115,8 +115,21 @@ const getMock = (): ReturnType<typeof vi.mocked<typeof getWorksheetXmlModule.get
 const loadMock = (): ReturnType<typeof vi.mocked<typeof loadWorksheetXmlModule.loadWorksheetXml>> =>
   vi.mocked(loadWorksheetXmlModule.loadWorksheetXml);
 
+// The get-worksheet-xml result now carries the resolved display name; mirror how the live
+// resolver returns it — the decoded <worksheet name> attribute, not the XML-escaped form.
+function sourceName(xml: string): string {
+  const raw = xml.match(/<worksheet name='([^']*)'/)?.[1] ?? '';
+  return raw
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
 function setupMocks(opts: MockOpts = {}): { applied: () => string | null } {
   const source = opts.source ?? SOURCE;
+  const name = sourceName(source);
   let lastApplied: string | null = null;
   let getCalls = 0;
   let readbackCalls = 0;
@@ -125,16 +138,20 @@ function setupMocks(opts: MockOpts = {}): { applied: () => string | null } {
     getCalls += 1;
     if (getCalls === 1) {
       // The fetch.
-      return (opts.fetchErr ? Err(opts.fetchErr) : Ok(source)) as GetResult;
+      return (opts.fetchErr ? Err(opts.fetchErr) : Ok({ xml: source, name })) as GetResult;
     }
     // A readback poll.
     readbackCalls += 1;
-    if (opts.readbackXml !== undefined) return Ok(opts.readbackXml) as GetResult;
-    if (opts.readback === 'source') return Ok(source) as GetResult;
+    if (opts.readbackXml !== undefined) return Ok({ xml: opts.readbackXml, name }) as GetResult;
+    if (opts.readback === 'source') return Ok({ xml: source, name }) as GetResult;
     if (typeof opts.readback === 'number') {
-      return (readbackCalls < opts.readback ? Ok(source) : Ok(lastApplied ?? source)) as GetResult;
+      return (
+        readbackCalls < opts.readback
+          ? Ok({ xml: source, name })
+          : Ok({ xml: lastApplied ?? source, name })
+      ) as GetResult;
     }
-    return Ok(lastApplied ?? source) as GetResult;
+    return Ok({ xml: lastApplied ?? source, name }) as GetResult;
   });
 
   loadMock().mockImplementation(async ({ xml }: { xml: string }): Promise<LoadResult> => {
@@ -199,6 +216,24 @@ describe('refineWorksheetTool — top_n happy path', () => {
     const out = applied()!;
     expect(out).toMatch(/function='end'\s+end='top'\s+count='5'/);
     expect(out).toContain('<slices><column>[Superstore].[none:Region:nk]</column></slices>');
+  });
+
+  it('reads back by the fragment simple-id, not the display name', async () => {
+    setupMocks();
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+
+    expect(result.isError).toBe(false);
+    // The initial fetch is by the caller's display name...
+    expect(getMock().mock.calls[0]![0]).toMatchObject({ worksheetName: 'Sales by Region' });
+    // ...but the readback targets the sheet's stable simple-id, so a rename between the fetch
+    // and the readback can't make it miss.
+    expect(getMock().mock.calls[1]![0]).toMatchObject({
+      worksheetName: '00000000-0000-0000-0000-000000000001',
+    });
   });
 
   it('refines an ampersand-titled worksheet by literal name', async () => {

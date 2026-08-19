@@ -37,6 +37,11 @@ export function formatBudget(budgetMs: number): string {
   return budgetMs % 1000 === 0 ? `${budgetMs / 1000}s` : `${budgetMs}ms`;
 }
 
+export const BLOCKING_DIALOG_GUIDANCE =
+  'Desktop is most likely showing a blocking dialog that a person has to dismiss, or the instance is wedged. ' +
+  'Do not retry this call — it will hang against the same dialog. ' +
+  'Tell the user to dismiss any open Tableau dialog, then call list-instances to confirm the session is still reachable and re-target if the pid changed.';
+
 /**
  * The agent-facing text for an expired call. It names the budget, says what is most likely
  * wrong, and forbids a blind retry — retrying a call that raised a blocking Desktop dialog
@@ -59,9 +64,7 @@ export function desktopCallTimeoutMessage({
     `Tableau Desktop did not respond within ${formatBudget(budgetMs)} and the call was aborted${
       scope ? ` (${scope})` : ''
     }.`,
-    'Desktop is most likely showing a blocking dialog that a person has to dismiss, or the instance is wedged.',
-    'Do not retry this call — it will hang against the same dialog.',
-    'Tell the user to dismiss any open Tableau dialog, then call list-instances to confirm the session is still reachable and re-target if the pid changed.',
+    BLOCKING_DIALOG_GUIDANCE,
   ].join(' ');
 }
 

@@ -1,4 +1,7 @@
 import { getActivateSheetTool } from './api/activateSheet.js';
+import { getAddDashboardTool } from './api/addDashboard.js';
+import { getAddStoryboardTool } from './api/addStoryboard.js';
+import { getAddWorksheetTool } from './api/addWorksheet.js';
 import { getApplyDashboardTool } from './api/applyDashboard.js';
 import { getApplyStoryboardTool } from './api/applyStoryboard.js';
 import { getApplyWorkbookTool } from './api/applyWorkbook.js';
@@ -6,6 +9,7 @@ import { getApplyWorksheetTool } from './api/applyWorksheet.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { getExecuteTableauCommandTool } from './api/executeTableauCommand.js';
 import { exportDashboardImageTool } from './api/exportDashboardImage.js';
+import { exportStoryboardImageTool } from './api/exportStoryboardImage.js';
 import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
 import { getApiRootTool } from './api/getApiRoot.js';
 import { getAppInfoTool } from './api/getAppInfo.js';
@@ -29,13 +33,16 @@ import { getListStoryboardsTool } from './api/listStoryboards.js';
 import { getListWorkbookDatasourcesTool } from './api/listWorkbookDatasources.js';
 import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
 import { getListWorksheetsTool } from './api/listWorksheets.js';
+import { getOpenFileTool } from './api/openFile.js';
 import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
 import { getRedoWorkbookTool } from './api/redoWorkbook.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
+import { getSaveWorkbookTool } from './api/saveWorkbook.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
 import { getUndoWorkbookTool } from './api/undoWorkbook.js';
 import { getValidateWorkbookXmlTool } from './api/validateWorkbookXml.js';
+import { getWorkbookExportAsTool } from './api/workbookExportAs.js';
 import { getBindTemplateTool } from './authoring/binder/bindTemplate.js';
 import { getListTemplatesTool } from './authoring/binder/listTemplates.js';
 import { getAuthorActionTool } from './authoring/datasource/authorAction.js';
@@ -80,6 +87,12 @@ export const desktopToolFactories = [
   getActivateSheetTool,
   getUndoWorkbookTool,
   getRedoWorkbookTool,
+  getOpenFileTool,
+  getSaveWorkbookTool,
+  getWorkbookExportAsTool,
+  getAddWorksheetTool,
+  getAddDashboardTool,
+  getAddStoryboardTool,
   getListWorksheetsTool,
   getListDashboardsTool,
   getGetWorksheetXmlTool,
@@ -133,6 +146,7 @@ export const desktopToolFactories = [
   getWorksheetUnderlyingDataTool,
   exportWorksheetImageTool,
   exportDashboardImageTool,
+  exportStoryboardImageTool,
   getWorkbookInventoryTool,
   getListWorkbookDatasourcesTool,
   getListSiteDatasourcesTool,

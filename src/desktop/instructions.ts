@@ -107,6 +107,39 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
+    id: 'dashboard-edit-fallback',
+    trigger: 'an existing dashboard edit the bounded batch cannot express',
+    action:
+      'use get-dashboard-xml -> read-cached-xml -> write-cached-xml -> apply-dashboard; stay on the scoped dashboard path.',
+    toolSequence: ['get-dashboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-dashboard'],
+    stopConditions: ['stay on the scoped dashboard path'],
+    requiredEvidence: ['dashboard apply receipt'],
+  },
+  {
+    kind: 'route',
+    id: 'story-edit-fallback',
+    trigger: 'an existing story edit',
+    action:
+      'use get-storyboard-xml -> read-cached-xml -> write-cached-xml -> apply-storyboard; stay on the scoped story path.',
+    toolSequence: ['get-storyboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-storyboard'],
+    stopConditions: ['stay on the scoped story path'],
+    requiredEvidence: ['story apply receipt'],
+  },
+  {
+    kind: 'route',
+    id: 'whole-workbook-fallback',
+    trigger: 'a datasource-definition or cross-artifact change no scoped apply can express',
+    action:
+      'use get-workbook-xml -> read-cached-xml -> write-cached-xml -> apply-workbook; use only for datasource definitions or cross-artifact changes, and prefer a scoped apply whenever possible.',
+    toolSequence: ['get-workbook-xml', 'read-cached-xml', 'write-cached-xml', 'apply-workbook'],
+    stopConditions: [
+      'use only for datasource definitions or cross-artifact changes',
+      'prefer a scoped apply whenever possible',
+    ],
+    requiredEvidence: ['workbook apply receipt'],
+  },
+  {
+    kind: 'route',
     id: 'data-value-question',
     trigger: 'a data-value question',
     action: 'on a populated worksheet, call get-summary-data; answer only from returned rows.',
@@ -178,7 +211,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'no-native-tool-escape',
-    text: 'If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. get-worksheet-xml -> add-field -> apply-worksheet is sanctioned. Whole-workbook XML surgery is behind TOOL_PROFILE=full, which the user can enable.',
+    text: 'If no native or sanctioned cached-file route covers the ask, say so plainly; never invent an unsupported path.',
   },
 ];
 

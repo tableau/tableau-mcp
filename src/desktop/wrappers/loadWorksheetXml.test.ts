@@ -389,6 +389,106 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     return { executor, calls };
   }
 
+  it('omits a pre-existing error from cached worksheet validation warnings', async () => {
+    const existingIssue = {
+      ruleId: 'existing',
+      severity: 'error' as const,
+      message: 'already broken',
+    };
+    vi.mocked(validationRegistry.runValidation).mockReturnValue({
+      valid: false,
+      issues: [existingIssue],
+    });
+    const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml: validXml }));
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] })),
+      getWorksheetDocument,
+      applyWorksheetDocument,
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) expect(result.value.validationWarnings).toEqual([]);
+    expect(applyWorksheetDocument).toHaveBeenCalledOnce();
+  });
+
+  it('skips the introduced-issue GET when the caller already preflighted blocking issues', async () => {
+    const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml: validXml }));
+    const applyWorksheetDocument = vi.fn().mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: { code: 'FAILED', message: 'apply failed', recoverable: false },
+      }),
+    );
+    const executor = makeExecutorMock({
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] })),
+      getWorksheetDocument,
+      applyWorksheetDocument,
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+      callerPreflightsBlockingIssues: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(getWorksheetDocument).not.toHaveBeenCalled();
+    expect(applyWorksheetDocument).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the introduced-issue GET for a hash-less cached worksheet apply', async () => {
+    const liveXml = "<worksheet name='Sheet 1'><table><rows>[baseline]</rows></table></worksheet>";
+    const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml: liveXml }));
+    const applyWorksheetDocument = vi.fn().mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: { code: 'FAILED', message: 'apply failed', recoverable: false },
+      }),
+    );
+    const executor = makeExecutorMock({
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] })),
+      getWorksheetDocument,
+      applyWorksheetDocument,
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(getWorksheetDocument).toHaveBeenCalledOnce();
+    expect(validationRegistry.runValidation).toHaveBeenNthCalledWith(2, liveXml, 'worksheet');
+    expect(validationRegistry.runValidation).toHaveBeenNthCalledWith(3, validXml, 'worksheet');
+    expect(applyWorksheetDocument).toHaveBeenCalledOnce();
+  });
+
   it('surfaces sheet-absent (no whole-workbook fallback) when requireExistingSheet is set', async () => {
     const { executor, calls } = absentSheetExecutor(['Some Other Sheet']);
 
@@ -474,6 +574,48 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       expect(result.error.error.type).toBe('sheet-absent');
     }
     expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+  });
+
+  it('targets the per-sheet route by the fragment simple-id, so an apply lands after a live rename', async () => {
+    const sheetId = '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}';
+    const fragment = `<worksheet name='${worksheetName}'><simple-id uuid='${sheetId}' /><table><rows /></table></worksheet>`;
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(
+        Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
+      );
+    const executor = makeExecutorMock({
+      // The live sheet kept its id but was renamed after the fragment was read: only the id matches.
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ worksheets: [{ id: sheetId, name: 'Renamed Live', hidden: false }] }),
+        ),
+      getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: fragment })),
+      applyWorksheetDocument,
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: fragment,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.appliedName).toBe('Renamed Live');
+    }
+    // Had it targeted by the fragment name ('Sheet 1' ≠ the live 'Renamed Live'), the route would
+    // have resolved to sheet-absent. Desktop also requires the posted fragment's root name to match
+    // the current live name even when the route is addressed by id.
+    expect(applyWorksheetDocument).toHaveBeenCalledWith(
+      sheetId,
+      expect.stringContaining("name='Renamed Live'"),
+      mockSignal,
+    );
   });
 
   it('should return execute-command-error when the workbook fetch fails', async () => {
