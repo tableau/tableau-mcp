@@ -180,7 +180,7 @@ function makeExecutor({
 
 async function getToolResult(opts: {
   session?: string;
-  storyboardName?: string;
+  storyboardName: string;
   mode?: 'file' | 'inline';
   capBytes?: number;
   bigDocument?: string;
