@@ -112,7 +112,10 @@ describe('readCachedXmlTool', () => {
       "<worksheet name='Sales'><table><rows>[Sales]</rows></table></worksheet>" +
       "<worksheet name='Profit'><table><rows>[Profit]</rows></table></worksheet>" +
       '</worksheets>' +
-      "<dashboards><dashboard name='Main'><zones><zone name='Sales'/></zones></dashboard></dashboards>" +
+      '<dashboards>' +
+      "<dashboard name='Main'><zones><zone name='Sales'/></zones></dashboard>" +
+      "<dashboard name='QBR Story' type='storyboard'><zones><zone name='QBRZone'/></zones></dashboard>" +
+      '</dashboards>' +
       '</workbook>';
 
     beforeEach(() => {
@@ -156,6 +159,16 @@ describe('readCachedXmlTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain("<zone name='Sales'/>");
       expect(result.content[0].text).not.toContain('[Profit]');
+    });
+
+    it('slices a storyboard via the dashboard selector (a story is a <dashboard> element)', async () => {
+      const result = await getResult(CACHED_FILE, { dashboard: 'QBR Story' });
+
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain("type='storyboard'");
+      expect(result.content[0].text).toContain("<zone name='QBRZone'/>");
+      // Only the story, not the sibling real dashboard.
+      expect(result.content[0].text).not.toContain("<zone name='Sales'/>");
     });
 
     it('returns a byte range slice', async () => {

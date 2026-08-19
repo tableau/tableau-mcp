@@ -24,6 +24,16 @@ const WORKBOOK_WITH_USER_NAMESPACE = `<?xml version='1.0' encoding='utf-8' ?>
   </dashboards>
 </workbook>`;
 
+// A story serializes as a `<dashboard type='storyboard'>` sharing the <dashboards> container with a
+// real dashboard; the dashboard resolvers must ignore the story.
+const WORKBOOK_WITH_STORYBOARD = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <dashboards>
+    <dashboard name='Overview'><zones /><simple-id uuid='{DB-0001}' /></dashboard>
+    <dashboard name='QBR Story' type='storyboard'><zones /><simple-id uuid='{ST-0001}' /></dashboard>
+  </dashboards>
+</workbook>`;
+
 describe('extractDashboardXml', () => {
   it('finds and extracts an existing dashboard', () => {
     const xml = extractDashboardXml(WORKBOOK_WITH_USER_NAMESPACE, 'Overview');
@@ -34,6 +44,12 @@ describe('extractDashboardXml', () => {
 
   it('returns null for a dashboard that does not exist', () => {
     expect(extractDashboardXml(WORKBOOK_WITH_USER_NAMESPACE, 'Does Not Exist')).toBeNull();
+  });
+
+  it('returns null for a storyboard — a story is not a dashboard', () => {
+    expect(extractDashboardXml(WORKBOOK_WITH_STORYBOARD, 'QBR Story')).toBeNull();
+    // The real dashboard sharing the container still extracts.
+    expect(extractDashboardXml(WORKBOOK_WITH_STORYBOARD, 'Overview')).toContain('name="Overview"');
   });
 
   // Same live-bug shape as extractSheetXml (sheets.test.ts): an untouched get-dashboard-xml ->
@@ -158,6 +174,19 @@ describe('listDashboardRefs / resolveDashboardRef', () => {
 
   it('returns null when neither an id nor a name matches', () => {
     expect(resolveDashboardRef(WORKBOOK, 'No Such Dashboard')).toBeNull();
+  });
+
+  it('excludes storyboards: a story is neither listed nor resolvable as a dashboard', () => {
+    expect(listDashboardRefs(WORKBOOK_WITH_STORYBOARD)).toEqual([
+      { id: '{DB-0001}', name: 'Overview' },
+    ]);
+    expect(resolveDashboardRef(WORKBOOK_WITH_STORYBOARD, 'QBR Story')).toBeNull();
+    expect(resolveDashboardRef(WORKBOOK_WITH_STORYBOARD, '{ST-0001}')).toBeNull();
+    // The real dashboard sharing the container still resolves.
+    expect(resolveDashboardRef(WORKBOOK_WITH_STORYBOARD, 'Overview')).toEqual({
+      id: '{DB-0001}',
+      name: 'Overview',
+    });
   });
 });
 

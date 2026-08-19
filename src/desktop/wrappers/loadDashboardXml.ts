@@ -65,8 +65,12 @@ type LoadDashboardHelperResult = Result<
 function resolveCanonicalDashboardName(
   dashboardName: string,
   xml: string,
+  kind: LoadDashboardKind,
 ): Result<string, Extract<LoadDashboardXmlError, { type: 'name-mismatch' }>> {
   const callerRef = dashboardName.trim();
+  // A storyboard is a `<dashboard>` element too, so the fragment tag and read-cached-xml selector
+  // stay `dashboard`; only the artifact noun and the tool's name param differ by kind.
+  const paramName = kind === 'storyboard' ? 'storyboardName' : 'dashboard_name';
   let xmlName = '';
   let xmlId = '';
   let isWorkbookDocument = false;
@@ -86,7 +90,7 @@ function resolveCanonicalDashboardName(
     return Err({
       type: 'name-mismatch',
       message: isWorkbookDocument
-        ? 'Applying a dashboard needs a single <dashboard name="..."> fragment, but the cached file holds ' +
+        ? `Applying a ${kind} needs a single <dashboard name="..."> fragment, but the cached file holds ` +
           `a whole <workbook> document. FIX: read-cached-xml with dashboard="${callerRef}" to pull just ` +
           'that element, write-cached-xml with the same selector to splice your edit back, then apply ' +
           'that file.'
@@ -100,8 +104,8 @@ function resolveCanonicalDashboardName(
     return Err({
       type: 'name-mismatch',
       message:
-        `dashboard_name "${dashboardName}" does not match the <dashboard name> in the XML ("${xmlName}")` +
-        `${xmlId ? ` or its id ("${xmlId}")` : ''}. FIX: Retry with dashboard_name set to the XML's ` +
+        `${paramName} "${dashboardName}" does not match the <dashboard name> in the XML ("${xmlName}")` +
+        `${xmlId ? ` or its id ("${xmlId}")` : ''}. FIX: Retry with ${paramName} set to the XML's ` +
         `name "${xmlName}"${xmlId ? ` or id "${xmlId}"` : ''} — or update the <dashboard name> attribute ` +
         `in the XML to "${dashboardName}" if the caller name is intended.`,
     });
@@ -176,7 +180,7 @@ export async function loadDashboardXml({
 
   // Require the caller's dashboard_name to agree with the XML root name before apply, then
   // thread the validated canonical name through the load.
-  const canonicalNameResult = resolveCanonicalDashboardName(dashboardName, xml);
+  const canonicalNameResult = resolveCanonicalDashboardName(dashboardName, xml, kind);
   if (canonicalNameResult.isErr()) {
     log({
       level: 'error',

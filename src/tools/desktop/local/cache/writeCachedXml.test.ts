@@ -296,6 +296,22 @@ describe('writeCachedXmlTool', () => {
       expect(written).toContain("<zone name='Profit'/>");
     });
 
+    it('splices a storyboard via the dashboard selector (a story is a <dashboard> element)', async () => {
+      vi.mocked(readFileSync).mockReturnValue(
+        "<workbook><dashboards><dashboard name='QBR Story' type='storyboard'><zones><zone name='Old'/></zones></dashboard></dashboards></workbook>",
+      );
+      const result = await getResult(
+        CACHED_FILE,
+        "<dashboard name='QBR Story' type='storyboard'><zones><zone name='New'/></zones></dashboard>",
+        { dashboard: 'QBR Story' },
+      );
+
+      expect(result.isError).toBeFalsy();
+      const written = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+      expect(written).toContain("<zone name='New'/>");
+      expect(written).not.toContain("<zone name='Old'/>");
+    });
+
     it('splices when an entity-escaped fragment name matches a plain-text selector', async () => {
       vi.mocked(readFileSync).mockReturnValue(
         '<workbook><worksheets>' +

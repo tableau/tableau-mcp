@@ -180,12 +180,19 @@ export function dashboardFragmentSimpleId(dashboardFragmentXml: string): string 
   return dashboard?.['simple-id']?.['@_uuid']?.trim() || null;
 }
 
+// A story serializes as a `<dashboard type='storyboard'>` inside the same `<dashboards>` container as
+// ordinary dashboards, so dashboard enumeration/resolution must skip it or a story leaks in as a dashboard.
+function isStoryboard(dashboard: ParsedDashboard): boolean {
+  return dashboard['@_type'] === 'storyboard';
+}
+
 // `id` is each dashboard's own `<simple-id uuid>` — the same value the External Client API returns
 // as the dashboard id.
 export function listDashboardRefs(workbookXml: string): Array<{ id: string; name: string }> {
   const workbook = parseXML(workbookXml);
   const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
   return dashboards.flatMap((db) => {
+    if (isStoryboard(db)) return [];
     const id = db['simple-id']?.['@_uuid']?.trim();
     const name = db['@_name'];
     return id && name ? [{ id, name }] : [];
@@ -201,7 +208,9 @@ export function resolveDashboardRef(
   ref: string,
 ): { id?: string; name: string } | null {
   const workbook = parseXML(workbookXml);
-  const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
+  const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard).filter(
+    (db) => !isStoryboard(db),
+  );
   const trimmed = ref.trim();
   const matched =
     dashboards.find((db) => db['simple-id']?.['@_uuid']?.trim() === trimmed) ??
@@ -216,7 +225,7 @@ export function resolveDashboardRef(
 export function extractDashboardXml(workbookXml: string, dashboardName: string): string | null {
   const workbook = parseXML(workbookXml);
   const dashboard = findDashboard(workbook, dashboardName);
-  if (!dashboard) {
+  if (!dashboard || isStoryboard(dashboard)) {
     return null;
   }
   carryNamespaceDeclarations(workbook.workbook, dashboard);
