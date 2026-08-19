@@ -30,6 +30,12 @@ describe('searchKnowledgeNodesTool', () => {
       scopeId: expect.any(Object),
       limit: expect.any(Object),
     });
+    expect(tool.description).toContain('governed business');
+    expect(tool.description).toContain('search-content');
+    expect(tool.description).toContain('list-datasources');
+    expect(tool.description).toContain('get-datasource-metadata');
+    expect(tool.description).toContain('ask the user for it');
+    expect(tool.description).toContain('do not invent, infer, or default one');
     expect(await Provider.from(tool.annotations)).toMatchObject({
       readOnlyHint: true,
       destructiveHint: false,
@@ -40,6 +46,7 @@ describe('searchKnowledgeNodesTool', () => {
 
   it('trims a non-empty query and accepts optional node and scope filters', async () => {
     const schema = await Provider.from(getTool().paramsSchema);
+    expect(schema.graphId.safeParse(undefined).success).toBe(false);
     expect(schema.query.parse('  net revenue  ')).toBe('net revenue');
     expect(schema.query.safeParse('   ').success).toBe(false);
     expect(schema.nodeType.safeParse('SEMANTIC_CONTEXT').success).toBe(true);

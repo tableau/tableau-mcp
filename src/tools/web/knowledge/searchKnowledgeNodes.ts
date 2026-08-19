@@ -26,7 +26,7 @@ export const getSearchKnowledgeNodesTool = (server: WebMcpServer): WebTool<typeo
     server,
     name: 'search-knowledge-nodes',
     description:
-      'Semantically searches nodes in an explicit Tableau Cloud knowledge graph. The graph ID must come from Tableau Knowledge configuration or a prior workflow; do not invent one.',
+      'Semantically searches an explicit Tableau Cloud knowledge graph. When a graph ID is available, use this tool first to find governed business terms, definitions, metrics, fields, and formulas; use get-knowledge-node-relationships after locating a node to retrieve its relationships. Prefer this tool over search-content or list-datasources, which find Tableau assets, and get-datasource-metadata, which returns technical metadata for an already selected datasource. If no graph ID is available from Tableau Knowledge configuration or a prior workflow, ask the user for it; do not invent, infer, or default one.',
     paramsSchema,
     annotations: {
       title: 'Search Knowledge Nodes',
