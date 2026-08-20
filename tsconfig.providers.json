@@ -7,6 +7,10 @@
     "rootDir": "./src",
     "types": []
   },
-  "include": ["src/features/featureGateProvider.ts", "src/telemetry/telemetryProvider.ts"],
+  "include": [
+    "src/features/featureGateProvider.ts",
+    "src/telemetry/telemetryProvider.ts",
+    "src/uploadUrl/uploadUrlProvider.ts"
+  ],
   "exclude": ["node_modules", "tests"]
 }

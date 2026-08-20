@@ -9,6 +9,11 @@ import {
 } from './features/types.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport } from './transports.js';
+import {
+  isUploadUrlProvider,
+  providerConfigSchema as uploadUrlProviderConfigSchema,
+  UploadUrlConfig,
+} from './uploadUrl/types.js';
 import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
@@ -73,6 +78,7 @@ export class Config extends BaseConfig {
   productTelemetryEnabled: boolean;
   isHyperforce: boolean;
   featureGate: FeatureGateConfig;
+  uploadUrl: UploadUrlConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   flowToolsEnabled: boolean;
@@ -143,6 +149,8 @@ export class Config extends BaseConfig {
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       FEATURE_GATE_PROVIDER: featureGateProvider,
       FEATURE_GATE_PROVIDER_CONFIG: featureGateProviderConfig,
+      UPLOAD_URL_PROVIDER: uploadUrlProvider,
+      UPLOAD_URL_PROVIDER_CONFIG: uploadUrlProviderConfig,
       LATENCY_METRIC_NAME: latencyMetricName,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
@@ -308,6 +316,25 @@ export class Config extends BaseConfig {
       };
     } else {
       this.featureGate = {
+        provider: 'server',
+      };
+    }
+
+    // Upload URL provider configuration (same pattern as feature gate provider).
+    // Default 'server' preserves standalone behavior: request-workbook-upload returns
+    // a raw S3 presigned PUT URL. A custom provider can return a first-party URL.
+    if (isUploadUrlProvider(uploadUrlProvider) && uploadUrlProvider === 'custom') {
+      if (!uploadUrlProviderConfig) {
+        throw new Error(
+          'UPLOAD_URL_PROVIDER_CONFIG is required when UPLOAD_URL_PROVIDER is "custom"',
+        );
+      }
+      this.uploadUrl = {
+        provider: 'custom',
+        providerConfig: uploadUrlProviderConfigSchema.parse(JSON.parse(uploadUrlProviderConfig)),
+      };
+    } else {
+      this.uploadUrl = {
         provider: 'server',
       };
     }
