@@ -1,0 +1,12 @@
+{
+  "id": "stale-workbooks-listworkbooks",
+  "name": "JTBD1 — Stale workbooks via list-workbooks",
+  "description": "Stale-content JTBD via the REST list-workbooks path (not Admin Insights). Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT. Model should filter list-workbooks on updatedAt before a cutoff (~90 days ago) to identify stale-workbook candidates. Read-only.",
+  "tags": ["admin", "workbooks", "stale-content", "read-only", "jtbd1", "real-server"],
+  "prompt": "List the workbooks on this site that have not been updated recently (roughly the last 90 days) as stale-workbook candidates. Use the list-workbooks tool with an updatedAt filter. Report the workbook names and LUIDs and the cutoff date you used. Do not modify or delete anything.",
+  "expected_tools": ["list-workbooks"],
+  "budget": {
+    "max_tool_calls": 5,
+    "max_wall_ms": 120000
+  }
+}

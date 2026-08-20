@@ -18,6 +18,10 @@ export class ConsentFlow extends Flow {
   };
 
   private fill = async (): Promise<void> => {
-    await this.page.locator('button[type="submit"]').click();
+    // The consent page now renders multiple submit buttons ("Switch site",
+    // "Switch username", and "Allow"), so a bare button[type="submit"] selector
+    // resolves to 3 elements and trips Playwright strict mode. Target the Allow
+    // button by its stable id, consistent with loginFlow's id-based selectors.
+    await this.page.locator('#allow-button').click();
   };
 }
