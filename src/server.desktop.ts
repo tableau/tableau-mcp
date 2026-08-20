@@ -98,7 +98,7 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * key signature, born at OPEN), author-action (parameter-change wiring), format-labels
  * (mark labels) — PLUS ask-user (ambiguity goes to the human, never to a guess) and
  * search-commands (how the singer discovers the execute-tableau-command dialect) — PLUS
- * bind-template for explicit named single charts, plus the guarded list/build/apply template
+ * bind-template for recognizable single-view asks, plus the guarded list/build/apply template
  * artifact fallback and refine-worksheet, the primitives-only
  * top-N/sort editor that carries
  * edit-in-place now that the notional-spec loop is retired.
