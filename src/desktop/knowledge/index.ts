@@ -9,12 +9,10 @@ export interface KnowledgeResource {
   mimeType: 'text/markdown';
 }
 
-export function getKnowledgeDir(): string {
-  return getConfiguredKnowledgeDir();
-}
-
 function knowledgeCorpusEmptyError(): Error {
-  return new Error(`Knowledge corpus is empty; expected assets under ${getKnowledgeDir()}`);
+  return new Error(
+    `Knowledge corpus is empty; expected assets under ${getConfiguredKnowledgeDir()}`,
+  );
 }
 
 export function getKnowledgeCorpusEntryCount(): number {
