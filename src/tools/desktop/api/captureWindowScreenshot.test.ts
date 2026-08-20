@@ -3,11 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import invariant from '../../../utils/invariant.js';
 import {
+  buildRedTriageText,
   buildWindowScreenshotToolResult,
   chooseMainWindowImage,
   extractScreenshotPaths,
   resolveImageFiles,
 } from './captureWindowScreenshot.js';
+import { ErrorRedScan } from './errorRedScan.js';
 
 // statSync / readdirSync / readFileSync are stubbed per-test so resolveImageFiles and
 // chooseMainWindowImage run against synthetic files; writeFileSync is stubbed so the
@@ -163,7 +165,7 @@ describe('buildWindowScreenshotToolResult', () => {
     vi.clearAllMocks();
   });
 
-  it('returns the PNG inline as a base64 image block when under the cap', () => {
+  it('leads with a triage line and returns the PNG inline when under the cap', () => {
     const bytes = Buffer.from('a small png');
     const result = buildWindowScreenshotToolResult({
       image: { path: '/tmp/main.png', bytes },
@@ -171,13 +173,15 @@ describe('buildWindowScreenshotToolResult', () => {
     });
 
     expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'image');
-    expect(result.content[0].mimeType).toBe('image/png');
-    expect(result.content[0].data).toBe(bytes.toString('base64'));
+    // A text triage block precedes the image so an obvious indicator is called out first.
+    invariant(result.content[0].type === 'text');
+    invariant(result.content[1].type === 'image');
+    expect(result.content[1].mimeType).toBe('image/png');
+    expect(result.content[1].data).toBe(bytes.toString('base64'));
     expect(vi.mocked(writeFileSync)).not.toHaveBeenCalled();
   });
 
-  it('writes to a cache file and returns its path when over the cap', () => {
+  it('writes to a cache file and appends the triage line when over the cap', () => {
     const bytes = Buffer.from('x'.repeat(2048));
     const result = buildWindowScreenshotToolResult({
       image: { path: '/tmp/main.png', bytes },
@@ -189,5 +193,34 @@ describe('buildWindowScreenshotToolResult', () => {
     // The cap message names a file rather than inlining the bytes.
     expect(result.content[0].text).toMatch(/\.png/);
     expect(vi.mocked(writeFileSync)).toHaveBeenCalledOnce();
+  });
+});
+
+describe('buildRedTriageText', () => {
+  const scan = (maxCellRedFraction: number): ErrorRedScan => ({
+    width: 1728,
+    height: 967,
+    redPixels: 1,
+    redFraction: 0,
+    maxCellRedPixels: 1,
+    maxCellRedFraction,
+  });
+
+  it('flags a dense red cluster as a possible error indicator', () => {
+    // 0.47 is what the real capture with an error pill scored.
+    const text = buildRedTriageText(scan(0.47));
+    expect(text).toMatch(/[Pp]ossible error/);
+    expect(text).toMatch(/do NOT report Done/);
+  });
+
+  it('reports no dense cluster below the threshold without licensing "Done"', () => {
+    const text = buildRedTriageText(scan(0.05));
+    expect(text).toMatch(/[Nn]o dense red/);
+    expect(text).toMatch(/confirm the result visually/);
+  });
+
+  it('says scan unavailable rather than clean when the capture cannot be decoded', () => {
+    const text = buildRedTriageText(null);
+    expect(text).toMatch(/unavailable/);
   });
 });

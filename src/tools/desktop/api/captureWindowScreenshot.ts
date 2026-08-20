@@ -15,6 +15,7 @@ import {
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+import { ErrorRedScan, isSuspiciousErrorRed, scanPngForErrorRed } from './errorRedScan.js';
 
 // TakeAllScreenshots is a monolith UI-project debug command
 // (codegen/ui/command-wrappers/debugging-ui-cmd.data). It captures every VISIBLE
@@ -226,10 +227,30 @@ function commandReturnedNoImage(pathCount: number): Result<never, ExecuteCommand
 }
 
 /**
+ * Cheap server-side triage line describing whether the capture contains a dense red
+ * cluster — a likely error pill / broken element. It is a nudge to look, never a verdict:
+ * red is overloaded in Tableau, so a hit escalates to the model actually inspecting the
+ * pixels (which ride in the same result), and a miss does NOT license "Done" on a risky
+ * change. Null scan (undecodable capture) says so rather than implying the window is clean.
+ */
+export function buildRedTriageText(scan: ErrorRedScan | null): string {
+  if (!scan) {
+    return 'Automatic red indicator scan unavailable for this capture; inspect the window yourself for a red pill or broken element.';
+  }
+  const pct = Math.round(scan.maxCellRedFraction * 100);
+  if (isSuspiciousErrorRed(scan)) {
+    return `Possible error indicator: the densest region of the window is ${pct}% saturated red, which usually means a red pill or broken element. Inspect the shelves, schema viewer, and Data pane; if a red pill is confirmed, do NOT report Done.`;
+  }
+  return `No dense red cluster detected (densest region ${pct}% red). If the change was risky, still confirm the result visually.`;
+}
+
+/**
  * Translate the chosen PNG into an MCP tool result. Mirrors buildSheetImageToolResult's
  * inline-cap policy: under the cap the bytes ride inline as an image block so the model
  * sees the pixels in its normal turn; over the cap they are written to a cache file and
  * the path is returned, keeping a multi-megabyte window capture out of the conversation.
+ * Either way a triage line (see buildRedTriageText) leads the result so an obvious red
+ * indicator is called out even before the model looks.
  */
 export function buildWindowScreenshotToolResult({
   image,
@@ -241,6 +262,7 @@ export function buildWindowScreenshotToolResult({
   const mimeType = 'image/png';
   const capBytes = config.inlineImageMaxBytes;
   const inlineBytes = inlineImageFootprintBytes(image.bytes.length, mimeType);
+  const triageText = buildRedTriageText(scanPngForErrorRed(image.bytes));
 
   if (isOverInlineImageCap(inlineBytes, capBytes)) {
     const cacheFile = new DesktopCache().getCacheFilePath({
@@ -259,12 +281,12 @@ export function buildWindowScreenshotToolResult({
       content: [
         {
           type: 'text',
-          text: buildInlineImageCapFileMessage({
+          text: `${buildInlineImageCapFileMessage({
             label: 'Window screenshot',
             bytes: inlineBytes,
             capBytes,
             file: cacheFile,
-          }),
+          })}\n\n${triageText}`,
         },
       ],
     };
@@ -272,6 +294,9 @@ export function buildWindowScreenshotToolResult({
 
   return {
     isError: false,
-    content: [{ type: 'image', data: image.bytes.toString('base64'), mimeType }],
+    content: [
+      { type: 'text', text: triageText },
+      { type: 'image', data: image.bytes.toString('base64'), mimeType },
+    ],
   };
 }
