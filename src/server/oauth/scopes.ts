@@ -427,6 +427,7 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   if (!authoringToolsEnabled) {
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('validate-upload-and-publish-workbook');
+    enabledTools.delete('download-workbook');
   }
 
   return enabledTools;
