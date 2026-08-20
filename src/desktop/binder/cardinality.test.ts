@@ -1,4 +1,4 @@
-import { cardinalityAdvice, idealCardinality } from './cardinality.js';
+import { cardinalityAdvice, idealCardinality, PIE_SLICE_WORKABLE_MAX } from './cardinality.js';
 import type { SlotSpec } from './manifest-types.js';
 import type { SchemaField } from './schema-summary.js';
 
@@ -26,6 +26,13 @@ const field = (over: Partial<SchemaField> = {}): SchemaField => ({
 });
 
 describe('cardinality advice', () => {
+  it('exports the pie slice workable boundary used by binding validation', () => {
+    expect(PIE_SLICE_WORKABLE_MAX).toBe(12);
+    expect(idealCardinality(slot({ role: ['wedge-size'] }))?.workable_max).toBe(
+      PIE_SLICE_WORKABLE_MAX,
+    );
+  });
+
   it('uses the tightest declared role band and remains advisory', () => {
     expect(idealCardinality(slot({ role: ['rows', 'color'] }))?.ideal_max).toBe(12);
     const advice = cardinalityAdvice(slot(), field({ approxCount: 397 }));

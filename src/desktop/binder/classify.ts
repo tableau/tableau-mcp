@@ -197,6 +197,7 @@ const PLURALIZABLE_CHART_NOUNS: ReadonlySet<string> = new Set([
   'pie',
   'donut',
   'bubble',
+  'heatmap',
 ]);
 
 /**
@@ -454,6 +455,8 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'pie',
   'donut',
   'bubble',
+  'heatmap',
+  'highlight-table',
   // 2026-07-06 growth (per the table's own contract — grow as new distinct-shape
   // templates are stamped eligible): gantt-task-rollup-chart's stamp made time-series
   // a TWO-member eligible family, collapsing strict-majority nativity for trend-line's
