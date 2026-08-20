@@ -333,7 +333,11 @@ export const getListTemplatesTool = (
                 ...fitOf(snapshot).visible_channels.direct,
                 ...fitOf(snapshot).visible_channels.calculated.map(({ channel }) => channel),
               ]);
-              return [...required].every((channel) => available.has(channel));
+              return [...required].every((channel) =>
+                channel === 'detail' || channel === 'lod'
+                  ? available.has('detail') || available.has('lod')
+                  : available.has(channel),
+              );
             });
           }
           const bestCanonicalScore =

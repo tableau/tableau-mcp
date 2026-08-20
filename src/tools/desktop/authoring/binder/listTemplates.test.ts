@@ -324,6 +324,25 @@ describe('list-templates', () => {
     }
   });
 
+  it('treats Tableau detail and lod as the same discovery channel', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const body = await getBody({
+      query: 'box plot',
+      requiredChannels: ['rows', 'cols', 'detail'],
+      limit: 10,
+    });
+
+    expect(body.templates[0]?.template).toBe('box-plot-chart');
+    expect(
+      body.templates.find(
+        (template: { template: string }) => template.template === 'box-plot-chart',
+      ),
+    ).toMatchObject({
+      visible_channels: { direct: expect.arrayContaining(['rows', 'cols', 'lod']) },
+    });
+  });
+
   it('paginates over the channel-filtered candidates', async () => {
     delete process.env['TEMPLATES_DIR'];
 

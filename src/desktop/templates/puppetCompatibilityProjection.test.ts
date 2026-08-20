@@ -566,6 +566,40 @@ describe('createPuppetCompatibilityProjection', () => {
     expect(injected.xml).toContain('boxplot-mark-exclusion="false"');
   });
 
+  it('keeps the quantitative axis title visible on the canonical ordered bar', async () => {
+    const template = 'ranking-ordered-bar';
+    const catalogValue = realRuntimeCatalog.get(template)!;
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Category',
+      workbookXml: superstoreWorkbook,
+      manifests: createPuppetCompatibilityProjection(realRuntimeCatalog).allDescriptors,
+      proposal: {
+        template,
+        title: template,
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Category' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+        ],
+        confidence: 0.9,
+      },
+    });
+    expect(result.status, JSON.stringify(result)).toBe('bound');
+    if (result.status !== 'bound') return;
+    const injected = buildInjectedWorkbookXml({
+      workbookXml: superstoreWorkbook,
+      templateXml: catalogValue.snapshot.xml,
+      title: result.args.title,
+      sheetType: result.args.sheet_type,
+      templateParameters: result.args.template_parameters,
+      fieldMapping: result.args.field_mapping,
+      templateSlots: catalogValue.snapshot.descriptor.slots,
+      applyNonce: 'ordered-bar-visible-axis-title',
+    });
+    expect(injected.ok).toBe(true);
+    if (!injected.ok) return;
+    expect(injected.xml).not.toMatch(/attr="title"[^>]*value=""/);
+  });
+
   it('injects a three-field gantt with authored DATEDIFF duration and unswapped dates', async () => {
     const template = 'gantt-task-rollup-chart';
     const catalogValue = realRuntimeCatalog.get(template)!;
@@ -721,6 +755,9 @@ describe('createPuppetCompatibilityProjection', () => {
     expect(injected.xml).toMatch(/<color column="\[PL\]\.\[usr:Calculation_[^\]]+:nk\]"/);
     expect(injected.xml).toMatch(/<size column="\[PL\]\.\[sum:Calculation_[^\]]+:qk\]"/);
     expect(injected.xml).toContain('<cols total="true">[PL].[none:line_item:nk]</cols>');
+    expect(injected.xml).not.toContain(
+      'attr="display" field="[PL].[none:line_item:nk]" value="false"',
+    );
     expect(injected.xml).not.toContain('attr="total-label"');
     expect(injected.xml).not.toContain('Net Profit');
   });

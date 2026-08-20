@@ -60,9 +60,6 @@
           <style-rule element='header'>
             <format attr='border-style' data-class='total' value='none' />
           </style-rule>
-          <style-rule element='label'>
-            <format attr='display' field='[Sample - Superstore].[none:Customer Name:nk]' value='false' />
-          </style-rule>
           <style-rule element='pane'>
             <format attr='border-style' data-class='total' value='none' />
             <format attr='border-style' data-class='subtotal' value='solid' />
