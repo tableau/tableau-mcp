@@ -13,7 +13,12 @@ import {
 
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
-import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
+import {
+  DATA_ROOT,
+  getConfiguredKnowledgeDir,
+  readResourceAsset,
+  RESOURCES_ROOT,
+} from './desktop/assets.js';
 import { createCallDeadline } from './desktop/callDeadline.js';
 import { emitEpisodeEvent, type ToolSchemaProfile } from './desktop/episode-events.js';
 import { apiVersionAtLeast } from './desktop/externalApi/apiVersion.js';
@@ -22,7 +27,6 @@ import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
 import {
   getKnowledgeCorpusEntryCount,
-  getKnowledgeDir,
   listKnowledgeResources,
   readKnowledgeResource,
 } from './desktop/knowledge/index.js';
@@ -289,7 +293,7 @@ export class DesktopMcpServer extends Server {
       this.knowledgeCorpusChecked = true;
       if (getKnowledgeCorpusEntryCount() === 0) {
         log({
-          message: `Knowledge corpus is empty; expected assets under ${getKnowledgeDir()}`,
+          message: `Knowledge corpus is empty; expected assets under ${getConfiguredKnowledgeDir()}`,
           level: 'warning',
           logger: 'DesktopMcpServer',
         });

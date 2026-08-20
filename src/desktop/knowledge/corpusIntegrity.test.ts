@@ -1,7 +1,6 @@
 import { readFileSync } from 'fs';
 
-import { listKnowledgeSlugs, readKnowledgeBySlug } from '../assets.js';
-import { getKnowledgeDir } from './index.js';
+import { getConfiguredKnowledgeDir, listKnowledgeSlugs, readKnowledgeBySlug } from '../assets.js';
 
 /**
  * Corpus-wide integrity gates over the REAL shipped knowledge tree
@@ -33,7 +32,7 @@ function normalizeTarget(raw: string): string {
 }
 
 function collectReferences(): Reference[] {
-  const knowledgeDir = getKnowledgeDir();
+  const knowledgeDir = getConfiguredKnowledgeDir();
   const references: Reference[] = [];
 
   for (const slug of listKnowledgeSlugs()) {
