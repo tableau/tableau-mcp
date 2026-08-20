@@ -242,11 +242,11 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-20: get-app-info's description now also documents the live UI-state fields
 // (Start Page visibility, Data Source page active, presentation mode) added to /v0/app in External
 // Client API 0.2.9. get-app-info is outside DYNAMIC_AUTHORING_TOOL_PROFILE, so only the full surface
-// moves.
+// moves: 59_224 -> 59_313 (retaining the 18-char slack).
 const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_521;
 const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_539;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 59_242;
+const FULL_TOOL_SURFACE_BUDGET = 59_331;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
