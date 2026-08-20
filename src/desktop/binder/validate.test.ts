@@ -739,7 +739,7 @@ describe('binder/validate — cardinality advice', () => {
   });
 });
 
-describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 gantt-task-rollup)', () => {
+describe('binder/validate — gantt stays blocked pending a live-proven aggregate-span donor', () => {
   const GANTT_SCHEMA: SchemaSummary = {
     datasource: 'Projects',
     fields: [
@@ -777,10 +777,18 @@ describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 
     ],
   });
 
-  it("gantt-task-rollup's authored start/end manifest passes its legality gate", () => {
+  it('blocks even an exact gantt proposal', () => {
     const m = manifests.get('gantt-task-rollup-chart')!;
     const r = validateBinding(m, ganttProposal(m), GANTT_SCHEMA);
-    expect(r.ok).toBe(true);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.blockers).toContainEqual(
+        expect.objectContaining({
+          code: 'kind-mismatch',
+          detail: expect.stringContaining('aggregate-span'),
+        }),
+      );
+    }
   });
 
   it('MIN on a date never fires a derivation-illegal blocker (regression guard)', () => {

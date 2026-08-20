@@ -171,8 +171,7 @@ const NUMERIC_DATATYPES: ReadonlySet<string> = new Set(['integer', 'real']);
 const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
 
 // Aggregations that are ALSO legal over a date/datetime field. MIN/MAX of a date are
-// real Tableau aggregations (earliest/latest date, a continuous green pill) — e.g.
-// gantt-task-rollup-chart authors MIN on its DATE start_date slot. The other
+// real Tableau aggregations (earliest/latest date, a continuous green pill). The other
 // aggregations (sum/avg/count/median) stay numeric-only. Scoped to temporal datatypes
 // only; MIN/MAX on a plain string dimension remains illegal (unchanged).
 const TEMPORAL_MINMAX_DERIVATIONS: ReadonlySet<string> = new Set(['min', 'max']);
@@ -649,6 +648,12 @@ export function validateBinding(
       (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('color'),
     );
     const slice = sliceSlot ? resolved.get(sliceSlot.slot_id)?.field : undefined;
+    if (ask && /\bdonuts?\b/i.test(ask)) {
+      blockers.push({
+        code: 'kind-mismatch',
+        detail: 'an explicit donut ask cannot use the plain pie template',
+      });
+    }
     if (slice?.approxCount !== undefined && slice.approxCount > PIE_SLICE_WORKABLE_MAX) {
       blockers.push({
         code: 'kind-mismatch',
@@ -753,6 +758,11 @@ export function validateBinding(
   }
 
   if (m.template === 'gantt-task-rollup-chart') {
+    blockers.push({
+      code: 'kind-mismatch',
+      detail:
+        'gantt-task-rollup-chart is disabled until a live-proven aggregate-span donor replaces its unverified duration calculation',
+    });
     const startSlot = m.slots.find(
       (slot) => slot.bindable && slot.kind === 'temporal' && slot.role.includes('cols'),
     );

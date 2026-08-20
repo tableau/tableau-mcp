@@ -95,7 +95,6 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   ['boxplot of Sales by Category with Order ID detail', 'box-plot-chart'],
   ['box-plot of Sales by Category with Order ID detail', 'box-plot-chart'],
   ['box-and-whisker of Sales by Category with Order ID detail', 'box-plot-chart'],
-  ['gantt chart of Order ID from Order Date to Ship Date', 'gantt-task-rollup-chart'],
   ['histogram of Sales', 'distribution-histogram'],
   [
     'bubble chart of Sales versus Profit by Product Name sized by Quantity colored by Category',
@@ -142,10 +141,15 @@ const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
   ],
   [
     'gantt of Sales by Sub-Category',
-    // gantt-task-rollup-chart requires start_date(temporal) + duration(quantitative) +
-    // phase(categorical) + task(categorical); the ask names only Sales + Sub-Category, so the
-    // temporal/duration/second-categorical slots are unfilled → role-greedy bind fails closed.
-    'required temporal/duration/phase slots unfilled (gantt-task-rollup-chart)',
+    'gantt-task-rollup-chart is disabled from automatic selection until its aggregate-span donor is live-proven',
+  ],
+  [
+    'gantt chart of Order ID from Order Date to Ship Date',
+    'even a fully specified gantt stays off the automatic path until its aggregate-span donor is live-proven',
+  ],
+  [
+    'donut chart of Sales by Region',
+    'the plain pie template must not stand in for an explicit donut request',
   ],
   [
     'sankey of customer order flows between regions',
@@ -320,14 +324,6 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
         '{{field_base_1}}': '[Sample - Superstore].[sum:Sales:qk]',
         '{{field_base_2}}': '[Sample - Superstore].[none:Category:nk]',
         '{{field_base_3}}': '[Sample - Superstore].[none:Order ID:nk]',
-      },
-    ],
-    [
-      'gantt chart of Order ID from Order Date to Ship Date',
-      {
-        '{{field_base_1}}': '[Sample - Superstore].[none:Order ID:nk]',
-        '{{field_base_2}}': '[Sample - Superstore].[none:Order Date:qk]',
-        '{{field_base_3}}': '[Sample - Superstore].[none:Ship Date:qk]',
       },
     ],
     [

@@ -125,6 +125,17 @@ describe('createPuppetCompatibilityProjection', () => {
     ).toBe(true);
   });
 
+  it('keeps unsupported donut and gantt shapes off the automatic path', () => {
+    const projection = createPuppetCompatibilityProjection(realRuntimeCatalog);
+
+    expect(projection.descriptors.get('part-to-whole-pie-chart')?.intent_keywords).toContain('pie');
+    expect(projection.descriptors.get('part-to-whole-pie-chart')?.intent_keywords).not.toContain(
+      'donut',
+    );
+    expect(projection.descriptors.has('gantt-task-rollup-chart')).toBe(false);
+    expect(projection.allDescriptors.has('gantt-task-rollup-chart')).toBe(true);
+  });
+
   it('keeps the waterfall raw qualified slots and only adds a post-bind anchor mapping', async () => {
     const template = 'part-to-whole-waterfall';
     const projection = createPuppetCompatibilityProjection(realRuntimeCatalog);
@@ -600,9 +611,8 @@ describe('createPuppetCompatibilityProjection', () => {
     expect(injected.xml).not.toMatch(/attr="title"[^>]*value=""/);
   });
 
-  it('injects a three-field gantt with authored DATEDIFF duration and unswapped dates', async () => {
+  it('retains gantt for explicit lookup but blocks injection pending a live-proven aggregate-span donor', async () => {
     const template = 'gantt-task-rollup-chart';
-    const catalogValue = realRuntimeCatalog.get(template)!;
     const result = await bindTemplate({
       ask: 'gantt chart of Order ID from Order Date to Ship Date',
       workbookXml: superstoreWorkbook,
@@ -618,33 +628,11 @@ describe('createPuppetCompatibilityProjection', () => {
         confidence: 0.9,
       },
     });
-    expect(result.status, JSON.stringify(result)).toBe('bound');
-    if (result.status !== 'bound') return;
-    const injected = buildInjectedWorkbookXml({
-      workbookXml: superstoreWorkbook,
-      templateXml: catalogValue.snapshot.xml,
-      title: result.args.title,
-      sheetType: result.args.sheet_type,
-      templateParameters: result.args.template_parameters,
-      fieldMapping: result.args.field_mapping,
-      templateSlots: catalogValue.snapshot.descriptor.slots,
-      applyNonce: 'advanced-gantt',
-    });
-    expect(injected.ok).toBe(true);
-    if (!injected.ok) return;
-    const worksheetXml = injected.xml.match(
-      /<worksheet name="gantt-task-rollup-chart">([\s\S]*?)<\/worksheet>/,
-    )?.[0];
-    expect(worksheetXml).toBeDefined();
-    expect(worksheetXml).toContain('<mark class="GanttBar"');
-    expect(worksheetXml).toContain('<rows>[Sample - Superstore].[none:Order ID:nk]</rows>');
-    expect(worksheetXml).toContain('<cols>[Sample - Superstore].[none:Order Date:qk]</cols>');
-    expect(worksheetXml).toContain('formula="DATEDIFF(&apos;day&apos;, [Order Date],[Ship Date])"');
-    expect(worksheetXml).toMatch(
-      /<size column="\[Sample - Superstore\]\.\[sum:Calculation_[^\]]+:qk\]"/,
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.blockers).toContainEqual(
+      expect.objectContaining({ detail: expect.stringContaining('aggregate-span') }),
     );
-    expect(worksheetXml).not.toContain('Product Name');
-    expect(worksheetXml).not.toContain('Profit');
   });
 
   it('overrides only the histogram bin size while one measure fills both raw slots', async () => {

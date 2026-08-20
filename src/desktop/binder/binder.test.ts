@@ -374,6 +374,20 @@ describe('binder/bindTemplate — two-call protocol', () => {
     expect(result.blockers[0].detail).toContain('workable maximum of 12');
   });
 
+  it('rejects an explicit donut ask mapped to the plain-pie template on Call 2', async () => {
+    const result = await bindTemplate({
+      ask: 'donut chart of Sales by Region',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: pieProposal(),
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('kind-mismatch');
+    expect(result.blockers.some((blocker) => blocker.detail.includes('plain pie'))).toBe(true);
+  });
+
   it('rejects a Call-2 box plot that reuses its category as record grain', async () => {
     const result = await bindTemplate({
       ask: 'box plot of Sales by Category with Category detail',
@@ -497,8 +511,13 @@ describe('binder/bindTemplate — two-call protocol', () => {
 
     expect(result.status).toBe('escalate');
     if (result.status !== 'escalate') return;
-    expect(result.blockers[0].detail).toContain('start field "Order Date"');
-    expect(result.blockers[0].detail).toContain('end field "Ship Date"');
+    expect(
+      result.blockers.some(
+        (blocker) =>
+          blocker.detail.includes('start field "Order Date"') &&
+          blocker.detail.includes('end field "Ship Date"'),
+      ),
+    ).toBe(true);
   });
 
   it('rejects swapped gantt dates before a trailing color modifier', async () => {
@@ -520,8 +539,13 @@ describe('binder/bindTemplate — two-call protocol', () => {
 
     expect(result.status).toBe('escalate');
     if (result.status !== 'escalate') return;
-    expect(result.blockers[0].detail).toContain('start field "Order Date"');
-    expect(result.blockers[0].detail).toContain('end field "Ship Date"');
+    expect(
+      result.blockers.some(
+        (blocker) =>
+          blocker.detail.includes('start field "Order Date"') &&
+          blocker.detail.includes('end field "Ship Date"'),
+      ),
+    ).toBe(true);
   });
 
   it('rejects a Call-2 gantt task remap and accepts the exact required roles', async () => {
@@ -543,7 +567,9 @@ describe('binder/bindTemplate — two-call protocol', () => {
     });
     expect(remapped.status).toBe('escalate');
     if (remapped.status === 'escalate') {
-      expect(remapped.blockers[0].detail).toContain('task "Customer Name"');
+      expect(
+        remapped.blockers.some((blocker) => blocker.detail.includes('task "Customer Name"')),
+      ).toBe(true);
     }
 
     const exact = await bindTemplate({
@@ -557,7 +583,12 @@ describe('binder/bindTemplate — two-call protocol', () => {
         ),
       },
     });
-    expect(exact.status).toBe('bound');
+    expect(exact.status).toBe('escalate');
+    if (exact.status === 'escalate') {
+      expect(exact.blockers.some((blocker) => blocker.detail.includes('aggregate-span'))).toBe(
+        true,
+      );
+    }
   });
 
   it('binds one histogram measure to both authored bin and raw-count slots', async () => {

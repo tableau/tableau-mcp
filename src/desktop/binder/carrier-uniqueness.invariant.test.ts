@@ -102,9 +102,9 @@ describe('binder/carrier-uniqueness — CHART_NOUN_KEYWORDS ↔ eligible manifes
     expect(carriersOf('dot-strip')).toEqual(['distribution-bar-code-chart']);
   });
 
-  it('the pie compatibility aliases are each single-carrier', () => {
+  it('keeps ordinary pie single-carrier without treating donut as plain pie', () => {
     expect(carriersOf('pie')).toEqual(['part-to-whole-pie-chart']);
-    expect(carriersOf('donut')).toEqual(['part-to-whole-pie-chart']);
+    expect(carriersOf('donut')).toEqual([]);
   });
 
   it("the generic 'map' is DELIBERATELY absent from CHART_NOUN_KEYWORDS (dual-carrier hazard)", () => {
@@ -119,9 +119,9 @@ describe('binder/carrier-uniqueness — CHART_NOUN_KEYWORDS ↔ eligible manifes
     expect(mapCarriers.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('keeps arrow aliases off the automatic path while the TBM is structurally ineligible', () => {
+  it('keeps intentionally unsupported chart nouns off the automatic path', () => {
     const zeroCarrier = [...new Set(nouns)].filter((n) => carriersOf(n).length === 0).sort();
-    expect(zeroCarrier).toEqual(['arrow-chart', 'over-under-arrow']);
+    expect(zeroCarrier).toEqual(['arrow-chart', 'donut', 'gantt', 'over-under-arrow']);
   });
 
   it('every non-zero-carrier noun has exactly one carrier (no >1 slips past the split)', () => {
