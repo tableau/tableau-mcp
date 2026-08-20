@@ -239,8 +239,10 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // routes, gated to a 0.2.8 floor. All three join DYNAMIC_AUTHORING_TOOL_PROFILE, so dynamic
 // authoring moves 40_096 -> 42_521 (budget kept at the 18-char slack) and the full surface
 // 56_799 -> 59_224. Dynamic still clears the 46k cliff.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_521;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_539;
+// Re-pinned 2026-08-20: get-app-info joins DYNAMIC_AUTHORING_TOOL_PROFILE (previously full-only),
+// so dynamic authoring moves 42_521 -> 42_910; full surface unchanged, it was already counted there.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_910;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_928;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
 const FULL_TOOL_SURFACE_BUDGET = 59_242;
 
@@ -499,10 +501,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 54-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 55-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(54);
+    expect(selected).toHaveLength(55);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -570,7 +572,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'validate-worksheet-xml',
       'inject-template',
       'list-site-workbooks',
-      'get-app-info',
       'get-health',
       'get-worksheet-info',
       'list-storyboards',
