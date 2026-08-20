@@ -82,6 +82,9 @@ export const desktopToolNames = [
   'add-worksheet',
   'add-dashboard',
   'add-storyboard',
+  'publish-workbook',
+  'refresh-datasource-data',
+  'refresh-datasource-extract',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 
