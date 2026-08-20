@@ -11,7 +11,7 @@ Values for the following environment variables can be provided to configure the 
 The URL of the Tableau server.
 
 - For Tableau Cloud, specify your site's specific pod e.g.
-`https://prod-useast-c.online.tableau.com`
+  `https://prod-useast-c.online.tableau.com`
 
 <hr />
 
@@ -22,11 +22,9 @@ Content URL `Internal` vs display name `[INTERNAL] My Company`).
 
 - For Tableau Cloud, specify your site's Content URL.
 - For Tableau Server, you may leave this value blank to use the default site.
-- Required unless `[AUTH](#auth)` is `oauth`.
+- Required unless [`AUTH`](#auth) is `oauth`.
 
 <hr />
-
-
 
 ## `TRANSPORT`
 
@@ -35,11 +33,9 @@ The MCP transport type to use for the server.
 - Default: `stdio`
 - Possible values: `stdio` or `http`
 - For `http`, see [HTTP Server Configuration](http-server.md) for additional variables.
-- See [MCP Transports](https://modelcontextprotocol.io/docs/concepts/transports) for details.
+- See [MCP Transports][mcp-transport] for details.
 
 <hr />
-
-
 
 ## `AUTH`
 
@@ -48,11 +44,9 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 - Default: `pat`
 - Possible values: `pat`, `direct-trust`, or `oauth`
 - See [Authentication](authentication) for additional required variables depending on the desired
-method.
+  method.
 
 <hr />
-
-
 
 ## `ENABLED_LOGGERS`
 
@@ -61,33 +55,32 @@ A comma-separated list of loggers to enable.
 - Default: `appLogger`
 - Possible values (may be combined): `fileLogger`, `appLogger`
   - `fileLogger` — writes log entries and MCP notifications normally only sent to clients to hourly
-  rotating files in the directory specified by`[FILE_LOGGER_DIRECTORY](#file_logger_directory)`.
-  Notifications include tool calls and their arguments as well as HTTP traces for the requests and
-  responses to the Tableau REST APIs.
+    rotating files in the directory specified by[`FILE_LOGGER_DIRECTORY`](#file_logger_directory).
+    Notifications include tool calls and their arguments as well as HTTP traces for the requests and
+    responses to the Tableau REST APIs.
   - `appLogger` — writes log entries to stdout as JSON. Enabled by default when transport is `http`.
 - The log file names are in the format `YYYY-MM-DDTHH-00-00-000Z.log` e.g.
-`2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
-2025-10-15 in UTC time. All log entries for a given hour of the day are appended to the same file.
+  `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
+  2025-10-15 in UTC time. All log entries for a given hour of the day are appended to the same file.
 - Each line in the log file is a JSON object with a timestamp and additional properties:
   - `timestamp`: The timestamp of the log message in UTC time.
   - `level`: The logging level of the log message.
   - `logger`: The logger of the log message. This is typically `rest-api` for HTTP traces or
-  `tableau-mcp` for tool calls.
+    `tableau-mcp` for tool calls.
   - `message`: The log message itself. This may be a string or a JSON object.
+
 - All notifications are written to the local log files regardless of the notification level, since
-`[DEFAULT_NOTIFICATION_LEVEL](#default_notification_level)` only applies to notifications sent to
-MCP clients. Server log output (stderr/console) is controlled separately by
-`[LOG_LEVEL](#log_level)`.
+  [`DEFAULT_NOTIFICATION_LEVEL`](#default_notification_level) only applies to notifications sent to
+  MCP clients. Server log output (stderr/console) is controlled separately by
+  [`LOG_LEVEL`](#log_level).
 - Secrets are masked by default in the log files. To reveal them for debugging purposes, set the
-`[DISABLE_LOG_MASKING](#disable_log_masking)` environment variable to `true`.
+  [`DISABLE_LOG_MASKING`](#disable_log_masking) environment variable to `true`.
 
 <hr />
 
-
-
 ## `FILE_LOGGER_DIRECTORY`
 
-The directory server logs are written to when `[ENABLED_LOGGERS](#enabled_loggers)` includes
+The directory server logs are written to when [`ENABLED_LOGGERS`](#enabled_loggers) includes
 `fileLogger`.
 
 - Default: `[build directory]/logs` i.e. `build/logs`.
@@ -95,8 +88,6 @@ The directory server logs are written to when `[ENABLED_LOGGERS](#enabled_logger
 - There is no cleanup of old log files. The server will continue to create log files indefinitely.
 
 <hr />
-
-
 
 ## `DEFAULT_NOTIFICATION_LEVEL`
 
@@ -123,8 +114,6 @@ Note: this variable was named DEFAULT_LOG_LEVEL until version 2.0.0
 
 <hr />
 
-
-
 ## `LOG_LEVEL`
 
 The minimum severity level for server log output (stderr on stdio transport, console on http
@@ -142,12 +131,10 @@ transport, and file logger).
   - `emergency`
 
 Log entries with a level below the configured value are silently dropped. This is independent of
-`[DEFAULT_NOTIFICATION_LEVEL](#default_notification_level)`, which controls MCP client
+[`DEFAULT_NOTIFICATION_LEVEL`](#default_notification_level), which controls MCP client
 notifications.
 
 <hr />
-
-
 
 ## `DISABLE_LOG_MASKING`
 
@@ -156,8 +143,6 @@ Disable masking of credentials in MCP client notifications and server logs. For 
 - Default: `false`
 
 <hr />
-
-
 
 ## `NOTIFICATION_PAYLOAD_MAX_BYTES`
 
@@ -171,8 +156,6 @@ Binary payloads, large SVG/XML payloads, and large base64 image payloads are red
 larger than this value are truncated.
 
 <hr />
-
-
 
 ## `DATASOURCE_CREDENTIALS`
 
@@ -204,33 +187,27 @@ data source][tab-connect-ds].
 
 <hr />
 
-
-
 ## `INCLUDE_TOOLS`
 
 A comma-separated list of tool or tool group names to include in the server. Only these tools will
 be available. This variable is site overridable, see [Site Settings](site-settings.md).
 
-- Default: Empty string (*all* are included)
+- Default: Empty string (_all_ are included)
 - For a list of available tools and groups, see
-[toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/toolName.ts).
+  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/toolName.ts).
 - Mixing tool names and group names is allowed.
 
 <hr />
-
-
 
 ## `EXCLUDE_TOOLS`
 
 A comma-separated list of tool or tool group names to exclude from the server. All other tools will
 be available. This variable is site overridable, see [Site Settings](site-settings.md).
 
-- Default: Empty string (*none* are excluded)
+- Default: Empty string (_none_ are excluded)
 - Cannot be provided with `INCLUDE_TOOLS`.
 
 <hr />
-
-
 
 ## `MAX_REQUEST_TIMEOUT_MS`
 
@@ -241,28 +218,24 @@ The maximum timeout for requests to the Tableau Server REST API.
 
 <hr />
 
-
-
 ## `MAX_RESULT_LIMIT`
 
 The maximum number of results that every tool with a `limit` parameter can return when no
-tool-specific max result limit is set in the `[MAX_RESULT_LIMITS](#max_result_limits)` variable.
+tool-specific max result limit is set in the [`MAX_RESULT_LIMITS`](#max_result_limits) variable.
 This variable is site and request overridable, see [Site Settings](site-settings.md) and
 [Request Overrides](request-overrides.md).
 
 :::warning
 
 Take care when setting this value and be sure to set appropriate tool-specific limits using the
-`[MAX_RESULT_LIMITS](#max_result_limits)` variable.
+[`MAX_RESULT_LIMITS`](#max_result_limits) variable.
 
 :::
 
-- Default: Empty string (*no limit*)
+- Default: Empty string (_no limit_)
 - Must be a positive number.
 
 <hr />
-
-
 
 ## `MAX_RESULT_LIMITS`
 
@@ -287,35 +260,32 @@ This means that:
 
 :::
 
-- Default: Empty string (*no limits*)
+- Default: Empty string (_no limits_)
 - For a list of available tools and groups, see
-[toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/toolName.ts).
+  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/toolName.ts).
 - Only applies to tools that have a `limit` parameter and return an array of items.
 - Tool names take precedence over tool group names. That is, `datasource:1000,list-datasources:20`
-means that the `list-datasources` tool can return up to 20 data sources but the `query-datasource`
-tool can only return up to 1000 results.
+  means that the `list-datasources` tool can return up to 20 data sources but the `query-datasource`
+  tool can only return up to 1000 results.
 - If a tool is not included in the comma-separated list, the global limit specified by the
-`[MAX_RESULT_LIMIT](#max_result_limit)` variable will be used instead.
+  [`MAX_RESULT_LIMIT`](#max_result_limit) variable will be used instead.
 - Each limit must be a positive number, or `*` to indicate unbounded results.
 
+
 <hr />
-
-
 
 ## `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`
 
 Disables requests that are made to the VizQl Data Service for validating queries in the
-`[query-datasource](../../tools/data-qna/query-datasource.md)` tool. Does not disable the ability to
+[`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to
 query the datasource. This variable is site and request overridable, see
 [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - Default: `false`
 - When `true`, skips validation of queries against metadata results and validation of SET and MATCH
-filters.
+  filters.
 
 <hr />
-
-
 
 ## `DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION`
 
@@ -323,32 +293,28 @@ Note: This environment variable was deprecated in Tableau MCP `v1.13.0` and repl
 `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`.
 
 Disable validation of SET and MATCH filter values in the
-`[query-datasource](../../tools/data-qna/query-datasource.md)` tool.
+[`query-datasource`](../../tools/data-qna/query-datasource.md) tool.
 
 - Default: `false`
 - When `true`, skips the validation that checks if filter values exist in the target field.
 
 <hr />
 
-
-
 ## `DISABLE_METADATA_API_REQUESTS`
 
 Disables `graphql` requests to the Tableau Metadata API in the
-`[get-datasource-metadata](../../tools/data-qna/get-datasource-metadata.md)` tool. This variable is
+[`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool. This variable is
 site and request overridable, see [Site Settings](site-settings.md) and
 [Request Overrides](request-overrides.md).
 
 - Default: `false`
 - When `true`, skips requests to the `graphql` endpoint that provides additional context to field
-metadata.
+  metadata.
 - Set this to `true` if you are using the
-`[get-datasource-metadata](../../tools/data-qna/get-datasource-metadata.md)` tool and the Tableau
-Metadata API is not enabled on your Tableau Server.
+  [`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool and the Tableau
+  Metadata API is not enabled on your Tableau Server.
 
 <hr />
-
-
 
 ## `DISABLE_SESSION_MANAGEMENT`
 
@@ -361,13 +327,11 @@ information about the client's identity, capabilities, and protocol version comp
 - Default: `false`
 - Does not apply to the stdio transport.
 - When `true`, the MCP server will no longer assign a session ID at initialization time nor require
-clients to provide that session ID in the `mcp-session-id` header for subsequent requests.
+  clients to provide that session ID in the `mcp-session-id` header for subsequent requests.
 - Set this to `true` if you are using the HTTP transport and your client does not support or need
-session management.
+  session management.
 
 <hr />
-
-
 
 ## `TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS`
 
@@ -381,8 +345,6 @@ variable.
 
 <hr />
 
-
-
 ## `TELEMETRY_PROVIDER`
 
 The telemetry provider to use for metrics collection.
@@ -391,20 +353,18 @@ The telemetry provider to use for metrics collection.
 - Possible values:
   - `noop` - No telemetry (default)
   - `custom` - Use a custom telemetry provider (requires
-  `[TELEMETRY_PROVIDER_CONFIG](#telemetry_provider_config)`)
+    [`TELEMETRY_PROVIDER_CONFIG`](#telemetry_provider_config))
 
 <hr />
-
-
 
 ## `TELEMETRY_PROVIDER_CONFIG`
 
 Configuration for the custom telemetry provider. Required when
-`[TELEMETRY_PROVIDER](#telemetry_provider)` is `custom`.
+[`TELEMETRY_PROVIDER`](#telemetry_provider) is `custom`.
 
 - Format: JSON string with at least a `module` field
 - The `module` field should be a path to a JavaScript file or npm package that exports a class
-implementing the `TelemetryProvider` interface.
+  implementing the `TelemetryProvider` interface.
 
 **Example:**
 
@@ -413,11 +373,9 @@ TELEMETRY_PROVIDER_CONFIG='{"module": "./my-telemetry-provider.js"}'
 ```
 
 The custom provider module should export a default class (or named export `TelemetryProvider`) that
-implements the `[TelemetryProvider](https://github.com/tableau/tableau-mcp/blob/main/src/telemetry/types.ts)` interface.
+implements the [`TelemetryProvider`](https://github.com/tableau/tableau-mcp/blob/main/src/telemetry/types.ts) interface.
 
 <hr />
-
-
 
 ## `FEATURE_GATE_PROVIDER`
 
@@ -443,8 +401,6 @@ The custom provider module should export a default class or named export `Featur
 
 <hr />
 
-
-
 ## `FEATURE_GATE_PROVIDER_CONFIG`
 
 Configuration for custom feature gate providers (JSON string).
@@ -453,20 +409,16 @@ Configuration for custom feature gate providers (JSON string).
 - Format: `{"module": "<path-to-module>", ...additional-config}`
 
 The `module` field can be:
-
 - A relative file path (e.g., `./my-provider.js`) - resolved from process working directory
 - An absolute file path (e.g., `/path/to/provider.js`)
 - An npm package name (e.g., `@company/feature-gate-provider`)
 
 **Example:**
-
 ```bash
 FEATURE_GATE_PROVIDER_CONFIG='{"module":"./providers/cloud-feature-gate.js"}'
 ```
 
 <hr />
-
-
 
 ## `LATENCY_METRIC_NAME`
 
@@ -474,7 +426,7 @@ The name of the histogram metric used to record HTTP request latency for tool ca
 
 - Default: `http_server_1agg1_request_duration`
 - Only recorded for requests that contain a tool call (non-tool requests such as `initialize` are
-not tracked).
+  not tracked).
 
 **Example:**
 
@@ -484,22 +436,24 @@ LATENCY_METRIC_NAME=http_server_1agg1_request_duration
 
 <hr />
 
-
-
 ## `PRODUCT_TELEMETRY_ENABLED`
 
 Enables product telemetry for tool usage tracking.
 
 - Default: `true`
 - When `true`, the server will send telemetry events to Tableau's telemetry endpoint for each tool
-call, including tool name, request ID, session ID, and site name.
+  call, including tool name, request ID, session ID, and site name.
 - Set to `false` to disable product telemetry. Read
-[https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm](https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm) for more
-information
+  https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm for more
+  information
+
+[mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
+[tab-ds-connections]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source_connections
+[tab-connect-ds]:
+  https://help.tableau.com/current/api/vizql-data-service/en-us/docs/vds_create_queries.html#connect-to-your-data-source
 
 <hr />
-
-
 
 ## `FLOW_TOOLS_ENABLED`
 
@@ -507,16 +461,14 @@ Controls whether the Tableau Prep flow tools are registered.
 
 - Default: `false`
 - Set to `true` to enable the Tableau Prep flow tools:
-  - `[list-flows](../../tools/flows/list-flows.md)`
-  - `[get-flow](../../tools/flows/get-flow.md)`
+  - [`list-flows`](../../tools/flows/list-flows.md)
+  - [`get-flow`](../../tools/flows/get-flow.md)
 - Only the exact value `true` enables them; any other value (or leaving it unset) keeps them
-disabled.
+  disabled.
 - When enabled, individual flow tools can still be excluded via
-`[EXCLUDE_TOOLS](#exclude_tools)` (e.g. `EXCLUDE_TOOLS=flow`).
+  [`EXCLUDE_TOOLS`](#exclude_tools) (e.g. `EXCLUDE_TOOLS=flow`).
 
 <hr />
-
-
 
 ## `ADMIN_TOOLS_ENABLED`
 
@@ -524,22 +476,20 @@ Enables admin-only tools that require site administrator permissions.
 
 - Default: `false`
 - When `true`, enables tools that are restricted to Tableau site administrators:
-  - `[list-extract-refresh-tasks](../../tools/tasks/list-extract-refresh-tasks.md)`
-  - `[update-cloud-extract-refresh-task](../../tools/tasks/update-cloud-extract-refresh-task.md)`
-  - `[list-jobs](../../tools/jobs/list-jobs.md)`
-  - `[list-users](../../tools/users/list-users.md)`
-  - `[delete-content](../../tools/content/delete-content.md)`
-  - `[query-admin-insights](../../tools/admin-insights/query-admin-insights.md)`
+  - [`list-extract-refresh-tasks`](../../tools/tasks/list-extract-refresh-tasks.md)
+  - [`update-cloud-extract-refresh-task`](../../tools/tasks/update-cloud-extract-refresh-task.md)
+  - [`list-jobs`](../../tools/jobs/list-jobs.md)
+  - [`list-users`](../../tools/users/list-users.md)
+  - [`delete-content`](../../tools/content/delete-content.md)
+  - [`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md)
 - These tools require the user to have one of the following site roles:
   - SiteAdministratorCreator
   - SiteAdministratorExplorer
   - ServerAdministrator
 - Admin tools perform runtime role verification and will return a 403 error if the user does not
-have the required permissions.
+  have the required permissions.
 
 <hr />
-
-
 
 ## `ADMIN_GATE_CACHE_TTL_MINUTES`
 
@@ -548,6 +498,7 @@ TTL (in minutes) for caches used by admin-only tools. Affects:
 - Admin role lookups (`assertAdmin`)
 - Admin Insights dataset LUID resolution
 - Project ID → name resolution used by `get-stale-content-report`
+
 - Default: `5`
 - Minimum: `1`
 - Maximum: `1440` (24 hours)
@@ -557,12 +508,10 @@ memory pressure to reduce REST traffic.
 
 <hr />
 
-
-
 ## `MUTATION_PREVIEW_TTL_MINUTES`
 
 TTL (in minutes) for the single-use confirmation tokens minted by the preview phase of two-phase
-mutation tools (e.g. `[delete-content](../../tools/content/delete-content.md)`).
+mutation tools (e.g. [`delete-content`](../../tools/content/delete-content.md)).
 A token must be supplied on the confirmed call before it expires, otherwise the caller must re-run
 the preview.
 
@@ -575,12 +524,10 @@ time between preview and confirmation.
 
 <hr />
 
-
-
 ## `STALE_CONTENT_MIN_AGE_DAYS`
 
 Default minimum days since last access for content to be considered stale by the
-`[query-admin-insights](../../tools/admin-insights/query-admin-insights.md)` tool's `kind: "stale-content"` backend. Callers
+[`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md) tool's `kind: "stale-content"` backend. Callers
 can pass an explicit `minAgeDays` argument to override per-call.
 
 - Default: `90`
@@ -592,12 +539,10 @@ Overridable per-site via [Site Settings](site-settings.md) and per-request via
 
 <hr />
 
-
-
 ## `STALE_CONTENT_MAX_ROWS`
 
 Maximum number of stale-content rows the
-`[query-admin-insights](../../tools/admin-insights/query-admin-insights.md)` tool's
+[`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md) tool's
 `kind: "stale-content"` backend will return in a single call. This is a server-side safety cap that
 protects the destructive stale-content cleanup flow from acting on an unreviewed mass set.
 
@@ -616,12 +561,10 @@ Overridable per-site via [Site Settings](site-settings.md) and per-request via
 
 <hr />
 
-
-
 ## `LICENSE_RECLAIM_INACTIVE_DAYS`
 
 Default minimum days of inactivity before a user is considered a license reclamation candidate by
-the `[user-license-reclamation-inform](../../prompts/user-license-reclamation-inform.md)` prompt.
+the [`user-license-reclamation-inform`](../../prompts/user-license-reclamation-inform.md) prompt.
 Callers can pass an explicit `inactiveDays` argument to override per-invocation.
 
 - Default: `90`
@@ -630,20 +573,16 @@ Callers can pass an explicit `inactiveDays` argument to override per-invocation.
 
 <hr />
 
-
-
 ## `LICENSE_RECLAIM_ROLES`
 
 Comma-separated list of site roles targeted for license reclamation by the
-`[user-license-reclamation-inform](../../prompts/user-license-reclamation-inform.md)` prompt.
+[`user-license-reclamation-inform`](../../prompts/user-license-reclamation-inform.md) prompt.
 Callers can pass an explicit `roles` argument to override per-invocation.
 
 - Default: `Creator,Explorer`
 - Values must be valid Tableau site role names (e.g., `Creator`, `Explorer`, `Viewer`).
 
 <hr />
-
-
 
 ## `BREAK_GLASS_DISABLE_GLOBALLY`
 
@@ -667,14 +606,12 @@ discretion.
 
 <hr />
 
-
-
 ## `CSP_ALLOWED_DOMAINS`
 
 A comma-separated list of domains to allow in the Content-Security-Policy header for MCP apps (when the `mcp-apps` feature is enabled).
 
 - Default: `https://*.online.tableau.com,https://*.tableau.com`
-- The configured `[SERVER](#server)` origin is automatically appended to this list.
+- The configured [`SERVER`](#server) origin is automatically appended to this list.
 - Use this to quickly add or modify allowed domains without requiring a code change and release.
 
 **Example:**
@@ -687,28 +624,22 @@ This allows embedding Tableau visualizations from custom Tableau Server domains 
 
 <hr />
 
-
-
 ## `MCP_S3_BUCKET`
 
-Enables offloading large tool payloads to Amazon S3. When set, the following tools upload the
-payload to this bucket and return a short-lived presigned URL (as a `resource_link` content block)
-instead of inlining it:
-
-- `get-view-image` / `get-custom-view-image` — rendered image (otherwise inline base64)
-- `get-view-data` / `get-custom-view-data` — CSV data (otherwise inline text)
-- `download-workbook` — workbook file (otherwise a local temp-file path)
-- `request-workbook-upload` / `validate-upload-and-publish-workbook`— stage workbook in S3 before publishing (otherwise a local file path)
-
-The client fetches the files directly from S3, so the payload never streams back through the MCP
+Enables offloading rendered view images to Amazon S3. When set, the `get-view-image` and
+`get-custom-view-image` tools upload the rendered image to this bucket and return a short-lived
+presigned URL (as a `resource_link` content block) instead of inlining the image as base64. The
+client fetches the image bytes directly from S3, so the image never streams back through the MCP
 server on read.
 
-- Default: unset (tools return the payload inline or as a local temp path, the original behavior).
+- Requires the `view-file-mode` feature flag to be enabled (see `features.json`). When the flag is
+  disabled, this variable has no effect and the tools return inline base64.
+- Default: unset (feature disabled — tools return inline base64, the original behavior).
 - When set, must be a valid S3 bucket name (lowercase letters, numbers, dots, and hyphens only).
 - AWS credentials are resolved via the default AWS SDK credential chain (IAM role / instance
-profile / standard `AWS_*` environment variables); no credentials are read from the MCP config.
-- If an upload fails, the tool falls back to the inline/temp-file result and logs a warning, so
-retrieval never hard-fails.
+  profile / standard `AWS_*` environment variables); no credentials are read from the MCP config.
+- If an upload fails, the tool falls back to returning inline base64 and logs a warning, so image
+  retrieval never hard-fails.
 
 **Example:**
 
@@ -718,15 +649,13 @@ MCP_S3_BUCKET=tableau-images
 
 <hr />
 
-
-
 ## `AWS_DEFAULT_REGION`
 
-The AWS region of the S3 bucket used for payload offload.
+The AWS region of the S3 bucket used for image offload.
 
 - Default: unset. If not set, the AWS SDK resolves the region from the environment via its standard
-credential/region chain.
-- Only relevant when `[MCP_S3_BUCKET](#mcp_s3_bucket)` is set.
+  credential/region chain.
+- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
 
 **Example:**
 
@@ -736,23 +665,20 @@ AWS_DEFAULT_REGION=us-east-1
 
 <hr />
 
-
-
 ## `MCP_IMAGE_PREFIX`
 
-The base key prefix (folder path) under which uploaded payloads are stored in the bucket. Each
-tool appends its own segment to this base, so objects are namespaced per tool. Slashes are
+The base key prefix (folder path) under which uploaded images are stored in the bucket. Each
+view-image tool appends its own segment to this base, so images are namespaced per tool. Slashes are
 normalized automatically.
 
 - Default: unset (empty). When unset, each tool uses only its own segment.
 - Per-tool segments: `get-view-image` → `view-images/`, `get-custom-view-image` →
-`custom-view-images/`, `get-view-data` → `view-data/`, `get-custom-view-data` →
-`custom-view-data/`, `download-workbook` → `workbook-files/`.
+  `custom-view-images/`.
 - Objects are keyed as `<base><tool-segment><resourceId>/<uuid>.<ext>`. For example, with
-`MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under `tableau/view-images/...` and a
-workbook under `tableau/workbook-files/...`. Unset, they are keyed under `view-images/...`
-and `workbook-files/...` respectively.
-- Only relevant when `[MCP_S3_BUCKET](#mcp_s3_bucket)` is set.
+  `MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under `tableau/view-images/...` and a custom
+  view image under `tableau/custom-view-images/...`. Unset, they are keyed under `view-images/...`
+  and `custom-view-images/...` respectively.
+- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
 
 **Example:**
 
@@ -762,8 +688,6 @@ MCP_IMAGE_PREFIX=tableau/
 
 <hr />
 
-
-
 ## `FILE_TTL`
 
 The lifetime of the presigned GET URL that is returned to the client. The value is in seconds. The link
@@ -771,11 +695,10 @@ should be fetched promptly rather than stored.
 
 - Default: `30` (30 seconds).
 - Clamped to the range `5`–`900` (5 seconds–15 minutes).
-- Only relevant when `[MCP_S3_BUCKET](#mcp_s3_bucket)` is set.
+- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
 
 **Example:**
 
 ```bash
 FILE_TTL=30
 ```
-
