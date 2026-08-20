@@ -35,7 +35,10 @@ import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTab
 import { getListWorksheetsTool } from './api/listWorksheets.js';
 import { getOpenFileTool } from './api/openFile.js';
 import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
+import { getPublishWorkbookTool } from './api/publishWorkbook.js';
 import { getRedoWorkbookTool } from './api/redoWorkbook.js';
+import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
+import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
@@ -93,6 +96,9 @@ export const desktopToolFactories = [
   getAddWorksheetTool,
   getAddDashboardTool,
   getAddStoryboardTool,
+  getPublishWorkbookTool,
+  getRefreshDatasourceDataTool,
+  getRefreshDatasourceExtractTool,
   getListWorksheetsTool,
   getListDashboardsTool,
   getGetWorksheetXmlTool,
