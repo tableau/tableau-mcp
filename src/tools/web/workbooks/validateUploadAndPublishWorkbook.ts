@@ -226,7 +226,7 @@ async function uploadTwbx({
   restApi: RestApi;
   resolvedWorkbookFile: ResolvedWorkbook;
 }): Promise<ValidationOutcome> {
-  const uploadSessionId = await restApi.workbooksMethods.uploadFileInChunks({
+  const uploadSessionId = await restApi.publishingMethods.uploadFileInChunks({
     siteId: restApi.siteId,
     filename: resolvedWorkbookFile.fileName,
     content: resolvedWorkbookFile.bytes,

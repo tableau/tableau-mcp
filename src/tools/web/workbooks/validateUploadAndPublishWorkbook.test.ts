@@ -27,8 +27,10 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       workbooksMethods: {
         validateWorkbookAndUpload: mocks.mockValidateWorkbookAndUpload,
-        uploadFileInChunks: mocks.mockUploadFileInChunks,
         publishWorkbook: mocks.mockPublishWorkbook,
+      },
+      publishingMethods: {
+        uploadFileInChunks: mocks.mockUploadFileInChunks,
       },
       siteId: 'test-site-id',
     }),
