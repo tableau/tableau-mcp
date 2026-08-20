@@ -17,6 +17,6 @@ export class ConsentFlow extends Flow {
   };
 
   private fill = async (): Promise<void> => {
-    await this.page.locator('button[type="submit"]').click();
+    await this.page.locator('#allow-button').click();
   };
 }
