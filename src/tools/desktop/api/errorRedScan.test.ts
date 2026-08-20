@@ -1,5 +1,5 @@
+import { encode as encodePng } from 'fast-png';
 import { describe, expect, it } from 'vitest';
-import { deflateSync } from 'zlib';
 
 import { DecodedImage, decodePng, isErrorRed, scanForErrorRed } from './errorRedScan.js';
 
@@ -23,45 +23,15 @@ function makeImage(
   return { width, height, channels: 3, data };
 }
 
-// Minimal 8-bit RGB PNG (filter 0 on every row, dummy CRCs — the decoder skips CRC).
+// Encode a real 8-bit RGB PNG (via fast-png) so decodePng is exercised against genuine
+// PNG bytes rather than a hand-rolled fixture.
 function makePng(
   width: number,
   height: number,
   paint: (x: number, y: number) => [number, number, number],
 ): Buffer {
-  const chunk = (type: string, body: Buffer): Buffer => {
-    const len = Buffer.alloc(4);
-    len.writeUInt32BE(body.length, 0);
-    return Buffer.concat([len, Buffer.from(type, 'ascii'), body, Buffer.alloc(4)]);
-  };
-
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8; // bit depth
-  ihdr[9] = 2; // color type: RGB
-  // comp/filter/interlace all 0.
-
-  const stride = width * 3;
-  const rawRows = Buffer.alloc((stride + 1) * height);
-  for (let y = 0; y < height; y++) {
-    const rowStart = y * (stride + 1);
-    rawRows[rowStart] = 0; // filter: none
-    for (let x = 0; x < width; x++) {
-      const [r, g, b] = paint(x, y);
-      const p = rowStart + 1 + x * 3;
-      rawRows[p] = r;
-      rawRows[p + 1] = g;
-      rawRows[p + 2] = b;
-    }
-  }
-
-  return Buffer.concat([
-    Buffer.from('89504e470d0a1a0a', 'hex'),
-    chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(rawRows)),
-    chunk('IEND', Buffer.alloc(0)),
-  ]);
+  const { data } = makeImage(width, height, paint);
+  return Buffer.from(encodePng({ width, height, channels: 3, depth: 8, data }));
 }
 
 const ERROR_RED: [number, number, number] = [190, 40, 40];
@@ -112,7 +82,7 @@ describe('scanForErrorRed', () => {
 });
 
 describe('decodePng', () => {
-  it('round-trips an 8-bit RGB image through unfiltering', () => {
+  it('maps decoded 8-bit RGB pixels onto DecodedImage', () => {
     const paint = (x: number, y: number): [number, number, number] =>
       x === y ? ERROR_RED : [x * 10, y * 10, 100];
     const decoded = decodePng(makePng(6, 4, paint));
