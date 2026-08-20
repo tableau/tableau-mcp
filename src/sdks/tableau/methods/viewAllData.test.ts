@@ -109,13 +109,18 @@ describe('ViewsMethods.getViewAllData', () => {
     viewsMethods._apiClient.axios.get = get;
 
     await expect(
-      viewsMethods.getViewAllData({ siteId: 'site-1', viewId: 'view-1' }),
+      viewsMethods.getViewAllData({
+        siteId: 'site-1',
+        viewId: 'view-1',
+        viewFilters: { Region: 'West', vf_Category: 'Furniture' },
+      }),
     ).resolves.toEqual({
       body: multipartBody,
       contentType: `multipart/form-data; boundary=${boundary}`,
     });
     expect(get).toHaveBeenCalledWith('/sites/site-1/views/view-1/allData', {
       headers: { Authorization: 'Bearer token' },
+      params: { vf_Region: 'West', vf_Category: 'Furniture' },
       responseType: 'arraybuffer',
     });
   });

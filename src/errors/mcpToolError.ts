@@ -167,6 +167,18 @@ export class ViewNotAllowedError extends McpToolError {
   }
 }
 
+export class ViewDataSheetNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'view-data-sheet-not-found', message, statusCode: 404 });
+  }
+}
+
+export class ViewDataPageTokenInvalidError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'view-data-page-token-invalid', message, statusCode: 400 });
+  }
+}
+
 export class CustomViewNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'custom-view-not-allowed', message, statusCode: 403 });

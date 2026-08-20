@@ -248,18 +248,30 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
    *
    * @param {string} viewId The ID of the view to return data for.
    * @param {string} siteId The Tableau site ID.
+   * @param {Record<string, string>} viewFilters Map of field name to filter value; keys are prefixed with `vf_` unless already present.
    */
   getViewAllData = async ({
     viewId,
     siteId,
+    viewFilters,
   }: {
     viewId: string;
     siteId: string;
+    viewFilters?: Record<string, string>;
   }): Promise<ViewAllDataResponse> => {
+    const queries: Record<string, string> = {};
+    if (viewFilters) {
+      for (const [key, value] of Object.entries(viewFilters)) {
+        const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
+        queries[paramName] = value;
+      }
+    }
+
     const response = await this._apiClient.axios.get<Uint8Array>(
       `/sites/${siteId}/views/${viewId}/allData`,
       {
         ...this.authHeader,
+        params: queries,
         responseType: 'arraybuffer',
       },
     );
