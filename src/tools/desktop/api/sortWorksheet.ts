@@ -19,13 +19,11 @@ import { resolveShelfField } from './resolveShelfField.js';
 const paramsSchema = {
   session: sessionParam(),
   worksheet: z.string().describe('Worksheet name/id to sort.'),
-  fieldName: z
-    .string()
-    .min(1)
-    .describe(
-      'Field to sort by, given as the field name as it appears on the worksheet (e.g. "Sales").',
-    ),
-  direction: z.enum(['asc', 'desc']).optional().describe('Sort direction; defaults to asc.'),
+  fieldName: z.string().min(1).describe('Worksheet field name (e.g. "Sales").'),
+  direction: z
+    .enum(['asc', 'desc'])
+    .optional()
+    .describe('Direction; default asc. Numeric desc: largest first.'),
   sortType: z
     .enum(['data-source-order', 'alpha'])
     .optional()

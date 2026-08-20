@@ -600,7 +600,7 @@ describe('createPuppetCompatibilityProjection', () => {
     expect(injected.xml).not.toMatch(/attr="title"[^>]*value=""/);
   });
 
-  it('injects a three-field gantt with authored DATEDIFF duration and unswapped dates', async () => {
+  it('injects a task-level gantt span without multiplying duration across duplicate task rows', async () => {
     const template = 'gantt-task-rollup-chart';
     const catalogValue = realRuntimeCatalog.get(template)!;
     const result = await bindTemplate({
@@ -612,7 +612,8 @@ describe('createPuppetCompatibilityProjection', () => {
         title: template,
         bindings: [
           { slot_id: 'field_base_1', field: 'Order ID' },
-          { slot_id: 'field_base_2', field: 'Order Date' },
+          { slot_id: 'field_base_2_min', field: 'Order Date' },
+          { slot_id: 'field_base_2_none', field: 'Order Date' },
           { slot_id: 'field_base_3', field: 'Ship Date' },
         ],
         confidence: 0.9,
@@ -628,7 +629,7 @@ describe('createPuppetCompatibilityProjection', () => {
       templateParameters: result.args.template_parameters,
       fieldMapping: result.args.field_mapping,
       templateSlots: catalogValue.snapshot.descriptor.slots,
-      applyNonce: 'advanced-gantt',
+      applyNonce: 'advanced-gantt-task-span',
     });
     expect(injected.ok).toBe(true);
     if (!injected.ok) return;
@@ -638,13 +639,14 @@ describe('createPuppetCompatibilityProjection', () => {
     expect(worksheetXml).toBeDefined();
     expect(worksheetXml).toContain('<mark class="GanttBar"');
     expect(worksheetXml).toContain('<rows>[Sample - Superstore].[none:Order ID:nk]</rows>');
-    expect(worksheetXml).toContain('<cols>[Sample - Superstore].[none:Order Date:qk]</cols>');
-    expect(worksheetXml).toContain('formula="DATEDIFF(&apos;day&apos;, [Order Date],[Ship Date])"');
-    expect(worksheetXml).toMatch(
-      /<size column="\[Sample - Superstore\]\.\[sum:Calculation_[^\]]+:qk\]"/,
+    expect(worksheetXml).toContain('<cols>[Sample - Superstore].[min:Order Date:qk]</cols>');
+    expect(worksheetXml).toContain(
+      'formula="{ FIXED [Order ID] : DATEDIFF(&apos;day&apos;, MIN([Order Date]), MAX([Ship Date])) }"',
     );
-    expect(worksheetXml).not.toContain('Product Name');
-    expect(worksheetXml).not.toContain('Profit');
+    expect(worksheetXml).toMatch(
+      /<size column="\[Sample - Superstore\]\.\[min:Calculation_[^\]]+:qk\]"/,
+    );
+    expect(worksheetXml).not.toMatch(/sum:Calculation_[^\]]+:qk/);
   });
 
   it('overrides only the histogram bin size while one measure fills both raw slots', async () => {

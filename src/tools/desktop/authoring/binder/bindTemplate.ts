@@ -82,7 +82,11 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
-import { fetchWorksheetSummaryData, type SummaryDataRead } from '../../api/summaryDataCore.js';
+import {
+  fetchWorksheetSummaryData,
+  type SummaryDataRead,
+  type SummaryRowOrder,
+} from '../../api/summaryDataCore.js';
 import {
   doneNextAction,
   jsonToolResult,
@@ -172,6 +176,7 @@ type AppliedFastPathResult = {
   guidance: string;
   applied_default?: AppliedDefault;
   summary_rows?: { columns: unknown[]; rows: unknown[][] };
+  summary_rows_order?: SummaryRowOrder;
   summary_rows_error?: string;
   truncated?: true;
   /**
@@ -238,7 +243,7 @@ const WATERFALL_TEMPLATE = 'part-to-whole-waterfall';
 // order is usually a non-displayed sequence field; the hint names it so the singer carries it
 // in the ORIGINAL bind (proposal.sort) instead of giving up on refine or falling to XML surgery.
 const WATERFALL_SORT_HINT =
-  'Waterfall default sort is DESC by the bound measure; override with proposal.sort:{by:<field>,direction:"asc"|"desc"} IN THE BIND — refine-worksheet cannot sort by a field that is not on the view.';
+  'Waterfall default sort is DESC by the bound measure (largest values first). After apply, verify and stop; override only with proposal.sort:{by:<field>,direction:"asc"|"desc"} IN THE BIND — refine-worksheet cannot sort by a field that is not on the view.';
 // Terminal stop-clause appended to the applied:true receipt when NO re-bind slot is unfilled
 // (Blake's spiral): the model reads guidance verbatim, so this directly contradicts the
 // bundled skill's "adapt fields/formatting" + the ambient "search-commands available" pulls.
@@ -336,10 +341,14 @@ function currencyHeterogeneityCaveat(
 
 type SummaryRowsEnrichment = Pick<
   AppliedFastPathResult,
-  'summary_rows' | 'summary_rows_error' | 'truncated'
+  'summary_rows' | 'summary_rows_order' | 'summary_rows_error' | 'truncated'
 >;
 
-function capSummaryRows(columns: unknown[], rows: unknown[][]): SummaryRowsEnrichment {
+function capSummaryRows(
+  columns: unknown[],
+  rows: unknown[][],
+  rowOrder: SummaryRowOrder,
+): SummaryRowsEnrichment {
   if (rows.length === 0) {
     return { summary_rows_error: EMPTY_SUMMARY_ROWS_ERROR };
   }
@@ -377,6 +386,7 @@ function capSummaryRows(columns: unknown[], rows: unknown[][]): SummaryRowsEnric
 
   return {
     summary_rows: { columns: cappedColumns, rows: cappedRows },
+    summary_rows_order: rowOrder,
     ...(cellTruncated || rows.length > cappedRows.length ? { truncated: true } : {}),
   };
 }
@@ -431,7 +441,7 @@ async function readAppliedSummaryRows({
         summary_rows_error: boundedSummaryRowsError(result.error.error.getErrorText()),
       };
     }
-    return capSummaryRows(result.value.columns, result.value.rows);
+    return capSummaryRows(result.value.columns, result.value.rows, result.value.rowOrder);
   } catch (error) {
     return { summary_rows_error: boundedSummaryRowsError(getExceptionMessage(error)) };
   } finally {

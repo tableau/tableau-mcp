@@ -772,12 +772,13 @@ describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 
     title: 'Task rollup',
     bindings: [
       { slot_id: 'field_base_1', field: 'Task' },
-      { slot_id: 'field_base_2', field: 'Start Date' },
+      { slot_id: 'field_base_2_min', field: 'Start Date' },
+      { slot_id: 'field_base_2_none', field: 'Start Date' },
       { slot_id: 'field_base_3', field: 'End Date' },
     ],
   });
 
-  it("gantt-task-rollup's authored start/end manifest passes its legality gate", () => {
+  it("gantt-task-rollup's task-level start/end span passes its legality gate", () => {
     const m = manifests.get('gantt-task-rollup-chart')!;
     const r = validateBinding(m, ganttProposal(m), GANTT_SCHEMA);
     expect(r.ok).toBe(true);

@@ -171,10 +171,9 @@ const NUMERIC_DATATYPES: ReadonlySet<string> = new Set(['integer', 'real']);
 const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
 
 // Aggregations that are ALSO legal over a date/datetime field. MIN/MAX of a date are
-// real Tableau aggregations (earliest/latest date, a continuous green pill) — e.g.
-// gantt-task-rollup-chart authors MIN on its DATE start_date slot. The other
-// aggregations (sum/avg/count/median) stay numeric-only. Scoped to temporal datatypes
-// only; MIN/MAX on a plain string dimension remains illegal (unchanged).
+// real Tableau aggregations (earliest/latest date, a continuous green pill). The other
+// aggregations (sum/avg/count/median) stay numeric-only. Scoped to temporal datatypes only;
+// MIN/MAX on a plain string dimension remains illegal (unchanged).
 const TEMPORAL_MINMAX_DERIVATIONS: ReadonlySet<string> = new Set(['min', 'max']);
 
 // Geo semantic-role concept check (red-team GEO-02). MIRRORS the private
@@ -658,6 +657,13 @@ export function validateBinding(
           `workable maximum of ${PIE_SLICE_WORKABLE_MAX}; choose a lower-cardinality dimension`,
       });
     }
+    if (ask && /\bdonut\b/i.test(ask)) {
+      blockers.push({
+        code: 'kind-mismatch',
+        detail:
+          'an explicit donut ask requires a distinct live-proven donor; plain pie is not equivalent',
+      });
+    }
   }
 
   if (m.template === 'quota-attainment-bullet') {
@@ -761,7 +767,8 @@ export function validateBinding(
         slot.bindable &&
         slot.kind === 'temporal' &&
         slot.role.includes('size') &&
-        !slot.role.includes('cols'),
+        !slot.role.includes('cols') &&
+        slot.template_field !== startSlot?.template_field,
     );
     const start = startSlot ? resolved.get(startSlot.slot_id)?.field : undefined;
     const end = endSlot ? resolved.get(endSlot.slot_id)?.field : undefined;

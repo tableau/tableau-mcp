@@ -117,6 +117,10 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
 // ── KNOWN SAFE-PROPOSES (NOT bound — fail-closed by design; WHY each) ──────────
 const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
   [
+    'donut chart of Sales by Region',
+    'a donut requires a distinct live-proven donor and must not bind the plain-pie template',
+  ],
+  [
     'grouped bar chart of Sales by Category',
     'the specific grouped-bar winner cannot fill its series slot and must not fall back to a generic bar',
   ],
@@ -326,7 +330,8 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
       'gantt chart of Order ID from Order Date to Ship Date',
       {
         '{{field_base_1}}': '[Sample - Superstore].[none:Order ID:nk]',
-        '{{field_base_2}}': '[Sample - Superstore].[none:Order Date:qk]',
+        '{{field_base_2}}@min': '[Sample - Superstore].[min:Order Date:qk]',
+        '{{field_base_2}}@none': '[Sample - Superstore].[none:Order Date:qk]',
         '{{field_base_3}}': '[Sample - Superstore].[none:Ship Date:qk]',
       },
     ],

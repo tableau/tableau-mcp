@@ -2213,6 +2213,11 @@ describe('bindTemplateTool auto_apply gate', () => {
         ],
         rows: [['Acme', 100, -75000]],
       },
+      summary_rows_order: {
+        status: 'unspecified',
+        usableFor: 'value_readback',
+        notUsableFor: 'visual_sort_verification',
+      },
     });
     expect(body.guidance).toContain('not the user’s stated choice');
     expect(body.guidance).toContain('Sales');

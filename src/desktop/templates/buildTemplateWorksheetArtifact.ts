@@ -8,6 +8,7 @@ import {
 } from '../../errors/mcpToolError.js';
 import { bindExplicitTemplate, formatExplicitBindErrors } from '../binder/explicit-bind.js';
 import { summarizeSchema } from '../binder/schema-summary.js';
+import { resolveUniqueDatasourceName } from '../metadata/field-resolver.js';
 import { extractSheetXml, extractWorksheetWindowXml } from '../metadata/sheets.js';
 import { captureTargetWorksheetState } from '../metadata/targetWorksheetState.js';
 import { buildInjectedWorkbookXml } from './injectTemplateCore.js';
@@ -98,10 +99,17 @@ export function buildTemplateWorksheetArtifact({
     }
 
     const schema = summarizeSchema(workbookXml);
+    const liveDatasourceNames = new Set(schema.fields.map((field) => field.datasource));
+    const resolvedPlanDatasource = resolveUniqueDatasourceName(workbookXml, plan.datasource);
+    if (resolvedPlanDatasource === null) {
+      return new ArgsValidationError(
+        `Datasource "${plan.datasource}" is not a unique live datasource name or caption.`,
+      ).toErr();
+    }
     const explicitBind = bindExplicitTemplate(plan.templateName, plan.fieldMapping, schema, {
       contract: snapshot.descriptor,
       title: plan.title,
-      datasource: plan.datasource,
+      datasource: resolvedPlanDatasource,
     });
     if (!explicitBind.ok) {
       return new ArgsValidationError(
@@ -110,9 +118,9 @@ export function buildTemplateWorksheetArtifact({
     }
     if (
       !datasourceNamesAreEquivalent(
-        plan.datasource,
+        resolvedPlanDatasource,
         explicitBind.datasource,
-        new Set(schema.fields.map((field) => field.datasource)),
+        liveDatasourceNames,
       )
     ) {
       return new ArgsValidationError(

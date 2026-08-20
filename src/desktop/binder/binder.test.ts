@@ -93,6 +93,19 @@ function pieProposal(field = 'Region'): BindingProposal {
   };
 }
 
+it('rejects a plain-pie proposal for an explicit donut ask', async () => {
+  const result = await bindTemplate({
+    ask: 'donut chart of Sales by Region',
+    workbookXml: WORKBOOK_XML,
+    manifests: allDescriptors,
+    proposal: pieProposal(),
+  });
+
+  expect(result.status).toBe('escalate');
+  if (result.status !== 'escalate') return;
+  expect(result.blockers[0].detail).toContain('distinct live-proven donor');
+});
+
 function rankingProposal(title = 'Sales by Region'): BindingProposal {
   return {
     template: 'ranking-ordered-bar',
@@ -185,6 +198,26 @@ describe('binder/classifyNoLlm', () => {
 
   it('fails closed when the ask has no chart intent', () => {
     expect(classifyNoLlm('hello there', descriptors, summarizeSchema(WORKBOOK_XML))).toBeNull();
+  });
+
+  it('binds both qualified start-date slots for a task-level gantt span', () => {
+    expect(
+      classifyNoLlm(
+        'gantt chart of Order ID from Order Date to Ship Date',
+        descriptors,
+        summarizeSchema(WORKBOOK_XML),
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        template: 'gantt-task-rollup-chart',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Order ID' },
+          { slot_id: 'field_base_2_min', field: 'Order Date' },
+          { slot_id: 'field_base_2_none', field: 'Order Date' },
+          { slot_id: 'field_base_3', field: 'Ship Date' },
+        ],
+      }),
+    );
   });
 });
 
@@ -488,7 +521,8 @@ describe('binder/bindTemplate — two-call protocol', () => {
         title: 'Order gantt',
         bindings: [
           { slot_id: 'field_base_1', field: 'Customer Name' },
-          { slot_id: 'field_base_2', field: 'Ship Date' },
+          { slot_id: 'field_base_2_min', field: 'Ship Date' },
+          { slot_id: 'field_base_2_none', field: 'Ship Date' },
           { slot_id: 'field_base_3', field: 'Order Date' },
         ],
         confidence: 0.9,
@@ -511,7 +545,8 @@ describe('binder/bindTemplate — two-call protocol', () => {
         title: 'Order gantt',
         bindings: [
           { slot_id: 'field_base_1', field: 'Customer Name' },
-          { slot_id: 'field_base_2', field: 'Ship Date' },
+          { slot_id: 'field_base_2_min', field: 'Ship Date' },
+          { slot_id: 'field_base_2_none', field: 'Ship Date' },
           { slot_id: 'field_base_3', field: 'Order Date' },
         ],
         confidence: 0.9,
@@ -530,7 +565,8 @@ describe('binder/bindTemplate — two-call protocol', () => {
       title: 'Order gantt',
       bindings: [
         { slot_id: 'field_base_1', field: 'Category' },
-        { slot_id: 'field_base_2', field: 'Order Date' },
+        { slot_id: 'field_base_2_min', field: 'Order Date' },
+        { slot_id: 'field_base_2_none', field: 'Order Date' },
         { slot_id: 'field_base_3', field: 'Ship Date' },
       ],
       confidence: 0.9,

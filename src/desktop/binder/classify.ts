@@ -3406,12 +3406,16 @@ function resolveExplicitGantt(
       slot.bindable &&
       slot.kind === 'temporal' &&
       slot.role.includes('size') &&
-      !slot.role.includes('cols'),
+      !slot.role.includes('cols') &&
+      slot.template_field !== startSlot?.template_field,
   );
   if (!taskSlot || !startSlot || !endSlot) return null;
+  const startSlots = manifest.slots.filter(
+    (slot) => slot.bindable && slot.template_field === startSlot.template_field,
+  );
   return [
     { slot_id: taskSlot.slot_id, field: tasks[0].name },
-    { slot_id: startSlot.slot_id, field: startFields[0].name },
+    ...startSlots.map((slot) => ({ slot_id: slot.slot_id, field: startFields[0].name })),
     { slot_id: endSlot.slot_id, field: endFields[0].name },
   ];
 }

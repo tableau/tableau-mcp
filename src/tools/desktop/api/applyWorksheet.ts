@@ -72,7 +72,7 @@ const paramsSchema = {
     .describe('Exact template binding to build and apply in this call.'),
   worksheetName: artifactNameParam('worksheet', { min: 1, max: 255 })
     .optional()
-    .describe('Existing worksheet id or name; inferred from a cached fragment.'),
+    .describe('Target id/name or plan/artifact title.'),
   worksheetFile: artifactFileParam('worksheet', { max: 4096 })
     .optional()
     .describe('Cached worksheet path for manual apply; omit with other modes.'),
@@ -128,7 +128,9 @@ export const getApplyWorksheetTool = (
         callback: async (): Promise<
           Result<StructuredResult<ApplyWorksheetResult>, McpToolError>
         > => {
-          const cachedModeSelected = worksheetName !== undefined || worksheetFile !== undefined;
+          const cachedModeSelected =
+            worksheetFile !== undefined ||
+            (artifactId === undefined && templatePlan === undefined && worksheetName !== undefined);
           const modeCount =
             Number(artifactId !== undefined) +
             Number(templatePlan !== undefined) +
@@ -139,6 +141,16 @@ export const getApplyWorksheetTool = (
             ).toErr();
           }
 
+          if (
+            templatePlan !== undefined &&
+            worksheetName !== undefined &&
+            worksheetName !== templatePlan.title
+          ) {
+            return new ArgsValidationError(
+              `worksheetName "${worksheetName}" must match templatePlan.title "${templatePlan.title}".`,
+            ).toErr();
+          }
+
           if (artifactId !== undefined) {
             const sessionResult = resolveSession(session);
             if (sessionResult.isErr()) return sessionResult.error.toErr();
@@ -146,6 +158,12 @@ export const getApplyWorksheetTool = (
             const reservation = artifactStore.reserve(artifactId, resolvedSession);
             if (!reservation.ok) {
               return templateArtifactUnavailableError(artifactId, reservation.reason).toErr();
+            }
+            if (worksheetName !== undefined && worksheetName !== reservation.artifact.title) {
+              artifactStore.release(reservation.lease);
+              return new ArgsValidationError(
+                `worksheetName "${worksheetName}" must match artifact title "${reservation.artifact.title}".`,
+              ).toErr();
             }
             try {
               const executor = await extra.getExecutor(resolvedSession);

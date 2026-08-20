@@ -28,7 +28,7 @@ import {
   withNextAction,
 } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
-import { fetchWorksheetSummaryData } from './summaryDataCore.js';
+import { fetchWorksheetSummaryData, type SummaryRowOrder } from './summaryDataCore.js';
 
 const DEFAULT_MAX_ROWS = 200;
 const MAX_ROWS_CAP = 1000;
@@ -68,6 +68,7 @@ type SummaryDataValue = {
   worksheet: { id: string; name: string };
   maxRows: number;
   shape: string;
+  rowOrder: SummaryRowOrder;
   summaryData: { columns: unknown[]; rows: unknown[] };
 };
 
@@ -172,7 +173,13 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                 const dataColumns = summaryResult.value.columns;
                 const dataRows = summaryResult.value.rows;
                 if (dataColumns.length === 0) {
-                  return new Ok(emptySheetResult(resolvedWorksheet, resolvedMaxRows));
+                  return new Ok(
+                    emptySheetResult(
+                      resolvedWorksheet,
+                      resolvedMaxRows,
+                      summaryResult.value.rowOrder,
+                    ),
+                  );
                 }
                 if (dataRows.length === 0) {
                   return new Ok(
@@ -186,6 +193,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                         },
                         maxRows: resolvedMaxRows,
                         shape: `0 rows x ${dataColumns.length} columns`,
+                        rowOrder: summaryResult.value.rowOrder,
                         summaryData: { columns: dataColumns, rows: dataRows },
                         guidance: NO_ROWS_GUIDANCE,
                       },
@@ -215,6 +223,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                   worksheet: { id: resolvedWorksheet.id, name: resolvedWorksheet.name },
                   maxRows: resolvedMaxRows,
                   shape: `${dataRows.length} rows x ${dataColumns.length} columns`,
+                  rowOrder: summaryResult.value.rowOrder,
                   summaryData: { columns: dataColumns, rows: dataRows },
                 });
               },
@@ -370,7 +379,11 @@ function columnsError(error: ArgsValidationError): SummaryDataResponseError {
   );
 }
 
-function emptySheetResult(worksheet: WorksheetItem, maxRows: number): SummaryDataCompletedResult {
+function emptySheetResult(
+  worksheet: WorksheetItem,
+  maxRows: number,
+  rowOrder: SummaryRowOrder,
+): SummaryDataCompletedResult {
   return withNextAction(
     {
       status: 'action-required' as const,
@@ -378,6 +391,7 @@ function emptySheetResult(worksheet: WorksheetItem, maxRows: number): SummaryDat
       worksheet: { id: worksheet.id, name: worksheet.name },
       maxRows,
       shape: '0 rows x 0 columns',
+      rowOrder,
       summaryData: { columns: [], rows: [] },
       guidance: EMPTY_SHEET_GUIDANCE,
     },
