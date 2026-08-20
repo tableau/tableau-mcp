@@ -233,10 +233,12 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // served profile, while the full schema-only surface moves 56_650 -> 56_799.
 // Re-pinned 2026-08-19: apply-worksheet now infers the target from a cached worksheet fragment, so
 // its worksheetName describe drops the redundant "worksheet" (-3 bytes); dynamic authoring 40_099 -> 40_096.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_096;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_117;
+// Re-pinned 2026-08-20: search-workbook-fields adds a 666-byte read-only current-workbook discovery
+// tool to full and dynamic-authoring: dynamic authoring 40_096 -> 40_762; full 56_799 -> 57_465.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_762;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_783;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 56_817;
+const FULL_TOOL_SURFACE_BUDGET = 57_483;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -493,10 +495,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 51-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 52-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(51);
+    expect(selected).toHaveLength(52);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -530,6 +532,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'redo-workbook',
       'list-instances',
       'list-available-fields',
+      'search-workbook-fields',
       'list-worksheets',
       'list-dashboards',
       'list-worksheet-logical-tables',
@@ -578,6 +581,18 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);
     }
+  });
+
+  it('registers search-workbook-fields once in full and dynamic-authoring profiles', () => {
+    const tools = allTools();
+
+    expect(tools.filter((tool) => tool.name === 'search-workbook-fields')).toHaveLength(1);
+    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('search-workbook-fields')).toBe(true);
+    expect(
+      selectToolsForProfile(tools, 'dynamic-authoring').filter(
+        (tool) => tool.name === 'search-workbook-fields',
+      ),
+    ).toHaveLength(1);
   });
 
   it('dynamic-authoring surface sits well under the 46k tools/list cliff (the whole point of a lean profile)', async () => {

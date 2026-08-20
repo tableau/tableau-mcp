@@ -161,6 +161,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'ask-user',
     'list-instances',
     'list-available-fields',
+    'search-workbook-fields',
     'list-worksheets',
     'list-dashboards',
     'get-summary-data',

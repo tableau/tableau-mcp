@@ -24,6 +24,7 @@ export const desktopToolNames = [
   'add-field',
   'remove-field',
   'resolve-field',
+  'search-workbook-fields',
   'search-examples',
   'search-commands',
   'lookup-workbook-schema',
