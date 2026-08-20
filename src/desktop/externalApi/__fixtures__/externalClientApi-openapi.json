@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.8",
+    "version": "0.2.9",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -96,11 +96,11 @@
     "/v0/app": {
       "get": {
         "summary": "Get application info",
-        "description": "Returns the running Tableau Desktop application version, build, edition, operating system, locale, and repository/log paths.",
+        "description": "Returns the running Tableau Desktop application version, build, edition, operating system, locale, and repository/log paths, plus live UI state: isStartPageVisible (whether the Start Page is showing; it can be visible even while a workbook is open), isDataSourcePageActive (whether the Data Source page is the active tab), and isPresentationMode (whether presentation mode is on).",
         "operationId": "getApp",
         "responses": {
           "200": {
-            "description": "Returns the running Tableau Desktop application version, build, edition, operating system, locale, and repository/log paths.",
+            "description": "Returns the running Tableau Desktop application version, build, edition, operating system, locale, and repository/log paths, plus live UI state: isStartPageVisible (whether the Start Page is showing; it can be visible even while a workbook is open), isDataSourcePageActive (whether the Data Source page is the active tab), and isPresentationMode (whether presentation mode is on).",
             "content": {
               "application/json": {
                 "schema": {
@@ -108,6 +108,9 @@
                 }
               }
             }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -806,7 +809,7 @@
       },
       "post": {
         "summary": "Apply a dashboard document",
-        "description": "Replaces a single dashboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415; a non-empty but malformed (not well-formed) XML body is not a 400 -- it is reported as a failed operation (HTTP 200 with state FAILED and an error). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply fails as a failed operation if the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document. It also fails as a failed operation when the name-matching payload element is the wrong sheet subtype -- a story (<dashboard type='storyboard'>) where the target is a dashboard.",
+        "description": "Replaces a single dashboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 when the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document -- or when the name-matching payload element is the wrong sheet subtype (a story, <dashboard type='storyboard'>, where the target is a dashboard). A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
         "operationId": "applyDashboardDocument",
         "parameters": [
           {
@@ -830,7 +833,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "The dashboard's Tableau XML -- either the bare <dashboard> element returned by GET .../dashboards/{id}/document, or that element inside a <workbook> envelope. Only the dashboard whose name matches the target sheet's name is applied, and any other sheets in the payload are ignored. Top-level <datasources> definitions in the payload are ignored, but the applied dashboard's datasource references must still resolve to a datasource already present in the open workbook -- a reference to an absent datasource fails the apply.",
+          "description": "The dashboard's Tableau XML -- either the bare <dashboard> element returned by GET .../dashboards/{id}/document, or that element inside a <workbook> envelope. Only the dashboard whose name matches the target sheet's name is applied, and any other sheets in the payload are ignored. Top-level <datasources> definitions in the payload are ignored, but the applied dashboard's datasource references must still resolve to a datasource already present in the open workbook -- a reference to an absent datasource is rejected with 409.",
           "content": {
             "application/xml": {
               "schema": {
@@ -846,7 +849,7 @@
         },
         "responses": {
           "200": {
-            "description": "Replaces a single dashboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415; a non-empty but malformed (not well-formed) XML body is not a 400 -- it is reported as a failed operation (HTTP 200 with state FAILED and an error). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply fails as a failed operation if the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document. It also fails as a failed operation when the name-matching payload element is the wrong sheet subtype -- a story (<dashboard type='storyboard'>) where the target is a dashboard.",
+            "description": "Replaces a single dashboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 when the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document -- or when the name-matching payload element is the wrong sheet subtype (a story, <dashboard type='storyboard'>, where the target is a dashboard). A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
             "content": {
               "application/json": {
                 "schema": {
@@ -884,11 +887,17 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableContent"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -1409,7 +1418,7 @@
       },
       "post": {
         "summary": "Apply a workbook document",
-        "description": "Replaces the open workbook with the submitted Tableau XML. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415; a non-empty but malformed (not well-formed) XML body is not a 400 -- it is reported as a failed operation (HTTP 200 with state FAILED and an error). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check; it overwrites concurrent edits and (Overwrite policy) deletes sheets the payload omits. A payload that would leave the workbook with no sheets is rejected as a failed operation.",
+        "description": "Replaces the open workbook with the submitted Tableau XML. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422 (a Problem Details response with code operation-failed carrying the underlying tableauErrorCode). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check; it overwrites concurrent edits and (Overwrite policy) deletes sheets the payload omits. A payload that would leave the workbook with no sheets is rejected as a failed operation (HTTP 200 with state FAILED and an error). The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
         "operationId": "applyWorkbookDocument",
         "parameters": [
           {
@@ -1440,7 +1449,7 @@
         },
         "responses": {
           "200": {
-            "description": "Replaces the open workbook with the submitted Tableau XML. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415; a non-empty but malformed (not well-formed) XML body is not a 400 -- it is reported as a failed operation (HTTP 200 with state FAILED and an error). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check; it overwrites concurrent edits and (Overwrite policy) deletes sheets the payload omits. A payload that would leave the workbook with no sheets is rejected as a failed operation.",
+            "description": "Replaces the open workbook with the submitted Tableau XML. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422 (a Problem Details response with code operation-failed carrying the underlying tableauErrorCode). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check; it overwrites concurrent edits and (Overwrite policy) deletes sheets the payload omits. A payload that would leave the workbook with no sheets is rejected as a failed operation (HTTP 200 with state FAILED and an error). The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1480,6 +1489,9 @@
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableContent"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -1723,7 +1735,7 @@
       },
       "post": {
         "summary": "Apply a storyboard document",
-        "description": "Replaces a single storyboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415; a non-empty but malformed (not well-formed) XML body is not a 400 -- it is reported as a failed operation (HTTP 200 with state FAILED and an error). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply fails as a failed operation if the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document. It also fails as a failed operation when the name-matching payload element is the wrong sheet subtype -- a plain <dashboard> where the target is a story (<dashboard type='storyboard'>).",
+        "description": "Replaces a single storyboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 when the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document -- or when the name-matching payload element is the wrong sheet subtype (a plain <dashboard> where the target is a story, <dashboard type='storyboard'>). A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
         "operationId": "applyStoryboardDocument",
         "parameters": [
           {
@@ -1747,7 +1759,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "The storyboard's Tableau XML -- either the bare <dashboard> element (storyboards serialize as <dashboard type='storyboard'>) returned by GET .../storyboards/{id}/document, or that element inside a <workbook> envelope. Only the storyboard whose name matches the target sheet's name is applied, and any other sheets in the payload are ignored. Top-level <datasources> definitions in the payload are ignored, but the applied storyboard's datasource references must still resolve to a datasource already present in the open workbook -- a reference to an absent datasource fails the apply.",
+          "description": "The storyboard's Tableau XML -- either the bare <dashboard> element (storyboards serialize as <dashboard type='storyboard'>) returned by GET .../storyboards/{id}/document, or that element inside a <workbook> envelope. Only the storyboard whose name matches the target sheet's name is applied, and any other sheets in the payload are ignored. Top-level <datasources> definitions in the payload are ignored, but the applied storyboard's datasource references must still resolve to a datasource already present in the open workbook -- a reference to an absent datasource is rejected with 409.",
           "content": {
             "application/xml": {
               "schema": {
@@ -1763,7 +1775,7 @@
         },
         "responses": {
           "200": {
-            "description": "Replaces a single storyboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415; a non-empty but malformed (not well-formed) XML body is not a 400 -- it is reported as a failed operation (HTTP 200 with state FAILED and an error). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply fails as a failed operation if the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document. It also fails as a failed operation when the name-matching payload element is the wrong sheet subtype -- a plain <dashboard> where the target is a story (<dashboard type='storyboard'>).",
+            "description": "Replaces a single storyboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 when the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document -- or when the name-matching payload element is the wrong sheet subtype (a plain <dashboard> where the target is a story, <dashboard type='storyboard'>). A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1801,11 +1813,17 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableContent"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -2259,7 +2277,7 @@
       },
       "post": {
         "summary": "Apply a worksheet document",
-        "description": "Replaces a single worksheet with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415; a non-empty but malformed (not well-formed) XML body is not a 400 -- it is reported as a failed operation (HTTP 200 with state FAILED and an error). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply fails as a failed operation if the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document.",
+        "description": "Replaces a single worksheet with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 if the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document. A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
         "operationId": "applyWorksheetDocument",
         "parameters": [
           {
@@ -2283,7 +2301,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "The worksheet's Tableau XML -- either the bare <worksheet> element returned by GET .../worksheets/{id}/document, or that element inside a <workbook> envelope. Only the worksheet whose name matches the target sheet's name is applied, and any other sheets in the payload are ignored. Top-level <datasources> definitions in the payload are ignored, but the applied worksheet's datasource references must still resolve to a datasource already present in the open workbook -- a reference to an absent datasource fails the apply.",
+          "description": "The worksheet's Tableau XML -- either the bare <worksheet> element returned by GET .../worksheets/{id}/document, or that element inside a <workbook> envelope. Only the worksheet whose name matches the target sheet's name is applied, and any other sheets in the payload are ignored. Top-level <datasources> definitions in the payload are ignored, but the applied worksheet's datasource references must still resolve to a datasource already present in the open workbook -- a reference to an absent datasource is rejected with 409.",
           "content": {
             "application/xml": {
               "schema": {
@@ -2299,7 +2317,7 @@
         },
         "responses": {
           "200": {
-            "description": "Replaces a single worksheet with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415; a non-empty but malformed (not well-formed) XML body is not a 400 -- it is reported as a failed operation (HTTP 200 with state FAILED and an error). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply fails as a failed operation if the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document.",
+            "description": "Replaces a single worksheet with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 if the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document. A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2337,11 +2355,17 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableContent"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -3557,12 +3581,18 @@
             "items": {
               "$ref": "#/components/schemas/WindowInfo"
             }
+          },
+          "progressWindows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WindowInfo"
+            }
           }
         }
       },
       "WindowInfo": {
         "type": "object",
-        "description": "A visible modal Qt top-level window currently blocking the command queue from progressing. The content fields (messageText, informativeText, detailedText, iconLevel, buttons) are best-effort: QMessageBox exposes them precisely, while generic dialogs scrape visible QLabel/QAbstractButton children and may include incidental labels alongside diagnostic text.",
+        "description": "A visible modal Qt top-level window observed at read time. Whether a client must act on it is conveyed by which array carries it: blockingWindows for a window that needs a human decision, progressWindows for a self-clearing one. The content fields (messageText, informativeText, detailedText, iconLevel, buttons) are best-effort: QMessageBox exposes them precisely, while generic dialogs scrape visible QLabel/QAbstractButton children and may include incidental labels alongside diagnostic text.",
         "required": [
           "objectName",
           "title",
@@ -3887,6 +3917,12 @@
             }
           },
           "blockingWindows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WindowInfo"
+            }
+          },
+          "progressWindows": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/WindowInfo"
@@ -4293,7 +4329,10 @@
           "os",
           "locale",
           "repositoryLocation",
-          "logLocation"
+          "logLocation",
+          "isStartPageVisible",
+          "isDataSourcePageActive",
+          "isPresentationMode"
         ],
         "properties": {
           "applicationVersion": {
@@ -4316,6 +4355,15 @@
           },
           "logLocation": {
             "type": "string"
+          },
+          "isStartPageVisible": {
+            "type": "boolean"
+          },
+          "isDataSourcePageActive": {
+            "type": "boolean"
+          },
+          "isPresentationMode": {
+            "type": "boolean"
           }
         }
       },
@@ -4443,6 +4491,16 @@
       },
       "MisdirectedRequest": {
         "description": "The request Host header was not a loopback address.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "UnprocessableContent": {
+        "description": "The request was well-formed but semantically invalid and could not be applied, such as a document whose structure the product rejects. The code field identifies the specific problem.",
         "content": {
           "application/problem+json": {
             "schema": {
