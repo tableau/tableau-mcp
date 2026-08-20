@@ -7,13 +7,16 @@ import {
 } from './stagedWorkbookUpload.js';
 
 const mocks = vi.hoisted(() => ({
-  createPresignedPutUrlToS3: vi.fn(),
+  getUploadUrl: vi.fn(),
   downloadObjectFromS3: vi.fn(),
+}));
+
+vi.mock('../../../uploadUrl/init.js', () => ({
+  getUploadUrlProvider: vi.fn(() => ({ getUploadUrl: mocks.getUploadUrl })),
 }));
 
 vi.mock('../s3Client.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../s3Client.js')>()),
-  createPresignedPutUrlToS3: mocks.createPresignedPutUrlToS3,
   downloadObjectFromS3: mocks.downloadObjectFromS3,
 }));
 
@@ -31,29 +34,33 @@ describe('requestStagedWorkbookUpload', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-12T18:00:00.000Z'));
-    mocks.createPresignedPutUrlToS3.mockResolvedValue('https://s3.example.com/signed-put');
+    mocks.getUploadUrl.mockResolvedValue({
+      uploadUrl: 'https://mcp.tableau.com/upload/first-party',
+      requiredHeaders: { 'Content-Type': 'application/xml', 'X-Upload-Token': 'abc' },
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('returns a presigned PUT URL and workbook upload id', async () => {
+  it('returns the upload URL and required headers from the upload URL provider', async () => {
     const result = await requestStagedWorkbookUpload({
       fileName: 'BoltBikes Workbook.twb',
       config,
     });
 
     expect(result).toMatchObject({
-      uploadUrl: 'https://s3.example.com/signed-put',
+      uploadUrl: 'https://mcp.tableau.com/upload/first-party',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
-      requiredHeaders: { 'Content-Type': 'application/xml' },
+      requiredHeaders: { 'Content-Type': 'application/xml', 'X-Upload-Token': 'abc' },
     });
     expect(result.workbookUploadId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
-    expect(mocks.createPresignedPutUrlToS3).toHaveBeenCalledWith({
+    expect(mocks.getUploadUrl).toHaveBeenCalledWith({
+      workbookUploadId: result.workbookUploadId,
       key: `mcp/workbook-uploads/${result.workbookUploadId}/workbook.twb`,
       contentType: 'application/xml',
       bucket: 'tableau-workbooks',

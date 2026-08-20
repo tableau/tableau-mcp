@@ -1,12 +1,8 @@
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
 
-import {
-  BucketS3Config,
-  createPresignedPutUrlToS3,
-  downloadObjectFromS3,
-  joinS3Prefix,
-} from '../s3Client.js';
+import { getUploadUrlProvider } from '../../../uploadUrl/init.js';
+import { BucketS3Config, downloadObjectFromS3, joinS3Prefix } from '../s3Client.js';
 
 export const MAX_STAGED_WORKBOOK_BYTES = 100 * 1024 * 1024;
 export const WORKBOOK_UPLOAD_CONTENT_TYPE = 'application/xml';
@@ -43,11 +39,12 @@ export async function requestStagedWorkbookUpload({
   assertWorkbookUploadFileName(fileName);
 
   const workbookUploadId = randomUUID();
-  const uploadUrl = await createPresignedPutUrlToS3({
+  const { uploadUrl, requiredHeaders } = await getUploadUrlProvider().getUploadUrl({
+    workbookUploadId,
     key: buildWorkbookUploadS3Key(config.keyPrefix, workbookUploadId),
-    contentType: WORKBOOK_UPLOAD_CONTENT_TYPE,
     bucket: config.bucket,
     region: config.region,
+    contentType: WORKBOOK_UPLOAD_CONTENT_TYPE,
     presignTtlSeconds: config.presignTtlSeconds,
   });
 
@@ -56,7 +53,7 @@ export async function requestStagedWorkbookUpload({
     uploadUrl,
     expiresAt: new Date(Date.now() + config.presignTtlSeconds * 1000).toISOString(),
     maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
-    requiredHeaders: { 'Content-Type': WORKBOOK_UPLOAD_CONTENT_TYPE },
+    requiredHeaders,
   };
 }
 
