@@ -25,7 +25,7 @@ export const getSearchWorkbookFieldsTool = (
     name: 'search-workbook-fields',
     title,
     description:
-      'Search fields in the current workbook and report worksheet shelf and mark placements.',
+      'Search fields and calculations in the current open workbook and report worksheet shelf and mark placements; does not search published content.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
