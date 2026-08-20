@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   mockRegisterAppTool: vi.fn(),
   mockRegisterAppResource: vi.fn(),
   mockFeatureGate: {
-    isFeatureEnabled: vi.fn(() => false),
+    isFeatureEnabled: vi.fn<(featureName: string) => boolean>(() => false),
   },
   mockReadFile: vi.fn(),
 }));
@@ -103,6 +103,44 @@ describe('server', () => {
         expect.any(Function),
       );
     }
+  });
+
+  it('should register knowledge read tools alongside existing Tableau tools', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).toContain('list-datasources');
+    expect(registeredToolNames).toContain('list-workbooks');
+    expect(registeredToolNames).toContain('query-datasource');
+    expect(registeredToolNames).toContain('get-knowledge-suggestions');
+    expect(registeredToolNames).toContain('list-knowledge-sources');
+    expect(registeredToolNames).toContain('search-knowledge-nodes');
+    expect(registeredToolNames).toContain('get-knowledge-node');
+    expect(registeredToolNames).toContain('get-knowledge-node-relationships');
+    expect(registeredToolNames).toContain('get-knowledge-lineage');
+    expect(registeredToolNames).toContain('get-knowledge-node-impact');
+    expect(registeredToolNames).toContain('list-knowledge-semantic-statements');
+    expect(registeredToolNames).not.toContain('create-knowledge-semantic-statements');
+    expect(registeredToolNames).not.toContain('update-knowledge-semantic-statements');
+  });
+
+  it('should register knowledge write tools when knowledge-write-tools is enabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'knowledge-write-tools',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).toContain('create-knowledge-semantic-statements');
+    expect(registeredToolNames).toContain('update-knowledge-semantic-statements');
   });
 
   it('should use the web variant server name', () => {

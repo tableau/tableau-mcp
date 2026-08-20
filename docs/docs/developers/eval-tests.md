@@ -82,6 +82,14 @@ The base URL for the OpenAI-compatible gateway.
 
 The model to use for the Eval tests. If not set, the default model is used.
 
+<hr />
+
+### `KNOWLEDGE_ACV_GRAPH_ID`
+
+Optional graph ID used by `knowledgeAcv.test.ts`. It defaults to the Tableau Knowledge ACV demo
+graph on `tk-demo-tdp1` at test-dataplane1. Override it only when the configured site contains an
+equivalent ACV fixture.
+
 ## Running the Eval tests against a different site
 
 To run the Eval tests locally against a different site, you need to:

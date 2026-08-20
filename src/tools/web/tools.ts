@@ -13,6 +13,16 @@ import { getListFlowTasksTool } from './flows/listFlowTasks/listFlowTasks.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getEmbedTokenTool } from './getEmbedToken/getEmbedToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
+import { getCreateSemanticStatementsTool } from './knowledge/createSemanticStatements.js';
+import { getGetKnowledgeLineageTool } from './knowledge/getKnowledgeLineage.js';
+import { getGetKnowledgeNodeTool } from './knowledge/getKnowledgeNode.js';
+import { getGetKnowledgeNodeImpactTool } from './knowledge/getKnowledgeNodeImpact.js';
+import { getGetKnowledgeNodeRelationshipsTool } from './knowledge/getKnowledgeNodeRelationships.js';
+import { getGetKnowledgeSuggestionsTool } from './knowledge/getKnowledgeSuggestions.js';
+import { getListKnowledgeSourcesTool } from './knowledge/listKnowledgeSources.js';
+import { getListSemanticStatementsTool } from './knowledge/listSemanticStatements.js';
+import { getSearchKnowledgeNodesTool } from './knowledge/searchKnowledgeNodes.js';
+import { getUpdateSemanticStatementsTool } from './knowledge/updateSemanticStatements.js';
 import { getListProjectsTool } from './projects/listProjects.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
@@ -52,6 +62,16 @@ export const webToolFactories = [
   getUpdateCloudExtractRefreshTaskTool,
   getConfirmUpdateCloudExtractRefreshTaskTool,
   getListJobsTool,
+  getGetKnowledgeSuggestionsTool,
+  getListKnowledgeSourcesTool,
+  getSearchKnowledgeNodesTool,
+  getGetKnowledgeNodeTool,
+  getGetKnowledgeNodeRelationshipsTool,
+  getGetKnowledgeLineageTool,
+  getGetKnowledgeNodeImpactTool,
+  getCreateSemanticStatementsTool,
+  getListSemanticStatementsTool,
+  getUpdateSemanticStatementsTool,
   getListUsersTool,
   getUpdateUserTool,
   getQueryDatasourceTool,
