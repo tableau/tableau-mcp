@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getConfig } from '../../../config.js';
 import { ViewNotAllowedError, WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -25,6 +26,8 @@ const paramsSchema = {
 type RenderInteractiveVizResult = { luid: string; objectType: 'workbook' | 'view'; name: string };
 
 export const getRenderInteractiveVizTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+  const config = getConfig();
+
   const renderInteractiveVizTool = new WebTool({
     server,
     name: 'render-interactive-viz',
@@ -39,7 +42,12 @@ export const getRenderInteractiveVizTool = (server: WebMcpServer): WebTool<typeo
       openWorldHint: false,
     },
     app: getAppConfig('render-interactive-viz'),
-    disabled: new Provider(async () => !(await getFeatureGate().isFeatureEnabled('mcp-apps'))),
+    disabled: new Provider(
+      async () =>
+        !(await getFeatureGate().isFeatureEnabled('mcp-apps')) ||
+        config.auth === 'pat' ||
+        (config.auth === 'oauth' && config.oauth.embeddedAuthzServer),
+    ),
     callback: async ({ luid, objectType }, extra): Promise<CallToolResult> => {
       return await renderInteractiveVizTool.logAndExecute<
         AppToolResult<RenderInteractiveVizResult>

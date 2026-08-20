@@ -19,6 +19,11 @@ const mocks = vi.hoisted(() => ({
     isViewAllowed: vi.fn(),
     isWorkbookAllowed: vi.fn(),
   },
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -50,6 +55,7 @@ describe('renderInteractiveVizTool', () => {
     resetResourceAccessCheckerSingleton();
     mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({ allowed: true });
     mocks.mockResourceAccessChecker.isWorkbookAllowed.mockResolvedValue({ allowed: true });
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -65,6 +71,61 @@ describe('renderInteractiveVizTool', () => {
       objectType: expect.any(Object),
     });
     expect(tool.app?.resourceUri).toBe('ui://render-interactive-viz/mcp-app.html');
+  });
+
+  describe('disabled property', () => {
+    it('should be disabled when AUTH is pat (default test env), even with mcp-apps enabled', async () => {
+      const tool = getRenderInteractiveVizTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
+
+    it('should be disabled when AUTH=oauth with embedded authz server, even with mcp-apps enabled', async () => {
+      vi.stubEnv('AUTH', 'oauth');
+      vi.stubEnv('OAUTH_ISSUER', 'https://sso.online.tableau.com');
+      vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'true');
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', './private_key.test.pem');
+      const tool = getRenderInteractiveVizTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
+
+    it('should be enabled when AUTH=oauth delegated to the Tableau authz server, with mcp-apps enabled', async () => {
+      vi.stubEnv('AUTH', 'oauth');
+      vi.stubEnv('OAUTH_ISSUER', 'https://sso.online.tableau.com');
+      vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
+      const tool = getRenderInteractiveVizTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(false);
+    });
+
+    it('should be enabled when AUTH=uat, with mcp-apps enabled', async () => {
+      vi.stubEnv('AUTH', 'uat');
+      vi.stubEnv('UAT_TENANT_ID', 'test-tenant-id');
+      vi.stubEnv('UAT_ISSUER', 'https://tableau-mcp.local/uat');
+      vi.stubEnv('UAT_USERNAME_CLAIM', 'test@example.com');
+      vi.stubEnv('UAT_PRIVATE_KEY', 'test-private-key');
+      const tool = getRenderInteractiveVizTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(false);
+    });
+
+    it('should be enabled when AUTH=direct-trust, with mcp-apps enabled', async () => {
+      vi.stubEnv('AUTH', 'direct-trust');
+      vi.stubEnv('JWT_SUB_CLAIM', 'test-user');
+      vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'test-client-id');
+      vi.stubEnv('CONNECTED_APP_SECRET_ID', 'test-secret-id');
+      vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'test-secret-value');
+      const tool = getRenderInteractiveVizTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(false);
+    });
+
+    it('should stay disabled when mcp-apps is off, regardless of auth type', async () => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+      vi.stubEnv('AUTH', 'uat');
+      vi.stubEnv('UAT_TENANT_ID', 'test-tenant-id');
+      vi.stubEnv('UAT_ISSUER', 'https://tableau-mcp.local/uat');
+      vi.stubEnv('UAT_USERNAME_CLAIM', 'test@example.com');
+      vi.stubEnv('UAT_PRIVATE_KEY', 'test-private-key');
+      const tool = getRenderInteractiveVizTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
   });
 
   it('should return correct payload for an allowed view', async () => {
