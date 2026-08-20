@@ -163,6 +163,38 @@ describe('applyWorksheetTool', () => {
     });
   });
 
+  it('keeps a templatePlan apply nonterminal when structural verification is skipped', async () => {
+    const artifact = templateArtifact('direct-plan');
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      return Ok({ readbackWarnings: [], readbackVerification: skippedReadbackVerification });
+    });
+
+    const result = await getDirectTemplateToolResult({
+      buildArtifact: vi.fn().mockReturnValue(Ok({ artifact, provenance: 'protected' })),
+      getExecutor: vi.fn().mockResolvedValue({
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: '<workbook><worksheets/><windows/></workbook>',
+            instanceId: 'inst-build',
+          }),
+        ),
+      }),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      verification: { status: 'skipped' },
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification unavailable — inspect live worksheet state',
+      },
+    });
+    expect(
+      (result.structuredContent as { nextAction: { receipt?: unknown } }).nextAction.receipt,
+    ).toBeUndefined();
+  });
+
   it('applies a live-shaped templatePlan with a matching worksheetName and unique datasource caption exactly once', async () => {
     await useRealTemplateReads();
     const mockLoadWorksheetXml = vi
@@ -897,6 +929,29 @@ describe('applyWorksheetTool', () => {
       session: '12345',
       worksheetId: 'artifact-sheet-uuid',
     });
+  });
+
+  it('keeps an artifactId apply nonterminal when structural verification is skipped', async () => {
+    const store = artifactStore();
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      return Ok({ readbackWarnings: [], readbackVerification: skippedReadbackVerification });
+    });
+
+    const result = await getArtifactToolResult(store, 'artifact-1', '12345');
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      artifactId: 'artifact-1',
+      verification: { status: 'skipped' },
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification unavailable — inspect live worksheet state',
+      },
+    });
+    expect(
+      (result.structuredContent as { nextAction: { receipt?: unknown } }).nextAction.receipt,
+    ).toBeUndefined();
   });
 
   it('applies an artifactId with a matching worksheetName exactly once', async () => {

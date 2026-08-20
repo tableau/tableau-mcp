@@ -210,28 +210,30 @@ export const getApplyWorksheetTool = (
                   // A 'done' marker tells the agent to stop; an observed FAILED readback
                   // is the one outcome where stopping buries the failure, so that branch
                   // points at the follow-up work instead of minting a terminal receipt.
-                  verification.status === 'failed'
-                    ? prefillNextAction('Verification failed — inspect sheet, rebuild artifact')
-                    : doneNextAction(
-                        receipt({
-                          did: [
-                            `Desktop accepted the artifact apply for worksheet "${outcome.receipt.title}"`,
-                            ...(verificationRan
+                  verification.status === 'skipped'
+                    ? prefillNextAction('Verification unavailable — inspect live worksheet state')
+                    : verification.status === 'failed'
+                      ? prefillNextAction('Verification failed — inspect sheet, rebuild artifact')
+                      : doneNextAction(
+                          receipt({
+                            did: [
+                              `Desktop accepted the artifact apply for worksheet "${outcome.receipt.title}"`,
+                              ...(verificationRan
+                                ? [
+                                    `read back the applied worksheet — verification status "${verification.status}"`,
+                                  ]
+                                : []),
+                            ],
+                            unverified: verificationRan
                               ? [
-                                  `read back the applied worksheet — verification status "${verification.status}"`,
+                                  'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
                                 ]
-                              : []),
-                          ],
-                          unverified: verificationRan
-                            ? [
-                                'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
-                              ]
-                            : [
-                                'whether the applied worksheet retained its intended structure — post-apply workbook readback was unavailable',
-                              ],
-                        }),
-                        'Artifact apply dispatched — see verification',
-                      ),
+                              : [
+                                  'whether the applied worksheet retained its intended structure — post-apply workbook readback was unavailable',
+                                ],
+                          }),
+                          'Artifact apply dispatched — see verification',
+                        ),
                 ),
               );
             } catch (error) {
@@ -297,28 +299,30 @@ export const getApplyWorksheetTool = (
                   retrySafe: false as const,
                   verification,
                 },
-                verification.status === 'failed'
-                  ? prefillNextAction('Verification failed — inspect sheet, build again')
-                  : doneNextAction(
-                      receipt({
-                        did: [
-                          `Desktop accepted the direct template apply for worksheet "${outcome.receipt.title}"`,
-                          ...(verificationRan
+                verification.status === 'skipped'
+                  ? prefillNextAction('Verification unavailable — inspect live worksheet state')
+                  : verification.status === 'failed'
+                    ? prefillNextAction('Verification failed — inspect sheet, build again')
+                    : doneNextAction(
+                        receipt({
+                          did: [
+                            `Desktop accepted the direct template apply for worksheet "${outcome.receipt.title}"`,
+                            ...(verificationRan
+                              ? [
+                                  `read back the applied worksheet — verification status "${verification.status}"`,
+                                ]
+                              : []),
+                          ],
+                          unverified: verificationRan
                             ? [
-                                `read back the applied worksheet — verification status "${verification.status}"`,
+                                'whether the sheet renders as intended — readback compared workbook structure, not rendered output',
                               ]
-                            : []),
-                        ],
-                        unverified: verificationRan
-                          ? [
-                              'whether the sheet renders as intended — readback compared workbook structure, not rendered output',
-                            ]
-                          : [
-                              'whether the applied worksheet retained its intended structure — post-apply workbook readback was unavailable',
-                            ],
-                      }),
-                      'Direct template apply dispatched — see verification',
-                    ),
+                            : [
+                                'whether the applied worksheet retained its intended structure — post-apply workbook readback was unavailable',
+                              ],
+                        }),
+                        'Direct template apply dispatched — see verification',
+                      ),
               ),
             );
           }

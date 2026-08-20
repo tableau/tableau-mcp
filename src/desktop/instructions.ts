@@ -47,18 +47,21 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'plain-chart',
     trigger:
-      'any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.)',
+      'a single-view visualization request with enough analytic intent or field cues to recognize, including explicit chart names and common semantic asks',
     action:
-      'Run list-templates and list-available-fields in parallel; put named channels in requiredChannels. No fit: use manual worksheet path. Preview/no-change: build-worksheets-from-templates; stop before apply-worksheet; artifacts coexist. For an explicit view, apply exact templatePlan. Direct asks may choose/build/apply. Open intent: build several distinct worksheets. Apply sequentially; never replay uncertain apply.',
+      "route precedence: Preview/no-change or open multi-chart asks skip bind-template and use the artifact flow. Existing-sheet edits stay on the edit-in-place route. Unnamed derived metrics stay on the derived-metric route. Otherwise call bind-template with the user's exact ask and auto_apply:true first; an explicit chart name may bind immediately, while a semantic ask may return one bounded proposal. If call 1 proposes, make one second bind-template call with one exact call_2_contract proposal. Terminal only with applied:true plus clean host verification, or a verified fallback apply receipt (passed or warnings); Never rephrase or resubmit the bare ask. If that second call still proposes, or any result escalates or blocks, use the guarded artifact fallback: list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet. Put named channels in requiredChannels. Preview artifacts stop before apply-worksheet; artifacts coexist. Open intent builds several distinct worksheets. Apply exact templatePlan sequentially; never replay uncertain apply.",
     toolSequence: [
+      'bind-template',
       'list-templates',
       'list-available-fields',
       'build-worksheets-from-templates',
       'apply-worksheet',
     ],
     stopConditions: [
+      'Terminal only with applied:true plus clean host verification, or a verified fallback apply receipt (passed or warnings)',
+      'Never rephrase or resubmit the bare ask',
       'stop before apply-worksheet',
-      'Apply sequentially',
+      'Apply exact templatePlan sequentially',
       'never replay uncertain apply',
     ],
     requiredEvidence: ['each applied worksheet returns a success receipt'],
@@ -178,7 +181,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'current/existing sheet/chart/view',
     action:
-      'edit in place: resolve target with list-worksheets -> list-dashboards -> ask-user when ambiguous, then use refine-worksheet or add-field -> apply-worksheet for color, size, detail, Rows, or Columns. For a requested new chart, use list-templates -> list-available-fields -> build-worksheets-from-templates, then apply-worksheet. Never create new sheets unless asked.',
+      'use existing-sheet tools only: resolve target with list-worksheets -> list-dashboards -> ask-user when ambiguous, then use refine-worksheet or add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never create new sheets unless asked.',
     toolSequence: [
       'list-worksheets',
       'list-dashboards',
@@ -186,9 +189,6 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'refine-worksheet',
       'add-field',
       'apply-worksheet',
-      'list-templates',
-      'list-available-fields',
-      'build-worksheets-from-templates',
     ],
     stopConditions: ['Never create new sheets unless asked'],
     requiredEvidence: ['resolved worksheet/dashboard target before applying'],

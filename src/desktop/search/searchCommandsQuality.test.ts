@@ -261,6 +261,20 @@ describe('search-commands routing recommendation', () => {
     expect(recommendation).not.toMatch(/edit workbook XML/i);
   });
 
+  it('uses the same chart-route precedence as the desktop instructions', () => {
+    const { recommendation } = searchCommandsByKeywords(['field']) as { recommendation?: string };
+
+    expect(recommendation).toContain('preview/no-change');
+    expect(recommendation).toContain('open multi-chart');
+    expect(recommendation).toContain('skip bind-template');
+    expect(recommendation).toContain('single-view visualization request');
+    expect(recommendation).toContain('bind-template first');
+    expect(recommendation).toContain('semantic ask may return one bounded proposal');
+    expect(recommendation).toContain('existing-sheet tools only');
+    expect(recommendation).toContain('unnamed derived metric');
+    expect(recommendation).not.toMatch(/build-and-apply-worksheet|inject-template|apply-workbook/);
+  });
+
   it('names the registered execute-tableau-command tool in blocking-surface warnings', () => {
     const { commands } = searchCommandsByKeywords(['editor']) as {
       commands: Array<{ warning?: string }>;

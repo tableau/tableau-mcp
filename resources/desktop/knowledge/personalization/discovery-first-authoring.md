@@ -11,7 +11,9 @@
 
 ## When to Use
 
-For a chart/graph/viz ask, inspect `list-templates` and `list-available-fields`, choose a compatible template and real field mapping, call `build-worksheets-from-templates`, then pass its artifact to `apply-worksheet`. The build step does not change the workbook; the apply step adds the new worksheet.
+For a recognizable single-view visualization request, call `bind-template` with the exact ask and `auto_apply:true`. This includes explicit chart names and common semantic asks; a semantic ask may return one bounded proposal. If call 1 proposes, make one more call with one exact `call_2_contract` proposal. Terminal evidence is `applied:true` plus clean host verification, or a verified fallback `apply-worksheet` receipt whose verification passed or returned warnings; never rephrase or resubmit the bare ask.
+
+If that second call still proposes, or any result escalates or blocks, inspect `list-templates` and `list-available-fields`, choose a compatible template and real field mapping, call `build-worksheets-from-templates`, then pass its artifact to `apply-worksheet`. The build step does not change the workbook; the apply step adds the new worksheet. Preview/no-change and open multi-chart asks use this artifact path directly.
 
 `get-worksheet-xml` is available before or after authoring for inspecting or editing an existing worksheet. It has no template or authoring prerequisite.
 
@@ -25,7 +27,7 @@ Skip broad discovery for trivial single-step edits. Use only the inventory neede
 
 ## Best Practices
 
-1. **Use the guarded template path for charts.** Read the template catalog and live fields, build one worksheet artifact with a complete mapping, then apply that exact artifact. Build and apply each worksheet in sequence; do not batch artifact construction because a later build invalidates the prior artifact.
+1. **Bind one recognizable single-view visualization first.** Use `bind-template` with `auto_apply:true`. Supply at most one exact `call_2_contract` proposal. Stop only on verified apply evidence; otherwise use the guarded artifact path. Build and apply each worksheet in sequence; do not batch artifact construction because a later build invalidates the prior artifact.
 2. **Inspect existing sheets directly.** Use `get-worksheet-xml` whenever an existing worksheet's structure is needed for inspection, repair, verification, or a follow-up edit. No earlier mutation is required.
 3. **Inventory cheap-first when the ask is inventory.** Start with session, worksheet, dashboard, or datasource listings. Use `get-workbook-xml` only when it is offered and exact structure is required. Budget 2-4 discovery calls; do not loop.
 4. **Restate the goal in one line.** Reflect back what the user is asking for so a mismatch surfaces immediately ("You want a monthly trend of profit margin by region.").
@@ -64,11 +66,11 @@ Offer this instead:
 The routed discovery flow:
 
 1. **Bootstrap:** if needed, call `list-instances` and capture `session`; otherwise omit it to use the pinned or only running Desktop.
-2. **Route the first move:** chart ask -> `list-templates` plus `list-available-fields`; parameter/set ask -> `author-parameter`/`author-set`; existing-sheet inspection or edit -> `get-worksheet-xml` or the relevant authoring tool; inventory-only ask -> inventory tools.
+2. **Route the first move:** recognizable single-view visualization -> `bind-template`; preview/open multi-chart ask -> `list-templates` plus `list-available-fields`; parameter/set ask -> `author-parameter`/`author-set`; existing-sheet inspection or edit -> `get-worksheet-xml` or the relevant authoring tool; inventory-only ask -> inventory tools.
 3. **Discover deliberately:** use `list-available-fields` at any time for field exploration, and `get-worksheet-xml` whenever exact existing-sheet structure is needed.
 4. **Align:** restate the goal; name relevant fields/sheets; flag any mismatch; choose the authoring surface.
 5. **Clarify (bounded):** ask at most 1-2 `ask-user` questions, only when a mismatch blocks safe building.
-6. **Build and verify:** call `build-worksheets-from-templates`, apply its artifact once with `apply-worksheet`, and read back what landed. After a pre-dispatch construction failure, try at most one different candidate. If the apply outcome is uncertain or post-apply verification fails, stop without retrying, replaying, or rebuilding automatically.
+6. **Build and verify:** accept a verified `bind-template` apply as terminal. Otherwise call `build-worksheets-from-templates`, apply its artifact once with `apply-worksheet`, and read back what landed. After a pre-dispatch construction failure, try at most one different candidate. If the apply outcome is uncertain or post-apply verification fails, inspect live state and stop without retrying, replaying, or rebuilding automatically.
 
 Telemetry: if you start an episode for the discovery turn, call `tableau-begin-episode` once and `tableau-end-episode` only for the episode you started. Otherwise keep the discovery summary and chosen surface in your normal response; do not invent episode tools.
 

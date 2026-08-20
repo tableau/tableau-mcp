@@ -170,7 +170,8 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
       buildDesktopInstructions({ sessionPinned: false, profile: '' }),
     );
     expect(DESKTOP_INSTRUCTIONS).toContain('build-worksheets-from-templates');
-    expect(DESKTOP_INSTRUCTIONS).not.toContain('bind-template');
+    expect(DESKTOP_INSTRUCTIONS).toContain('bind-template');
+    expect(DESKTOP_INSTRUCTIONS).toContain('auto_apply:true');
   });
 
   it('tells agents to narrate with Tableau vocabulary', () => {
@@ -200,8 +201,8 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Raised 2026-08-10 (#734 review fold) 48_958 -> 49_076: bind-template gained
 // skip_validation, the server-gated trust flag for the deterministic build_viz path.
 // It is a genuinely new param (name + boolean schema, description dropped since the
-// LLM must never set it), so shrinking prose could not fund it. bind-template is not
-// in DYNAMIC_AUTHORING_TOOL_PROFILE, so that ratchet was unchanged by #734.
+// LLM must never set it), so shrinking prose could not fund it. At that historical point,
+// bind-template was not in DYNAMIC_AUTHORING_TOOL_PROFILE, so #734 did not move that ratchet.
 // Re-pinned 2026-08-07: added delete-sheet, rename-sheet, sort-worksheet,
 // list-worksheet-logical-tables, and get-worksheet-underlying-data over the External
 // Client API sheet-action and logical-table routes, and dropped delete-worksheet.
@@ -234,8 +235,11 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-19: apply-worksheet now infers the target from a cached worksheet fragment, so
 // its worksheetName describe drops the redundant "worksheet" (-3 bytes); dynamic authoring 40_099 -> 40_096.
 // Re-pinned 2026-08-20: compact schema guidance keeps its meaning and lowers 40_096 -> 40_038.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_038;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_059;
+// Re-pinned 2026-08-20: intentionally serving bind-template and one precedence rule for
+// recognizable single-view, preview, multi-view, edit, and derived asks moves the default
+// surface to 43_151; retain the established 21-character ratchet slack.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 43_151;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 43_172;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
 const FULL_TOOL_SURFACE_BUDGET = 56_817;
 
@@ -262,7 +266,7 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
     // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_526);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_072);
     expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
@@ -494,10 +498,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 51-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 52-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(51);
+    expect(selected).toHaveLength(52);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -510,6 +514,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'ask-user',
       'search-commands',
       'list-templates',
+      'bind-template',
       'build-worksheets-from-templates',
       'refine-worksheet',
       'add-field',
@@ -556,7 +561,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     // Keep unrelated info/site/validation and legacy template tools out. The six scoped and
     // whole-workbook fallbacks above are the complete XML surface added to this profile.
     for (const banished of [
-      'bind-template',
       'build-and-apply-worksheet',
       'validate-workbook-xml',
       'validate-worksheet-xml',
@@ -763,7 +767,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
 
 describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
   afterEach(() => {
-    // Reset to the unset (full) state so later tests in this file are unaffected.
+    // Reset to the unset (dynamic-authoring) state so later tests in this file are unaffected.
     vi.stubEnv('TOOL_PROFILE', '');
   });
 

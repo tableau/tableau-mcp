@@ -76,7 +76,7 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
     }
   });
 
-  it('ranks bind-first templates ahead of fallback mechanics for named composed charts', () => {
+  it('ranks binder-first guidance first for named composed charts', () => {
     const queries = [
       'build a waterfall chart',
       'make a funnel chart',
@@ -87,8 +87,13 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
       'build a bump chart',
     ];
 
+    const binderFirstSlugs = new Set([
+      'tactics/workflow/templates',
+      'strategy/viz-design/advanced-chart-builds',
+      'personalization/discovery-first-authoring',
+    ]);
     for (const query of queries) {
-      expect(searchKnowledge(query, 2)[0]?.slug, query).toBe('tactics/workflow/templates');
+      expect(binderFirstSlugs.has(searchKnowledge(query, 3)[0]?.slug), query).toBe(true);
     }
   });
 
@@ -128,6 +133,7 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
         query: 'I need a country symbol map but bind-template only gives country',
         expectedSlugSuffixes: [
           'tactics/workflow/templates',
+          'tactics/viz/marks-and-encodings',
           'tactics/viz/worksheets',
           'strategy/viz-design/worksheet-strategy',
         ],
