@@ -49,6 +49,8 @@ describe('getProfileSummaryDataTool', () => {
 
     expect(tool.name).toBe('profile-summary-data');
     expect(tool.description).toContain('not worksheet render time');
+    expect(tool.description).toContain('ask the user to run Tableau Performance Recorder');
+    expect(tool.description).toContain('Workbook Optimizer');
     expect(tool.annotations).toMatchObject({
       readOnlyHint: true,
       destructiveHint: false,

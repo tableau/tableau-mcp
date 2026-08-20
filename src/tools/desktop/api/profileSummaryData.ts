@@ -49,7 +49,7 @@ export const getProfileSummaryDataTool = (
     name: 'profile-summary-data',
     title,
     description:
-      'Measure repeated summary-data query/compute round trips for one worksheet; not worksheet render time.',
+      'Measure repeated summary-data query/compute round trips for one worksheet; not worksheet render time. For render bottlenecks, ask the user to run Tableau Performance Recorder or Workbook Optimizer.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

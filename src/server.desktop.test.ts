@@ -233,12 +233,13 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // served profile, while the full schema-only surface moves 56_650 -> 56_799.
 // Re-pinned 2026-08-19: apply-worksheet now infers the target from a cached worksheet fragment, so
 // its worksheetName describe drops the redundant "worksheet" (-3 bytes); dynamic authoring 40_099 -> 40_096.
-// Re-pinned 2026-08-20: profile-summary-data adds a bounded, read-only performance probe.
-// Dynamic authoring moves 40_096 -> 40_883; full moves 56_799 -> 57_586.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_883;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_904;
+// Re-pinned 2026-08-20: profile-summary-data adds a bounded, read-only query probe and directs
+// render-performance questions to Tableau's native tools. Dynamic authoring moves 40_096 ->
+// 40_979; full moves 56_799 -> 57_682.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_979;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 41_000;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 57_604;
+const FULL_TOOL_SURFACE_BUDGET = 57_700;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
