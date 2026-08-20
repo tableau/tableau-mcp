@@ -42,15 +42,14 @@ import {
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.8 — adds the
- * `workbook:publish` and `datasources/{id}:refreshData`/`:refreshExtract` routes, now
- * documents `workbook:exportAs` and `storyboards/{id}/image`, grows `DatasourceItem`
- * with `type`/`isExtract`/`hasDownloadFilePermission`, marks `index`/`type` (and
- * `StoryboardItem.storyPointCount`) required on the sheet items, and adds the
- * `unsupported-target-version` problem code, on top of the 0.2.6 surface
- * (`app:openFile`, `workbook:save`, `*:new`). No hand-edits, except the 0.2.9 `AppInfo`
- * delta (`isStartPageVisible`/`isDataSourcePageActive`/`isPresentationMode`), hand-applied
- * from the monolith PR that shipped it — no live 0.2.9 spec was captured.
+ * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.9 — grows `AppInfo`
+ * with `isStartPageVisible`/`isDataSourcePageActive`/`isPresentationMode` and `Operation`/
+ * `OperationList` with `progressWindows`, documents `UnprocessableContent` (422) on the
+ * document-replace routes, on top of the 0.2.8 surface (`workbook:publish`,
+ * `datasources/{id}:refreshData`/`:refreshExtract`, `workbook:exportAs`,
+ * `storyboards/{id}/image`, `DatasourceItem.type`/`isExtract`/`hasDownloadFilePermission`,
+ * required `index`/`type`/`StoryboardItem.storyPointCount`, `unsupported-target-version`).
+ * No hand-edits.
  */
 
 type SpecSchema = {
@@ -202,7 +201,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.8 requiredness exception set, plus the hand-applied 0.2.9 AppInfo delta', () => {
+    it('pins the complete 0.2.9 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
