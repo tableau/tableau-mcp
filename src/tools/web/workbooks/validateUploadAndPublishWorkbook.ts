@@ -21,7 +21,7 @@ import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import {
-  isTwbFileName,
+  getWorkbookFileType,
   type ResolvedWorkbook,
   resolveStagedWorkbookUpload,
 } from './stagedWorkbookUpload.js';
@@ -39,7 +39,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Path to a local TWB workbook file on the MCP server filesystem. Only supported when staged S3 uploads are not configured.',
+      'Path to a local TWB or TWBX workbook file on the MCP server filesystem. Only supported when staged S3 uploads are not configured.',
     ),
   name: z.string().min(1).describe('The name to give the published workbook.'),
   projectId: z
@@ -84,7 +84,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
     server,
     name: 'validate-upload-and-publish-workbook',
     description:
-      'Validates a TWB workbook with Tableau from a local file path or staged upload id, uploads it only when validation succeeds, and immediately publishes it to the specified Tableau project. Use list-projects to discover project IDs. If validation returns blocking errors, the tool returns those findings and does not publish anything.',
+      'Publishes a TWB or TWBX workbook from a local file path or staged upload id to the specified Tableau project. Use list-projects to discover project IDs. TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
     paramsSchema,
     annotations: {
       title: 'Validate, Upload, and Publish Workbook',
@@ -110,7 +110,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
           overwrite,
         },
         callback: async () => {
-          assertValidateWorkbookAndUploadSupported();
+          assertMinimumRestApiVersionSupported();
           const configWithOverrides = await extra.getConfigWithOverrides();
           assertProjectAllowedByBoundedContext(projectId, configWithOverrides.boundedContext);
 
@@ -123,31 +123,31 @@ export const getValidateUploadAndPublishWorkbookTool = (
                 workbookUploadId,
                 workbookFilePath,
               });
-
-              const validation = await restApi.workbooksMethods.validateWorkbookAndUpload({
-                siteId: restApi.siteId,
-                filename: resolvedWorkbookFile.fileName,
-                workbook: resolvedWorkbookFile.bytes,
-              });
-
-              const errors = (validation.errors ?? []).map(toValidationFinding);
-              const warnings = (validation.warnings ?? []).map(toValidationFinding);
-
-              if (errors.length > 0) {
-                return { status: 'invalid' as const, errors, warnings };
+              const fileType = getWorkbookFileType(resolvedWorkbookFile.fileName);
+              if (!fileType) {
+                throw new UnknownError(
+                  `Resolved workbook file "${resolvedWorkbookFile.fileName}" is neither a .twb nor a .twbx file.`,
+                );
               }
 
-              if (!validation.uploadId) {
-                throw new UnknownError(
-                  'Tableau validation succeeded but did not return an uploadId to publish.',
-                );
+              const outcome =
+                fileType === 'twb'
+                  ? await validateAndUploadTwb({ restApi, resolvedWorkbookFile })
+                  : await uploadTwbx({ restApi, resolvedWorkbookFile });
+
+              if (outcome.status === 'invalid') {
+                return {
+                  status: 'invalid' as const,
+                  errors: outcome.errors,
+                  warnings: outcome.warnings,
+                };
               }
 
               const publishedWorkbook = await restApi.workbooksMethods.publishWorkbook({
                 siteId: restApi.siteId,
-                uploadSessionId: validation.uploadId,
+                uploadSessionId: outcome.uploadSessionId,
                 name,
-                workbookType: 'twb',
+                workbookType: fileType,
                 projectId,
                 overwrite,
               });
@@ -157,7 +157,12 @@ export const getValidateUploadAndPublishWorkbookTool = (
                 publishedWorkbook.webpageUrl ??
                 '';
 
-              return { status: 'published' as const, data: publishedWorkbook, url, warnings };
+              return {
+                status: 'published' as const,
+                data: publishedWorkbook,
+                url,
+                warnings: outcome.warnings,
+              };
             },
           });
 
@@ -175,6 +180,60 @@ export const getValidateUploadAndPublishWorkbookTool = (
 
   return tool;
 };
+
+type ValidationOutcome =
+  | { status: 'invalid'; errors: ValidationFinding[]; warnings: ValidationFinding[] }
+  | { status: 'valid'; warnings: ValidationFinding[]; uploadSessionId: string };
+
+async function validateAndUploadTwb({
+  restApi,
+  resolvedWorkbookFile,
+}: {
+  restApi: RestApi;
+  resolvedWorkbookFile: ResolvedWorkbook;
+}): Promise<ValidationOutcome> {
+  const validation = await restApi.workbooksMethods.validateWorkbookAndUpload({
+    siteId: restApi.siteId,
+    filename: resolvedWorkbookFile.fileName,
+    workbook: resolvedWorkbookFile.bytes,
+  });
+
+  const errors = (validation.errors ?? []).map(toValidationFinding);
+  const warnings = (validation.warnings ?? []).map(toValidationFinding);
+
+  if (errors.length > 0) {
+    return { status: 'invalid', errors, warnings };
+  }
+
+  if (!validation.uploadId) {
+    throw new UnknownError(
+      'Tableau validation succeeded but did not return an uploadId to publish.',
+    );
+  }
+
+  return { status: 'valid', warnings, uploadSessionId: validation.uploadId };
+}
+
+/**
+ * Tableau's TWB-only validate endpoint cannot resolve extracts embedded in a TWBX package -
+ * it only sees the inner .twb XML, whose data source paths only exist inside the zip. TWBX
+ * files are uploaded directly and validated by Tableau as part of publishing instead.
+ */
+async function uploadTwbx({
+  restApi,
+  resolvedWorkbookFile,
+}: {
+  restApi: RestApi;
+  resolvedWorkbookFile: ResolvedWorkbook;
+}): Promise<ValidationOutcome> {
+  const uploadSessionId = await restApi.workbooksMethods.uploadFileInChunks({
+    siteId: restApi.siteId,
+    filename: resolvedWorkbookFile.fileName,
+    content: resolvedWorkbookFile.bytes,
+  });
+
+  return { status: 'valid', warnings: [], uploadSessionId };
+}
 
 async function resolveWorkbookInput({
   config,
@@ -216,8 +275,8 @@ async function resolveWorkbookInput({
 
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {
   const fileName = basename(workbookFilePath);
-  if (!isTwbFileName(fileName)) {
-    throw new ArgsValidationError('workbookFilePath must point to a .twb file.');
+  if (!getWorkbookFileType(fileName)) {
+    throw new ArgsValidationError('workbookFilePath must point to a .twb or .twbx file.');
   }
 
   const bytes = await readFile(workbookFilePath);
@@ -228,7 +287,7 @@ async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<Resol
   return { fileName, bytes };
 }
 
-function assertValidateWorkbookAndUploadSupported(): void {
+function assertMinimumRestApiVersionSupported(): void {
   if (!RestApi.versionIsAtLeast('3.29')) {
     throw new UnknownError(
       `validate-upload-and-publish-workbook requires Tableau REST API version 3.29 or later (Tableau Server 2026.2+). The connected server is using REST API version ${RestApi.version}.`,

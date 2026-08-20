@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
   mockPublishWorkbook: vi.fn(),
   mockValidateWorkbookAndUpload: vi.fn(),
+  mockUploadFileInChunks: vi.fn(),
   mockResolveStagedWorkbookUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
 }));
@@ -26,6 +27,7 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       workbooksMethods: {
         validateWorkbookAndUpload: mocks.mockValidateWorkbookAndUpload,
+        uploadFileInChunks: mocks.mockUploadFileInChunks,
         publishWorkbook: mocks.mockPublishWorkbook,
       },
       siteId: 'test-site-id',
@@ -62,6 +64,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     RestApi.version = '3.29';
     mocks.mockPublishWorkbook.mockReset();
     mocks.mockValidateWorkbookAndUpload.mockReset();
+    mocks.mockUploadFileInChunks.mockReset();
     mocks.mockResolveStagedWorkbookUpload.mockReset();
     mocks.mockReadFile.mockReset();
     mocks.mockIsFeatureEnabled.mockReset();
@@ -87,7 +90,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     const paramsSchema = await Provider.from(tool.paramsSchema);
 
     expect(tool.name).toBe('validate-upload-and-publish-workbook');
-    expect(tool.description).toContain('Validates a TWB workbook');
+    expect(tool.description).toContain('Publishes a TWB or TWBX workbook');
     expect(paramsSchema).toMatchObject({
       workbookUploadId: expect.any(Object),
       workbookFilePath: expect.any(Object),
@@ -172,6 +175,84 @@ describe('validateUploadAndPublishWorkbookTool', () => {
       projectId: 'target-project-id',
       overwrite: false,
     });
+  });
+
+  it('uploads and publishes a TWBX file without a separate validation step', async () => {
+    mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
+      fileName: 'source-superstore.twbx',
+      bytes: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+    });
+    mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      project: { id: 'target-project-id', name: 'Marketing Analytics' },
+    });
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const response = JSON.parse(result.content[0].text);
+    expect(response.status).toBe('published');
+    expect(response.data.id).toBe(mockWorkbook.id);
+
+    expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      filename: 'source-superstore.twbx',
+      content: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+    });
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      uploadSessionId: 'chunked-upload-session-id',
+      name: 'My New Workbook',
+      workbookType: 'twbx',
+      projectId: 'target-project-id',
+      overwrite: false,
+    });
+  });
+
+  it('returns an error when Tableau rejects an invalid TWBX workbook during publish', async () => {
+    mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
+      fileName: 'source-superstore.twbx',
+      bytes: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+    });
+    mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
+    mocks.mockPublishWorkbook.mockRejectedValue(
+      new Error('Tableau publishWorkbook request failed with status 400: bad workbook'),
+    );
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('bad workbook');
+  });
+
+  it('uploads and publishes a local TWBX workbook file path without a separate validation step', async () => {
+    mocks.mockReadFile.mockResolvedValue(Buffer.from('PK\x03\x04-fake-zip-bytes'));
+    mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      project: { id: 'target-project-id', name: 'Marketing Analytics' },
+    });
+
+    const result = await getToolResult(
+      { ...validLocalArgs, workbookFilePath: '/tmp/source-superstore.twbx' },
+      { bucketS3Enabled: false },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.twbx');
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      filename: 'source-superstore.twbx',
+      content: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+    });
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ workbookType: 'twbx' }),
+    );
   });
 
   it('defaults overwrite to false when publishing', async () => {
@@ -290,18 +371,18 @@ describe('validateUploadAndPublishWorkbookTool', () => {
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
   });
 
-  it('returns an args-validation error when local workbook path is not a twb', async () => {
+  it('returns an args-validation error when local workbook path is neither twb nor twbx', async () => {
     const result = await getToolResult(
       {
         ...validLocalArgs,
-        workbookFilePath: '/tmp/source-superstore.twbx',
+        workbookFilePath: '/tmp/source-superstore.xml',
       },
       { bucketS3Enabled: false },
     );
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('workbookFilePath must point to a .twb file');
+    expect(result.content[0].text).toContain('workbookFilePath must point to a .twb or .twbx file');
     expect(mocks.mockReadFile).not.toHaveBeenCalled();
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
   });

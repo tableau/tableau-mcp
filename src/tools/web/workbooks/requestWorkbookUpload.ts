@@ -16,7 +16,7 @@ const paramsSchema = {
   fileName: z
     .string()
     .min(1)
-    .describe('Name of the Tableau workbook file to upload. Must end in .twb.'),
+    .describe('Name of the Tableau workbook file to upload. Must end in .twb or .twbx.'),
 };
 
 export const getRequestWorkbookUploadTool = (
@@ -26,7 +26,7 @@ export const getRequestWorkbookUploadTool = (
     server,
     name: 'request-workbook-upload',
     description:
-      'Creates a short-lived staged upload URL for a Tableau TWB workbook. Upload the workbook bytes to the returned URL, then call validate-upload-and-publish-workbook with the returned workbookUploadId.',
+      'Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. Upload the workbook bytes to the returned URL, then call validate-upload-and-publish-workbook with the returned workbookUploadId.',
     paramsSchema,
     annotations: {
       title: 'Request Workbook Upload',
