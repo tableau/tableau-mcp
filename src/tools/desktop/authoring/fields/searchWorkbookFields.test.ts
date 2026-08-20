@@ -37,8 +37,9 @@ describe('searchWorkbookFieldsTool', () => {
     const schema = z.object(await Provider.from(tool.paramsSchema));
 
     expect(tool.name).toBe('search-workbook-fields');
-    expect(tool.description).toContain('current open workbook');
-    expect(tool.description).toContain('does not search published content');
+    expect(tool.description).toContain('live open workbook');
+    expect(tool.description).toContain('Rows, Columns, and Marks placements');
+    expect(tool.description).toContain('no cached files or published content');
     expect(schema.parse({ query: '  Profit  ' })).toEqual({ query: 'Profit' });
     expect(() => schema.parse({ query: '   ' })).toThrow();
     expect(() => schema.parse({ query: 'Profit', limit: 101 })).toThrow();

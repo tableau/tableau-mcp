@@ -236,10 +236,13 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-20: search-workbook-fields adds a read-only current-workbook search tool and
 // states that published content is out of scope: dynamic authoring 40_096 -> 40_819; full 56_799 ->
 // 57_522.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_819;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_840;
+// Re-pinned 2026-08-20: the three field-discovery tools now state their distinct live, cached,
+// available, and placed-field scopes while trimming redundant prose: dynamic authoring
+// 40_819 -> 40_808; full 57_522 -> 57_556.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_808;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_829;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 57_540;
+const FULL_TOOL_SURFACE_BUDGET = 57_574;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
