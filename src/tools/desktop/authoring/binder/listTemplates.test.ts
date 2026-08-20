@@ -201,12 +201,21 @@ describe('list-templates', () => {
             {
               slot_id: 'field_base_1',
               kind: 'categorical',
+              derivation: 'none',
+              role: ['rows'],
+              binding_usage: 'direct',
+              calculation_channels: [],
             },
             {
               slot_id: 'field_base_2',
               kind: 'quantitative',
+              derivation: 'sum',
+              role: ['cols'],
+              binding_usage: 'direct',
+              calculation_channels: [],
             },
           ],
+          optional_slots: [],
         },
         visible_channels: { direct: ['rows', 'cols'], calculated: [] },
         same_field_groups: [],
@@ -270,6 +279,26 @@ describe('list-templates', () => {
       ['field_base_2_sum', 'field_base_2_none'],
     ]);
     expect(template.visible_channels.direct).not.toContain('size');
+    expect(template.slot_signature.required_slots).toEqual(
+      expect.arrayContaining([
+        {
+          slot_id: 'field_base_1_sum',
+          kind: 'quantitative',
+          derivation: 'sum',
+          role: ['rows'],
+          binding_usage: 'direct',
+          calculation_channels: [],
+        },
+        {
+          slot_id: 'field_base_1_none',
+          kind: 'quantitative',
+          derivation: 'none',
+          role: [],
+          binding_usage: 'calculation-input',
+          calculation_channels: ['color'],
+        },
+      ]),
+    );
 
     for (const slotId of ['field_base_1_none', 'field_base_2_none']) {
       expect(
@@ -407,22 +436,45 @@ describe('list-templates', () => {
 
     expect(body.templates[0].slot_signature.required_slots).toEqual(
       expect.arrayContaining([
-        {
+        expect.objectContaining({
           slot_id: 'field_base_1',
           kind: 'quantitative',
-        },
-        {
+        }),
+        expect.objectContaining({
           slot_id: 'field_base_2',
           kind: 'geo',
           semantic_role: '[Country].[ISO3166_2]',
-        },
-        {
+        }),
+        expect.objectContaining({
           slot_id: 'field_base_3',
           kind: 'geo',
           semantic_role: '[State].[Name]',
-        },
+        }),
       ]),
     );
+  });
+
+  it('includes exact optional slot facts in a bounded compact real-template result', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const result = await getToolResult({ query: 'bullet-variance-chart', limit: 1 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(Buffer.byteLength(result.content[0].text, 'utf-8')).toBeLessThanOrEqual(16_384);
+    const body = JSON.parse(result.content[0].text);
+
+    expect(body.templates).toHaveLength(1);
+    expect(body.templates[0].template).toBe('bullet-variance-chart');
+    expect(body.templates[0].slot_signature.optional_slots).toEqual([
+      {
+        slot_id: 'field_base_3',
+        kind: 'quantitative',
+        derivation: 'sum',
+        role: ['lod', 'reference-line'],
+        binding_usage: 'direct',
+        calculation_channels: [],
+      },
+    ]);
   });
 
   it('filters on eligibility computed from the TBM instead of catalog policy', async () => {
