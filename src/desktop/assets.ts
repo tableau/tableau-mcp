@@ -8,7 +8,7 @@
 
 import { createHash } from 'crypto';
 import { existsSync, readdirSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { delimiter, join } from 'path';
 
 import { getDirname } from '../utils/getDirname.js';
 import {
@@ -206,17 +206,27 @@ export function readResourceAsset(relPath: string): string | null {
   }
 }
 
-// Knowledge module slugs (forward-slash, no .md) under resources/desktop/knowledge.
-// SEA reads the manifest; disk walks the tree.
-export function listKnowledgeSlugs(): string[] {
-  if (runningAsSea()) {
-    const prefix = 'resources/desktop/knowledge/';
-    return listSeaAssetKeys('resources/desktop/knowledge')
-      .filter((key) => key.endsWith('.md'))
-      .map((key) => key.slice(prefix.length).replace(/\.md$/, ''))
-      .sort();
+const KNOWLEDGE_DIR_ENV_NAME = 'TABLEAU_KNOWLEDGE_DIR';
+
+// Ordered by precedence: earlier roots win on a slug collision. tab-agent-south owns what
+// each root physically is (protected/user-content/overridable); this file never learns those
+// names, it just merges whatever ordered list it's handed.
+function externalKnowledgeRoots(): string[] {
+  const raw = process.env[KNOWLEDGE_DIR_ENV_NAME];
+  if (!raw) {
+    return [];
   }
-  const root = join(getResourcesRoot(), 'knowledge');
+  return raw
+    .split(delimiter)
+    .map((root) => root.trim())
+    .filter((root) => root.length > 0);
+}
+
+function isHiddenName(name: string): boolean {
+  return name.startsWith('.');
+}
+
+function walkMarkdownSlugs(root: string): string[] {
   const slugs: string[] = [];
   const walk = (dir: string, prefixParts: string[]): void => {
     let entries;
@@ -226,6 +236,9 @@ export function listKnowledgeSlugs(): string[] {
       return;
     }
     for (const entry of entries) {
+      if (isHiddenName(entry.name)) {
+        continue;
+      }
       const next = join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(next, [...prefixParts, entry.name]);
@@ -235,12 +248,58 @@ export function listKnowledgeSlugs(): string[] {
     }
   };
   walk(root, []);
-  return slugs.sort();
+  return slugs;
+}
+
+export function listKnowledgeSlugs(): string[] {
+  const externalRoots = externalKnowledgeRoots();
+  if (externalRoots.length > 0) {
+    const slugs = new Set<string>();
+    for (const root of externalRoots) {
+      for (const slug of walkMarkdownSlugs(root)) {
+        slugs.add(slug);
+      }
+    }
+    return [...slugs].sort();
+  }
+  if (runningAsSea()) {
+    const prefix = 'resources/desktop/knowledge/';
+    return listSeaAssetKeys('resources/desktop/knowledge')
+      .filter((key) => key.endsWith('.md'))
+      .map((key) => key.slice(prefix.length).replace(/\.md$/, ''))
+      .sort();
+  }
+  return walkMarkdownSlugs(join(getResourcesRoot(), 'knowledge')).sort();
+}
+
+function isSafeKnowledgeSlug(slug: string): boolean {
+  if (!slug || slug.includes('..') || slug.includes('\\') || slug.startsWith('/')) {
+    return false;
+  }
+  return !slug.split('/').some((part) => part.length === 0 || isHiddenName(part));
 }
 
 export function readKnowledgeBySlug(slug: string): string | null {
-  if (!slug || slug.includes('..') || slug.includes('\\') || slug.startsWith('/')) {
+  if (!isSafeKnowledgeSlug(slug)) {
     return null;
   }
-  return readResourceAsset(`knowledge/${slug}.md`);
+  const externalRoots = externalKnowledgeRoots();
+  if (externalRoots.length === 0) {
+    return readResourceAsset(`knowledge/${slug}.md`);
+  }
+  for (const root of externalRoots) {
+    try {
+      return readFileSync(join(root, ...slug.split('/')) + '.md', 'utf-8');
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+export function getConfiguredKnowledgeDir(): string {
+  const externalRoots = externalKnowledgeRoots();
+  return externalRoots.length > 0
+    ? externalRoots.join(delimiter)
+    : join(getResourcesRoot(), 'knowledge');
 }
