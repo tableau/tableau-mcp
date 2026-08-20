@@ -48,7 +48,9 @@ import {
  * with `type`/`isExtract`/`hasDownloadFilePermission`, marks `index`/`type` (and
  * `StoryboardItem.storyPointCount`) required on the sheet items, and adds the
  * `unsupported-target-version` problem code, on top of the 0.2.6 surface
- * (`app:openFile`, `workbook:save`, `*:new`). No hand-edits.
+ * (`app:openFile`, `workbook:save`, `*:new`). No hand-edits, except the 0.2.9 `AppInfo`
+ * delta (`isStartPageVisible`/`isDataSourcePageActive`/`isPresentationMode`), hand-applied
+ * from the monolith PR that shipped it — no live 0.2.9 spec was captured.
  */
 
 type SpecSchema = {
@@ -87,6 +89,9 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
     'locale',
     'repositoryLocation',
     'logLocation',
+    'isStartPageVisible',
+    'isDataSourcePageActive',
+    'isPresentationMode',
   ],
   DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
   DashboardList: ['dashboards'],
@@ -197,7 +202,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.8 requiredness exception set', () => {
+    it('pins the complete 0.2.8 requiredness exception set, plus the hand-applied 0.2.9 AppInfo delta', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
@@ -208,6 +213,9 @@ describe('external client API contract (captured openapi fixture)', () => {
           'locale',
           'repositoryLocation',
           'logLocation',
+          'isStartPageVisible',
+          'isDataSourcePageActive',
+          'isPresentationMode',
         ],
         DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
         DashboardList: ['dashboards'],

@@ -708,7 +708,7 @@ export const imageResultSchema = z
   .passthrough();
 export type ImageResult = z.infer<typeof imageResultSchema>;
 
-/** Running Desktop application info returned by `GET /v0/app`. */
+/** Running Desktop application info and live UI state returned by `GET /v0/app`. */
 export const appInfoSchema = z
   .object({
     applicationVersion: z.string().optional(),
@@ -718,6 +718,9 @@ export const appInfoSchema = z
     locale: z.string().optional(),
     repositoryLocation: z.string().optional(),
     logLocation: z.string().optional(),
+    isStartPageVisible: z.boolean().optional(),
+    isDataSourcePageActive: z.boolean().optional(),
+    isPresentationMode: z.boolean().optional(),
   })
   .passthrough();
 export type AppInfo = z.infer<typeof appInfoSchema>;

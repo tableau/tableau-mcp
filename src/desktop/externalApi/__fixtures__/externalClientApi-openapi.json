@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.8",
+    "version": "0.2.9",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -4285,7 +4285,7 @@
       },
       "AppInfo": {
         "type": "object",
-        "description": "Running Tableau Desktop process information.",
+        "description": "Running Tableau Desktop process information and live UI state.",
         "required": [
           "applicationVersion",
           "edition",
@@ -4293,7 +4293,10 @@
           "os",
           "locale",
           "repositoryLocation",
-          "logLocation"
+          "logLocation",
+          "isStartPageVisible",
+          "isDataSourcePageActive",
+          "isPresentationMode"
         ],
         "properties": {
           "applicationVersion": {
@@ -4316,6 +4319,18 @@
           },
           "logLocation": {
             "type": "string"
+          },
+          "isStartPageVisible": {
+            "type": "boolean",
+            "description": "Whether the Start Page is currently visible."
+          },
+          "isDataSourcePageActive": {
+            "type": "boolean",
+            "description": "Whether the Data Source page is the active tab."
+          },
+          "isPresentationMode": {
+            "type": "boolean",
+            "description": "Whether Tableau Desktop is in presentation mode."
           }
         }
       },

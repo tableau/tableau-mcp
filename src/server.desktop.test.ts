@@ -239,6 +239,10 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // routes, gated to a 0.2.8 floor. All three join DYNAMIC_AUTHORING_TOOL_PROFILE, so dynamic
 // authoring moves 40_096 -> 42_521 (budget kept at the 18-char slack) and the full surface
 // 56_799 -> 59_224. Dynamic still clears the 46k cliff.
+// Re-pinned 2026-08-20: get-app-info's description now also documents the live UI-state fields
+// (Start Page visibility, Data Source page active, presentation mode) added to /v0/app in External
+// Client API 0.2.9. get-app-info is outside DYNAMIC_AUTHORING_TOOL_PROFILE, so only the full surface
+// moves.
 const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_521;
 const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_539;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
