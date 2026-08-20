@@ -20,12 +20,41 @@ export interface ReadbackFinding {
   severity: ReadbackFindingSeverity;
 }
 
-export type ReadbackVerificationStatus = 'passed' | 'warning' | 'failed' | 'skipped';
+/**
+ * Which verification strategy produced a finding. Readback compares re-read XML against the
+ * authored intent; visual scans the rendered pixels for an error indicator. The set grows as
+ * strategies are added — this is context/telemetry metadata, and consumers render findings
+ * uniformly rather than branching on it.
+ */
+export type VerificationSource = 'readback' | 'visual';
 
-export interface ReadbackVerificationResult {
+/**
+ * A single, source-agnostic verification finding — the shape that travels on a
+ * VerificationReport and reaches the model. `message` is already human-rendered; `source`
+ * is metadata (not a branch point); `evidence` optionally points at backing material (e.g. a
+ * screenshot cache handle) the model can fetch to look closer.
+ */
+export interface VerificationFinding {
+  severity: ReadbackFindingSeverity;
+  source: VerificationSource;
+  message: string;
+  evidence?: string;
+}
+
+export type VerificationStatus = 'passed' | 'warning' | 'failed' | 'skipped';
+
+/**
+ * The unified post-apply verification result: one report per apply, no matter how many
+ * strategies ran. `status`/`ok` summarize the worst finding; `message` is an optional
+ * top-line note (e.g. why verification was skipped); `findings` is the single channel each
+ * strategy contributes to. A new strategy (visual, …) APPENDS findings here — there are
+ * deliberately no `visualCheck`-style sibling fields for a consumer to fan out over.
+ */
+export interface VerificationReport {
   ok: boolean;
-  status: ReadbackVerificationStatus;
+  status: VerificationStatus;
   message?: string;
+  findings?: VerificationFinding[];
 }
 
 type XmlRecord = Record<string, any>;
@@ -374,4 +403,20 @@ export function formatReadbackVerificationWarnings(findings: ReadbackFinding[]):
   const warnings = findings.filter((finding) => finding.severity === 'warning');
   if (warnings.length === 0) return '';
   return `\n\n⚠️ Readback verification warning — Tableau changed or dropped: ${warnings.map(formatReadbackFinding).join(', ')}. Re-check the rendered chart before moving on.`;
+}
+
+/**
+ * Project the readback verifier's structural findings onto the source-agnostic
+ * VerificationFinding shape carried by a VerificationReport. Each renders to the same
+ * `<node column=…>` fragment the readback formatters use, tagged `source: 'readback'`, so a
+ * report can carry readback and (later) visual findings in one uniform list.
+ */
+export function readbackFindingsToVerification(findings: ReadbackFinding[]): VerificationFinding[] {
+  return findings.map(
+    (finding): VerificationFinding => ({
+      severity: finding.severity,
+      source: 'readback',
+      message: formatReadbackFinding(finding),
+    }),
+  );
 }

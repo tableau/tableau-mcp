@@ -12,8 +12,8 @@ import {
 import type { PromiseOutcome } from './validation/promise-check.js';
 import type {
   ReadbackFinding,
-  ReadbackVerificationResult,
-  ReadbackVerificationStatus,
+  VerificationReport,
+  VerificationStatus,
 } from './validation/readback-verify.js';
 
 type EpisodeConfig = BaseConfig & {
@@ -94,7 +94,7 @@ export type EpisodeEventInput =
       type: 'readback_verification';
       tool: string;
       operation: string;
-      status: ReadbackVerificationStatus;
+      status: VerificationStatus;
       promise_outcome: PromiseOutcome;
       warnings?: number;
       findings?: ReadbackFinding[];
@@ -246,7 +246,7 @@ export async function emitWorksheetPromiseEvents({
   sessionId: string;
   tool: string;
   operation: string;
-  readback: ReadbackVerificationResult | undefined;
+  readback: VerificationReport | undefined;
   findings: ReadbackFinding[];
   promiseOutcome: PromiseOutcome;
 }): Promise<void> {

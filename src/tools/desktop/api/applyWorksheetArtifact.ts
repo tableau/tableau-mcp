@@ -5,7 +5,7 @@ import {
   type TemplateArtifactUnavailableReason,
   type TemplateWorksheetArtifact,
 } from '../../../desktop/templates/templateArtifactStore.js';
-import type { ReadbackVerificationResult } from '../../../desktop/validation/readback-verify.js';
+import type { VerificationReport } from '../../../desktop/validation/readback-verify.js';
 import { loadWorksheetXml } from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
   DesktopCommandExecutionError,
@@ -25,7 +25,7 @@ export interface ApplyWorksheetArtifactArgs {
 export interface ArtifactApplyReceipt {
   artifactId: string;
   title: string;
-  verification: ReadbackVerificationResult;
+  verification: VerificationReport;
 }
 
 export interface ApplyWorksheetArtifactPayloadArgs {

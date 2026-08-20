@@ -17,7 +17,8 @@ import type { ParsedWorksheet } from '../metadata/types.js';
 import {
   formatReadbackVerificationError,
   type ReadbackFinding,
-  type ReadbackVerificationResult,
+  readbackFindingsToVerification,
+  type VerificationReport,
   verifyWorksheetReadback,
 } from '../validation/readback-verify.js';
 import {
@@ -59,11 +60,20 @@ export type LoadWorksheetXmlError =
 /** Non-fatal readback warnings surfaced on a successful apply (sort drops/changes). */
 export interface LoadWorksheetXmlOk {
   readbackWarnings: ReadbackFinding[];
-  readbackVerification?: ReadbackVerificationResult;
+  readbackVerification?: VerificationReport;
   validationWarnings?: ValidationIssue[];
 }
 
-export interface PostApplyWorksheetReadbackVerification extends ReadbackVerificationResult {
+/**
+ * The readback verifier's RICH internal result: the aggregate plus the structural
+ * `ReadbackFinding[]` that promise-check (sort-loss) and the readback formatters consume.
+ * `publicVerificationReport` projects it onto the source-agnostic VerificationReport
+ * that leaves this layer.
+ */
+export interface PostApplyWorksheetReadbackVerification {
+  ok: boolean;
+  status: VerificationReport['status'];
+  message?: string;
   findings: ReadbackFinding[];
 }
 
@@ -86,12 +96,18 @@ type LoadWorksheetXmlResult = Result<
  * apply on a re-read miss: if the worksheet cannot be re-read, verification is skipped
  * (returns no findings) so telemetry can never mask a real apply.
  */
-export function publicReadbackVerificationResult(
+export function publicVerificationReport(
   result: PostApplyWorksheetReadbackVerification,
-): ReadbackVerificationResult {
-  return result.message
-    ? { ok: result.ok, status: result.status, message: result.message }
-    : { ok: result.ok, status: result.status };
+): VerificationReport {
+  const report: VerificationReport = {
+    ok: result.ok,
+    status: result.status,
+    findings: readbackFindingsToVerification(result.findings),
+  };
+  if (result.message) {
+    report.message = result.message;
+  }
+  return report;
 }
 
 /**
@@ -228,7 +244,7 @@ function readbackOutcome(
   }
   return Ok({
     readbackWarnings: findings,
-    readbackVerification: publicReadbackVerificationResult(verification),
+    readbackVerification: publicVerificationReport(verification),
   });
 }
 
@@ -310,7 +326,7 @@ export async function loadWorksheetXml({
   worksheetName: string;
   xml: string;
   focus: ApplyFocus;
-  readbackVerificationOut?: ReadbackVerificationResult[];
+  readbackVerificationOut?: VerificationReport[];
   // Picks the External Client API call this apply uses.
   // On (apply-worksheet): replace an existing worksheet by id via the per-sheet `/document` route,
   // leaving other sheets untouched. That route is replace-only, so a name that resolves to no live
@@ -444,10 +460,10 @@ export async function loadWorksheetXml({
         executor,
         signal,
       );
-      readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
+      readbackVerificationOut?.push(publicVerificationReport(verification));
       return Ok({
         readbackWarnings: verification.findings,
-        readbackVerification: publicReadbackVerificationResult(verification),
+        readbackVerification: publicVerificationReport(verification),
         validationWarnings: [...validation.issues, ...workbookValidation.issues],
       });
     });
@@ -478,7 +494,7 @@ export async function loadWorksheetXml({
         executor,
         signal,
       );
-      readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
+      readbackVerificationOut?.push(publicVerificationReport(verification));
       const outcomeResult = readbackOutcome(verification);
       if (outcomeResult.isErr()) {
         return outcomeResult;
@@ -516,7 +532,7 @@ async function loadWorksheetXmlViaExternalApi({
   worksheetName: string;
   xml: string;
   focus: ApplyFocus;
-  readbackVerificationOut?: ReadbackVerificationResult[];
+  readbackVerificationOut?: VerificationReport[];
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   return withApplyLock(async () => {
     const workbookResult = await getWorkbookXml({ executor, signal });
@@ -597,7 +613,7 @@ async function loadWorksheetXmlViaExternalApi({
       executor,
       signal,
     );
-    readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
+    readbackVerificationOut?.push(publicVerificationReport(verification));
     const outcomeResult = readbackOutcome(verification);
     if (outcomeResult.isErr()) return outcomeResult;
 

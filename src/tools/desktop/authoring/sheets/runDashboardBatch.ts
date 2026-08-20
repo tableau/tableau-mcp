@@ -28,7 +28,7 @@ import {
 import {
   formatReadbackVerificationError,
   formatReadbackVerificationWarnings,
-  type ReadbackVerificationResult,
+  type VerificationReport,
   verifyWorksheetReadback,
 } from '../../../../desktop/validation/readback-verify.js';
 import {
@@ -88,7 +88,7 @@ type StepReceipt =
       state: 'applied';
       retrySafe: false;
       title: string;
-      verification: ReadbackVerificationResult;
+      verification: VerificationReport;
     }
   | {
       index: number;
@@ -98,7 +98,7 @@ type StepReceipt =
       retrySafe: boolean;
       error?: string;
       title?: string;
-      verification?: ReadbackVerificationResult;
+      verification?: VerificationReport;
     }
   | {
       index: number;
@@ -144,7 +144,7 @@ type LoadWorkbookXmlFailure =
 type WorksheetVerification = {
   artifactId: string;
   title: string;
-  verification: ReadbackVerificationResult;
+  verification: VerificationReport;
 };
 
 type BatchReadbackVerification = {
@@ -704,7 +704,7 @@ function unknownBatch({
   return incomplete({ applied: 'unknown', retrySafe: false, steps });
 }
 
-function boundedVerification(verification: ReadbackVerificationResult): ReadbackVerificationResult {
+function boundedVerification(verification: VerificationReport): VerificationReport {
   return verification.message
     ? { ...verification, message: boundedText(verification.message) }
     : verification;

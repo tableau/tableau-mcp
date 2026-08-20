@@ -67,7 +67,7 @@ import {
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import {
-  publicReadbackVerificationResult,
+  publicVerificationReport,
   verifyPostApplyWorksheetReadback,
 } from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
@@ -1578,7 +1578,7 @@ async function performAutoApply({
     : undefined;
   const receiptInput = {
     validationWarnings: applyResult.value.validationWarnings,
-    readback: verification ? publicReadbackVerificationResult(verification) : undefined,
+    readback: verification ? publicVerificationReport(verification) : undefined,
     readbackFindings: verification?.findings ?? [],
   };
   const promiseOutcome = classifyWorksheetPromiseOutcome(receiptInput);

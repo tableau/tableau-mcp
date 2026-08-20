@@ -11,14 +11,14 @@
  *
  * Ported from agent-to-tableau-desktop.
  */
-import type { ReadbackFinding, ReadbackVerificationResult } from './readback-verify.js';
+import type { ReadbackFinding, VerificationReport } from './readback-verify.js';
 import type { ValidationIssue } from './types.js';
 
 export type PromiseOutcome = 'verified' | 'unverified' | 'failed';
 
 export interface WorksheetReceiptInput {
   validationWarnings: ValidationIssue[];
-  readback: ReadbackVerificationResult | undefined;
+  readback: VerificationReport | undefined;
   readbackFindings?: ReadbackFinding[];
 }
 
