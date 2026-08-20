@@ -46,6 +46,7 @@ const NON_TOOL_VOCABULARY = [
   'clear-option',
   'column-instance',
   'columns-not-found',
+  'command-failed',
   'command-postcondition',
   'computed-sort',
   'cross-datasource-binding',
@@ -113,6 +114,7 @@ const NON_TOOL_VOCABULARY = [
   'no-data',
   'no-desktop-instances-found',
   'no-rows',
+  'no-screenshot-output',
   'non-empty',
   'non-federated',
   'non-template',
@@ -169,6 +171,9 @@ const NON_TOOL_VOCABULARY = [
   'style-rule',
   'success-already-present',
   'summary-data',
+  // External Client API command name (tabui:take-all-screenshots) that capture-window-
+  // screenshot invokes — a Desktop command, not an MCP tool the model can call.
+  'take-all-screenshots',
   'target-group',
   'target-parameter',
   'template-artifact-unavailable',
@@ -193,6 +198,7 @@ const NON_TOOL_VOCABULARY = [
   'viewpoint-workbook-apply',
   'viz-specific',
   'well-formed',
+  'window-screenshot',
   'workbook-change',
   'workbook-datasource',
   'workbook-drift',

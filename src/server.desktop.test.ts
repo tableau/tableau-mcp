@@ -210,8 +210,15 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // descriptions carrying the new-window/session-binding and blocking-Save-As caveats the 0.2.6
 // descriptions spell out. All five join the dynamic-authoring profile: served moves
 // 31_485 -> 34_581 (still well under the 46k cliff), full moves 51_101 -> 54_197.
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 34_581;
-const FULL_TOOL_SURFACE_BUDGET = 54_197;
+// Re-pinned 2026-08-14: added capture-window-screenshot to the dynamic-authoring profile
+// (post-mutation visual verification — the verify-visible-state route routes to it), served
+// moves 34_581 -> 35_654 (still well under the 46k cliff), full moves 54_197 -> 54_788.
+// Re-pinned 2026-08-20: verify-visible-state prose expanded to treat RED anywhere as broken
+// (shelf pill -> get-worksheet-xml; schema-viewer/Data-pane red -> list-available-fields /
+// list-workbook-datasources); both surfaces move +318 (served 35_654 -> 35_972, full
+// 54_788 -> 55_106), still well under the 46k cliff.
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 35_972;
+const FULL_TOOL_SURFACE_BUDGET = 55_106;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -236,7 +243,10 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
     // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_191);
+    // Re-pinned 2026-08-20: verify-visible-state now treats RED anywhere as broken — a shelf
+    // pill (-> get-worksheet-xml) or schema-viewer/Data-pane red (-> list-available-fields /
+    // list-workbook-datasources) — not just a shelf pill (3_673 -> 3_991).
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(3_991);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(fullToolSurfaceTotal).toBeLessThanOrEqual(FULL_TOOL_SURFACE_BUDGET);
   });
@@ -466,10 +476,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 44-tool modern surface with one dashboard mutation door', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 45-tool modern surface with one dashboard mutation door', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(44);
+    expect(selected).toHaveLength(45);
     expect(selected.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining(['bind-template', 'build-and-apply-worksheet']),
     );

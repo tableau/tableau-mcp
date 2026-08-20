@@ -60,6 +60,7 @@ export const desktopToolNames = [
   'get-worksheet-underlying-data',
   'export-worksheet-image',
   'export-dashboard-image',
+  'capture-window-screenshot',
   'get-workbook-inventory',
   'list-workbook-datasources',
   'list-site-datasources',

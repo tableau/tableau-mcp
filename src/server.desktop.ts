@@ -167,6 +167,10 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'format-labels',
     'read-knowledge-resource',
     'search-knowledge',
+    // Post-mutation visual verification: capture the whole window (shelf chrome included)
+    // so a red error pill / empty view that a command-level success receipt cannot see
+    // gets caught before the agent reports Done. Paired with the verify-visible-state route.
+    'capture-window-screenshot',
   ]);
 
 /**

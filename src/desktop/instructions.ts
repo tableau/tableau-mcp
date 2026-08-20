@@ -172,6 +172,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'prose',
+    id: 'verify-visible-state',
+    text: 'After a mutating apply-*/author-* that could break the result, call capture-window-screenshot and inspect it — do not just describe the chart. In Tableau, RED marks something broken, so scan the whole window, not only the viz: a red pill on a worksheet shelf (Columns/Rows/Marks/Filters) is an invalid field; red in the schema viewer or the Data pane is a broken datasource. Red means the change failed even though the command succeeded and a bar or axis still renders — a structural read that ignores it is a miss. On red do NOT report Done: read the source (get-worksheet-xml for a shelf pill; list-available-fields or list-workbook-datasources for schema-viewer or Data-pane red), name what broke, and fix it or say plainly it is broken. Never report success over red or a visibly broken window.',
+  },
+  {
+    kind: 'prose',
     id: 'preflight-rejection',
     text: 'If preflight rejects apply, fix per FIX lines. Prefer file mode',
   },
