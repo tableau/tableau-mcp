@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { SlotSpec } from '../../../../desktop/binder/manifest-types.js';
 import { TEMPLATE_VISIBLE_CHANNELS } from '../../../../desktop/templates/bookmarkTemplate.js';
 import type { TemplateFitFacts } from '../../../../desktop/templates/inferSlots.js';
+import { withTemplateLiveSupport } from '../../../../desktop/templates/templateLiveSupport.js';
 import {
   listTemplateCatalog,
   readBookmarkFromCatalogEntry,
@@ -180,12 +181,13 @@ function summarizeTemplate(
 ): TemplateSummary {
   const slots = snapshot.descriptor.slots;
   const fit = fitOf(snapshot);
+  const eligibility = withTemplateLiveSupport(entry.template, snapshot.eligibility);
   return {
     template: entry.template,
     provenance: entry.provenance,
     overridesLowerPrecedence: entry.overridesLowerPrecedence,
-    pass1_eligible: snapshot.eligibility.pass1_eligible,
-    pass1_blockers: snapshot.eligibility.pass1_blockers.slice(),
+    pass1_eligible: eligibility.pass1_eligible,
+    pass1_blockers: eligibility.pass1_blockers.slice(),
     slot_signature: {
       total: slots.length,
       required: slots.filter((slot) => slot.required).length,
@@ -434,7 +436,9 @@ export const getListTemplatesTool = (
                 resolved,
               ): resolved is { entry: TemplateCatalogEntry; snapshot: TemplateRuntimeSnapshot } =>
                 resolved.snapshot !== null &&
-                (!pass1EligibleOnly || resolved.snapshot.eligibility.pass1_eligible),
+                (!pass1EligibleOnly ||
+                  withTemplateLiveSupport(resolved.entry.template, resolved.snapshot.eligibility)
+                    .pass1_eligible),
             );
             return {
               total: catalog.length,

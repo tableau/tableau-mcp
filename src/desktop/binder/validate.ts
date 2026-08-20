@@ -37,6 +37,7 @@ import {
   optionalFieldPrunesFor,
   type OptionalFieldPruneSpec,
 } from '../templates/optionalFieldPrune.js';
+import { templateLiveSupportBlocker } from '../templates/templateLiveSupport.js';
 import { cardinalityAdvice, PIE_SLICE_WORKABLE_MAX } from './cardinality.js';
 import { matchAvoidWhen, parseExplicitBoxRolePhrases } from './classify.js';
 import { escapeXml } from './escape.js';
@@ -643,6 +644,14 @@ export function validateBinding(
 
   // Chart-specific structural invariants belong in this shared validation seam so
   // Call 1, Call 2, and the eval-only injected proposal path cannot disagree.
+  const liveSupportBlocker = templateLiveSupportBlocker(m.template);
+  if (liveSupportBlocker !== undefined) {
+    blockers.push({
+      code: 'kind-mismatch',
+      detail: liveSupportBlocker,
+    });
+  }
+
   if (m.template === 'part-to-whole-pie-chart') {
     const sliceSlot = m.slots.find(
       (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('color'),
@@ -758,11 +767,6 @@ export function validateBinding(
   }
 
   if (m.template === 'gantt-task-rollup-chart') {
-    blockers.push({
-      code: 'kind-mismatch',
-      detail:
-        'gantt-task-rollup-chart is disabled until a live-proven aggregate-span donor replaces its unverified duration calculation',
-    });
     const startSlot = m.slots.find(
       (slot) => slot.bindable && slot.kind === 'temporal' && slot.role.includes('cols'),
     );

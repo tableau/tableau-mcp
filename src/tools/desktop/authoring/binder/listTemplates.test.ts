@@ -503,6 +503,34 @@ describe('list-templates', () => {
     ).toEqual(['eligible']);
   });
 
+  it('reports shipped donut and Gantt support gates as eligibility truth', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const donut = await getBody({
+      query: 'part-to-whole__donut__show-parts-with-center-space-for-total',
+      limit: 1,
+    });
+    expect(donut.templates[0]).toMatchObject({
+      pass1_eligible: false,
+      pass1_blockers: [expect.stringContaining('not-live-proven')],
+    });
+    const eligibleDonut = await getBody({
+      query: 'part-to-whole__donut__show-parts-with-center-space-for-total',
+      limit: 1,
+      pass1EligibleOnly: true,
+    });
+    expect(eligibleDonut.templates).toEqual([]);
+
+    const pie = await getBody({ query: 'part-to-whole-pie-chart', limit: 1 });
+    expect(pie.templates[0]).toMatchObject({ pass1_eligible: true, pass1_blockers: [] });
+
+    const gantt = await getBody({ query: 'gantt-task-rollup-chart', limit: 1 });
+    expect(gantt.templates[0]).toMatchObject({
+      pass1_eligible: false,
+      pass1_blockers: [expect.stringContaining('not-live-proven')],
+    });
+  });
+
   it('examines only the requested candidate page when filtering for pass-1 eligibility', async () => {
     catalog(Array.from({ length: 51 }, (_, index) => `chart-${String(index).padStart(2, '0')}`));
     let resolutions = 0;
