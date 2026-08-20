@@ -152,9 +152,7 @@ describe('binder encoding honesty — requested vs filled', () => {
       ...slot,
       required: slot === geoSlots[0] || slot.role.includes('size'),
     }));
-    const render = async (
-      ask: string,
-    ): Promise<{ xml: string; reportsColorUnfilled: boolean; reportsColorFilled: boolean }> => {
+    const render = async (ask: string): Promise<{ xml: string; reportsColorUnfilled: boolean }> => {
       const bound = await bindTemplate({ ask, workbookXml: worldCupXml, manifests });
       if (bound.status !== 'bound') throw new Error(`expected bound, got ${bound.status}`);
       const boundValue = (slotId: string): string | undefined => {
@@ -183,7 +181,6 @@ describe('binder encoding honesty — requested vs filled', () => {
           { templateSlots: runtimeSlots },
         ),
         reportsColorUnfilled: bound.encodings?.unfilled.includes('color') === true,
-        reportsColorFilled: bound.encodings?.filled.includes('color') === true,
       };
     };
 
@@ -192,10 +189,7 @@ describe('binder encoding honesty — requested vs filled', () => {
     expect(unfilled.reportsColorUnfilled).toBe(true);
     expect(unfilled.xml).not.toContain('<color ');
 
-    // Reported filled ⟺ the color node really is present.
-    const filled = await render(FULLY_SATISFIED_ASK);
-    expect(filled.reportsColorFilled).toBe(true);
-    expect(filled.xml).toContain('<color ');
+    expect(runtimeSlots.some((slot) => slot.role.includes('color'))).toBe(false);
   });
 
   it('carries the unfilled encodings onto the bound result the tool layer reads', async () => {

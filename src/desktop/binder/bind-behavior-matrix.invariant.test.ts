@@ -49,6 +49,15 @@ function bind(ask: string): ReturnType<typeof bindTemplate> {
 // ── KNOWN ONE-SHOTS (bound, used_llm=false, correct template) ─────────────────
 const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   ['bar chart of Sales by Sub-Category', 'ranking-ordered-bar'],
+  ['grouped bar chart of Sales by Category and Region', 'magnitude-paired-bar'],
+  ['paired bar chart of Sales by Category and Region', 'magnitude-paired-bar'],
+  ['line chart of Sales over Order Date by Category', 'trend-line-chart'],
+  ['scatter plot of Sales vs Profit by Product Name', 'correlation-scatter-plot-chart'],
+  [
+    'scatter plot of Sales vs Profit by Product Name with trend line',
+    'correlation-scatter-trendline-chart',
+  ],
+  ['symbol map of Sales by State/Province', 'spatial-symbol-map'],
   ['treemap of Sales by Category and Sub-Category', 'part-to-whole-treemap-chart'],
   ['pie chart of Sales by Segment', 'part-to-whole-pie-chart'],
   ['quota attainment bullet of Sales by Segment', 'quota-attainment-bullet'],
@@ -63,6 +72,18 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
 
 // ── KNOWN SAFE-PROPOSES (NOT bound — fail-closed by design; WHY each) ──────────
 const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
+  [
+    'grouped bar chart of Sales by Category',
+    'the specific grouped-bar winner cannot fill its series slot and must not fall back to a generic bar',
+  ],
+  [
+    'symbol map of Sales by Country and State',
+    'a neutral geo slot cannot choose between two requested geo concepts',
+  ],
+  [
+    'symbol map of Sales by Country, State, and City',
+    'a neutral geo slot must not accept one exact match while ignoring two other requested geo concepts',
+  ],
   [
     'over-under arrow chart of Sales by Sub-Category',
     // fix b1490be5: ww-ou-arrow carries the compound-string-parse hazard (its calcs SPLIT a
@@ -120,20 +141,8 @@ const PINNED_BOUND: ReadonlyArray<readonly [ask: string, template: string, note:
 // Pinned NOT-BOUND (propose → assert not-bound):
 const PINNED_PROPOSE: ReadonlyArray<readonly [ask: string, note: string]> = [
   [
-    'line chart of Sales by Order Date',
-    'runtime descriptor also requires a color category, so two named fields fail closed',
-  ],
-  [
     'waterfall of Profit by Sub-Category',
     'runtime descriptor requires the measure at both sum and none derivations; automatic binding does not duplicate it',
-  ],
-  [
-    'scatter plot of Profit and Sales by Sub-Category',
-    'runtime descriptor requires both measures at sum and none plus two detail fields',
-  ],
-  [
-    'symbol map of Sales by Country/Region, State/Province, and City',
-    'runtime descriptor requires a second quantitative color field',
   ],
   [
     'connected scatterplot of Profit vs Sales by Customer Name and Region',
@@ -204,6 +213,70 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
       '{{field_base_3}}': '[Sample - Superstore].[sum:Quantity:qk]',
       '{{field_base_4}}': '[Sample - Superstore].[none:Product Name:nk]',
     });
+  });
+
+  it.each([
+    [
+      'grouped bar chart of Sales by Category and Region',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[none:Category:nk]',
+        '{{field_base_2}}': '[Sample - Superstore].[none:Region:nk]',
+        '{{field_base_3}}': '[Sample - Superstore].[sum:Sales:qk]',
+      },
+    ],
+    [
+      'line chart of Sales over Order Date by Category',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[sum:Sales:qk]',
+        '{{field_base_2}}': '[Sample - Superstore].[tmn:Order Date:qk]',
+        '{{field_base_3}}': '[Sample - Superstore].[none:Category:nk]',
+      },
+    ],
+    [
+      'scatter plot of Sales vs Profit by Product Name with trend line',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[sum:Sales:qk]',
+        '{{field_base_2}}': '[Sample - Superstore].[sum:Profit:qk]',
+        '{{field_base_3}}': '[Sample - Superstore].[none:Product Name:nk]',
+      },
+    ],
+    [
+      'symbol map of Sales by State/Province',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[sum:Sales:qk]',
+        '{{field_base_2}}': '[Sample - Superstore].[none:State/Province:nk]',
+      },
+    ],
+  ] as const)('maps the must-demo contract for %s', async (ask, expectedMapping) => {
+    const res = await bind(ask);
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status === 'bound') expect(res.args.field_mapping).toEqual(expectedMapping);
+  });
+
+  it.each(['Country/Region', 'State/Province', 'City'])(
+    'binds the generic symbol-map geo slot to target semantic role %s',
+    async (geoField) => {
+      const res = await bind(`symbol map of Sales by ${geoField}`);
+      expect(res.status, JSON.stringify(res)).toBe('bound');
+      if (res.status !== 'bound') return;
+      expect(res.args.template_name).toBe('spatial-symbol-map');
+      expect(res.args.field_mapping['{{field_base_2}}']).toBe(
+        `[Sample - Superstore].[none:${geoField}:nk]`,
+      );
+    },
+  );
+
+  it.each([
+    ['Country', 'Country/Region'],
+    ['State', 'State/Province'],
+  ])('resolves generic geo synonym %s through target field %s', async (askGeo, targetField) => {
+    const res = await bind(`symbol map of Sales by ${askGeo}`);
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.args.template_name).toBe('spatial-symbol-map');
+    expect(res.args.field_mapping['{{field_base_2}}']).toBe(
+      `[Sample - Superstore].[none:${targetField}:nk]`,
+    );
   });
 });
 

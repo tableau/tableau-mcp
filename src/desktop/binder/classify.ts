@@ -447,6 +447,9 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'sorted-column',
   'vertical-bar',
   'stacked-bar',
+  'grouped-bar',
+  'grouped-bar-chart',
+  'paired-bar',
   'treemap',
   'pie',
   'donut',
@@ -1966,6 +1969,14 @@ function geoConceptFromSlot(slot: TemplateManifest['slots'][number]): GeoConcept
   );
 }
 
+function geoConceptsNamedInAsk(maskedAsk: string): GeoConcept[] {
+  return (Object.entries(GEO_CONCEPT_SYNONYMS) as [GeoConcept, readonly string[]][])
+    .filter(([, synonyms]) =>
+      synonyms.some((token) => fieldNameMatchInAsk(maskedAsk, token, new Set()) >= 0),
+    )
+    .map(([concept]) => concept);
+}
+
 /** Split a name/slot_id into lowercased whole tokens (non-alphanumeric boundaries). */
 function nameTokens(s: string): string[] {
   return s
@@ -2044,6 +2055,14 @@ function pickGeoField(
     if (semanticMatches.length > 1) return { kind: 'tie' };
   }
 
+  if (!concept) {
+    const semanticMatches = pool.filter(
+      (field) => geoConceptFromSemanticRole(field.semanticRole) !== null,
+    );
+    if (semanticMatches.length === 1) return { kind: 'ok', field: semanticMatches[0] };
+    if (semanticMatches.length > 1) return { kind: 'tie' };
+  }
+
   const fallbackPool = concept
     ? pool.filter((f) => {
         const fieldConcept = geoConceptFromSemanticRole(f.semanticRole);
@@ -2059,17 +2078,17 @@ function pickGeoField(
  * "Country Code"). This is deliberately geo-slot-only: ordinary field matching
  * remains exact-first and never gains generic substring behavior.
  *
- * Existing ask-named geo matches always win. Otherwise the masked ask must contain
- * one of the slot's whole-token concept aliases, and the full schema must produce
- * exactly one semantic-role/name-affine field. Zero or multiple candidates add
- * nothing, preserving the existing fail-closed behavior.
+ * For a neutral slot, multiple requested geo concepts reject the deterministic
+ * classification before any exact-match shortcut. Otherwise existing ask-named
+ * geo matches win, or the full schema must produce exactly one semantic-role/name-
+ * affine field. Zero candidates add nothing, preserving fail-closed behavior.
  */
 function augmentGeoConceptMatches(
   maskedAsk: string,
   manifest: TemplateManifest,
   matched: SchemaField[],
   schemaDims: SchemaField[],
-): SchemaField[] {
+): SchemaField[] | null {
   const augmented = [...matched];
   const geoSlots = manifest.slots.filter(
     (slot) => slot.bindable && slot.required && slot.kind === 'geo',
@@ -2077,13 +2096,32 @@ function augmentGeoConceptMatches(
 
   for (const slot of geoSlots) {
     const askNamedPool = augmented.filter((field) => field.role === 'dimension');
+    const slotConcept = geoConceptFromSlot(slot);
+    const requestedConcepts = new Set(geoConceptsNamedInAsk(maskedAsk));
+    if (!slotConcept) {
+      for (const field of askNamedPool) {
+        const exactConcept = geoConceptFromSemanticRole(field.semanticRole);
+        if (exactConcept) requestedConcepts.add(exactConcept);
+      }
+      if (requestedConcepts.size > 1) return null;
+    }
     if (pickGeoField(askNamedPool, slot).kind !== 'none') continue;
-    const conceptNamed = [...geoAffinityTokens(slot)].some(
-      (token) => fieldNameMatchInAsk(maskedAsk, token, new Set()) >= 0,
-    );
-    if (!conceptNamed) continue;
+    const requestedConcept =
+      slotConcept ?? (requestedConcepts.size === 1 ? [...requestedConcepts][0] : null);
+    if (!requestedConcept) continue;
+    if (
+      slotConcept &&
+      ![...geoAffinityTokens(slot)].some(
+        (token) => fieldNameMatchInAsk(maskedAsk, token, new Set()) >= 0,
+      )
+    ) {
+      continue;
+    }
 
-    const schemaPick = pickGeoField(schemaDims, slot);
+    const requestedSlot = slotConcept
+      ? slot
+      : { ...slot, slot_id: requestedConcept, semantic_role: undefined };
+    const schemaPick = pickGeoField(schemaDims, requestedSlot);
     if (schemaPick.kind === 'ok' && !augmented.includes(schemaPick.field)) {
       augmented.push(schemaPick.field);
     }
@@ -2609,16 +2647,19 @@ function selectWithinFamily(
   const families = new Set(top.map((t) => t.m.family));
   if (families.size > 1) {
     // CROSS-family tie: fail closed UNLESS one candidate's most-specific matched
-    // chart noun strictly outranks the rest. Rank slot-satisfiable chart-noun
-    // matchers by chart-noun specificity, break ties by template name; a strict
-    // #1 binds, a #1/#2 specificity tie (or no chart-noun matcher) stays null.
+    // chart noun strictly outranks the rest. Select that noun winner BEFORE testing
+    // slot satisfiability: an under-specified named chart must fail closed rather
+    // than fall through to a less-specific chart that happens to bind.
     const byNoun = top
       .map((t) => ({ m: t.m, spec: chartNounSpecificity(maskedAsk, t.m.intent_keywords) }))
-      .filter((c) => c.spec > 0 && roleGreedyBind(c.m, matched, aggOverride, schemaDims) !== null)
+      .filter((c) => c.spec > 0)
       .sort((a, b) => b.spec - a.spec || a.m.template.localeCompare(b.m.template));
     if (byNoun.length === 0) return null;
     if (byNoun.length > 1 && byNoun[0].spec === byNoun[1].spec) return null;
-    return byNoun[0].m;
+    const nounWinner = byNoun[0].m;
+    return roleGreedyBind(nounWinner, matched, aggOverride, schemaDims) !== null
+      ? nounWinner
+      : null;
   }
 
   // SAME-family spatial "map" tie without a generated-symbol-map candidate in
@@ -3531,12 +3572,14 @@ export function classifyNoLlm(
   // the masked ask + full schema so a lone required date slot the ask did not name
   // can complete with the schema's single date field). selectWithinFamily's earlier
   // slot-fit probes deliberately omit this context (no completion during tie-break).
-  let matchedForBinding = augmentGeoConceptMatches(
+  const augmentedGeoMatches = augmentGeoConceptMatches(
     maskedAsk,
     chosen,
     matched,
     schemaDims,
   );
+  if (!augmentedGeoMatches) return null;
+  let matchedForBinding = augmentedGeoMatches;
   if (waterfallCanOrderDeterministically) {
     // The selected sequence field is sort metadata; other sequence-like names may still be
     // ask-named contribution measures. Goal-language P&L asks may name neither "amount" nor
