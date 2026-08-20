@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { verifyWorksheetReadback } from './readback-verify.js';
+import {
+  formatVerificationWarnings,
+  type ReadbackFinding,
+  readbackFindingsToVerification,
+  type VerificationFinding,
+  verifyWorksheetReadback,
+} from './readback-verify.js';
 
 const GEO_FIELD = '[DS].[none:State:nk]';
 const PROFIT_FIELD = '[DS].[sum:Profit:qk]';
@@ -194,5 +200,72 @@ describe('verifyWorksheetReadback — column-instance co-dependency (RT finding 
 
   it('does not fire when the intended XML never declared the instance either', () => {
     expect(verifyWorksheetReadback(withDeps(''), withDeps(''))).toHaveLength(0);
+  });
+});
+
+describe('readbackFindingsToVerification', () => {
+  const sortFinding: ReadbackFinding = {
+    kind: 'sort',
+    node: 'computed-sort',
+    column: '[DS].[none:State:nk]',
+    intended: '<computed-sort column="[DS].[none:State:nk]">',
+    readback: 'changed',
+    severity: 'warning',
+  };
+
+  it('maps each readback finding onto a source-tagged VerificationFinding', () => {
+    const [mapped] = readbackFindingsToVerification([sortFinding]);
+    expect(mapped).toEqual({
+      severity: 'warning',
+      source: 'readback',
+      message: '<computed-sort column="[DS].[none:State:nk]">',
+    });
+  });
+
+  it('preserves severity and renders the node fragment as the message', () => {
+    const errorFinding: ReadbackFinding = { ...sortFinding, node: 'lod', severity: 'error' };
+    const [mapped] = readbackFindingsToVerification([errorFinding]);
+    expect(mapped.severity).toBe('error');
+    expect(mapped.message).toBe('<lod column="[DS].[none:State:nk]">');
+  });
+});
+
+describe('formatVerificationWarnings', () => {
+  const readbackWarning: VerificationFinding = {
+    severity: 'warning',
+    source: 'readback',
+    message: '<computed-sort column="[DS].[none:State:nk]">',
+  };
+  const visualWarning: VerificationFinding = {
+    severity: 'warning',
+    source: 'visual',
+    message: 'the densest region of the applied window is 47% saturated red',
+  };
+
+  it('returns empty when there are no warnings', () => {
+    expect(formatVerificationWarnings([])).toBe('');
+    expect(formatVerificationWarnings([{ ...readbackWarning, severity: 'error' }])).toBe('');
+  });
+
+  it('renders readback warnings under the exact existing readback sentence', () => {
+    expect(formatVerificationWarnings([readbackWarning])).toBe(
+      '\n\n⚠️ Readback verification warning — Tableau changed or dropped: <computed-sort column="[DS].[none:State:nk]">. Re-check the rendered chart before moving on.',
+    );
+  });
+
+  it('renders a visual warning under its own lead-in', () => {
+    expect(formatVerificationWarnings([visualWarning])).toBe(
+      '\n\n⚠️ Visual check — the densest region of the applied window is 47% saturated red.',
+    );
+  });
+
+  it('groups readback warnings together and appends visual warnings after them', () => {
+    const text = formatVerificationWarnings([readbackWarning, visualWarning]);
+    expect(text).toContain('⚠️ Readback verification warning');
+    expect(text).toContain('⚠️ Visual check');
+    // Readback grouping leads; the visual lead-in follows.
+    expect(text.indexOf('Readback verification warning')).toBeLessThan(
+      text.indexOf('Visual check'),
+    );
   });
 });

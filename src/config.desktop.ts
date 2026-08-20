@@ -55,6 +55,16 @@ export class Config extends BaseConfig {
   desktopCallTimeoutMs: number;
 
   /**
+   * When true, apply tools run a post-apply VISUAL check — capture the Desktop window and
+   * scan for a dense error-red cluster (a likely error pill / broken render) — and fold any
+   * finding into the same verification channel readback uses. Off by default (turn on with
+   * env AUTO_VISUAL_CHECK=true) because it adds a full-window screenshot capture to each apply;
+   * a hit is a warning that nudges the model to capture and inspect the window, never a hard
+   * apply failure.
+   */
+  autoVisualCheck: boolean;
+
+  /**
    * Server-side gate for bind-template's `skip_validation`. Set true (env ALLOW_SKIP_VALIDATION)
    * only by a trusted spawner — the backend's self-owned deterministic build_viz session, which
    * builds the proposal in code. Over stdio there is no per-call principal; this process-env flag
@@ -75,6 +85,7 @@ export class Config extends BaseConfig {
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
       TABLEAU_DESKTOP_CALL_TIMEOUT_MS: desktopCallTimeoutMs,
       ALLOW_SKIP_VALIDATION: allowSkipValidation,
+      AUTO_VISUAL_CHECK: autoVisualCheck,
     } = cleansedVars;
 
     if (this.transport !== 'stdio') {
@@ -108,6 +119,8 @@ export class Config extends BaseConfig {
     });
 
     this.allowSkipValidation = allowSkipValidation === 'true';
+
+    this.autoVisualCheck = autoVisualCheck === 'true';
   }
 }
 

@@ -18,7 +18,11 @@ import {
   classifyWorksheetPromiseOutcome,
   formatWorksheetPromiseCheck,
 } from '../../../desktop/validation/promise-check.js';
-import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
+import {
+  formatVerificationWarnings,
+  readbackFindingsToVerification,
+  type VerificationFinding,
+} from '../../../desktop/validation/readback-verify.js';
 import { loadWorksheetXml } from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
   ArgsValidationError,
@@ -44,6 +48,7 @@ import {
   applyWorksheetArtifactPayload,
   templateArtifactUnavailableError,
 } from './applyWorksheetArtifact.js';
+import { runVisualErrorCheck } from './visualErrorCheck.js';
 
 const templatePlanSchema = z.object({
   templateName: z.string().trim().min(1).max(128).describe('Worksheet template ID.'),
@@ -332,11 +337,21 @@ export const getApplyWorksheetTool = (
             }
           }
 
-          // Non-fatal post-apply readback warnings (e.g. a sort Tableau reshaped) ride
-          // along so the agent can re-check the rendered chart before moving on (W4).
-          const readbackWarning = result.isOk()
-            ? formatReadbackVerificationWarnings(result.value.readbackWarnings)
-            : '';
+          // Non-fatal post-apply warnings ride along in ONE channel so the agent can re-check
+          // before moving on: readback warnings (e.g. a sort Tableau reshaped, W4) plus — when
+          // AUTO_VISUAL_CHECK is on — a visual finding if the rendered window shows a dense
+          // error-red cluster (a likely error pill readback cannot see). The visual check is
+          // best-effort and never fails the apply; a hit is a warning nudging a capture-and-look.
+          const verificationFindings: VerificationFinding[] = result.isOk()
+            ? readbackFindingsToVerification(result.value.readbackWarnings)
+            : [];
+          if (result.isOk() && extra.config.autoVisualCheck) {
+            const visualFinding = await runVisualErrorCheck({ executor, signal: extra.signal });
+            if (visualFinding) {
+              verificationFindings.push(visualFinding);
+            }
+          }
+          const readbackWarning = formatVerificationWarnings(verificationFindings);
           // Host verification receipt (W-23447506) — subsumes the old readback
           // status sentence: one host-truth line, derived from preflight +
           // readback, never model-filled.

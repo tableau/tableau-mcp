@@ -5,7 +5,10 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../desktop/cache.js';
-import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
+import {
+  ExecuteCommandError,
+  WithExecutorAndAbortSignal,
+} from '../../../desktop/externalApi/executorTypes.js';
 import {
   buildInlineImageCapFileMessage,
   inlineImageFootprintBytes,
@@ -49,7 +52,7 @@ const paramsSchema = {
 };
 const title = 'Capture Tableau Window Screenshot';
 
-type CapturedImage = {
+export type CapturedImage = {
   /** Absolute path to the chosen PNG on disk. */
   path: string;
   /** The decoded PNG bytes. */
@@ -147,6 +150,34 @@ export function chooseMainWindowImage(paths: string[]): CapturedImage | null {
   return best;
 }
 
+/**
+ * Run TakeAllScreenshots and return the main-window PNG, given an executor + signal already
+ * in hand. Factored out of the tool callback so the post-apply visual check (runVisualErrorCheck)
+ * can capture the window mid-apply without going through the read harness. Errors (Desktop
+ * unavailable, no readable PNG) come back as an Err so a caller can degrade to "no capture"
+ * rather than throwing.
+ */
+export async function captureMainWindowImage({
+  executor,
+  signal,
+}: WithExecutorAndAbortSignal): Promise<Result<CapturedImage, ExecuteCommandError>> {
+  const commandResult = await executor.executeCommand({
+    namespace: NAMESPACE,
+    command: COMMAND,
+    args: { HideMouse: true },
+    signal,
+  });
+  if (commandResult.isErr()) {
+    return Err(commandResult.error);
+  }
+  const paths = extractScreenshotPaths(commandResult.value.result);
+  const image = chooseMainWindowImage(paths);
+  if (!image) {
+    return commandReturnedNoImage(paths.length);
+  }
+  return Ok(image);
+}
+
 export const captureWindowScreenshotTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -176,24 +207,9 @@ export const captureWindowScreenshotTool = (
             session,
             extra,
             callback: async (_executor, _signal, read) => {
-              return await read('window screenshot', async (executor, signal) => {
-                const commandResult = await executor.executeCommand({
-                  namespace: NAMESPACE,
-                  command: COMMAND,
-                  args: { HideMouse: true },
-                  signal,
-                });
-                if (commandResult.isErr()) {
-                  return Err(commandResult.error);
-                }
-
-                const paths = extractScreenshotPaths(commandResult.value.result);
-                const image = chooseMainWindowImage(paths);
-                if (!image) {
-                  return commandReturnedNoImage(paths.length);
-                }
-                return Ok(image);
-              });
+              return await read('window screenshot', async (executor, signal) =>
+                captureMainWindowImage({ executor, signal }),
+              );
             },
           });
         },

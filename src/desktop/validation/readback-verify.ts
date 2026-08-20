@@ -420,3 +420,29 @@ export function readbackFindingsToVerification(findings: ReadbackFinding[]): Ver
     }),
   );
 }
+
+/**
+ * Render the WARNING findings of a verification report as agent-facing text, source by source.
+ * This is the single warnings channel an apply appends to: readback warnings keep their exact
+ * existing sentence, and any other strategy (visual, …) renders under its own lead-in — so
+ * adding a strategy grows this output instead of adding a separate returned field. Returns ''
+ * when there are no warnings.
+ */
+export function formatVerificationWarnings(findings: VerificationFinding[]): string {
+  const warnings = findings.filter((finding) => finding.severity === 'warning');
+  if (warnings.length === 0) return '';
+
+  const parts: string[] = [];
+  const readback = warnings.filter((finding) => finding.source === 'readback');
+  if (readback.length > 0) {
+    parts.push(
+      `\n\n⚠️ Readback verification warning — Tableau changed or dropped: ${readback
+        .map((finding) => finding.message)
+        .join(', ')}. Re-check the rendered chart before moving on.`,
+    );
+  }
+  for (const finding of warnings.filter((finding) => finding.source !== 'readback')) {
+    parts.push(`\n\n⚠️ Visual check — ${finding.message}.`);
+  }
+  return parts.join('');
+}
