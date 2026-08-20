@@ -56,7 +56,11 @@ describe('WorkbooksMethods', () => {
         { id: 'conn-1', type: 'sqlserver', datasource: { id: 'ds-1' } },
         { id: 'conn-2', type: 'postgres' },
       ];
-      const workbooksMethods = new WorkbooksMethods('http://test', { type: 'Bearer', token: 't' }, {});
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 't' },
+        {},
+      );
       // @ts-expect-error - Mocking private property
       workbooksMethods._apiClient = {
         getWorkbookConnections: vi.fn().mockResolvedValue({ connections: { connection } }),
