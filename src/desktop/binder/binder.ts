@@ -131,6 +131,8 @@ export interface InjectTemplateArgs {
   field_mapping: Record<string, string>;
   sort?: { by: string; direction: 'asc' | 'desc' };
   top_n?: number;
+  /** Histogram-only positive bin width; undefined preserves the authored default. */
+  bin_size?: number;
   /** Declarative interactive dimension filters (m7). A context:true filter is emitted at
    * Tableau OoO step 3 so a Top-N within that dimension ranks within the selection. */
   filters?: FilterSpec[];
@@ -247,6 +249,10 @@ export const PROPOSAL_OUTPUT_SCHEMA: Record<string, unknown> = {
       },
     },
     top_n: { type: 'integer', minimum: 1, description: 'Top N.' },
+    bin_size: {
+      type: 'number',
+      exclusiveMinimum: 0,
+    },
     // Declarative interactive dimension filters (m7 order-of-operations). Set context:true to
     // make a filter a CONTEXT filter (Tableau OoO step 3) so a Top-N within that dimension
     // ranks WITHIN the selected member, not globally-then-filtered. Omit `values` for an
@@ -363,6 +369,28 @@ function validateAndBuild(
     return { status: 'escalate', reason: 'not-fast-path', blockers, proposal };
   }
 
+  if (
+    proposal.bin_size !== undefined &&
+    (m.template !== 'distribution-histogram' ||
+      !Number.isFinite(proposal.bin_size) ||
+      proposal.bin_size <= 0)
+  ) {
+    return {
+      status: 'escalate',
+      reason: 'kind-mismatch',
+      blockers: [
+        {
+          code: 'kind-mismatch',
+          detail:
+            m.template === 'distribution-histogram'
+              ? 'histogram bin_size must be a positive finite number'
+              : 'bin_size is supported only by distribution-histogram',
+        },
+      ],
+      proposal,
+    };
+  }
+
   const v = validateBinding(m, proposal, summary, ask);
   if (!v.ok) {
     const reason = (v.blockers[0]?.code as EscalateReason) ?? 'missing-required-slot';
@@ -391,7 +419,23 @@ function validateAndBuild(
   // WATERFALL_ORDER_FIELD_RE. Only when the column resolves unambiguously; otherwise leave the
   // template default (never guess). This is the deterministic fix for m1's sort-lands-~1/3 miss.
   if (!sort && m.template === WATERFALL_TEMPLATE_NAME) {
-    const orderField = summary.fields.find((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
+    const orderFields = summary.fields.filter((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
+    if (orderFields.length > 1) {
+      return {
+        status: 'escalate',
+        reason: 'kind-mismatch',
+        blockers: [
+          {
+            code: 'kind-mismatch',
+            detail:
+              `waterfall has multiple order fields (${orderFields.map((field) => `"${field.name}"`).join(', ')}); ` +
+              'set proposal.sort explicitly',
+          },
+        ],
+        proposal,
+      };
+    }
+    const orderField = orderFields[0];
     if (orderField) {
       const resolved = resolveInSummary(summary, orderField.name);
       if ((resolved.kind === 'exact' || resolved.kind === 'rewritten') && resolved.field) {
@@ -474,6 +518,7 @@ function validateAndBuild(
     field_mapping: v.field_mapping,
     ...(sort ? { sort } : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
+    ...(proposal.bin_size !== undefined ? { bin_size: proposal.bin_size } : {}),
     ...(filters && filters.length > 0 ? { filters } : {}),
     ...(v.dateparse_axis ? { dateparse_axis: v.dateparse_axis } : {}),
     ...(v.optional_field_prunes ? { optional_field_prunes: v.optional_field_prunes } : {}),

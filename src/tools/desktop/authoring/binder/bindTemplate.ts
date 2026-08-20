@@ -109,10 +109,7 @@ import { proposalSchema } from './proposalSchema.js';
 import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
-  session: z
-    .string()
-    .optional()
-    .describe('Desktop process ID; omit to use the pinned or only running instance.'),
+  session: z.string().optional().describe('Desktop process ID; omit if pinned or only.'),
   ask: z.string().describe('Verbatim ask.'),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
@@ -1476,6 +1473,7 @@ async function performAutoApply({
       applyNonce,
       optionalFieldPrunes: args.optional_field_prunes,
       dateparseAxis: args.dateparse_axis,
+      histogramBinSize: args.bin_size,
     });
   } catch (err) {
     return {

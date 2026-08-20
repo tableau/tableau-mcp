@@ -336,7 +336,15 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.isError).toBeFalsy();
     expect(appliedXml).toMatch(/<mark class=(['"])GanttBar\1\s*\/>/);
     expect(appliedXml).toMatch(/<table-calc\b[^>]*\btype=(['"])CumTotal\1/);
-    expect(appliedXml).toMatch(/formula=(['"])-SUM\(\[amount\]\)\1/);
+    expect(appliedXml).toMatch(/formula=(['"])-\[amount\]\1/);
+    expect(appliedXml).toMatch(/formula=(['"])SUM\(\[amount\]\)&gt;0\1/);
+    expect(appliedXml).toMatch(
+      /<color column=(['"])\[P&amp;L Data\]\.\[usr:Calculation_[^\]]+:nk\]\1/,
+    );
+    expect(appliedXml).toMatch(
+      /<size column=(['"])\[P&amp;L Data\]\.\[sum:Calculation_[^\]]+:qk\]\1/,
+    );
+    expect(appliedXml).toContain('<cols total="true">[P&amp;L Data].[none:line_item:nk]</cols>');
     expect(appliedXml).not.toContain('[none:category:nk]');
   });
 

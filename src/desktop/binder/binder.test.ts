@@ -23,12 +23,15 @@ const WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
       <column name='[Category]' role='dimension' type='nominal' datatype='string' />
       <column name='[Sub-Category]' role='dimension' type='nominal' datatype='string' />
       <column name='[Customer Name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Order ID]' role='dimension' type='nominal' datatype='string' />
       <column name='[Country/Region]' role='dimension' type='nominal' datatype='string' />
       <column name='[State/Province]' role='dimension' type='nominal' datatype='string' />
       <column name='[City]' role='dimension' type='nominal' datatype='string' />
       <column name='[Order Date]' role='dimension' type='ordinal' datatype='date' />
+      <column name='[Ship Date]' role='dimension' type='ordinal' datatype='date' />
       <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
       <column name='[Profit]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Quantity]' role='measure' type='quantitative' datatype='integer' />
     </datasource>
   </datasources>
 </workbook>`;
@@ -371,6 +374,403 @@ describe('binder/bindTemplate — two-call protocol', () => {
     expect(result.blockers[0].detail).toContain('workable maximum of 12');
   });
 
+  it('rejects a Call-2 box plot that reuses its category as record grain', async () => {
+    const result = await bindTemplate({
+      ask: 'box plot of Sales by Category with Category detail',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        template: 'box-plot-chart',
+        title: 'Sales box plot',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Sales' },
+          { slot_id: 'field_base_2', field: 'Category' },
+          { slot_id: 'field_base_3', field: 'Category' },
+        ],
+        confidence: 0.9,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.blockers[0].detail).toContain('three distinct underlying fields');
+  });
+
+  it('rejects a Call-2 box grain that differs from the explicit detail clause', async () => {
+    const result = await bindTemplate({
+      ask: 'box plot of Sales by Category with Customer Name detail',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        template: 'box-plot-chart',
+        title: 'Sales box plot',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Sales' },
+          { slot_id: 'field_base_2', field: 'Category' },
+          { slot_id: 'field_base_3', field: 'Region' },
+        ],
+        confidence: 0.9,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.blockers[0].detail).toContain('record grain "Customer Name"');
+    expect(result.blockers[0].detail).toContain('record grain "Region"');
+  });
+
+  it('rejects a Call-2 box category remap and accepts the exact required roles', async () => {
+    const proposal: BindingProposal = {
+      template: 'box-plot-chart',
+      title: 'Sales box plot',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Sales' },
+        { slot_id: 'field_base_2', field: 'Customer Name' },
+        { slot_id: 'field_base_3', field: 'Order ID' },
+      ],
+      confidence: 0.9,
+    };
+    const remapped = await bindTemplate({
+      ask: 'box plot of Sales by Category with Order ID detail',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal,
+    });
+    expect(remapped.status).toBe('escalate');
+    if (remapped.status === 'escalate') {
+      expect(remapped.blockers[0].detail).toContain('category "Category"');
+    }
+
+    const exact = await bindTemplate({
+      ask: 'box plot of Sales by Category with Order ID detail',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        ...proposal,
+        bindings: proposal.bindings.map((binding) =>
+          binding.slot_id === 'field_base_2' ? { ...binding, field: 'Category' } : binding,
+        ),
+      },
+    });
+    expect(exact.status).toBe('bound');
+  });
+
+  it.each(['box plot', 'boxplot', 'box-plot', 'box-and-whisker'])(
+    'accepts exact required roles for the %s prefix on Call 2',
+    async (prefix) => {
+      const result = await bindTemplate({
+        ask: `${prefix} of Sales by Category with Order ID detail`,
+        workbookXml: WORKBOOK_XML,
+        manifests: allDescriptors,
+        proposal: {
+          template: 'box-plot-chart',
+          title: 'Sales box plot',
+          bindings: [
+            { slot_id: 'field_base_1', field: 'Sales' },
+            { slot_id: 'field_base_2', field: 'Category' },
+            { slot_id: 'field_base_3', field: 'Order ID' },
+          ],
+          confidence: 0.9,
+        },
+      });
+
+      expect(result.status).toBe('bound');
+    },
+  );
+
+  it('rejects a Call-2 gantt proposal that swaps explicit start and end dates', async () => {
+    const result = await bindTemplate({
+      ask: 'gantt chart of Customer Name from Order Date to Ship Date',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        template: 'gantt-task-rollup-chart',
+        title: 'Order gantt',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Customer Name' },
+          { slot_id: 'field_base_2', field: 'Ship Date' },
+          { slot_id: 'field_base_3', field: 'Order Date' },
+        ],
+        confidence: 0.9,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.blockers[0].detail).toContain('start field "Order Date"');
+    expect(result.blockers[0].detail).toContain('end field "Ship Date"');
+  });
+
+  it('rejects swapped gantt dates before a trailing color modifier', async () => {
+    const result = await bindTemplate({
+      ask: 'gantt chart of Customer Name from Order Date to Ship Date, colored by Category',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        template: 'gantt-task-rollup-chart',
+        title: 'Order gantt',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Customer Name' },
+          { slot_id: 'field_base_2', field: 'Ship Date' },
+          { slot_id: 'field_base_3', field: 'Order Date' },
+        ],
+        confidence: 0.9,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.blockers[0].detail).toContain('start field "Order Date"');
+    expect(result.blockers[0].detail).toContain('end field "Ship Date"');
+  });
+
+  it('rejects a Call-2 gantt task remap and accepts the exact required roles', async () => {
+    const proposal: BindingProposal = {
+      template: 'gantt-task-rollup-chart',
+      title: 'Order gantt',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Category' },
+        { slot_id: 'field_base_2', field: 'Order Date' },
+        { slot_id: 'field_base_3', field: 'Ship Date' },
+      ],
+      confidence: 0.9,
+    };
+    const remapped = await bindTemplate({
+      ask: 'gantt chart of Customer Name from Order Date to Ship Date',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal,
+    });
+    expect(remapped.status).toBe('escalate');
+    if (remapped.status === 'escalate') {
+      expect(remapped.blockers[0].detail).toContain('task "Customer Name"');
+    }
+
+    const exact = await bindTemplate({
+      ask: 'gantt chart of Customer Name from Order Date to Ship Date',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        ...proposal,
+        bindings: proposal.bindings.map((binding) =>
+          binding.slot_id === 'field_base_1' ? { ...binding, field: 'Customer Name' } : binding,
+        ),
+      },
+    });
+    expect(exact.status).toBe('bound');
+  });
+
+  it('binds one histogram measure to both authored bin and raw-count slots', async () => {
+    const result = await bindTemplate({
+      ask: 'histogram of Sales',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        template: 'distribution-histogram',
+        title: 'Sales histogram',
+        bindings: [
+          { slot_id: 'field_base_1_cnt', field: 'Sales' },
+          { slot_id: 'field_base_1_none', field: 'Sales' },
+        ],
+        confidence: 0.9,
+        bin_size: 250,
+      },
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.bin_size).toBe(250);
+  });
+
+  it('rejects histogram proposals with distinct bin/count fields or invalid bin sizes', async () => {
+    const base: BindingProposal = {
+      template: 'distribution-histogram',
+      title: 'Histogram',
+      bindings: [
+        { slot_id: 'field_base_1_cnt', field: 'Sales' },
+        { slot_id: 'field_base_1_none', field: 'Profit' },
+      ],
+      confidence: 0.9,
+    };
+    const distinct = await bindTemplate({
+      ask: 'histogram of Sales',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: base,
+    });
+    const invalid = await bindTemplate({
+      ask: 'histogram of Sales',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        ...base,
+        bindings: base.bindings.map((binding) => ({ ...binding, field: 'Sales' })),
+        bin_size: 0,
+      },
+    });
+
+    expect(distinct.status).toBe('escalate');
+    if (distinct.status === 'escalate') {
+      expect(distinct.blockers[0].detail).toContain('same underlying measure');
+    }
+    expect(invalid.status).toBe('escalate');
+    if (invalid.status === 'escalate') expect(invalid.blockers[0].detail).toContain('bin_size');
+  });
+
+  it('rejects a Call-2 bubble proposal that omits the required size measure', async () => {
+    const result = await bindTemplate({
+      ask: 'bubble chart of Sales versus Profit by Customer Name',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        template: 'correlation-bubble-chart',
+        title: 'Bubble chart',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Profit' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+          { slot_id: 'field_base_4', field: 'Customer Name' },
+        ],
+        confidence: 0.9,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status === 'escalate') expect(result.reason).toBe('missing-required-slot');
+  });
+
+  it('rejects an optional bubble color that the ask did not explicitly request', async () => {
+    const result = await bindTemplate({
+      ask: 'bubble chart of Sales versus Profit by Customer Name sized by Quantity',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        template: 'correlation-bubble-chart',
+        title: 'Bubble chart',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Profit' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+          { slot_id: 'field_base_3', field: 'Quantity' },
+          { slot_id: 'field_base_4', field: 'Customer Name' },
+          { slot_id: 'field_base_5', field: 'Category' },
+        ],
+        confidence: 0.9,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.blockers[0].detail).toContain('explicit color-by clause');
+  });
+
+  it('rejects Call-2 bubble role remaps and accepts the exact required roles', async () => {
+    const proposal: BindingProposal = {
+      template: 'correlation-bubble-chart',
+      title: 'Bubble chart',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Sales' },
+        { slot_id: 'field_base_2', field: 'Quantity' },
+        { slot_id: 'field_base_3', field: 'Profit' },
+        { slot_id: 'field_base_4', field: 'Category' },
+      ],
+      confidence: 0.9,
+    };
+    const remapped = await bindTemplate({
+      ask: 'bubble chart of Sales versus Profit by Customer Name sized by Quantity',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal,
+    });
+    expect(remapped.status).toBe('escalate');
+    if (remapped.status === 'escalate') {
+      expect(remapped.blockers[0].detail).toContain('X "Sales"');
+      expect(remapped.blockers[0].detail).toContain('Y "Profit"');
+      expect(remapped.blockers[0].detail).toContain('size "Quantity"');
+      expect(remapped.blockers[0].detail).toContain('grain "Customer Name"');
+    }
+
+    const exact = await bindTemplate({
+      ask: 'bubble chart of Sales versus Profit by Customer Name sized by Quantity',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        ...proposal,
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Profit' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+          { slot_id: 'field_base_3', field: 'Quantity' },
+          { slot_id: 'field_base_4', field: 'Customer Name' },
+        ],
+      },
+    });
+    expect(exact.status).toBe('bound');
+  });
+
+  it('rejects a Call-2 histogram measure remap and accepts the named measure', async () => {
+    const proposal: BindingProposal = {
+      template: 'distribution-histogram',
+      title: 'Histogram',
+      bindings: [
+        { slot_id: 'field_base_1_cnt', field: 'Profit' },
+        { slot_id: 'field_base_1_none', field: 'Profit' },
+      ],
+      confidence: 0.9,
+    };
+    const remapped = await bindTemplate({
+      ask: 'histogram of Sales',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal,
+    });
+    expect(remapped.status).toBe('escalate');
+    if (remapped.status === 'escalate') {
+      expect(remapped.blockers[0].detail).toContain('measure "Sales"');
+    }
+
+    const exact = await bindTemplate({
+      ask: 'histogram of Sales',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        ...proposal,
+        bindings: proposal.bindings.map((binding) => ({ ...binding, field: 'Sales' })),
+      },
+    });
+    expect(exact.status).toBe('bound');
+  });
+
+  it('keeps histogram measure validation across distribution and bin-size suffixes', async () => {
+    const distribution = await bindTemplate({
+      ask: 'histogram of Sales distribution',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+    });
+    expect(distribution.status).toBe('bound');
+    if (distribution.status === 'bound') {
+      expect(distribution.args.field_mapping).toEqual({
+        '{{field_base_1}}@cnt': '[Superstore].[cnt:Sales:qk]',
+        '{{field_base_1}}@none': '[Superstore].[none:Sales:qk]',
+      });
+    }
+
+    const sized = await bindTemplate({
+      ask: 'histogram of Sales with bin size 250',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        template: 'distribution-histogram',
+        title: 'Histogram',
+        bindings: [
+          { slot_id: 'field_base_1_cnt', field: 'Sales' },
+          { slot_id: 'field_base_1_none', field: 'Sales' },
+        ],
+        confidence: 0.9,
+        bin_size: 250,
+      },
+    });
+    expect(sized.status).toBe('bound');
+    if (sized.status === 'bound') expect(sized.args.bin_size).toBe(250);
+  });
+
   it('binds a waterfall proposal with derivation-qualified runtime keys', async () => {
     const result = await bindTemplate({
       ask: 'waterfall of Profit by Sub-Category',
@@ -395,6 +795,45 @@ describe('binder/bindTemplate — two-call protocol', () => {
       '{{field_base_2}}': '[Superstore].[none:Sub-Category:nk]',
       '{{field_base_1}}@none': '[Superstore].[none:Profit:qk]',
     });
+  });
+
+  it('rejects an unordered waterfall when more than one sequence field exists', async () => {
+    const workbookXml = WORKBOOK_XML.replace(
+      '</datasource>',
+      "<column name='[display_order]' role='measure' type='quantitative' datatype='integer' /><column name='[sort_order]' role='measure' type='quantitative' datatype='integer' /></datasource>",
+    );
+    const proposal: BindingProposal = {
+      template: 'part-to-whole-waterfall',
+      title: 'Profit waterfall',
+      bindings: [
+        { slot_id: 'field_base_1_sum', field: 'Profit' },
+        { slot_id: 'field_base_2', field: 'Sub-Category' },
+        { slot_id: 'field_base_1_none', field: 'Profit' },
+      ],
+      confidence: 0.9,
+    };
+    const result = await bindTemplate({
+      ask: 'waterfall of Profit by Sub-Category',
+      workbookXml,
+      manifests: descriptors,
+      proposal,
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.blockers[0].detail).toContain('multiple order fields');
+    expect(result.blockers[0].detail).toContain('proposal.sort');
+
+    const explicit = await bindTemplate({
+      ask: 'waterfall of Profit by Sub-Category ordered by display_order',
+      workbookXml,
+      manifests: descriptors,
+      proposal: { ...proposal, sort: { by: 'display_order', direction: 'asc' } },
+    });
+    expect(explicit.status).toBe('bound');
+    if (explicit.status === 'bound') {
+      expect(explicit.args.sort).toEqual({ by: 'display_order', direction: 'asc' });
+    }
   });
 
   it('escalates unknown templates and low-confidence valid proposals', async () => {
@@ -496,6 +935,10 @@ describe('binder/proposal contract', () => {
     const bindings = (PROPOSAL_OUTPUT_SCHEMA.properties as Record<string, any>).bindings;
     expect(bindings.items.properties.derivation.enum).toContain('sum');
     expect(bindings.items.properties.derivation.description).toMatch(/ONLY|only/i);
+    expect((PROPOSAL_OUTPUT_SCHEMA.properties as Record<string, any>).bin_size).toEqual({
+      type: 'number',
+      exclusiveMinimum: 0,
+    });
   });
 });
 

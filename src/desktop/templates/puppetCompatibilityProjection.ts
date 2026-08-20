@@ -62,7 +62,8 @@ function filenameIntentKeywords(template: string): string[] {
 function normalizeRequiredSlots(descriptor: RuntimeTemplateDescriptor): RuntimeTemplateDescriptor {
   if (
     descriptor.template !== 'correlation-highlight-table' &&
-    descriptor.template !== 'quota-attainment-bullet'
+    descriptor.template !== 'quota-attainment-bullet' &&
+    descriptor.template !== 'correlation-bubble-chart'
   ) {
     return descriptor;
   }
@@ -73,7 +74,8 @@ function normalizeRequiredSlots(descriptor: RuntimeTemplateDescriptor): RuntimeT
       ((descriptor.template === 'correlation-highlight-table' && slot.role.includes('color')) ||
         (descriptor.template === 'quota-attainment-bullet' &&
           slot.role.includes('reference-line') &&
-          !slot.role.includes('cols')))
+          !slot.role.includes('cols')) ||
+        (descriptor.template === 'correlation-bubble-chart' && slot.role.includes('size')))
         ? { ...slot, required: true }
         : slot,
     ),

@@ -684,7 +684,7 @@ describe('bindTemplateTool', () => {
       calcs: expect.any(Object),
     });
     expect(paramsSchema['session']!.description).toBe(
-      'Desktop process ID; omit to use the pinned or only running instance.',
+      'Desktop process ID; omit if pinned or only.',
     );
     expect(paramsSchema['target_worksheet']!.description).toBe(
       'Worksheet id or name; omit to create.',
