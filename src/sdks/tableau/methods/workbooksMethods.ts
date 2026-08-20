@@ -92,14 +92,14 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
    * @param siteId - The Tableau site ID
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook_connections
    */
-  getWorkbookConnections = async ({
+  queryWorkbookConnections = async ({
     workbookId,
     siteId,
   }: {
     workbookId: string;
     siteId: string;
   }): Promise<WorkbookConnection[]> => {
-    const response = await this._apiClient.getWorkbookConnections({
+    const response = await this._apiClient.queryWorkbookConnections({
       params: { siteId, workbookId },
       ...this.authHeader,
     });

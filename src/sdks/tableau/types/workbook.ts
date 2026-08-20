@@ -40,7 +40,7 @@ export type Workbook = z.infer<typeof workbookSchema>;
 // deliberately omitted, following flow.ts's flowConnectionSchema.
 // Everything but `id` is optional because Tableau Server/Cloud versions are inconsistent about which
 // fields they emit; Zodios validates at the schema boundary, so one connection missing a datasource
-// (or its name) would otherwise fail the entire getWorkbookConnections() call.
+// (or its name) would otherwise fail the entire queryWorkbookConnections() call.
 export const workbookConnectionSchema = z.object({
   id: z.string(),
   type: z.string().optional(),

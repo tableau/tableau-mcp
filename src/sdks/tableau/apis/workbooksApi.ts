@@ -92,7 +92,7 @@ const addTagsToWorkbookEndpoint = makeEndpoint({
 const queryWorkbookConnectionsEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/workbooks/:workbookId/connections',
-  alias: 'getWorkbookConnections',
+  alias: 'queryWorkbookConnections',
   description:
     'Returns a list of data connections for the specified workbook, including the datasource each connection points to.',
   response: z.object({

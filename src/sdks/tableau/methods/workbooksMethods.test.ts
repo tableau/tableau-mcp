@@ -4,9 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import WorkbooksMethods from './workbooksMethods.js';
 
 describe('WorkbooksMethods', () => {
-  describe('getWorkbookConnections', () => {
+  describe('queryWorkbookConnections', () => {
     it('extracts each connection with its datasource id and name', async () => {
-      const mockGetWorkbookConnections = vi.fn().mockResolvedValue({
+      const mockQueryWorkbookConnections = vi.fn().mockResolvedValue({
         connections: {
           connection: [
             {
@@ -29,10 +29,10 @@ describe('WorkbooksMethods', () => {
       );
       // @ts-expect-error - Mocking private property
       workbooksMethods._apiClient = {
-        getWorkbookConnections: mockGetWorkbookConnections,
+        queryWorkbookConnections: mockQueryWorkbookConnections,
       };
 
-      const connections = await workbooksMethods.getWorkbookConnections({
+      const connections = await workbooksMethods.queryWorkbookConnections({
         siteId: 'site-1',
         workbookId: 'wb-1',
       });
@@ -45,7 +45,7 @@ describe('WorkbooksMethods', () => {
         { id: 'ds-1', name: 'Superstore' },
         { id: 'ds-2', name: 'Orders' },
       ]);
-      expect(mockGetWorkbookConnections).toHaveBeenCalledWith({
+      expect(mockQueryWorkbookConnections).toHaveBeenCalledWith({
         params: { siteId: 'site-1', workbookId: 'wb-1' },
         headers: { Authorization: 'Bearer test' },
       });
@@ -63,11 +63,11 @@ describe('WorkbooksMethods', () => {
       );
       // @ts-expect-error - Mocking private property
       workbooksMethods._apiClient = {
-        getWorkbookConnections: vi.fn().mockResolvedValue({ connections: { connection } }),
+        queryWorkbookConnections: vi.fn().mockResolvedValue({ connections: { connection } }),
       };
 
       expect(
-        await workbooksMethods.getWorkbookConnections({ siteId: 'site-1', workbookId: 'wb-1' }),
+        await workbooksMethods.queryWorkbookConnections({ siteId: 'site-1', workbookId: 'wb-1' }),
       ).toEqual(connection);
     });
 
@@ -79,10 +79,10 @@ describe('WorkbooksMethods', () => {
       );
       // @ts-expect-error - Mocking private property
       workbooksMethods._apiClient = {
-        getWorkbookConnections: vi.fn().mockResolvedValue({ connections: {} }),
+        queryWorkbookConnections: vi.fn().mockResolvedValue({ connections: {} }),
       };
 
-      const connections = await workbooksMethods.getWorkbookConnections({
+      const connections = await workbooksMethods.queryWorkbookConnections({
         siteId: 'site-1',
         workbookId: 'wb-1',
       });
