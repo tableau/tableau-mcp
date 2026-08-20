@@ -51,6 +51,22 @@ describe('WorkbooksMethods', () => {
       });
     });
 
+    it('passes through connections that omit datasource or its name', async () => {
+      const connection = [
+        { id: 'conn-1', type: 'sqlserver', datasource: { id: 'ds-1' } },
+        { id: 'conn-2', type: 'postgres' },
+      ];
+      const workbooksMethods = new WorkbooksMethods('http://test', { type: 'Bearer', token: 't' }, {});
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        getWorkbookConnections: vi.fn().mockResolvedValue({ connections: { connection } }),
+      };
+
+      expect(
+        await workbooksMethods.getWorkbookConnections({ siteId: 'site-1', workbookId: 'wb-1' }),
+      ).toEqual(connection);
+    });
+
     it('returns an empty array when the workbook has no connections', async () => {
       const workbooksMethods = new WorkbooksMethods(
         'http://test',
