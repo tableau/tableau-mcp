@@ -164,6 +164,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'list-worksheets',
     'list-dashboards',
     'get-summary-data',
+    'profile-summary-data',
     'list-worksheet-logical-tables',
     'get-worksheet-underlying-data',
     'get-workbook-inventory',

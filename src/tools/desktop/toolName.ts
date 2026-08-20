@@ -56,6 +56,7 @@ export const desktopToolNames = [
   'get-dashboard-info',
   'get-storyboard-info',
   'get-summary-data',
+  'profile-summary-data',
   'list-worksheet-logical-tables',
   'get-worksheet-underlying-data',
   'export-worksheet-image',

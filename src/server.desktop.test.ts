@@ -233,10 +233,12 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // served profile, while the full schema-only surface moves 56_650 -> 56_799.
 // Re-pinned 2026-08-19: apply-worksheet now infers the target from a cached worksheet fragment, so
 // its worksheetName describe drops the redundant "worksheet" (-3 bytes); dynamic authoring 40_099 -> 40_096.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_096;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_117;
+// Re-pinned 2026-08-20: profile-summary-data adds a bounded, read-only performance probe.
+// Dynamic authoring moves 40_096 -> 40_883; full moves 56_799 -> 57_586.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 40_883;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 40_904;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 56_817;
+const FULL_TOOL_SURFACE_BUDGET = 57_604;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -493,10 +495,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 51-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 52-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(51);
+    expect(selected).toHaveLength(52);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -519,6 +521,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'read-knowledge-resource',
       'search-knowledge',
       'get-summary-data',
+      'profile-summary-data',
       'get-workbook-inventory',
       'list-workbook-datasources',
       'list-site-datasources',
