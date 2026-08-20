@@ -10,6 +10,7 @@ import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { IncompleteOperationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { workbookTargetFingerprint } from '../../api/workbookTargetFingerprint.js';
 import { sessionParam } from '../../params.js';
 import {
   attachNextAction,
@@ -33,6 +34,7 @@ const paramsSchema = {
     .min(2)
     .max(64 * 1024),
   themeSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  expectedWorkbookTarget: z.string().regex(/^[0-9a-f]{64}$/),
 };
 
 type Verification = {
@@ -66,10 +68,13 @@ export const getApplyWorkbookStyleTool = (
       destructiveHint: true,
       idempotentHint: true,
     },
-    callback: async ({ session, themeJson, themeSha256 }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { session, themeJson, themeSha256, expectedWorkbookTarget },
+      extra,
+    ): Promise<CallToolResult> => {
       return await tool.logAndExecute<ApplyWorkbookStyleToolResult>({
         extra,
-        args: { session, themeJson: REDACTED_THEME_JSON, themeSha256 },
+        args: { session, themeJson: REDACTED_THEME_JSON, themeSha256, expectedWorkbookTarget },
         callback: async () => {
           const themeName = `studio-theme-${themeSha256.slice(0, 12)}`;
           const sessionResult = resolveSession(session);
@@ -101,6 +106,33 @@ export const getApplyWorkbookStyleTool = (
           }
 
           return await withApplyLock(async () => {
+            let inventoryResult;
+            try {
+              inventoryResult = await executor.getWorkbook(extra.signal);
+            } catch {
+              return preInvocationFailure(
+                themeName,
+                themeSha256,
+                'The current workbook target could not be confirmed; the theme command was not sent.',
+                'Preview the style guide again before applying it',
+              );
+            }
+            if (inventoryResult.isErr()) {
+              return preInvocationFailure(
+                themeName,
+                themeSha256,
+                'The current workbook target could not be confirmed; the theme command was not sent.',
+                'Preview the style guide again before applying it',
+              );
+            }
+            if (workbookTargetFingerprint(inventoryResult.value) !== expectedWorkbookTarget) {
+              return preInvocationFailure(
+                themeName,
+                themeSha256,
+                'The current workbook changed after preview; the theme command was not sent.',
+                'Preview the style guide again before applying it',
+              );
+            }
             try {
               const commandResult = await executor.executeCommand({
                 namespace: 'tabdoc',
@@ -203,6 +235,7 @@ function preInvocationFailure(
   themeName: string,
   themeSha256: string,
   message: string,
+  nextActionLabel = 'Correct the theme input, then retry once',
 ): Err<IncompleteOperationError<ApplyWorkbookStylePayload>> {
   const payload: ApplyWorkbookStylePayload = {
     applied: false,
@@ -212,7 +245,7 @@ function preInvocationFailure(
     verification: { status: 'not-run', themeReference: 'not-run', message },
   };
   return new IncompleteOperationError(
-    attachNextAction(payload, prefillNextAction('Correct the theme input, then retry once')),
+    attachNextAction(payload, prefillNextAction(nextActionLabel)),
   ).toErr();
 }
 

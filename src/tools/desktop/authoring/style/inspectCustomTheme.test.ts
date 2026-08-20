@@ -42,6 +42,25 @@ describe('inspect-custom-theme', () => {
     });
   });
 
+  it('accepts an exact 64 KiB UTF-8 multibyte theme', async () => {
+    const themeJson = multibyteThemeJson(64 * 1024);
+
+    const result = await callTool(themeJson, sha256(themeJson));
+
+    expect(result.isError).toBe(false);
+    expect(bodyOf(result).byteCount).toBe(64 * 1024);
+  });
+
+  it('rejects a 64 KiB plus one UTF-8 multibyte theme without exposing it', async () => {
+    const themeJson = multibyteThemeJson(64 * 1024 + 1);
+
+    const result = await callTool(themeJson, sha256(themeJson));
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).not.toContain(themeJson);
+    expect(JSON.stringify(result)).not.toContain('Tableau 日本語');
+  });
+
   it.each([
     ['invalid schema', JSON.stringify({ version: '1.0.0', styles: {} }), undefined],
     [
@@ -92,6 +111,18 @@ describe('inspect-custom-theme', () => {
 
 function sha256(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function multibyteThemeJson(byteCount: number): string {
+  const base = JSON.stringify({
+    version: '1.0.0',
+    'base-theme': 'default',
+    styles: { worksheet: { 'font-family': 'Tableau 日本語' } },
+  });
+  const themeJson = `${base}${' '.repeat(byteCount - Buffer.byteLength(base, 'utf8'))}`;
+  expect(Buffer.byteLength(themeJson, 'utf8')).toBe(byteCount);
+  expect(themeJson.length).toBeLessThan(byteCount);
+  return themeJson;
 }
 
 async function callTool(

@@ -101,6 +101,17 @@ function themeJsonWithStyles(styles: Record<string, unknown>): string {
   return JSON.stringify({ ...sparseTheme, styles });
 }
 
+function multibyteThemeJson(byteCount: number): string {
+  const base = JSON.stringify({
+    ...sparseTheme,
+    styles: { worksheet: { 'font-family': 'Tableau 日本語' } },
+  });
+  const themeJson = `${base}${' '.repeat(byteCount - Buffer.byteLength(base, 'utf8'))}`;
+  expect(Buffer.byteLength(themeJson, 'utf8')).toBe(byteCount);
+  expect(themeJson.length).toBeLessThan(byteCount);
+  return themeJson;
+}
+
 function thrownMessage(run: () => unknown): string {
   try {
     run();
@@ -145,6 +156,21 @@ describe('parseCustomThemeJson', () => {
     expect(parsed.themeJson).toBe(themeJson);
     expect(parsed.sha256).toBe(expectedSha256);
     expect(parsed.commandFileName).toBe(`studio-theme-${expectedSha256.slice(0, 12)}`);
+  });
+
+  it('accepts an exact 64 KiB UTF-8 multibyte theme', () => {
+    const themeJson = multibyteThemeJson(64 * 1024);
+
+    expect(parseWithSourceDigest(themeJson).themeJson).toBe(themeJson);
+  });
+
+  it('rejects a 64 KiB plus one UTF-8 multibyte theme without echoing it', () => {
+    const themeJson = multibyteThemeJson(64 * 1024 + 1);
+
+    const message = thrownMessage(() => parseWithSourceDigest(themeJson));
+
+    expect(message).toMatch(/UTF-8 bytes/i);
+    expect(message).not.toContain(themeJson);
   });
 
   it.each(['default', 'classic', 'modern', 'clean', 'smooth'])(

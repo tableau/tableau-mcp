@@ -9,6 +9,7 @@ import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/ex
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { workbookTargetFingerprint } from '../../api/workbookTargetFingerprint.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getApplyWorkbookStyleTool } from './applyWorkbookStyle.js';
 
@@ -29,6 +30,15 @@ const themeJson = JSON.stringify(theme);
 const themeSha256 = sha256(themeJson);
 const themeName = `studio-theme-${themeSha256.slice(0, 12)}`;
 const selectedThemeXml = workbookXml(themeName);
+const workbookInventory = {
+  title: 'Book 2',
+  location: null,
+  unsavedChanges: true,
+  worksheets: [{ id: 'sheet-1', name: 'se-eval-scratch', hidden: false }],
+  dashboards: [],
+  storyboards: [],
+};
+const expectedWorkbookTarget = workbookTargetFingerprint(workbookInventory);
 
 describe('apply-workbook-style', () => {
   afterEach(() => {
@@ -41,7 +51,12 @@ describe('apply-workbook-style', () => {
     const schema = await Provider.from(tool.paramsSchema);
 
     expect(tool.name).toBe('apply-workbook-style');
-    expect(Object.keys(schema)).toEqual(['session', 'themeJson', 'themeSha256']);
+    expect(Object.keys(schema)).toEqual([
+      'session',
+      'themeJson',
+      'themeSha256',
+      'expectedWorkbookTarget',
+    ]);
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
       openWorldHint: false,
@@ -49,13 +64,65 @@ describe('apply-workbook-style', () => {
       idempotentHint: true,
     });
     expect(schema.themeJson.safeParse('x').success).toBe(false);
+    expect(schema.themeJson.safeParse('x'.repeat(64 * 1024)).success).toBe(true);
     expect(schema.themeJson.safeParse('x'.repeat(64 * 1024 + 1)).success).toBe(false);
     expect(schema.themeSha256.safeParse('A'.repeat(64)).success).toBe(false);
+    expect(schema.expectedWorkbookTarget.safeParse('a'.repeat(64)).success).toBe(true);
+    expect(schema.expectedWorkbookTarget.safeParse('short').success).toBe(false);
+  });
+
+  it('accepts an exact 64 KiB UTF-8 multibyte theme', async () => {
+    const exactThemeJson = multibyteThemeJson(64 * 1024);
+    const exactThemeSha = sha256(exactThemeJson);
+    const exactThemeName = `studio-theme-${exactThemeSha.slice(0, 12)}`;
+    const executor = makeExecutorMock({
+      executeCommand: vi.fn().mockResolvedValue(Ok(commandSuccess())),
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValue(Ok(workbookDocument(workbookXml(exactThemeName)))),
+    });
+
+    const result = await callTool({
+      executor,
+      args: {
+        session: 'S1',
+        themeJson: exactThemeJson,
+        themeSha256: exactThemeSha,
+        expectedWorkbookTarget,
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    expect(executor.executeCommand).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a 64 KiB plus one UTF-8 multibyte theme before reading or writing Desktop', async () => {
+    const oversizedThemeJson = multibyteThemeJson(64 * 1024 + 1);
+    const executor = makeExecutorMock();
+
+    const result = await callTool({
+      executor,
+      args: {
+        session: 'S1',
+        themeJson: oversizedThemeJson,
+        themeSha256: sha256(oversizedThemeJson),
+        expectedWorkbookTarget,
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).not.toContain(oversizedThemeJson);
+    expect(executor.getWorkbook).not.toHaveBeenCalled();
+    expect(executor.executeCommand).not.toHaveBeenCalled();
   });
 
   it('sends the exact validated source once and verifies the direct root theme reference', async () => {
     const order: string[] = [];
     const executor = makeExecutorMock({
+      getWorkbook: vi.fn(async () => {
+        order.push('target');
+        return Ok(workbookInventory);
+      }),
       executeCommand: vi.fn(async () => {
         order.push('command');
         return Ok(commandSuccess());
@@ -71,7 +138,7 @@ describe('apply-workbook-style', () => {
     const body = bodyOf(result);
 
     expect(result.isError).toBe(false);
-    expect(order).toEqual(['command', 'readback']);
+    expect(order).toEqual(['target', 'command', 'readback']);
     expect(executor.executeCommand).toHaveBeenCalledOnce();
     expect(executor.executeCommand).toHaveBeenCalledWith({
       namespace: 'tabdoc',
@@ -121,6 +188,68 @@ describe('apply-workbook-style', () => {
     );
   });
 
+  it('rejects a changed workbook target before sending the native theme command', async () => {
+    const executor = makeExecutorMock({
+      getWorkbook: vi.fn().mockResolvedValue(
+        Ok({
+          ...workbookInventory,
+          worksheets: [{ id: 'other', name: 'Other Sheet', hidden: false }],
+        }),
+      ),
+    });
+
+    const result = await callTool({ executor });
+
+    expect(result.isError).toBe(true);
+    expect(bodyOf(result)).toMatchObject({
+      applied: false,
+      retrySafe: true,
+      verification: { status: 'not-run', themeReference: 'not-run' },
+    });
+    expect(result.structuredContent?.nextAction).toEqual({
+      kind: 'prefill',
+      label: 'Preview the style guide again before applying it',
+    });
+    expect(executor.executeCommand).not.toHaveBeenCalled();
+    expect(executor.getWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a workbook target read failure before sending the native theme command', async () => {
+    const executor = makeExecutorMock({
+      getWorkbook: vi
+        .fn()
+        .mockResolvedValue(
+          Err({ type: 'command-timed-out' as const, error: 'inventory unavailable' }),
+        ),
+    });
+
+    const result = await callTool({ executor });
+
+    expect(result.isError).toBe(true);
+    expect(bodyOf(result)).toMatchObject({ applied: false, retrySafe: true });
+    expect(result.structuredContent?.nextAction).toEqual({
+      kind: 'prefill',
+      label: 'Preview the style guide again before applying it',
+    });
+    expect(executor.executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('rejects a thrown workbook target read before sending the native theme command', async () => {
+    const executor = makeExecutorMock({
+      getWorkbook: vi.fn().mockRejectedValue(new Error('PRIVATE WORKBOOK DETAIL')),
+    });
+
+    const result = await callTool({ executor });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.nextAction).toEqual({
+      kind: 'prefill',
+      label: 'Preview the style guide again before applying it',
+    });
+    expect(JSON.stringify(result)).not.toContain('PRIVATE WORKBOOK DETAIL');
+    expect(executor.executeCommand).not.toHaveBeenCalled();
+  });
+
   it('polls after the command until the direct root theme reference matches', async () => {
     vi.useFakeTimers();
     const executor = makeExecutorMock({
@@ -150,7 +279,12 @@ describe('apply-workbook-style', () => {
     const result = await callTool({
       executor,
       getExecutor,
-      args: { session: 'S1', themeJson: candidateJson, themeSha256: candidateSha },
+      args: {
+        session: 'S1',
+        themeJson: candidateJson,
+        themeSha256: candidateSha,
+        expectedWorkbookTarget,
+      },
     });
 
     expect(result.isError).toBe(true);
@@ -171,7 +305,7 @@ describe('apply-workbook-style', () => {
     const result = await callTool({
       executor,
       getExecutor,
-      args: { session: 'default', themeJson, themeSha256 },
+      args: { session: 'default', themeJson, themeSha256, expectedWorkbookTarget },
     });
 
     expect(result.isError).toBe(true);
@@ -316,7 +450,12 @@ describe('apply-workbook-style', () => {
 
     const { result, notification } = await callToolWithServer({
       executor,
-      args: { session: 'S1', themeJson: privateJson, themeSha256: privateSha },
+      args: {
+        session: 'S1',
+        themeJson: privateJson,
+        themeSha256: privateSha,
+        expectedWorkbookTarget,
+      },
     });
     await vi.waitFor(() => expect(fileLogSpy).toHaveBeenCalled());
     await vi.waitFor(() => expect(notification).toHaveBeenCalled());
@@ -339,6 +478,18 @@ describe('apply-workbook-style', () => {
 
 function sha256(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function multibyteThemeJson(byteCount: number): string {
+  const base = JSON.stringify({
+    version: '1.0.0',
+    'base-theme': 'default',
+    styles: { worksheet: { 'font-family': 'Tableau 日本語' } },
+  });
+  const themeJson = `${base}${' '.repeat(byteCount - Buffer.byteLength(base, 'utf8'))}`;
+  expect(Buffer.byteLength(themeJson, 'utf8')).toBe(byteCount);
+  expect(themeJson.length).toBeLessThan(byteCount);
+  return themeJson;
 }
 
 function workbookXml(name: string): string {
@@ -367,12 +518,17 @@ function commandSuccess(): {
   return { command_id: 'theme-1', status: 'completed' as const, submitted_at: 'now' };
 }
 
-type ToolArgs = { session: string; themeJson: string; themeSha256: string };
+type ToolArgs = {
+  session: string;
+  themeJson: string;
+  themeSha256: string;
+  expectedWorkbookTarget: string;
+};
 
 async function callTool({
   executor,
   getExecutor = vi.fn().mockResolvedValue(executor),
-  args = { session: 'S1', themeJson, themeSha256 },
+  args = { session: 'S1', themeJson, themeSha256, expectedWorkbookTarget },
   instanceId = 'instance-live',
 }: {
   executor: ExternalApiToolExecutor;
@@ -386,7 +542,7 @@ async function callTool({
 async function callToolWithServer({
   executor,
   getExecutor = vi.fn().mockResolvedValue(executor),
-  args = { session: 'S1', themeJson, themeSha256 },
+  args = { session: 'S1', themeJson, themeSha256, expectedWorkbookTarget },
   instanceId = 'instance-live',
 }: {
   executor: ExternalApiToolExecutor;
@@ -394,6 +550,10 @@ async function callToolWithServer({
   args?: ToolArgs;
   instanceId?: string | null;
 }): Promise<{ result: CallToolResult; notification: ReturnType<typeof vi.fn> }> {
+  const getWorkbook = vi.mocked(executor.getWorkbook);
+  if (!getWorkbook.getMockImplementation()) {
+    getWorkbook.mockResolvedValue(Ok(workbookInventory));
+  }
   (executor as unknown as { desktopInstanceId: string | undefined }).desktopInstanceId =
     instanceId ?? undefined;
   const server = new DesktopMcpServer();

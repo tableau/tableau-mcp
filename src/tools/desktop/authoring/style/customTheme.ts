@@ -15,6 +15,7 @@ import {
 import customThemeSchema from './CustomThemesSchema_1.0.0.json';
 
 const sha256Pattern = /^[0-9a-f]{64}$/;
+const maxThemeJsonBytes = 64 * 1024;
 const maxJsonNestingDepth = 64;
 const ajv = new Ajv({ allErrors: false, strict: true });
 addFormats(ajv);
@@ -119,6 +120,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function parseCustomThemeJson(themeJson: string, expectedSha256: string): ParsedCustomTheme {
+  if (Buffer.byteLength(themeJson, 'utf8') > maxThemeJsonBytes) {
+    throw new Error(`Custom Theme JSON exceeds ${maxThemeJsonBytes} UTF-8 bytes`);
+  }
   if (themeJson.charCodeAt(0) === 0xfeff) {
     throw new Error('Custom Theme JSON must not contain a byte-order mark');
   }

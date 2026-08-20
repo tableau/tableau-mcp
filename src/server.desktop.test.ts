@@ -234,10 +234,12 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-19: added native Custom Theme apply, inspect, and export tools to the Desktop
 // authoring suite. The later apply-worksheet name inference trims three bytes from both profiles.
 // Dynamic stays below the 46k product ceiling with 18 bytes of ratchet slack.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 41_572;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 41_590;
+// Re-pinned 2026-08-19: workbook-bound theme apply adds the required target fingerprint input;
+// both profiles move by 95 bytes; dynamic keeps 18 bytes and full keeps 36 bytes of ratchet slack.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 41_667;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 41_685;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 58_272;
+const FULL_TOOL_SURFACE_BUDGET = 58_403;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
