@@ -89,7 +89,7 @@ const addTagsToWorkbookEndpoint = makeEndpoint({
   response: z.object({ tags: tagsSchema }),
 });
 
-const getWorkbookConnectionsEndpoint = makeEndpoint({
+const queryWorkbookConnectionsEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/workbooks/:workbookId/connections',
   alias: 'getWorkbookConnections',
@@ -105,7 +105,7 @@ const getWorkbookConnectionsEndpoint = makeEndpoint({
 const workbooksApi = makeApi([
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
-  getWorkbookConnectionsEndpoint,
+  queryWorkbookConnectionsEndpoint,
   deleteWorkbookEndpoint,
   addTagsToWorkbookEndpoint,
 ]);
