@@ -1,3 +1,5 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
@@ -391,5 +393,38 @@ describe('server', () => {
     // Should NOT register as app tool
     expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
     expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  describe('server instructions', () => {
+    // Constructs a fresh WebMcpServer and returns the `instructions` passed to the McpServer
+    // constructor (arg 2). The base Server ctor builds the McpServer when none is injected, so the
+    // globally-mocked McpServer captures the options object here.
+    function getConstructedInstructions(): string | undefined {
+      vi.mocked(McpServer).mockClear();
+      new WebMcpServer();
+      const calls = vi.mocked(McpServer).mock.calls;
+      return calls[calls.length - 1]?.[1]?.instructions;
+    }
+
+    it('passes non-empty instructions with the grounding pattern to the McpServer', () => {
+      const instructions = getConstructedInstructions();
+      expect(instructions).toBeTruthy();
+      expect(instructions).toContain('list-datasources');
+      expect(instructions).toContain('get-datasource-metadata');
+      expect(instructions).toContain('query-datasource');
+    });
+
+    it('omits the admin-insights taxonomy when ADMIN_TOOLS_ENABLED is unset', () => {
+      const instructions = getConstructedInstructions();
+      expect(instructions).not.toContain('query-admin-insights');
+    });
+
+    it('includes the admin-insights taxonomy when ADMIN_TOOLS_ENABLED is "true"', () => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+      const instructions = getConstructedInstructions();
+      expect(instructions).toContain('query-admin-insights');
+      expect(instructions).toContain('ts-users');
+      expect(instructions).toContain('stale-content');
+    });
   });
 });

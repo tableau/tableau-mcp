@@ -23,6 +23,7 @@ import { ClientInfo, Server } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
+import { buildServerInstructions } from './serverInstructions.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { webToolFactories } from './tools/web/tools.js';
@@ -38,7 +39,18 @@ const __dirname = getDirname();
 
 export class WebMcpServer extends Server {
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
-    super({ mcpServer, clientInfo, serverName, serverVersion });
+    super({
+      mcpServer,
+      clientInfo,
+      serverName,
+      serverVersion,
+      // Read the env var directly rather than getConfig(): this ctor runs once per HTTP request, so
+      // it must not construct a full Config on the hot path. adminToolsEnabled is not per-request
+      // overridable, so the raw env read matches Config's derivation (config.ts).
+      instructions: buildServerInstructions({
+        adminToolsEnabled: process.env.ADMIN_TOOLS_ENABLED === 'true',
+      }),
+    });
   }
 
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
