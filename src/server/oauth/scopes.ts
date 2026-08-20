@@ -53,6 +53,7 @@ export type TableauApiScope =
   | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
+  | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
@@ -190,7 +191,7 @@ const toolScopeMap: Record<
   },
   'validate-upload-and-publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
-    api: new Set(['tableau:workbooks:create']),
+    api: new Set(['tableau:workbooks:create', 'tableau:file_uploads:create']),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
