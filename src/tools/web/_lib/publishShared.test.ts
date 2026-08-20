@@ -94,6 +94,38 @@ describe('toPublishResult', () => {
     expect(result.webpageUrl).toBe('https://test.tableau.com/#/workbooks/wb-123');
   });
 
+  it('links `url` to the named preferred view (the dashboard) over the first view', () => {
+    const result = toPublishResult(
+      published({
+        views: {
+          view: [
+            { id: 'v1', name: 'My Viz', contentUrl: 'MyViz/sheets/MyViz' },
+            { id: 'v2', name: 'My Viz Dashboard', contentUrl: 'MyViz/sheets/MyVizDashboard' },
+          ],
+        },
+      } as Partial<PublishedWorkbook>),
+      { location: 'project', id: 'proj-1', name: 'Default' },
+      'https://test.tableau.com',
+      'tc25',
+      'My Viz Dashboard',
+    );
+    // The dashboard view wins even though the sheet view comes first in the list.
+    expect(result.url).toBe('https://test.tableau.com/#/site/tc25/views/MyViz/MyVizDashboard');
+  });
+
+  it('falls back to the first view when the preferred view name is not present', () => {
+    const result = toPublishResult(
+      published({
+        views: { view: [{ id: 'v1', name: 'My Viz', contentUrl: 'MyViz/sheets/MyViz' }] },
+      } as Partial<PublishedWorkbook>),
+      { location: 'project', id: 'proj-1', name: 'Default' },
+      'https://test.tableau.com',
+      'tc25',
+      'My Viz Dashboard',
+    );
+    expect(result.url).toBe('https://test.tableau.com/#/site/tc25/views/MyViz/MyViz');
+  });
+
   it('uses the default-site view route when siteName is empty/Default', () => {
     const result = toPublishResult(
       published({
