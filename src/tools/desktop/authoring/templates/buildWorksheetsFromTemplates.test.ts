@@ -178,6 +178,7 @@ describe('build-worksheets-from-templates', () => {
       );
 
       expect(result.isError).toBe(false);
+      expect(bodyOf(result).datasource).toBe(liveDatasource);
       const reserved = store.reserve('artifact-unicode', '12345');
       expect(reserved.ok).toBe(true);
       if (!reserved.ok) return;
@@ -185,6 +186,66 @@ describe('build-worksheets-from-templates', () => {
       expect(reserved.artifact.worksheetXml).toContain(liveDatasource);
     },
   );
+
+  it('rejects a case-different datasource name', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: LIVE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-case-different',
+    });
+
+    const result = await callTool(tool, { ...EXACT_ARGS, datasource: 'TARGET.ds' }, executor);
+
+    expect(result.isError).toBe(true);
+    expect(store.reserve('artifact-case-different', '12345')).toEqual({
+      ok: false,
+      reason: 'unknown',
+    });
+  });
+
+  it('rejects bracket equivalence when raw and bracketed datasource names coexist', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const ambiguousWorkbook = LIVE_WORKBOOK.replace(
+      '</datasources>',
+      `<datasource name='[target.ds]'>
+        <column name='[Unrelated]' datatype='string' role='dimension' type='nominal'/>
+      </datasource></datasources>`,
+    );
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: ambiguousWorkbook,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-ambiguous-datasource',
+    });
+
+    const result = await callTool(tool, { ...EXACT_ARGS, datasource: '[target.ds]' }, executor);
+
+    expect(result.isError).toBe(true);
+    expect(store.reserve('artifact-ambiguous-datasource', '12345')).toEqual({
+      ok: false,
+      reason: 'unknown',
+    });
+  });
 
   it('still rejects a field mapping from a different datasource', async () => {
     const store = new TemplateArtifactStore({ capacity: 4 });

@@ -17,11 +17,28 @@ import { createTemplateRuntimeSnapshot } from './templateRuntimeSnapshot.js';
 
 export const MAX_TEMPLATE_BINDINGS = 32;
 
-function normalizeDatasourceName(name: string): string {
-  const normalized = name.normalize('NFC').trim();
-  const unwrapped =
-    normalized.startsWith('[') && normalized.endsWith(']') ? normalized.slice(1, -1) : normalized;
-  return unwrapped.trim().toLocaleLowerCase();
+function datasourceNamesAreEquivalent(
+  requested: string,
+  bound: string,
+  liveDatasourceNames: ReadonlySet<string>,
+): boolean {
+  const normalizedRequested = requested.normalize('NFC');
+  const normalizedBound = bound.normalize('NFC');
+  if (normalizedRequested === normalizedBound) return true;
+
+  const [raw, unwrapped] =
+    normalizedRequested.startsWith('[') && normalizedRequested.endsWith(']')
+      ? [normalizedRequested, normalizedRequested.slice(1, -1)]
+      : normalizedBound.startsWith('[') && normalizedBound.endsWith(']')
+        ? [normalizedBound, normalizedBound.slice(1, -1)]
+        : [undefined, undefined];
+  if (raw === undefined || unwrapped === undefined) return false;
+  if (unwrapped !== normalizedRequested && unwrapped !== normalizedBound) return false;
+
+  const normalizedLiveNames = new Set(
+    [...liveDatasourceNames].map((name) => name.normalize('NFC')),
+  );
+  return !(normalizedLiveNames.has(raw) && normalizedLiveNames.has(unwrapped));
 }
 
 export interface WorksheetTemplatePlan {
@@ -80,23 +97,23 @@ export function buildTemplateWorksheetArtifact({
       ).toErr();
     }
 
-    const explicitBind = bindExplicitTemplate(
-      plan.templateName,
-      plan.fieldMapping,
-      summarizeSchema(workbookXml),
-      {
-        contract: snapshot.descriptor,
-        title: plan.title,
-        datasource: plan.datasource,
-      },
-    );
+    const schema = summarizeSchema(workbookXml);
+    const explicitBind = bindExplicitTemplate(plan.templateName, plan.fieldMapping, schema, {
+      contract: snapshot.descriptor,
+      title: plan.title,
+      datasource: plan.datasource,
+    });
     if (!explicitBind.ok) {
       return new ArgsValidationError(
         formatExplicitBindErrors(plan.templateName, explicitBind.errors),
       ).toErr();
     }
     if (
-      normalizeDatasourceName(explicitBind.datasource) !== normalizeDatasourceName(plan.datasource)
+      !datasourceNamesAreEquivalent(
+        plan.datasource,
+        explicitBind.datasource,
+        new Set(schema.fields.map((field) => field.datasource)),
+      )
     ) {
       return new ArgsValidationError(
         `Datasource "${plan.datasource}" does not match the bound datasource "${explicitBind.datasource}".`,

@@ -454,6 +454,29 @@ describe('list-templates', () => {
     );
   });
 
+  it('includes exact optional slot facts in a bounded compact real-template result', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const result = await getToolResult({ query: 'bullet-variance-chart', limit: 1 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(Buffer.byteLength(result.content[0].text, 'utf-8')).toBeLessThanOrEqual(16_384);
+    const body = JSON.parse(result.content[0].text);
+
+    expect(body.templates).toHaveLength(1);
+    expect(body.templates[0].template).toBe('bullet-variance-chart');
+    expect(body.templates[0].slot_signature.optional_slots).toEqual([
+      {
+        slot_id: 'field_base_3',
+        kind: 'quantitative',
+        derivation: 'sum',
+        role: ['lod', 'reference-line'],
+        binding_usage: 'direct',
+        calculation_channels: [],
+      },
+    ]);
+  });
+
   it('filters on eligibility computed from the TBM instead of catalog policy', async () => {
     const root = mkdtempSync(join(process.cwd(), 'tmp-list-templates-eligibility-'));
     temporaryRoots.push(root);
