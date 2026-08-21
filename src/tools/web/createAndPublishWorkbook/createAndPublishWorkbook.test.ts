@@ -150,6 +150,31 @@ describe('createAndPublishWorkbookTool', () => {
     expect(payload.projectName).toBe('Default');
   });
 
+  it('links the card to the generated dashboard view when the publish response lists it', async () => {
+    // The published workbook carries both the sheet view and the full-screen dashboard view. The card
+    // must link to the DASHBOARD (name = "<workbook> Dashboard"), not the underlying sheet — this is
+    // what makes the "open" link land on the full-screen viz and fixes the stray sheet URL.
+    mocks.mockPublishWorkbook.mockResolvedValueOnce({
+      id: 'wb-123',
+      name: 'My Viz',
+      contentUrl: 'MyViz',
+      webpageUrl: 'https://test.tableau.com/#/workbooks/wb-123',
+      views: {
+        view: [
+          { id: 'v1', name: 'My Viz', contentUrl: 'MyViz/sheets/MyViz' },
+          { id: 'v2', name: 'My Viz Dashboard', contentUrl: 'MyViz/sheets/MyVizDashboard' },
+        ],
+      },
+    });
+    const validationId = await saveReceipt({ workbookName: 'My Viz' });
+    const result = await getToolResult({ validationId });
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.url).toBe(
+      'https://my-tableau-server.com/#/site/tc25/views/MyViz/MyVizDashboard',
+    );
+  });
+
   it('surfaces the validation package digest for traceability', async () => {
     const validationId = await saveReceipt();
     const result = await getToolResult({ validationId });
@@ -346,6 +371,15 @@ describe('createAndPublishWorkbookTool', () => {
     expect(getAuditEntries()[0].data).toMatchObject({ showTabs: false, overwrite: true });
   });
 
+  it('defaults showTabs to false when omitted (single full-screen dashboard, tabs hidden)', async () => {
+    const validationId = await saveReceipt();
+    await getToolResult({ validationId, projectId: 'proj-abc' });
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ showTabs: false }),
+    );
+    expect(getAuditEntries()[0].data).toMatchObject({ showTabs: false });
+  });
+
   it('rejects a missing validationId before any REST call', async () => {
     const result = await getToolResult({ validationId: generateOpaqueId() });
     expect(result.isError).toBe(true);
@@ -448,7 +482,7 @@ describe('createAndPublishWorkbookTool', () => {
       appId: 'a'.repeat(32),
       digest: RECEIPT_DIGEST,
       projectId: 'proj-abc',
-      showTabs: true,
+      showTabs: false,
       overwrite: true,
       outcome: 'published',
     });
@@ -472,7 +506,7 @@ describe('createAndPublishWorkbookTool', () => {
     expect(audits[0].data).toMatchObject({
       validationId,
       projectId: 'proj-abc',
-      showTabs: true,
+      showTabs: false,
       overwrite: false,
       outcome: 'failed',
       failureCode: 'publish-workbook-failed',
@@ -495,7 +529,7 @@ describe('createAndPublishWorkbookTool', () => {
     expect(audits[0].data).toMatchObject({
       validationId,
       projectId: undefined,
-      showTabs: true,
+      showTabs: false,
       overwrite: false,
       outcome: 'failed',
       failureCode: 'target-project-query-failed',
@@ -519,7 +553,7 @@ describe('createAndPublishWorkbookTool', () => {
     expect(audits).toHaveLength(1);
     expect(audits[0].data).toMatchObject({
       validationId,
-      showTabs: true,
+      showTabs: false,
       overwrite: false,
       outcome: 'failed',
       failureCode: 'rest-api-setup-failed',
@@ -541,7 +575,7 @@ describe('createAndPublishWorkbookTool', () => {
     expect(audits[0].data).toMatchObject({
       validationId,
       projectId: undefined,
-      showTabs: true,
+      showTabs: false,
       overwrite: false,
       outcome: 'failed',
       failureCode: 'target-project-not-found',

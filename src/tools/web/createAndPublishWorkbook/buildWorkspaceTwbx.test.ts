@@ -86,10 +86,11 @@ describe('buildWorkspaceTwbx', () => {
     expect(twb).toContain(
       "column='[sqlproxy.abc123].[none:song_title:nk]' custom-type-name='field'",
     );
-    // The host worksheet (named after the workbook) carries the viz-extension add-in; no dashboard.
+    // The host worksheet (named after the workbook) carries the viz-extension add-in and is wrapped
+    // in a full-screen dashboard named "<workbook> Dashboard".
     expect(twb).toContain("<worksheet name='My App'>");
     expect(twb).toContain("<add-in add-in-id='com.example.myapp'");
-    expect(twb).not.toContain('<dashboards>');
+    expect(twb).toContain("<dashboard enable-sort-zone-taborder='true' name='My App Dashboard'>");
   });
 
   it('does NOT ship the tool-managed dataapp.json manifest as package content', () => {

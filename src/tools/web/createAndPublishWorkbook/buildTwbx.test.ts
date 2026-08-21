@@ -116,20 +116,31 @@ describe('buildTwbx', () => {
     );
   });
 
-  it('binds the bundled extension to a host worksheet (no dashboard) so the published workbook is NOT empty', () => {
+  it('binds the bundled extension to a host worksheet and wraps that worksheet in a full-screen dashboard', () => {
     // The viz model carries the full render chain on ONE worksheet: the worksheet <add-in>
-    // (type-settings/worksheet), the inline <referenced-extension> worksheet-extension manifest, and
-    // a <referenced-view> pointing at that worksheet. No dashboard / dashboard-object zone exists.
+    // (type-settings/worksheet), the inline <referenced-extension> worksheet-extension manifest, and a
+    // <referenced-view> pointing at that worksheet. The worksheet is then embedded in a single
+    // automatically-sized dashboard so the published workbook opens full-screen on the viz.
     const twb = entries(buildTwbx(base).bytes)['My Viz.twb'];
-    expect(twb).not.toContain('<dashboards>');
-    expect(twb).not.toContain("type-v2='dashboard-object'");
-    expect(twb).not.toContain("<window class='dashboard'");
+    // Host worksheet + extension chain.
     expect(twb).toContain("<worksheet name='My Viz'>");
     expect(twb).toContain("<add-in add-in-id='com.example.myviz'");
     expect(twb).toContain('<worksheet />');
     expect(twb).toContain("<worksheet-extension extension-version='1.0.0' id='com.example.myviz'>");
+    // The referenced-view points at the host WORKSHEET (where the extension mounts), not the dashboard.
     expect(twb).toContain("<referenced-view instances='1' viewId='My Viz' />");
-    expect(twb).toContain("<window class='worksheet' maximized='true' name='My Viz'>");
+    // Full-screen dashboard wrapping it: named, automatic size, sheet title hidden, no title zone.
+    expect(twb).toContain('<dashboards>');
+    expect(twb).toContain("<dashboard enable-sort-zone-taborder='true' name='My Viz Dashboard'>");
+    expect(twb).toContain("<size sizing-mode='automatic' />");
+    expect(twb).toContain("id='3' name='My Viz' show-title='false'");
+    // The dashboard window is the maximized one (its viewpoint names the embedded worksheet, and
+    // <active> selects the sheet zone); the worksheet window is NOT maximized.
+    expect(twb).toContain("<window class='dashboard' maximized='true' name='My Viz Dashboard'>");
+    expect(twb).toContain("<viewpoint name='My Viz' />");
+    expect(twb).toContain("<active id='3' />");
+    expect(twb).toContain("<window class='worksheet' name='My Viz'>");
+    expect(twb).not.toContain("<window class='worksheet' maximized='true' name='My Viz'>");
   });
 
   it('points the add-in extension-url at the FULL tableaulocalext:///<id>/content/index.html form', () => {
@@ -217,7 +228,7 @@ describe('buildTwbx', () => {
 
     it('wires the field onto the single host worksheet that carries the extension add-in', () => {
       const twb = twbOf([wcsDatasource]);
-      // The host worksheet is named after the workbook (it IS the published view; no dashboard).
+      // The host worksheet is named after the workbook (it hosts the viz; the dashboard embeds it).
       expect(twb).toContain("<worksheet name='My Viz'>");
       // The pane mark MUST be VizExtension — the signal that mounts the extension as the sheet's viz.
       expect(twb).toContain("<mark class='VizExtension' />");
@@ -233,9 +244,10 @@ describe('buildTwbx', () => {
       // The viz-extension add-in lives inside the host worksheet's pane (type-settings/worksheet).
       expect(twb).toContain("<add-in add-in-id='com.example.myviz'");
       expect(twb).toContain('<worksheet />');
-      // A maximized worksheet window (no dashboard window / viewpoints).
-      expect(twb).toContain("<window class='worksheet' maximized='true' name='My Viz'>");
-      expect(twb).not.toContain('<viewpoint ');
+      // The worksheet window is NOT maximized; the dashboard window is, and its viewpoint names the sheet.
+      expect(twb).toContain("<window class='worksheet' name='My Viz'>");
+      expect(twb).toContain("<window class='dashboard' maximized='true' name='My Viz Dashboard'>");
+      expect(twb).toContain("<viewpoint name='My Viz' />");
     });
 
     it('attaches every datasource to a worksheet: primary on the viz-ext host, extras on visible wire sheets (multi-datasource)', () => {

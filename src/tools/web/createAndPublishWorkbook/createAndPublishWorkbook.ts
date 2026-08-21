@@ -22,7 +22,7 @@ import {
 } from '../_lib/publishShared.js';
 import { resolveScopeFromExtra } from '../dataApps/scopeFromExtra.js';
 import { WebTool } from '../tool.js';
-import { sanitizeFileNameBase } from './buildTwbx.js';
+import { dashboardNameFor, sanitizeFileNameBase } from './buildTwbx.js';
 
 // Publish consumes ONLY an approved validation receipt plus the publish-target options. It never
 // accepts HTML/assets/build params: those were consumed by validate-workbook-package, which stored
@@ -54,7 +54,11 @@ const paramsSchema = {
   showTabs: z
     .boolean()
     .optional()
-    .describe('Whether the published workbook shows its sheets as tabs. Defaults to true.'),
+    .describe(
+      'Whether the published workbook shows its sheets as tabs. Defaults to false: this tool ' +
+        'publishes a single full-screen dashboard, so tab navigation is hidden (and any internal ' +
+        'wire worksheets stay out of view). Pass true only to expose the sheet tabs explicitly.',
+    ),
   overwrite: z
     .boolean()
     .optional()
@@ -108,7 +112,7 @@ preflight actually ran; it does not replace human consent.
 - \`validationId\` (required) – The receipt from \`validate-workbook-package\`.
 - \`projectId\` (optional) – Publish into this project instead of the site default.
 - \`publishToPersonalSpace\` (optional) – Publish into the user's personal space instead of a project.
-- \`showTabs\` (optional) – Show sheets as tabs. Defaults to true.
+- \`showTabs\` (optional) – Show sheets as tabs. Defaults to false (the workbook opens as a single full-screen dashboard).
 - \`overwrite\` (optional) – Overwrite an existing workbook of the same name. Defaults to false.
 
 **Result:** on success the result includes a \`url\` field — the canonical link to the published
@@ -188,7 +192,7 @@ report the workbook \`name\` and \`id\` instead.
             ).toErr();
           }
 
-          const showTabsFlag = showTabs ?? true;
+          const showTabsFlag = showTabs ?? false;
           const overwriteFlag = overwrite ?? false;
           const fileName = `${sanitizeFileNameBase(workbookName)}.twbx`;
           const actor = buildPublishActor(extra);
@@ -281,8 +285,15 @@ report the workbook \`name\` and \`id\` instead.
                 return new Ok({
                   // Rebase the returned link onto the configured SERVER origin: some servers
                   // advertise an internal gateway host/IP in webpageUrl that the caller can't reach.
-                  // Pass the site name so `url` can resolve to the first view's per-sheet route.
-                  ...toPublishResult(published, target, getConfig().server, extra.getSiteName()),
+                  // Pass the site name so `url` can resolve to a per-view route, and the generated
+                  // dashboard's name so the card links to the full-screen dashboard, not the sheet.
+                  ...toPublishResult(
+                    published,
+                    target,
+                    getConfig().server,
+                    extra.getSiteName(),
+                    dashboardNameFor(workbookName),
+                  ),
                   warnings,
                   validationId: args.validationId,
                   digest,

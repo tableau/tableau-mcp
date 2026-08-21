@@ -207,24 +207,33 @@ export function rebaseUrlOrigin(rawUrl: string, serverOrigin: string | undefined
 }
 
 // Map the SDK's PublishedWorkbook onto the tool result for the resolved `target`. `url` is the
-// canonical clickable link: we prefer a direct link to the workbook's first materialized view (its
-// opening sheet), built from that view's contentUrl against the configured SERVER origin + site —
-// this lands the user on rendered content instead of the workbook's Views-tab index. When the
-// publish response carries no usable view contentUrl (or we have no origin to build against) we fall
-// back to the workbook Views tab (webpageUrl rebased onto the SERVER origin). `webpageUrl` always
-// keeps the raw server value. `url` is omitted (never fabricated) when neither source is available.
-// A view URL needs a concrete origin, so `serverOrigin` gates it; `siteName` selects the site path
-// ('' / 'Default' → the default-site route).
+// canonical clickable link, built from a view's contentUrl against the configured SERVER origin +
+// site so the user lands on rendered content instead of the workbook's Views-tab index. View choice:
+// when `preferredViewName` is given AND a published view carries that exact name, we link to it — the
+// data-app flow passes its full-screen dashboard's name here so the card opens the dashboard rather
+// than the underlying sheet. Otherwise we fall back to the first materialized view (its opening
+// sheet), then to the workbook Views tab (webpageUrl rebased onto the SERVER origin) when the publish
+// response carried no usable view contentUrl. `webpageUrl` always keeps the raw server value. `url`
+// is omitted (never fabricated) when neither source is available. A view URL needs a concrete origin,
+// so `serverOrigin` gates it; `siteName` selects the site path ('' / 'Default' → the default-site route).
 export function toPublishResult(
   published: PublishedWorkbook,
   target: PublishTarget,
   serverOrigin?: string,
   siteName?: string,
+  preferredViewName?: string,
 ): PublishResult {
-  const firstView = published.views?.view?.find((view) => view.contentUrl);
+  const views = published.views?.view ?? [];
+  // Prefer the named view (the generated dashboard) when present; else the first view with a
+  // contentUrl (the opening sheet).
+  const preferredView =
+    preferredViewName !== undefined
+      ? views.find((view) => view.contentUrl && view.name === preferredViewName)
+      : undefined;
+  const chosenView = preferredView ?? views.find((view) => view.contentUrl);
   const viewUrl =
-    serverOrigin && firstView?.contentUrl
-      ? constructViewWebUrl(serverOrigin, siteName ?? '', firstView.contentUrl)
+    serverOrigin && chosenView?.contentUrl
+      ? constructViewWebUrl(serverOrigin, siteName ?? '', chosenView.contentUrl)
       : undefined;
   const workbookUrl =
     published.webpageUrl !== undefined
