@@ -148,7 +148,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     action: 'on a populated worksheet, call get-summary-data; answer only from returned rows.',
     toolSequence: ['get-summary-data'],
     stopConditions: ['answer only from returned rows'],
-    requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
+    requiredEvidence: ['get-summary-data returned rows'],
   },
   {
     kind: 'route',

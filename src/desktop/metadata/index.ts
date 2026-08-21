@@ -34,6 +34,13 @@ export {
   parseXML,
   serializeXML,
 } from './parser.js';
+export {
+  type SearchWorkbookFieldMatch,
+  type SearchWorkbookFieldMatchAttribute,
+  type SearchWorkbookFieldPlacement,
+  searchWorkbookFields,
+  type SearchWorkbookFieldsResult,
+} from './searchWorkbookFields.js';
 export { addSheet, deleteSheet, listSheets } from './sheets.js';
 export {
   AggregationType,

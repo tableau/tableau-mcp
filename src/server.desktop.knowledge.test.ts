@@ -5,12 +5,16 @@ import * as loggerModule from './logging/logger.js';
 
 const knowledgeMocks = vi.hoisted(() => ({
   getKnowledgeCorpusEntryCount: vi.fn(() => 0),
-  getKnowledgeDir: vi.fn(() => '/app/resources/desktop/knowledge'),
   listKnowledgeResources: vi.fn(() => []),
   readKnowledgeResource: vi.fn(() => null),
 }));
 
 vi.mock('./desktop/knowledge/index.js', () => knowledgeMocks);
+
+vi.mock('./desktop/assets.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./desktop/assets.js')>()),
+  getConfiguredKnowledgeDir: vi.fn(() => '/app/resources/desktop/knowledge'),
+}));
 
 import { DesktopMcpServer } from './server.desktop.js';
 
@@ -40,6 +44,7 @@ describe('DesktopMcpServer knowledge startup check', () => {
       vi.resetModules();
       vi.doMock('./utils/getDirname.js', () => ({ getDirname: () => emptyRoot }));
       vi.doUnmock('./desktop/knowledge/index.js');
+      vi.doUnmock('./desktop/assets.js');
       const realKnowledge = await import('./desktop/knowledge/index.js');
       realKnowledge.clearKnowledgeCache();
       realKnowledge._resetKnowledgeSearchCache();

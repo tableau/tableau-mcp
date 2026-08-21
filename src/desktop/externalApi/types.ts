@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * live `/openapi.json` (OpenAPI 3.1, `info.version` 0.2.6, captured 2026-08-11).
+ * live `/openapi.json` (OpenAPI 3.1, `info.version` 0.2.9, captured 2026-08-20).
  * Envelope fields the spec marks required are required here; everything else stays
  * permissive (`.passthrough()` / optional) because the spec is read-complete but
  * write-thin, and an older Desktop build may omit a field a newer spec marks required.
@@ -30,6 +30,7 @@ export const EXTERNAL_API_ROUTES = {
   workbookRedo: '/v0/workbook:redo',
   workbookSave: '/v0/workbook:save',
   workbookExportAs: '/v0/workbook:exportAs',
+  workbookPublish: '/v0/workbook:publish',
   workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
   dashboardDocument: '/v0/workbook/dashboards/{id}/document',
@@ -57,6 +58,8 @@ export const EXTERNAL_API_ROUTES = {
   site: '/v0/site',
   siteDatasources: '/v0/site/datasources',
   siteWorkbooks: '/v0/site/workbooks',
+  datasourceRefreshData: '/v0/datasources/{id}:refreshData',
+  datasourceRefreshExtract: '/v0/datasources/{id}:refreshExtract',
   invokeCommand: '/v0/app:invokeCommand',
   operations: '/v0/operations',
   operationById: '/v0/operations/{id}',
@@ -129,6 +132,14 @@ export type ExportAsWorkbookRequest = {
   format: ExportAsFormat;
   filePath: string;
   targetVersion?: string;
+};
+
+/**
+ * Body of `POST /v0/datasources/{id}:refreshExtract`. `isFullRefresh` forces a full refresh;
+ * omit it (server default) for an incremental refresh when the extract supports one, else full.
+ */
+export type RefreshExtractRequest = {
+  isFullRefresh?: boolean;
 };
 
 /** Query accepted by {@link worksheetImageRoute}, {@link dashboardImageRoute}, and {@link storyboardImageRoute}. */
@@ -298,6 +309,17 @@ export function storyboardImageRoute(storyboardId: string, query: ImageExportQue
   return `${storyboardRoute(storyboardId)}/image${imageQuerySuffix(query)}`;
 }
 
+// {id} is the datasource's stable id from `GET /v0/workbook/datasources`, not its display name/caption.
+const DATASOURCE_ROUTE_PREFIX = '/v0/datasources';
+
+export function datasourceRefreshDataRoute(datasourceId: string): string {
+  return `${DATASOURCE_ROUTE_PREFIX}/${encodeURIComponent(datasourceId)}:refreshData`;
+}
+
+export function datasourceRefreshExtractRoute(datasourceId: string): string {
+  return `${DATASOURCE_ROUTE_PREFIX}/${encodeURIComponent(datasourceId)}:refreshExtract`;
+}
+
 /**
  * Discovery file written by Desktop to `<OS app-local-data>/ExternalApi/<pid>.json`.
  * Only `schemaVersion === 1` is understood. Version fields are optional so a slightly
@@ -361,7 +383,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.6). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.8). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -384,6 +406,7 @@ export const PROBLEM_CODES = [
   'invalid-command-parameter',
   'invalid-query-parameter',
   'unsupported-file-type',
+  'unsupported-target-version',
   'file-not-found',
   'operation-failed',
 ] as const;
@@ -426,7 +449,7 @@ export const operationWarningSchema = z
   .passthrough();
 export type OperationWarning = z.infer<typeof operationWarningSchema>;
 
-/** A modal window blocking the command queue, reported on an Operation that cannot progress. */
+/** A visible modal Qt window on an Operation: rides `blockingWindows` when it needs a human decision, `progressWindows` when it is self-clearing. */
 export const windowInfoSchema = z
   .object({
     objectName: z.string(),
@@ -458,6 +481,7 @@ export const operationEnvelopeSchema = z
     error: operationErrorSchema.optional(),
     warnings: z.array(operationWarningSchema).optional(),
     blockingWindows: z.array(windowInfoSchema).optional(),
+    progressWindows: z.array(windowInfoSchema).optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
     completedAt: z.string().optional(),
@@ -557,6 +581,10 @@ export const datasourceItemSchema = z
     luid: z.string().nullish(),
     name: z.string().optional(),
     caption: z.string().optional(),
+    type: z.string().optional(),
+    isExtract: z.boolean().optional(),
+    // null (not false) for an unpublished datasource, where the download-file permission does not apply.
+    hasDownloadFilePermission: z.boolean().nullish(),
   })
   .passthrough();
 export type DatasourceItem = z.infer<typeof datasourceItemSchema>;
@@ -681,7 +709,7 @@ export const imageResultSchema = z
   .passthrough();
 export type ImageResult = z.infer<typeof imageResultSchema>;
 
-/** Running Desktop application info returned by `GET /v0/app`. */
+/** Running Desktop application info and live UI state returned by `GET /v0/app`. */
 export const appInfoSchema = z
   .object({
     applicationVersion: z.string().optional(),
@@ -691,6 +719,9 @@ export const appInfoSchema = z
     locale: z.string().optional(),
     repositoryLocation: z.string().optional(),
     logLocation: z.string().optional(),
+    isStartPageVisible: z.boolean().optional(),
+    isDataSourcePageActive: z.boolean().optional(),
+    isPresentationMode: z.boolean().optional(),
   })
   .passthrough();
 export type AppInfo = z.infer<typeof appInfoSchema>;

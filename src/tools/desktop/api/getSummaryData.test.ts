@@ -9,9 +9,8 @@ import {
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
 import { isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
-import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
-import { ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.js';
+import { UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -22,7 +21,6 @@ import { fetchWorksheetSummaryData, type SummaryDataRead } from './summaryDataCo
 vi.mock('../../../desktop/session/sessionResolution.js');
 
 const resultSchema = z.object({
-  status: z.literal('success'),
   worksheet: z.object({ id: z.string(), name: z.string() }),
   maxRows: z.number(),
   rowOrder: z.object({
@@ -30,23 +28,12 @@ const resultSchema = z.object({
     usableFor: z.literal('value_readback'),
     notUsableFor: z.literal('visual_sort_verification'),
   }),
+  shape: z.string(),
   summaryData: z.object({
     columns: z.array(z.object({ name: z.string().optional(), dataType: z.string().optional() })),
     rows: z.array(z.array(z.unknown())),
   }),
 });
-
-// Every terminal failure mints the same marker: the tool stopped, it retrieved nothing,
-// and "terminal" is its own retry policy rather than a claim about Desktop.
-const TERMINAL_FAILURE_NEXT_ACTION = {
-  label: 'Data retrieval failed — report outcome',
-  kind: 'done',
-  receipt: {
-    did: [expect.stringContaining('stopped get-summary-data on a terminal')],
-    didNot: ['retrieve any summary data'],
-    unverified: ['whether the underlying condition is permanent'],
-  },
-};
 
 type SummaryDataArgs = {
   session?: string;
@@ -183,21 +170,84 @@ describe('fetchWorksheetSummaryData', () => {
     if (result.isOk()) throw new Error('expected materialization failure');
     expect(result.error).toEqual({ type: 'request', error: renderError });
   });
+
+  // The projection has two duplicate-caption guards; a first-match "simplification" of either
+  // would silently project the wrong column. Both branches must error, not pick the first.
+  it('rejects a requested column that exactly matches more than one returned column', async () => {
+    const read = summaryReadReturning({
+      columns: [{ name: 'SUM(Sales)' }, { name: 'SUM(Sales)' }],
+      rows: [[1200, 900]],
+    });
+
+    const result = await fetchWorksheetSummaryData({
+      read,
+      worksheet: 'Sales by Region',
+      maxRows: 200,
+      columns: ['SUM(Sales)'],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected a duplicate-column error');
+    expect(result.error.type).toBe('columns');
+    expect(result.error.error.message).toContain('matches more than one returned column');
+    expect(result.error.error.message).toContain('SUM(Sales), SUM(Sales)');
+  });
+
+  it('rejects a base field name that normalizes to more than one returned column', async () => {
+    // Neither returned caption equals "Sales" exactly, so the exact-match branch is skipped and
+    // the normalized branch decides: both SUM(Sales) and AGG(Sales) normalize to "sales".
+    const read = summaryReadReturning({
+      columns: [{ name: 'SUM(Sales)' }, { name: 'AGG(Sales)' }],
+      rows: [[1200, 900]],
+    });
+
+    const result = await fetchWorksheetSummaryData({
+      read,
+      worksheet: 'Sales by Region',
+      maxRows: 200,
+      columns: ['Sales'],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected a duplicate-column error');
+    expect(result.error.type).toBe('columns');
+    expect(result.error.error.message).toContain('matches more than one returned column');
+    expect(result.error.error.message).toContain('SUM(Sales), AGG(Sales)');
+  });
 });
+
+// A minimal read that resolves the sole worksheet and returns the given summary payload, for
+// exercising fetchWorksheetSummaryData's projection without the mock HTTP harness.
+function summaryReadReturning(summary: { columns: unknown[]; rows: unknown[][] }): SummaryDataRead {
+  return (async (endpoint: string) => {
+    if (endpoint === 'worksheet list') {
+      return Ok({
+        worksheets: [
+          {
+            id: 'sheet-sales',
+            name: 'Sales by Region',
+            hidden: false,
+            datasources: ['Sample - Superstore'],
+          },
+        ],
+      });
+    }
+    return Ok(summary);
+  }) as SummaryDataRead;
+}
 
 describe('getSummaryDataTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    sessionRouteState.clear();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('describes populated-sheet summary reads and one transient retry', () => {
+  it('describes an aggregated summary read of the fields on the view', () => {
     const tool = getSummaryDataTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-summary-data');
     expect(tool.description).toBe(
-      'Read summary rows from a populated worksheet with fields on the view. A terminal/no-data result means stop; a transient failure may be retried once.',
+      'Read the aggregated summary rows on a populated worksheet (only the fields on the view).',
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
@@ -222,7 +272,6 @@ describe('getSummaryDataTool', () => {
 
       expect(result.isError).toBe(false);
       const body = parseResult(result);
-      expect(body.status).toBe('success');
       expect(body.worksheet).toEqual({ id: 'sheet-sales', name: 'Sales by Region' });
       expect(body.maxRows).toBe(50);
       expect(body.rowOrder).toEqual({
@@ -230,6 +279,7 @@ describe('getSummaryDataTool', () => {
         usableFor: 'value_readback',
         notUsableFor: 'visual_sort_verification',
       });
+      expect(body.shape).toBe('2 rows x 2 columns');
       expect(body.summaryData.columns).toEqual([
         { name: 'Region', dataType: 'string' },
         { name: 'Sales', dataType: 'real' },
@@ -287,7 +337,7 @@ describe('getSummaryDataTool', () => {
     }
   });
 
-  it('returns an actionable error when Desktop ignores an invalid requested column', async () => {
+  it('surfaces a raw column error when a requested column is not returned', async () => {
     const harness = await startHarness();
     try {
       const result = await harness.callTool({
@@ -296,62 +346,13 @@ describe('getSummaryDataTool', () => {
       });
 
       expect(result.isError).toBe(true);
-      expect(parseJsonResult(result)).toMatchObject({
-        status: 'action-required',
-        reason: 'columns-not-found',
-        guidance:
-          'Use exact column names returned by this worksheet, or omit columns to retrieve the full summary table.',
-        error: {
-          message: expect.stringContaining('Available columns: Region, Sales, Profit'),
-        },
-      });
-      expectStructuredBlock(result, {
-        label: 'Repair summary columns and retry',
-        kind: 'prefill',
-      });
+      expect(errorText(result)).toContain('Available columns: Region, Sales, Profit');
     } finally {
       await harness.close();
     }
   });
 
-  it('returns an actionable error when an exact caption identifies multiple columns', async () => {
-    const harness = await startHarness((server) => {
-      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          columns: [
-            { name: 'Region', dataType: 'string' },
-            { name: 'SUM(Sales)', dataType: 'real' },
-            { name: 'SUM(Sales)', dataType: 'real' },
-          ],
-          rows: [['West', 1200, 1200]],
-        }),
-      });
-    });
-
-    try {
-      const result = await harness.callTool({
-        worksheet: 'Sales by Region',
-        columns: ['SUM(Sales)'],
-      });
-
-      expect(result.isError).toBe(true);
-      expect(parseJsonResult(result)).toMatchObject({
-        status: 'action-required',
-        reason: 'columns-not-found',
-        error: {
-          message: expect.stringContaining(
-            'Requested summary column "SUM(Sales)" matches more than one returned column',
-          ),
-        },
-      });
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('requires action without querying a worksheet that has no datasource', async () => {
+  it('returns aggregated data with no datasource as an empty summary, without querying', async () => {
     const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets', {
         status: 200,
@@ -374,9 +375,7 @@ describe('getSummaryDataTool', () => {
       const result = await harness.callTool({ worksheetName: 'Empty Sheet' });
 
       expect(result.isError).toBe(false);
-      expect(parseJsonResult(result)).toEqual({
-        status: 'action-required',
-        reason: 'empty-sheet',
+      expect(parseResult(result)).toMatchObject({
         worksheet: { id: 'sheet-empty', name: 'Empty Sheet' },
         maxRows: 200,
         shape: '0 rows x 0 columns',
@@ -386,12 +385,6 @@ describe('getSummaryDataTool', () => {
           notUsableFor: 'visual_sort_verification',
         },
         summaryData: { columns: [], rows: [] },
-        guidance:
-          'Desktop returned no summary columns for this sheet. Do NOT call get-summary-data again for this ask — name a sheet with fields on the view, or build and apply one first.',
-      });
-      expectStructuredBlock(result, {
-        label: 'List templates, build a chart, then apply it',
-        kind: 'prefill',
       });
       expect(harness.server.requests.some((request) => request.path.endsWith('/summaryData'))).toBe(
         false,
@@ -401,7 +394,7 @@ describe('getSummaryDataTool', () => {
     }
   });
 
-  it('requires action when the worksheet has no marks', async () => {
+  it('returns an empty summary when the worksheet has no marks', async () => {
     const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
         status: 200,
@@ -414,26 +407,16 @@ describe('getSummaryDataTool', () => {
       const result = await harness.callTool({ worksheetName: 'Sales by Region' });
 
       expect(result.isError).toBe(false);
-      expect(parseJsonResult(result)).toMatchObject({
-        status: 'action-required',
-        reason: 'empty-sheet',
+      expect(parseResult(result)).toMatchObject({
         shape: '0 rows x 0 columns',
         summaryData: { columns: [], rows: [] },
-        guidance:
-          'Desktop returned no summary columns for this sheet. Do NOT call get-summary-data again for this ask — name a sheet with fields on the view, or build and apply one first.',
-      });
-      expect(result.structuredContent).toMatchObject({
-        nextAction: {
-          label: 'List templates, build a chart, then apply it',
-          kind: 'prefill',
-        },
       });
     } finally {
       await harness.close();
     }
   });
 
-  it('returns a distinct terminal result when a populated worksheet query has zero rows', async () => {
+  it('returns the columns and zero rows when a populated worksheet query has no rows', async () => {
     const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
         status: 200,
@@ -446,9 +429,7 @@ describe('getSummaryDataTool', () => {
       const result = await harness.callTool({ worksheetName: 'Sales by Region' });
 
       expect(result.isError).toBe(false);
-      expect(parseJsonResult(result)).toMatchObject({
-        status: 'terminal',
-        reason: 'no-rows',
+      expect(parseResult(result)).toMatchObject({
         shape: '0 rows x 1 columns',
         rowOrder: {
           status: 'unspecified',
@@ -456,20 +437,6 @@ describe('getSummaryDataTool', () => {
           notUsableFor: 'visual_sort_verification',
         },
         summaryData: { columns: [{ name: 'Sales', dataType: 'real' }], rows: [] },
-        guidance:
-          "The summary query returned no rows. Do NOT call get-summary-data again for this ask — the answer is 'no data'; say so.",
-      });
-      expectStructuredBlock(result, {
-        label: 'Data retrieval complete — no further calls needed',
-        kind: 'done',
-        receipt: {
-          did: [
-            'queried summary data for worksheet "Sales by Region" (maxRows 200)',
-            'the sheet returned 1 column(s) and 0 rows',
-          ],
-          didNot: ['return any data values — there were none to return'],
-          unverified: [expect.stringContaining('why the result is empty')],
-        },
       });
     } finally {
       await harness.close();
@@ -499,161 +466,7 @@ describe('getSummaryDataTool', () => {
     }
   });
 
-  it('counts an alias call against the same transient-failure signature as a named call', async () => {
-    const harness = await startHarness((server) => {
-      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
-        status: 500,
-        contentType: 'application/problem+json',
-        body: JSON.stringify({
-          type: 'summary-failed',
-          title: 'Summary unavailable',
-          status: 500,
-          detail: 'Could not query worksheet',
-        }),
-      });
-    });
-
-    try {
-      const first = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
-      const second = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
-
-      expect(parseJsonResult(first)).toMatchObject({
-        status: 'retryable',
-        reason: 'request-failed',
-      });
-      // The alias resolves to the same signature, so the repeat escalates to terminal.
-      expect(parseJsonResult(second)).toMatchObject({
-        status: 'terminal',
-        reason: 'request-failed',
-        guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
-      });
-      expectStructuredBlock(second, TERMINAL_FAILURE_NEXT_ACTION);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('routes a blocking Desktop dialog to action-required instead of retryable', async () => {
-    const harness = await startHarness((server) => {
-      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
-        status: 202,
-        headers: { Location: '/v0/operations/op-blocked', 'Retry-After': '0' },
-      });
-      server.setOperation('op-blocked', {
-        retryAfterSeconds: 0,
-        poll: [
-          {
-            id: 'op-blocked',
-            kind: 'worksheet-summary-data',
-            state: 'RUNNING',
-            blockingWindows: [
-              {
-                objectName: 'signIn',
-                title: 'Sign In',
-                className: 'QDialog',
-                messageText: 'Enter your SQL Server password',
-              },
-            ],
-          },
-        ],
-      });
-    });
-
-    try {
-      const result = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
-      expect(result.isError).toBe(true);
-      expect(parseJsonResult(result)).toMatchObject({
-        status: 'action-required',
-        reason: 'desktop-blocked',
-        guidance: expect.stringContaining('list-instances'),
-      });
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('does not replay a prior success payload for repeated calls', async () => {
-    const harness = await startHarness();
-    try {
-      const args = {
-        worksheetName: 'Sales by Region',
-        maxRows: 50,
-        columns: ['Region', 'Sales'],
-      };
-
-      const first = await harness.callTool(args);
-      const requestCountAfterFirst = harness.server.requests.length;
-      const second = await harness.callTool(args);
-
-      expect(first.isError).toBe(false);
-      expect(second.isError).toBe(false);
-      expect(parseResult(second)).toEqual(parseResult(first));
-      expect(parseJsonResult(second)).not.toHaveProperty('guidance');
-      expect(
-        harness.server.requests.filter((request) => request.path.endsWith('/summaryData')),
-      ).toHaveLength(2);
-      expect(harness.server.requests.length).toBeGreaterThan(requestCountAfterFirst);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('keeps repeated empty-sheet calls terminal without replay guidance', async () => {
-    const harness = await startHarness((server) => {
-      server.setOverride('GET /v0/workbook/worksheets', {
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          worksheets: [
-            {
-              id: 'sheet-empty',
-              name: 'Empty Sheet',
-              hidden: false,
-              isActiveSheet: false,
-              datasources: [],
-            },
-          ],
-        }),
-      });
-    });
-
-    try {
-      const args = { worksheetName: 'Empty Sheet' };
-      const first = await harness.callTool(args);
-      const repeated = await harness.callTool(args);
-      const firstBody = parseJsonResult(first) as Record<string, unknown>;
-
-      expect(parseJsonResult(repeated)).toEqual({
-        ...firstBody,
-        guidance:
-          'Desktop returned no summary columns for this sheet. Do NOT call get-summary-data again for this ask — name a sheet with fields on the view, or build and apply one first.',
-      });
-      expect(repeated.structuredContent).toEqual(first.structuredContent);
-      expect(harness.server.requests.some((request) => request.path.endsWith('/summaryData'))).toBe(
-        false,
-      );
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('allows parallel first calls to execute without fabricating a prior result', async () => {
-    const harness = await startHarness();
-    try {
-      const args = { worksheetName: 'Sales by Region', columns: ['Region'] };
-      const [first, parallel] = await Promise.all([harness.callTool(args), harness.callTool(args)]);
-
-      expect(parseResult(first).status).toBe('success');
-      expect(parseResult(parallel).status).toBe('success');
-      expect(
-        harness.server.requests.filter((request) => request.path.endsWith('/summaryData')),
-      ).toHaveLength(2);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('marks the first transient Desktop failure retryable and clears it after a successful retry', async () => {
+  it('surfaces a raw request error when the summary query fails', async () => {
     const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
         status: 500,
@@ -669,264 +482,9 @@ describe('getSummaryDataTool', () => {
 
     try {
       const result = await harness.callTool({ worksheetName: 'Sales by Region' });
-
       expect(result.isError).toBe(true);
-      expect(parseJsonResult(result)).toMatchObject({
-        status: 'retryable',
-        reason: 'request-failed',
-        guidance: expect.stringContaining('transient — one retry is reasonable'),
-        error: { type: 'desktop-command-execution-error' },
-      });
-      expectStructuredBlock(result, { label: 'Retry get-summary-data once', kind: 'prefill' });
-
-      harness.server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', undefined);
-      const retry = await harness.callTool({ worksheetName: 'Sales by Region' });
-      expect(parseResult(retry).status).toBe('success');
-      expect(
-        harness.server.requests.filter((request) => request.path.endsWith('/summaryData')),
-      ).toHaveLength(2);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('escalates the second consecutive transient failure for the same signature to terminal', async () => {
-    const harness = await startHarness((server) => {
-      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
-        status: 500,
-        contentType: 'application/problem+json',
-        body: JSON.stringify({
-          type: 'summary-failed',
-          title: 'Summary unavailable',
-          status: 500,
-          detail: 'Could not query worksheet',
-        }),
-      });
-    });
-
-    try {
-      const first = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
-      const second = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
-
-      expect(parseJsonResult(first)).toMatchObject({
-        status: 'retryable',
-        reason: 'request-failed',
-        guidance: expect.stringContaining('transient — one retry is reasonable'),
-      });
-      expect(parseJsonResult(second)).toMatchObject({
-        status: 'terminal',
-        reason: 'request-failed',
-        guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
-      });
-      expectStructuredBlock(second, TERMINAL_FAILURE_NEXT_ACTION);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('passes an explicit session to the session resolver', async () => {
-    const harness = await startHarness();
-    try {
-      const result = await harness.callTool({ session: 'desktop-2', worksheetName: 'sheet-sales' });
-
-      expect(result.isError).toBe(false);
-      expect(sessionResolution.resolveSession).toHaveBeenCalledWith('desktop-2');
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('marks session-resolution failures transient and allows retry', async () => {
-    const harness = await startHarness();
-    vi.mocked(sessionResolution.resolveSession).mockReturnValueOnce(
-      new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
-    );
-
-    try {
-      const failed = await harness.callTool({ worksheetName: 'Sales by Region' });
-
-      expect(failed.isError).toBe(true);
-      expect(parseJsonResult(failed)).toMatchObject({
-        status: 'retryable',
-        reason: 'session-resolution-failed',
-        guidance: expect.stringContaining('transient — one retry is reasonable'),
-      });
-
-      const retry = await harness.callTool({ worksheetName: 'Sales by Region' });
-      expect(parseResult(retry).status).toBe('success');
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('does not escalate a session-resolution failure after an intervening success', async () => {
-    const harness = await startHarness();
-    vi.mocked(sessionResolution.resolveSession).mockReturnValueOnce(
-      new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
-    );
-
-    try {
-      const firstFailure = await harness.callTool({
-        worksheetName: 'Sales by Region',
-        maxRows: 50,
-      });
-      const success = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
-      vi.mocked(sessionResolution.resolveSession).mockReturnValueOnce(
-        new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
-      );
-      const nextFailure = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
-
-      expect(parseJsonResult(firstFailure)).toMatchObject({
-        status: 'retryable',
-        reason: 'session-resolution-failed',
-      });
-      expect(parseResult(success).status).toBe('success');
-      expect(parseJsonResult(nextFailure)).toMatchObject({
-        status: 'retryable',
-        reason: 'session-resolution-failed',
-        guidance: expect.stringContaining('transient — one retry is reasonable'),
-      });
-      expectStructuredBlock(nextFailure, {
-        label: 'Retry get-summary-data once',
-        kind: 'prefill',
-      });
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('escalates the second consecutive session-resolution failure for the same signature to terminal', async () => {
-    const harness = await startHarness();
-    vi.mocked(sessionResolution.resolveSession).mockReturnValue(
-      new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
-    );
-
-    try {
-      const first = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
-      const second = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
-
-      expect(parseJsonResult(first)).toMatchObject({
-        status: 'retryable',
-        reason: 'session-resolution-failed',
-        guidance: expect.stringContaining('transient — one retry is reasonable'),
-      });
-      expect(parseJsonResult(second)).toMatchObject({
-        status: 'terminal',
-        reason: 'session-resolution-failed',
-        guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
-      });
-      expectStructuredBlock(second, TERMINAL_FAILURE_NEXT_ACTION);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('keeps first session-resolution failures retryable for distinct requested sessions', async () => {
-    const harness = await startHarness();
-    vi.mocked(sessionResolution.resolveSession).mockReturnValue(
-      new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
-    );
-
-    try {
-      const sessionA = await harness.callTool({
-        session: 'desktop-a',
-        worksheetName: 'Sales by Region',
-        maxRows: 50,
-      });
-      const sessionB = await harness.callTool({
-        session: 'desktop-b',
-        worksheetName: 'Sales by Region',
-        maxRows: 50,
-      });
-
-      expect(parseJsonResult(sessionA)).toMatchObject({
-        status: 'retryable',
-        reason: 'session-resolution-failed',
-        guidance: expect.stringContaining('transient — one retry is reasonable'),
-      });
-      expect(parseJsonResult(sessionB)).toMatchObject({
-        status: 'retryable',
-        reason: 'session-resolution-failed',
-        guidance: expect.stringContaining('transient — one retry is reasonable'),
-      });
-      expectStructuredBlock(sessionB, { label: 'Retry get-summary-data once', kind: 'prefill' });
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('escalates the second consecutive caught exception for the same signature to terminal', async () => {
-    const harness = await startHarness();
-    vi.mocked(sessionResolution.resolveSession).mockImplementation(() => {
-      throw new Error('Desktop discovery exploded');
-    });
-
-    try {
-      const first = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
-      const second = await harness.callTool({ worksheetName: 'Sales by Region', maxRows: 50 });
-
-      expect(parseJsonResult(first)).toMatchObject({
-        status: 'retryable',
-        reason: 'request-failed',
-        guidance: expect.stringContaining('transient — one retry is reasonable'),
-        error: { type: 'unknown', message: 'Desktop discovery exploded' },
-      });
-      expect(parseJsonResult(second)).toMatchObject({
-        status: 'terminal',
-        reason: 'request-failed',
-        guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
-      });
-      expectStructuredBlock(second, TERMINAL_FAILURE_NEXT_ACTION);
-    } finally {
-      await harness.close();
-    }
-  });
-
-  it('keeps unresolved-session and resolved-session transient scopes separate', async () => {
-    const harness = await startHarness((server) => {
-      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
-        status: 500,
-        contentType: 'application/problem+json',
-        body: JSON.stringify({
-          type: 'summary-failed',
-          title: 'Summary unavailable',
-          status: 500,
-          detail: 'Could not query worksheet',
-        }),
-      });
-    });
-    vi.mocked(sessionResolution.resolveSession).mockReturnValueOnce(
-      new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
-    );
-
-    try {
-      const unresolvedFailure = await harness.callTool({
-        worksheetName: 'Sales by Region',
-        maxRows: 50,
-      });
-      const resolvedTransportFailure = await harness.callTool({
-        worksheetName: 'Sales by Region',
-        maxRows: 50,
-      });
-      const secondResolvedTransportFailure = await harness.callTool({
-        worksheetName: 'Sales by Region',
-        maxRows: 50,
-      });
-
-      expect(parseJsonResult(unresolvedFailure)).toMatchObject({
-        status: 'retryable',
-        reason: 'session-resolution-failed',
-      });
-      expect(parseJsonResult(resolvedTransportFailure)).toMatchObject({
-        status: 'retryable',
-        reason: 'request-failed',
-        guidance: expect.stringContaining('transient — one retry is reasonable'),
-      });
-      expect(parseJsonResult(secondResolvedTransportFailure)).toMatchObject({
-        status: 'terminal',
-        reason: 'request-failed',
-        guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
-      });
+      // The raw executor message reaches the caller so it can read the reason, not a bare status.
+      expect(errorText(result)).toContain('Could not query worksheet');
     } finally {
       await harness.close();
     }
@@ -964,30 +522,19 @@ describe('getSummaryDataTool', () => {
     }
   });
 
-  it('returns an action-required error with worksheet names when worksheet is omitted but ambiguous', async () => {
+  it('surfaces a raw error when worksheet is omitted but ambiguous', async () => {
     const harness = await startHarness();
     try {
       const result = await harness.callTool({});
 
       expect(result.isError).toBe(true);
-      expect(parseJsonResult(result)).toMatchObject({
-        status: 'action-required',
-        reason: 'worksheet-ambiguous',
-        guidance: 'Choose one worksheet by exact id or name, then call get-summary-data again.',
-        error: {
-          type: 'args-validation',
-          message: expect.stringContaining('Multiple worksheets exist'),
-        },
-      });
-      expect(result.structuredContent).toMatchObject({
-        nextAction: { kind: 'prefill' },
-      });
+      expect(errorText(result)).toContain('Multiple worksheets exist');
     } finally {
       await harness.close();
     }
   });
 
-  it('returns an action-required error when worksheet name is ambiguous', async () => {
+  it('surfaces a raw error when worksheet name is ambiguous', async () => {
     const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets', {
         status: 200,
@@ -1005,45 +552,30 @@ describe('getSummaryDataTool', () => {
       const result = await harness.callTool({ worksheetName: 'Regional Sales' });
 
       expect(result.isError).toBe(true);
-      expect(parseJsonResult(result)).toMatchObject({
-        status: 'action-required',
-        reason: 'worksheet-ambiguous',
-        error: {
-          message: expect.stringMatching(/matched multiple worksheets.*sheet-a.*sheet-b/),
-        },
-      });
+      expect(errorText(result)).toMatch(/matched multiple worksheets.*sheet-a.*sheet-b/);
     } finally {
       await harness.close();
     }
   });
 
-  it('returns an action-required repair error with available names when worksheet is not found', async () => {
+  it('surfaces a raw error when the worksheet is not found', async () => {
     const harness = await startHarness();
     try {
       const result = await harness.callTool({ worksheetName: 'Missing Sheet' });
 
       expect(result.isError).toBe(true);
-      expect(parseJsonResult(result)).toMatchObject({
-        status: 'action-required',
-        reason: 'worksheet-not-found',
-        guidance:
-          'The requested worksheet was not found. Choose an available populated worksheet, correct the worksheet name/id, or use list-templates, build-worksheets-from-templates, and apply-worksheet before calling get-summary-data again.',
-        error: {
-          message: expect.stringMatching(
-            /Worksheet "Missing Sheet" was not found.*Sales by Region.*Profit by Category/,
-          ),
-        },
-      });
-      expectStructuredBlock(result, {
-        label: 'Repair worksheet selection and retry',
-        kind: 'prefill',
-      });
+      expect(errorText(result)).toMatch(
+        /Worksheet "Missing Sheet" was not found.*Sales by Region.*Profit by Category/,
+      );
     } finally {
       await harness.close();
     }
   });
 
-  it('uses endpoint-unavailable guidance when Desktop lacks the summary-data route', async () => {
+  it('tells the caller the Desktop build is too old when the summary-data route is missing', async () => {
+    // The tool dropped its own endpoint-unavailable status, but the shared read harness still
+    // maps a missing route to the actionable "build is too old, do not retry" message, so a
+    // build-too-old read stays diagnosable without the removed status machine.
     const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
         status: 404,
@@ -1061,14 +593,9 @@ describe('getSummaryDataTool', () => {
 
     try {
       const result = await harness.callTool({ worksheetName: 'Sales by Region' });
-
       expect(result.isError).toBe(true);
-      expect(parseJsonResult(result)).toMatchObject({
-        status: 'action-required',
-        reason: 'endpoint-unavailable',
-        guidance: expect.stringContaining('Desktop build'),
-      });
-      expectStructuredBlock(result, { label: 'Update Desktop/API and retry', kind: 'prefill' });
+      expect(errorText(result)).toContain('Desktop build');
+      expect(errorText(result)).toContain('Do not retry');
     } finally {
       await harness.close();
     }
@@ -1143,17 +670,11 @@ function parseJsonResult(result: CallToolResult): unknown {
   return JSON.parse(result.content[0].text);
 }
 
-/**
- * The block a client actually receives is the JSON body PLUS the nextAction envelope. A
- * client that prefers structuredContent drops the text block outright, so asserting the
- * body is folded in is asserting the agent still learns the status, the reason and the
- * guidance — not just "what to do next".
- */
-function expectStructuredBlock(result: CallToolResult, nextAction: unknown): void {
-  expect(result.structuredContent).toEqual({
-    ...(parseJsonResult(result) as object),
-    nextAction,
-  });
+// The clean wrapper surfaces a failure as the executor's raw error text, so a caller reads
+// the reason straight from the message rather than from a status/guidance envelope.
+function errorText(result: CallToolResult): string {
+  invariant(result.content[0].type === 'text');
+  return result.content[0].text;
 }
 
 describe('isRouteMissing', () => {

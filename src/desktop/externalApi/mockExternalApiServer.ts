@@ -127,6 +127,9 @@ const DEFAULT_WORKBOOK_DATASOURCES = [
     luid: 'luid-superstore',
     name: 'Sample - Superstore',
     caption: 'Sample - Superstore',
+    type: 'relational',
+    isExtract: true,
+    hasDownloadFilePermission: true,
   },
   {
     id: 'wb-ds-quota',
@@ -134,11 +137,17 @@ const DEFAULT_WORKBOOK_DATASOURCES = [
     luid: null,
     name: 'Quota Targets',
     caption: 'Quota Targets',
+    type: 'federated',
+    isExtract: false,
+    // Unpublished: hasDownloadFilePermission is null (permission N/A), projected out like a null luid.
+    hasDownloadFilePermission: null,
   },
   {
     // luid absent entirely (older API build that predates the field): exercises
     // the `undefined` leg of `luid: z.string().nullish()` — the reason it's
-    // nullish() rather than nullable(). Projected out of the tool output like null.
+    // nullish() rather than nullable(). type/isExtract/hasDownloadFilePermission
+    // are likewise absent, exercising the fail-open `undefined` leg of each newer
+    // field. All projected out of the tool output.
     id: 'wb-ds-legacy',
     name: 'Legacy Extract',
     caption: 'Legacy Extract',
@@ -413,6 +422,9 @@ export async function startMockExternalApiServer(
         locale: 'en_US',
         repositoryLocation: '/Users/tableau/Documents/My Tableau Repository',
         logLocation: '/Users/tableau/Library/Logs/Tableau',
+        isStartPageVisible: false,
+        isDataSourcePageActive: false,
+        isPresentationMode: false,
       });
       return;
     }
@@ -881,6 +893,41 @@ export async function startMockExternalApiServer(
         return;
       }
       sendOperation(res, 'export-workbook-as');
+      return;
+    }
+
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookPublish) {
+      sendOperation(res, 'publish-workbook');
+      return;
+    }
+
+    const datasourceRefreshMatch = path.match(
+      /^\/v0\/datasources\/([^/]+):(refreshData|refreshExtract)$/,
+    );
+    if (method === 'POST' && datasourceRefreshMatch) {
+      const action = datasourceRefreshMatch[2];
+      if (action === 'refreshExtract') {
+        let parsed: { isFullRefresh?: unknown };
+        try {
+          parsed = JSON.parse(body);
+        } catch {
+          sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+          return;
+        }
+        if (parsed.isFullRefresh !== undefined && typeof parsed.isFullRefresh !== 'boolean') {
+          sendProblem(
+            res,
+            400,
+            'invalid-request-body',
+            'refreshExtract `isFullRefresh` must be a boolean.',
+          );
+          return;
+        }
+      }
+      sendOperation(
+        res,
+        action === 'refreshData' ? 'refresh-datasource-data' : 'refresh-datasource-extract',
+      );
       return;
     }
 

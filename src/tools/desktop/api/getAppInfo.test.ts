@@ -22,6 +22,9 @@ const resultSchema = z.object({
   build: z.string().optional(),
   edition: z.string().optional(),
   os: z.string().optional(),
+  isStartPageVisible: z.boolean().optional(),
+  isDataSourcePageActive: z.boolean().optional(),
+  isPresentationMode: z.boolean().optional(),
 });
 
 describe('getAppInfoTool', () => {
@@ -34,7 +37,9 @@ describe('getAppInfoTool', () => {
     const tool = getAppInfoTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-app-info');
-    expect(tool.description).toBe('Identify the Desktop build when an endpoint 404s as too-new.');
+    expect(tool.description).toBe(
+      'Identify the Desktop build when an endpoint 404s as too-new, and read live UI state (Start Page visibility, Data Source page active, presentation mode).',
+    );
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       readOnlyHint: true,
@@ -42,7 +47,7 @@ describe('getAppInfoTool', () => {
     });
   });
 
-  it('returns application version, build, edition, and OS', async () => {
+  it('returns application version, build, edition, OS, and live UI state', async () => {
     const server = await startMockExternalApiServer();
     const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
     await executor.start();
@@ -60,13 +65,16 @@ describe('getAppInfoTool', () => {
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toBe(
-        '{"applicationVersion":"2026.1","build":"20261.26.0701.1234","edition":"Professional","os":"macOS"}',
+        '{"applicationVersion":"2026.1","build":"20261.26.0701.1234","edition":"Professional","os":"macOS","isStartPageVisible":false,"isDataSourcePageActive":false,"isPresentationMode":false}',
       );
       expect(parseResult(result)).toEqual({
         applicationVersion: '2026.1',
         build: '20261.26.0701.1234',
         edition: 'Professional',
         os: 'macOS',
+        isStartPageVisible: false,
+        isDataSourcePageActive: false,
+        isPresentationMode: false,
       });
       expect(server.requests.at(-1)?.path).toBe('/v0/app');
     } finally {
