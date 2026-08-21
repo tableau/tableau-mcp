@@ -56,6 +56,22 @@ describe('buildDashboardCandidateXml', () => {
       '<viewpoint name="Profit"><zoom type="entire-view"/></viewpoint>',
     );
   });
+
+  it('places named KPI worksheets in the executive-summary strip', () => {
+    const candidateXml = buildDashboardCandidateXml({
+      baselineXml: PRISTINE,
+      dashboardName: 'Sales Dashboard',
+      canonicalWorksheetNames: ['Sales', 'Profit'],
+      title: 'Executive Overview',
+      layout: {
+        layoutType: 'executive-summary',
+        kpiWorksheetNames: ['Sales'],
+      },
+    });
+
+    expect(candidateXml).toContain('h="20000" id="11" name="Sales" w="100000" x="0" y="8000"');
+    expect(candidateXml).toContain('h="72000" id="12" name="Profit" w="100000" x="0" y="28000"');
+  });
 });
 
 describe('composeDashboardCore', () => {

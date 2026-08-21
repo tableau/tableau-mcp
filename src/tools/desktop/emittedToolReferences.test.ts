@@ -72,6 +72,7 @@ const NON_TOOL_VOCABULARY = [
   'endpoint-not-in-this-build',
   'exclude-all',
   'execute-command-error',
+  'executive-summary',
   'field-not-found',
   'file-not-found',
   'filter-group',
