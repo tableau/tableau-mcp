@@ -83,20 +83,19 @@ const paramsSchema = {
       end: z.enum(['top', 'bottom']).optional().describe('top/bottom; default top.'),
     })
     .optional()
-    .describe('For top_n: Top/Bottom-N.'),
+    .describe('Top/Bottom N.'),
   sortDirection: z
     .object({
       direction: z.enum(['ASC', 'DESC']).describe('Existing-sort direction.'),
     })
     .optional()
-    .describe('For sort_direction.'),
-  targetField: z
-    .string()
-    .min(1)
+    .describe('sort_direction; numeric DESC=largest first.'),
+  targetField: z.string().min(1).optional().describe('Axis; omit to auto-detect categorical axis.'),
+  sortByField: z.string().min(1).optional().describe('Measure to sort by.'),
+  direction: z
+    .enum(['asc', 'desc'])
     .optional()
-    .describe('sort_by_field axis; omit to auto-detect one categorical axis.'),
-  sortByField: z.string().min(1).optional().describe('sort_by_field measure to sort by.'),
-  direction: z.enum(['asc', 'desc']).optional().describe('sort_by_field direction; default asc.'),
+    .describe('sort_by_field; asc default; numeric desc=largest first.'),
 };
 
 const title = 'Refining worksheet';

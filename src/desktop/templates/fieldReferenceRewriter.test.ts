@@ -485,7 +485,8 @@ describe('rewriteFieldReferences — ref-class coverage: part-to-whole-waterfall
   it('class 2: rewrites the aggregated encoding instance (sum)', () => {
     const r = run();
     expect(r).toContain('name="[sum:population:qk]"');
-    expect(r).toContain(`<color column="[${DS}].[sum:population:qk]"`);
+    expect(r).toContain(`using="[${DS}].[sum:population:qk]"`);
+    expect(r).toMatch(new RegExp(`<size column="\\[${DS}\\]\\.\\[sum:Calculation_[^\\]]+:qk\\]"`));
     expect(r).not.toContain('[sum:{{field_base_1}}:qk]');
   });
 
@@ -497,9 +498,10 @@ describe('rewriteFieldReferences — ref-class coverage: part-to-whole-waterfall
     expect(r).not.toContain('[cum:sum:{{field_base_1}}:qk]');
   });
 
-  it('class 4: rewrites the calc FORMULA placeholder ref to population', () => {
+  it('class 4: rewrites both authored contribution calc formulas to population', () => {
     const r = run();
-    expect(r).toContain('formula="-SUM([population])"');
+    expect(r).toContain('formula="-[population]"');
+    expect(r).toContain('formula="SUM([population])&gt;0"');
     expect(r).not.toContain('{{field_base_1}}');
   });
 

@@ -49,8 +49,8 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('requires explicit requested encodings to participate in template discovery', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
 
-    expect(plainChart?.action).toContain('put named channels in requiredChannels');
-    expect(plainChart?.action).toContain('No fit: use manual worksheet path');
+    expect(plainChart?.action).toContain('Put named channels in requiredChannels');
+    expect(plainChart?.action).toContain('guarded artifact');
   });
 
   // Live incident (v11 bundle): asked to move "warmer" onto color, the agent had no route
@@ -69,10 +69,9 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'refine-worksheet',
       'add-field',
       'apply-worksheet',
-      'list-templates',
-      'list-available-fields',
-      'build-worksheets-from-templates',
     ]);
+    expect(editInPlace?.action).toContain('existing-sheet tools only');
+    expect(editInPlace?.action).not.toContain('requested new chart');
   });
 
   it('census scopes refine-worksheet to top-N/sort and names the encoding pair', () => {
@@ -129,18 +128,55 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
   it('allows direct and open-intent modern template choices', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
-    expect(plainChart?.action).toContain('in parallel');
+    expect(plainChart?.action).toContain('bind-template');
+    expect(plainChart?.action).toContain('auto_apply:true');
+    expect(plainChart?.action).toContain('one exact call_2_contract proposal');
+    expect(plainChart?.action).toContain(
+      'Terminal only with applied:true plus clean host verification, or a verified fallback apply receipt (passed or warnings)',
+    );
+    expect(plainChart?.action).toContain('Never rephrase or resubmit the bare ask');
+    expect(plainChart?.action).toContain(
+      'If that second call still proposes, or any result escalates or blocks',
+    );
     expect(plainChart?.action).toContain('templatePlan');
-    expect(plainChart?.action).toContain('an explicit view');
-    expect(plainChart?.action).toContain('Direct asks may choose/build/apply.');
-    expect(plainChart?.action).toContain('Open intent: build several distinct worksheets.');
+    expect(plainChart?.action).toContain('Open intent builds several distinct worksheets.');
     expect(plainChart?.action).toContain('Preview/no-change');
     expect(plainChart?.action).toContain('stop before apply-worksheet');
   });
 
-  it('does not impose a bind-first or confirmation ceremony', () => {
+  it.each([
+    ['Compare Sales across Categories', 'plain-chart', 'semantic ask', 'bind-template'],
+    ['Show Sales over time', 'plain-chart', 'semantic ask', 'bind-template'],
+    ['Show relationship between Sales and Profit', 'plain-chart', 'semantic ask', 'bind-template'],
+    ['explicit named single chart', 'plain-chart', 'explicit chart name', 'bind-template'],
+    ['preview or no-change chart', 'plain-chart', 'artifact flow', 'skip bind-template'],
+    ['open multi-chart request', 'plain-chart', 'artifact flow', 'skip bind-template'],
+    [
+      'existing-sheet edit',
+      'edit-in-place',
+      'existing-sheet tools only',
+      'Never create new sheets',
+    ],
+    ['unnamed derived metric', 'derived-metric', 'author-calc', 'no named chart type'],
+  ])('route precedence: %s uses %s', (_intent, routeId, requiredAction, requiredBoundary) => {
+    const route = routes.find((candidate) => candidate.id === routeId);
+
+    expect(`${route?.trigger} ${route?.action}`).toContain(requiredAction);
+    expect(`${route?.trigger} ${route?.action}`).toContain(requiredBoundary);
+  });
+
+  it('uses bind first for recognizable single-view visualization requests', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
-    expect(plainChart?.action).not.toContain('bind-template');
+    expect(plainChart?.trigger).toContain('single-view visualization request');
+    expect(plainChart?.trigger).toContain('common semantic asks');
+    expect(plainChart?.action).toContain('semantic ask may return one bounded proposal');
+    expect(plainChart?.toolSequence).toEqual([
+      'bind-template',
+      'list-templates',
+      'list-available-fields',
+      'build-worksheets-from-templates',
+      'apply-worksheet',
+    ]);
     expect(plainChart?.action).not.toMatch(/confirm|expire|same.session|re-list/i);
   });
 
@@ -285,19 +321,24 @@ describe('buildDesktopInstructions', () => {
     expect(pinned).toContain('You control Tableau Desktop.');
   });
 
-  it('uses the caller-neutral template artifact flow for the default profile', () => {
+  it('uses binder-first explicit charts with a guarded artifact fallback for the default profile', () => {
     const instructions = buildDesktopInstructions({ sessionPinned: false, profile: '' });
 
     expect(instructions).toContain(
       'list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet',
     );
-    expect(instructions).toContain('Direct asks may choose/build/apply.');
     expect(instructions).toContain('artifacts coexist');
-    expect(instructions).toContain('Open intent: build several distinct worksheets.');
+    expect(instructions).toContain('Open intent builds several distinct worksheets.');
     expect(instructions).toContain('stop before apply-worksheet');
-    expect(instructions).toContain('Apply sequentially');
+    expect(instructions).toContain('Apply exact templatePlan sequentially');
     expect(instructions).toContain('never replay uncertain apply');
-    expect(instructions).not.toContain('bind-template');
+    expect(instructions).toContain('bind-template');
+    expect(instructions).toContain('auto_apply:true');
+    expect(instructions).toContain('one exact call_2_contract proposal');
+    expect(instructions).toContain(
+      'Terminal only with applied:true plus clean host verification, or a verified fallback apply receipt (passed or warnings)',
+    );
+    expect(instructions).toContain('Never rephrase or resubmit the bare ask');
     expect(instructions).not.toMatch(
       /re-list|turn gate|forced confirmation|build-one-then-apply|expiry|same-session invalidation/i,
     );
@@ -316,11 +357,11 @@ describe('buildDesktopInstructions', () => {
   });
 
   it.each(['dynamic-authoring', 'full', 'combined-lean'])(
-    'prefers the modern template flow for profile %s',
+    'serves binder-first charts with the modern artifact fallback for profile %s',
     (profile) => {
       const instructions = buildDesktopInstructions({ sessionPinned: false, profile });
       expect(instructions).toContain('build-worksheets-from-templates');
-      expect(instructions).not.toContain('bind-template');
+      expect(instructions).toContain('bind-template');
     },
   );
 });

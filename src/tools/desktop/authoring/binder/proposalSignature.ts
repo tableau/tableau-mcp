@@ -18,6 +18,7 @@ export interface ProposalSignatureInput {
     direction: string;
   };
   top_n?: number;
+  bin_size?: number;
   filters?: ProposalSignatureFilter[];
 }
 
@@ -55,6 +56,7 @@ export function proposalSignature(proposal: ProposalSignatureInput): string {
       ? { sort: { by: proposal.sort.by, direction: proposal.sort.direction } }
       : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
+    ...(proposal.bin_size !== undefined ? { bin_size: proposal.bin_size } : {}),
     ...(filters !== undefined && filters.length > 0 ? { filters } : {}),
   });
 }

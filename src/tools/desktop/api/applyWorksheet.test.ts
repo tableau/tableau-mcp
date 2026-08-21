@@ -33,7 +33,11 @@ vi.mock('../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) 
 }));
 vi.mock('../authoring/fields/worksheetEditBuffer.js');
 vi.mock('../../../desktop/wrappers/listWorksheets.js');
-vi.mock('fs');
+vi.mock('fs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('fs')>()),
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+}));
 
 describe('applyWorksheetTool', () => {
   const resultSchema = z.object({
@@ -77,6 +81,8 @@ describe('applyWorksheetTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(existsSync).mockReset();
+    vi.mocked(readFileSync).mockReset();
     vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
       Ok({ count: 1, worksheets: [{ id: 'artifact-sheet-uuid', name: 'Artifact Sheet' }] }),
     );
@@ -155,6 +161,135 @@ describe('applyWorksheetTool', () => {
       session: '12345',
       worksheetId: 'artifact-sheet-uuid',
     });
+  });
+
+  it('keeps a templatePlan apply nonterminal when structural verification is skipped', async () => {
+    const artifact = templateArtifact('direct-plan');
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      return Ok({ readbackWarnings: [], readbackVerification: skippedReadbackVerification });
+    });
+
+    const result = await getDirectTemplateToolResult({
+      buildArtifact: vi.fn().mockReturnValue(Ok({ artifact, provenance: 'protected' })),
+      getExecutor: vi.fn().mockResolvedValue({
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: '<workbook><worksheets/><windows/></workbook>',
+            instanceId: 'inst-build',
+          }),
+        ),
+      }),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      verification: { status: 'skipped' },
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification unavailable — inspect live worksheet state',
+      },
+    });
+    expect(
+      (result.structuredContent as { nextAction: { receipt?: unknown } }).nextAction.receipt,
+    ).toBeUndefined();
+  });
+
+  it('applies a live-shaped templatePlan with a matching worksheetName and unique datasource caption exactly once', async () => {
+    await useRealTemplateReads();
+    const mockLoadWorksheetXml = vi
+      .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockImplementation(async (args) => {
+        expect(args.worksheetName).toBe('Sales by Category');
+        expect(args.xml).toContain('[federated.actual]');
+        args.artifactApply!.dispatchState.attempted = true;
+        return Ok({
+          readbackWarnings: [],
+          readbackVerification: { ok: true, status: 'passed' },
+        });
+      });
+    const getExecutor = vi.fn().mockResolvedValue({
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValue(Ok({ xml: captionedTemplateWorkbook(), instanceId: 'inst-build' })),
+    });
+
+    const result = await getDirectTemplateToolResult({
+      getExecutor,
+      plan: captionTemplatePlan(),
+      worksheetName: 'Sales by Category',
+    });
+
+    expect(result.isError).toBe(false);
+    expect(mockLoadWorksheetXml).toHaveBeenCalledOnce();
+  });
+
+  it('resolves a unique datasource caption to the live internal name when building', async () => {
+    await useRealTemplateReads();
+    const mockLoadWorksheetXml = vi
+      .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockImplementation(async (args) => {
+        expect(args.xml).toContain('[federated.actual]');
+        args.artifactApply!.dispatchState.attempted = true;
+        return Ok({
+          readbackWarnings: [],
+          readbackVerification: { ok: true, status: 'passed' },
+        });
+      });
+
+    const result = await getDirectTemplateToolResult({
+      getExecutor: vi.fn().mockResolvedValue({
+        getWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(Ok({ xml: captionedTemplateWorkbook(), instanceId: 'inst-build' })),
+      }),
+      plan: captionTemplatePlan(),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(mockLoadWorksheetXml).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a templatePlan worksheetName mismatch before resolving Desktop or building', async () => {
+    const buildArtifact = vi.fn();
+    const getExecutor = vi.fn();
+
+    const result = await getDirectTemplateToolResult({
+      buildArtifact,
+      getExecutor,
+      worksheetName: 'Wrong Sheet',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'worksheetName "Wrong Sheet" must match templatePlan.title "Artifact Sheet"',
+    );
+    expect(getExecutor).not.toHaveBeenCalled();
+    expect(buildArtifact).not.toHaveBeenCalled();
+    expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['duplicate', duplicateCaptionTemplateWorkbook(), 'Shared Caption'],
+    ['unrelated', captionedTemplateWorkbook(), 'Missing Caption'],
+  ])('rejects a %s datasource caption without applying', async (_kind, workbookXml, datasource) => {
+    await useRealTemplateReads();
+    const result = await getDirectTemplateToolResult({
+      getExecutor: vi.fn().mockResolvedValue({
+        getWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(Ok({ xml: workbookXml, instanceId: 'inst-build' })),
+      }),
+      plan: captionTemplatePlan(datasource),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      `Datasource "${datasource}" is not a unique live datasource name or caption.`,
+    );
+    expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -426,7 +561,7 @@ describe('applyWorksheetTool', () => {
     expect(mockLoadWorksheetXml).not.toHaveBeenCalled();
   });
 
-  it('reports skipped readback honestly for inline worksheet XML apply', async () => {
+  it('keeps inline worksheet XML apply nonterminal when readback is skipped', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
       Ok({ readbackWarnings: [], readbackVerification: skippedReadbackVerification }),
@@ -445,9 +580,18 @@ describe('applyWorksheetTool', () => {
     expect(message).toContain('HOST VERIFICATION — unverified');
     expect(message).toContain('readback unavailable');
     expect(message).not.toMatch(/\bverified\b/i);
+    expect(result.structuredContent).toMatchObject({
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification unavailable — inspect live worksheet state',
+      },
+    });
+    expect(
+      (result.structuredContent as { nextAction: { receipt?: unknown } }).nextAction.receipt,
+    ).toBeUndefined();
   });
 
-  it('reports skipped readback honestly for file-based worksheet apply', async () => {
+  it('keeps file-based worksheet apply nonterminal when readback is skipped', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
     const mockFilePath = '/path/to/worksheet.xml';
     vi.mocked(existsSync).mockReturnValue(true);
@@ -469,6 +613,15 @@ describe('applyWorksheetTool', () => {
     expect(message).toContain('HOST VERIFICATION — unverified');
     expect(message).toContain('readback unavailable');
     expect(message).not.toMatch(/\bverified\b/i);
+    expect(result.structuredContent).toMatchObject({
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification unavailable — inspect live worksheet state',
+      },
+    });
+    expect(
+      (result.structuredContent as { nextAction: { receipt?: unknown } }).nextAction.receipt,
+    ).toBeUndefined();
   });
 
   it('fails the receipt when readback warnings show promised sort loss', async () => {
@@ -796,6 +949,64 @@ describe('applyWorksheetTool', () => {
     });
   });
 
+  it('keeps an artifactId apply nonterminal when structural verification is skipped', async () => {
+    const store = artifactStore();
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      return Ok({ readbackWarnings: [], readbackVerification: skippedReadbackVerification });
+    });
+
+    const result = await getArtifactToolResult(store, 'artifact-1', '12345');
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      artifactId: 'artifact-1',
+      verification: { status: 'skipped' },
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification unavailable — inspect live worksheet state',
+      },
+    });
+    expect(
+      (result.structuredContent as { nextAction: { receipt?: unknown } }).nextAction.receipt,
+    ).toBeUndefined();
+  });
+
+  it('applies an artifactId with a matching worksheetName exactly once', async () => {
+    const store = artifactStore();
+    const mockLoadWorksheetXml = vi
+      .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+      .mockImplementation(async (args) => {
+        args.artifactApply!.dispatchState.attempted = true;
+        return Ok({
+          readbackWarnings: [],
+          readbackVerification: { ok: true, status: 'passed' },
+        });
+      });
+
+    const result = await getArtifactToolResult(store, 'artifact-1', '12345', 'Artifact Sheet');
+
+    expect(result.isError).toBe(false);
+    expect(mockLoadWorksheetXml).toHaveBeenCalledOnce();
+    expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
+  });
+
+  it('rejects an artifactId worksheetName mismatch without applying or consuming it', async () => {
+    const store = artifactStore();
+
+    const result = await getArtifactToolResult(store, 'artifact-1', '12345', 'Wrong Sheet');
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'worksheetName "Wrong Sheet" must match artifact title "Artifact Sheet"',
+    );
+    expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
+    const stillAvailable = store.reserve('artifact-1', '12345');
+    expect(stillAvailable.ok).toBe(true);
+    if (stillAvailable.ok) store.release(stillAvailable.lease);
+  });
+
   it('keeps a same-pid/new-instance mismatch usable for the correct instance', async () => {
     const store = artifactStore();
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
@@ -951,6 +1162,7 @@ async function getArtifactToolResult(
   store: TemplateArtifactStore,
   artifactId: string,
   session: string,
+  worksheetName?: string,
 ): Promise<CallToolResult> {
   const tool = getApplyWorksheetTool(new DesktopMcpServer(), { store });
   const callback = await Provider.from(tool.callback);
@@ -959,7 +1171,7 @@ async function getArtifactToolResult(
       session,
       artifactId,
       templatePlan: undefined,
-      worksheetName: undefined,
+      worksheetName,
       worksheetFile: undefined,
     },
     {
@@ -1001,13 +1213,17 @@ async function getDirectTemplateToolResult({
   buildArtifact,
   getExecutor,
   store,
+  plan = directTemplatePlan(),
+  worksheetName,
 }: {
-  buildArtifact: ReturnType<typeof vi.fn>;
+  buildArtifact?: ReturnType<typeof vi.fn>;
   getExecutor: TableauDesktopToolContext['getExecutor'];
   store?: TemplateArtifactStore;
+  plan?: WorksheetTemplatePlan;
+  worksheetName?: string;
 }): Promise<CallToolResult> {
   const tool = (getApplyWorksheetTool as any)(new DesktopMcpServer(), {
-    buildArtifact,
+    ...(buildArtifact ? { buildArtifact } : {}),
     createId: () => 'direct-plan',
     store,
   });
@@ -1016,12 +1232,52 @@ async function getDirectTemplateToolResult({
     {
       session: '12345',
       artifactId: undefined,
-      templatePlan: directTemplatePlan(),
-      worksheetName: undefined,
+      templatePlan: plan,
+      worksheetName,
       worksheetFile: undefined,
     },
     { ...getMockRequestHandlerExtra(), getExecutor },
   );
+}
+
+function captionTemplatePlan(datasource = 'Superstore'): WorksheetTemplatePlan {
+  return {
+    templateName: 'magnitude-simple-bar',
+    title: 'Sales by Category',
+    datasource,
+    fieldMapping: {
+      field_base_1: '[federated.actual].[none:Category:nk]',
+      field_base_2: '[federated.actual].[sum:Sales:qk]',
+    },
+  };
+}
+
+function captionedTemplateWorkbook(): string {
+  return `<workbook><datasources>
+    <datasource name='federated.actual' caption='Superstore'>
+      <column name='[Category]' datatype='string' role='dimension' type='nominal' />
+      <column name='[Sales]' datatype='real' role='measure' type='quantitative' />
+    </datasource>
+  </datasources><worksheets/><windows/></workbook>`;
+}
+
+function duplicateCaptionTemplateWorkbook(): string {
+  return `<workbook><datasources>
+    <datasource name='federated.actual' caption='Shared Caption'>
+      <column name='[Category]' datatype='string' role='dimension' type='nominal' />
+      <column name='[Sales]' datatype='real' role='measure' type='quantitative' />
+    </datasource>
+    <datasource name='federated.other' caption='Shared Caption'>
+      <column name='[Category]' datatype='string' role='dimension' type='nominal' />
+      <column name='[Sales]' datatype='real' role='measure' type='quantitative' />
+    </datasource>
+  </datasources><worksheets/><windows/></workbook>`;
+}
+
+async function useRealTemplateReads(): Promise<void> {
+  const realFs = await vi.importActual<typeof import('fs')>('fs');
+  vi.mocked(existsSync).mockImplementation(realFs.existsSync);
+  vi.mocked(readFileSync).mockImplementation(realFs.readFileSync);
 }
 
 async function getToolResult({

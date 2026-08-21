@@ -21,7 +21,7 @@ const AUTOMATIC_NOUN_ALIASES = new Map<string, string[]>([
   ['ranking-ordered-column', ['column', 'sorted-column', 'vertical-bar']],
   ['part-to-whole-stacked-bar-chart', ['stacked-bar']],
   ['part-to-whole-treemap-chart', ['treemap']],
-  ['part-to-whole-pie-chart', ['pie', 'donut']],
+  ['part-to-whole-pie-chart', ['pie']],
   ['correlation-highlight-table', ['heatmap', 'highlight-table']],
   ['correlation-scatter-trendline-chart', ['with-trend-line']],
   ['trend-line-chart', ['line', 'trend', 'over-time', 'timeline']],
@@ -37,6 +37,14 @@ const AUTOMATIC_NOUN_ALIASES = new Map<string, string[]>([
   ['spatial-choropleth-map', ['choropleth', 'filled-map', 'region-map']],
 ]);
 const AUTOMATIC_NOUNS = new Set([...AUTOMATIC_NOUN_ALIASES.values()].flat());
+
+export function preferredAutomaticTemplateForNoun(noun: string): string | undefined {
+  const normalized = noun.trim().toLowerCase().replace(/\s+/g, '-');
+  for (const [template, aliases] of AUTOMATIC_NOUN_ALIASES) {
+    if (aliases.includes(normalized)) return template;
+  }
+  return undefined;
+}
 
 function filenameIntentKeywords(template: string): string[] {
   const tokens = new Set(
@@ -62,7 +70,8 @@ function filenameIntentKeywords(template: string): string[] {
 function normalizeRequiredSlots(descriptor: RuntimeTemplateDescriptor): RuntimeTemplateDescriptor {
   if (
     descriptor.template !== 'correlation-highlight-table' &&
-    descriptor.template !== 'quota-attainment-bullet'
+    descriptor.template !== 'quota-attainment-bullet' &&
+    descriptor.template !== 'correlation-bubble-chart'
   ) {
     return descriptor;
   }
@@ -73,7 +82,8 @@ function normalizeRequiredSlots(descriptor: RuntimeTemplateDescriptor): RuntimeT
       ((descriptor.template === 'correlation-highlight-table' && slot.role.includes('color')) ||
         (descriptor.template === 'quota-attainment-bullet' &&
           slot.role.includes('reference-line') &&
-          !slot.role.includes('cols')))
+          !slot.role.includes('cols')) ||
+        (descriptor.template === 'correlation-bubble-chart' && slot.role.includes('size')))
         ? { ...slot, required: true }
         : slot,
     ),

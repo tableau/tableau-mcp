@@ -38,7 +38,7 @@ import {
   type OptionalFieldPruneSpec,
 } from '../templates/optionalFieldPrune.js';
 import { cardinalityAdvice, PIE_SLICE_WORKABLE_MAX } from './cardinality.js';
-import { matchAvoidWhen } from './classify.js';
+import { matchAvoidWhen, parseExplicitBoxRolePhrases } from './classify.js';
 import { escapeXml } from './escape.js';
 import type {
   BlockerCode,
@@ -82,6 +82,8 @@ export interface BindingProposal {
   bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>; // field = a NAME from SchemaSummary.fields
   sort?: { by: string; direction: 'asc' | 'desc' };
   top_n?: number;
+  /** Histogram-only positive bin width. Omit to preserve the Tableau-authored default. */
+  bin_size?: number;
   filters?: FilterSpec[];
   /** Literal {{KEY}} template substitutions (e.g. date-range {{DATE_MIN}}); reserved
    *  keys DATASOURCE/field_base_* are stripped before use. */
@@ -169,10 +171,9 @@ const NUMERIC_DATATYPES: ReadonlySet<string> = new Set(['integer', 'real']);
 const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
 
 // Aggregations that are ALSO legal over a date/datetime field. MIN/MAX of a date are
-// real Tableau aggregations (earliest/latest date, a continuous green pill) — e.g.
-// gantt-task-rollup-chart authors MIN on its DATE start_date slot. The other
-// aggregations (sum/avg/count/median) stay numeric-only. Scoped to temporal datatypes
-// only; MIN/MAX on a plain string dimension remains illegal (unchanged).
+// real Tableau aggregations (earliest/latest date, a continuous green pill). The other
+// aggregations (sum/avg/count/median) stay numeric-only. Scoped to temporal datatypes only;
+// MIN/MAX on a plain string dimension remains illegal (unchanged).
 const TEMPORAL_MINMAX_DERIVATIONS: ReadonlySet<string> = new Set(['min', 'max']);
 
 // Geo semantic-role concept check (red-team GEO-02). MIRRORS the private
@@ -458,7 +459,11 @@ export function validateBinding(
       slot.bindable &&
       slot.kind === 'quantitative' &&
       slot.role.includes('reference-line') &&
-      !slot.role.includes('cols'));
+      !slot.role.includes('cols')) ||
+    (m.template === 'correlation-bubble-chart' &&
+      slot.bindable &&
+      slot.kind === 'quantitative' &&
+      slot.role.includes('size'));
 
   // ── Gate 1: slot coverage ────────────────────────────────────────
   for (const slot of m.slots) {
@@ -652,6 +657,13 @@ export function validateBinding(
           `workable maximum of ${PIE_SLICE_WORKABLE_MAX}; choose a lower-cardinality dimension`,
       });
     }
+    if (ask && /\bdonut\b/i.test(ask)) {
+      blockers.push({
+        code: 'kind-mismatch',
+        detail:
+          'an explicit donut ask requires a distinct live-proven donor; plain pie is not equivalent',
+      });
+    }
   }
 
   if (m.template === 'quota-attainment-bullet') {
@@ -680,6 +692,251 @@ export function validateBinding(
           'bullet actual and target must resolve to distinct underlying fields; ' +
           `both bindings resolve to "${actual.name}"`,
       });
+    }
+  }
+
+  const identityOf = (field: SchemaField): string =>
+    `${field.datasource}\u0000${bareName(field.columnName)}`;
+
+  if (m.template === 'box-plot-chart') {
+    const boxFields = [...resolved.values()].map(({ field }) => field);
+    if (boxFields.length === 3 && new Set(boxFields.map(identityOf)).size !== 3) {
+      blockers.push({
+        code: 'base-column-conflict',
+        detail:
+          'box plot measure, category, and record-grain detail must resolve to three distinct underlying fields',
+      });
+    }
+    if (ask) {
+      const measureSlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('rows'),
+      );
+      const categorySlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('cols'),
+      );
+      const grainSlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('lod'),
+      );
+      const measure = measureSlot ? resolved.get(measureSlot.slot_id)?.field : undefined;
+      const category = categorySlot ? resolved.get(categorySlot.slot_id)?.field : undefined;
+      const grain = grainSlot ? resolved.get(grainSlot.slot_id)?.field : undefined;
+      const clause = parseExplicitBoxRolePhrases(ask);
+      const expectedMeasure = clause ? resolveInSummary(s, clause.measure).field : undefined;
+      const expectedCategory = clause ? resolveInSummary(s, clause.category).field : undefined;
+      const expectedGrain = clause ? resolveInSummary(s, clause.grain).field : undefined;
+      if (
+        !expectedMeasure ||
+        expectedMeasure.role !== 'measure' ||
+        !expectedCategory ||
+        expectedCategory.role !== 'dimension' ||
+        !expectedGrain ||
+        expectedGrain.role !== 'dimension'
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          slot_id: grainSlot?.slot_id,
+          detail:
+            'box plot requires explicit, verifiable measure, category, and "with <field> detail" roles',
+        });
+      } else if (
+        measure &&
+        category &&
+        grain &&
+        (identityOf(measure) !== identityOf(expectedMeasure) ||
+          identityOf(category) !== identityOf(expectedCategory) ||
+          identityOf(grain) !== identityOf(expectedGrain))
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          slot_id: grainSlot?.slot_id,
+          detail:
+            `box plot ask requires measure "${expectedMeasure.name}", category "${expectedCategory.name}", ` +
+            `and record grain "${expectedGrain.name}"; proposal mapped measure "${measure.name}", ` +
+            `category "${category.name}", and record grain "${grain.name}"`,
+        });
+      }
+    }
+  }
+
+  if (m.template === 'gantt-task-rollup-chart') {
+    const startSlot = m.slots.find(
+      (slot) => slot.bindable && slot.kind === 'temporal' && slot.role.includes('cols'),
+    );
+    const endSlot = m.slots.find(
+      (slot) =>
+        slot.bindable &&
+        slot.kind === 'temporal' &&
+        slot.role.includes('size') &&
+        !slot.role.includes('cols') &&
+        slot.template_field !== startSlot?.template_field,
+    );
+    const start = startSlot ? resolved.get(startSlot.slot_id)?.field : undefined;
+    const end = endSlot ? resolved.get(endSlot.slot_id)?.field : undefined;
+    const taskSlot = m.slots.find(
+      (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('rows'),
+    );
+    const task = taskSlot ? resolved.get(taskSlot.slot_id)?.field : undefined;
+    if (start && end && identityOf(start) === identityOf(end)) {
+      blockers.push({
+        code: 'base-column-conflict',
+        detail: 'gantt start and end dates must resolve to distinct underlying fields',
+      });
+    }
+    const phrase = ask?.match(
+      /\bfrom\s+(.+?)\s+to\s+(.+?)(?=\s*(?:[,;.]|colou?r(?:ed)?\s+by\b|with\b|where\b|filter(?:ed)?\s+by\b|$))/i,
+    );
+    const hasRangeCue = ask ? /\bfrom\b[\s\S]*\bto\b/i.test(ask) : false;
+    const taskPhrase = ask?.match(/\bgantt(?:\s+chart)?\s+of\s+(.+?)\s+from\b/i);
+    const expectedTask = taskPhrase ? resolveInSummary(s, taskPhrase[1].trim()).field : undefined;
+    if (ask && (!expectedTask || expectedTask.role !== 'dimension')) {
+      blockers.push({
+        code: 'kind-mismatch',
+        slot_id: taskSlot?.slot_id,
+        detail: 'gantt ask requires an explicit, verifiable task field before the from/to dates',
+      });
+    } else if (task && expectedTask && identityOf(task) !== identityOf(expectedTask)) {
+      blockers.push({
+        code: 'kind-mismatch',
+        slot_id: taskSlot?.slot_id,
+        detail: `gantt ask requires task "${expectedTask.name}"; proposal mapped "${task.name}"`,
+      });
+    }
+    if (hasRangeCue && !phrase) {
+      blockers.push({
+        code: 'kind-mismatch',
+        detail: 'gantt explicit from/to clause could not be verified against start and end fields',
+      });
+    } else if (phrase && start && end) {
+      const expectedStart = resolveInSummary(s, phrase[1].trim()).field;
+      const expectedEnd = resolveInSummary(s, phrase[2].trim()).field;
+      if (
+        !expectedStart?.datatype.match(/^date(?:time)?$/) ||
+        !expectedEnd?.datatype.match(/^date(?:time)?$/)
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail: 'gantt explicit from/to clause could not be verified against date fields',
+        });
+      } else if (
+        identityOf(start) !== identityOf(expectedStart) ||
+        identityOf(end) !== identityOf(expectedEnd)
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail:
+            `gantt ask requires start field "${expectedStart.name}" and end field "${expectedEnd.name}"; ` +
+            `proposal mapped start "${start.name}" and end "${end.name}"`,
+        });
+      }
+    }
+  }
+
+  if (m.template === 'distribution-histogram') {
+    const histogramFields = [...resolved.values()].map(({ field }) => field);
+    if (histogramFields.length === 2 && new Set(histogramFields.map(identityOf)).size !== 1) {
+      blockers.push({
+        code: 'base-column-conflict',
+        detail: 'histogram bin and raw-count slots must resolve to the same underlying measure',
+      });
+    }
+    if (ask) {
+      const clause =
+        /\bhistogram(?:\s+chart)?\s+of\s+(.+?)(?=\s+(?:distribution\b|with\s+bin\s+size\b)|\s*[,;.]|\s*$)/i.exec(
+          ask,
+        );
+      const expected = clause ? resolveInSummary(s, clause[1].trim()).field : undefined;
+      if (!expected || expected.role !== 'measure') {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail: 'histogram ask requires one explicit, verifiable measure',
+        });
+      } else if (histogramFields.some((field) => identityOf(field) !== identityOf(expected))) {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail: `histogram ask requires measure "${expected.name}"; proposal mapped "${histogramFields[0]?.name}"`,
+        });
+      }
+    }
+  }
+
+  if (m.template === 'correlation-bubble-chart') {
+    const measures = [...resolved.values()]
+      .filter(({ slot }) => slot.kind === 'quantitative')
+      .map(({ field }) => field);
+    if (measures.length === 3 && new Set(measures.map(identityOf)).size !== 3) {
+      blockers.push({
+        code: 'base-column-conflict',
+        detail: 'bubble X, Y, and size must resolve to three distinct underlying measures',
+      });
+    }
+    if (ask) {
+      const clause =
+        /\bbubble(?:\s+chart)?\s+of\s+(.+?)\s+(?:versus|vs\.?)\s+(.+?)\s+by\s+(.+?)\s+sized?\s+by\s+(.+?)(?=\s*(?:[,;.]|colou?r(?:ed)?\s+by\b|$))/i.exec(
+          ask,
+        );
+      const expectedX = clause ? resolveInSummary(s, clause[1].trim()).field : undefined;
+      const expectedY = clause ? resolveInSummary(s, clause[2].trim()).field : undefined;
+      const expectedGrain = clause ? resolveInSummary(s, clause[3].trim()).field : undefined;
+      const expectedSize = clause ? resolveInSummary(s, clause[4].trim()).field : undefined;
+      const xSlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('cols'),
+      );
+      const ySlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('rows'),
+      );
+      const sizeSlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('size'),
+      );
+      const grainSlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('lod'),
+      );
+      const x = xSlot ? resolved.get(xSlot.slot_id)?.field : undefined;
+      const y = ySlot ? resolved.get(ySlot.slot_id)?.field : undefined;
+      const size = sizeSlot ? resolved.get(sizeSlot.slot_id)?.field : undefined;
+      const grain = grainSlot ? resolved.get(grainSlot.slot_id)?.field : undefined;
+      if (!expectedX || !expectedY || !expectedSize || !expectedGrain) {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail: 'bubble ask requires explicit, verifiable X, Y, size, and record-grain fields',
+        });
+      } else if (
+        x &&
+        y &&
+        size &&
+        grain &&
+        (identityOf(x) !== identityOf(expectedX) ||
+          identityOf(y) !== identityOf(expectedY) ||
+          identityOf(size) !== identityOf(expectedSize) ||
+          identityOf(grain) !== identityOf(expectedGrain))
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail:
+            `bubble ask requires X "${expectedX.name}", Y "${expectedY.name}", size "${expectedSize.name}", ` +
+            `and grain "${expectedGrain.name}"; proposal mapped X "${x.name}", Y "${y.name}", ` +
+            `size "${size.name}", and grain "${grain.name}"`,
+        });
+      }
+    }
+    const colorSlot = m.slots.find(
+      (slot) =>
+        slot.bindable &&
+        !slot.required &&
+        slot.kind === 'categorical' &&
+        slot.derivation === 'attr' &&
+        slot.role.includes('color'),
+    );
+    const color = colorSlot ? resolved.get(colorSlot.slot_id)?.field : undefined;
+    if (color && ask) {
+      const clause = /\bcolou?r(?:ed)?\s+by\s+(.+?)(?=\s*(?:[,;.]|with\b|where\b|$))/i.exec(ask);
+      const expected = clause ? resolveInSummary(s, clause[1].trim()).field : undefined;
+      if (!clause || !expected || identityOf(color) !== identityOf(expected)) {
+        blockers.push({
+          code: 'kind-mismatch',
+          slot_id: colorSlot?.slot_id,
+          detail: 'bubble optional color must match an explicit color-by clause in the ask',
+        });
+      }
     }
   }
 

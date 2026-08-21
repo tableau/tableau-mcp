@@ -23,6 +23,11 @@ vi.mock('../../../desktop/session/sessionResolution.js');
 const resultSchema = z.object({
   worksheet: z.object({ id: z.string(), name: z.string() }),
   maxRows: z.number(),
+  rowOrder: z.object({
+    status: z.literal('unspecified'),
+    usableFor: z.literal('value_readback'),
+    notUsableFor: z.literal('visual_sort_verification'),
+  }),
   shape: z.string(),
   summaryData: z.object({
     columns: z.array(z.object({ name: z.string().optional(), dataType: z.string().optional() })),
@@ -44,6 +49,47 @@ type SummaryDataHarness = {
 };
 
 describe('fetchWorksheetSummaryData', () => {
+  it('preserves endpoint row order and labels it unspecified', async () => {
+    const endpointRows = [
+      ['Middle', 20],
+      ['Largest', 90],
+      ['Smallest', 10],
+    ];
+    const read = (async (endpoint: string) => {
+      if (endpoint === 'worksheet list') {
+        return Ok({
+          worksheets: [
+            {
+              id: 'sheet-sales',
+              name: 'Sales by Region',
+              hidden: false,
+              datasources: ['Superstore'],
+            },
+          ],
+        });
+      }
+      return Ok({
+        columns: [{ name: 'Region' }, { name: 'SUM(Sales)' }],
+        rows: endpointRows,
+      });
+    }) as SummaryDataRead;
+
+    const result = await fetchWorksheetSummaryData({
+      read,
+      worksheet: 'Sales by Region',
+      maxRows: 10,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) throw result.error;
+    expect(result.value.rows).toEqual(endpointRows);
+    expect(result.value.rowOrder).toEqual({
+      status: 'unspecified',
+      usableFor: 'value_readback',
+      notUsableFor: 'visual_sort_verification',
+    });
+  });
+
   it('materializes a populated worksheet once before retrying an initially empty summary', async () => {
     const endpoints: string[] = [];
     let summaryReads = 0;
@@ -228,6 +274,11 @@ describe('getSummaryDataTool', () => {
       const body = parseResult(result);
       expect(body.worksheet).toEqual({ id: 'sheet-sales', name: 'Sales by Region' });
       expect(body.maxRows).toBe(50);
+      expect(body.rowOrder).toEqual({
+        status: 'unspecified',
+        usableFor: 'value_readback',
+        notUsableFor: 'visual_sort_verification',
+      });
       expect(body.shape).toBe('2 rows x 2 columns');
       expect(body.summaryData.columns).toEqual([
         { name: 'Region', dataType: 'string' },
@@ -328,6 +379,11 @@ describe('getSummaryDataTool', () => {
         worksheet: { id: 'sheet-empty', name: 'Empty Sheet' },
         maxRows: 200,
         shape: '0 rows x 0 columns',
+        rowOrder: {
+          status: 'unspecified',
+          usableFor: 'value_readback',
+          notUsableFor: 'visual_sort_verification',
+        },
         summaryData: { columns: [], rows: [] },
       });
       expect(harness.server.requests.some((request) => request.path.endsWith('/summaryData'))).toBe(
@@ -375,6 +431,11 @@ describe('getSummaryDataTool', () => {
       expect(result.isError).toBe(false);
       expect(parseResult(result)).toMatchObject({
         shape: '0 rows x 1 columns',
+        rowOrder: {
+          status: 'unspecified',
+          usableFor: 'value_readback',
+          notUsableFor: 'visual_sort_verification',
+        },
         summaryData: { columns: [{ name: 'Sales', dataType: 'real' }], rows: [] },
       });
     } finally {
