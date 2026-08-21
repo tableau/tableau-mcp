@@ -7,7 +7,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockWorkbook } from './mockWorkbook.js';
-import { getValidateUploadAndPublishWorkbookTool } from './validateUploadAndPublishWorkbook.js';
+import { getPublishWorkbookTool } from './publishWorkbook.js';
 
 const mocks = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
@@ -58,7 +58,7 @@ const validLocalArgs = {
   projectId: 'target-project-id',
 };
 
-describe('validateUploadAndPublishWorkbookTool', () => {
+describe('publishWorkbookTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
@@ -87,11 +87,11 @@ describe('validateUploadAndPublishWorkbookTool', () => {
   });
 
   it('should create a tool instance with correct properties', async () => {
-    const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
+    const tool = getPublishWorkbookTool(new WebMcpServer());
     const annotations = await Provider.from(tool.annotations);
     const paramsSchema = await Provider.from(tool.paramsSchema);
 
-    expect(tool.name).toBe('validate-upload-and-publish-workbook');
+    expect(tool.name).toBe('publish-workbook');
     expect(tool.description).toContain('Publishes a TWB or TWBX workbook');
     expect(paramsSchema).toMatchObject({
       workbookUploadId: expect.any(Object),
@@ -108,14 +108,14 @@ describe('validateUploadAndPublishWorkbookTool', () => {
   it('is disabled when the authoring-tools feature flag is OFF', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
 
-    const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
+    const tool = getPublishWorkbookTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(true);
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
   it('is enabled when the authoring-tools feature flag is ON', async () => {
-    const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
+    const tool = getPublishWorkbookTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(false);
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
@@ -508,7 +508,7 @@ describe('validateUploadAndPublishWorkbookTool', () => {
   });
 
   it('redacts staged workbookUploadId details passed to shared logging', async () => {
-    const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
+    const tool = getPublishWorkbookTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
     const logAndExecute = vi
       .spyOn(tool, 'logAndExecute')
@@ -547,7 +547,7 @@ async function getToolResult(
   },
   options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
 ): Promise<CallToolResult> {
-  const tool = getValidateUploadAndPublishWorkbookTool(new WebMcpServer());
+  const tool = getPublishWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {

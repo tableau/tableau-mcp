@@ -56,7 +56,7 @@ const paramsSchema = {
     ),
 };
 
-export type ValidateUploadAndPublishWorkbookResult =
+export type PublishWorkbookResult =
   | {
       status: 'published';
       data: Workbook;
@@ -77,17 +77,15 @@ type ValidationFinding = {
   elementName: string;
 };
 
-export const getValidateUploadAndPublishWorkbookTool = (
-  server: WebMcpServer,
-): WebTool<typeof paramsSchema> => {
+export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const tool = new WebTool({
     server,
-    name: 'validate-upload-and-publish-workbook',
+    name: 'publish-workbook',
     description:
       'Publishes a TWB or TWBX workbook from a local file path or staged upload id to the specified Tableau project. Use list-projects to discover project IDs. TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
     paramsSchema,
     annotations: {
-      title: 'Validate, Upload, and Publish Workbook',
+      title: 'Publish Workbook',
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
@@ -100,7 +98,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
       { workbookUploadId, workbookFilePath, name, projectId, overwrite = false },
       extra,
     ): Promise<CallToolResult> => {
-      return await tool.logAndExecute<ValidateUploadAndPublishWorkbookResult>({
+      return await tool.logAndExecute<PublishWorkbookResult>({
         extra,
         args: {
           workbookUploadId: workbookUploadId ? '<redacted>' : undefined,
@@ -114,7 +112,7 @@ export const getValidateUploadAndPublishWorkbookTool = (
           const configWithOverrides = await extra.getConfigWithOverrides();
           assertProjectAllowedByBoundedContext(projectId, configWithOverrides.boundedContext);
 
-          const result = await useRestApi<ValidateUploadAndPublishWorkbookResult>({
+          const result = await useRestApi<PublishWorkbookResult>({
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
@@ -290,7 +288,7 @@ async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<Resol
 function assertMinimumRestApiVersionSupported(): void {
   if (!RestApi.versionIsAtLeast('3.29')) {
     throw new UnknownError(
-      `validate-upload-and-publish-workbook requires Tableau REST API version 3.29 or later (Tableau Server 2026.2+). The connected server is using REST API version ${RestApi.version}.`,
+      `publish-workbook requires Tableau REST API version 3.29 or later (Tableau Server 2026.2+). The connected server is using REST API version ${RestApi.version}.`,
     );
   }
 }

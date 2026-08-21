@@ -26,7 +26,7 @@ export const getRequestWorkbookUploadTool = (
     server,
     name: 'request-workbook-upload',
     description:
-      'Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. Upload the workbook bytes to the returned URL, then call validate-upload-and-publish-workbook with the returned workbookUploadId.',
+      'Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. Upload the workbook bytes to the returned URL, then call publish-workbook with the returned workbookUploadId.',
     paramsSchema,
     annotations: {
       title: 'Request Workbook Upload',
