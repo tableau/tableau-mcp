@@ -77,6 +77,21 @@ describe('setDashboardNavigationDocument', () => {
     expect(result.message).toContain('existing navigation');
   });
 
+  it('fails closed when generated buttons would overlap a preserved root top-row zone', () => {
+    const source = dashboardXml('Sales Overview').replace(
+      '</zones>',
+      "<zone h='8000' id='12' name='User control' w='45000' x='55000' y='0'/></zones>",
+    );
+    const result = setDashboardNavigationDocument(source, 'Sales Overview', [
+      ...TARGETS,
+      { name: 'Customer Detail', label: 'Customers', windowUuid: '{window-customers}' },
+    ]);
+
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) return;
+    expect(result.message).toContain('overlap');
+  });
+
   it('preserves non-zone content in the root zones container', () => {
     const source = dashboardXml('Sales Overview').replace(
       "<zone h='100000'",

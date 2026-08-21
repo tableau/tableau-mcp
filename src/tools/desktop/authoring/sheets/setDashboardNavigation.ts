@@ -263,6 +263,15 @@ export function setDashboardNavigationDocument(
       message: 'A different existing navigation row occupies the top title band.',
     };
   }
+  const overlappingZone = rootChildren.find(
+    (child) => child !== layout && overlapsNavigationBand(child.openTag, titleHeight),
+  );
+  if (overlappingZone) {
+    return {
+      ok: false,
+      message: 'A preserved root zone would overlap the generated title or navigation buttons.',
+    };
+  }
 
   const nextTitleTag = upsertAttribute(titleBand.openTag, 'w', String(titleWidth));
   const nextLayoutInner =
@@ -421,6 +430,17 @@ function findTitleBand(layoutInner: string): ElementBounds | undefined {
       height <= 15_000
     );
   });
+}
+
+function overlapsNavigationBand(openTag: string, height: number): boolean {
+  const x = readIntegerAttribute(openTag, 'x');
+  const y = readIntegerAttribute(openTag, 'y');
+  const width = readIntegerAttribute(openTag, 'w');
+  const zoneHeight = readIntegerAttribute(openTag, 'h');
+  if (x === undefined || y === undefined || width === undefined || zoneHeight === undefined) {
+    return false;
+  }
+  return x < 100_000 && x + width > 0 && y < height && y + zoneHeight > 0;
 }
 
 type NavigationButtonSignature = {
