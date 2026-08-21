@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
 import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
+import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
+import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
@@ -130,19 +132,35 @@ export const getFormatWorksheetsTool = (
             prepared.push({
               worksheet: item.value,
               xml: edited.xml,
+              sourceHash: sourceSha256(document.value.xml),
               alreadyFormatted: hasRequestedFormatting(document.value.xml, edited.xml),
             });
           }
 
           const formatted: FormattedWorksheet[] = [];
-          for (const { worksheet, xml, alreadyFormatted } of prepared) {
+          for (const { worksheet, xml, sourceHash, alreadyFormatted } of prepared) {
             if (alreadyFormatted) {
               formatted.push({ worksheet: worksheet.name, verified: true });
               continue;
             }
-            const applied = await executor.applyWorksheetDocument(worksheet.id, xml, extra.signal);
-            if (applied.isErr()) {
+            const applied = await withApplyLock(async () => {
+              const latest = await executor.getWorksheetDocument(worksheet.id, extra.signal);
+              if (latest.isErr()) return { kind: 'error' as const, error: latest.error };
+              if (sourceSha256(latest.value.xml) !== sourceHash) {
+                return { kind: 'drift' as const };
+              }
+              const result = await executor.applyWorksheetDocument(worksheet.id, xml, extra.signal);
+              return result.isErr()
+                ? { kind: 'error' as const, error: result.error }
+                : { kind: 'applied' as const };
+            });
+            if (applied.kind === 'error') {
               return new DesktopCommandExecutionError(applied.error).toErr();
+            }
+            if (applied.kind === 'drift') {
+              return new XmlModificationError(
+                `Worksheet "${worksheet.name}" changed while formatting was being applied. ${formatted.length} earlier formatted sheets may already be updated.`,
+              ).toErr();
             }
 
             const readback = await pollReadback({
@@ -199,11 +217,20 @@ export function formatWorksheetDocument(
       };
     }
     const value = renderNumberFormat(format);
-    xml = upsertTableStyleFormat(xml, 'label', {
-      attr: 'text-format',
-      field: resolved.column,
-      value,
-    });
+    const elements = numberFormatElements(xml, resolved.column);
+    if (elements.length === 0) {
+      return {
+        ok: false,
+        message: `Field "${format.field}" is not used as a mark value or on a worksheet shelf.`,
+      };
+    }
+    for (const element of elements) {
+      xml = upsertTableStyleFormat(xml, element, {
+        attr: 'text-format',
+        field: resolved.column,
+        value,
+      });
+    }
   }
   return { ok: true, xml };
 }
@@ -213,12 +240,12 @@ function renderNumberFormat(format: NumberFormat): string {
   const decimals = decimalCount > 0 ? `.${'0'.repeat(decimalCount)}` : '';
   if (format.kind === 'percentage') return `p0${decimals}%`;
   const unit = {
-    none: '',
-    thousands: ',K',
-    millions: ',,M',
-    billions: ',,,B',
+    none: { scale: '', suffix: '' },
+    thousands: { scale: ',', suffix: 'K' },
+    millions: { scale: ',,', suffix: 'M' },
+    billions: { scale: ',,,', suffix: 'B' },
   }[format.displayUnits ?? 'none'];
-  const body = `#,##0${decimals}${unit}`;
+  const body = `#,##0${unit.scale}${decimals}${unit.suffix}`;
   if (format.kind === 'number') return `n${body};-${body}`;
   const symbol = escapeAttribute(format.currencySymbol ?? '');
   return `c&quot;${symbol}&quot;${body};-&quot;${symbol}&quot;${body}`;
@@ -311,14 +338,45 @@ function hasRequestedFormatting(readbackXml: string, intendedXml: string): boole
 }
 
 function formattingKeys(xml: string): string[] {
-  return [...xml.matchAll(/<format\b[^>]*\/?\s*>/g)].flatMap(([tag]) => {
-    const attributes = new Map(
-      [...tag.matchAll(/([\w:-]+)=(['"])(.*?)\2/g)].map((match) => [match[1], match[3]]),
-    );
-    const attr = attributes.get('attr');
-    if (attr !== 'mark-labels-show' && attr !== 'text-format') return [];
-    return [`${attr}\0${attributes.get('field') ?? ''}\0${attributes.get('value') ?? ''}`];
+  const panesStart = xml.search(/<panes\b/);
+  const tableScope = panesStart === -1 ? xml : xml.slice(0, panesStart);
+  const keys = styleFormatKeys(tableScope, 'table');
+  const panes = [...xml.matchAll(/<pane\b[^>]*>[\s\S]*?<\/pane>/g)];
+  panes.forEach((pane, index) => {
+    const openTag = /<pane\b[^>]*>/.exec(pane[0])?.[0] ?? '';
+    const identity = readXmlAttribute(openTag, 'id') ?? readXmlAttribute(openTag, 'name') ?? '';
+    keys.push(...styleFormatKeys(pane[0], `pane:${index}:${identity}`));
   });
+  return keys;
+}
+
+function styleFormatKeys(xml: string, scope: string): string[] {
+  return [...xml.matchAll(/<style-rule\b[^>]*>[\s\S]*?<\/style-rule>/g)].flatMap(([rule]) => {
+    const ruleTag = /<style-rule\b[^>]*>/.exec(rule)?.[0] ?? '';
+    const element = readXmlAttribute(ruleTag, 'element') ?? '';
+    return [...rule.matchAll(/<format\b[^>]*\/?\s*>/g)].flatMap(([tag]) => {
+      const attr = readXmlAttribute(tag, 'attr');
+      if (attr !== 'mark-labels-show' && attr !== 'text-format') return [];
+      return [
+        `${scope}\0${element}\0${attr}\0${readXmlAttribute(tag, 'field') ?? ''}\0${readXmlAttribute(tag, 'value') ?? ''}`,
+      ];
+    });
+  });
+}
+
+function numberFormatElements(xml: string, column: string): Array<'cell' | 'label'> {
+  const markValue = [...xml.matchAll(/<encodings\b[^>]*>[\s\S]*?<\/encodings>/g)].some(
+    ([encodings]) =>
+      new RegExp(`\\bcolumn=(['"])${escapeRegExp(escapeAttribute(column))}\\1`).test(encodings),
+  );
+  const shelf = [...xml.matchAll(/<(rows|cols)\b[^>]*>([\s\S]*?)<\/\1>/g)].some((match) =>
+    match[2].includes(column),
+  );
+  return [...(markValue ? (['cell'] as const) : []), ...(shelf ? (['label'] as const) : [])];
+}
+
+function readXmlAttribute(tag: string, name: string): string | undefined {
+  return new RegExp(`\\b${name}\\s*=\\s*(['"])(.*?)\\1`, 'i').exec(tag)?.[2];
 }
 
 function firstElementBounds(xml: string, tag: string): { start: number; end: number } | undefined {

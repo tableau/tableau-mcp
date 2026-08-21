@@ -30,6 +30,7 @@ const paramsSchema = {
   session: sessionParam(),
   storyboard: z.string().trim().min(1).max(255).describe('Existing story name or id.'),
   points: z.array(pointSchema).min(1).max(12),
+  replaceExisting: z.boolean().optional(),
 };
 
 type StoryPoint = z.infer<typeof pointSchema>;
@@ -44,18 +45,21 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'compose-story',
     title,
-    description: 'Set ordered dashboard story points and match their common fixed size.',
+    description: 'Set ordered story points at one fixed size.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ session, storyboard, points }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { session, storyboard, points, replaceExisting = false },
+      extra,
+    ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { session, storyboard, points },
+        args: { session, storyboard, points, replaceExisting },
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) return sessionResult.error.toErr();
@@ -118,6 +122,12 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
             points: resolvedPoints,
           });
           if (!composed.ok) return new ArgsValidationError(composed.message).toErr();
+          const alreadyMatches = storyMatches(source.value.xml, composed.xml);
+          if (!alreadyMatches && hasPopulatedStoryPoints(source.value.xml) && !replaceExisting) {
+            return new ArgsValidationError(
+              `Story "${resolvedStory.value.name}" already contains story points. Set replaceExisting only after an explicit rebuild/replace request.`,
+            ).toErr();
+          }
 
           const introduced = introducedBlockingValidationIssues(
             runValidation(source.value.xml, 'dashboard').issues,
@@ -129,7 +139,7 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
             ).toErr();
           }
 
-          if (!storyMatches(source.value.xml, composed.xml)) {
+          if (!alreadyMatches) {
             const sourceHash = sourceSha256(source.value.xml);
             const applied = await withApplyLock(async () => {
               const latest = await executor.getStoryboardDocument(
@@ -241,6 +251,8 @@ export function composeStoryDocument(
 function readFixedSize(xml: string): StorySize | undefined {
   const size = /<size\b[^>]*\/?\s*>/.exec(xml)?.[0];
   if (!size) return undefined;
+  const sizingMode = readAttribute(size, 'sizing-mode');
+  if (sizingMode !== undefined && sizingMode !== 'fixed') return undefined;
   const maxWidth = readIntegerAttribute(size, 'maxwidth');
   const minWidth = readIntegerAttribute(size, 'minwidth');
   const maxHeight = readIntegerAttribute(size, 'maxheight');
@@ -256,6 +268,15 @@ function readFixedSize(xml: string): StorySize | undefined {
     return undefined;
   }
   return { width: maxWidth, height: maxHeight };
+}
+
+function hasPopulatedStoryPoints(xml: string): boolean {
+  const points = /<story-points\b[^>]*>[\s\S]*?<\/story-points>/.exec(xml)?.[0] ?? '';
+  return [...points.matchAll(/<story-point\b[^>]*\/?\s*>/g)].some((match) => {
+    const dashboard = readAttribute(match[0], 'captured-sheet');
+    const caption = readAttribute(match[0], 'caption');
+    return dashboard === undefined || dashboard.trim() !== '' || (caption?.trim() ?? '') !== '';
+  });
 }
 
 function storyMatches(actualXml: string, intendedXml: string): boolean {
