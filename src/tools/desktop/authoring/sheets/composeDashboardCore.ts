@@ -30,14 +30,17 @@ import {
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { buildDashboardXml, computeZones, escapeXml } from './dashboardZones.js';
 
+export interface ComposeDashboardLayout {
+  layoutType?: 'auto-grid' | 'rows' | 'columns' | 'executive-summary';
+  gridColumns?: number;
+  kpiWorksheetNames?: string[];
+}
+
 export interface ComposeDashboardCoreArgs {
   dashboardName: string;
   worksheetNames: string[];
   title?: string;
-  layout?: {
-    layoutType?: 'auto-grid' | 'rows' | 'columns';
-    gridColumns?: number;
-  };
+  layout?: ComposeDashboardLayout;
   executor: ExternalApiToolExecutor;
   signal: AbortSignal;
 }
@@ -69,10 +72,24 @@ export function buildDashboardCandidateXml({
   title,
   layout,
 }: BuildDashboardCandidateXmlArgs): string {
+  const inputError = validateComposeDashboardInput(canonicalWorksheetNames, layout);
+  if (inputError) throw inputError;
+  const kpis =
+    layout?.layoutType === 'executive-summary'
+      ? canonicalWorksheetNames.filter((name) =>
+          layout.kpiWorksheetNames?.some((kpiName) => xmlNamesEqual(kpiName, name)),
+        )
+      : [];
+  const charts = canonicalWorksheetNames.filter(
+    (name) => !kpis.some((kpiName) => xmlNamesEqual(kpiName, name)),
+  );
   const zones = computeZones(title, {
-    kpis: [],
-    charts: canonicalWorksheetNames,
-    layoutType: layout?.layoutType ?? 'auto-grid',
+    kpis,
+    charts,
+    layoutType:
+      layout?.layoutType === 'executive-summary'
+        ? 'auto-grid'
+        : (layout?.layoutType ?? 'auto-grid'),
     gridColumns: layout?.gridColumns,
   });
   const dashboardXml = buildDashboardXml(dashboardName, zones);
@@ -110,7 +127,7 @@ export async function composeDashboardCore({
   executor,
   signal,
 }: ComposeDashboardCoreArgs): Promise<ComposeDashboardOutcome> {
-  const inputError = validateComposeDashboardInput(worksheetNames);
+  const inputError = validateComposeDashboardInput(worksheetNames, layout);
   if (inputError) return failed('input-validation', inputError);
 
   const workbookResult = await getWorkbookXml({ executor, signal });
@@ -388,6 +405,7 @@ function loadFailureOutcome({
 
 export function validateComposeDashboardInput(
   worksheetNames: string[],
+  layout?: ComposeDashboardLayout,
 ): ArgsValidationError | undefined {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
@@ -396,10 +414,53 @@ export function validateComposeDashboardInput(
     if (seen.has(normalized)) duplicates.add(name);
     seen.add(normalized);
   }
-  if (duplicates.size === 0) return undefined;
-  return new ArgsValidationError(
-    `Duplicate worksheet name(s): ${[...duplicates].map((name) => `"${name}"`).join(', ')}.`,
+  if (duplicates.size > 0) {
+    return new ArgsValidationError(
+      `Duplicate worksheet name(s): ${[...duplicates].map((name) => `"${name}"`).join(', ')}.`,
+    );
+  }
+
+  const requestedKpis = layout?.kpiWorksheetNames ?? [];
+  if (layout?.layoutType !== 'executive-summary') {
+    return requestedKpis.length > 0
+      ? new ArgsValidationError('kpiWorksheetNames requires layoutType "executive-summary".')
+      : undefined;
+  }
+  if (layout.gridColumns !== undefined) {
+    return new ArgsValidationError(
+      'gridColumns cannot be combined with layoutType "executive-summary".',
+    );
+  }
+  if (requestedKpis.length < 1) {
+    return new ArgsValidationError(
+      'layoutType "executive-summary" requires at least one KPI worksheet name.',
+    );
+  }
+  const duplicateKpis = requestedKpis.filter(
+    (name, index) =>
+      requestedKpis.findIndex((candidate) => xmlNamesEqual(candidate, name)) !== index,
   );
+  if (duplicateKpis.length > 0) {
+    return new ArgsValidationError(
+      `Duplicate KPI worksheet name(s): ${[...new Set(duplicateKpis)]
+        .map((name) => `"${name}"`)
+        .join(', ')}.`,
+    );
+  }
+  const unknownKpis = requestedKpis.filter(
+    (name) => !worksheetNames.some((worksheetName) => xmlNamesEqual(worksheetName, name)),
+  );
+  if (unknownKpis.length > 0) {
+    return new ArgsValidationError(
+      `Unknown KPI worksheet name(s): ${unknownKpis.map((name) => `"${name}"`).join(', ')}.`,
+    );
+  }
+  if (worksheetNames.length === requestedKpis.length) {
+    return new ArgsValidationError(
+      'layoutType "executive-summary" requires at least one non-KPI worksheet.',
+    );
+  }
+  return undefined;
 }
 
 export function resolveRenderedWorksheetNames(
