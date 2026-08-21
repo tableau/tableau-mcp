@@ -109,19 +109,17 @@ import { proposalSchema } from './proposalSchema.js';
 import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
-  session: z
-    .string()
-    .optional()
-    .describe('Desktop process ID; omit to use the pinned or only running instance.'),
-  ask: z.string().describe('Verbatim ask.'),
+  session: z.string().optional().describe('Desktop PID; omit for default.'),
+  ask: z.string().describe('Ask.'),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
-  auto_apply: z.boolean().optional().describe('Apply immediately.'),
+  auto_apply: z.boolean().optional().describe('Apply now.'),
   skip_validation: z.boolean().optional(),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
-  target_worksheet: z.string().optional().describe('Worksheet id or name; omit to create.'),
+  target_worksheet: z.string().optional().describe('Worksheet id/name; omit to create.'),
+  datasource: z.string().optional().describe('Calc datasource id/name.'),
   calcs: z
     .array(
       z.object({
@@ -132,7 +130,7 @@ const paramsSchema = {
       }),
     )
     .optional()
-    .describe('Derived fields to author before binding.'),
+    .describe('Fields to author.'),
 };
 
 /**
@@ -1973,6 +1971,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
         minConfidence,
         auto_apply,
         target_worksheet,
+        datasource,
         calcs,
         skip_validation,
       },
@@ -1987,6 +1986,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           minConfidence,
           auto_apply,
           target_worksheet,
+          datasource,
           calcs,
           skip_validation,
         },
@@ -2048,6 +2048,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             const authored = await authorCalculationsInWorkbook({
               workbookXml,
               calcs: authoredCalcInputs,
+              datasource,
               executor,
               signal: extra.signal,
               resolveLooseReferences: true,

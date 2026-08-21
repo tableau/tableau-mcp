@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * live `/openapi.json` (OpenAPI 3.1, `info.version` 0.2.8, captured 2026-08-18).
+ * live `/openapi.json` (OpenAPI 3.1, `info.version` 0.2.9, captured 2026-08-20).
  * Envelope fields the spec marks required are required here; everything else stays
  * permissive (`.passthrough()` / optional) because the spec is read-complete but
  * write-thin, and an older Desktop build may omit a field a newer spec marks required.
@@ -449,7 +449,7 @@ export const operationWarningSchema = z
   .passthrough();
 export type OperationWarning = z.infer<typeof operationWarningSchema>;
 
-/** A modal window blocking the command queue, reported on an Operation that cannot progress. */
+/** A visible modal Qt window on an Operation: rides `blockingWindows` when it needs a human decision, `progressWindows` when it is self-clearing. */
 export const windowInfoSchema = z
   .object({
     objectName: z.string(),
@@ -481,6 +481,7 @@ export const operationEnvelopeSchema = z
     error: operationErrorSchema.optional(),
     warnings: z.array(operationWarningSchema).optional(),
     blockingWindows: z.array(windowInfoSchema).optional(),
+    progressWindows: z.array(windowInfoSchema).optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
     completedAt: z.string().optional(),
@@ -708,7 +709,7 @@ export const imageResultSchema = z
   .passthrough();
 export type ImageResult = z.infer<typeof imageResultSchema>;
 
-/** Running Desktop application info returned by `GET /v0/app`. */
+/** Running Desktop application info and live UI state returned by `GET /v0/app`. */
 export const appInfoSchema = z
   .object({
     applicationVersion: z.string().optional(),
@@ -718,6 +719,9 @@ export const appInfoSchema = z
     locale: z.string().optional(),
     repositoryLocation: z.string().optional(),
     logLocation: z.string().optional(),
+    isStartPageVisible: z.boolean().optional(),
+    isDataSourcePageActive: z.boolean().optional(),
+    isPresentationMode: z.boolean().optional(),
   })
   .passthrough();
 export type AppInfo = z.infer<typeof appInfoSchema>;
