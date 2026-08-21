@@ -5,8 +5,6 @@ import { z } from 'zod';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
-import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -15,7 +13,7 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
-import { workbookLoadToolError } from './workbookLoadToolError.js';
+import { applyAndVerify } from './applyAndVerify.js';
 
 const endSchema = z.enum(['top', 'bottom']);
 const modeSchema = z.enum(['top-n', 'empty']);
@@ -144,18 +142,6 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
             return new ArgsValidationError(validation.message).toErr();
           }
 
-          const loadResult = await loadWorkbookXml({
-            xml: editedXml,
-            baselineXml: liveXml,
-            expectedWorkbookXml: liveXml,
-            focus: { navigate: 'restore' },
-            executor,
-            signal: extra.signal,
-          });
-          if (loadResult.isErr()) {
-            return workbookLoadToolError(loadResult.error).toErr();
-          }
-
           const findReadbackGroup = (xml: string): string | undefined => {
             const readbackTarget = findDatasourceElements(xml).find(
               (datasource) => datasource.name === target.name,
@@ -164,20 +150,22 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
               ? undefined
               : findGroupByNameAndCaption(readbackTarget.xml, setName, caption);
           };
-          const readback = await pollReadback({
-            read: () => getWorkbookXml({ executor, signal: extra.signal }),
+          const outcome = await applyAndVerify({
+            xml: editedXml,
+            baselineXml: liveXml,
             settled: (xml) => {
               const group = findReadbackGroup(xml);
               return group !== undefined && getAttr(group, 'user:ui-builder') === 'filter-group';
             },
+            executor,
             signal: extra.signal,
           });
-          if (!readback.ok) {
-            return new DesktopCommandExecutionError(readback.error).toErr();
+          if (outcome.status === 'failed') {
+            return outcome.error.toErr();
           }
-          if (!readback.settled) {
+          if (outcome.status === 'not-applied') {
             return new XmlModificationError(
-              findReadbackGroup(readback.value) === undefined
+              findReadbackGroup(outcome.workbookXml) === undefined
                 ? 'load completed but did not apply: readback did not contain the new set name and caption'
                 : "load completed and the set name and caption survived readback, but the user:ui-builder='filter-group' marker did not survive readback",
             ).toErr();
