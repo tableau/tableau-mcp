@@ -11,6 +11,7 @@ import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
   removeSameNamedWorksheet,
+  stripDonorCurrencyOrLocaleFormats,
 } from './injectTemplateCore.js';
 import { getRuntimeTemplateSnapshot } from './runtimeTemplateCatalog.js';
 import { readTemplate } from './templatePath.js';
@@ -30,6 +31,35 @@ const DUPLICATED_WORKBOOK_XML = [
   '<window class="dashboard" name="Sales"/></windows>',
   '</workbook>',
 ].join('');
+
+describe('stripDonorCurrencyOrLocaleFormats', () => {
+  const templateXml =
+    '<workbook><style><style-rule element="label">' +
+    '<format attr="text-format" field="[Donor].[sum:Profit:qk]" value="c&amp;quot;£&amp;quot;#,##0"/>' +
+    '<format attr="text-format" field="[Donor].[sum:Quantity:qk]" value="n#,##0.00"/>' +
+    '</style-rule></style></workbook>';
+
+  it('removes donor currency while preserving neutral precision during a bind', () => {
+    const out = stripDonorCurrencyOrLocaleFormats(templateXml, {
+      Profit: '[Superstore].[sum:Sales:qk]',
+    });
+
+    expect(out).not.toContain('£');
+    expect(out).toContain('value="n#,##0.00"');
+  });
+
+  it('leaves the template byte-identical without a field bind', () => {
+    expect(stripDonorCurrencyOrLocaleFormats(templateXml, {})).toBe(templateXml);
+  });
+
+  it('leaves the template byte-identical when the mapping names no authored field', () => {
+    expect(
+      stripDonorCurrencyOrLocaleFormats(templateXml, {
+        Nonexistent: '[Superstore].[sum:Sales:qk]',
+      }),
+    ).toBe(templateXml);
+  });
+});
 
 describe('removeSameNamedWorksheet — quote-agnostic strip (adversary P0-3)', () => {
   it('strips a double-quoted worksheet + window (the serializer emits double quotes)', () => {
