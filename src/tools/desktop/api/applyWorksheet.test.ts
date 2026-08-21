@@ -561,7 +561,7 @@ describe('applyWorksheetTool', () => {
     expect(mockLoadWorksheetXml).not.toHaveBeenCalled();
   });
 
-  it('reports skipped readback honestly for inline worksheet XML apply', async () => {
+  it('keeps inline worksheet XML apply nonterminal when readback is skipped', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
       Ok({ readbackWarnings: [], readbackVerification: skippedReadbackVerification }),
@@ -580,9 +580,18 @@ describe('applyWorksheetTool', () => {
     expect(message).toContain('HOST VERIFICATION — unverified');
     expect(message).toContain('readback unavailable');
     expect(message).not.toMatch(/\bverified\b/i);
+    expect(result.structuredContent).toMatchObject({
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification unavailable — inspect live worksheet state',
+      },
+    });
+    expect(
+      (result.structuredContent as { nextAction: { receipt?: unknown } }).nextAction.receipt,
+    ).toBeUndefined();
   });
 
-  it('reports skipped readback honestly for file-based worksheet apply', async () => {
+  it('keeps file-based worksheet apply nonterminal when readback is skipped', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
     const mockFilePath = '/path/to/worksheet.xml';
     vi.mocked(existsSync).mockReturnValue(true);
@@ -604,6 +613,15 @@ describe('applyWorksheetTool', () => {
     expect(message).toContain('HOST VERIFICATION — unverified');
     expect(message).toContain('readback unavailable');
     expect(message).not.toMatch(/\bverified\b/i);
+    expect(result.structuredContent).toMatchObject({
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification unavailable — inspect live worksheet state',
+      },
+    });
+    expect(
+      (result.structuredContent as { nextAction: { receipt?: unknown } }).nextAction.receipt,
+    ).toBeUndefined();
   });
 
   it('fails the receipt when readback warnings show promised sort loss', async () => {

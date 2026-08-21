@@ -420,9 +420,8 @@ export const getApplyWorksheetTool = (
             clearStickyWorksheetFile({ session: resolvedSession, worksheetId: appliedBufferId });
           }
 
-          // The structured receipt is derived from the same readback outcome the text
-          // reports: when the readback ran its status is an observation; when it was
-          // skipped or absent, the applied structure is listed as unverified.
+          // An explicit skipped verification keeps the run open for live inspection;
+          // legacy outcomes with no verification object retain their unverified receipt.
           const readback = receiptInput?.readback;
           const readbackRan = readback !== undefined && readback.status !== 'skipped';
           return new Ok(
@@ -430,27 +429,29 @@ export const getApplyWorksheetTool = (
               {
                 message: `Successfully applied worksheet update for "${appliedWorksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
               },
-              doneNextAction(
-                receipt({
-                  did: [
-                    `Desktop accepted the worksheet XML apply for "${appliedWorksheetName}"`,
-                    `preflight validation returned ${receiptInput?.validationWarnings.length ?? 0} warning(s)`,
-                    ...(readbackRan
-                      ? [
-                          `read back the applied worksheet — verification status "${readback.status}", promise outcome "${promiseOutcome}"`,
-                        ]
-                      : []),
-                  ],
-                  unverified: readbackRan
-                    ? [
-                        'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
-                      ]
-                    : [
-                        'whether the applied worksheet retained its intended structure — post-apply readback was unavailable',
+              readback?.status === 'skipped'
+                ? prefillNextAction('Verification unavailable — inspect live worksheet state')
+                : doneNextAction(
+                    receipt({
+                      did: [
+                        `Desktop accepted the worksheet XML apply for "${appliedWorksheetName}"`,
+                        `preflight validation returned ${receiptInput?.validationWarnings.length ?? 0} warning(s)`,
+                        ...(readbackRan
+                          ? [
+                              `read back the applied worksheet — verification status "${readback.status}", promise outcome "${promiseOutcome}"`,
+                            ]
+                          : []),
                       ],
-                }),
-                'Worksheet apply finished — see verification',
-              ),
+                      unverified: readbackRan
+                        ? [
+                            'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
+                          ]
+                        : [
+                            'whether the applied worksheet retained its intended structure — post-apply readback was unavailable',
+                          ],
+                    }),
+                    'Worksheet apply finished — see verification',
+                  ),
             ),
           );
         },
