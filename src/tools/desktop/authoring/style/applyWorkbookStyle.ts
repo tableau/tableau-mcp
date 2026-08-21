@@ -26,6 +26,7 @@ import { parseCustomThemeJson } from './customTheme.js';
 import { readAppliedCustomThemeName } from './customThemeWorkbook.js';
 
 const REDACTED_THEME_JSON = '[redacted custom theme JSON]';
+const CONFLICT_POLICY = 'Preserve' as const;
 
 const paramsSchema = {
   session: sessionParam({ max: 64 }),
@@ -46,6 +47,7 @@ type Verification = {
 type ApplyWorkbookStylePayload = {
   applied: true | false | 'unknown';
   retrySafe: boolean;
+  conflictPolicy: typeof CONFLICT_POLICY;
   themeName: string;
   themeSha256: string;
   verification: Verification;
@@ -60,7 +62,7 @@ export const getApplyWorkbookStyleTool = (
     server,
     name: 'apply-workbook-style',
     title: 'Apply Workbook Style',
-    description: 'Apply one validated Tableau Custom Theme with Override semantics.',
+    description: 'Apply a Tableau Custom Theme to the whole workbook with Preserve.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -141,7 +143,7 @@ export const getApplyWorkbookStyleTool = (
                 args: {
                   'file-contents': parsedTheme.themeJson,
                   'file-name': parsedTheme.commandFileName,
-                  'should-clear': 'true',
+                  'should-clear': 'false',
                   'theme-json-syntax': 'high-level',
                 },
                 signal: extra.signal,
@@ -186,6 +188,7 @@ export const getApplyWorkbookStyleTool = (
               const payload: ApplyWorkbookStylePayload = {
                 applied: true,
                 retrySafe: false,
+                conflictPolicy: CONFLICT_POLICY,
                 themeName: parsedTheme.commandFileName,
                 themeSha256: parsedTheme.sha256,
                 verification: {
@@ -202,8 +205,10 @@ export const getApplyWorkbookStyleTool = (
                     receipt({
                       did: [
                         'Read back the workbook and confirmed Desktop selected the requested native theme through its direct theme reference.',
+                        `Applied the native theme using ${CONFLICT_POLICY} conflict handling.`,
                       ],
                       unverified: [
+                        'Existing local formatting may remain when Preserve applies the theme to the whole workbook.',
                         'Individual theme settings were not verified.',
                         'Workbook semantic preservation was not verified; Tableau native theme application owns semantic safety.',
                         'Rendered appearance was not verified.',
@@ -240,6 +245,7 @@ function preInvocationFailure(
   const payload: ApplyWorkbookStylePayload = {
     applied: false,
     retrySafe: true,
+    conflictPolicy: CONFLICT_POLICY,
     themeName,
     themeSha256,
     verification: { status: 'not-run', themeReference: 'not-run', message },
@@ -257,6 +263,7 @@ function unknownOutcome(
   const payload: ApplyWorkbookStylePayload = {
     applied: 'unknown',
     retrySafe: false,
+    conflictPolicy: CONFLICT_POLICY,
     themeName,
     themeSha256,
     verification: { status: 'unknown', themeReference: 'unknown', message },

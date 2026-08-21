@@ -147,7 +147,7 @@ describe('apply-workbook-style', () => {
       args: {
         'file-contents': themeJson,
         'file-name': themeName,
-        'should-clear': 'true',
+        'should-clear': 'false',
         'theme-json-syntax': 'high-level',
       },
       signal: expect.any(AbortSignal),
@@ -156,6 +156,7 @@ describe('apply-workbook-style', () => {
     expect(body).toEqual({
       applied: true,
       retrySafe: false,
+      conflictPolicy: 'Preserve',
       themeName,
       themeSha256,
       verification: {
@@ -167,9 +168,13 @@ describe('apply-workbook-style', () => {
     expect(result.structuredContent?.nextAction).toMatchObject({
       kind: 'done',
       receipt: {
-        did: [expect.stringContaining('selected the requested native theme')],
+        did: expect.arrayContaining([
+          expect.stringContaining('selected the requested native theme'),
+          'Applied the native theme using Preserve conflict handling.',
+        ]),
         didNot: [],
         unverified: expect.arrayContaining([
+          'Existing local formatting may remain when Preserve applies the theme to the whole workbook.',
           expect.stringContaining('Individual theme settings'),
           expect.stringContaining('Workbook semantic preservation'),
           expect.stringContaining('Rendered appearance'),
@@ -188,6 +193,45 @@ describe('apply-workbook-style', () => {
     );
   });
 
+  it('uses Preserve without requiring dashboard or story inventory arrays', async () => {
+    const inventory = {
+      title: 'Book 2',
+      location: null,
+      unsavedChanges: true,
+      worksheets: [{ id: 'sheet-1', name: 'se-eval-scratch', hidden: false }],
+    };
+    const executor = makeExecutorMock({
+      getWorkbook: vi.fn().mockResolvedValue(Ok(inventory)),
+      executeCommand: vi.fn().mockResolvedValue(Ok(commandSuccess())),
+      getWorkbookDocument: vi.fn().mockResolvedValue(Ok(workbookDocument(selectedThemeXml))),
+    });
+
+    const result = await callTool({
+      executor,
+      args: {
+        session: 'S1',
+        themeJson,
+        themeSha256,
+        expectedWorkbookTarget: workbookTargetFingerprint(inventory),
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    expect(executor.executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: expect.objectContaining({ 'should-clear': 'false' }),
+      }),
+    );
+    expect(bodyOf(result)).toMatchObject({ conflictPolicy: 'Preserve' });
+    expect(result.structuredContent?.nextAction).toMatchObject({
+      receipt: {
+        unverified: expect.arrayContaining([
+          'Existing local formatting may remain when Preserve applies the theme to the whole workbook.',
+        ]),
+      },
+    });
+  });
+
   it('rejects a changed workbook target before sending the native theme command', async () => {
     const executor = makeExecutorMock({
       getWorkbook: vi.fn().mockResolvedValue(
@@ -204,6 +248,7 @@ describe('apply-workbook-style', () => {
     expect(bodyOf(result)).toMatchObject({
       applied: false,
       retrySafe: true,
+      conflictPolicy: 'Preserve',
       verification: {
         status: 'not-run',
         themeReference: 'not-run',
@@ -230,7 +275,11 @@ describe('apply-workbook-style', () => {
     const result = await callTool({ executor });
 
     expect(result.isError).toBe(true);
-    expect(bodyOf(result)).toMatchObject({ applied: false, retrySafe: true });
+    expect(bodyOf(result)).toMatchObject({
+      applied: false,
+      retrySafe: true,
+      conflictPolicy: 'Preserve',
+    });
     expect(result.structuredContent?.nextAction).toEqual({
       kind: 'prefill',
       label: 'Review the style guide again before applying it',
@@ -246,6 +295,7 @@ describe('apply-workbook-style', () => {
     const result = await callTool({ executor });
 
     expect(result.isError).toBe(true);
+    expect(bodyOf(result)).toMatchObject({ conflictPolicy: 'Preserve' });
     expect(result.structuredContent?.nextAction).toEqual({
       kind: 'prefill',
       label: 'Review the style guide again before applying it',
@@ -295,6 +345,7 @@ describe('apply-workbook-style', () => {
     expect(bodyOf(result)).toMatchObject({
       applied: false,
       retrySafe: true,
+      conflictPolicy: 'Preserve',
       themeSha256: candidateSha,
       verification: { status: 'not-run', themeReference: 'not-run' },
     });
@@ -313,7 +364,11 @@ describe('apply-workbook-style', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(bodyOf(result)).toMatchObject({ applied: false, retrySafe: true });
+    expect(bodyOf(result)).toMatchObject({
+      applied: false,
+      retrySafe: true,
+      conflictPolicy: 'Preserve',
+    });
     expect(getExecutor).not.toHaveBeenCalled();
     expect(executor.executeCommand).not.toHaveBeenCalled();
   });
@@ -327,7 +382,11 @@ describe('apply-workbook-style', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(bodyOf(result)).toMatchObject({ applied: false, retrySafe: true });
+    expect(bodyOf(result)).toMatchObject({
+      applied: false,
+      retrySafe: true,
+      conflictPolicy: 'Preserve',
+    });
     expect(executor.executeCommand).not.toHaveBeenCalled();
   });
 
@@ -340,6 +399,7 @@ describe('apply-workbook-style', () => {
     expect(bodyOf(result)).toMatchObject({
       applied: false,
       retrySafe: true,
+      conflictPolicy: 'Preserve',
       verification: { status: 'not-run', themeReference: 'not-run' },
     });
     expect(executor.executeCommand).not.toHaveBeenCalled();
@@ -382,6 +442,7 @@ describe('apply-workbook-style', () => {
     expect(bodyOf(result)).toMatchObject({
       applied: 'unknown',
       retrySafe: false,
+      conflictPolicy: 'Preserve',
       verification: { status: 'unknown', themeReference: 'unknown' },
     });
     expect(result.structuredContent?.nextAction).toMatchObject({
@@ -403,7 +464,11 @@ describe('apply-workbook-style', () => {
     await vi.runAllTimersAsync();
     const result = await pending;
 
-    expect(bodyOf(result)).toMatchObject({ applied: 'unknown', retrySafe: false });
+    expect(bodyOf(result)).toMatchObject({
+      applied: 'unknown',
+      retrySafe: false,
+      conflictPolicy: 'Preserve',
+    });
     expect(executor.executeCommand).toHaveBeenCalledOnce();
     expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(8);
   });
