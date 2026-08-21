@@ -256,6 +256,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(storyEdit).toMatchObject({
       trigger: 'an existing story edit',
       toolSequence: [
+        'compose-story',
         'get-storyboard-xml',
         'read-cached-xml',
         'write-cached-xml',
@@ -263,6 +264,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       ],
       stopConditions: ['stay on the scoped story path'],
     });
+    expect(storyEdit?.action).toContain('ordered dashboard points');
   });
 
   it('reserves whole-workbook apply for datasource definitions or cross-artifact changes', () => {

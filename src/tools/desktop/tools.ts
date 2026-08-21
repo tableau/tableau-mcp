@@ -64,6 +64,7 @@ import { getBatchCreateAndCacheSheetsTool } from './authoring/sheets/batchCreate
 import { getBuildAndApplyDashboardTool } from './authoring/sheets/buildAndApplyDashboard.js';
 import { getBuildAndApplyWorksheetTool } from './authoring/sheets/buildAndApplyWorksheet.js';
 import { getComposeDashboardTool } from './authoring/sheets/composeDashboard.js';
+import { getComposeStoryTool } from './authoring/sheets/composeStory.js';
 import { getDashboardHealthCheckTool } from './authoring/sheets/dashboardHealthCheck.js';
 import { getPlanDashboardCreationTool } from './authoring/sheets/planDashboardCreation.js';
 import { getRefineWorksheetTool } from './authoring/sheets/refineWorksheet.js';
@@ -98,6 +99,7 @@ export const desktopToolFactories = [
   getAddWorksheetTool,
   getAddDashboardTool,
   getAddStoryboardTool,
+  getComposeStoryTool,
   getPublishWorkbookTool,
   getRefreshDatasourceDataTool,
   getRefreshDatasourceExtractTool,

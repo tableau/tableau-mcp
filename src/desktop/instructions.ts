@@ -123,8 +123,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'story-edit-fallback',
     trigger: 'an existing story edit',
     action:
-      'use get-storyboard-xml -> read-cached-xml -> write-cached-xml -> apply-storyboard; stay on the scoped story path.',
-    toolSequence: ['get-storyboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-storyboard'],
+      'use compose-story for ordered dashboard points and matching size; otherwise use get-storyboard-xml -> read-cached-xml -> write-cached-xml -> apply-storyboard; stay on the scoped story path.',
+    toolSequence: [
+      'compose-story',
+      'get-storyboard-xml',
+      'read-cached-xml',
+      'write-cached-xml',
+      'apply-storyboard',
+    ],
     stopConditions: ['stay on the scoped story path'],
     requiredEvidence: ['story apply receipt'],
   },

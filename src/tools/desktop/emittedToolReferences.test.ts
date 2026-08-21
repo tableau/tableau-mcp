@@ -23,6 +23,7 @@ const CONDITIONAL_TOOLS = ['inject-template', 'apply-workbook', 'apply-dashboard
 // names, and hyphenated prose. Sorted; every entry must still be matched by the scan
 // (see the dead-vocabulary test below).
 const NON_TOOL_VOCABULARY = [
+  'active-id',
   'add-or-remove-marks',
   'agg-type',
   'aggregation-level-mismatch',
@@ -42,6 +43,7 @@ const NON_TOOL_VOCABULARY = [
   'calc-dependency-unmet',
   'calculation-input',
   'candidate-build',
+  'captured-sheet',
   'changed-or-unreadable',
   'clear-option',
   'column-instance',
@@ -106,6 +108,7 @@ const NON_TOOL_VOCABULARY = [
   'missing-required-slot',
   'name-only',
   'name-style',
+  'nav-type',
   'no-desktop-instances-found',
   'non-empty',
   'non-federated',
@@ -153,11 +156,14 @@ const NON_TOOL_VOCABULARY = [
   'session-mismatch',
   'sheet-not-found',
   'show-all',
+  'show-nav-arrows',
   'simple-id',
   'single-select',
   'sizing-mode',
   'slot-to-field',
   'source-field',
+  'story-point',
+  'story-points',
   'storyboard-image',
   'style-rule',
   'success-already-present',
