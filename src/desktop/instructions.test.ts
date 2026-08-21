@@ -156,13 +156,13 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     );
   });
 
-  it('answers only from returned rows; terminal/retry policy lives in the tool description', () => {
+  it('answers only from the rows get-summary-data returns', () => {
     const dataValueQuestion = routes.find((route) => route.id === 'data-value-question');
 
     expect(dataValueQuestion).toMatchObject({
       action: 'on a populated worksheet, call get-summary-data; answer only from returned rows.',
       stopConditions: ['answer only from returned rows'],
-      requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
+      requiredEvidence: ['get-summary-data returned rows'],
     });
   });
 

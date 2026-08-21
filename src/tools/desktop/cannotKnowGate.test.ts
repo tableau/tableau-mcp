@@ -20,11 +20,6 @@ type Violation = {
 };
 
 const RECEIPT_ALLOWLIST: Readonly<Record<string, string>> = {
-  // WHY safe: this receipt describes a local retry-policy decision, not an external effect;
-  // `reason` is the observed branch input and `unverified` disclaims permanence.
-  [receiptExemptionKey('src/tools/desktop/api/getSummaryData.ts', 'nextActionForSummaryError', [
-    'stopped get-summary-data on a terminal " " failure',
-  ])]: 'Local terminal-policy receipt with no external mutation claim.',
   // WHY safe: callers pass this record only after rememberedSheetStillPresent re-read the live
   // workbook; the receipt limits its claim to name presence and disclaims field/content checks.
   [receiptExemptionKey('src/tools/desktop/authoring/binder/bindTemplate.ts', 'reusedSheetResult', [
@@ -580,18 +575,18 @@ describe('cannot-know hunter gate', () => {
   });
 
   it('does not exempt a new receipt in an allowlisted function', () => {
-    const file = join(DESKTOP_ROOT, 'api/getSummaryData.ts');
+    const file = join(DESKTOP_ROOT, 'authoring/binder/bindTemplate.ts');
     const source = readFileSync(file, 'utf-8');
     const mutated = source.replace(
-      `function nextActionForSummaryError(
-  status: SummaryDataErrorStatus,
-  reason: SummaryDataErrorReason,
-): NextAction {
+      `function reusedSheetResult(
+  remembered: AppliedSheetRecord,
+  authoredCalcs: string[],
+): StructuredBindTemplateToolResult {
 `,
-      `function nextActionForSummaryError(
-  status: SummaryDataErrorStatus,
-  reason: SummaryDataErrorReason,
-): NextAction {
+      `function reusedSheetResult(
+  remembered: AppliedSheetRecord,
+  authoredCalcs: string[],
+): StructuredBindTemplateToolResult {
   receipt({ did: ['applied an unobserved workbook change'], unverified: [] });
 `,
     );

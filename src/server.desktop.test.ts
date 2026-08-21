@@ -239,10 +239,13 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // routes, gated to a 0.2.8 floor. All three join DYNAMIC_AUTHORING_TOOL_PROFILE, so dynamic
 // authoring moves 40_096 -> 42_521 (budget kept at the 18-char slack) and the full surface
 // 56_799 -> 59_224. Dynamic still clears the 46k cliff.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_521;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_539;
+// Re-pinned 2026-08-20: get-summary-data stripped to a clean API wrapper; its description drops
+// the terminal/retry prose (-60 bytes), so dynamic authoring moves 42_521 -> 42_461 (budget kept
+// at the 18-char slack) and the full surface 59_224 -> 59_164.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_461;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_479;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 59_242;
+const FULL_TOOL_SURFACE_BUDGET = 59_182;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
