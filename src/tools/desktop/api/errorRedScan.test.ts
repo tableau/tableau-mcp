@@ -37,47 +37,130 @@ function makePng(
 const ERROR_RED: [number, number, number] = [190, 40, 40];
 const WHITE: [number, number, number] = [255, 255, 255];
 
+// A horizontal capsule = the field-pill shape: a solid rounded rectangle with semicircular
+// end-caps of radius H/2. `text` optionally punches a white hole through the middle rows to
+// mimic the white field-name text, which the extent-based profile must see through.
+function pillPainter(
+  x0: number,
+  y0: number,
+  w: number,
+  h: number,
+  { text = false }: { text?: boolean } = {},
+): (x: number, y: number) => [number, number, number] {
+  const r = h / 2;
+  const cy = y0 + r;
+  const leftC = x0 + r;
+  const rightC = x0 + w - r;
+  return (x, y) => {
+    const px = x + 0.5;
+    const dy = y + 0.5 - cy;
+    if (Math.abs(dy) > r) return WHITE;
+    let inside: boolean;
+    if (px >= leftC && px <= rightC) {
+      inside = true;
+    } else {
+      const cx = px < leftC ? leftC : rightC;
+      const dx = px - cx;
+      inside = dx * dx + dy * dy <= r * r;
+    }
+    if (!inside) return WHITE;
+    // White text band through the vertical middle of the solid core (never near the caps),
+    // so a real pill's interior is not uniformly red.
+    if (text && Math.abs(dy) < r * 0.4 && px > leftC + r && px < rightC - r) {
+      return WHITE;
+    }
+    return ERROR_RED;
+  };
+}
+
 describe('isErrorRed', () => {
   it('matches Tableau error-pill red', () => {
     expect(isErrorRed(190, 40, 40)).toBe(true);
     expect(isErrorRed(210, 25, 30)).toBe(true);
+    expect(isErrorRed(232, 72, 88)).toBe(true); // measured real pill body #E84858
   });
 
   it('rejects non-error colors', () => {
     expect(isErrorRed(255, 255, 255)).toBe(false); // white
     expect(isErrorRed(40, 40, 40)).toBe(false); // dark gray
-    expect(isErrorRed(40, 90, 200)).toBe(false); // blue
+    expect(isErrorRed(40, 90, 200)).toBe(false); // blue (the OTHER, valid pill)
     expect(isErrorRed(240, 150, 60)).toBe(false); // orange (G too high)
     expect(isErrorRed(150, 110, 110)).toBe(false); // muted maroon (not dominant enough)
   });
 });
 
-describe('scanForErrorRed', () => {
-  it('flags a small DENSE red block with a high densest-cell fraction', () => {
-    // A 40x20 solid red pill on a 480x270 white canvas: tiny overall, but saturates its cell.
-    const image = makeImage(480, 270, (x, y) =>
-      x >= 60 && x < 100 && y >= 40 && y < 60 ? ERROR_RED : WHITE,
+describe('scanForErrorRed — pill-shape detection', () => {
+  it('flags a red field-pill capsule', () => {
+    const image = makeImage(240, 120, pillPainter(40, 40, 120, 24));
+    const scan = scanForErrorRed(image);
+
+    expect(scan.pillFound).toBe(true);
+    expect(scan.pill?.caps).toBe(2); // both rounded end-caps present
+    expect(scan.pill?.fill).toBeGreaterThan(0.6); // solid body
+    expect(scan.pill?.plateauHeight).toBe(24);
+  });
+
+  it('flags a pill even with white field-name text punched through the middle', () => {
+    // The extent profile keys on the pill's top/bottom borders, so interior text does not hide it.
+    const image = makeImage(240, 120, pillPainter(40, 40, 120, 24, { text: true }));
+    const scan = scanForErrorRed(image);
+
+    expect(scan.pillFound).toBe(true);
+  });
+
+  it('flags a short pill whose length shrank with the field name (length-invariant)', () => {
+    const image = makeImage(240, 120, pillPainter(40, 40, 60, 24));
+    const scan = scanForErrorRed(image);
+
+    expect(scan.pillFound).toBe(true);
+  });
+
+  it('does NOT flag a square-cornered red rectangle (a bar, not a pill)', () => {
+    const image = makeImage(240, 120, (x, y) =>
+      x >= 40 && x < 160 && y >= 40 && y < 64 ? ERROR_RED : WHITE,
     );
     const scan = scanForErrorRed(image);
 
-    expect(scan.redFraction).toBeLessThan(0.01); // barely any red overall
-    expect(scan.maxCellRedFraction).toBeGreaterThan(0.9); // but its cell is nearly all red
+    expect(scan.redPixels).toBeGreaterThan(1000); // plenty of red...
+    expect(scan.pillFound).toBe(false); // ...but square corners, so not a pill
   });
 
-  it('does not spike the density signal for red scattered thinly across the viz', () => {
-    // Same number of red pixels as a ~35px block, but sprinkled one-every-13 across the whole
-    // canvas (think: red marks in a scatterplot). No single cell fills up.
-    const image = makeImage(480, 270, (x, y) => ((x * 7 + y * 13) % 169 === 0 ? ERROR_RED : WHITE));
+  it('does NOT flag a tall red bar (wrong orientation)', () => {
+    const image = makeImage(240, 200, (x, y) =>
+      x >= 40 && x < 64 && y >= 20 && y < 180 ? ERROR_RED : WHITE,
+    );
     const scan = scanForErrorRed(image);
 
-    expect(scan.redPixels).toBeGreaterThan(400); // plenty of red pixels in total
-    expect(scan.maxCellRedFraction).toBeLessThan(0.2); // yet no dense cluster
+    expect(scan.pillFound).toBe(false);
   });
 
-  it('reports zero on a clean window', () => {
+  it('does NOT flag red scattered thinly across the viz (marks)', () => {
+    const image = makeImage(240, 135, (x, y) => ((x * 7 + y * 13) % 169 === 0 ? ERROR_RED : WHITE));
+    const scan = scanForErrorRed(image);
+
+    expect(scan.redPixels).toBeGreaterThan(100); // plenty of red pixels overall
+    expect(scan.pillFound).toBe(false); // but no capsule-shaped component
+  });
+
+  it('does NOT flag a solid red disc (a round mark peaks for one column, no flat body)', () => {
+    const cx = 120;
+    const cy = 60;
+    const r = 18;
+    const image = makeImage(240, 120, (x, y) => {
+      const dx = x + 0.5 - cx;
+      const dy = y + 0.5 - cy;
+      return dx * dx + dy * dy <= r * r ? ERROR_RED : WHITE;
+    });
+    const scan = scanForErrorRed(image);
+
+    expect(scan.pillFound).toBe(false);
+  });
+
+  it('reports zero red and no pill on a clean window', () => {
     const scan = scanForErrorRed(makeImage(200, 100, () => WHITE));
     expect(scan.redPixels).toBe(0);
-    expect(scan.maxCellRedFraction).toBe(0);
+    expect(scan.pillFound).toBe(false);
+    expect(scan.pill).toBeNull();
   });
 });
 
@@ -100,12 +183,10 @@ describe('decodePng', () => {
     expect(at(decoded!, 5, 1)).toEqual([50, 10, 100]);
   });
 
-  it('scans a decoded PNG containing a red block', () => {
-    const decoded = decodePng(
-      makePng(96, 54, (x, y) => (x >= 10 && x < 22 && y >= 10 && y < 18 ? ERROR_RED : WHITE)),
-    );
+  it('scans a decoded PNG containing a red pill', () => {
+    const decoded = decodePng(makePng(240, 120, pillPainter(40, 40, 120, 24)));
     const scan = scanForErrorRed(decoded!);
-    expect(scan.maxCellRedFraction).toBeGreaterThan(0.5);
+    expect(scan.pillFound).toBe(true);
   });
 
   it('returns null for a non-PNG or unsupported variant', () => {

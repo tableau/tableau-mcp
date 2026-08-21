@@ -197,25 +197,27 @@ describe('buildWindowScreenshotToolResult', () => {
 });
 
 describe('buildRedTriageText', () => {
-  const scan = (maxCellRedFraction: number): ErrorRedScan => ({
+  // A scan carrying (or not) a matched pill shape — the only field the triage keys on.
+  const scan = (pillFound: boolean): ErrorRedScan => ({
     width: 1728,
     height: 967,
-    redPixels: 1,
+    redPixels: pillFound ? 2000 : 1,
     redFraction: 0,
-    maxCellRedPixels: 1,
-    maxCellRedFraction,
+    pillFound,
+    pill: pillFound
+      ? { x: 40, y: 40, width: 120, height: 24, plateauHeight: 24, fill: 0.82, caps: 2 }
+      : null,
   });
 
-  it('flags a dense red cluster as a possible error indicator', () => {
-    // 0.47 is what the real capture with an error pill scored.
-    const text = buildRedTriageText(scan(0.47));
+  it('flags a red pill shape as a possible error indicator', () => {
+    const text = buildRedTriageText(scan(true));
     expect(text).toMatch(/[Pp]ossible error/);
     expect(text).toMatch(/do NOT report Done/);
   });
 
-  it('reports no dense cluster below the threshold without licensing "Done"', () => {
-    const text = buildRedTriageText(scan(0.05));
-    expect(text).toMatch(/[Nn]o dense red/);
+  it('reports no pill shape without licensing "Done"', () => {
+    const text = buildRedTriageText(scan(false));
+    expect(text).toMatch(/[Nn]o red field pill/);
     expect(text).toMatch(/confirm the result visually/);
   });
 

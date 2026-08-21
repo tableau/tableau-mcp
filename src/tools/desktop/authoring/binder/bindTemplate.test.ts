@@ -2465,7 +2465,9 @@ describe('bindTemplateTool auto_apply gate', () => {
     // second reads back, sees the goto did not land in this fixture, and reissues once.
     expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(3);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledTimes(2);
+    // 2 goto-sheet dispatches (initial + reissue) plus 1 post-apply visual-check window
+    // capture — the default-on AUTO_VISUAL_CHECK scan rides every bind-template apply.
+    expect(executeCommand).toHaveBeenCalledTimes(3);
     expect(executeCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         command: 'goto-sheet',
@@ -2508,7 +2510,9 @@ describe('bindTemplateTool auto_apply gate', () => {
       }),
     );
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
+    // 1 goto-sheet dispatch (which times out) plus 1 post-apply visual-check window capture:
+    // the default-on scan still rides the apply even when activation fails.
+    expect(executeCommand).toHaveBeenCalledTimes(2);
   });
 
   it('applied:true returns ONLY the trimmed fast-path shape (W60 P4 response-shape trim)', async () => {

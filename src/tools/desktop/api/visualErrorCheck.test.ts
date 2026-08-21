@@ -40,11 +40,33 @@ function makePng(
   return Buffer.from(encodePng({ width, height, channels: 3, depth: 8, data }));
 }
 
-// A capture with a solid red pill on an otherwise white window — a dense cluster the density
-// triage flags. A clean capture is all white.
-const REDDISH_PNG = makePng(96, 54, (x, y) =>
-  x >= 10 && x < 40 && y >= 10 && y < 30 ? ERROR_RED : WHITE,
-);
+// A horizontal capsule = the field-pill shape the SHAPE detector keys on: a solid
+// rounded rectangle with semicircular end-caps of radius h/2. A square rectangle would NOT
+// flag (no rounded caps), so the fixture must be a genuine capsule.
+function pillPainter(
+  x0: number,
+  y0: number,
+  w: number,
+  h: number,
+): (x: number, y: number) => [number, number, number] {
+  const r = h / 2;
+  const cy = y0 + r;
+  const leftC = x0 + r;
+  const rightC = x0 + w - r;
+  return (x, y) => {
+    const px = x + 0.5;
+    const dy = y + 0.5 - cy;
+    if (Math.abs(dy) > r) return WHITE;
+    if (px >= leftC && px <= rightC) return ERROR_RED;
+    const cx = px < leftC ? leftC : rightC;
+    const dx = px - cx;
+    return dx * dx + dy * dy <= r * r ? ERROR_RED : WHITE;
+  };
+}
+
+// A capture with a red field-pill capsule on an otherwise white window — the shape the visual
+// check flags. A clean capture is all white.
+const REDDISH_PNG = makePng(240, 120, pillPainter(40, 40, 120, 24));
 const CLEAN_PNG = makePng(96, 54, () => WHITE);
 
 // An executor whose take-all-screenshots call resolves to one PNG on disk (bytes), or errors.
@@ -69,7 +91,7 @@ describe('runVisualErrorCheck', () => {
     vi.clearAllMocks();
   });
 
-  it('returns a visual warning naming capture-window-screenshot when the window is densely red', async () => {
+  it('returns a visual warning naming capture-window-screenshot when a red pill shape is present', async () => {
     const executor = executorReturning(REDDISH_PNG);
 
     const finding = await runVisualErrorCheck({
@@ -81,7 +103,6 @@ describe('runVisualErrorCheck', () => {
     expect(finding?.severity).toBe('warning');
     expect(finding?.source).toBe('visual');
     expect(finding?.message).toMatch(/capture-window-screenshot/);
-    expect(finding?.message).toMatch(/%/);
     // The finding pins no evidence handle yet — a live re-capture shows the persistent pill.
     expect(finding?.evidence).toBeUndefined();
   });
@@ -144,7 +165,7 @@ describe('runVisualErrorCheck', () => {
     );
   });
 
-  it('logs a warning line under logger "visualCheck" when it flags a dense cluster', async () => {
+  it('logs a warning line under logger "visualCheck" when it flags a red pill shape', async () => {
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
     const executor = executorReturning(REDDISH_PNG);
 
@@ -181,7 +202,7 @@ describe('runVisualErrorCheckText', () => {
     expect(executor.executeCommand).not.toHaveBeenCalled();
   });
 
-  it('renders the visual-check warning text when enabled and the window is densely red', async () => {
+  it('renders the visual-check warning text when enabled and a red pill shape is present', async () => {
     const executor = executorReturning(REDDISH_PNG);
 
     const text = await runVisualErrorCheckText({

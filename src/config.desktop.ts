@@ -57,10 +57,11 @@ export class Config extends BaseConfig {
   /**
    * When true, apply tools run a post-apply VISUAL check — capture the Desktop window and
    * scan for a dense error-red cluster (a likely error pill / broken render) — and fold any
-   * finding into the same verification channel readback uses. Off by default (turn on with
-   * env AUTO_VISUAL_CHECK=true) because it adds a full-window screenshot capture to each apply;
-   * a hit is a warning that nudges the model to capture and inspect the window, never a hard
-   * apply failure.
+   * finding into the same verification channel readback uses. On by default; it is the only
+   * post-apply signal for the XML-blind apply paths (dashboard/workbook/storyboard), so it
+   * runs without any env plumbing. Set AUTO_VISUAL_CHECK=false to turn it off (the kill-switch
+   * for the per-apply full-window screenshot). A hit is a warning that nudges the model to
+   * capture and inspect the window, never a hard apply failure.
    */
   autoVisualCheck: boolean;
 
@@ -120,7 +121,9 @@ export class Config extends BaseConfig {
 
     this.allowSkipValidation = allowSkipValidation === 'true';
 
-    this.autoVisualCheck = autoVisualCheck === 'true';
+    // Default ON: only AUTO_VISUAL_CHECK=false disables it (the kill-switch). An unset var
+    // leaves the check running, so the XML-blind apply paths always get a post-apply signal.
+    this.autoVisualCheck = autoVisualCheck !== 'false';
   }
 }
 

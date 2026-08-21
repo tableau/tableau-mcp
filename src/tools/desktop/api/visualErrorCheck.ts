@@ -18,7 +18,7 @@ const VISUAL_CHECK_LOGGER = 'visualCheck';
 
 /**
  * Post-apply VISUAL verifier — the pluggable counterpart to readback. It captures the Desktop
- * window and scans for a dense error-red cluster (a likely error pill or broken render), which
+ * window and scans for a red field-pill shape (a likely broken/invalid field reference), which
  * XML readback cannot see. On a hit it returns a source-agnostic VerificationFinding that points
  * the model at capture-window-screenshot to look closer; because an error pill persists until the
  * underlying problem is fixed, a live re-capture shows the same state, so the finding carries no
@@ -59,20 +59,22 @@ export async function runVisualErrorCheck({
     }
 
     const suspicious = isSuspiciousErrorRed(scan);
-    const pct = Math.round(scan.maxCellRedFraction * 100);
-    // Positive confirmation the scan ran, with the numbers behind the verdict. Info so it is
-    // visible at default verbosity once the flag is on; a suspicious hit is escalated below.
+    // Positive confirmation the scan ran, with the shape numbers behind the verdict. Info so it
+    // is visible at default verbosity once the flag is on; a suspicious hit is escalated below.
     log({
       level: suspicious ? 'warning' : 'info',
       message: suspicious
-        ? 'Visual error check flagged a dense error red cluster'
-        : 'Visual error check ran — no suspicious error red cluster',
+        ? 'Visual error check flagged a red field pill shape'
+        : 'Visual error check ran — no red field pill shape found',
       logger: VISUAL_CHECK_LOGGER,
       data: {
         suspicious,
-        maxCellRedFraction: scan.maxCellRedFraction,
-        redFraction: scan.redFraction,
+        pillFound: scan.pillFound,
+        plateauHeight: scan.pill?.plateauHeight,
+        pillFill: scan.pill?.fill,
+        pillCaps: scan.pill?.caps,
         redPixels: scan.redPixels,
+        redFraction: scan.redFraction,
         width: scan.width,
         height: scan.height,
       },
@@ -85,9 +87,9 @@ export async function runVisualErrorCheck({
       severity: 'warning',
       source: 'visual',
       message:
-        `the densest region of the applied window is ${pct}% saturated red, which usually ` +
-        `means a red error pill or broken element — capture the window with ${CAPTURE_TOOL} ` +
-        'and inspect the shelves before reporting Done',
+        'a red field pill shape (a likely broken or invalid field reference that XML readback ' +
+        `cannot see) was detected on a shelf — capture the window with ${CAPTURE_TOOL} and ` +
+        'inspect the shelves before reporting Done',
     };
   } catch (error) {
     // Best-effort by contract: an unexpected capture/scan failure yields no finding rather than

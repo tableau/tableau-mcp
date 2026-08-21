@@ -243,8 +243,8 @@ function commandReturnedNoImage(pathCount: number): Result<never, ExecuteCommand
 }
 
 /**
- * Cheap server-side triage line describing whether the capture contains a dense red
- * cluster — a likely error pill / broken element. It is a nudge to look, never a verdict:
+ * Cheap server-side triage line describing whether the capture contains a red field-pill
+ * shape — a likely broken/invalid field reference. It is a nudge to look, never a verdict:
  * red is overloaded in Tableau, so a hit escalates to the model actually inspecting the
  * pixels (which ride in the same result), and a miss does NOT license "Done" on a risky
  * change. Null scan (undecodable capture) says so rather than implying the window is clean.
@@ -253,11 +253,10 @@ export function buildRedTriageText(scan: ErrorRedScan | null): string {
   if (!scan) {
     return 'Automatic red indicator scan unavailable for this capture; inspect the window yourself for a red pill or broken element.';
   }
-  const pct = Math.round(scan.maxCellRedFraction * 100);
   if (isSuspiciousErrorRed(scan)) {
-    return `Possible error indicator: the densest region of the window is ${pct}% saturated red, which usually means a red pill or broken element. Inspect the shelves, schema viewer, and Data pane; if a red pill is confirmed, do NOT report Done.`;
+    return 'Possible error indicator: a red field pill shape was detected in the window, which usually means a broken or invalid field reference. Inspect the shelves, schema viewer, and Data pane; if a red pill is confirmed, do NOT report Done.';
   }
-  return `No dense red cluster detected (densest region ${pct}% red). If the change was risky, still confirm the result visually.`;
+  return 'No red field pill shape detected. If the change was risky, still confirm the result visually.';
 }
 
 /**
