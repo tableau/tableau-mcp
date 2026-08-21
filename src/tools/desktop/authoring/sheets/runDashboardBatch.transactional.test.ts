@@ -233,6 +233,7 @@ async function callBatch(
       title: 'Executive Overview',
       layoutType: 'columns',
       gridColumns: undefined,
+      kpiWorksheetNames: undefined,
     },
     {
       ...getMockRequestHandlerExtra(),
