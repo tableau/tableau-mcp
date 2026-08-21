@@ -22,7 +22,7 @@ import { workbookLoadToolError } from './workbookLoadToolError.js';
 export const roleSchema = z.enum(['measure', 'dimension']);
 export const datatypeSchema = z.enum(['real', 'integer', 'string', 'boolean', 'date', 'datetime']);
 
-type DatasourceElement = {
+export type DatasourceElement = {
   name: string;
   openStart: number;
   openEnd: number;
@@ -335,7 +335,7 @@ function selectTargetDatasource(
   ).toErr();
 }
 
-function findDatasourceElements(xml: string): DatasourceElement[] {
+export function findDatasourceElements(xml: string): DatasourceElement[] {
   const elements: DatasourceElement[] = [];
   const opaqueRanges = findOpaqueXmlRanges(xml);
   // Worksheet <dependencies> blocks clone <datasource name='...'> elements.

@@ -1,63 +1,49 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { writeFileSync } from 'fs';
-import { resolve } from 'path';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getExternalApiDiscoveryDir } from '../../../../desktop/externalApi/discovery.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import { deriveStageSiblingPath, reopenFromStage } from '../../../../desktop/stageReopen.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
+import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
-  FileReadError,
-  McpToolError,
+  XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
-import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
+import { DatasourceElement, findDatasourceElements } from './authorCalcCore.js';
+import { workbookLoadToolError } from './workbookLoadToolError.js';
 
 const datatypeSchema = z.enum(['integer', 'real', 'string', 'boolean', 'date']);
 
-// Primitives in, Parameters-datasource XML server-side, a ready-to-open stage out.
-// PROVEN live 2026-07-19 (CODA): the Parameters datasource is FROZEN to live merge —
-// create/add/value-edit are all silently refused (envelope SUCCEEDED, readback
-// unchanged). A parameter is born ONLY at OPEN time: seed it into the document on
-// disk, then reopen and re-pin when the live Desktop stack can prove the reopened
-// document contains the new parameter. Parameters are the "key signature" —
-// established once, at the top.
+// Primitives in, a parameter created in place out. A parameter materializes only through
+// dependency resolution: the live model reconstructs the Parameters datasource from a
+// `<datasource-dependencies datasource='Parameters'>` block hung off a real datasource
+// (live-proven 2026-08-20 against a running instance — the block alone is sufficient, and a
+// bare top-level Parameters datasource is dropped). So we inject that block and apply the
+// document to the running instance the same way every sibling authoring tool does
+// (loadWorkbookXml -> applyWorkbookDocument -> pollReadback). No stage file, no reopen.
 const paramsSchema = {
   session: sessionParam(),
   caption: z.string().describe(''),
   datatype: datatypeSchema.default('integer').describe(''),
   value: z.string().describe(''),
   members: z.array(z.string()).optional().describe(''),
-  stagePath: z.string().optional().describe(''),
 };
 
-type AuthorParameterFallbackResult = {
+type AuthorParameterResult = {
   parameterName: string;
   caption: string;
-  stagePath: string;
-  reopenRequired: true;
+  applied: 'in-place';
+  session: string;
   hint: string;
-  reopenError?: string;
 };
 
-type AuthorParameterReopenedResult = {
-  parameterName: string;
-  caption: string;
-  stagePath: string;
-  reopened: true;
-  oldSession: string;
-  newSession: string;
-  hint: string;
-  killWarning?: string;
-};
-
-type AuthorParameterResult = AuthorParameterFallbackResult | AuthorParameterReopenedResult;
+const PARAM_DEP_OPEN = "<datasource-dependencies datasource='Parameters'>";
+const PARAM_DEP_CLOSE = '</datasource-dependencies>';
 
 const title = 'Author Parameter';
 export const getAuthorParameterTool = (
@@ -76,12 +62,12 @@ export const getAuthorParameterTool = (
       idempotentHint: false,
     },
     callback: async (
-      { session, caption, datatype = 'integer', value, members, stagePath },
+      { session, caption, datatype = 'integer', value, members },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute<AuthorParameterResult>({
         extra,
-        args: { session, caption, datatype, value, members, stagePath },
+        args: { session, caption, datatype, value, members },
         callback: async () => {
           if (caption.trim().length === 0) {
             return new ArgsValidationError('caption empty').toErr();
@@ -90,17 +76,6 @@ export const getAuthorParameterTool = (
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
-          }
-
-          // Untaught agents should not have to invent filesystem paths: when stagePath
-          // is omitted, stage under the user's Tableau repository.
-          let effectiveStagePath = stagePath?.trim() ?? '';
-          if (effectiveStagePath.length === 0) {
-            const derivedResult = await deriveStageSiblingPath();
-            if (derivedResult.isErr()) {
-              return derivedResult.error.toErr();
-            }
-            effectiveStagePath = derivedResult.value;
           }
 
           const executor = await extra.getExecutor(sessionResult.value);
@@ -116,76 +91,51 @@ export const getAuthorParameterTool = (
             ).toErr();
           }
 
+          const hostResult = selectHostDatasource(liveXml);
+          if (hostResult.isErr()) {
+            return hostResult.error.toErr();
+          }
+
           const paramName = nextParameterName(liveXml);
           const columnXml = renderParameterColumn({ caption, paramName, datatype, value, members });
-          const editResult = seedParameterColumn(liveXml, columnXml);
-          if (editResult.isErr()) {
-            return editResult.error.toErr();
-          }
+          const editedXml = injectParameterDependency(liveXml, hostResult.value, columnXml);
 
-          const trimmedStagePath = effectiveStagePath;
-          try {
-            writeFileSync(resolve(trimmedStagePath), editResult.value, 'utf-8');
-          } catch (error) {
-            return new FileReadError(error).toErr();
-          }
-
-          const fallback = (reopenError?: string): Ok<AuthorParameterFallbackResult> =>
-            new Ok({
-              parameterName: paramName,
-              caption,
-              stagePath: trimmedStagePath,
-              reopenRequired: true,
-              hint:
-                `parameter was staged at ${trimmedStagePath}; mutation staged at ${trimmedStagePath}. ` +
-                'do NOT rerun author-parameter (a rerun creates a second uniquely-named parameter). ' +
-                'Recovery: reopen the staged file / restore the session; merged calcs/sets/actions/formatting carry through the reopen.',
-              ...(reopenError ? { reopenError } : {}),
-            });
-
-          // Same resolution as instance discovery: env override, else the platform's
-          // standard dir — the serving path never forwards the env, so a hard guard
-          // here would silently kill the reopen in production.
-          const discoveryDir = getExternalApiDiscoveryDir();
-
-          const reopenResult = await reopenFromStage({
-            stagePath: trimmedStagePath,
-            oldPid: sessionResult.value,
-            discoveryDir,
-          });
-          if (reopenResult.isErr()) {
-            return fallback(oneLineReason(reopenResult.error));
-          }
-
-          const verifyResult = await verifyReopenedParameter({
-            getExecutor: extra.getExecutor,
-            newPid: reopenResult.value.newPid,
+          const loadResult = await loadWorkbookXml({
+            xml: editedXml,
+            baselineXml: liveXml,
+            expectedWorkbookXml: liveXml,
+            focus: { navigate: 'restore' },
+            executor,
             signal: extra.signal,
-            caption,
           });
-          if (verifyResult.isErr()) {
-            return fallback(oneLineReason(verifyResult.error));
+          if (loadResult.isErr()) {
+            return workbookLoadToolError(loadResult.error).toErr();
           }
 
-          if (process.env.TABLEAU_DESKTOP_SESSION_ID !== undefined) {
-            process.env.TABLEAU_DESKTOP_SESSION_ID = String(reopenResult.value.newPid);
+          const readback = await pollReadback({
+            read: () => getWorkbookXml({ executor, signal: extra.signal }),
+            settled: (xml) => hasParameterCaption(xml, caption),
+            signal: extra.signal,
+          });
+          if (!readback.ok) {
+            return new DesktopCommandExecutionError(readback.error).toErr();
           }
-
-          const killWarning = terminateOldSession(sessionResult.value);
+          if (!readback.settled) {
+            return new XmlModificationError(
+              'load completed but the parameter did not materialize: readback did not contain the new parameter caption',
+            ).toErr();
+          }
 
           return new Ok({
             parameterName: paramName,
             caption,
-            stagePath: trimmedStagePath,
-            reopened: true,
-            oldSession: sessionResult.value,
-            newSession: reopenResult.value.newPid,
-            hint: 'parameter born at reopen; session re-pinned — continue authoring, melody merges (calcs/sets/actions/formatting) now target the reopened instance',
-            ...(killWarning ? { killWarning } : {}),
+            applied: 'in-place' as const,
+            session: sessionResult.value,
+            hint: 'parameter created in place; the session is unchanged — continue authoring against the same instance',
           });
         },
         getSuccessResult: (result): CallToolResult => ({
-          isError: isReopenErrorFallback(result),
+          isError: false,
           content: [{ type: 'text', text: JSON.stringify(result) }],
         }),
       });
@@ -195,54 +145,42 @@ export const getAuthorParameterTool = (
   return tool;
 };
 
-function isReopenErrorFallback(
-  result: AuthorParameterResult,
-): result is AuthorParameterFallbackResult {
-  return 'reopenRequired' in result && result.reopenError !== undefined;
-}
-
-async function verifyReopenedParameter({
-  getExecutor,
-  newPid,
-  signal,
-  caption,
-}: {
-  getExecutor: TableauDesktopRequestHandlerExtra['getExecutor'];
-  newPid: string;
-  signal: AbortSignal;
-  caption: string;
-}): Promise<Result<void, McpToolError>> {
-  try {
-    const executor = await getExecutor(newPid);
-    const readResult = await getWorkbookXml({ executor, signal });
-    if (readResult.isErr()) {
-      return new DesktopCommandExecutionError(readResult.error).toErr();
-    }
-    if (!hasParameterCaption(readResult.value, caption)) {
-      return new ArgsValidationError(
-        `reopened workbook did not contain parameter caption ${caption}`,
-      ).toErr();
-    }
-    return Ok.EMPTY;
-  } catch (error) {
+function selectHostDatasource(xml: string): Result<DatasourceElement, ArgsValidationError> {
+  const host = findDatasourceElements(xml).find((datasource) => datasource.name !== 'Parameters');
+  if (host === undefined) {
     return new ArgsValidationError(
-      `failed to verify reopened workbook: ${oneLineReason(error)}`,
+      'no data source to attach the parameter to — open a workbook with at least one data source, then retry',
     ).toErr();
   }
+  return new Ok(host);
 }
 
-function terminateOldSession(oldPid: string): string | undefined {
-  try {
-    process.kill(Number(oldPid), 'SIGTERM');
-    return undefined;
-  } catch (error) {
-    return `failed to terminate old Tableau Desktop pid ${oldPid}: ${oneLineReason(error)}`;
+// Insert the full parameter <column> into a `<datasource-dependencies datasource='Parameters'>`
+// block on the host datasource
+function injectParameterDependency(
+  xml: string,
+  host: DatasourceElement,
+  columnXml: string,
+): string {
+  if (host.selfClosing) {
+    const openTag = xml.slice(host.openStart, host.openEnd).replace(/\/\s*>$/, '>');
+    const block = `${PARAM_DEP_OPEN}${columnXml}${PARAM_DEP_CLOSE}`;
+    return `${xml.slice(0, host.openStart)}${openTag}${block}</datasource>${xml.slice(host.openEnd)}`;
   }
-}
 
-function oneLineReason(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.replace(/\s+/g, ' ').trim();
+  const existing = /<datasource-dependencies\b[^>]*\bdatasource=(['"])Parameters\1[^>]*>/.exec(
+    host.xml,
+  );
+  if (existing && existing.index !== undefined) {
+    const closeRel = host.xml.indexOf(PARAM_DEP_CLOSE, existing.index + existing[0].length);
+    if (closeRel !== -1) {
+      const absClose = host.openStart + closeRel;
+      return xml.slice(0, absClose) + columnXml + xml.slice(absClose);
+    }
+  }
+
+  const block = `${PARAM_DEP_OPEN}${columnXml}${PARAM_DEP_CLOSE}`;
+  return xml.slice(0, host.closeStart) + block + xml.slice(host.closeStart);
 }
 
 function hasParameterCaption(xml: string, caption: string): boolean {
@@ -302,32 +240,6 @@ function renderParameterColumn({
     `name='${escapeXml(paramName)}' param-domain-type='${domain}' role='${role}' type='${type}' value='${valueAttr}'>` +
     `<calculation class='tableau' formula='${formula}' />${membersXml}</column>`
   );
-}
-
-// Splice the parameter column into the Parameters datasource, creating that datasource
-// (right after <datasources>) if the document has none. An EMPTY Parameters ds is
-// dropped by Desktop on load — one carrying a real column survives (live-proven).
-function seedParameterColumn(xml: string, columnXml: string): Result<string, ArgsValidationError> {
-  const dsOpen = /<datasource\b[^>]*\bname=(['"])Parameters\1[^>]*>/.exec(xml);
-  if (dsOpen && dsOpen.index !== undefined) {
-    const close = xml.indexOf('</datasource>', dsOpen.index);
-    if (close === -1) {
-      return new ArgsValidationError(
-        'malformed document: Parameters datasource is not closed',
-      ).toErr();
-    }
-    return new Ok(xml.slice(0, close) + columnXml + xml.slice(close));
-  }
-
-  const blockOpen = xml.indexOf('<datasources>');
-  if (blockOpen === -1) {
-    return new ArgsValidationError('document has no <datasources> block to seed into').toErr();
-  }
-  const insertAt = blockOpen + '<datasources>'.length;
-  const newDs =
-    "<datasource hasconnection='false' inline='true' name='Parameters' version='18.1'>" +
-    `<aliases enabled='yes' />${columnXml}</datasource>`;
-  return new Ok(xml.slice(0, insertAt) + newDs + xml.slice(insertAt));
 }
 
 function parametersDatasource(xml: string): string | undefined {

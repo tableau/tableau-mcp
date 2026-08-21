@@ -239,8 +239,11 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // routes, gated to a 0.2.8 floor. All three join DYNAMIC_AUTHORING_TOOL_PROFILE, so dynamic
 // authoring moves 40_096 -> 42_521 (budget kept at the 18-char slack) and the full surface
 // 56_799 -> 59_224. Dynamic still clears the 46k cliff.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_521;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_539;
+// Re-pinned 2026-08-20: author-parameter now creates the parameter in place (dropped the reopen
+// path), so its obsolete stagePath param leaves the schema (-30 bytes); dynamic authoring
+// 42_521 -> 42_491 (budget kept at the 18-char slack).
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_491;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_509;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
 const FULL_TOOL_SURFACE_BUDGET = 59_242;
 

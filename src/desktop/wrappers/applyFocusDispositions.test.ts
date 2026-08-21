@@ -47,6 +47,7 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
   'src/tools/desktop/authoring/sheets/runDashboardBatch.ts': ['loadWorkbookXml:none'],
   'src/tools/desktop/authoring/datasource/authorAction.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/authoring/datasource/authorCalcCore.ts': ['loadWorkbookXml:restore'],
+  'src/tools/desktop/authoring/datasource/authorParameter.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/authoring/datasource/authorSet.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/authoring/datasource/formatLabels.ts': ['loadWorkbookXml:artifact'],
   'src/tools/desktop/api/applyWorkbook.ts': ['loadWorkbookXml:restore'],
