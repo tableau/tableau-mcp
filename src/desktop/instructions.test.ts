@@ -86,6 +86,19 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(dynamicAuthoring?.trigger).toContain('WITHOUT a conventional name');
     expect(dynamicAuthoring?.action).toContain('author-calc');
+    expect(dynamicAuthoring?.action).toContain('format-worksheets');
+    expect(dynamicAuthoring?.action).not.toContain('format-labels');
+    expect(dynamicAuthoring?.toolSequence).toEqual([
+      'author-parameter',
+      'author-set',
+      'author-calc',
+      'author-action',
+      'format-worksheets',
+      'list-templates',
+      'list-available-fields',
+      'build-worksheets-from-templates',
+      'apply-worksheet',
+    ]);
     expect(dynamicAuthoring?.action).toContain('build-worksheets-from-templates');
   });
 

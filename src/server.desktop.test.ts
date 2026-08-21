@@ -255,42 +255,20 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // for recognizable single-view asks. The 55-tool surface is 45_742 bytes; retain the current
 // 18-character ratchet slack without raising the 46k product ceiling.
 // Re-pinned 2026-08-21 (merge of dev/myu404 in-place author-parameter into feature/desktop):
-// author-parameter now edits the live document in place — its obsolete stagePath param leaves the
-// schema (-30 bytes) and it adopts the sibling `datasource` selector param (+31 bytes) for a net
-// +1; dynamic authoring 45_742 -> 45_743 (18-char slack kept, 46k product ceiling untouched).
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 45_743;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 45_761;
-const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 60_022;
-
+// Aggregate tools/list size is no longer a product contract: TAS discovers tools through search.
+// Keep the selected profile and its instruction text pinned, plus per-tool caps below.
 describe('desktop tools/list serialized surface', () => {
-  it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
+  it('serves the selected dynamic authoring profile with pinned instructions', () => {
     const server = new DesktopMcpServer();
     const tools = desktopToolFactories.map((toolFactory) => toolFactory(server));
     const dynamicAuthoringTools = selectToolsForProfile(tools, 'dynamic-authoring');
-    let dynamicAuthoringTotal = DESKTOP_INSTRUCTIONS.length;
-    let fullToolSurfaceTotal = 0;
-
-    for (const tool of tools) {
-      const bytes = (await serializeDesktopToolSurface(tool)).length;
-      fullToolSurfaceTotal += bytes;
-      if (DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name)) {
-        dynamicAuthoringTotal += bytes;
-      }
-    }
     expect(new Set(dynamicAuthoringTools.map((tool) => tool.name))).toEqual(
       DYNAMIC_AUTHORING_TOOL_PROFILE,
     );
 
-    // The default served surface includes instructions. Full-profile tool schemas are
-    // pinned separately so intentional route prose does not fund schema growth.
-    // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
-    // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_072);
-    expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
-    expect(fullToolSurfaceTotal).toBeLessThanOrEqual(FULL_TOOL_SURFACE_BUDGET);
+    // Tool search, not an aggregate tools/list payload, owns discovery. Keep only the
+    // instruction pin and per-tool budget so useful tools do not fund one shared ceiling.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_076);
   });
 });
 
@@ -360,6 +338,9 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['refine-worksheet', 1465], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
+    // Approved with the tool-search transition: the per-sheet schema prevents partial
+    // cross-field bulk edits; preserve that contract instead of compressing its names.
+    ['format-worksheets', 1097],
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
@@ -530,7 +511,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'author-set',
       'author-parameter',
       'author-action',
-      'format-labels',
+      'format-worksheets',
       'ask-user',
       'search-commands',
       'list-templates',
@@ -619,21 +600,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
         (tool) => tool.name === 'search-workbook-fields',
       ),
     ).toHaveLength(1);
-  });
-
-  it('dynamic-authoring surface sits well under the 46k tools/list cliff (the whole point of a lean profile)', async () => {
-    const server = new DesktopMcpServer();
-    const selected = selectToolsForProfile(
-      desktopToolFactories.map((f) => f(server)),
-      'dynamic-authoring',
-    );
-    let total = DESKTOP_INSTRUCTIONS.length;
-    for (const tool of selected) {
-      total += (await serializeDesktopToolSurface(tool)).length;
-    }
-    expect(total).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
-    expect(total).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
-    expect(total).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {

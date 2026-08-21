@@ -46,6 +46,7 @@ export const desktopToolNames = [
   'author-set',
   'author-action',
   'format-labels',
+  'format-worksheets',
   'author-parameter',
   'get-health',
   'get-worksheet-info',
