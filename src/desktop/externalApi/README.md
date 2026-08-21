@@ -4,11 +4,6 @@ All normal Tableau Desktop API traffic lives here. Desktop is reached only throu
 the External Client API ("Athena V0"), a loopback HTTP host discovered via
 per-instance `<pid>.json` files.
 
-There is one narrow startup exception: after `stageReopen.ts` launches a staged
-workbook, it polls `GET /v0/workbook/document` only to learn when the new Desktop
-process is ready. It does not run tool operations or own endpoint behavior; normal
-traffic resumes through this layer once startup completes.
-
 | File | Role |
 | --- | --- |
 | `types.ts` | Route constants, `{id}` route builders, and zod schemas for every payload |
