@@ -252,10 +252,16 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // terminal/retry prose (-60 bytes), so dynamic authoring moves 42_739 -> 42_679 and the full
 // surface 60_064 -> 60_004, retaining the 18-character slack.
 // Re-pinned 2026-08-21: bind-template joins the current 54-tool base as the bounded fast path
-// for recognizable single-view asks. The 55-tool surface is 45_757 bytes; retain the current
-// 3-character ratchet slack without raising the 46k product ceiling.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 45_757;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 45_760;
+// for recognizable single-view asks. The 55-tool surface is 45_742 bytes; retain the current
+// 18-character ratchet slack without raising the 46k product ceiling.
+// Re-pinned 2026-08-21 (merge of dev/myu404 in-place author-parameter into feature/desktop):
+// author-parameter now edits the live document in place — its obsolete stagePath param leaves the
+// schema (-30 bytes) and it adopts the sibling `datasource` selector param (+31 bytes) for a net
+// +1; dynamic authoring 45_742 -> 45_743 (18-char slack kept, 46k product ceiling untouched).
+// Re-pinned 2026-08-21: executive-summary adds KPI names to run-dashboard-batch while trimming its
+// older field prose; dynamic authoring 45_743 -> 45_758 without raising the 46k product ceiling.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 45_758;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 45_761;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
 const FULL_TOOL_SURFACE_BUDGET = 60_022;
 

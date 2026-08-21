@@ -5,8 +5,6 @@ import { z } from 'zod';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
-import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -15,7 +13,7 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
-import { workbookLoadToolError } from './workbookLoadToolError.js';
+import { applyAndVerify } from './applyAndVerify.js';
 
 const activationSchema = z.enum(['on-select', 'on-hover', 'on-menu']);
 const modeSchema = z.enum(['parameter', 'set']);
@@ -213,18 +211,6 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new ArgsValidationError(validation.message).toErr();
           }
 
-          const loadResult = await loadWorkbookXml({
-            xml: editedXml,
-            baselineXml: liveXml,
-            expectedWorkbookXml: liveXml,
-            focus: { navigate: 'restore' },
-            executor,
-            signal: extra.signal,
-          });
-          if (loadResult.isErr()) {
-            return workbookLoadToolError(loadResult.error).toErr();
-          }
-
           const targetParamLanded = (xml: string): boolean =>
             mode === 'set'
               ? hasActionWithTargetParam(xml, 'edit-group-action', caption, 'target-group', target)
@@ -235,15 +221,17 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                   'target-parameter',
                   target,
                 );
-          const readback = await pollReadback({
-            read: () => getWorkbookXml({ executor, signal: extra.signal }),
+          const outcome = await applyAndVerify({
+            xml: editedXml,
+            baselineXml: liveXml,
             settled: targetParamLanded,
+            executor,
             signal: extra.signal,
           });
-          if (!readback.ok) {
-            return new DesktopCommandExecutionError(readback.error).toErr();
+          if (outcome.status === 'failed') {
+            return outcome.error.toErr();
           }
-          if (!readback.settled) {
+          if (outcome.status === 'not-applied') {
             return new XmlModificationError(
               mode === 'set'
                 ? 'action applied but the target-group param did not survive readback'
