@@ -4,6 +4,7 @@ import type { RuntimeTemplateDescriptor } from '../binder/manifest-types.js';
 import type { SchemaSummary } from '../binder/schema-summary.js';
 import { WATERFALL_ANCHOR_FIELD_RE, WATERFALL_TEMPLATE_NAME } from '../binder/waterfall.js';
 import type { RuntimeTemplateCatalogSnapshot } from './runtimeTemplateCatalog.js';
+import { templateLiveSupportBlocker } from './templateLiveSupport.js';
 
 export interface PuppetCompatibilityProjection {
   allDescriptors: Map<string, RuntimeTemplateDescriptor>;
@@ -36,7 +37,7 @@ const AUTOMATIC_NOUN_ALIASES = new Map<string, string[]>([
   ['part-to-whole-waterfall', ['waterfall']],
   ['spatial-choropleth-map', ['choropleth', 'filled-map', 'region-map']],
 ]);
-const AUTOMATIC_NOUNS = new Set([...AUTOMATIC_NOUN_ALIASES.values()].flat());
+const AUTOMATIC_NOUNS = new Set([...AUTOMATIC_NOUN_ALIASES.values()].flat().concat('donut'));
 
 export function preferredAutomaticTemplateForNoun(noun: string): string | undefined {
   const normalized = noun.trim().toLowerCase().replace(/\s+/g, '-');
@@ -159,7 +160,10 @@ export function createPuppetCompatibilityProjection(
   );
   const descriptors = new Map(
     [...runtimeCatalog]
-      .filter(([template]) => !template.includes('__'))
+      .filter(
+        ([template]) =>
+          !template.includes('__') && templateLiveSupportBlocker(template) === undefined,
+      )
       .map(([template, value]) => [template, automaticDescriptor(value.descriptor)]),
   );
 

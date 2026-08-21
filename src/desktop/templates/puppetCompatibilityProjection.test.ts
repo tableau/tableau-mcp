@@ -600,9 +600,8 @@ describe('createPuppetCompatibilityProjection', () => {
     expect(injected.xml).not.toMatch(/attr="title"[^>]*value=""/);
   });
 
-  it('injects a task-level gantt span without multiplying duration across duplicate task rows', async () => {
+  it('rejects the unproven task-level gantt span before injection', async () => {
     const template = 'gantt-task-rollup-chart';
-    const catalogValue = realRuntimeCatalog.get(template)!;
     const result = await bindTemplate({
       ask: 'gantt chart of Order ID from Order Date to Ship Date',
       workbookXml: superstoreWorkbook,
@@ -619,34 +618,12 @@ describe('createPuppetCompatibilityProjection', () => {
         confidence: 0.9,
       },
     });
-    expect(result.status, JSON.stringify(result)).toBe('bound');
-    if (result.status !== 'bound') return;
-    const injected = buildInjectedWorkbookXml({
-      workbookXml: superstoreWorkbook,
-      templateXml: catalogValue.snapshot.xml,
-      title: result.args.title,
-      sheetType: result.args.sheet_type,
-      templateParameters: result.args.template_parameters,
-      fieldMapping: result.args.field_mapping,
-      templateSlots: catalogValue.snapshot.descriptor.slots,
-      applyNonce: 'advanced-gantt-task-span',
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.blockers).toContainEqual({
+      code: 'kind-mismatch',
+      detail: expect.stringContaining('not-live-proven'),
     });
-    expect(injected.ok).toBe(true);
-    if (!injected.ok) return;
-    const worksheetXml = injected.xml.match(
-      /<worksheet name="gantt-task-rollup-chart">([\s\S]*?)<\/worksheet>/,
-    )?.[0];
-    expect(worksheetXml).toBeDefined();
-    expect(worksheetXml).toContain('<mark class="GanttBar"');
-    expect(worksheetXml).toContain('<rows>[Sample - Superstore].[none:Order ID:nk]</rows>');
-    expect(worksheetXml).toContain('<cols>[Sample - Superstore].[min:Order Date:qk]</cols>');
-    expect(worksheetXml).toContain(
-      'formula="{ FIXED [Order ID] : DATEDIFF(&apos;day&apos;, MIN([Order Date]), MAX([Ship Date])) }"',
-    );
-    expect(worksheetXml).toMatch(
-      /<size column="\[Sample - Superstore\]\.\[min:Calculation_[^\]]+:qk\]"/,
-    );
-    expect(worksheetXml).not.toMatch(/sum:Calculation_[^\]]+:qk/);
   });
 
   it('overrides only the histogram bin size while one measure fills both raw slots', async () => {

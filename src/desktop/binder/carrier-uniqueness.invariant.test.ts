@@ -121,7 +121,7 @@ describe('binder/carrier-uniqueness — CHART_NOUN_KEYWORDS ↔ eligible manifes
 
   it('keeps arrow aliases off the automatic path while the TBM is structurally ineligible', () => {
     const zeroCarrier = [...new Set(nouns)].filter((n) => carriersOf(n).length === 0).sort();
-    expect(zeroCarrier).toEqual(['arrow-chart', 'donut', 'over-under-arrow']);
+    expect(zeroCarrier).toEqual(['arrow-chart', 'donut', 'gantt', 'over-under-arrow']);
   });
 
   it('every non-zero-carrier noun has exactly one carrier (no >1 slips past the split)', () => {

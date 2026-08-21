@@ -95,7 +95,6 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   ['boxplot of Sales by Category with Order ID detail', 'box-plot-chart'],
   ['box-plot of Sales by Category with Order ID detail', 'box-plot-chart'],
   ['box-and-whisker of Sales by Category with Order ID detail', 'box-plot-chart'],
-  ['gantt chart of Order ID from Order Date to Ship Date', 'gantt-task-rollup-chart'],
   ['histogram of Sales', 'distribution-histogram'],
   [
     'bubble chart of Sales versus Profit by Product Name sized by Quantity colored by Category',
@@ -116,6 +115,10 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
 
 // ── KNOWN SAFE-PROPOSES (NOT bound — fail-closed by design; WHY each) ──────────
 const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
+  [
+    'gantt chart of Order ID from Order Date to Ship Date',
+    'the aggregate-span donor is not live-proven',
+  ],
   [
     'donut chart of Sales by Region',
     'a donut requires a distinct live-proven donor and must not bind the plain-pie template',
@@ -324,15 +327,6 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
         '{{field_base_1}}': '[Sample - Superstore].[sum:Sales:qk]',
         '{{field_base_2}}': '[Sample - Superstore].[none:Category:nk]',
         '{{field_base_3}}': '[Sample - Superstore].[none:Order ID:nk]',
-      },
-    ],
-    [
-      'gantt chart of Order ID from Order Date to Ship Date',
-      {
-        '{{field_base_1}}': '[Sample - Superstore].[none:Order ID:nk]',
-        '{{field_base_2}}@min': '[Sample - Superstore].[min:Order Date:qk]',
-        '{{field_base_2}}@none': '[Sample - Superstore].[none:Order Date:qk]',
-        '{{field_base_3}}': '[Sample - Superstore].[none:Ship Date:qk]',
       },
     ],
     [

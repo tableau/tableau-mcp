@@ -15,6 +15,7 @@
 import { listAvailableFields } from '../metadata/field-builder.js';
 import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
 import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types.js';
+import { unsubstitutedTemplateTokenRule } from '../validation/rules/unsubstitutedTemplateToken.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparseTemporalAxis.js';
 import { spliceBoundFacet } from './facetSplice.js';
@@ -30,6 +31,8 @@ import {
 import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
 import { type OptionalFieldPruneSpec, pruneUnboundOptionalFields } from './optionalFieldPrune.js';
 import { spliceWaterfallAnchorFilter } from './waterfallAnchorFilter.js';
+
+const AUTHORED_TITLE_SENTINEL = '__TABLEAU_MCP_AUTHORED_TITLE_4D9E7A1B__';
 
 /** Escape the five XML metacharacters (identical to the inject-template tool). */
 /**
@@ -341,7 +344,7 @@ export function buildInjectedWorkbookXml({
 
   let processed = spliceHistogramBinSize(templateXml, histogramBinSize).replace(
     /\{\{TITLE\}\}/g,
-    escapeXml(title),
+    AUTHORED_TITLE_SENTINEL,
   );
   const rewriteWarnings: string[] = [];
 
@@ -389,6 +392,13 @@ export function buildInjectedWorkbookXml({
     processed = spliceBoundCalcDefinitions(processed, fieldMapping, workbookXml);
     processed = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
   }
+
+  const templateTokenIssues = unsubstitutedTemplateTokenRule.validate(processed);
+  if (templateTokenIssues.length > 0) {
+    return { ok: false, issues: templateTokenIssues.map((issue) => issue.message) };
+  }
+
+  processed = processed.replace(new RegExp(AUTHORED_TITLE_SENTINEL, 'g'), escapeXml(title));
 
   const modifiedXml = injectTemplate(
     baseWorkbookXml,

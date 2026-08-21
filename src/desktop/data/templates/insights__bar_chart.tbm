@@ -69,7 +69,7 @@
         <max>#{{DATE_MAX}}#</max>
       </filter>
       <shelf-sorts>
-        <shelf-sort-v2 dimension-to-sort='[Sample - Superstore].[none:Product:nk]' direction='{{DIRECTION}}' is-on-innermost-dimension='true' measure-to-sort-by='[Sample - Superstore].[sum:ARR:qk]' shelf='rows' />
+        <shelf-sort-v2 dimension-to-sort='[Sample - Superstore].[none:Product:nk]' direction='DESC' is-on-innermost-dimension='true' measure-to-sort-by='[Sample - Superstore].[sum:ARR:qk]' shelf='rows' />
       </shelf-sorts>
       <aggregation value='true' />
     </view>

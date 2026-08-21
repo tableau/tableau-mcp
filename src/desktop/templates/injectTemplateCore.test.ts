@@ -621,6 +621,47 @@ describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
       xml.replace(/uuid="\{[^}]*\}"/g, 'uuid="{UUID}"');
     expect(normalizeUuid(guarded.xml)).toBe(normalizeUuid(previousBehavior.xml));
   });
+
+  it('rejects a literal title token supplied through a bound field instead of rewriting it', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: RANKING_TEMPLATE,
+      title: 'Goals by Country',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'World Cup' },
+      fieldMapping: {
+        region: '[World Cup].[none:{{TITLE}}:nk]',
+        sales: '[World Cup].[sum:Goals For:qk]',
+      },
+      templateSlots: RANKING_SLOTS,
+      applyNonce: 'literal-title-field',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues.join('\n')).toContain('{{TITLE}}');
+  });
+
+  it('rejects a literal title token supplied through a template parameter instead of rewriting it', () => {
+    const templateXml = [
+      "<?xml version='1.0'?><workbook>",
+      "<worksheets><worksheet name='{{TITLE}}'><table><style value='{{LABEL}}'/></table></worksheet></worksheets>",
+      "<windows><window class='worksheet' name='{{TITLE}}'/></windows>",
+      '</workbook>',
+    ].join('');
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml,
+      title: 'Goals by Country',
+      sheetType: 'worksheet',
+      templateParameters: { LABEL: '{{TITLE}}' },
+      applyNonce: 'literal-title-parameter',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues.join('\n')).toContain('{{TITLE}}');
+  });
 });
 
 describe('classifyWorksheetReplaceTarget', () => {

@@ -778,10 +778,15 @@ describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 
     ],
   });
 
-  it("gantt-task-rollup's task-level start/end span passes its legality gate", () => {
+  it('blocks gantt-task-rollup until its task-level span has a live-proven donor', () => {
     const m = manifests.get('gantt-task-rollup-chart')!;
     const r = validateBinding(m, ganttProposal(m), GANTT_SCHEMA);
-    expect(r.ok).toBe(true);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.blockers).toContainEqual({
+      code: 'kind-mismatch',
+      detail: expect.stringContaining('not-live-proven'),
+    });
   });
 
   it('MIN on a date never fires a derivation-illegal blocker (regression guard)', () => {

@@ -277,24 +277,14 @@ describe('binder/classifyNoLlm', () => {
     expect(classifyNoLlm('hello there', descriptors, summarizeSchema(WORKBOOK_XML))).toBeNull();
   });
 
-  it('binds both qualified start-date slots for a task-level gantt span', () => {
+  it('keeps the unproven task-level gantt span off the no-LLM path', () => {
     expect(
       classifyNoLlm(
         'gantt chart of Order ID from Order Date to Ship Date',
         descriptors,
         summarizeSchema(WORKBOOK_XML),
       ),
-    ).toEqual(
-      expect.objectContaining({
-        template: 'gantt-task-rollup-chart',
-        bindings: [
-          { slot_id: 'field_base_1', field: 'Order ID' },
-          { slot_id: 'field_base_2_min', field: 'Order Date' },
-          { slot_id: 'field_base_2_none', field: 'Order Date' },
-          { slot_id: 'field_base_3', field: 'Ship Date' },
-        ],
-      }),
-    );
+    ).toBeNull();
   });
 });
 
@@ -636,7 +626,7 @@ describe('binder/bindTemplate — two-call protocol', () => {
     expect(result.blockers[0].detail).toContain('end field "Ship Date"');
   });
 
-  it('rejects a Call-2 gantt task remap and accepts the exact required roles', async () => {
+  it('rejects a Call-2 gantt task remap and keeps exact roles blocked until live proof', async () => {
     const proposal: BindingProposal = {
       template: 'gantt-task-rollup-chart',
       title: 'Order gantt',
@@ -670,7 +660,12 @@ describe('binder/bindTemplate — two-call protocol', () => {
         ),
       },
     });
-    expect(exact.status).toBe('bound');
+    expect(exact.status).toBe('escalate');
+    if (exact.status !== 'escalate') return;
+    expect(exact.blockers).toContainEqual({
+      code: 'kind-mismatch',
+      detail: expect.stringContaining('not-live-proven'),
+    });
   });
 
   it('binds one histogram measure to both authored bin and raw-count slots', async () => {

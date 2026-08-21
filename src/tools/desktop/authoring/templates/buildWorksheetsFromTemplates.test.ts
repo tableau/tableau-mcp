@@ -1,5 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
@@ -36,6 +36,26 @@ const LIVE_WORKBOOK = `<?xml version='1.0'?><workbook>
   <windows><window class='worksheet' name='Existing' /></windows>
 </workbook>`;
 
+const SUPERSTORE_WORKBOOK = `<?xml version='1.0'?><workbook>
+  <datasources><datasource name='Sample - Superstore'>
+    <column name='[Sales]' datatype='real' role='measure' type='quantitative'/>
+    <column name='[Category]' datatype='string' role='dimension' type='nominal'/>
+    <column name='[Region]' datatype='string' role='dimension' type='nominal'/>
+    <column name='[Order ID]' datatype='string' role='dimension' type='nominal'/>
+    <column name='[Order Date]' datatype='date' role='dimension' type='ordinal'/>
+    <column name='[Ship Date]' datatype='date' role='dimension' type='ordinal'/>
+  </datasource></datasources>
+  <worksheets><worksheet name='Existing'><table /></worksheet></worksheets>
+  <windows><window class='worksheet' name='Existing' /></windows>
+</workbook>`;
+
+const SHIPPED_TEMPLATE_NAMES = [
+  'insights__bar_chart',
+  'part-to-whole__donut__show-parts-with-center-space-for-total',
+  'part-to-whole-pie-chart',
+  'gantt-task-rollup-chart',
+] as const;
+
 const EXACT_ARGS = {
   session: '12345',
   templateName: 'pulse-bar',
@@ -54,6 +74,14 @@ describe('build-worksheets-from-templates', () => {
   beforeEach(() => {
     templatesDir = mkdtempSync(join(process.cwd(), 'tmp-build-template-'));
     writeFileSync(join(templatesDir, 'pulse-bar.tbm'), BOOKMARK);
+    for (const templateName of SHIPPED_TEMPLATE_NAMES) {
+      writeFileSync(
+        join(templatesDir, `${templateName}.tbm`),
+        readFileSync(
+          join(process.cwd(), 'src', 'desktop', 'data', 'templates', `${templateName}.tbm`),
+        ),
+      );
+    }
     process.env['TEMPLATES_DIR'] = templatesDir;
     sessionRouteState.clear();
   });
@@ -131,6 +159,266 @@ describe('build-worksheets-from-templates', () => {
     );
     expect(reserved.artifact.windowXml).toContain('Revenue by Segment');
     expect(reserved.artifact.instanceId).toBe('inst-build');
+  });
+
+  it('builds and applies the shipped insights bar without leaving a direction token', async () => {
+    const server = new DesktopMcpServer();
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const posts: string[] = [];
+    let liveXml = SUPERSTORE_WORKBOOK;
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn(async () =>
+        Ok({
+          xml: liveXml,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(async (xml: string) => {
+        posts.push(xml);
+        liveXml = xml;
+        return Ok({ command_id: 'apply', status: 'completed' as const, submitted_at: '' });
+      }),
+      executeCommand: vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'focus', status: 'completed', submitted_at: '' })),
+    });
+    const buildTool = getBuildWorksheetsFromTemplatesTool(server, {
+      store,
+      createId: () => 'artifact-insights-bar',
+    });
+
+    const built = await callTool(
+      buildTool,
+      {
+        session: '12345',
+        templateName: 'insights__bar_chart',
+        title: 'Sales by Category',
+        datasource: 'Sample - Superstore',
+        fieldMapping: {
+          field_base_1: '[Sample - Superstore].[none:Category:nk]',
+          field_base_2: '[Sample - Superstore].[sum:Sales:qk]',
+        },
+      },
+      executor,
+    );
+    expect(built.isError).toBe(false);
+
+    const applyTool = getApplyWorksheetTool(server, { store });
+    const apply = await Provider.from(applyTool.callback);
+    const applied = await apply(
+      {
+        session: '12345',
+        artifactId: 'artifact-insights-bar',
+        templatePlan: undefined,
+        worksheetName: undefined,
+        worksheetFile: undefined,
+      },
+      {
+        ...getMockRequestHandlerExtra(),
+        getExecutor: vi.fn().mockResolvedValue(executor),
+      },
+    );
+
+    expect(applied.isError).toBe(false);
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toContain('direction="DESC"');
+    expect(posts[0]).not.toContain('{{');
+  });
+
+  it('keeps placeholder-shaped text in a user title while rejecting authored residue', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: SUPERSTORE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-placeholder-title',
+    });
+
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'insights__bar_chart',
+        title: 'Sales {{Q3}}',
+        datasource: 'Sample - Superstore',
+        fieldMapping: {
+          field_base_1: '[Sample - Superstore].[none:Category:nk]',
+          field_base_2: '[Sample - Superstore].[sum:Sales:qk]',
+        },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(false);
+    const reserved = store.reserve('artifact-placeholder-title', '12345');
+    expect(reserved.ok).toBe(true);
+    if (!reserved.ok) return;
+    expect(reserved.artifact.worksheetXml).toContain('name="Sales {{Q3}}"');
+    expect(reserved.artifact.windowXml).toContain('name="Sales {{Q3}}"');
+  });
+
+  it('rejects an artifact when an optional template path leaves literal tokens unresolved', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: SUPERSTORE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-unresolved-literals',
+    });
+
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'insights__bar_chart',
+        title: 'Sales by Category in Date Range',
+        datasource: 'Sample - Superstore',
+        fieldMapping: {
+          field_base_1: '[Sample - Superstore].[none:Category:nk]',
+          field_base_2: '[Sample - Superstore].[sum:Sales:qk]',
+          field_base_3: '[Sample - Superstore].[none:Order Date:ok]',
+        },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(store.reserve('artifact-unresolved-literals', '12345')).toEqual({
+      ok: false,
+      reason: 'unknown',
+    });
+  });
+
+  it('rejects the protected donut template before storing an artifact', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: SUPERSTORE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-donut',
+    });
+
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'part-to-whole__donut__show-parts-with-center-space-for-total',
+        title: 'Orders by Region',
+        datasource: 'Sample - Superstore',
+        fieldMapping: {
+          field_base_1: '[Sample - Superstore].[none:Region:nk]',
+          field_base_2: '[Sample - Superstore].[ctd:Order ID:qk]',
+        },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(store.reserve('artifact-donut', '12345')).toEqual({ ok: false, reason: 'unknown' });
+  });
+
+  it('keeps the ordinary pie template available for explicit builds', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: SUPERSTORE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-pie',
+    });
+
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'part-to-whole-pie-chart',
+        title: 'Sales by Region',
+        datasource: 'Sample - Superstore',
+        fieldMapping: {
+          field_base_1: '[Sample - Superstore].[none:Region:nk]',
+          field_base_2: '[Sample - Superstore].[sum:Sales:qk]',
+        },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(store.reserve('artifact-pie', '12345').ok).toBe(true);
+  });
+
+  it('keeps the unproven task-rollup Gantt template blocked', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: SUPERSTORE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-gantt',
+    });
+
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'gantt-task-rollup-chart',
+        title: 'Order Timeline',
+        datasource: 'Sample - Superstore',
+        fieldMapping: {
+          field_base_1: '[Sample - Superstore].[none:Order ID:nk]',
+          field_base_2: '[Sample - Superstore].[none:Order Date:ok]',
+          field_base_3: '[Sample - Superstore].[none:Ship Date:ok]',
+        },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(store.reserve('artifact-gantt', '12345')).toEqual({ ok: false, reason: 'unknown' });
   });
 
   it.each([
@@ -385,7 +673,13 @@ describe('build-worksheets-from-templates', () => {
 
 async function callTool(
   tool: ReturnType<typeof getBuildWorksheetsFromTemplatesTool>,
-  args: typeof EXACT_ARGS,
+  args: {
+    session: string;
+    templateName: string;
+    title: string;
+    datasource: string;
+    fieldMapping: Record<string, string>;
+  },
   executor: ExternalApiToolExecutor,
 ): Promise<CallToolResult> {
   const callback = await Provider.from(tool.callback);
