@@ -7,7 +7,10 @@ import {
   PulseNotAvailableError,
 } from '../../../../errors/mcpToolError.js';
 import { formatPulseInsightsApiError } from '../../../../errors/pulseInsightsApiError.js';
-import { PulseInsightBundleType } from '../../../../sdks/tableau/types/pulse.js';
+import {
+  pulseBundleRequestSchema,
+  PulseInsightBundleType,
+} from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
 import invariant from '../../../../utils/invariant.js';
@@ -459,6 +462,50 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0][0].bundle_request.input.metric
         .metric_specification.measurement_period.specific_period,
     ).toEqual({ date: '2026-04-15', end_date: '2026-04-20' });
+  });
+
+  it('injects sentiment_type from config map before POST', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+    const sentimentBundleRequest = {
+      bundle_request: {
+        ...bundleRequest.bundle_request,
+        input: {
+          ...bundleRequest.bundle_request.input,
+          metadata: {
+            ...bundleRequest.bundle_request.input.metadata,
+            name: 'ARR',
+          },
+        },
+      },
+    };
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    const extra = getMockRequestHandlerExtra();
+    extra.config.insightSentimentMap = { ARR: 'SENTIMENT_TYPE_UP_IS_GOOD' };
+    await callback(
+      {
+        bundleRequest: sentimentBundleRequest,
+        bundleType: undefined,
+        slim: undefined,
+        verbosity: undefined,
+      },
+      extra,
+    );
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledTimes(1);
+    const capturedRequest = mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0][0];
+    expect(capturedRequest.bundle_request.input.metric.representation_options.sentiment_type).toBe(
+      'SENTIMENT_TYPE_UP_IS_GOOD',
+    );
+
+    // Prove the injected field is at a path the wire schema actually keeps —
+    // i.e. it would survive Zodios's default object-stripping on the real
+    // HTTP request, not just satisfy a mock.
+    const parsed = pulseBundleRequestSchema.parse(capturedRequest);
+    expect(parsed.bundle_request.input.metric.representation_options?.sentiment_type).toBe(
+      'SENTIMENT_TYPE_UP_IS_GOOD',
+    );
   });
 
   async function getToolResult(
