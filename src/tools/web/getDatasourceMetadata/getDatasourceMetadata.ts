@@ -84,7 +84,12 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
   }`;
 
 const paramsSchema = {
-  datasourceLuid: z.string().nonempty(),
+  datasourceLuid: z
+    .string()
+    .nonempty()
+    .describe(
+      'Tableau datasource LUID. Do not pass a Knowledge graph ID, Knowledge node ID, or other external identifier.',
+    ),
 };
 
 export type GetDatasourceMetadataError =

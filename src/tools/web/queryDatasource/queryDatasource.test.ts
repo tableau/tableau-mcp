@@ -85,6 +85,9 @@ describe('queryDatasourceTool', () => {
     expect(queryDatasourceTool.name).toBe('query-datasource');
     expect(queryDatasourceTool.description).toBeInstanceOf(Provider);
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
+    expect(queryDatasourceTool.paramsSchema.datasourceLuid.description).toContain(
+      'Do not pass a Knowledge graph ID',
+    );
   });
 
   it.each([
@@ -97,7 +100,8 @@ describe('queryDatasourceTool', () => {
     expect(description).toContain('When Tableau Knowledge evidence defines a requested value');
     expect(description).toContain('fields explicitly bound by that evidence');
     expect(description).toContain('confirmed queryable by datasource metadata');
-    expect(description).toContain('Do not substitute similarly named or proxy fields');
+    expect(description).toContain('Do not substitute or offer similarly named or proxy fields');
+    expect(description).toContain('ask for authoritative field mappings or another datasource');
   });
 
   it('should return error when query args fail validation', async () => {

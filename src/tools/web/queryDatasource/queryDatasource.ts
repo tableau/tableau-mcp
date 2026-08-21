@@ -38,7 +38,12 @@ import { validateFilterValues } from './validators/validateFilterValues.js';
 import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
 
 const paramsSchema = {
-  datasourceLuid: z.string().nonempty(),
+  datasourceLuid: z
+    .string()
+    .nonempty()
+    .describe(
+      'Tableau datasource LUID. Do not pass a Knowledge graph ID, Knowledge node ID, or other external identifier.',
+    ),
   query: querySchema,
   limit: z.number().int().min(1).optional(),
 };

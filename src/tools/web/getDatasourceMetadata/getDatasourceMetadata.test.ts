@@ -287,6 +287,9 @@ describe('getDatasourceMetadataTool', () => {
     expect(getDatasourceMetadataTool.paramsSchema).toMatchObject({
       datasourceLuid: expect.any(Object),
     });
+    expect(getDatasourceMetadataTool.paramsSchema.datasourceLuid.description).toContain(
+      'Do not pass a Knowledge graph ID',
+    );
     expect(getDatasourceMetadataTool.annotations).toMatchObject({
       title: 'Get Datasource Metadata',
       readOnlyHint: true,
