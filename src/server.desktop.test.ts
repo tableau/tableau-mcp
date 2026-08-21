@@ -252,9 +252,9 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // terminal/retry prose (-60 bytes), so dynamic authoring moves 42_739 -> 42_679 and the full
 // surface 60_064 -> 60_004, retaining the 18-character slack.
 // Re-pinned 2026-08-21: bind-template joins the current 54-tool base as the bounded fast path
-// for recognizable single-view asks. The 55-tool surface is 45_742 bytes; retain the current
-// 18-character ratchet slack without raising the 46k product ceiling.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 45_742;
+// for recognizable single-view asks. The 55-tool surface is 45_757 bytes; retain the current
+// 3-character ratchet slack without raising the 46k product ceiling.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 45_757;
 const DYNAMIC_AUTHORING_SURFACE_BUDGET = 45_760;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
 const FULL_TOOL_SURFACE_BUDGET = 60_022;

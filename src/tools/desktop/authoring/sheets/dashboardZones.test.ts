@@ -22,11 +22,11 @@ describe('computeZones — auto-grid', () => {
     ]);
   });
 
-  it('N=3 (default cols=2) wraps to 2 rows with the known cosmetic half-width gap', () => {
+  it('N=3 (default cols=2) expands the final chart across the incomplete row', () => {
     const zones = computeZones(undefined, spec({ charts: ['A', 'B', 'C'] }));
     expect(zones.map((z) => (z.kind === 'worksheet' ? z.name : ''))).toEqual(['A', 'B', 'C']);
     // Row 2 (chart C) starts at y=50000 (chartHeight = floor(100000/2)).
-    expect(zones[2]).toMatchObject({ x: 0, y: 50000, w: 50000 });
+    expect(zones[2]).toMatchObject({ x: 0, y: 50000, w: 100000 });
   });
 
   it('N=4 with gridColumns=4 produces one row of four equal columns', () => {
@@ -105,6 +105,16 @@ describe('buildDashboardXml', () => {
       '<zone h="8000" id="10" type-v2="text" w="100000" x="0" y="0">\n          <formatted-text>',
     );
     expect(xml).not.toContain('<zone-text>');
+  });
+
+  it('leaves dashboard title font and color to the workbook style', () => {
+    const zones = computeZones('Q1 Sales', spec({ charts: ['A'] }));
+    const xml = buildDashboardXml('My Dashboard', zones);
+
+    expect(xml).not.toContain('fontcolor="#1f77b4"');
+    expect(xml).not.toContain('fontname="Tableau Semibold"');
+    expect(xml).toContain('bold="true"');
+    expect(xml).toContain('fontsize="16"');
   });
 
   it('wraps zones in the fixed 1400x1000 layout-basic dashboard shape', () => {
