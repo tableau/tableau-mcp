@@ -10,6 +10,7 @@ import {
   OperationEnvelope,
   operationEnvelopeSchema,
   problemResponseSchema,
+  WindowInfo,
 } from './types.js';
 
 export type ExternalApiHttpOptions = {
@@ -269,10 +270,15 @@ export class ExternalApiHttp {
 
     let retryAfterMs = parseRetryAfterMs(accepted.headers.get(HEADER_RETRY_AFTER));
     const deadline = Date.now() + this.pollDeadlineMs;
+    let lastProgressWindows: Array<WindowInfo> | undefined;
 
     for (;;) {
       if (Date.now() >= deadline) {
-        return Err({ type: 'poll-timeout', operationId });
+        return Err({
+          type: 'poll-timeout',
+          operationId,
+          ...(lastProgressWindows ? { progressWindows: lastProgressWindows } : {}),
+        });
       }
 
       await delay(retryAfterMs, signal);
@@ -310,6 +316,8 @@ export class ExternalApiHttp {
           blockingWindows,
         });
       }
+
+      lastProgressWindows = envelope.progressWindows;
 
       retryAfterMs = parseRetryAfterMs(res.headers.get(HEADER_RETRY_AFTER));
     }

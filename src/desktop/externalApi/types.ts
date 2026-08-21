@@ -741,4 +741,5 @@ export type ExternalApiError =
   // Blocked on a human; a poll can never clear it.
   | { type: 'awaiting-user'; operationId?: string; blockingWindows?: Array<WindowInfo> }
   | { type: 'operation-expired'; operationId?: string }
-  | { type: 'poll-timeout'; operationId?: string };
+  // Diagnostic only: unlike blockingWindows, progressWindows never fails fast on its own.
+  | { type: 'poll-timeout'; operationId?: string; progressWindows?: Array<WindowInfo> };

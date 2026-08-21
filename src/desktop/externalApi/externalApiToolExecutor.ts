@@ -945,7 +945,7 @@ function supportsOperationResult(apiVersion: string | undefined): boolean {
   return apiVersionAtLeast(apiVersion, '0.1.1');
 }
 
-function describeBlockingWindows(windows: Array<WindowInfo> | undefined): string {
+function describeWindows(windows: Array<WindowInfo> | undefined): string {
   if (windows === undefined || windows.length === 0) {
     return '';
   }
@@ -1004,7 +1004,7 @@ function mapClientError(
           code: 'awaiting-user',
           message:
             'The operation is blocked on a Tableau Desktop dialog and cannot complete over the API ' +
-            `until a person dismisses it.${describeBlockingWindows(error.blockingWindows)}`,
+            `until a person dismisses it.${describeWindows(error.blockingWindows)}`,
           recoverable: false,
         },
       };
@@ -1013,11 +1013,23 @@ function mapClientError(
         type: 'command-timed-out',
         error: `The async operation expired before it completed (polled past the Desktop retention window). ${BLOCKING_DIALOG_GUIDANCE}`,
       };
-    case 'poll-timeout':
+    case 'poll-timeout': {
+      const progressWindows = error.progressWindows;
+      if (progressWindows !== undefined && progressWindows.length > 0) {
+        return {
+          type: 'command-timed-out',
+          error:
+            'The async operation did not reach a terminal state within the poll deadline. Desktop was ' +
+            'last seen showing a self-clearing progress dialog rather than one a person must dismiss, ' +
+            'so this is most likely a slow operation rather than a wedged instance. If it keeps ' +
+            `happening, call list-instances to confirm the session is still reachable before retrying.${describeWindows(progressWindows)}`,
+        };
+      }
       return {
         type: 'command-timed-out',
         error: `The async operation did not reach a terminal state within the poll deadline. ${BLOCKING_DIALOG_GUIDANCE}`,
       };
+    }
     case 'no-instance':
       return {
         type: 'unknown',
