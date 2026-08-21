@@ -84,6 +84,26 @@ describe('requestWorkbookUploadTool', () => {
     });
   });
 
+  it('returns a staged upload URL for a .twbx filename', async () => {
+    mocks.mockRequestStagedWorkbookUpload.mockResolvedValue({
+      workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
+      uploadUrl: 'https://s3.example.com/signed-put',
+      expiresAt: '2026-08-12T18:05:00.000Z',
+      maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
+      requiredHeaders: { 'Content-Type': 'application/octet-stream' },
+    });
+
+    const result = await getToolResult({
+      fileName: 'BoltBikes Workbook.twbx',
+    });
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
+      fileName: 'BoltBikes Workbook.twbx',
+      config: expect.objectContaining({ enabled: true }),
+    });
+  });
+
   it('returns an error when S3 is not configured', async () => {
     const result = await getToolResult(
       { fileName: 'BoltBikes Workbook.twb' },

@@ -289,10 +289,10 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:workbooks:create');
     });
 
-    it('should not require content read for validate-upload-and-publish-workbook', () => {
-      const scopes = getRequiredApiScopesForTool('validate-upload-and-publish-workbook');
+    it('should not require content read for publish-workbook', () => {
+      const scopes = getRequiredApiScopesForTool('publish-workbook');
 
-      expect(scopes).toEqual(['tableau:workbooks:create']);
+      expect(scopes).toEqual(['tableau:workbooks:create', 'tableau:file_uploads:create']);
       expect(scopes).not.toContain('tableau:content:read');
     });
 

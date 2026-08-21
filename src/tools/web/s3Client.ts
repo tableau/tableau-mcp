@@ -208,6 +208,42 @@ export async function downloadObjectFromS3({
   return await bodyToBufferBounded(response.Body, maxBytes);
 }
 
+/**
+ * Like {@link downloadObjectFromS3}, but resolves to `undefined` instead of throwing when
+ * `key` doesn't exist. Callers that need to probe for one of several candidate keys (e.g.
+ * an upload whose exact key depends on a file type only the uploader's PUT determines) can
+ * use this to distinguish "not found" from a real S3/network failure, which a raw try/catch
+ * around `downloadObjectFromS3` can't safely do without risking swallowing the latter.
+ */
+export async function downloadObjectFromS3IfExists({
+  key,
+  bucket,
+  region,
+  maxBytes,
+}: {
+  key: string;
+  bucket: string;
+  region: string;
+  maxBytes: number;
+}): Promise<Buffer | undefined> {
+  try {
+    return await downloadObjectFromS3({ key, bucket, region, maxBytes });
+  } catch (error) {
+    if (isS3NotFoundError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+function isS3NotFoundError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const { name, $metadata } = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } };
+  return name === 'NoSuchKey' || $metadata?.httpStatusCode === 404;
+}
+
 async function bodyToBufferBounded(body: unknown, maxBytes: number): Promise<Buffer> {
   if (!body) {
     throw new Error('S3 object did not return a body.');
