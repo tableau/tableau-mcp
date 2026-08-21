@@ -247,10 +247,13 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // (#815) land together. Dynamic authoring 42_521 -> 42_739 (net of both changes, budget
 // kept at the 18-char slack) and the full surface 59_313 -> 60_064 (search-workbook-fields
 // only; list-site-datasources stays on the full profile).
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_739;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_757;
+// Re-pinned 2026-08-21: get-summary-data is a clean API wrapper; its description drops the
+// terminal/retry prose (-60 bytes), so dynamic authoring moves 42_739 -> 42_679 and the full
+// surface 60_064 -> 60_004, retaining the 18-character slack.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_679;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_697;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 60_082;
+const FULL_TOOL_SURFACE_BUDGET = 60_022;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
