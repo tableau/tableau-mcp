@@ -3,12 +3,18 @@ import {
   formatVerificationWarnings,
   VerificationFinding,
 } from '../../../desktop/validation/readback-verify.js';
+import { log } from '../../../logging/logger.js';
 import { captureMainWindowImage } from './captureWindowScreenshot.js';
 import { isSuspiciousErrorRed, scanPngForErrorRed } from './errorRedScan.js';
 
 // The in-profile tool the model uses to look at the window when a visual finding fires. Named
 // here so the finding message can tell the model exactly how to inspect the rendered pixels.
 const CAPTURE_TOOL = 'capture-window-screenshot';
+
+// One logger name for every branch so an operator who turns AUTO_VISUAL_CHECK on can confirm the
+// check fired (and see what it measured) with a single `logger:"visualCheck"` filter. The check is
+// otherwise silent — a clean scan appends nothing — so absence of a finding is not evidence it ran.
+const VISUAL_CHECK_LOGGER = 'visualCheck';
 
 /**
  * Post-apply VISUAL verifier — the pluggable counterpart to readback. It captures the Desktop
@@ -31,15 +37,50 @@ export async function runVisualErrorCheck({
   try {
     const captured = await captureMainWindowImage({ executor, signal });
     if (captured.isErr()) {
+      // Expected/transient (Desktop busy, no readable PNG): debug, not warning — this is a
+      // best-effort scan, not a failure of the apply it rides on.
+      log({
+        level: 'debug',
+        message: 'Visual error check skipped — window capture unavailable',
+        logger: VISUAL_CHECK_LOGGER,
+        data: { error: captured.error },
+      });
       return null;
     }
 
     const scan = scanPngForErrorRed(captured.value.bytes);
-    if (!scan || !isSuspiciousErrorRed(scan)) {
+    if (!scan) {
+      log({
+        level: 'debug',
+        message: 'Visual error check skipped — capture not decodable as PNG',
+        logger: VISUAL_CHECK_LOGGER,
+      });
       return null;
     }
 
+    const suspicious = isSuspiciousErrorRed(scan);
     const pct = Math.round(scan.maxCellRedFraction * 100);
+    // Positive confirmation the scan ran, with the numbers behind the verdict. Info so it is
+    // visible at default verbosity once the flag is on; a suspicious hit is escalated below.
+    log({
+      level: suspicious ? 'warning' : 'info',
+      message: suspicious
+        ? 'Visual error check flagged a dense error red cluster'
+        : 'Visual error check ran — no suspicious error red cluster',
+      logger: VISUAL_CHECK_LOGGER,
+      data: {
+        suspicious,
+        maxCellRedFraction: scan.maxCellRedFraction,
+        redFraction: scan.redFraction,
+        redPixels: scan.redPixels,
+        width: scan.width,
+        height: scan.height,
+      },
+    });
+    if (!suspicious) {
+      return null;
+    }
+
     return {
       severity: 'warning',
       source: 'visual',
@@ -48,9 +89,15 @@ export async function runVisualErrorCheck({
         `means a red error pill or broken element — capture the window with ${CAPTURE_TOOL} ` +
         'and inspect the shelves before reporting Done',
     };
-  } catch {
+  } catch (error) {
     // Best-effort by contract: an unexpected capture/scan failure yields no finding rather than
     // failing the apply this rides on. The caller treats null as "nothing to report".
+    log({
+      level: 'warning',
+      message: 'Visual error check errored — treated as no finding',
+      logger: VISUAL_CHECK_LOGGER,
+      data: { error: error instanceof Error ? error.message : String(error) },
+    });
     return null;
   }
 }

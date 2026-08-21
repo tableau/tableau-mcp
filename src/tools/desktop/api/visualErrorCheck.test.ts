@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { runVisualErrorCheck, runVisualErrorCheckText } from './visualErrorCheck.js';
 
 // runVisualErrorCheck resolves the chosen capture through chooseMainWindowImage, which reads
@@ -121,6 +122,44 @@ describe('runVisualErrorCheck', () => {
     });
 
     expect(finding).toBeNull();
+  });
+
+  // The check is silent on a clean window (appends nothing), so a `logger:"visualCheck"` line is
+  // the only positive signal that it actually ran — assert both the clean-info and the hit-warning.
+  it('logs an info line under logger "visualCheck" confirming a clean scan ran', async () => {
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+    const executor = executorReturning(CLEAN_PNG);
+
+    await runVisualErrorCheck({
+      executor: executor as never,
+      signal: new AbortController().signal,
+    });
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'info',
+        logger: 'visualCheck',
+        data: expect.objectContaining({ suspicious: false }),
+      }),
+    );
+  });
+
+  it('logs a warning line under logger "visualCheck" when it flags a dense cluster', async () => {
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+    const executor = executorReturning(REDDISH_PNG);
+
+    await runVisualErrorCheck({
+      executor: executor as never,
+      signal: new AbortController().signal,
+    });
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        logger: 'visualCheck',
+        data: expect.objectContaining({ suspicious: true }),
+      }),
+    );
   });
 });
 
