@@ -63,6 +63,13 @@ const KPI_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
   <column name='[O/U Line]' role='measure' type='quantitative' datatype='real' />
 </datasource></datasources></workbook>`;
 
+const METRICS_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook><datasources><datasource name='Metrics'>
+  <column name='[Product]' role='dimension' type='nominal' datatype='string' />
+  <column name='[ARR]' role='measure' type='quantitative' datatype='integer' />
+  <column name='[Close Date]' role='dimension' type='ordinal' datatype='date' />
+</datasource></datasources></workbook>`;
+
 let descriptors: Map<string, RuntimeTemplateDescriptor>;
 let allDescriptors: Map<string, RuntimeTemplateDescriptor>;
 
@@ -130,6 +137,76 @@ function scatterProposal(): BindingProposal {
     confidence: 0.9,
   };
 }
+
+it('binds explicit Insights bar and line proposals through the non-discovery catalog', async () => {
+  expect(allDescriptors.has('insights__bar_chart')).toBe(false);
+  expect(allDescriptors.has('insights__line_chart')).toBe(false);
+  const insightsProjection = createPuppetCompatibilityProjection(
+    loadRuntimeTemplateCatalogSnapshots({
+      automaticOnly: true,
+      includeExternal: false,
+      additionalTemplates: ['insights__bar_chart', 'insights__line_chart'],
+    }),
+  );
+  const cases: Array<{
+    ask: string;
+    proposal: BindingProposal;
+    expectedMapping: Record<string, string>;
+  }> = [
+    {
+      ask: 'bar chart of ARR by Product filtered by Close Date',
+      proposal: {
+        template: 'insights__bar_chart',
+        title: 'ARR by Product',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Product' },
+          { slot_id: 'field_base_2', field: 'ARR' },
+          { slot_id: 'field_base_3', field: 'Close Date' },
+        ],
+        confidence: 1,
+      },
+      expectedMapping: {
+        '{{field_base_1}}': '[Metrics].[none:Product:nk]',
+        '{{field_base_2}}': '[Metrics].[sum:ARR:qk]',
+        '{{field_base_3}}': '[Metrics].[none:Close Date:qk]',
+      },
+    },
+    {
+      ask: 'line chart of ARR over Close Date',
+      proposal: {
+        template: 'insights__line_chart',
+        title: 'ARR over time',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'ARR' },
+          { slot_id: 'field_base_2_tdy', field: 'Close Date' },
+          { slot_id: 'field_base_2_none', field: 'Close Date' },
+        ],
+        confidence: 1,
+      },
+      expectedMapping: {
+        '{{field_base_1}}': '[Metrics].[sum:ARR:qk]',
+        '{{field_base_2}}@tdy': '[Metrics].[tdy:Close Date:qk]',
+        '{{field_base_2}}@none': '[Metrics].[none:Close Date:qk]',
+      },
+    },
+  ];
+
+  for (const { ask, proposal, expectedMapping } of cases) {
+    expect(insightsProjection.descriptors.has(proposal.template)).toBe(false);
+    expect(insightsProjection.allDescriptors.has(proposal.template)).toBe(true);
+    const result = await bindTemplate({
+      ask,
+      workbookXml: METRICS_WORKBOOK_XML,
+      manifests: insightsProjection.allDescriptors,
+      proposal,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') continue;
+    expect(result.args.template_name).toBe(proposal.template);
+    expect(result.args.field_mapping).toEqual(expectedMapping);
+  }
+});
 
 describe('binder/schema-summary', () => {
   it('summarizes fields and chooses the primary datasource', () => {
