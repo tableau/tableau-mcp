@@ -245,9 +245,16 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(dashboardEdit).toMatchObject({
       trigger: 'an existing dashboard edit the bounded batch cannot express',
-      toolSequence: ['get-dashboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-dashboard'],
+      toolSequence: [
+        'set-dashboard-navigation',
+        'get-dashboard-xml',
+        'read-cached-xml',
+        'write-cached-xml',
+        'apply-dashboard',
+      ],
       stopConditions: ['stay on the scoped dashboard path'],
     });
+    expect(dashboardEdit?.action).toContain('dashboard-suite navigation');
   });
 
   it('routes story edits through the scoped story fallback', () => {

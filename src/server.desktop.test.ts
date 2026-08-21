@@ -204,7 +204,7 @@ describe('desktop tools/list serialized surface', () => {
 
     // Tool search, not an aggregate tools/list payload, owns discovery. Keep only the
     // instruction pin and per-tool budget so useful tools do not fund one shared ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_152);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_223);
   });
 });
 
@@ -435,10 +435,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 56-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 57-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(56);
+    expect(selected).toHaveLength(57);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -449,6 +449,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'author-action',
       'format-worksheets',
       'compose-story',
+      'set-dashboard-navigation',
       'ask-user',
       'search-commands',
       'list-templates',
