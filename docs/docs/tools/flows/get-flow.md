@@ -123,7 +123,7 @@ Server 2020.4):
 {
   "type": "VERSION_GATE_SKIPPED",
   "severity": "WARNING",
-  "message": "Flow runs require Tableau REST API 3.10 or later; this server is older.",
+  "message": "Flow runs require Tableau REST API version 3.10 or later (Tableau Server 2020.4+). The current server version does not support this endpoint.",
   "affectedField": "flowRuns"
 }
 ```

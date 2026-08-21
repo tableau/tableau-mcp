@@ -43,11 +43,39 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 
 ## Arguments
 
-This tool takes no arguments.
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `filter` | string | No | Client-side filter string with format `field:operator:value`. Multiple filters are comma-separated (AND logic). |
+| `pageSize` | number | No | Maximum number of results to return after filtering (client-side). |
+| `limit` | number | No | Maximum number of results to return after filtering (client-side). If both `pageSize` and `limit` are set, the smaller value applies. |
 
 :::note[API Limitation]
-The Tableau REST API does not support filtering or pagination parameters for extract refresh tasks. All tasks are returned in a single request. For sites with many extract refresh tasks, consider using client-side filtering based on the returned data.
+The Tableau REST API does not support server-side filtering or pagination for extract refresh tasks — all tasks are fetched in a single request. This tool applies `filter`, `pageSize`, and `limit` client-side after fetching.
 :::
+
+### Filterable fields
+
+| Field | Type | Operators | Example |
+|-------|------|-----------|---------|
+| `id` | string | `eq`, `in` | `id:eq:abc123` |
+| `type` | string | `eq`, `in` | `type:eq:RefreshExtractTask` |
+| `priority` | number | `eq`, `gt`, `gte`, `lt`, `lte` | `priority:gte:5` |
+| `consecutiveFailedCount` | number | `eq`, `gt`, `gte`, `lt`, `lte` | `consecutiveFailedCount:gt:0` |
+| `datasource.id` | string | `eq`, `in` | `datasource.id:eq:ds-123` |
+| `workbook.id` | string | `eq`, `in` | `workbook.id:eq:wb-456` |
+| `schedule.id` | string | `eq`, `in` | `schedule.id:eq:sched-789` |
+| `schedule.name` | string | `eq`, `in` | `schedule.name:eq:Daily Refresh` |
+| `schedule.state` | string | `eq`, `in` | `schedule.state:eq:Active` |
+| `schedule.frequency` | string | `eq`, `in` | `schedule.frequency:eq:Daily` |
+| `schedule.nextRunAt` | string (ISO 8601) | `eq`, `gt`, `gte`, `lt`, `lte` | `schedule.nextRunAt:lt:2026-05-25T00:00:00Z` |
+| `schedule.createdAt` | string (ISO 8601) | `eq`, `gt`, `gte`, `lt`, `lte` | `schedule.createdAt:gte:2026-01-01T00:00:00Z` |
+| `schedule.updatedAt` | string (ISO 8601) | `eq`, `gt`, `gte`, `lt`, `lte` | `schedule.updatedAt:gte:2026-05-01T00:00:00Z` |
+
+### Filter examples
+
+- Single filter: `schedule.frequency:eq:Daily`
+- Multiple filters (AND): `schedule.frequency:eq:Daily,priority:gte:5`
+- IN operator (bracketed list): `schedule.frequency:in:[Daily,Weekly]`
 
 ## Response structure
 

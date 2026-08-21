@@ -9,7 +9,7 @@ sidebar_position: 5
 A read-only Tableau Cloud admin workflow that identifies inactive licensed users who are candidates for downgrade to Unlicensed.
 
 :::warning[Admin Only]
-This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` site setting.
+This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable.
 :::
 
 ## Workflow
