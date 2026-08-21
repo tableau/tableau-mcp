@@ -30,6 +30,7 @@ const publishWorkbookResultSchema = z.discriminatedUnion('status', [
 
 const defaultWorkbookFilePath = resolve('tests/e2e/fixtures/workbooks/superstore-datasource.twb');
 const twbxWorkbookFilePath = resolve('tests/e2e/fixtures/workbooks/forecast.twbx');
+const defaultProjectId = 'd87d843b-4326-4ce3-bc50-a68c1e6c9ca5';
 
 type PublishWorkbookSmokeConfig = {
   workbookFilePath: string;
@@ -41,23 +42,14 @@ describe('publish-workbook local file', () => {
   let client: McpClient | undefined;
 
   beforeAll(() => {
-    if (isPublishWorkbookSmokeRequested()) {
-      setEnv();
-    }
+    setEnv();
   });
 
   afterAll(() => {
-    if (isPublishWorkbookSmokeRequested()) {
-      resetEnv();
-    }
+    resetEnv();
   });
 
   beforeAll(async () => {
-    const smokeConfig = getPublishWorkbookSmokeConfig();
-    if (!smokeConfig) {
-      return;
-    }
-
     await buildVariant('default');
     client = new McpClient({ env: getPublishWorkbookSmokeEnv() });
     await client.connect();
@@ -69,12 +61,8 @@ describe('publish-workbook local file', () => {
 
   it('validates and publishes a workbook (.twb) from a local file path', async () => {
     const smokeConfig = getPublishWorkbookSmokeConfig();
-    if (!smokeConfig || !client) {
-      console.warn('Skipping publish-workbook e2e. Set PUBLISH_WORKBOOK_E2E=true to run it.');
-      return;
-    }
 
-    const publishResult = await client.callTool('publish-workbook', {
+    const publishResult = await client!.callTool('publish-workbook', {
       schema: publishWorkbookResultSchema,
       toolArgs: {
         workbookFilePath: smokeConfig.workbookFilePath,
@@ -93,14 +81,9 @@ describe('publish-workbook local file', () => {
 
   it('validates and publishes a .twbx workbook from a local file path', async () => {
     const smokeConfig = getPublishWorkbookSmokeConfig();
-    if (!smokeConfig || !client) {
-      console.warn('Skipping publish-workbook e2e. Set PUBLISH_WORKBOOK_E2E=true to run it.');
-      return;
-    }
-
     const workbookName = `${smokeConfig.workbookName} TWBX`;
 
-    const publishResult = await client.callTool('publish-workbook', {
+    const publishResult = await client!.callTool('publish-workbook', {
       schema: publishWorkbookResultSchema,
       toolArgs: {
         workbookFilePath: twbxWorkbookFilePath,
@@ -118,27 +101,12 @@ describe('publish-workbook local file', () => {
   });
 });
 
-function getPublishWorkbookSmokeConfig(): PublishWorkbookSmokeConfig | undefined {
-  if (!isPublishWorkbookSmokeRequested()) {
-    return undefined;
-  }
-  const projectId = process.env.PUBLISH_WORKBOOK_E2E_PROJECT_ID?.trim();
-  if (!projectId) {
-    console.warn(
-      'Skipping publish-workbook e2e. Set PUBLISH_WORKBOOK_E2E_PROJECT_ID to the destination project LUID.',
-    );
-    return undefined;
-  }
-
+function getPublishWorkbookSmokeConfig(): PublishWorkbookSmokeConfig {
   return {
     workbookFilePath: process.env.PUBLISH_WORKBOOK_E2E_FILE?.trim() || defaultWorkbookFilePath,
     workbookName: process.env.PUBLISH_WORKBOOK_E2E_NAME?.trim() || 'Codex Publish Workbook E2E',
-    projectId,
+    projectId: process.env.PUBLISH_WORKBOOK_E2E_PROJECT_ID?.trim() || defaultProjectId,
   };
-}
-
-function isPublishWorkbookSmokeRequested(): boolean {
-  return process.env.PUBLISH_WORKBOOK_E2E === 'true';
 }
 
 function getPublishWorkbookSmokeEnv(): Record<string, string> {
