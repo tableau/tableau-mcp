@@ -116,8 +116,8 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * first-class workbook/data reads/navigation, scoped dashboard/story cached-XML fallbacks, and a
  * narrow whole-workbook cached-XML fallback. Standalone validation and unrelated info/site tools
  * stay out. This is the
- * "make it shorter" answer — a lean, semantically-named surface under the 46k tools/list cliff,
- * not a describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19 (CODA):
+ * "make it shorter" answer — a lean, semantically-named surface for direct/default clients while
+ * TAS discovers the wider surface through tool search. Mechanism map live-proven 2026-07-19 (CODA):
  * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
  */
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
