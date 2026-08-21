@@ -239,10 +239,16 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // routes, gated to a 0.2.8 floor. All three join DYNAMIC_AUTHORING_TOOL_PROFILE, so dynamic
 // authoring moves 40_096 -> 42_521 (budget kept at the 18-char slack) and the full surface
 // 56_799 -> 59_224. Dynamic still clears the 46k cliff.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_521;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_539;
+// Re-pinned 2026-08-20: get-app-info's description now also documents the live UI-state fields
+// (Start Page visibility, Data Source page active, presentation mode) added to /v0/app in External
+// Client API 0.2.9. get-app-info is outside DYNAMIC_AUTHORING_TOOL_PROFILE, so only the full surface
+// moves: 59_224 -> 59_313 (retaining the 18-char slack).
+// Re-pinned 2026-08-20: search-workbook-fields and the distinct field-discovery descriptions
+// move dynamic authoring 42_521 -> 43_233 and full 59_313 -> 60_070.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 43_233;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 43_251;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 59_242;
+const FULL_TOOL_SURFACE_BUDGET = 60_088;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -499,10 +505,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 54-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 55-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(54);
+    expect(selected).toHaveLength(55);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -536,6 +542,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'redo-workbook',
       'list-instances',
       'list-available-fields',
+      'search-workbook-fields',
       'list-worksheets',
       'list-dashboards',
       'list-worksheet-logical-tables',
@@ -587,6 +594,18 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);
     }
+  });
+
+  it('registers search-workbook-fields once in full and dynamic-authoring profiles', () => {
+    const tools = allTools();
+
+    expect(tools.filter((tool) => tool.name === 'search-workbook-fields')).toHaveLength(1);
+    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('search-workbook-fields')).toBe(true);
+    expect(
+      selectToolsForProfile(tools, 'dynamic-authoring').filter(
+        (tool) => tool.name === 'search-workbook-fields',
+      ),
+    ).toHaveLength(1);
   });
 
   it('dynamic-authoring surface sits well under the 46k tools/list cliff (the whole point of a lean profile)', async () => {
