@@ -85,12 +85,9 @@ function scatterProposal(): BindingProposal {
     template: 'correlation-scatter-plot-chart',
     title: 'Profit vs Sales',
     bindings: [
-      { slot_id: 'field_base_1_sum', field: 'Sales' },
-      { slot_id: 'field_base_2_sum', field: 'Profit' },
+      { slot_id: 'field_base_1', field: 'Sales' },
+      { slot_id: 'field_base_2', field: 'Profit' },
       { slot_id: 'field_base_3', field: 'Customer Name' },
-      { slot_id: 'field_base_4', field: 'Region' },
-      { slot_id: 'field_base_2_none', field: 'Profit' },
-      { slot_id: 'field_base_1_none', field: 'Sales' },
     ],
     confidence: 0.9,
   };
@@ -215,12 +212,9 @@ describe('binder/bindTemplate — two-call protocol', () => {
       (candidate) => candidate.template === 'correlation-scatter-plot-chart',
     );
     expect(scatter?.slots.map((slot) => slot.slot_id)).toEqual([
-      'field_base_1_sum',
-      'field_base_2_sum',
+      'field_base_1',
+      'field_base_2',
       'field_base_3',
-      'field_base_4',
-      'field_base_2_none',
-      'field_base_1_none',
     ]);
     expect(scatter?.slots.every((slot) => slot.kind !== 'calc')).toBe(true);
     expect(result.output_schema).toBe(PROPOSAL_OUTPUT_SCHEMA);
@@ -255,12 +249,9 @@ describe('binder/bindTemplate — two-call protocol', () => {
     if (result.status !== 'bound') return;
     expect(result.used_llm).toBe(true);
     expect(result.args.field_mapping).toEqual({
-      '{{field_base_1}}@sum': '[Superstore].[sum:Sales:qk]',
-      '{{field_base_2}}@sum': '[Superstore].[sum:Profit:qk]',
+      '{{field_base_1}}': '[Superstore].[sum:Sales:qk]',
+      '{{field_base_2}}': '[Superstore].[sum:Profit:qk]',
       '{{field_base_3}}': '[Superstore].[none:Customer Name:nk]',
-      '{{field_base_4}}': '[Superstore].[none:Region:nk]',
-      '{{field_base_2}}@none': '[Superstore].[none:Profit:qk]',
-      '{{field_base_1}}@none': '[Superstore].[none:Sales:qk]',
     });
   });
 

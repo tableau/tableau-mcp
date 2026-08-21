@@ -63,6 +63,7 @@ beforeAll(() => {
   realRuntimeCatalog = loadExactRuntimeCatalog([
     ...new Set(PROJECTION_PAIRS.flat()),
     'connected-scatterplot',
+    'magnitude-paired-bar',
     'spatial-symbol-map',
   ]);
   superstoreWorkbook = readFileSync(
@@ -156,24 +157,99 @@ describe('createPuppetCompatibilityProjection', () => {
 
   it.each([
     {
+      template: 'magnitude-paired-bar',
+      ask: 'grouped bar chart of Sales by Category and Region',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Category' },
+        { slot_id: 'field_base_2', field: 'Region' },
+        { slot_id: 'field_base_3', field: 'Sales' },
+      ],
+      slots: [
+        { slot_id: 'field_base_1', kind: 'categorical', derivation: 'none', role: ['rows'] },
+        {
+          slot_id: 'field_base_2',
+          kind: 'categorical',
+          derivation: 'none',
+          role: ['rows', 'color'],
+        },
+        { slot_id: 'field_base_3', kind: 'quantitative', derivation: 'sum', role: ['cols'] },
+      ],
+      assertions: (xml: string) => {
+        expect(xml).toContain('<mark class="Bar"');
+        expect(xml).toContain(
+          '<rows>([Sample - Superstore].[none:Category:nk] / [Sample - Superstore].[none:Region:nk])</rows>',
+        );
+        expect(xml).toContain('<cols>[Sample - Superstore].[sum:Sales:qk]</cols>');
+        expect(xml).toContain('<color column="[Sample - Superstore].[none:Region:nk]"');
+        expect(xml).not.toContain('<filter');
+        expect(xml).not.toContain('<slices');
+      },
+    },
+    {
       template: 'trend-line-chart',
-      ask: 'line chart of Sales by Order Date colored by Sub-Category',
+      ask: 'line chart of Sales over Order Date by Category',
       bindings: [
         { slot_id: 'field_base_1', field: 'Sales' },
         { slot_id: 'field_base_2', field: 'Order Date' },
-        { slot_id: 'field_base_3', field: 'Sub-Category' },
+        { slot_id: 'field_base_3', field: 'Category' },
       ],
+      slots: [
+        { slot_id: 'field_base_1', kind: 'quantitative', derivation: 'sum', role: ['rows'] },
+        { slot_id: 'field_base_2', kind: 'temporal', derivation: 'tmn', role: ['cols'] },
+        { slot_id: 'field_base_3', kind: 'categorical', derivation: 'none', role: ['color'] },
+      ],
+      assertions: (xml: string) => {
+        expect(xml).toContain('<mark class="Line"');
+        expect(xml).toContain('<rows>[Sample - Superstore].[sum:Sales:qk]</rows>');
+        expect(xml).toContain('<cols>[Sample - Superstore].[tmn:Order Date:qk]</cols>');
+        expect(xml).toContain('<color column="[Sample - Superstore].[none:Category:nk]"');
+      },
     },
     {
-      template: 'spatial-symbol-map',
-      ask: 'symbol map of Sales and Profit by Country, State, and City',
+      template: 'correlation-scatter-plot-chart',
+      ask: 'scatter plot of Sales vs Profit by Product Name',
       bindings: [
         { slot_id: 'field_base_1', field: 'Sales' },
         { slot_id: 'field_base_2', field: 'Profit' },
-        { slot_id: 'field_base_4', field: 'Country/Region' },
-        { slot_id: 'field_base_5', field: 'State/Province' },
-        { slot_id: 'field_base_6', field: 'City' },
+        { slot_id: 'field_base_3', field: 'Product Name' },
       ],
+      slots: [
+        { slot_id: 'field_base_1', kind: 'quantitative', derivation: 'sum', role: ['rows'] },
+        { slot_id: 'field_base_2', kind: 'quantitative', derivation: 'sum', role: ['cols'] },
+        { slot_id: 'field_base_3', kind: 'categorical', derivation: 'none', role: ['lod'] },
+      ],
+      assertions: (xml: string) => {
+        expect(xml).toContain('<mark class="Circle"');
+        expect(xml).toContain('<rows>[Sample - Superstore].[sum:Sales:qk]</rows>');
+        expect(xml).toContain('<cols>[Sample - Superstore].[sum:Profit:qk]</cols>');
+        expect(xml).toContain('<lod column="[Sample - Superstore].[none:Product Name:nk]"');
+        expect(xml).not.toContain('<trendline');
+        expect(xml).not.toContain('Profit Ratio');
+        expect(xml).not.toContain('<color');
+      },
+    },
+    {
+      template: 'spatial-symbol-map',
+      ask: 'symbol map of Sales by State/Province',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Sales' },
+        { slot_id: 'field_base_2', field: 'State/Province' },
+      ],
+      slots: [
+        { slot_id: 'field_base_1', kind: 'quantitative', derivation: 'sum', role: ['size'] },
+        { slot_id: 'field_base_2', kind: 'geo', derivation: 'none', role: ['lod'] },
+      ],
+      assertions: (xml: string) => {
+        expect(xml).toContain('<mark class="Circle"');
+        expect(xml).toContain('<rows>[Sample - Superstore].[Latitude (generated)]</rows>');
+        expect(xml).toContain('<cols>[Sample - Superstore].[Longitude (generated)]</cols>');
+        expect(xml).toContain('<size column="[Sample - Superstore].[sum:Sales:qk]"');
+        expect(xml).toContain('<lod column="[Sample - Superstore].[none:State/Province:nk]"');
+        expect(xml).not.toContain('<color');
+        expect(xml).not.toContain('<tooltip');
+        expect(xml).not.toContain('Country/Region');
+        expect(xml).not.toContain('<column name="[City]"');
+      },
     },
   ])(
     'injects an explicit raw-slot $template bind without placeholder residue',
@@ -182,6 +258,9 @@ describe('createPuppetCompatibilityProjection', () => {
       const catalogValue = realRuntimeCatalog.get(testCase.template);
       expect(catalogValue).toBeDefined();
       if (!catalogValue) return;
+      expect(catalogValue.descriptor.slots).toEqual(
+        testCase.slots.map((slot) => expect.objectContaining({ ...slot, required: true })),
+      );
       const result = await bindTemplate({
         ask: testCase.ask,
         workbookXml: superstoreWorkbook,
@@ -212,8 +291,48 @@ describe('createPuppetCompatibilityProjection', () => {
       expect(injected.ok).toBe(true);
       if (!injected.ok) return;
       expect(injected.xml).not.toMatch(/\{\{(?:DATASOURCE|field_base_[1-9]\d*)\}\}/);
+      const worksheetXml = injected.xml.match(
+        new RegExp(`<worksheet name="${testCase.template}">([\\s\\S]*?)</worksheet>`),
+      )?.[0];
+      expect(worksheetXml).toBeDefined();
+      testCase.assertions(worksheetXml!);
     },
   );
+
+  it('keeps an explicit three-slot scatter trendline carrier', () => {
+    const snapshot = getRuntimeTemplateSnapshot('correlation-scatter-trendline-chart', {
+      includeExternal: false,
+    });
+
+    expect(snapshot).not.toBeNull();
+    if (!snapshot) return;
+    expect(snapshot.descriptor.slots).toEqual([
+      expect.objectContaining({
+        slot_id: 'field_base_1',
+        kind: 'quantitative',
+        derivation: 'sum',
+        role: ['rows'],
+        required: true,
+      }),
+      expect.objectContaining({
+        slot_id: 'field_base_2',
+        kind: 'quantitative',
+        derivation: 'sum',
+        role: ['cols'],
+        required: true,
+      }),
+      expect.objectContaining({
+        slot_id: 'field_base_3',
+        kind: 'categorical',
+        derivation: 'none',
+        role: ['lod'],
+        required: true,
+      }),
+    ]);
+    expect(snapshot.xml).toContain('<trendline');
+    expect(snapshot.xml).toContain("enabled='true'");
+    expect(snapshot.xml).toContain("fit='linear'");
+  });
 
   it('uses semantic roles from a real runtime choropleth descriptor to bind neutral geo slots', async () => {
     const projection = createPuppetCompatibilityProjection(realRuntimeCatalog);
@@ -253,7 +372,7 @@ describe('createPuppetCompatibilityProjection', () => {
     ['bar chart of Sales by Sub-Category', 'bound', 'ranking-ordered-bar'],
     ['waterfall of Profit by Sub-Category', 'propose', undefined],
     ['line chart of Sales by Order Date', 'propose', undefined],
-    ['scatter plot of Profit and Sales by Sub-Category', 'propose', undefined],
+    ['scatter plot of Profit and Sales by Sub-Category', 'bound', 'correlation-scatter-plot-chart'],
     ['filled map of Profit by State/Province', 'bound', 'spatial-choropleth-map'],
     ['symbol map of Sales by Country/Region, State/Province, and City', 'propose', undefined],
     ['connected scatterplot of Profit vs Sales by Customer Name and Region', 'propose', undefined],

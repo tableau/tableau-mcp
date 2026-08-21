@@ -1356,18 +1356,15 @@ describe('binder/validate — gate 7: temporal suffix', () => {
 });
 
 describe('binder/validate — gate 7: full scatter emission', () => {
-  it('emits the exact raw-slot field_mapping with the template-owned calc excluded', () => {
+  it('emits the exact three-slot scatter field_mapping', () => {
     const m = manifests.get('correlation-scatter-plot-chart')!;
     const p: BindingProposal = {
       template: m.template,
       title: 'Scatter',
       bindings: [
-        { slot_id: 'field_base_1_sum', field: 'Sales' },
-        { slot_id: 'field_base_2_sum', field: 'Profit' },
+        { slot_id: 'field_base_1', field: 'Sales' },
+        { slot_id: 'field_base_2', field: 'Profit' },
         { slot_id: 'field_base_3', field: 'Customer Name' },
-        { slot_id: 'field_base_4', field: 'Region' },
-        { slot_id: 'field_base_2_none', field: 'Profit' },
-        { slot_id: 'field_base_1_none', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, SUMMARY);
@@ -1375,12 +1372,9 @@ describe('binder/validate — gate 7: full scatter emission', () => {
     if (r.ok) {
       expect(r.datasource).toBe('Superstore');
       expect(r.field_mapping).toEqual({
-        '{{field_base_1}}@sum': '[Superstore].[sum:Sales:qk]',
-        '{{field_base_2}}@sum': '[Superstore].[sum:Profit:qk]',
+        '{{field_base_1}}': '[Superstore].[sum:Sales:qk]',
+        '{{field_base_2}}': '[Superstore].[sum:Profit:qk]',
         '{{field_base_3}}': '[Superstore].[none:Customer Name:nk]',
-        '{{field_base_4}}': '[Superstore].[none:Region:nk]',
-        '{{field_base_2}}@none': '[Superstore].[none:Profit:qk]',
-        '{{field_base_1}}@none': '[Superstore].[none:Sales:qk]',
       });
     }
   });
