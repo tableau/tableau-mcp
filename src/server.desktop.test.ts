@@ -260,7 +260,9 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // +1; dynamic authoring 45_742 -> 45_743 (18-char slack kept, 46k product ceiling untouched).
 // Re-pinned 2026-08-21: executive-summary adds KPI names to run-dashboard-batch while trimming its
 // older field prose; dynamic authoring 45_743 -> 45_758 without raising the 46k product ceiling.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 45_758;
+// Re-pinned 2026-08-21: mark KPI names as ordered; 45_758 -> 45_761 consumes the existing slack
+// without raising either budget.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 45_761;
 const DYNAMIC_AUTHORING_SURFACE_BUDGET = 45_761;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
 const FULL_TOOL_SURFACE_BUDGET = 60_022;

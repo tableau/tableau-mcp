@@ -74,22 +74,21 @@ export function buildDashboardCandidateXml({
 }: BuildDashboardCandidateXmlArgs): string {
   const inputError = validateComposeDashboardInput(canonicalWorksheetNames, layout);
   if (inputError) throw inputError;
-  const kpis =
-    layout?.layoutType === 'executive-summary'
-      ? canonicalWorksheetNames.filter((name) =>
-          layout.kpiWorksheetNames?.some((kpiName) => xmlNamesEqual(kpiName, name)),
-        )
-      : [];
+  const layoutType = layout?.layoutType;
+  const isExecutiveSummary = layoutType === 'executive-summary';
+  const kpis = isExecutiveSummary
+    ? (layout?.kpiWorksheetNames ?? []).flatMap((kpiName) => {
+        const canonicalName = canonicalWorksheetNames.find((name) => xmlNamesEqual(kpiName, name));
+        return canonicalName ? [canonicalName] : [];
+      })
+    : [];
   const charts = canonicalWorksheetNames.filter(
     (name) => !kpis.some((kpiName) => xmlNamesEqual(kpiName, name)),
   );
   const zones = computeZones(title, {
     kpis,
     charts,
-    layoutType:
-      layout?.layoutType === 'executive-summary'
-        ? 'auto-grid'
-        : (layout?.layoutType ?? 'auto-grid'),
+    layoutType: isExecutiveSummary ? 'auto-grid' : (layoutType ?? 'auto-grid'),
     gridColumns: layout?.gridColumns,
   });
   const dashboardXml = buildDashboardXml(dashboardName, zones);

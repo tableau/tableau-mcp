@@ -78,7 +78,11 @@ describe('runDashboardBatchTool', () => {
         title: { type: 'string' },
         layoutType: { type: 'string' },
         gridColumns: { type: 'integer' },
-        kpiWorksheetNames: { type: 'array', items: { type: 'string' } },
+        kpiWorksheetNames: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Ordered KPIs.',
+        },
       },
       required: expect.arrayContaining(['dashboardName']),
     });
@@ -366,6 +370,43 @@ describe('runDashboardBatchTool', () => {
     expect(bodyOf(conflict)).toMatchObject({ applied: false, retrySafe: true });
     expect(missingHarness.posts).toHaveLength(0);
     expect(conflictHarness.posts).toHaveLength(0);
+  });
+
+  it.each([
+    {
+      name: 'a missing KPI list',
+      worksheetNames: ['Existing A', 'Existing B'],
+      kpiWorksheetNames: undefined,
+      error: 'layoutType "executive-summary" requires at least one KPI worksheet name.',
+    },
+    {
+      name: 'duplicate KPI names',
+      worksheetNames: ['Existing A', 'Existing B'],
+      kpiWorksheetNames: ['Existing A', 'Existing A'],
+      error: 'Duplicate KPI worksheet name(s): "Existing A".',
+    },
+    {
+      name: 'only KPI worksheets',
+      worksheetNames: ['Existing A', 'Existing B'],
+      kpiWorksheetNames: ['Existing A', 'Existing B'],
+      error: 'layoutType "executive-summary" requires at least one non-KPI worksheet.',
+    },
+  ])('rejects $name before writing', async ({ worksheetNames, kpiWorksheetNames, error }) => {
+    const harness = statefulExecutor();
+
+    const result = await callBatch([], {
+      existingWorksheetNames: worksheetNames,
+      layoutType: 'executive-summary',
+      kpiWorksheetNames,
+      executor: harness.executor,
+    });
+
+    expect(bodyOf(result)).toMatchObject({
+      applied: false,
+      retrySafe: true,
+      steps: [expect.objectContaining({ stage: 'inputValidation', error })],
+    });
+    expect(harness.posts).toHaveLength(0);
   });
 
   it('keeps six-artifact warning and failure receipts below the SDK truncation limit', async () => {

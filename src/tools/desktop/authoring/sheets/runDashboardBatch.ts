@@ -78,7 +78,7 @@ const paramsSchema = {
     .min(1)
     .max(5)
     .optional()
-    .describe('KPI names.'),
+    .describe('Ordered KPIs.'),
 };
 
 type AppliedState = true | false | 'unknown';
