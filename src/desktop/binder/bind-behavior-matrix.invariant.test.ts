@@ -295,6 +295,23 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
     if (res.status === 'bound') expect(res.args.field_mapping).toEqual(expectedMapping);
   });
 
+  it('binds a pie chart to the workbook datasource after it is renamed', async () => {
+    const datasource = 'Regional Orders';
+    const res = await bind(
+      'pie chart of Sales by Region',
+      FIXTURE.replaceAll(EXPECTED_DATASOURCE, datasource),
+    );
+
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.args.template_parameters.DATASOURCE).toBe(datasource);
+    expect(res.args.field_mapping).toEqual({
+      '{{field_base_1}}': `[${datasource}].[none:Region:nk]`,
+      '{{field_base_2}}': `[${datasource}].[sum:Sales:qk]`,
+    });
+    expect(JSON.stringify(res.args)).not.toContain(EXPECTED_DATASOURCE);
+  });
+
   it('requires and maps an explicit bullet target measure', async () => {
     const res = await bind('bullet chart of Sales vs Target by Region', BULLET_WORKBOOK);
     expect(res.status, JSON.stringify(res)).toBe('bound');
