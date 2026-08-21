@@ -243,12 +243,14 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // (Start Page visibility, Data Source page active, presentation mode) added to /v0/app in External
 // Client API 0.2.9. get-app-info is outside DYNAMIC_AUTHORING_TOOL_PROFILE, so only the full surface
 // moves: 59_224 -> 59_313 (retaining the 18-char slack).
-// Re-pinned 2026-08-20: search-workbook-fields and the distinct field-discovery descriptions
-// move dynamic authoring 42_521 -> 43_233 and full 59_313 -> 60_070.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 43_233;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 43_251;
+// Re-pinned 2026-08-21: search-workbook-fields (#797) and dropping list-site-datasources
+// (#815) land together. Dynamic authoring 42_521 -> 42_739 (net of both changes, budget
+// kept at the 18-char slack) and the full surface 59_313 -> 60_064 (search-workbook-fields
+// only; list-site-datasources stays on the full profile).
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_739;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_757;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 60_088;
+const FULL_TOOL_SURFACE_BUDGET = 60_082;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -505,10 +507,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 55-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 54-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(55);
+    expect(selected).toHaveLength(54);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -533,7 +535,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'get-summary-data',
       'get-workbook-inventory',
       'list-workbook-datasources',
-      'list-site-datasources',
       'activate-sheet',
       'delete-sheet',
       'rename-sheet',
@@ -576,6 +577,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'validate-workbook-xml',
       'validate-worksheet-xml',
       'inject-template',
+      'list-site-datasources',
       'list-site-workbooks',
       'get-app-info',
       'get-health',
