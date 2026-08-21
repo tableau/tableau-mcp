@@ -1,11 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok, Result } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
-import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -14,8 +12,8 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
-import { DatasourceElement, findDatasourceElements } from './authorCalcCore.js';
-import { workbookLoadToolError } from './workbookLoadToolError.js';
+import { applyAndVerify } from './applyAndVerify.js';
+import { DatasourceElement, selectTargetDatasource } from './authorCalcCore.js';
 
 const datatypeSchema = z.enum(['integer', 'real', 'string', 'boolean', 'date']);
 
@@ -24,14 +22,15 @@ const datatypeSchema = z.enum(['integer', 'real', 'string', 'boolean', 'date']);
 // `<datasource-dependencies datasource='Parameters'>` block hung off a real datasource
 // (live-proven 2026-08-20 against a running instance — the block alone is sufficient, and a
 // bare top-level Parameters datasource is dropped). So we inject that block and apply the
-// document to the running instance the same way every sibling authoring tool does
-// (loadWorkbookXml -> applyWorkbookDocument -> pollReadback). No stage file, no reopen.
+// document to the running instance the same way every sibling authoring tool does (via the
+// shared applyAndVerify helper). No stage file, no reopen.
 const paramsSchema = {
   session: sessionParam(),
   caption: z.string().describe(''),
   datatype: datatypeSchema.default('integer').describe(''),
   value: z.string().describe(''),
   members: z.array(z.string()).optional().describe(''),
+  datasource: z.string().optional().describe(''),
 };
 
 type AuthorParameterResult = {
@@ -62,12 +61,12 @@ export const getAuthorParameterTool = (
       idempotentHint: false,
     },
     callback: async (
-      { session, caption, datatype = 'integer', value, members },
+      { session, caption, datatype = 'integer', value, members, datasource },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute<AuthorParameterResult>({
         extra,
-        args: { session, caption, datatype, value, members },
+        args: { session, caption, datatype, value, members, datasource },
         callback: async () => {
           if (caption.trim().length === 0) {
             return new ArgsValidationError('caption empty').toErr();
@@ -91,7 +90,7 @@ export const getAuthorParameterTool = (
             ).toErr();
           }
 
-          const hostResult = selectHostDatasource(liveXml);
+          const hostResult = selectTargetDatasource(liveXml, datasource);
           if (hostResult.isErr()) {
             return hostResult.error.toErr();
           }
@@ -100,27 +99,17 @@ export const getAuthorParameterTool = (
           const columnXml = renderParameterColumn({ caption, paramName, datatype, value, members });
           const editedXml = injectParameterDependency(liveXml, hostResult.value, columnXml);
 
-          const loadResult = await loadWorkbookXml({
+          const outcome = await applyAndVerify({
             xml: editedXml,
             baselineXml: liveXml,
-            expectedWorkbookXml: liveXml,
-            focus: { navigate: 'restore' },
+            settled: (xml) => hasParameterCaption(xml, caption),
             executor,
             signal: extra.signal,
           });
-          if (loadResult.isErr()) {
-            return workbookLoadToolError(loadResult.error).toErr();
+          if (outcome.status === 'failed') {
+            return outcome.error.toErr();
           }
-
-          const readback = await pollReadback({
-            read: () => getWorkbookXml({ executor, signal: extra.signal }),
-            settled: (xml) => hasParameterCaption(xml, caption),
-            signal: extra.signal,
-          });
-          if (!readback.ok) {
-            return new DesktopCommandExecutionError(readback.error).toErr();
-          }
-          if (!readback.settled) {
+          if (outcome.status === 'not-applied') {
             return new XmlModificationError(
               'load completed but the parameter did not materialize: readback did not contain the new parameter caption',
             ).toErr();
@@ -144,16 +133,6 @@ export const getAuthorParameterTool = (
 
   return tool;
 };
-
-function selectHostDatasource(xml: string): Result<DatasourceElement, ArgsValidationError> {
-  const host = findDatasourceElements(xml).find((datasource) => datasource.name !== 'Parameters');
-  if (host === undefined) {
-    return new ArgsValidationError(
-      'no data source to attach the parameter to — open a workbook with at least one data source, then retry',
-    ).toErr();
-  }
-  return new Ok(host);
-}
 
 // Insert the full parameter <column> into a `<datasource-dependencies datasource='Parameters'>`
 // block on the host datasource

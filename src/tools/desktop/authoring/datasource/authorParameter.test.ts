@@ -47,6 +47,45 @@ const XML_ONLY_PARAMS_DS = [
   '</workbook>',
 ].join('');
 
+// A self-closing host datasource — the injector must reopen it around the dependency block.
+const XML_SELF_CLOSING_HOST = [
+  "<?xml version='1.0' encoding='utf-8'?>",
+  "<workbook version='18.1'>",
+  '<datasources>',
+  "<datasource name='Sample - Superstore' />",
+  '</datasources>',
+  '<worksheets><worksheet name="Sheet 1" /></worksheets>',
+  '</workbook>',
+].join('');
+
+// A host datasource that already carries a Parameters dependency block — the injector must
+// append into it rather than create a second block.
+const XML_EXISTING_DEP_BLOCK = [
+  "<?xml version='1.0' encoding='utf-8'?>",
+  "<workbook version='18.1'>",
+  '<datasources>',
+  "<datasource name='Sample - Superstore'>",
+  "<datasource-dependencies datasource='Parameters'>",
+  "<column caption='p.Existing' datatype='integer' name='[Parameter 9]' param-domain-type='any' role='measure' type='quantitative' value='1'><calculation class='tableau' formula='1' /></column>",
+  '</datasource-dependencies>',
+  '</datasource>',
+  '</datasources>',
+  '<worksheets><worksheet name="Sheet 1" /></worksheets>',
+  '</workbook>',
+].join('');
+
+// Two non-Parameters datasources — the tool must ask which one hosts the parameter.
+const XML_TWO_DATASOURCES = [
+  "<?xml version='1.0' encoding='utf-8'?>",
+  "<workbook version='18.1'>",
+  '<datasources>',
+  "<datasource name='Sales'></datasource>",
+  "<datasource name='Returns'></datasource>",
+  '</datasources>',
+  '<worksheets><worksheet name="Sheet 1" /></worksheets>',
+  '</workbook>',
+].join('');
+
 let originalDesktopSessionId: string | undefined;
 
 beforeEach(() => {
@@ -151,8 +190,71 @@ describe('authorParameterTool', () => {
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('no data source');
+    expect(result.content[0].text).toContain('No non-Parameters datasource');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('reopens a self-closing host datasource around the dependency block', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'p.Region', datatype: 'integer', value: '1' },
+      initialXml: XML_SELF_CLOSING_HOST,
+      readbackXml: xmlWithParameterCaption('p.Region'),
+    });
+
+    expect(result.isError).toBe(false);
+    const posted = applyWorkbookDocument.mock.calls[0][0] as string;
+    // the self-closing tag is reopened (only the slash is stripped) and closed around the block
+    expect(posted).not.toContain("<datasource name='Sample - Superstore' />");
+    expect(posted).toContain(
+      "<datasource name='Sample - Superstore' ><datasource-dependencies datasource='Parameters'>",
+    );
+    expect(posted).toContain("caption='p.Region'");
+    expect(posted).toContain('</datasource-dependencies></datasource>');
+  });
+
+  it('appends to an existing Parameters dependency block instead of creating a second one', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'p.New', datatype: 'integer', value: '2' },
+      initialXml: XML_EXISTING_DEP_BLOCK,
+      readbackXml: xmlWithParameterCaption('p.New'),
+    });
+
+    expect(result.isError).toBe(false);
+    const posted = applyWorkbookDocument.mock.calls[0][0] as string;
+    // exactly one dependency block — the new column joined the existing one
+    expect(posted.match(/<datasource-dependencies datasource='Parameters'>/g)).toHaveLength(1);
+    expect(posted).toContain("caption='p.Existing'");
+    expect(posted).toContain("caption='p.New'");
+    // the new column lands after the pre-existing one, ahead of the single closing tag
+    expect(posted.indexOf("caption='p.Existing'")).toBeLessThan(posted.indexOf("caption='p.New'"));
+  });
+
+  it('requires a datasource when multiple non-Parameters datasources exist', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'p.Period', datatype: 'string', value: 'Month' },
+      initialXml: XML_TWO_DATASOURCES,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Multiple datasources found');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('injects the dependency block onto the requested datasource', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'p.Period', datatype: 'string', value: 'Month', datasource: 'Returns' },
+      initialXml: XML_TWO_DATASOURCES,
+      readbackXml: xmlWithParameterCaption('p.Period'),
+    });
+
+    expect(result.isError).toBe(false);
+    const posted = applyWorkbookDocument.mock.calls[0][0] as string;
+    // the block hangs off the requested datasource, not the first candidate
+    const salesOpen = posted.indexOf("name='Sales'");
+    const returnsOpen = posted.indexOf("name='Returns'");
+    const depBlock = posted.indexOf('<datasource-dependencies');
+    expect(salesOpen).toBeLessThan(returnsOpen);
+    expect(returnsOpen).toBeLessThan(depBlock);
   });
 
   it('errors when the readback does not contain the new parameter (did not materialize)', async () => {
@@ -192,6 +294,7 @@ type AuthorParameterArgs = {
   datatype?: 'integer' | 'real' | 'string' | 'boolean' | 'date';
   value: string;
   members?: string[];
+  datasource?: string;
 };
 
 async function getToolResult({

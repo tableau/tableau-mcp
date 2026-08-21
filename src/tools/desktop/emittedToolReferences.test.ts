@@ -122,6 +122,7 @@ const NON_TOOL_VOCABULARY = [
   'non-federated',
   'non-template',
   'none-available',
+  'not-applied',
   'not-fast-path',
   'not-found',
   'on-hover',

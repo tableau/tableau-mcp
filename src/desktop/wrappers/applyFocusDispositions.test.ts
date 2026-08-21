@@ -45,10 +45,9 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
   'src/tools/desktop/api/applyWorksheetArtifact.ts': ['loadWorksheetXml:artifact'],
   'src/tools/desktop/authoring/sheets/composeDashboardCore.ts': ['loadWorkbookXml:artifact'],
   'src/tools/desktop/authoring/sheets/runDashboardBatch.ts': ['loadWorkbookXml:none'],
-  'src/tools/desktop/authoring/datasource/authorAction.ts': ['loadWorkbookXml:restore'],
-  'src/tools/desktop/authoring/datasource/authorCalcCore.ts': ['loadWorkbookXml:restore'],
-  'src/tools/desktop/authoring/datasource/authorParameter.ts': ['loadWorkbookXml:restore'],
-  'src/tools/desktop/authoring/datasource/authorSet.ts': ['loadWorkbookXml:restore'],
+  // author-calc/set/action/parameter now share one apply/verify seam, so the single restore
+  // write lives here rather than being copied into each tool.
+  'src/tools/desktop/authoring/datasource/applyAndVerify.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/authoring/datasource/formatLabels.ts': ['loadWorkbookXml:artifact'],
   'src/tools/desktop/api/applyWorkbook.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/api/applyWorksheet.ts': ['loadWorksheetXml:artifact'],

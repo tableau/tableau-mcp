@@ -9,15 +9,12 @@ import {
 } from '../../../../desktop/binder/schema-summary.js';
 import { WithExecutorAndAbortSignal } from '../../../../desktop/externalApi/executorTypes.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
-import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
-import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
-import { workbookLoadToolError } from './workbookLoadToolError.js';
+import { applyAndVerify } from './applyAndVerify.js';
 
 export const roleSchema = z.enum(['measure', 'dimension']);
 export const datatypeSchema = z.enum(['real', 'integer', 'string', 'boolean', 'date', 'datetime']);
@@ -89,36 +86,26 @@ export async function authorCalculationsInWorkbook({
 
   // A calc is not something the user looks at, and this helper also runs as an early leg of
   // bind-template, where the apply that follows names the chart it built.
-  const loadResult = await loadWorkbookXml({
+  const outcome = await applyAndVerify({
     xml: prepared.value.editedXml,
     baselineXml: workbookXml,
-    expectedWorkbookXml: workbookXml,
-    focus: { navigate: 'restore' },
-    executor,
-    signal,
-  });
-  if (loadResult.isErr()) {
-    return workbookLoadToolError(loadResult.error).toErr();
-  }
-
-  const readback = await pollReadback({
-    read: () => getWorkbookXml({ executor, signal }),
     settled: (xml) =>
       prepared.value.authoredCalcs.every((calc) =>
         hasColumnNameAndCaption(xml, calc.calcName, calc.caption),
       ),
+    executor,
     signal,
   });
-  if (!readback.ok) {
-    return new DesktopCommandExecutionError(readback.error).toErr();
+  if (outcome.status === 'failed') {
+    return outcome.error.toErr();
   }
-  if (!readback.settled) {
+  if (outcome.status === 'not-applied') {
     return new XmlModificationError(
       'load completed but did not apply: readback did not contain the new column name and caption',
     ).toErr();
   }
 
-  return new Ok({ workbookXml: readback.value, authoredCalcs: prepared.value.authoredCalcs });
+  return new Ok({ workbookXml: outcome.workbookXml, authoredCalcs: prepared.value.authoredCalcs });
 }
 
 function prepareCalculationBatch({
@@ -309,7 +296,7 @@ function formatFieldCandidates(fields: SchemaField[]): string {
   return names.length > 0 ? ` <one of: ${names.join(', ')}>` : '';
 }
 
-function selectTargetDatasource(
+export function selectTargetDatasource(
   xml: string,
   requested: string | undefined,
 ): Result<DatasourceElement, ArgsValidationError> {

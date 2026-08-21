@@ -242,8 +242,12 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-20: author-parameter now creates the parameter in place (dropped the reopen
 // path), so its obsolete stagePath param leaves the schema (-30 bytes); dynamic authoring
 // 42_521 -> 42_491 (budget kept at the 18-char slack).
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_491;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_509;
+// Re-pinned 2026-08-21: author-parameter adopted the sibling `datasource` selector param (choose
+// which datasource hosts the parameter when a workbook has more than one), matching author-calc/
+// set/action; its optional-string schema adds 31 bytes; dynamic authoring 42_491 -> 42_522 (budget
+// kept at the 18-char slack).
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 42_522;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 42_540;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
 const FULL_TOOL_SURFACE_BUDGET = 59_242;
 

@@ -22,7 +22,7 @@ Before invoking any `tabdoc:`/`tabui:` command via `execute-tableau-command` on 
 ## Best Practices
 
 - **Trust the command's SOURCE name over the reference's `opens_blocking_dialog` flag.** A `source_file` ending in `DialogCommand` opens a dialog regardless of what the flag says. The reference misclassifies 15 such commands as non-blocking.
-- **Prefer an author-* verb for the same intent.** Parameters → `author-parameter` (reopen path); actions → `author-action`; sorts/filters/labels → the document round-trip. These never open a dialog.
+- **Prefer an author-* verb for the same intent.** Parameters → `author-parameter` (in-place document round-trip); actions → `author-action`; sorts/filters/labels → the document round-trip. These never open a dialog.
 - **If a run must probe a dialog command, do it only with a human at the screen** (probe discipline: no dialog-risk probes on an unattended screen).
 
 ## Common Mistakes
