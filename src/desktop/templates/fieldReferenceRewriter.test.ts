@@ -366,6 +366,14 @@ describe('rewriteFieldReferences — ref-class coverage: kpi-text (aggregated me
     expect(r).toContain('column="[Sales Data].[sum:Revenue:qk]"');
     expect(r).not.toContain('{{DATASOURCE}}');
   });
+
+  it('keeps the KPI value large and rewrites its customized label reference', () => {
+    const r = run();
+    expect(r).toContain('<customized-label>');
+    expect(r).toContain('bold="true" fontsize="36"');
+    expect(r).toContain('<![CDATA[<[Sales Data].[sum:Revenue:qk]>]]>');
+    expect(r).not.toContain('{{field_base_1}}');
+  });
 });
 
 describe('rewriteFieldReferences — ref-class coverage: ranking-ordered-bar (dimension + measure + computed-sort)', () => {

@@ -22,7 +22,10 @@ import { resolveSession } from '../../../../desktop/session/sessionResolution.js
 import { spliceBoundFacet } from '../../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferencesWithDiagnostics } from '../../../../desktop/templates/fieldReferenceRewriter.js';
 import { spliceBoundCalcDefinitions } from '../../../../desktop/templates/groupDefinitionSplice.js';
-import { ensureUserNamespace } from '../../../../desktop/templates/injectTemplateCore.js';
+import {
+  ensureUserNamespace,
+  stripDonorCurrencyOrLocaleFormats,
+} from '../../../../desktop/templates/injectTemplateCore.js';
 import { pruneUnboundOptionalFields } from '../../../../desktop/templates/optionalFieldPrune.js';
 import { getRuntimeTemplateSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
 import { listTemplateNames } from '../../../../desktop/templates/templatePath.js';
@@ -411,6 +414,7 @@ export const getBuildAndApplyWorksheetTool = (
           templateXml = pruneUnboundOptionalFields(templateXml, explicitBind.optionalFieldPrunes);
           templateXml = ensureUserNamespace(templateXml);
           templateXml = spliceBoundFacet(templateXml, fieldMapping, explicitBind.templateSlots);
+          templateXml = stripDonorCurrencyOrLocaleFormats(templateXml, fieldMapping);
           const rewrite = rewriteFieldReferencesWithDiagnostics(
             templateXml,
             fieldMapping,
