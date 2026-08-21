@@ -255,7 +255,7 @@ describe('list-templates', () => {
     );
   });
 
-  it('reports truthful visible channels and opaque binding constraints for a calculated-color scatter', async () => {
+  it('reports truthful visible channels and the three direct scatter slots', async () => {
     delete process.env['TEMPLATES_DIR'];
 
     const body = await getBody({
@@ -267,22 +267,14 @@ describe('list-templates', () => {
 
     expect(template.visible_channels).toEqual({
       direct: ['rows', 'cols', 'lod'],
-      calculated: [
-        {
-          channel: 'color',
-          dependency_slot_ids: ['field_base_2_none', 'field_base_1_none'],
-        },
-      ],
+      calculated: [],
     });
-    expect(template.same_field_groups).toEqual([
-      ['field_base_1_sum', 'field_base_1_none'],
-      ['field_base_2_sum', 'field_base_2_none'],
-    ]);
+    expect(template.same_field_groups).toEqual([]);
     expect(template.visible_channels.direct).not.toContain('size');
     expect(template.slot_signature.required_slots).toEqual(
       expect.arrayContaining([
         {
-          slot_id: 'field_base_1_sum',
+          slot_id: 'field_base_1',
           kind: 'quantitative',
           derivation: 'sum',
           role: ['rows'],
@@ -290,25 +282,15 @@ describe('list-templates', () => {
           calculation_channels: [],
         },
         {
-          slot_id: 'field_base_1_none',
-          kind: 'quantitative',
+          slot_id: 'field_base_3',
+          kind: 'categorical',
           derivation: 'none',
-          role: [],
-          binding_usage: 'calculation-input',
-          calculation_channels: ['color'],
+          role: ['lod'],
+          binding_usage: 'direct',
+          calculation_channels: [],
         },
       ]),
     );
-
-    for (const slotId of ['field_base_1_none', 'field_base_2_none']) {
-      expect(
-        template.slots.find((slot: { slot_id: string }) => slot.slot_id === slotId),
-      ).toMatchObject({
-        binding_usage: 'calculation-input',
-        role: [],
-        calculation_channels: ['color'],
-      });
-    }
   });
 
   it('filters templates by every explicitly required visible channel', async () => {
@@ -340,6 +322,34 @@ describe('list-templates', () => {
       ];
       expect(channels).toEqual(expect.arrayContaining(['size', 'color']));
     }
+  });
+
+  it('treats Tableau detail and lod as the same discovery channel', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const body = await getBody({
+      query: 'box plot',
+      requiredChannels: ['rows', 'cols', 'detail'],
+      limit: 10,
+    });
+
+    expect(body.templates[0]?.template).toBe('box-plot-chart');
+    expect(
+      body.templates.find(
+        (template: { template: string }) => template.template === 'box-plot-chart',
+      ),
+    ).toMatchObject({
+      visible_channels: { direct: expect.arrayContaining(['rows', 'cols', 'lod']) },
+    });
+  });
+
+  it('ranks the smaller bindable Gantt carrier before a shorter legacy match', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const body = await getBody({ query: 'gantt', includeSlots: true, limit: 1 });
+
+    expect(body.templates[0]?.template).toBe('gantt-task-rollup-chart');
+    expect(body.templates[0]?.pass1_eligible).toBe(true);
   });
 
   it('paginates over the channel-filtered candidates', async () => {

@@ -70,6 +70,12 @@ describe('proposalSignature', () => {
     );
   });
 
+  it('changes when histogram bin_size changes', () => {
+    expect(proposalSignature({ ...baseProposal, bin_size: 250 })).not.toBe(
+      proposalSignature(baseProposal),
+    );
+  });
+
   it('changes when a declarative filter is added (m7 — so an add-filter re-bind is not blocked as unchanged)', () => {
     // The recovery gate blocks a retry whose signature is unchanged. Adding an interactive
     // context filter is a real semantic change and MUST produce a distinct signature, else the

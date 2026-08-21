@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { SlotSpec } from '../../../../desktop/binder/manifest-types.js';
 import { TEMPLATE_VISIBLE_CHANNELS } from '../../../../desktop/templates/bookmarkTemplate.js';
 import type { TemplateFitFacts } from '../../../../desktop/templates/inferSlots.js';
+import { preferredAutomaticTemplateForNoun } from '../../../../desktop/templates/puppetCompatibilityProjection.js';
 import {
   listTemplateCatalog,
   readBookmarkFromCatalogEntry,
@@ -333,7 +334,11 @@ export const getListTemplatesTool = (
                 ...fitOf(snapshot).visible_channels.direct,
                 ...fitOf(snapshot).visible_channels.calculated.map(({ channel }) => channel),
               ]);
-              return [...required].every((channel) => available.has(channel));
+              return [...required].every((channel) =>
+                channel === 'detail' || channel === 'lod'
+                  ? available.has('detail') || available.has('lod')
+                  : available.has(channel),
+              );
             });
           }
           const bestCanonicalScore =
@@ -364,6 +369,21 @@ export const getListTemplatesTool = (
                   fuzzyQueryScore(b.template, normalizedQuery) -
                   fuzzyQueryScore(a.template, normalizedQuery);
                 if (scoreDifference !== 0) return scoreDifference;
+                const preferredTemplate = preferredAutomaticTemplateForNoun(normalizedQuery);
+                if (preferredTemplate !== undefined) {
+                  const preferredDifference =
+                    Number(b.template === preferredTemplate) -
+                    Number(a.template === preferredTemplate);
+                  if (preferredDifference !== 0) return preferredDifference;
+                }
+                if (includeSlots) {
+                  const aSnapshot = resolveOnce(a);
+                  const bSnapshot = resolveOnce(b);
+                  const eligibilityDifference =
+                    Number(bSnapshot?.eligibility.pass1_eligible === true) -
+                    Number(aSnapshot?.eligibility.pass1_eligible === true);
+                  if (eligibilityDifference !== 0) return eligibilityDifference;
+                }
                 const lengthDifference = a.template.length - b.template.length;
                 if (lengthDifference !== 0) return lengthDifference;
               }

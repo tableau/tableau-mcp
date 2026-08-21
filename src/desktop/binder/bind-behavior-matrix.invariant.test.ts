@@ -34,6 +34,29 @@ const FIXTURE = fs.readFileSync(
 
 const EXPECTED_DATASOURCE = 'Sample - Superstore';
 
+const BULLET_WORKBOOK = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Bullet Data'>
+      <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Target]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+const WATERFALL_WORKBOOK = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='PL'>
+      <column name='[line_item]' role='dimension' type='nominal' datatype='string' />
+      <column name='[amount]' role='measure' type='quantitative' datatype='real' />
+      <column name='[display_order]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[category]' role='dimension' type='nominal' datatype='string' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
 let manifests: Map<string, RuntimeTemplateDescriptor>;
 
 beforeAll(() => {
@@ -42,16 +65,46 @@ beforeAll(() => {
   ).descriptors;
 });
 
-function bind(ask: string): ReturnType<typeof bindTemplate> {
-  return bindTemplate({ ask, workbookXml: FIXTURE, manifests });
+function bind(ask: string, workbookXml: string = FIXTURE): ReturnType<typeof bindTemplate> {
+  return bindTemplate({ ask, workbookXml, manifests });
+}
+
+function withApproxCount(field: string, count: number): string {
+  const localName = `<local-name>[${field}]</local-name>`;
+  if (!FIXTURE.includes(localName)) throw new Error(`Missing fixture metadata for ${field}`);
+  return FIXTURE.replace(localName, `${localName}<approx-count>${count}</approx-count>`);
 }
 
 // ── KNOWN ONE-SHOTS (bound, used_llm=false, correct template) ─────────────────
 const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   ['bar chart of Sales by Sub-Category', 'ranking-ordered-bar'],
+  ['grouped bar chart of Sales by Category and Region', 'magnitude-paired-bar'],
+  ['paired bar chart of Sales by Category and Region', 'magnitude-paired-bar'],
+  ['line chart of Sales over Order Date by Category', 'trend-line-chart'],
+  ['scatter plot of Sales vs Profit by Product Name', 'correlation-scatter-plot-chart'],
+  [
+    'scatter plot of Sales vs Profit by Product Name with trend line',
+    'correlation-scatter-trendline-chart',
+  ],
+  ['symbol map of Sales by State/Province', 'spatial-symbol-map'],
   ['treemap of Sales by Category and Sub-Category', 'part-to-whole-treemap-chart'],
-  ['pie chart of Sales by Segment', 'part-to-whole-pie-chart'],
-  ['quota attainment bullet of Sales by Segment', 'quota-attainment-bullet'],
+  ['heatmap of Sales by Category and Region', 'correlation-highlight-table'],
+  ['highlight table of Sales by Category and Region', 'correlation-highlight-table'],
+  ['pie chart of Sales by Region', 'part-to-whole-pie-chart'],
+  ['box plot of Sales by Category with Order ID detail', 'box-plot-chart'],
+  ['boxplot of Sales by Category with Order ID detail', 'box-plot-chart'],
+  ['box-plot of Sales by Category with Order ID detail', 'box-plot-chart'],
+  ['box-and-whisker of Sales by Category with Order ID detail', 'box-plot-chart'],
+  ['gantt chart of Order ID from Order Date to Ship Date', 'gantt-task-rollup-chart'],
+  ['histogram of Sales', 'distribution-histogram'],
+  [
+    'bubble chart of Sales versus Profit by Product Name sized by Quantity colored by Category',
+    'correlation-bubble-chart',
+  ],
+  [
+    'bubble chart of Sales versus Profit by Product Name sized by Quantity color by Category',
+    'correlation-bubble-chart',
+  ],
   ['slope chart of Sales by Region over Order Date', 'slope-chart'],
   ['filled map of Profit by State/Province', 'spatial-choropleth-map'],
   ['filled map of Profit by State/Province and Country/Region', 'spatial-choropleth-map'],
@@ -63,6 +116,27 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
 
 // ── KNOWN SAFE-PROPOSES (NOT bound — fail-closed by design; WHY each) ──────────
 const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
+  [
+    'donut chart of Sales by Region',
+    'a donut requires a distinct live-proven donor and must not bind the plain-pie template',
+  ],
+  [
+    'grouped bar chart of Sales by Category',
+    'the specific grouped-bar winner cannot fill its series slot and must not fall back to a generic bar',
+  ],
+  [
+    'symbol map of Sales by Country and State',
+    'a neutral geo slot cannot choose between two requested geo concepts',
+  ],
+  [
+    'symbol map of Sales by Country, State, and City',
+    'a neutral geo slot must not accept one exact match while ignoring two other requested geo concepts',
+  ],
+  ['bullet chart of Sales by Region', 'a bullet chart requires an explicit target measure'],
+  [
+    'box plot of Sales by Category',
+    'a box plot requires an explicit distinct record-grain detail field',
+  ],
   [
     'over-under arrow chart of Sales by Sub-Category',
     // fix b1490be5: ww-ou-arrow carries the compound-string-parse hazard (its calcs SPLIT a
@@ -90,11 +164,6 @@ const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
 // Pinned BOUND (bound → assert template + used_llm=false):
 const PINNED_BOUND: ReadonlyArray<readonly [ask: string, template: string, note: string]> = [
   [
-    'box plot of Sales by Sub-Category',
-    'box-plot-chart',
-    'runtime binder reuses the named Sub-Category for both required categorical slots',
-  ],
-  [
     'funnel chart of Sales by Segment',
     'funnel-chart',
     'pinned-current-behavior: stage=Segment + amount=Sales fill the two required slots',
@@ -120,20 +189,8 @@ const PINNED_BOUND: ReadonlyArray<readonly [ask: string, template: string, note:
 // Pinned NOT-BOUND (propose → assert not-bound):
 const PINNED_PROPOSE: ReadonlyArray<readonly [ask: string, note: string]> = [
   [
-    'line chart of Sales by Order Date',
-    'runtime descriptor also requires a color category, so two named fields fail closed',
-  ],
-  [
     'waterfall of Profit by Sub-Category',
     'runtime descriptor requires the measure at both sum and none derivations; automatic binding does not duplicate it',
-  ],
-  [
-    'scatter plot of Profit and Sales by Sub-Category',
-    'runtime descriptor requires both measures at sum and none plus two detail fields',
-  ],
-  [
-    'symbol map of Sales by Country/Region, State/Province, and City',
-    'runtime descriptor requires a second quantitative color field',
   ],
   [
     'connected scatterplot of Profit vs Sales by Customer Name and Region',
@@ -204,6 +261,209 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
       '{{field_base_3}}': '[Sample - Superstore].[sum:Quantity:qk]',
       '{{field_base_4}}': '[Sample - Superstore].[none:Product Name:nk]',
     });
+  });
+
+  it.each([
+    [
+      'grouped bar chart of Sales by Category and Region',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[none:Category:nk]',
+        '{{field_base_2}}': '[Sample - Superstore].[none:Region:nk]',
+        '{{field_base_3}}': '[Sample - Superstore].[sum:Sales:qk]',
+      },
+    ],
+    [
+      'line chart of Sales over Order Date by Category',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[sum:Sales:qk]',
+        '{{field_base_2}}': '[Sample - Superstore].[tmn:Order Date:qk]',
+        '{{field_base_3}}': '[Sample - Superstore].[none:Category:nk]',
+      },
+    ],
+    [
+      'scatter plot of Sales vs Profit by Product Name with trend line',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[sum:Sales:qk]',
+        '{{field_base_2}}': '[Sample - Superstore].[sum:Profit:qk]',
+        '{{field_base_3}}': '[Sample - Superstore].[none:Product Name:nk]',
+      },
+    ],
+    [
+      'symbol map of Sales by State/Province',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[sum:Sales:qk]',
+        '{{field_base_2}}': '[Sample - Superstore].[none:State/Province:nk]',
+      },
+    ],
+    [
+      'treemap of Sales by Category and Sub-Category',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[none:Category:nk]',
+        '{{field_base_2}}': '[Sample - Superstore].[none:Sub-Category:nk]',
+        '{{field_base_3}}': '[Sample - Superstore].[sum:Sales:qk]',
+      },
+    ],
+    [
+      'heatmap of Sales by Category and Region',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[none:Category:nk]',
+        '{{field_base_2}}': '[Sample - Superstore].[none:Region:nk]',
+        '{{field_base_3}}': '[Sample - Superstore].[sum:Sales:qk]',
+      },
+    ],
+    [
+      'pie chart of Sales by Region',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[none:Region:nk]',
+        '{{field_base_2}}': '[Sample - Superstore].[sum:Sales:qk]',
+      },
+    ],
+    [
+      'box plot of Sales by Category with Order ID detail',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[sum:Sales:qk]',
+        '{{field_base_2}}': '[Sample - Superstore].[none:Category:nk]',
+        '{{field_base_3}}': '[Sample - Superstore].[none:Order ID:nk]',
+      },
+    ],
+    [
+      'gantt chart of Order ID from Order Date to Ship Date',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[none:Order ID:nk]',
+        '{{field_base_2}}@min': '[Sample - Superstore].[min:Order Date:qk]',
+        '{{field_base_2}}@none': '[Sample - Superstore].[none:Order Date:qk]',
+        '{{field_base_3}}': '[Sample - Superstore].[none:Ship Date:qk]',
+      },
+    ],
+    [
+      'histogram of Sales',
+      {
+        '{{field_base_1}}@cnt': '[Sample - Superstore].[cnt:Sales:qk]',
+        '{{field_base_1}}@none': '[Sample - Superstore].[none:Sales:qk]',
+      },
+    ],
+    [
+      'bubble chart of Sales versus Profit by Product Name sized by Quantity colored by Category',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[avg:Profit:qk]',
+        '{{field_base_2}}': '[Sample - Superstore].[sum:Sales:qk]',
+        '{{field_base_3}}': '[Sample - Superstore].[sum:Quantity:qk]',
+        '{{field_base_4}}': '[Sample - Superstore].[none:Product Name:nk]',
+        '{{field_base_5}}': '[Sample - Superstore].[attr:Category:nk]',
+      },
+    ],
+    [
+      'bubble chart of Sales versus Profit by Product Name sized by Quantity color by Category',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[avg:Profit:qk]',
+        '{{field_base_2}}': '[Sample - Superstore].[sum:Sales:qk]',
+        '{{field_base_3}}': '[Sample - Superstore].[sum:Quantity:qk]',
+        '{{field_base_4}}': '[Sample - Superstore].[none:Product Name:nk]',
+        '{{field_base_5}}': '[Sample - Superstore].[attr:Category:nk]',
+      },
+    ],
+  ] as const)('maps the must-demo contract for %s', async (ask, expectedMapping) => {
+    const res = await bind(ask);
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status === 'bound') expect(res.args.field_mapping).toEqual(expectedMapping);
+  });
+
+  it('binds a pie chart to the workbook datasource after it is renamed', async () => {
+    const datasource = 'Regional Orders';
+    const res = await bind(
+      'pie chart of Sales by Region',
+      FIXTURE.replaceAll(EXPECTED_DATASOURCE, datasource),
+    );
+
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.args.template_parameters.DATASOURCE).toBe(datasource);
+    expect(res.args.field_mapping).toEqual({
+      '{{field_base_1}}': `[${datasource}].[none:Region:nk]`,
+      '{{field_base_2}}': `[${datasource}].[sum:Sales:qk]`,
+    });
+    expect(JSON.stringify(res.args)).not.toContain(EXPECTED_DATASOURCE);
+  });
+
+  it('requires and maps an explicit bullet target measure', async () => {
+    const res = await bind('bullet chart of Sales vs Target by Region', BULLET_WORKBOOK);
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.args.template_name).toBe('quota-attainment-bullet');
+    expect(res.args.field_mapping).toEqual({
+      '{{field_base_1}}': '[Bullet Data].[none:Region:nk]',
+      '{{field_base_2}}': '[Bullet Data].[sum:Sales:qk]',
+      '{{field_base_3}}': '[Bullet Data].[sum:Target:qk]',
+    });
+  });
+
+  it('binds an ordered waterfall by duplicating one contribution measure into its authored slots', async () => {
+    const res = await bind('waterfall of amount by line_item', WATERFALL_WORKBOOK);
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.args.template_name).toBe('part-to-whole-waterfall');
+    expect(res.args.field_mapping).toEqual({
+      '{{field_base_1}}@sum': '[PL].[sum:amount:qk]',
+      '{{field_base_2}}': '[PL].[none:line_item:nk]',
+      '{{field_base_1}}@none': '[PL].[none:amount:qk]',
+    });
+    expect(res.args.sort).toEqual({ by: 'display_order', direction: 'asc' });
+  });
+
+  it.each([
+    ['Category', 3, 'bound'],
+    ['Region', 12, 'bound'],
+    ['Region', 13, 'propose'],
+    ['Product Name', 1850, 'propose'],
+  ] as const)(
+    'uses real cardinality metadata for pie dimension %s (%i members)',
+    async (dimension, count, expectedStatus) => {
+      const res = await bind(
+        `pie chart of Sales by ${dimension}`,
+        withApproxCount(dimension, count),
+      );
+      expect(res.status, JSON.stringify(res)).toBe(expectedStatus);
+    },
+  );
+
+  it('does not fabricate missing pie cardinality metadata', async () => {
+    const res = await bind('pie chart of Sales by Product Name');
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status === 'bound') expect(res.args.template_name).toBe('part-to-whole-pie-chart');
+  });
+
+  it.each(['Country/Region', 'State/Province', 'City'])(
+    'binds the generic symbol-map geo slot to target semantic role %s',
+    async (geoField) => {
+      const res = await bind(`symbol map of Sales by ${geoField}`);
+      expect(res.status, JSON.stringify(res)).toBe('bound');
+      if (res.status !== 'bound') return;
+      expect(res.args.template_name).toBe('spatial-symbol-map');
+      expect(res.args.field_mapping['{{field_base_2}}']).toBe(
+        `[Sample - Superstore].[none:${geoField}:nk]`,
+      );
+    },
+  );
+
+  it('documents the neutral-geo boundary: extra geo vocabulary fails closed to proposal', async () => {
+    const res = await bind('symbol map of Sales by Country/Region for the admin dashboard');
+    expect(res.status, JSON.stringify(res)).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.decline_reason.code).toBe('no_llm_classifier_declined');
+    }
+  });
+
+  it.each([
+    ['Country', 'Country/Region'],
+    ['State', 'State/Province'],
+  ])('resolves generic geo synonym %s through target field %s', async (askGeo, targetField) => {
+    const res = await bind(`symbol map of Sales by ${askGeo}`);
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.args.template_name).toBe('spatial-symbol-map');
+    expect(res.args.field_mapping['{{field_base_2}}']).toBe(
+      `[Sample - Superstore].[none:${targetField}:nk]`,
+    );
   });
 });
 

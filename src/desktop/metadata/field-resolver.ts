@@ -336,6 +336,48 @@ function datasourceCaptionMap(workbookXml: string): Map<string, Set<string>> {
   return captions;
 }
 
+function datasourceNames(workbookXml: string): Set<string> {
+  const workbook = parseXML(workbookXml);
+  const datasources = normalizeArray<any>(workbook.workbook?.datasources?.datasource);
+  return new Set(
+    datasources
+      .map((datasource) => datasource?.['@_name'])
+      .filter((name): name is string => !!name && name !== 'Parameters'),
+  );
+}
+
+export function resolveUniqueDatasourceName(
+  workbookXml: string,
+  requestedDatasource: string,
+): string | null {
+  const names = datasourceNames(workbookXml);
+  if (names.has(requestedDatasource)) return requestedDatasource;
+
+  const normalizedRequested = requestedDatasource.normalize('NFC');
+  const normalizedNameMatches = [...names].filter(
+    (name) => name.normalize('NFC') === normalizedRequested,
+  );
+  if (normalizedNameMatches.length === 1) return normalizedNameMatches[0];
+
+  const hasOuterBrackets = normalizedRequested.startsWith('[') && normalizedRequested.endsWith(']');
+  const hasPartialOuterBrackets =
+    normalizedRequested.startsWith('[') !== normalizedRequested.endsWith(']');
+  if (!hasPartialOuterBrackets) {
+    const bracketEquivalent = hasOuterBrackets
+      ? normalizedRequested.slice(1, -1)
+      : `[${normalizedRequested}]`;
+    const bracketMatches = [...names].filter((name) => name.normalize('NFC') === bracketEquivalent);
+    if (bracketMatches.length === 1) return bracketMatches[0];
+  }
+
+  const captionMatches = new Set<string>();
+  for (const [caption, captionNames] of datasourceCaptionMap(workbookXml)) {
+    if (caption.normalize('NFC') !== normalizedRequested) continue;
+    for (const name of captionNames) captionMatches.add(name);
+  }
+  return captionMatches.size === 1 ? [...captionMatches][0] : null;
+}
+
 function matchingFieldsForDatasource(
   workbookXml: string,
   fields: Array<FieldReference & { column_ref: string }>,
@@ -349,15 +391,17 @@ function matchingFieldsForDatasource(
     return { kind: 'exact', fields: internalMatches };
   }
 
-  const captionNames = datasourceCaptionMap(workbookXml).get(datasource);
-  if (!captionNames || captionNames.size === 0) {
-    return { kind: 'not_found', fields: [] };
+  const resolvedCaptionName = resolveUniqueDatasourceName(workbookXml, datasource);
+  if (resolvedCaptionName !== null) {
+    return {
+      kind: 'exact',
+      fields: fields.filter((field) => field.datasource === resolvedCaptionName),
+    };
   }
 
+  const captionNames = datasourceCaptionMap(workbookXml).get(datasource);
+  if (!captionNames || captionNames.size === 0) return { kind: 'not_found', fields: [] };
   const captionFields = fields.filter((f) => captionNames.has(f.datasource));
-  if (captionNames.size === 1) {
-    return { kind: 'exact', fields: captionFields };
-  }
   return { kind: 'ambiguous', fields: captionFields };
 }
 

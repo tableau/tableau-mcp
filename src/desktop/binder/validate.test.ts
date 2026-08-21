@@ -740,24 +740,11 @@ describe('binder/validate — cardinality advice', () => {
 });
 
 describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 gantt-task-rollup)', () => {
-  // gantt-task-rollup-chart authors MIN on its DATE start_date slot (each task's
-  // earliest start on a continuous date axis). MIN/MAX over a date is legal Tableau,
-  // so the template's OWN manifest must pass the legality gate against a schema with a
-  // date-typed start field + a real duration measure. Pre-W60 the gate treated `min`
-  // as numeric-only, so it rejected the date slot and the template could never one-shot
-  // on ANY schema (confirmed on the Superstore control).
   const GANTT_SCHEMA: SchemaSummary = {
     datasource: 'Projects',
     fields: [
       field({
         columnName: '[Task]',
-        role: 'dimension',
-        type: 'nominal',
-        datatype: 'string',
-        datasource: 'Projects',
-      }),
-      field({
-        columnName: '[Phase]',
         role: 'dimension',
         type: 'nominal',
         datatype: 'string',
@@ -771,10 +758,10 @@ describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 
         datasource: 'Projects',
       }),
       field({
-        columnName: '[Duration]',
-        role: 'measure',
-        type: 'quantitative',
-        datatype: 'real',
+        columnName: '[End Date]',
+        role: 'dimension',
+        type: 'ordinal',
+        datatype: 'date',
         datasource: 'Projects',
       }),
     ],
@@ -785,13 +772,13 @@ describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 
     title: 'Task rollup',
     bindings: [
       { slot_id: 'field_base_1', field: 'Task' },
-      { slot_id: 'field_base_2', field: 'Start Date' },
-      { slot_id: 'field_base_3', field: 'Phase' },
-      { slot_id: 'field_base_4', field: 'Duration' },
+      { slot_id: 'field_base_2_min', field: 'Start Date' },
+      { slot_id: 'field_base_2_none', field: 'Start Date' },
+      { slot_id: 'field_base_3', field: 'End Date' },
     ],
   });
 
-  it("gantt-task-rollup's own manifest passes its legality gate (MIN on the date start slot)", () => {
+  it("gantt-task-rollup's task-level start/end span passes its legality gate", () => {
     const m = manifests.get('gantt-task-rollup-chart')!;
     const r = validateBinding(m, ganttProposal(m), GANTT_SCHEMA);
     expect(r.ok).toBe(true);
@@ -799,7 +786,9 @@ describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 
 
   it('MIN on a date never fires a derivation-illegal blocker (regression guard)', () => {
     const m = manifests.get('gantt-task-rollup-chart')!;
-    const r = validateBinding(m, ganttProposal(m), GANTT_SCHEMA);
+    const proposal = ganttProposal(m);
+    proposal.bindings[1] = { ...proposal.bindings[1], derivation: 'min' };
+    const r = validateBinding(m, proposal, GANTT_SCHEMA);
     if (!r.ok) {
       expect(r.blockers.some((b) => b.code === 'derivation-illegal')).toBe(false);
     }
@@ -1356,18 +1345,15 @@ describe('binder/validate — gate 7: temporal suffix', () => {
 });
 
 describe('binder/validate — gate 7: full scatter emission', () => {
-  it('emits the exact raw-slot field_mapping with the template-owned calc excluded', () => {
+  it('emits the exact three-slot scatter field_mapping', () => {
     const m = manifests.get('correlation-scatter-plot-chart')!;
     const p: BindingProposal = {
       template: m.template,
       title: 'Scatter',
       bindings: [
-        { slot_id: 'field_base_1_sum', field: 'Sales' },
-        { slot_id: 'field_base_2_sum', field: 'Profit' },
+        { slot_id: 'field_base_1', field: 'Sales' },
+        { slot_id: 'field_base_2', field: 'Profit' },
         { slot_id: 'field_base_3', field: 'Customer Name' },
-        { slot_id: 'field_base_4', field: 'Region' },
-        { slot_id: 'field_base_2_none', field: 'Profit' },
-        { slot_id: 'field_base_1_none', field: 'Sales' },
       ],
     };
     const r = validateBinding(m, p, SUMMARY);
@@ -1375,12 +1361,9 @@ describe('binder/validate — gate 7: full scatter emission', () => {
     if (r.ok) {
       expect(r.datasource).toBe('Superstore');
       expect(r.field_mapping).toEqual({
-        '{{field_base_1}}@sum': '[Superstore].[sum:Sales:qk]',
-        '{{field_base_2}}@sum': '[Superstore].[sum:Profit:qk]',
+        '{{field_base_1}}': '[Superstore].[sum:Sales:qk]',
+        '{{field_base_2}}': '[Superstore].[sum:Profit:qk]',
         '{{field_base_3}}': '[Superstore].[none:Customer Name:nk]',
-        '{{field_base_4}}': '[Superstore].[none:Region:nk]',
-        '{{field_base_2}}@none': '[Superstore].[none:Profit:qk]',
-        '{{field_base_1}}@none': '[Superstore].[none:Sales:qk]',
       });
     }
   });

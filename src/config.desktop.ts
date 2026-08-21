@@ -13,7 +13,8 @@ import { parseNumber } from './utils/parseNumber.js';
 
 export class Config extends BaseConfig {
   // toolProfile lives on BaseConfig (shared with web/combined); desktop consumes it via
-  // selectToolsForProfile — '' / 'full' / 'combined-lean' → full set, 'demo' → slim set.
+  // selectToolsForProfile — '' / 'dynamic-authoring' → lean default, 'full' /
+  // 'combined-lean' → full Desktop set, 'demo' → slim set.
   /**
    * Server-enforced ceiling (bytes) on inline workbook/worksheet/dashboard XML in a tool
    * result. Over this, the get-*-xml tools respond in file mode regardless of the requested

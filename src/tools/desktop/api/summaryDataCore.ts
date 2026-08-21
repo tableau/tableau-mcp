@@ -14,10 +14,19 @@ export type SummaryDataRead = <T>(
   ) => Promise<Result<T, ExecuteCommandError>>,
 ) => Promise<Result<T, McpToolError>>;
 
+export const SUMMARY_ROW_ORDER = {
+  status: 'unspecified',
+  usableFor: 'value_readback',
+  notUsableFor: 'visual_sort_verification',
+} as const;
+
+export type SummaryRowOrder = typeof SUMMARY_ROW_ORDER;
+
 export type WorksheetSummaryData = {
   worksheet: WorksheetItem;
   columns: unknown[];
   rows: unknown[][];
+  rowOrder: SummaryRowOrder;
 };
 
 export type WorksheetSummaryDataError =
@@ -53,7 +62,12 @@ export async function fetchWorksheetSummaryData({
 
   const resolvedWorksheet = worksheetResult.value;
   if (resolvedWorksheet.datasources?.length === 0) {
-    return Ok({ worksheet: resolvedWorksheet, columns: [], rows: [] });
+    return Ok({
+      worksheet: resolvedWorksheet,
+      columns: [],
+      rows: [],
+      rowOrder: SUMMARY_ROW_ORDER,
+    });
   }
 
   // No columnsToIncludeByFieldName: it matches only a column-instance name, not a plain field
@@ -96,7 +110,12 @@ export async function fetchWorksheetSummaryData({
   const returnedColumns = summaryResult.value.columns ?? [];
   const returnedRows = summaryResult.value.rows ?? [];
   if (!columns || columns.length === 0) {
-    return Ok({ worksheet: resolvedWorksheet, columns: returnedColumns, rows: returnedRows });
+    return Ok({
+      worksheet: resolvedWorksheet,
+      columns: returnedColumns,
+      rows: returnedRows,
+      rowOrder: SUMMARY_ROW_ORDER,
+    });
   }
 
   const projection = resolveColumnProjection(columns, returnedColumns);
@@ -107,6 +126,7 @@ export async function fetchWorksheetSummaryData({
     worksheet: resolvedWorksheet,
     columns: projection.value.map((index) => returnedColumns[index]),
     rows: returnedRows.map((row) => projection.value.map((index) => row[index])),
+    rowOrder: SUMMARY_ROW_ORDER,
   });
 }
 

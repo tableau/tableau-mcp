@@ -36,10 +36,12 @@
         <column datatype='string' name='[Customer Name]' role='dimension' type='nominal' />
         <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
         <column datatype='real' name='[Quantity]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Category]' role='dimension' type='nominal' />
         <column-instance column='[Profit]' derivation='Avg' name='[avg:Profit:qk]' pivot='key' type='quantitative' />
         <column-instance column='[Customer Name]' derivation='None' name='[none:Customer Name:nk]' pivot='key' type='nominal' />
         <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
         <column-instance column='[Quantity]' derivation='Sum' name='[sum:Quantity:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Category]' derivation='Attribute' name='[attr:Category:nk]' pivot='key' type='nominal' />
       </datasource-dependencies>
       <aggregation value='true' />
     </view>
@@ -54,6 +56,7 @@
         <encodings>
           <size column='[Sample - Superstore].[sum:Quantity:qk]' />
           <lod column='[Sample - Superstore].[none:Customer Name:nk]' />
+          <color column='[Sample - Superstore].[attr:Category:nk]' />
         </encodings>
         <style>
           <style-rule element='mark'>

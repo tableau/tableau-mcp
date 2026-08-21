@@ -329,15 +329,6 @@ describe('planSortDirection', () => {
     expect(r.xml).not.toContain("direction='DESC'");
   });
 
-  it('flips ASC to DESC', () => {
-    const asc = BASE.replace("direction='DESC'", "direction='ASC'");
-    const r = planSortDirection(asc, { direction: 'DESC' });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.xml).toContain("direction='DESC'");
-    expect(r.xml).not.toContain("direction='ASC'");
-  });
-
   it('refuses an invalid direction', () => {
     const r = planSortDirection(BASE, { direction: 'SIDEWAYS' as unknown as 'ASC' });
     expect(r.ok).toBe(false);

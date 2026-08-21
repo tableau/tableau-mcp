@@ -461,7 +461,8 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
     expect(result.xml).not.toContain('column="[State]"');
   });
 
-  it('removes unbound optional state/city LODs from a country-only symbol map', () => {
+  it('injects the symbol map through its single generic geo LOD', () => {
+    expect(SYMBOL_GEO_SLOTS).toHaveLength(1);
     const result = buildInjectedWorkbookXml({
       workbookXml: EMPTY_WORKBOOK,
       templateXml: SYMBOL_TEMPLATE,
@@ -472,10 +473,6 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
         [SYMBOL_GEO_SLOTS[0].template_field]: '[Football].[none:Country:nk]',
         [SYMBOL_SIZE_SLOT.template_field]: '[Football].[sum:Goals For:qk]',
       },
-      optionalFieldPrunes: [
-        { templateField: SYMBOL_GEO_SLOTS[1].template_field, derivation: 'none', role: 'nk' },
-        { templateField: SYMBOL_GEO_SLOTS[2].template_field, derivation: 'none', role: 'nk' },
-      ],
       templateSlots: SYMBOL_SLOTS,
       applyNonce: 'country-symbol',
     });
@@ -484,34 +481,7 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
     if (!result.ok) return;
     expect(result.xml).toContain('[Football].[none:Country:nk]');
     expect(result.xml).toContain('[Football].[sum:Goals For:qk]');
-    expect(result.xml).not.toContain('[none:State/Province:nk]');
-    expect(result.xml).not.toContain('[none:City:nk]');
-    expect(result.xml).not.toContain('name="[State/Province]"');
-    expect(result.xml).not.toContain('name="[City]"');
-  });
-
-  it('keeps the full symbol-map hierarchy when every geo slot is bound', () => {
-    const result = buildInjectedWorkbookXml({
-      workbookXml: EMPTY_WORKBOOK,
-      templateXml: SYMBOL_TEMPLATE,
-      title: 'Goals by City',
-      sheetType: 'worksheet',
-      templateParameters: { DATASOURCE: 'Football' },
-      fieldMapping: {
-        [SYMBOL_GEO_SLOTS[0].template_field]: '[Football].[none:Country:nk]',
-        [SYMBOL_GEO_SLOTS[1].template_field]: '[Football].[none:State:nk]',
-        [SYMBOL_GEO_SLOTS[2].template_field]: '[Football].[none:City:nk]',
-        [SYMBOL_SIZE_SLOT.template_field]: '[Football].[sum:Goals For:qk]',
-      },
-      templateSlots: SYMBOL_SLOTS,
-      applyNonce: 'full-symbol',
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.xml).toContain('[Football].[none:Country:nk]');
-    expect(result.xml).toContain('[Football].[none:State:nk]');
-    expect(result.xml).toContain('[Football].[none:City:nk]');
+    expect(result.xml).not.toContain('[none:Location:nk]');
   });
 });
 

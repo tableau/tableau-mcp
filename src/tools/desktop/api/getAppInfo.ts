@@ -16,6 +16,9 @@ type GetAppInfoResult =
       build?: string;
       edition?: string;
       os?: string;
+      isStartPageVisible?: boolean;
+      isDataSourcePageActive?: boolean;
+      isPresentationMode?: boolean;
     }
   | {
       status: 'unavailable';
@@ -28,7 +31,8 @@ export const getAppInfoTool = (server: DesktopMcpServer): DesktopTool<typeof par
     server,
     name: 'get-app-info',
     title,
-    description: 'Identify the Desktop build when an endpoint 404s as too-new.',
+    description:
+      'Identify the Desktop build when an endpoint 404s as too-new, and read live UI state (Start Page visibility, Data Source page active, presentation mode).',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -58,6 +62,15 @@ export const getAppInfoTool = (server: DesktopMcpServer): DesktopTool<typeof par
             ...(result.value.build !== undefined ? { build: result.value.build } : {}),
             ...(result.value.edition !== undefined ? { edition: result.value.edition } : {}),
             ...(result.value.os !== undefined ? { os: result.value.os } : {}),
+            ...(result.value.isStartPageVisible !== undefined
+              ? { isStartPageVisible: result.value.isStartPageVisible }
+              : {}),
+            ...(result.value.isDataSourcePageActive !== undefined
+              ? { isDataSourcePageActive: result.value.isDataSourcePageActive }
+              : {}),
+            ...(result.value.isPresentationMode !== undefined
+              ? { isPresentationMode: result.value.isPresentationMode }
+              : {}),
           };
 
           if (Object.keys(appInfo).length === 0) {

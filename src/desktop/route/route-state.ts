@@ -121,12 +121,6 @@ export interface BindRecoveryRecord {
   lastProposalSignature?: string;
   proposalContext?: BindRecoveryProposalContext;
   consecutiveBareResubmitCount?: number;
-  /** One repair may re-enter a Tier-2 terminal record by binding its sole missing slot. */
-  terminalRepairAllowance?: {
-    template: string;
-    slotId: string;
-    remaining: 0 | 1;
-  };
   /** One-shot retry for an apply failure proven to have occurred before mutation dispatch. */
   preDispatchRetryAllowance?: {
     proposalSignature: string;
@@ -141,7 +135,6 @@ export interface BindRecoveryAttemptInput {
   proposalSignature?: string;
   proposalContext?: BindRecoveryProposalContext;
   reservationId?: number;
-  terminalRepairAllowance?: BindRecoveryRecord['terminalRepairAllowance'];
   /** Explicit terminal-done marker; callers use this only after final bind processing concludes. */
   terminal?: boolean;
 }
@@ -209,8 +202,6 @@ export interface SessionRouteState {
   route_overrides: RouteOverride[];
   /** Bounded per-ask bind recovery records, keyed by the same normalized ask as current_ask. */
   bindRecoveryByAsk: Map<string, BindRecoveryRecord>;
-  /** Consecutive transient get-summary-data failures keyed by argument signature. */
-  summaryDataTransientFailures: Map<string, number>;
   /** Capacity-rejected bind admissions that intentionally proceeded unprotected. */
   unprotected_passthroughs: UnprotectedPassthroughs;
   /** Sheets applied by bind-template in this session, keyed by render signature. */
@@ -326,13 +317,6 @@ export class SessionRouteStateStore {
   /** Per-session LRU cap for bind recovery records. */
   static readonly MAX_BIND_RECOVERY_ASKS = 8;
 
-  /**
-   * Per-session LRU cap for get-summary-data transient-failure counters. Rotating more than
-   * this many failing signatures can evict a first failure before its retry, so the terminal
-   * guard is intentionally best-effort for that rare pattern in exchange for bounded memory.
-   */
-  static readonly MAX_SUMMARY_DATA_FAILURE_SIGNATURES = 8;
-
   /** Receipt cap for capacity-rejected asks. */
   static readonly MAX_UNPROTECTED_PASSTHROUGH_ASKS = 4;
 
@@ -351,7 +335,6 @@ export class SessionRouteStateStore {
         deflections: [],
         route_overrides: [],
         bindRecoveryByAsk: new Map(),
-        summaryDataTransientFailures: new Map(),
         unprotected_passthroughs: { count: 0, last_asks: [] },
         appliedSheets: new Map(),
       };
@@ -455,29 +438,6 @@ export class SessionRouteStateStore {
     return this.bySession.get(sessionId);
   }
 
-  recordSummaryDataTransientFailure(sessionId: string | undefined, signature: string): number {
-    if (!sessionId) return 1;
-    const state = this.ensure(sessionId);
-    const count = (state.summaryDataTransientFailures.get(signature) ?? 0) + 1;
-    state.summaryDataTransientFailures.delete(signature);
-    state.summaryDataTransientFailures.set(signature, count);
-    while (
-      state.summaryDataTransientFailures.size >
-      SessionRouteStateStore.MAX_SUMMARY_DATA_FAILURE_SIGNATURES
-    ) {
-      const oldest = state.summaryDataTransientFailures.keys().next().value;
-      if (oldest === undefined) break;
-      state.summaryDataTransientFailures.delete(oldest);
-    }
-    return count;
-  }
-
-  clearSummaryDataTransientFailure(sessionId: string | undefined, signature: string): boolean {
-    const state = this.get(sessionId);
-    if (!state) return false;
-    return state.summaryDataTransientFailures.delete(signature);
-  }
-
   /**
    * Whether a deflection was already issued for this (session, ask). The one-shot invariant:
    * once true, the gate overrides (executes) instead of deflecting again.
@@ -576,15 +536,6 @@ export class SessionRouteStateStore {
     return allowance?.proposalSignature === nextProposalSignature
       ? { preDispatchRetryAllowance: allowance }
       : {};
-  }
-
-  private withTerminalRepairAllowance(
-    previous: BindRecoveryRecord | undefined,
-    next?: BindRecoveryRecord['terminalRepairAllowance'],
-  ): Pick<BindRecoveryRecord, 'terminalRepairAllowance'> {
-    // Once consumed, the same ask cannot mint a fresh allowance by escalating again.
-    const allowance = previous?.terminalRepairAllowance ?? next;
-    return allowance ? { terminalRepairAllowance: allowance } : {};
   }
 
   private withProposalContext(
@@ -702,7 +653,6 @@ export class SessionRouteStateStore {
         admission.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
       ),
       ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
-      ...this.withTerminalRepairAllowance(previous),
       ...this.withUncorrelatedOutcomeCount(previous, false),
     };
 
@@ -768,7 +718,6 @@ export class SessionRouteStateStore {
         attempt.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
       ),
       ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
-      ...this.withTerminalRepairAllowance(previous),
       ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
     };
 
@@ -824,37 +773,11 @@ export class SessionRouteStateStore {
         attempt.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
       ),
       ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
-      ...this.withTerminalRepairAllowance(previous, attempt.terminalRepairAllowance),
       ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
     };
 
     this.touchBindRecovery(state, ask, record);
     return state;
-  }
-
-  consumeTerminalRepairAllowance(
-    sessionId: string | undefined,
-    ask: string,
-    template: string,
-    slotId: string,
-  ): boolean {
-    const state = this.get(sessionId);
-    const record = state?.bindRecoveryByAsk.get(ask);
-    const allowance = record?.terminalRepairAllowance;
-    if (
-      !state ||
-      !record ||
-      record.phase !== 'terminal' ||
-      allowance?.remaining !== 1 ||
-      allowance.template !== template ||
-      allowance.slotId !== slotId
-    ) {
-      return false;
-    }
-    return this.touchBindRecovery(state, ask, {
-      ...record,
-      terminalRepairAllowance: { ...allowance, remaining: 0 },
-    });
   }
 
   grantPreDispatchRetryAllowance(

@@ -44,7 +44,6 @@
     <style>
       <style-rule element='axis'>
         <format attr='line-visibility' value='off' />
-        <format attr='title' class='0' field='[Sample - Superstore].[sum:Profit:qk]' scope='cols' value='' />
       </style-rule>
       <style-rule element='worksheet'>
         <format attr='display-field-labels' scope='rows' value='false' />

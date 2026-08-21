@@ -197,6 +197,7 @@ const PLURALIZABLE_CHART_NOUNS: ReadonlySet<string> = new Set([
   'pie',
   'donut',
   'bubble',
+  'heatmap',
 ]);
 
 /**
@@ -447,10 +448,15 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'sorted-column',
   'vertical-bar',
   'stacked-bar',
+  'grouped-bar',
+  'grouped-bar-chart',
+  'paired-bar',
   'treemap',
   'pie',
   'donut',
   'bubble',
+  'heatmap',
+  'highlight-table',
   // 2026-07-06 growth (per the table's own contract — grow as new distinct-shape
   // templates are stamped eligible): gantt-task-rollup-chart's stamp made time-series
   // a TWO-member eligible family, collapsing strict-majority nativity for trend-line's
@@ -703,6 +709,9 @@ function askCarriesSpatialIntent(
 const LATLON_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map-latlon';
 const GENERATED_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map';
 const CORRELATION_BUBBLE_TEMPLATE = 'correlation-bubble-chart';
+const BOX_PLOT_TEMPLATE = 'box-plot-chart';
+const GANTT_TASK_TEMPLATE = 'gantt-task-rollup-chart';
+const HISTOGRAM_TEMPLATE = 'distribution-histogram';
 
 /**
  * POINT-LOCATION CUES (Blake wall #2). Coordinate/point-location intent a user types when
@@ -1966,6 +1975,14 @@ function geoConceptFromSlot(slot: TemplateManifest['slots'][number]): GeoConcept
   );
 }
 
+function geoConceptsNamedInAsk(maskedAsk: string): GeoConcept[] {
+  return (Object.entries(GEO_CONCEPT_SYNONYMS) as [GeoConcept, readonly string[]][])
+    .filter(([, synonyms]) =>
+      synonyms.some((token) => fieldNameMatchInAsk(maskedAsk, token, new Set()) >= 0),
+    )
+    .map(([concept]) => concept);
+}
+
 /** Split a name/slot_id into lowercased whole tokens (non-alphanumeric boundaries). */
 function nameTokens(s: string): string[] {
   return s
@@ -2044,6 +2061,14 @@ function pickGeoField(
     if (semanticMatches.length > 1) return { kind: 'tie' };
   }
 
+  if (!concept) {
+    const semanticMatches = pool.filter(
+      (field) => geoConceptFromSemanticRole(field.semanticRole) !== null,
+    );
+    if (semanticMatches.length === 1) return { kind: 'ok', field: semanticMatches[0] };
+    if (semanticMatches.length > 1) return { kind: 'tie' };
+  }
+
   const fallbackPool = concept
     ? pool.filter((f) => {
         const fieldConcept = geoConceptFromSemanticRole(f.semanticRole);
@@ -2059,17 +2084,17 @@ function pickGeoField(
  * "Country Code"). This is deliberately geo-slot-only: ordinary field matching
  * remains exact-first and never gains generic substring behavior.
  *
- * Existing ask-named geo matches always win. Otherwise the masked ask must contain
- * one of the slot's whole-token concept aliases, and the full schema must produce
- * exactly one semantic-role/name-affine field. Zero or multiple candidates add
- * nothing, preserving the existing fail-closed behavior.
+ * For a neutral slot, multiple requested geo concepts reject the deterministic
+ * classification before any exact-match shortcut. Otherwise existing ask-named
+ * geo matches win, or the full schema must produce exactly one semantic-role/name-
+ * affine field. Zero candidates add nothing, preserving fail-closed behavior.
  */
 function augmentGeoConceptMatches(
   maskedAsk: string,
   manifest: TemplateManifest,
   matched: SchemaField[],
   schemaDims: SchemaField[],
-): SchemaField[] {
+): SchemaField[] | null {
   const augmented = [...matched];
   const geoSlots = manifest.slots.filter(
     (slot) => slot.bindable && slot.required && slot.kind === 'geo',
@@ -2077,13 +2102,32 @@ function augmentGeoConceptMatches(
 
   for (const slot of geoSlots) {
     const askNamedPool = augmented.filter((field) => field.role === 'dimension');
+    const slotConcept = geoConceptFromSlot(slot);
+    const requestedConcepts = new Set(geoConceptsNamedInAsk(maskedAsk));
+    if (!slotConcept) {
+      for (const field of askNamedPool) {
+        const exactConcept = geoConceptFromSemanticRole(field.semanticRole);
+        if (exactConcept) requestedConcepts.add(exactConcept);
+      }
+      if (requestedConcepts.size > 1) return null;
+    }
     if (pickGeoField(askNamedPool, slot).kind !== 'none') continue;
-    const conceptNamed = [...geoAffinityTokens(slot)].some(
-      (token) => fieldNameMatchInAsk(maskedAsk, token, new Set()) >= 0,
-    );
-    if (!conceptNamed) continue;
+    const requestedConcept =
+      slotConcept ?? (requestedConcepts.size === 1 ? [...requestedConcepts][0] : null);
+    if (!requestedConcept) continue;
+    if (
+      slotConcept &&
+      ![...geoAffinityTokens(slot)].some(
+        (token) => fieldNameMatchInAsk(maskedAsk, token, new Set()) >= 0,
+      )
+    ) {
+      continue;
+    }
 
-    const schemaPick = pickGeoField(schemaDims, slot);
+    const requestedSlot = slotConcept
+      ? slot
+      : { ...slot, slot_id: requestedConcept, semantic_role: undefined };
+    const schemaPick = pickGeoField(schemaDims, requestedSlot);
     if (schemaPick.kind === 'ok' && !augmented.includes(schemaPick.field)) {
       augmented.push(schemaPick.field);
     }
@@ -2609,16 +2653,19 @@ function selectWithinFamily(
   const families = new Set(top.map((t) => t.m.family));
   if (families.size > 1) {
     // CROSS-family tie: fail closed UNLESS one candidate's most-specific matched
-    // chart noun strictly outranks the rest. Rank slot-satisfiable chart-noun
-    // matchers by chart-noun specificity, break ties by template name; a strict
-    // #1 binds, a #1/#2 specificity tie (or no chart-noun matcher) stays null.
+    // chart noun strictly outranks the rest. Select that noun winner BEFORE testing
+    // slot satisfiability: an under-specified named chart must fail closed rather
+    // than fall through to a less-specific chart that happens to bind.
     const byNoun = top
       .map((t) => ({ m: t.m, spec: chartNounSpecificity(maskedAsk, t.m.intent_keywords) }))
-      .filter((c) => c.spec > 0 && roleGreedyBind(c.m, matched, aggOverride, schemaDims) !== null)
+      .filter((c) => c.spec > 0)
       .sort((a, b) => b.spec - a.spec || a.m.template.localeCompare(b.m.template));
     if (byNoun.length === 0) return null;
     if (byNoun.length > 1 && byNoun[0].spec === byNoun[1].spec) return null;
-    return byNoun[0].m;
+    const nounWinner = byNoun[0].m;
+    return roleGreedyBind(nounWinner, matched, aggOverride, schemaDims) !== null
+      ? nounWinner
+      : null;
   }
 
   // SAME-family spatial "map" tie without a generated-symbol-map candidate in
@@ -3186,7 +3233,13 @@ function resolveExplicitCorrelationBubble(
 
   const measures = matched.filter(isMeasure);
   const dimensions = matched.filter(isCategorical);
-  if (matched.length !== 4 || measures.length !== 3 || dimensions.length !== 1) return null;
+  if (
+    (matched.length !== 4 && matched.length !== 5) ||
+    measures.length !== 3 ||
+    (dimensions.length !== 1 && dimensions.length !== 2)
+  ) {
+    return null;
+  }
 
   const exactNames = fieldExactNames(summary.fields);
   const position = (field: SchemaField): number => {
@@ -3199,7 +3252,22 @@ function resolveExplicitCorrelationBubble(
   const positionedMeasures = measures
     .map((field) => ({ field, index: position(field) }))
     .sort((a, b) => a.index - b.index);
-  const dimension = { field: dimensions[0], index: position(dimensions[0]) };
+  const colorMatch = /\bcolou?r(?:ed)?\s+by\b/i.exec(ask);
+  const colorCandidates = colorMatch
+    ? matchFieldsInAsk(ask.slice(colorMatch.index + colorMatch[0].length), summary).filter(
+        isCategorical,
+      )
+    : [];
+  if (
+    (dimensions.length === 2 && colorCandidates.length !== 1) ||
+    (dimensions.length === 1 && colorMatch)
+  ) {
+    return null;
+  }
+  const colorField = colorCandidates[0];
+  const grainFields = dimensions.filter((field) => field !== colorField);
+  if (grainFields.length !== 1) return null;
+  const dimension = { field: grainFields[0], index: position(grainFields[0]) };
   if (positionedMeasures.some(({ index }) => index < 0) || dimension.index < 0) return null;
 
   const versusIndex = ['versus', 'vs']
@@ -3227,12 +3295,190 @@ function resolveExplicitCorrelationBubble(
   const sizeSlot = uniqueSlot('size', 'quantitative');
   const lod = uniqueSlot('lod', 'categorical');
   if (!cols || !rows || !sizeSlot || !lod) return null;
-
-  return [
+  const bindings = [
     { slot_id: cols.slot_id, field: x.field.name },
     { slot_id: rows.slot_id, field: y.field.name },
     { slot_id: sizeSlot.slot_id, field: size.field.name },
     { slot_id: lod.slot_id, field: dimension.field.name },
+  ];
+  if (colorField) {
+    const color = manifest.slots.find(
+      (slot) =>
+        slot.bindable &&
+        !slot.required &&
+        slot.kind === 'categorical' &&
+        slot.derivation === 'attr' &&
+        slot.role.includes('color'),
+    );
+    if (!color) return null;
+    bindings.push({ slot_id: color.slot_id, field: colorField.name });
+  }
+  return bindings;
+}
+
+export interface ExplicitBoxRolePhrases {
+  measure: string;
+  category: string;
+  grain: string;
+}
+
+export function parseExplicitBoxRolePhrases(ask: string): ExplicitBoxRolePhrases | null {
+  const match =
+    /\b(?:box(?:[\s-]?plot)|box-and-whisker)\s+of\s+(.+?)\s+by\s+(.+?)\s+with\s+(.+?)\s+(?:detail|grain)\b/i.exec(
+      ask,
+    );
+  if (!match) return null;
+  return {
+    measure: match[1].trim(),
+    category: match[2].trim(),
+    grain: match[3].trim(),
+  };
+}
+
+function resolveExplicitBoxPlot(
+  manifest: TemplateManifest,
+  ask: string,
+  matched: SchemaField[],
+  summary: SchemaSummary,
+  aggOverride: Derivation | null,
+): Array<{ slot_id: string; field: string; derivation?: Derivation }> | null {
+  if (manifest.template !== BOX_PLOT_TEMPLATE) return null;
+  const phrases = parseExplicitBoxRolePhrases(ask);
+  if (!phrases) return null;
+  const measures = matched.filter(isMeasure);
+  const dimensions = matched.filter(isCategorical);
+  if (measures.length !== 1 || dimensions.length !== 2 || matched.length !== 3) return null;
+  const detailFields = matchFieldsInAsk(phrases.grain, summary).filter(isCategorical);
+  if (detailFields.length !== 1) return null;
+  const grain = detailFields[0];
+  const categories = dimensions.filter((field) => field !== grain);
+  if (categories.length !== 1) return null;
+  const measureSlot = manifest.slots.find(
+    (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('rows'),
+  );
+  const categorySlot = manifest.slots.find(
+    (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('cols'),
+  );
+  const grainSlot = manifest.slots.find(
+    (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('lod'),
+  );
+  if (!measureSlot || !categorySlot || !grainSlot) return null;
+  return [
+    {
+      slot_id: measureSlot.slot_id,
+      field: measures[0].name,
+      ...(aggOverride ? { derivation: aggOverride } : {}),
+    },
+    { slot_id: categorySlot.slot_id, field: categories[0].name },
+    { slot_id: grainSlot.slot_id, field: grain.name },
+  ];
+}
+
+function resolveExplicitGantt(
+  manifest: TemplateManifest,
+  ask: string,
+  maskedAsk: string,
+  matched: SchemaField[],
+  summary: SchemaSummary,
+): Array<{ slot_id: string; field: string }> | null {
+  if (manifest.template !== GANTT_TASK_TEMPLATE || phraseIndexInAsk(maskedAsk, 'gantt') < 0) {
+    return null;
+  }
+  const tasks = matched.filter(isCategorical);
+  const dates = matched.filter((field) => field.datatype === 'date' || field.datatype === 'datetime');
+  if (tasks.length !== 1 || dates.length !== 2 || matched.length !== 3) return null;
+  const range = /\bfrom\s+(.+?)\s+to\s+(.+?)\s*$/i.exec(ask);
+  if (!range) return null;
+  const startFields = matchFieldsInAsk(range[1], summary).filter((field) =>
+    ['date', 'datetime'].includes(field.datatype),
+  );
+  const endFields = matchFieldsInAsk(range[2], summary).filter((field) =>
+    ['date', 'datetime'].includes(field.datatype),
+  );
+  if (startFields.length !== 1 || endFields.length !== 1 || startFields[0] === endFields[0]) {
+    return null;
+  }
+  const taskSlot = manifest.slots.find(
+    (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('rows'),
+  );
+  const startSlot = manifest.slots.find(
+    (slot) => slot.bindable && slot.kind === 'temporal' && slot.role.includes('cols'),
+  );
+  const endSlot = manifest.slots.find(
+    (slot) =>
+      slot.bindable &&
+      slot.kind === 'temporal' &&
+      slot.role.includes('size') &&
+      !slot.role.includes('cols') &&
+      slot.template_field !== startSlot?.template_field,
+  );
+  if (!taskSlot || !startSlot || !endSlot) return null;
+  const startSlots = manifest.slots.filter(
+    (slot) => slot.bindable && slot.template_field === startSlot.template_field,
+  );
+  return [
+    { slot_id: taskSlot.slot_id, field: tasks[0].name },
+    ...startSlots.map((slot) => ({ slot_id: slot.slot_id, field: startFields[0].name })),
+    { slot_id: endSlot.slot_id, field: endFields[0].name },
+  ];
+}
+
+function resolveSingleMeasureHistogram(
+  manifest: TemplateManifest,
+  maskedAsk: string,
+  matched: SchemaField[],
+): Array<{ slot_id: string; field: string }> | null {
+  if (manifest.template !== HISTOGRAM_TEMPLATE || phraseIndexInAsk(maskedAsk, 'histogram') < 0) {
+    return null;
+  }
+  if (matched.length !== 1 || !isMeasure(matched[0])) return null;
+  const slots = manifest.slots.filter(
+    (slot) => slot.bindable && slot.kind === 'quantitative' && slot.required,
+  );
+  if (slots.length !== 2 || new Set(slots.map((slot) => slot.template_field)).size !== 1) {
+    return null;
+  }
+  return slots.map((slot) => ({ slot_id: slot.slot_id, field: matched[0].name }));
+}
+
+function resolveOrderedWaterfall(
+  manifest: TemplateManifest,
+  maskedAsk: string,
+  matched: SchemaField[],
+  summary: SchemaSummary,
+): Array<{ slot_id: string; field: string }> | null {
+  if (
+    manifest.template !== WATERFALL_TEMPLATE_NAME ||
+    phraseIndexInAsk(maskedAsk, 'waterfall') < 0
+  ) {
+    return null;
+  }
+  const orderFields = summary.fields.filter((field) => WATERFALL_ORDER_FIELD_RE.test(field.name));
+  if (orderFields.length !== 1) return null;
+  const named = matched.filter((field) => field !== orderFields[0]);
+  const measures = named.filter(
+    (field) => isMeasure(field) && !WATERFALL_ANCHOR_FIELD_RE.test(field.name),
+  );
+  const categories = named.filter(
+    (field) => isCategorical(field) && !WATERFALL_ANCHOR_FIELD_RE.test(field.name),
+  );
+  if (named.length !== 2 || measures.length !== 1 || categories.length !== 1) return null;
+  const measureSlots = manifest.slots.filter(
+    (slot) => slot.bindable && slot.required && slot.kind === 'quantitative',
+  );
+  const categorySlots = manifest.slots.filter(
+    (slot) => slot.bindable && slot.required && slot.kind === 'categorical',
+  );
+  if (
+    measureSlots.length !== 2 ||
+    new Set(measureSlots.map((slot) => slot.template_field)).size !== 1 ||
+    categorySlots.length !== 1
+  ) {
+    return null;
+  }
+  return [
+    ...measureSlots.map((slot) => ({ slot_id: slot.slot_id, field: measures[0].name })),
+    { slot_id: categorySlots[0].slot_id, field: categories[0].name },
   ];
 }
 
@@ -3424,6 +3670,59 @@ export function classifyNoLlm(
   }
 
   const bubble = manifests.get(CORRELATION_BUBBLE_TEMPLATE);
+  const boxPlot = manifests.get(BOX_PLOT_TEMPLATE);
+  if (boxPlot?.fast_path_eligible) {
+    const bindings = resolveExplicitBoxPlot(
+      boxPlot,
+      ask,
+      matched,
+      summary,
+      aggOverride,
+    );
+    if (bindings) {
+      return attachAskModifiers(ask, { template: boxPlot.template, bindings }, filterCandidates);
+    }
+  }
+
+  const gantt = manifests.get(GANTT_TASK_TEMPLATE);
+  if (gantt?.fast_path_eligible) {
+    const bindings = resolveExplicitGantt(gantt, ask, maskedAsk, matched, summary);
+    if (bindings) {
+      return attachAskModifiers(ask, { template: gantt.template, bindings }, filterCandidates);
+    }
+  }
+
+  const histogram = manifests.get(HISTOGRAM_TEMPLATE);
+  if (histogram?.fast_path_eligible) {
+    const bindings = resolveSingleMeasureHistogram(histogram, maskedAsk, matched);
+    if (bindings) {
+      return attachAskModifiers(
+        ask,
+        { template: histogram.template, bindings },
+        filterCandidates,
+      );
+    }
+  }
+
+  const waterfall = manifests.get(WATERFALL_TEMPLATE_NAME);
+  if (waterfall?.fast_path_eligible) {
+    const bindings = resolveOrderedWaterfall(waterfall, maskedAsk, matched, summary);
+    if (bindings) {
+      const unresolvedAvoidMatches = matchAvoidWhen(
+        maskedAsk,
+        waterfall.avoid_when,
+        waterfall.intent_keywords,
+      ).filter((entry) => !entry.toLowerCase().includes('order-dependent'));
+      if (unresolvedAvoidMatches.length === 0 && !hasDeterministicPathBlockingHazard(waterfall)) {
+        return attachAskModifiers(
+          ask,
+          { template: waterfall.template, bindings },
+          filterCandidates,
+        );
+      }
+    }
+  }
+
   if (bubble?.fast_path_eligible) {
     const bindings = resolveExplicitCorrelationBubble(
       bubble,
@@ -3491,6 +3790,13 @@ export function classifyNoLlm(
   if (!chosen) return null;
   // WHY: generic greedy binding drops the optional size encoding and can reverse X/Y.
   if (chosen.template === CORRELATION_BUBBLE_TEMPLATE) return null;
+  if (
+    chosen.template === BOX_PLOT_TEMPLATE ||
+    chosen.template === GANTT_TASK_TEMPLATE ||
+    chosen.template === HISTOGRAM_TEMPLATE
+  ) {
+    return null;
+  }
 
   // DEMOTE (family guard, W-23447710): a spatial-intent ask must never bind a
   // non-spatial keyword-count winner. Bare "map" stays out of CHART_NOUN_KEYWORDS
@@ -3531,12 +3837,14 @@ export function classifyNoLlm(
   // the masked ask + full schema so a lone required date slot the ask did not name
   // can complete with the schema's single date field). selectWithinFamily's earlier
   // slot-fit probes deliberately omit this context (no completion during tie-break).
-  let matchedForBinding = augmentGeoConceptMatches(
+  const augmentedGeoMatches = augmentGeoConceptMatches(
     maskedAsk,
     chosen,
     matched,
     schemaDims,
   );
+  if (!augmentedGeoMatches) return null;
+  let matchedForBinding = augmentedGeoMatches;
   if (waterfallCanOrderDeterministically) {
     // The selected sequence field is sort metadata; other sequence-like names may still be
     // ask-named contribution measures. Goal-language P&L asks may name neither "amount" nor

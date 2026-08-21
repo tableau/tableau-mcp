@@ -58,6 +58,7 @@ import { getListAvailableFieldsTool } from './authoring/fields/listAvailableFiel
 import { getListFieldsTool } from './authoring/fields/listFields.js';
 import { getRemoveFieldTool } from './authoring/fields/removeField.js';
 import { getResolveFieldTool } from './authoring/fields/resolveField.js';
+import { getSearchWorkbookFieldsTool } from './authoring/fields/searchWorkbookFields.js';
 import { getApplyDashboardWithViewpointsTool } from './authoring/sheets/applyDashboardWithViewpoints.js';
 import { getBatchCreateAndCacheSheetsTool } from './authoring/sheets/batchCreateAndCacheSheets.js';
 import { getBuildAndApplyDashboardTool } from './authoring/sheets/buildAndApplyDashboard.js';
@@ -118,6 +119,7 @@ export const desktopToolFactories = [
   getAddFieldTool,
   getRemoveFieldTool,
   getResolveFieldTool,
+  getSearchWorkbookFieldsTool,
   getSearchExamplesTool,
   getSearchCommandsTool,
   getLookupWorkbookSchemaTool,
