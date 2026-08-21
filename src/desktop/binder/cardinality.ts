@@ -15,11 +15,6 @@ const ROLE_BANDS: Readonly<Record<string, CardinalityBand>> = {
     workable_max: 20,
     rationale: 'one legend entry per member; beyond ~12 the colors stop being distinguishable',
   },
-  'wedge-size': {
-    ideal_max: 8,
-    workable_max: PIE_SLICE_WORKABLE_MAX,
-    rationale: 'one wedge per member; a pie with many thin slices cannot be compared',
-  },
   rows: {
     ideal_max: 25,
     workable_max: 50,

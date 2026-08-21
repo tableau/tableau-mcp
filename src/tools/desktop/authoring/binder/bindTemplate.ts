@@ -4,18 +4,15 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
-  APPLY_INSTRUCTION,
   type BinderResult,
   type BindingProposal,
   bindTemplate,
   type Blocker,
-  buildLlmInput,
   DERIVATION_OVERRIDE_INSTRUCTION,
   type EncodingReport,
   type EscalateReason,
   type LlmProposeInput,
   makeTitle,
-  MAX_CLASSIFIABLE_FIELDS,
   resolveEncodingFieldInAsk,
   resolveInSummary,
   type SchemaField,
@@ -43,7 +40,6 @@ import {
 import {
   type AppliedSheetRecord,
   type BindRecoveryProposalContext,
-  type BindRecoveryRecord,
   classifyBindProposalProgress,
   MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS,
   sessionRouteState,
@@ -82,11 +78,14 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
-import { fetchWorksheetSummaryData, type SummaryDataRead } from '../../api/summaryDataCore.js';
+import {
+  fetchWorksheetSummaryData,
+  type SummaryDataRead,
+  type SummaryRowOrder,
+} from '../../api/summaryDataCore.js';
 import {
   doneNextAction,
   jsonToolResult,
-  type NextAction,
   prefillNextAction,
   receipt,
   type StructuredResult,
@@ -109,16 +108,17 @@ import { proposalSchema } from './proposalSchema.js';
 import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Desktop process ID; omit if pinned or only.'),
-  ask: z.string().describe('Verbatim ask.'),
+  session: z.string().optional().describe('Desktop PID; omit if pinned or sole.'),
+  ask: z.string().describe('Ask.'),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
-  auto_apply: z.boolean().optional().describe('Apply immediately.'),
+  auto_apply: z.boolean().optional().describe('Apply now.'),
   skip_validation: z.boolean().optional(),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
-  target_worksheet: z.string().optional().describe('Worksheet id or name; omit to create.'),
+  target_worksheet: z.string().optional().describe('Sheet id/name; omit to add.'),
+  datasource: z.string().optional().describe('Calc source id/name.'),
   calcs: z
     .array(
       z.object({
@@ -129,7 +129,7 @@ const paramsSchema = {
       }),
     )
     .optional()
-    .describe('Derived fields to author before binding.'),
+    .describe('Author fields.'),
 };
 
 /**
@@ -138,7 +138,13 @@ const paramsSchema = {
  * present: `applied` + either `sheet_name`/`phase_ms` (success) or `apply_error`
  * (graceful fallback — the bound `args` are still intact).
  */
-type BindTemplateToolResultBase = BinderResult & {
+type BoundBinderResult = Extract<BinderResult, { status: 'bound' }>;
+type PublicBinderResult =
+  | Omit<BoundBinderResult, 'apply_hint' | 'apply_instruction'>
+  | Extract<BinderResult, { status: 'propose' }>
+  | Extract<BinderResult, { status: 'escalate' }>;
+
+type BindTemplateToolResultBase = PublicBinderResult & {
   guidance: string;
   call_2_contract?: Call2Contract;
   authored_calcs?: string[];
@@ -159,8 +165,8 @@ type AppliedDefault = Pick<
  * preamble P4). It keeps just what a rendered success needs and drops the args echo, the
  * ~170-token apply_instruction, apply_hint, and used_llm — those exist to enable a manual
  * second call that never happens once the server-side apply succeeds. The FULL shape is
- * preserved on applied:false / propose / escalate / error (the graceful-fallback contract
- * is sacred — the fallback chain still needs the bound args).
+ * preserved on applied:false / propose / escalate / error, except for legacy apply instructions
+ * that name tools outside the served profile. Graceful fallback still keeps the safe bound args.
  */
 type AppliedFastPathResult = {
   status: 'bound';
@@ -172,6 +178,7 @@ type AppliedFastPathResult = {
   guidance: string;
   applied_default?: AppliedDefault;
   summary_rows?: { columns: unknown[]; rows: unknown[][] };
+  summary_rows_order?: SummaryRowOrder;
   summary_rows_error?: string;
   truncated?: true;
   /**
@@ -215,35 +222,22 @@ type BindTemplateToolResult =
 type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>;
 
 type Call2Contract = BindRecoveryProposalContext;
-type TerminalRepairAllowance = NonNullable<BindRecoveryRecord['terminalRepairAllowance']>;
 
-/** Escalation reasons that route back to the general (non-fast-path) authoring flow. */
-const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
-  'not-fast-path',
-  'missing-required-slot',
-  'calc-dependency-unmet',
-  'template-not-found',
-  'kind-mismatch',
-  'derivation-illegal',
-  'base-column-conflict',
-  'cross-datasource-binding',
-  // Schema exceeds the classifier's field cap (M10 Finding 3): not a fast-path bind —
-  // route to the general authoring flow.
-  'schema-too-large',
-]);
 const NOT_APPLIED_GUIDANCE =
-  'NOT APPLIED — the worksheet is unchanged. Resubmit this exact call with auto_apply:true to apply the bind.';
+  'NOT APPLIED — the worksheet is unchanged. Resubmit this exact bind-template call with auto_apply:true to apply the bind.';
 const WATERFALL_TEMPLATE = 'part-to-whole-waterfall';
 // A P&L/bridge running total is order-dependent and its intended
 // order is usually a non-displayed sequence field; the hint names it so the singer carries it
 // in the ORIGINAL bind (proposal.sort) instead of giving up on refine or falling to XML surgery.
 const WATERFALL_SORT_HINT =
-  'Waterfall default sort is DESC by the bound measure; override with proposal.sort:{by:<field>,direction:"asc"|"desc"} IN THE BIND — refine-worksheet cannot sort by a field that is not on the view.';
+  'Waterfall default sort is DESC by the bound measure (largest values first). After apply, verify and stop; override only with proposal.sort:{by:<field>,direction:"asc"|"desc"} IN THE BIND — refine-worksheet cannot sort by a field that is not on the view.';
 // Terminal stop-clause appended to the applied:true receipt when NO re-bind slot is unfilled
 // (Blake's spiral): the model reads guidance verbatim, so this directly contradicts the
 // bundled skill's "adapt fields/formatting" + the ambient "search-commands available" pulls.
 // Paired with structuredContent.nextAction{kind:'done'} for host orchestration.
 const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
+const POST_APPLY_UNCERTAINTY_GUIDANCE =
+  'Post-apply state is uncertain: inspect live worksheet state with get-worksheet-xml before any correction. Do NOT call bind-template again or replay apply.';
 // When the confident bind already applied a top-N limit and/or an interactive filter, the
 // singer must NOT hand-author another one. These clauses are appended only for splices the
 // function observed succeeding; requested-but-skipped filters are warnings, not successes.
@@ -336,10 +330,14 @@ function currencyHeterogeneityCaveat(
 
 type SummaryRowsEnrichment = Pick<
   AppliedFastPathResult,
-  'summary_rows' | 'summary_rows_error' | 'truncated'
+  'summary_rows' | 'summary_rows_order' | 'summary_rows_error' | 'truncated'
 >;
 
-function capSummaryRows(columns: unknown[], rows: unknown[][]): SummaryRowsEnrichment {
+function capSummaryRows(
+  columns: unknown[],
+  rows: unknown[][],
+  rowOrder: SummaryRowOrder,
+): SummaryRowsEnrichment {
   if (rows.length === 0) {
     return { summary_rows_error: EMPTY_SUMMARY_ROWS_ERROR };
   }
@@ -377,6 +375,7 @@ function capSummaryRows(columns: unknown[], rows: unknown[][]): SummaryRowsEnric
 
   return {
     summary_rows: { columns: cappedColumns, rows: cappedRows },
+    summary_rows_order: rowOrder,
     ...(cellTruncated || rows.length > cappedRows.length ? { truncated: true } : {}),
   };
 }
@@ -431,7 +430,7 @@ async function readAppliedSummaryRows({
         summary_rows_error: boundedSummaryRowsError(result.error.error.getErrorText()),
       };
     }
-    return capSummaryRows(result.value.columns, result.value.rows);
+    return capSummaryRows(result.value.columns, result.value.rows, result.value.rowOrder);
   } catch (error) {
     return { summary_rows_error: boundedSummaryRowsError(getExceptionMessage(error)) };
   } finally {
@@ -464,44 +463,34 @@ function bareResubmitFallbackResult(
 ): StructuredBindTemplateToolResult {
   return blockedResult(
     'fallback_required',
-    'Blocked: bind-template received two consecutive calls without the required proposal. Stop calling bind-template and use build-and-apply-worksheet. If a user decision is still required, use ask-user and present the retained call_2_contract choices; do not choose a measure.',
-    'Use build-and-apply-worksheet',
+    'Blocked: bind-template received two consecutive calls without the required proposal. Stop calling bind-template. Use the template artifact fallback: list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet. If a user decision is still required, use ask-user and present the retained call_2_contract choices; do not choose a measure.',
+    'Use template artifact fallback',
     proposalContext,
+  );
+}
+
+function correctionFallbackResult(): StructuredBindTemplateToolResult {
+  return blockedResult(
+    'fallback_required',
+    'Blocked: the single structured bind correction did not bind and apply. Stop calling bind-template. Use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet.',
+    'Use template artifact fallback',
   );
 }
 
 function recoveryGateBlock(
   record: ReturnType<typeof sessionRouteState.getBindRecovery>,
   currentProposalSignature: string | undefined,
-  currentProposal: BindingProposal | undefined,
   session: string,
   askKey: string,
   targetWorksheet: string | undefined,
 ): StructuredBindTemplateToolResult | undefined {
-  // Naming a target is an explicit rebuild instruction, not another bare recovery attempt.
-  // It must be able to escape even a terminal same-ask recovery record.
-  if (targetWorksheet !== undefined) {
-    return undefined;
-  }
-
   if (!record) {
     return undefined;
   }
 
   if (record.phase === 'terminal') {
-    const repair = record.terminalRepairAllowance;
-    if (
-      repair?.remaining === 1 &&
-      currentProposal?.template === repair.template &&
-      currentProposal.bindings.some((binding) => binding.slot_id === repair.slotId) &&
-      sessionRouteState.consumeTerminalRepairAllowance(
-        session,
-        askKey,
-        repair.template,
-        repair.slotId,
-      )
-    ) {
-      return undefined;
+    if (record.attempts.some((attempt) => attempt.proposalSignature !== undefined)) {
+      return correctionFallbackResult();
     }
     if (
       (record.consecutiveBareResubmitCount ?? 0) >= MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS
@@ -510,9 +499,18 @@ function recoveryGateBlock(
     }
     return blockedResult(
       'fallback_required',
-      'Blocked: bind-template already determined this ask is not recoverable in the fast path. Use build-and-apply-worksheet, or place fields stepwise with add-field then apply-worksheet; ask-user only if the fallback path needs a user decision.',
+      'Blocked: bind-template already determined this ask is not recoverable in the fast path. Use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet; ask-user only if the fallback path needs a user decision.',
       'Use fallback authoring path',
     );
+  }
+
+  // A target can request a legitimate rebuild, but it cannot erase a completed Call 2.
+  if (record.attempts.some((attempt) => attempt.proposalSignature !== undefined)) {
+    return correctionFallbackResult();
+  }
+
+  if (targetWorksheet !== undefined) {
+    return undefined;
   }
 
   if (currentProposalSignature === undefined) {
@@ -553,7 +551,7 @@ function recoveryGateBlock(
   ) {
     return blockedResult(
       'retry_budget_exhausted',
-      'Blocked: this proposal repeats an attempted signature or the bounded distinct correction limit is exhausted. Stop cycling bind-template; ask-user if more information is needed, or use build-and-apply-worksheet.',
+      'Blocked: this proposal repeats an attempted signature or the bounded distinct correction limit is exhausted. Stop cycling bind-template; ask-user if more information is needed, or use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet.',
       'Use fallback path or ask user',
     );
   }
@@ -564,7 +562,7 @@ function recoveryGateBlock(
   ) {
     return blockedResult(
       'unchanged_proposal',
-      'Blocked: this proposal is semantically unchanged from the failed bind attempt. Title/confidence only changes do not count; change a binding, derivation, sort, or top_n based on evidence, otherwise ask-user or use build-and-apply-worksheet.',
+      'Blocked: this proposal is semantically unchanged from the failed bind attempt. Title/confidence only changes do not count; change a binding, derivation, sort, or top_n based on evidence, otherwise ask-user or use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet.',
       'Change proposal or ask user',
     );
   }
@@ -572,25 +570,12 @@ function recoveryGateBlock(
   if (proposalProgress === 'repeat') {
     return blockedResult(
       'retry_budget_exhausted',
-      'Blocked: this proposal repeats an earlier attempted signature. Stop cycling bind-template; ask-user if more information is needed, or use build-and-apply-worksheet.',
+      'Blocked: this proposal repeats an earlier attempted signature. Stop cycling bind-template; ask-user if more information is needed, or use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet.',
       'Use fallback path or ask user',
     );
   }
 
   return undefined;
-}
-
-function nextActionForEscalation(reason: EscalateReason): NextAction {
-  if (reason === 'ambiguous-field' || reason === 'field-not-found') {
-    return prefillNextAction('Resolve the fields first; otherwise ask the user');
-  }
-  if (reason === 'low-confidence') {
-    return prefillNextAction('Pick a higher-confidence proposal');
-  }
-  if (TIER2_REASONS.has(reason)) {
-    return prefillNextAction('Build via build-and-apply-worksheet');
-  }
-  return prefillNextAction('Build manually with worksheet tools');
 }
 
 function renderBlockers(blockers: Blocker[]): string {
@@ -607,46 +592,12 @@ function renderBlockers(blockers: Blocker[]): string {
     .join('; ');
 }
 
-/**
- * A recoverable escalation now ships the candidate shortlist, so say where it is. Without it
- * the agent that was told to "re-propose" had nothing to propose FROM: the live transcript
- * shows it falling through to search-commands, which answered an encoding ask with mapbox
- * logging and device-layout removal, and then reading a whole knowledge document.
- */
-const ESCALATE_CANDIDATES_SENTENCE =
-  'The candidate templates and the fields that fit each of their slots are in call_2_contract.proposal_choices below — bind from those; do not go hunting with search-commands or the knowledge tools.';
-
-function renderEscalationGuidance(
-  reason: EscalateReason,
-  blockers: Blocker[],
-  /** True only when this result actually carries call_2_contract — never promise a payload we dropped. */
-  hasCandidates: boolean,
-): string {
-  let next: string;
-  const outcome = TIER2_REASONS.has(reason)
-    ? 'Fast-path template bind did not apply; direct authoring is available.'
-    : 'No worksheet was produced.';
-  const candidates = hasCandidates ? ` ${ESCALATE_CANDIDATES_SENTENCE}` : '';
-  if (reason === 'ambiguous-field' || reason === 'field-not-found') {
-    next =
-      'Resolve the field(s) with the resolve-field tool, then call bind-template again with a corrected proposal; otherwise ask the user with ask-user (present the candidates).' +
-      candidates;
-  } else if (reason === 'low-confidence') {
-    next =
-      'Confidence was below the floor. Re-examine the candidate template(s), pick the best fit, and re-propose with higher confidence.' +
-      candidates;
-  } else if (TIER2_REASONS.has(reason)) {
-    next =
-      'No fast-path template fits this ask/data - build it directly: build-and-apply-worksheet ' +
-      'does one validated build+apply, or place fields stepwise with add-field then ' +
-      'apply-worksheet, then refine-worksheet for top-N/sort. This is a normal path, not a ' +
-      'failure. If the inject-template/apply-workbook tools are available and a blocker names ' +
-      'a real template, that template can still be applied via: get workbook structure in ' +
-      'file mode -> inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
-  } else {
-    next = 'Author the worksheet with the general build tools instead.';
-  }
-  return `Escalated (${reason}). ${outcome} Blockers: ${renderBlockers(blockers)}. Next: ${next}`;
+function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): string {
+  return (
+    `Escalated (${reason}). No worksheet was produced. Blockers: ${renderBlockers(blockers)}. ` +
+    'Next: use the guarded artifact path: list-templates, list-available-fields, ' +
+    'build-worksheets-from-templates, then apply-worksheet. This is a normal path, not a failure.'
+  );
 }
 
 function isWaterfallResult(res: BinderResult): boolean {
@@ -914,12 +865,11 @@ function buildGuidance(
   res: BinderResult,
   schemaSummary?: SchemaSummary,
   proposal?: BindingProposal,
-  escalateHasCandidates = false,
 ): string {
   let guidance: string;
   switch (res.status) {
     case 'bound':
-      guidance = `${NOT_APPLIED_GUIDANCE} ${res.apply_instruction || APPLY_INSTRUCTION}`;
+      guidance = NOT_APPLIED_GUIDANCE;
       break;
     case 'propose':
       guidance =
@@ -929,12 +879,54 @@ function buildGuidance(
         'Do not call other authoring tools between calls.';
       break;
     case 'escalate':
-      guidance = renderEscalationGuidance(res.reason, res.blockers, escalateHasCandidates);
+      guidance = renderEscalationGuidance(res.reason, res.blockers);
       break;
   }
   return res.status === 'propose'
     ? guidance
     : appendWaterfallDiscoveryGuidance(guidance, res, schemaSummary, proposal);
+}
+
+function withoutLegacyApplyInstructions(result: BinderResult): PublicBinderResult {
+  if (result.status === 'bound') {
+    const { apply_instruction: _applyInstruction, apply_hint: _applyHint, ...safeResult } = result;
+    const legacyArgs = result.args as typeof result.args & {
+      apply_instruction?: unknown;
+      apply_hint?: unknown;
+    };
+    const {
+      apply_instruction: _nestedApplyInstruction,
+      apply_hint: _nestedApplyHint,
+      ...safeArgs
+    } = legacyArgs;
+    return { ...safeResult, args: safeArgs };
+  }
+  if (result.status === 'propose') {
+    const legacyResult = result as typeof result & {
+      apply_instruction?: unknown;
+      apply_hint?: unknown;
+      args?: unknown;
+    };
+    const {
+      apply_instruction: _applyInstruction,
+      apply_hint: _applyHint,
+      args: _args,
+      ...safeResult
+    } = legacyResult;
+    return safeResult;
+  }
+  const legacyResult = result as typeof result & {
+    apply_instruction?: unknown;
+    apply_hint?: unknown;
+    args?: unknown;
+  };
+  const {
+    apply_instruction: _applyInstruction,
+    apply_hint: _applyHint,
+    args: _args,
+    ...safeResult
+  } = legacyResult;
+  return safeResult;
 }
 
 /** Human-readable detail for a loadWorkbookXml failure, used in the apply-error text. */
@@ -1385,12 +1377,8 @@ function applyProposalSplices({
 }
 
 /**
- * Build the graceful-fallback result: the bound args are intact + why apply didn't run.
- * Default guidance points at the manual inject/apply chain using the returned args — that
- * is correct for inject/validation/apply failures (the workbook was not the problem). The
- * events-dirty branch passes a custom `guidance` that DROPS the "apply the returned args
- * manually" alternative, because there the args are stale pre-edit values and re-applying
- * them would revert the user's changes (adversary P1-5).
+ * Build the graceful-fallback result: the bound args remain diagnostic evidence, but recovery
+ * re-reads live state and raw fields rather than reusing the binder's escaped legacy mapping.
  */
 function applyFallback(
   base: BindTemplateToolResultBase,
@@ -1402,7 +1390,7 @@ function applyFallback(
     ...base,
     guidance:
       guidance ??
-      `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to build-and-apply-worksheet using the returned args; or, if the inject-template/apply-workbook tools are available, the template chain: get workbook structure in file mode → inject-template → apply-workbook.`,
+      `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). Before any correction, inspect live worksheet state with get-worksheet-xml; do not replay an uncertain apply. If correction is needed, use list-available-fields to reacquire RAW column_ref values, then list-templates, build-worksheets-from-templates, and apply-worksheet. Do not pass the returned XML-escaped field_mapping into templatePlan or call bind-template again.`,
     applied: false,
     apply_error,
   };
@@ -1637,7 +1625,8 @@ async function performAutoApply({
     promiseOutcome === 'failed';
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
-  const needsFollowUp = incomplete || (injected.warnings?.length ?? 0) > 0 || emptySummaryReadback;
+  const needsFollowUp =
+    incomplete || (injected.warnings?.length ?? 0) > 0 || emptySummaryReadback || !readbackRan;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
     ...(args.top_n !== undefined ? [TOP_N_APPLIED_GUIDANCE] : []),
@@ -1663,7 +1652,9 @@ async function performAutoApply({
           schemaSummary,
         )
       : needsFollowUp
-        ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
+        ? `${appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)}${
+            !readbackRan ? ` ${POST_APPLY_UNCERTAINTY_GUIDANCE}` : ''
+          }`
         : `${receiptText} ${terminalGuidance}`
   }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const applied: AppliedFastPathResult = {
@@ -1759,7 +1750,6 @@ function recordBindRecoveryAttemptFailOpen({
   currentProposalSignature,
   proposalContext,
   reservationId,
-  terminalRepairAllowance,
   terminal = false,
   terminalFallback = false,
 }: {
@@ -1769,7 +1759,6 @@ function recordBindRecoveryAttemptFailOpen({
   currentProposalSignature?: string;
   proposalContext?: BindRecoveryProposalContext;
   reservationId?: number;
-  terminalRepairAllowance?: TerminalRepairAllowance;
   terminal?: boolean;
   terminalFallback?: boolean;
 }): void {
@@ -1781,21 +1770,8 @@ function recordBindRecoveryAttemptFailOpen({
         : {}),
       ...(proposalContext !== undefined ? { proposalContext } : {}),
       ...(reservationId !== undefined ? { reservationId } : {}),
-      ...(terminalRepairAllowance !== undefined ? { terminalRepairAllowance } : {}),
     };
-    if (outcome === 'escalate' && currentProposalSignature === undefined && !terminalFallback) {
-      sessionRouteState.clearBindRecovery(session, askKey);
-      return;
-    }
     if (terminalFallback) {
-      sessionRouteState.recordBindRecoveryTerminal(session, askKey, attempt);
-      return;
-    }
-    if (
-      sessionRouteState.getBindRecovery(session, askKey)?.terminalRepairAllowance?.remaining === 0
-    ) {
-      // An admitted repair used its sole terminal escape. Keep the ask terminal regardless
-      // of outcome, so no later proposal can re-enter after the allowance is consumed.
       sessionRouteState.recordBindRecoveryTerminal(session, askKey, attempt);
       return;
     }
@@ -1806,26 +1782,6 @@ function recordBindRecoveryAttemptFailOpen({
   } catch {
     /* fail-open */
   }
-}
-
-function terminalRepairAllowanceFor(result: BinderResult): TerminalRepairAllowance | undefined {
-  if (
-    result.status !== 'escalate' ||
-    result.reason !== 'missing-required-slot' ||
-    result.proposal === undefined ||
-    result.blockers.length !== 1
-  ) {
-    return undefined;
-  }
-  const blocker = result.blockers[0];
-  if (blocker.code !== 'missing-required-slot' || blocker.slot_id === undefined) {
-    return undefined;
-  }
-  return {
-    template: result.proposal.template,
-    slotId: blocker.slot_id,
-    remaining: 1,
-  };
 }
 
 /**
@@ -1971,6 +1927,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
         minConfidence,
         auto_apply,
         target_worksheet,
+        datasource,
         calcs,
         skip_validation,
       },
@@ -1985,6 +1942,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           minConfidence,
           auto_apply,
           target_worksheet,
+          datasource,
           calcs,
           skip_validation,
         },
@@ -1997,13 +1955,18 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const askKey = normalizeAskForMatch(ask);
           const currentProposalSignature =
             proposal !== undefined ? proposalSignature(proposal as BindingProposal) : undefined;
+          const priorRecovery = sessionRouteState.getBindRecovery(resolvedSession, askKey);
+          const isStructuredCorrectionCall =
+            currentProposalSignature !== undefined &&
+            priorRecovery?.attempts.some(
+              (attempt) => attempt.outcome === 'propose' && attempt.proposalSignature === undefined,
+            ) === true;
           let bindRecoveryReservationId: number | undefined;
 
           try {
             const blocked = recoveryGateBlock(
-              sessionRouteState.getBindRecovery(resolvedSession, askKey),
+              priorRecovery,
               currentProposalSignature,
-              proposal as BindingProposal | undefined,
               resolvedSession,
               askKey,
               target_worksheet,
@@ -2046,6 +2009,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             const authored = await authorCalculationsInWorkbook({
               workbookXml,
               calcs: authoredCalcInputs,
+              datasource,
               executor,
               signal: extra.signal,
               resolveLooseReferences: true,
@@ -2188,45 +2152,33 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const schemaSummary = summarizeSchema(workbookXml);
           res = puppetCompatibility.expandBinderResult(res, schemaSummary);
 
-          // ── Candidate handover on a RECOVERABLE escalation ────────────────
-          // Only `propose` used to carry the candidate list, so an agent told to re-propose
-          // after an ambiguous-field / field-not-found / low-confidence escalation had nothing
-          // to propose FROM and went hunting: the live transcript shows it falling through to
-          // search-commands — which answered an encoding ask with mapbox logging and
-          // device-layout removal — and then reading an entire knowledge document.
-          //
-          // TIER-2 reasons are deliberately excluded. They are recorded as a terminal fallback,
-          // so the next bind-template call for this ask is blocked outright; handing out a
-          // Call-2 contract there would walk the agent into a refusal.
-          //
-          // The field cap is the binder's own fail-closed cost guard (buildLlmInput runs one
-          // regex PER schema field). Call-2 skips that guard, so a proposal escalating against a
-          // pathologically wide schema must not re-enter the per-field loop here.
-          //
-          // Fail-open: this is an enrichment, not the outcome. A fault while assembling the
-          // shortlist (a manifest missing its slots, say) must leave the escalation the honest
-          // business result it already is, never turn it into a tool error.
-          let escalateCandidates: LlmProposeInput | undefined;
-          if (
-            res.status === 'escalate' &&
-            !TIER2_REASONS.has(res.reason) &&
-            schemaSummary.fields.length <= MAX_CLASSIFIABLE_FIELDS
-          ) {
+          // ── One structured correction boundary ─────────────────────────
+          // Only `propose` earns a structured Call 2. Every escalation closes the fast path.
+          const call2Contract =
+            res.status === 'propose'
+              ? buildCall2Contract({
+                  llmInput: res.llm_input,
+                  session: resolvedSession,
+                  ask,
+                  targetWorksheet: resolvedTarget?.id ?? target_worksheet,
+                })
+              : undefined;
+          if (isStructuredCorrectionCall && res.status !== 'bound') {
             try {
-              escalateCandidates = buildLlmInput(ask, manifests, schemaSummary);
-            } catch {
-              escalateCandidates = undefined;
-            }
-          }
-          const call2ContractInput = res.status === 'propose' ? res.llm_input : escalateCandidates;
-          const call2Contract = call2ContractInput
-            ? buildCall2Contract({
-                llmInput: call2ContractInput,
+              sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
+              recordBindRecoveryAttemptFailOpen({
                 session: resolvedSession,
-                ask,
-                targetWorksheet: resolvedTarget?.id ?? target_worksheet,
-              })
-            : undefined;
+                askKey,
+                outcome: res.status,
+                currentProposalSignature,
+                reservationId: bindRecoveryReservationId,
+                terminalFallback: true,
+              });
+            } catch {
+              /* fail-open */
+            }
+            return new IncompleteOperationError(correctionFallbackResult()).toErr();
+          }
           try {
             sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
             if (res.status === 'propose') {
@@ -2244,43 +2196,34 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 askKey,
                 outcome: res.status,
                 currentProposalSignature,
-                // Retained so a bare resubmit gets the SAME choices repeated back rather than a
-                // bare "supply a proposal" it has no list to satisfy.
-                ...(call2Contract !== undefined ? { proposalContext: call2Contract } : {}),
                 reservationId: bindRecoveryReservationId,
-                terminalFallback: TIER2_REASONS.has(res.reason),
-                terminalRepairAllowance: terminalRepairAllowanceFor(res),
+                terminalFallback: true,
               });
             }
           } catch {
             /* fail-open */
           }
 
+          const publicResult = withoutLegacyApplyInstructions(res);
           const base: StructuredBindTemplateToolResult = annotateAuthoredCalcs(
             res.status === 'escalate'
               ? withNextAction(
                   {
-                    ...res,
-                    guidance: buildGuidance(
-                      res,
-                      schemaSummary,
-                      proposal,
-                      call2Contract !== undefined,
-                    ),
-                    ...(call2Contract !== undefined ? { call_2_contract: call2Contract } : {}),
+                    ...publicResult,
+                    guidance: buildGuidance(res, schemaSummary, proposal),
                   },
-                  nextActionForEscalation(res.reason),
+                  prefillNextAction('Use template artifact fallback'),
                 )
               : res.status === 'propose'
                 ? withNextAction(
                     {
-                      ...res,
+                      ...publicResult,
                       guidance: buildGuidance(res, schemaSummary, proposal),
                       call_2_contract: call2Contract,
                     },
                     prefillNextAction('Supply proposal from call_2_contract to bind-template'),
                   )
-                : { ...res, guidance: buildGuidance(res, schemaSummary, proposal) },
+                : { ...publicResult, guidance: buildGuidance(res, schemaSummary, proposal) },
             authoredCalcCaptions,
           );
 
@@ -2304,6 +2247,17 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           if (!canAutoApply || selectedTemplate === undefined) {
+            if (isStructuredCorrectionCall) {
+              recordBindRecoveryAttemptFailOpen({
+                session: resolvedSession,
+                askKey,
+                outcome: res.status,
+                currentProposalSignature,
+                reservationId: bindRecoveryReservationId,
+                terminalFallback: true,
+              });
+              return new IncompleteOperationError(correctionFallbackResult()).toErr();
+            }
             recordBindRecoveryAttemptFailOpen({
               session: resolvedSession,
               askKey,
@@ -2368,14 +2322,29 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               template: res.args.template_name,
             });
           }
-          recordBoundRecoveryAfterFinalResult({
-            session: resolvedSession,
-            askKey,
-            currentProposalSignature,
-            reservationId: bindRecoveryReservationId,
-            result: appliedResult,
-          });
+          const correctionDidNotFinish =
+            isStructuredCorrectionCall &&
+            appliedResult.structuredContent?.nextAction.kind !== 'done';
+          if (correctionDidNotFinish) {
+            recordBindRecoveryAttemptFailOpen({
+              session: resolvedSession,
+              askKey,
+              outcome: 'bound',
+              currentProposalSignature,
+              reservationId: bindRecoveryReservationId,
+              terminalFallback: true,
+            });
+          } else {
+            recordBoundRecoveryAfterFinalResult({
+              session: resolvedSession,
+              askKey,
+              currentProposalSignature,
+              reservationId: bindRecoveryReservationId,
+              result: appliedResult,
+            });
+          }
           if (
+            !isStructuredCorrectionCall &&
             autoApplyResult.failureDisposition === 'pre-dispatch' &&
             currentProposalSignature !== undefined
           ) {

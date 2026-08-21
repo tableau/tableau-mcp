@@ -4,6 +4,7 @@ import type { RuntimeTemplateDescriptor } from '../binder/manifest-types.js';
 import type { SchemaSummary } from '../binder/schema-summary.js';
 import { WATERFALL_ANCHOR_FIELD_RE, WATERFALL_TEMPLATE_NAME } from '../binder/waterfall.js';
 import type { RuntimeTemplateCatalogSnapshot } from './runtimeTemplateCatalog.js';
+import { templateLiveSupportBlocker } from './templateLiveSupport.js';
 
 export interface PuppetCompatibilityProjection {
   allDescriptors: Map<string, RuntimeTemplateDescriptor>;
@@ -37,7 +38,14 @@ const AUTOMATIC_NOUN_ALIASES = new Map<string, string[]>([
   ['spatial-choropleth-map', ['choropleth', 'filled-map', 'region-map']],
 ]);
 const AUTOMATIC_NOUNS = new Set([...AUTOMATIC_NOUN_ALIASES.values()].flat().concat('donut'));
-const AUTOMATICALLY_DISABLED_TEMPLATES = new Set(['gantt-task-rollup-chart']);
+
+export function preferredAutomaticTemplateForNoun(noun: string): string | undefined {
+  const normalized = noun.trim().toLowerCase().replace(/\s+/g, '-');
+  for (const [template, aliases] of AUTOMATIC_NOUN_ALIASES) {
+    if (aliases.includes(normalized)) return template;
+  }
+  return undefined;
+}
 
 function filenameIntentKeywords(template: string): string[] {
   const tokens = new Set(
@@ -153,7 +161,8 @@ export function createPuppetCompatibilityProjection(
   const descriptors = new Map(
     [...runtimeCatalog]
       .filter(
-        ([template]) => !template.includes('__') && !AUTOMATICALLY_DISABLED_TEMPLATES.has(template),
+        ([template]) =>
+          !template.includes('__') && templateLiveSupportBlocker(template) === undefined,
       )
       .map(([template, value]) => [template, automaticDescriptor(value.descriptor)]),
   );

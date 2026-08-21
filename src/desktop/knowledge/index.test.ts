@@ -9,7 +9,6 @@ import { getDirname } from '../../utils/getDirname.js';
 import {
   _resetKnowledgeSearchCache,
   clearKnowledgeCache,
-  getKnowledgeDir,
   listKnowledgeResources,
   readKnowledgeResource,
   searchKnowledgeWithFallback,
@@ -58,14 +57,6 @@ describe('knowledge/index', () => {
     vi.clearAllMocks();
     clearKnowledgeCache();
     _resetKnowledgeSearchCache();
-  });
-
-  describe('getKnowledgeDir', () => {
-    it('returns the first candidate that exists', () => {
-      vi.mocked(getDirname).mockReturnValue(MOCK_ROOT);
-      vi.mocked(existsSync).mockImplementation((p) => String(p) === KNOWLEDGE_DIR);
-      expect(getKnowledgeDir()).toBe(KNOWLEDGE_DIR);
-    });
   });
 
   describe('listKnowledgeResources', () => {

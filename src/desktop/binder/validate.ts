@@ -173,8 +173,8 @@ const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
 
 // Aggregations that are ALSO legal over a date/datetime field. MIN/MAX of a date are
 // real Tableau aggregations (earliest/latest date, a continuous green pill). The other
-// aggregations (sum/avg/count/median) stay numeric-only. Scoped to temporal datatypes
-// only; MIN/MAX on a plain string dimension remains illegal (unchanged).
+// aggregations (sum/avg/count/median) stay numeric-only. Scoped to temporal datatypes only;
+// MIN/MAX on a plain string dimension remains illegal (unchanged).
 const TEMPORAL_MINMAX_DERIVATIONS: ReadonlySet<string> = new Set(['min', 'max']);
 
 // Geo semantic-role concept check (red-team GEO-02). MIRRORS the private
@@ -644,25 +644,11 @@ export function validateBinding(
 
   // Chart-specific structural invariants belong in this shared validation seam so
   // Call 1, Call 2, and the eval-only injected proposal path cannot disagree.
-  const liveSupportBlocker = templateLiveSupportBlocker(m.template);
-  if (liveSupportBlocker !== undefined) {
-    blockers.push({
-      code: 'kind-mismatch',
-      detail: liveSupportBlocker,
-    });
-  }
-
   if (m.template === 'part-to-whole-pie-chart') {
     const sliceSlot = m.slots.find(
       (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('color'),
     );
     const slice = sliceSlot ? resolved.get(sliceSlot.slot_id)?.field : undefined;
-    if (ask && /\bdonuts?\b/i.test(ask)) {
-      blockers.push({
-        code: 'kind-mismatch',
-        detail: 'an explicit donut ask cannot use the plain pie template',
-      });
-    }
     if (slice?.approxCount !== undefined && slice.approxCount > PIE_SLICE_WORKABLE_MAX) {
       blockers.push({
         code: 'kind-mismatch',
@@ -670,6 +656,13 @@ export function validateBinding(
         detail:
           `pie slice field "${slice.name}" has ${slice.approxCount} distinct values, above the ` +
           `workable maximum of ${PIE_SLICE_WORKABLE_MAX}; choose a lower-cardinality dimension`,
+      });
+    }
+    if (ask && /\bdonut\b/i.test(ask)) {
+      blockers.push({
+        code: 'kind-mismatch',
+        detail:
+          'an explicit donut ask requires a distinct live-proven donor; plain pie is not equivalent',
       });
     }
   }
@@ -775,7 +768,8 @@ export function validateBinding(
         slot.bindable &&
         slot.kind === 'temporal' &&
         slot.role.includes('size') &&
-        !slot.role.includes('cols'),
+        !slot.role.includes('cols') &&
+        slot.template_field !== startSlot?.template_field,
     );
     const start = startSlot ? resolved.get(startSlot.slot_id)?.field : undefined;
     const end = endSlot ? resolved.get(endSlot.slot_id)?.field : undefined;
@@ -1019,6 +1013,14 @@ export function validateBinding(
     } else {
       for (const dep of calc.depends_on_slots) checkDep(dep, 'dependency');
     }
+  }
+
+  const liveSupportBlocker = templateLiveSupportBlocker(m.template);
+  if (liveSupportBlocker !== undefined) {
+    blockers.push({
+      code: 'kind-mismatch',
+      detail: liveSupportBlocker,
+    });
   }
 
   if (blockers.length > 0) return { ok: false, blockers };

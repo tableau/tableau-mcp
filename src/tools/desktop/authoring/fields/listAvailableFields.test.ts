@@ -82,7 +82,9 @@ describe('listAvailableFieldsTool', () => {
     const paramsSchema = await Provider.from(tool.paramsSchema);
 
     expect(tool.name).toBe('list-available-fields');
-    expect(tool.description).toContain('List datasource fields');
+    expect(tool.description).toContain('datasource fields available for authoring');
+    expect(tool.description).toContain('live or cached workbook');
+    expect(tool.description).toContain('Does not report worksheet placements');
     expect(paramsSchema).toMatchObject({
       session: expect.any(Object),
       workbookFile: expect.any(Object),

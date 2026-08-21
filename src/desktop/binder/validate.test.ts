@@ -739,7 +739,7 @@ describe('binder/validate — cardinality advice', () => {
   });
 });
 
-describe('binder/validate — gantt stays blocked pending a live-proven aggregate-span donor', () => {
+describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 gantt-task-rollup)', () => {
   const GANTT_SCHEMA: SchemaSummary = {
     datasource: 'Projects',
     fields: [
@@ -772,23 +772,21 @@ describe('binder/validate — gantt stays blocked pending a live-proven aggregat
     title: 'Task rollup',
     bindings: [
       { slot_id: 'field_base_1', field: 'Task' },
-      { slot_id: 'field_base_2', field: 'Start Date' },
+      { slot_id: 'field_base_2_min', field: 'Start Date' },
+      { slot_id: 'field_base_2_none', field: 'Start Date' },
       { slot_id: 'field_base_3', field: 'End Date' },
     ],
   });
 
-  it('blocks even an exact gantt proposal', () => {
+  it('blocks gantt-task-rollup until its task-level span has a live-proven donor', () => {
     const m = manifests.get('gantt-task-rollup-chart')!;
     const r = validateBinding(m, ganttProposal(m), GANTT_SCHEMA);
     expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.blockers).toContainEqual(
-        expect.objectContaining({
-          code: 'kind-mismatch',
-          detail: expect.stringContaining('aggregate-span'),
-        }),
-      );
-    }
+    if (r.ok) return;
+    expect(r.blockers).toContainEqual({
+      code: 'kind-mismatch',
+      detail: expect.stringContaining('not-live-proven'),
+    });
   });
 
   it('MIN on a date never fires a derivation-illegal blocker (regression guard)', () => {

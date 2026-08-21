@@ -116,6 +116,14 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
 // ── KNOWN SAFE-PROPOSES (NOT bound — fail-closed by design; WHY each) ──────────
 const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
   [
+    'gantt chart of Order ID from Order Date to Ship Date',
+    'the aggregate-span donor is not live-proven',
+  ],
+  [
+    'donut chart of Sales by Region',
+    'a donut requires a distinct live-proven donor and must not bind the plain-pie template',
+  ],
+  [
     'grouped bar chart of Sales by Category',
     'the specific grouped-bar winner cannot fill its series slot and must not fall back to a generic bar',
   ],
@@ -141,15 +149,10 @@ const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
   ],
   [
     'gantt of Sales by Sub-Category',
-    'gantt-task-rollup-chart is disabled from automatic selection until its aggregate-span donor is live-proven',
-  ],
-  [
-    'gantt chart of Order ID from Order Date to Ship Date',
-    'even a fully specified gantt stays off the automatic path until its aggregate-span donor is live-proven',
-  ],
-  [
-    'donut chart of Sales by Region',
-    'the plain pie template must not stand in for an explicit donut request',
+    // gantt-task-rollup-chart requires start_date(temporal) + duration(quantitative) +
+    // phase(categorical) + task(categorical); the ask names only Sales + Sub-Category, so the
+    // temporal/duration/second-categorical slots are unfilled → role-greedy bind fails closed.
+    'required temporal/duration/phase slots unfilled (gantt-task-rollup-chart)',
   ],
   [
     'sankey of customer order flows between regions',
@@ -359,6 +362,23 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
     if (res.status === 'bound') expect(res.args.field_mapping).toEqual(expectedMapping);
   });
 
+  it('binds a pie chart to the workbook datasource after it is renamed', async () => {
+    const datasource = 'Regional Orders';
+    const res = await bind(
+      'pie chart of Sales by Region',
+      FIXTURE.replaceAll(EXPECTED_DATASOURCE, datasource),
+    );
+
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.args.template_parameters.DATASOURCE).toBe(datasource);
+    expect(res.args.field_mapping).toEqual({
+      '{{field_base_1}}': `[${datasource}].[none:Region:nk]`,
+      '{{field_base_2}}': `[${datasource}].[sum:Sales:qk]`,
+    });
+    expect(JSON.stringify(res.args)).not.toContain(EXPECTED_DATASOURCE);
+  });
+
   it('requires and maps an explicit bullet target measure', async () => {
     const res = await bind('bullet chart of Sales vs Target by Region', BULLET_WORKBOOK);
     expect(res.status, JSON.stringify(res)).toBe('bound');
@@ -418,6 +438,14 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
       );
     },
   );
+
+  it('documents the neutral-geo boundary: extra geo vocabulary fails closed to proposal', async () => {
+    const res = await bind('symbol map of Sales by Country/Region for the admin dashboard');
+    expect(res.status, JSON.stringify(res)).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.decline_reason.code).toBe('no_llm_classifier_declined');
+    }
+  });
 
   it.each([
     ['Country', 'Country/Region'],

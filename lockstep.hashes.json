@@ -1,6 +1,6 @@
 {
   "src/desktop/binder/calc-derivation.ts": "da94b7228658f9c5d964abc5e2c5df8b27d06db20c552a77b5fb883b40e80755",
-    "src/desktop/binder/classify.ts": "c9277c5145d787617ee10f4d66bfef8b37a4695683c7d4eb42097749cce5a2af",
+  "src/desktop/binder/classify.ts": "14fbf3e85b3cba5c0c333936b24aa9df190fb1109f488b717f9d675573c7af72",
   "src/desktop/binder/escape.ts": "3c79bcf77c33fad64975e95ea57df5fb3e416008633e15dc7a585018fbc92d3f",
   "src/desktop/binder/manifest-types.ts": "2c7b56aa6d92fc141a9492864079da2eead70526540a66d2022cfff685835aac",
   "src/desktop/binder/stringTemporal.ts": "8b4808dcc410453fed10041d2cb8908f9728a0dd94353bf0c6bc31a295a67c9b",

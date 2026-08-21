@@ -26,11 +26,11 @@ const field = (over: Partial<SchemaField> = {}): SchemaField => ({
 });
 
 describe('cardinality advice', () => {
-  it('exports the pie slice workable boundary used by binding validation', () => {
+  it('keeps the pie slice threshold off the quantitative wedge-size field', () => {
     expect(PIE_SLICE_WORKABLE_MAX).toBe(12);
-    expect(idealCardinality(slot({ role: ['wedge-size'] }))?.workable_max).toBe(
-      PIE_SLICE_WORKABLE_MAX,
-    );
+    const wedgeSize = slot({ kind: 'quantitative-or-categorical', role: ['wedge-size'] });
+    expect(idealCardinality(wedgeSize)).toBeUndefined();
+    expect(cardinalityAdvice(wedgeSize, field({ approxCount: 13 }))).toBeUndefined();
   });
 
   it('uses the tightest declared role band and remains advisory', () => {

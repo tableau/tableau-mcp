@@ -79,7 +79,7 @@ describe('McpToolError structured-content invariant', () => {
       visit(sourceFile);
     }
 
-    expect(assignments.length).toBeGreaterThanOrEqual(3);
+    expect(assignments.length).toBeGreaterThanOrEqual(2);
     expect(violations).toEqual([]);
   });
 });

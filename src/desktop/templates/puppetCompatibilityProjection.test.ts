@@ -125,17 +125,6 @@ describe('createPuppetCompatibilityProjection', () => {
     ).toBe(true);
   });
 
-  it('keeps unsupported donut and gantt shapes off the automatic path', () => {
-    const projection = createPuppetCompatibilityProjection(realRuntimeCatalog);
-
-    expect(projection.descriptors.get('part-to-whole-pie-chart')?.intent_keywords).toContain('pie');
-    expect(projection.descriptors.get('part-to-whole-pie-chart')?.intent_keywords).not.toContain(
-      'donut',
-    );
-    expect(projection.descriptors.has('gantt-task-rollup-chart')).toBe(false);
-    expect(projection.allDescriptors.has('gantt-task-rollup-chart')).toBe(true);
-  });
-
   it('keeps the waterfall raw qualified slots and only adds a post-bind anchor mapping', async () => {
     const template = 'part-to-whole-waterfall';
     const projection = createPuppetCompatibilityProjection(realRuntimeCatalog);
@@ -611,7 +600,7 @@ describe('createPuppetCompatibilityProjection', () => {
     expect(injected.xml).not.toMatch(/attr="title"[^>]*value=""/);
   });
 
-  it('retains gantt for explicit lookup but blocks injection pending a live-proven aggregate-span donor', async () => {
+  it('rejects the unproven task-level gantt span before injection', async () => {
     const template = 'gantt-task-rollup-chart';
     const result = await bindTemplate({
       ask: 'gantt chart of Order ID from Order Date to Ship Date',
@@ -622,7 +611,8 @@ describe('createPuppetCompatibilityProjection', () => {
         title: template,
         bindings: [
           { slot_id: 'field_base_1', field: 'Order ID' },
-          { slot_id: 'field_base_2', field: 'Order Date' },
+          { slot_id: 'field_base_2_min', field: 'Order Date' },
+          { slot_id: 'field_base_2_none', field: 'Order Date' },
           { slot_id: 'field_base_3', field: 'Ship Date' },
         ],
         confidence: 0.9,
@@ -630,9 +620,10 @@ describe('createPuppetCompatibilityProjection', () => {
     });
     expect(result.status).toBe('escalate');
     if (result.status !== 'escalate') return;
-    expect(result.blockers).toContainEqual(
-      expect.objectContaining({ detail: expect.stringContaining('aggregate-span') }),
-    );
+    expect(result.blockers).toContainEqual({
+      code: 'kind-mismatch',
+      detail: expect.stringContaining('not-live-proven'),
+    });
   });
 
   it('overrides only the histogram bin size while one measure fills both raw slots', async () => {

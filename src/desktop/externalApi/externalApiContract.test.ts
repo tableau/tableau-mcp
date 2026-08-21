@@ -42,12 +42,14 @@ import {
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.6 — a build
- * adding the `app:openFile`, `workbook:save`, and `worksheets:new`/`dashboards:new`/
- * `storyboards:new` routes, the `operation-not-found`/`unsupported-file-type`/
- * `file-not-found` problem codes, and formalized `required` arrays across the read
- * schemas, on top of the 0.2.5 surface (`:pauseAutoUpdates`/`:resumeAutoUpdates`,
- * `isActiveSheet`/`isAutoUpdatesPaused`). No hand-edits.
+ * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.9 — grows `AppInfo`
+ * with `isStartPageVisible`/`isDataSourcePageActive`/`isPresentationMode` and `Operation`/
+ * `OperationList` with `progressWindows`, documents `UnprocessableContent` (422) on the
+ * document-replace routes, on top of the 0.2.8 surface (`workbook:publish`,
+ * `datasources/{id}:refreshData`/`:refreshExtract`, `workbook:exportAs`,
+ * `storyboards/{id}/image`, `DatasourceItem.type`/`isExtract`/`hasDownloadFilePermission`,
+ * required `index`/`type`/`StoryboardItem.storyPointCount`, `unsupported-target-version`).
+ * No hand-edits.
  */
 
 type SpecSchema = {
@@ -86,19 +88,30 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
     'locale',
     'repositoryLocation',
     'logLocation',
+    'isStartPageVisible',
+    'isDataSourcePageActive',
+    'isPresentationMode',
   ],
-  DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets'],
+  DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
   DashboardList: ['dashboards'],
-  DatasourceItem: ['id', 'luid', 'name', 'caption'],
+  DatasourceItem: [
+    'id',
+    'luid',
+    'name',
+    'caption',
+    'type',
+    'isExtract',
+    'hasDownloadFilePermission',
+  ],
   DatasourceList: ['datasources'],
   Health: ['status'],
   ProtectedResourceMetadata: ['authorization_servers', 'bearer_methods_supported'],
   Site: ['siteId', 'authenticatedUserId'],
   SiteWorkbookItem: ['id', 'luid', 'name', 'project'],
   SiteWorkbookList: ['workbooks'],
-  WorksheetItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'datasources'],
+  WorksheetItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'datasources', 'index', 'type'],
   WorksheetList: ['worksheets'],
-  StoryboardItem: ['isActiveSheet'],
+  StoryboardItem: ['isActiveSheet', 'index', 'storyPointCount', 'type'],
   StoryboardList: ['storyboards'],
   WorkbookInventory: ['location', 'worksheets', 'dashboards', 'storyboards'],
   SiteDatasourceItem: ['id', 'luid', 'name', 'caption', 'project'],
@@ -188,7 +201,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.6 requiredness exception set', () => {
+    it('pins the complete 0.2.9 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
@@ -199,19 +212,30 @@ describe('external client API contract (captured openapi fixture)', () => {
           'locale',
           'repositoryLocation',
           'logLocation',
+          'isStartPageVisible',
+          'isDataSourcePageActive',
+          'isPresentationMode',
         ],
-        DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets'],
+        DashboardItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'containedSheets', 'index', 'type'],
         DashboardList: ['dashboards'],
-        DatasourceItem: ['id', 'luid', 'name', 'caption'],
+        DatasourceItem: [
+          'id',
+          'luid',
+          'name',
+          'caption',
+          'type',
+          'isExtract',
+          'hasDownloadFilePermission',
+        ],
         DatasourceList: ['datasources'],
         Health: ['status'],
         ProtectedResourceMetadata: ['authorization_servers', 'bearer_methods_supported'],
         Site: ['siteId', 'authenticatedUserId'],
         SiteWorkbookItem: ['id', 'luid', 'name', 'project'],
         SiteWorkbookList: ['workbooks'],
-        WorksheetItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'datasources'],
+        WorksheetItem: ['isActiveSheet', 'isAutoUpdatesPaused', 'datasources', 'index', 'type'],
         WorksheetList: ['worksheets'],
-        StoryboardItem: ['isActiveSheet'],
+        StoryboardItem: ['isActiveSheet', 'index', 'storyPointCount', 'type'],
         StoryboardList: ['storyboards'],
         WorkbookInventory: ['location', 'worksheets', 'dashboards', 'storyboards'],
         SiteDatasourceItem: ['id', 'luid', 'name', 'caption', 'project'],
@@ -326,7 +350,12 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.storyboardDelete,
       EXTERNAL_API_ROUTES.storyboardRename,
       EXTERNAL_API_ROUTES.workbookGoToSheet,
+      EXTERNAL_API_ROUTES.workbookExportAs,
+      EXTERNAL_API_ROUTES.workbookPublish,
+      EXTERNAL_API_ROUTES.datasourceRefreshData,
+      EXTERNAL_API_ROUTES.datasourceRefreshExtract,
       EXTERNAL_API_ROUTES.dashboardImage,
+      EXTERNAL_API_ROUTES.storyboardImage,
       EXTERNAL_API_ROUTES.appOpenFile,
       EXTERNAL_API_ROUTES.workbookSave,
       EXTERNAL_API_ROUTES.workbookWorksheetsNew,

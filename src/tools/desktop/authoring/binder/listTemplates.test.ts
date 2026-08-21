@@ -343,6 +343,18 @@ describe('list-templates', () => {
     });
   });
 
+  it('ranks the smaller bindable Gantt carrier before a shorter legacy match', async () => {
+    delete process.env['TEMPLATES_DIR'];
+
+    const body = await getBody({ query: 'gantt', includeSlots: true, limit: 1 });
+
+    expect(body.templates[0]?.template).toBe('gantt-task-rollup-chart');
+    expect(body.templates[0]).toMatchObject({
+      pass1_eligible: false,
+      pass1_blockers: [expect.stringContaining('not-live-proven')],
+    });
+  });
+
   it('paginates over the channel-filtered candidates', async () => {
     delete process.env['TEMPLATES_DIR'];
 

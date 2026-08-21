@@ -102,7 +102,7 @@ describe('binder/carrier-uniqueness — CHART_NOUN_KEYWORDS ↔ eligible manifes
     expect(carriersOf('dot-strip')).toEqual(['distribution-bar-code-chart']);
   });
 
-  it('keeps ordinary pie single-carrier without treating donut as plain pie', () => {
+  it('keeps donut out of the plain-pie compatibility aliases', () => {
     expect(carriersOf('pie')).toEqual(['part-to-whole-pie-chart']);
     expect(carriersOf('donut')).toEqual([]);
   });
@@ -119,7 +119,7 @@ describe('binder/carrier-uniqueness — CHART_NOUN_KEYWORDS ↔ eligible manifes
     expect(mapCarriers.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('keeps intentionally unsupported chart nouns off the automatic path', () => {
+  it('keeps arrow aliases off the automatic path while the TBM is structurally ineligible', () => {
     const zeroCarrier = [...new Set(nouns)].filter((n) => carriersOf(n).length === 0).sort();
     expect(zeroCarrier).toEqual(['arrow-chart', 'donut', 'gantt', 'over-under-arrow']);
   });

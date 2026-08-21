@@ -26,11 +26,11 @@
       <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
       <column datatype='date' name='[Ship Date]' role='dimension' type='ordinal' />
       <column caption='Duration (days)' datatype='integer' name='[Calculation_3464112593783345164]' role='measure' type='quantitative'>
-        <calculation class='tableau' formula='DATEDIFF(&apos;day&apos;, [Order Date],[Ship Date])' />
+        <calculation class='tableau' formula='{ FIXED [Order ID] : DATEDIFF(&apos;day&apos;, MIN([Order Date]), MAX([Ship Date])) }' />
       </column>
       <column-instance column='[Order ID]' derivation='None' name='[none:Order ID:nk]' pivot='key' type='nominal' />
-      <column-instance column='[Order Date]' derivation='None' name='[none:Order Date:qk]' pivot='key' type='quantitative' />
-      <column-instance column='[Calculation_3464112593783345164]' derivation='Sum' name='[sum:Calculation_3464112593783345164:qk]' pivot='key' type='quantitative' />
+      <column-instance column='[Order Date]' derivation='Min' name='[min:Order Date:qk]' pivot='key' type='quantitative' />
+      <column-instance column='[Calculation_3464112593783345164]' derivation='Min' name='[min:Calculation_3464112593783345164:qk]' pivot='key' type='quantitative' />
     </datasource-dependencies>
     <aggregation value='true' />
   </view>
@@ -40,11 +40,11 @@
       <view><breakdown value='auto' /></view>
       <mark class='GanttBar' />
       <encodings>
-        <size column='[Sample - Superstore].[sum:Calculation_3464112593783345164:qk]' />
+        <size column='[Sample - Superstore].[min:Calculation_3464112593783345164:qk]' />
       </encodings>
     </pane>
   </panes>
   <rows>[Sample - Superstore].[none:Order ID:nk]</rows>
-  <cols>[Sample - Superstore].[none:Order Date:qk]</cols>
+  <cols>[Sample - Superstore].[min:Order Date:qk]</cols>
 </table>
 </bookmark>

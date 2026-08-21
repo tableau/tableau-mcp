@@ -29,6 +29,12 @@ const DASHBOARD_ID = 'dash-exec';
 const LOGICAL_TABLE_ID = 'lt-orders';
 
 describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tools', () => {
+  it('defines descending numeric sort in plain language', async () => {
+    const tool = getSortWorksheetTool(new DesktopMcpServer());
+    const paramsSchema = await Provider.from(tool.paramsSchema);
+    expect(paramsSchema.direction.description).toContain('Numeric desc: largest first');
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));

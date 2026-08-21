@@ -165,11 +165,12 @@ function setupMocks(opts: MockOpts = {}): { applied: () => string | null } {
 describe('refineWorksheetTool — instance', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('creates a tool instance with the expected properties', () => {
+  it('creates a tool instance with the expected properties', async () => {
     const tool = getRefineWorksheetTool(new DesktopMcpServer());
+    const paramsSchema = await Provider.from(tool.paramsSchema);
     expect(tool.name).toBe('refine-worksheet');
     expect(tool.description).toContain('by-field');
-    expect(tool.paramsSchema).toMatchObject({
+    expect(paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
       operation: expect.any(Object),
@@ -179,6 +180,8 @@ describe('refineWorksheetTool — instance', () => {
       sortByField: expect.any(Object),
       direction: expect.any(Object),
     });
+    expect(paramsSchema.sortDirection.description).toContain('numeric DESC=largest first');
+    expect(paramsSchema.direction.description).toContain('numeric desc=largest first');
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,
