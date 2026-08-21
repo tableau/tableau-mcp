@@ -5,7 +5,9 @@ import {
   type ReadbackFinding,
   readbackFindingsToVerification,
   type VerificationFinding,
+  type VerificationReport,
   verifyWorksheetReadback,
+  withVerificationFinding,
 } from './readback-verify.js';
 
 const GEO_FIELD = '[DS].[none:State:nk]';
@@ -267,5 +269,59 @@ describe('formatVerificationWarnings', () => {
     expect(text.indexOf('Readback verification warning')).toBeLessThan(
       text.indexOf('Visual check'),
     );
+  });
+});
+
+describe('withVerificationFinding', () => {
+  const passed: VerificationReport = { ok: true, status: 'passed', findings: [] };
+  const skipped: VerificationReport = {
+    ok: true,
+    status: 'skipped',
+    message: 'could not re-read the latest workbook after apply',
+    findings: [],
+  };
+  const failed: VerificationReport = {
+    ok: false,
+    status: 'failed',
+    findings: [{ severity: 'error', source: 'readback', message: '<lod>' }],
+  };
+  const visualWarning: VerificationFinding = {
+    severity: 'warning',
+    source: 'visual',
+    message: 'the densest region of the applied window is 47% saturated red',
+  };
+
+  it('returns the report unchanged for a null finding (the common no-op)', () => {
+    expect(withVerificationFinding(passed, null)).toBe(passed);
+  });
+
+  it('escalates a passed report to warning and surfaces the finding message', () => {
+    const merged = withVerificationFinding(passed, visualWarning);
+    expect(merged.status).toBe('warning');
+    expect(merged.ok).toBe(true);
+    expect(merged.message).toBe(`⚠️ Visual check — ${visualWarning.message}.`);
+    expect(merged.findings).toEqual([visualWarning]);
+  });
+
+  it('escalates a skipped report to warning and appends after the skip reason', () => {
+    const merged = withVerificationFinding(skipped, visualWarning);
+    expect(merged.status).toBe('warning');
+    expect(merged.message).toBe(
+      `could not re-read the latest workbook after apply\n\n⚠️ Visual check — ${visualWarning.message}.`,
+    );
+    expect(merged.findings).toHaveLength(1);
+  });
+
+  it('never downgrades a failed report; keeps failed and appends the finding', () => {
+    const merged = withVerificationFinding(failed, visualWarning);
+    expect(merged.status).toBe('failed');
+    expect(merged.ok).toBe(false);
+    expect(merged.findings).toHaveLength(2);
+  });
+
+  it('escalates to failed when the folded finding is itself an error', () => {
+    const merged = withVerificationFinding(passed, { ...visualWarning, severity: 'error' });
+    expect(merged.status).toBe('failed');
+    expect(merged.ok).toBe(false);
   });
 });

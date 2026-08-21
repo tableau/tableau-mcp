@@ -421,6 +421,16 @@ export function readbackFindingsToVerification(findings: ReadbackFinding[]): Ver
   );
 }
 
+/** The readback warnings sentence — one lead-in for however many readback messages. */
+function formatReadbackWarningLine(messages: string[]): string {
+  return `⚠️ Readback verification warning — Tableau changed or dropped: ${messages.join(', ')}. Re-check the rendered chart before moving on.`;
+}
+
+/** The visual-check lead-in for a single visual finding. */
+function formatVisualFinding(finding: VerificationFinding): string {
+  return `⚠️ Visual check — ${finding.message}.`;
+}
+
 /**
  * Render the WARNING findings of a verification report as agent-facing text, source by source.
  * This is the single warnings channel an apply appends to: readback warnings keep their exact
@@ -435,14 +445,50 @@ export function formatVerificationWarnings(findings: VerificationFinding[]): str
   const parts: string[] = [];
   const readback = warnings.filter((finding) => finding.source === 'readback');
   if (readback.length > 0) {
-    parts.push(
-      `\n\n⚠️ Readback verification warning — Tableau changed or dropped: ${readback
-        .map((finding) => finding.message)
-        .join(', ')}. Re-check the rendered chart before moving on.`,
-    );
+    parts.push(`\n\n${formatReadbackWarningLine(readback.map((finding) => finding.message))}`);
   }
   for (const finding of warnings.filter((finding) => finding.source !== 'readback')) {
-    parts.push(`\n\n⚠️ Visual check — ${finding.message}.`);
+    parts.push(`\n\n${formatVisualFinding(finding)}`);
   }
   return parts.join('');
+}
+
+const STATUS_SEVERITY_RANK: Record<VerificationStatus, number> = {
+  skipped: 0,
+  passed: 1,
+  warning: 2,
+  failed: 3,
+};
+
+/** The worse (higher-severity) of two statuses — a fold never downgrades a report. */
+function worstStatus(a: VerificationStatus, b: VerificationStatus): VerificationStatus {
+  return STATUS_SEVERITY_RANK[a] >= STATUS_SEVERITY_RANK[b] ? a : b;
+}
+
+/**
+ * Fold one more finding (e.g. the visual check's) into an existing VerificationReport: append it
+ * to `findings`, escalate `status`/`ok` to reflect it (a warning lifts a passed/skipped report to
+ * 'warning', an error to 'failed'; nothing downgrades a worse status), and surface its message so
+ * a consumer that only reads `status`/`message` (not the findings list) still tells the model what
+ * to look at. A null finding — the common no-op case — returns the report unchanged. This is how
+ * the structured-report apply modes (artifact, template plan) append a visual finding to the same
+ * channel the text-mode apply reaches via formatVerificationWarnings.
+ */
+export function withVerificationFinding(
+  report: VerificationReport,
+  finding: VerificationFinding | null,
+): VerificationReport {
+  if (!finding) return report;
+
+  const status = worstStatus(report.status, finding.severity === 'error' ? 'failed' : 'warning');
+  const line =
+    finding.source === 'readback'
+      ? formatReadbackWarningLine([finding.message])
+      : formatVisualFinding(finding);
+  return {
+    ok: status !== 'failed',
+    status,
+    message: report.message ? `${report.message}\n\n${line}` : line,
+    findings: [...(report.findings ?? []), finding],
+  };
 }

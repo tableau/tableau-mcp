@@ -25,23 +25,29 @@ export async function runVisualErrorCheck({
   executor,
   signal,
 }: WithExecutorAndAbortSignal): Promise<VerificationFinding | null> {
-  const captured = await captureMainWindowImage({ executor, signal });
-  if (captured.isErr()) {
+  try {
+    const captured = await captureMainWindowImage({ executor, signal });
+    if (captured.isErr()) {
+      return null;
+    }
+
+    const scan = scanPngForErrorRed(captured.value.bytes);
+    if (!scan || !isSuspiciousErrorRed(scan)) {
+      return null;
+    }
+
+    const pct = Math.round(scan.maxCellRedFraction * 100);
+    return {
+      severity: 'warning',
+      source: 'visual',
+      message:
+        `the densest region of the applied window is ${pct}% saturated red, which usually ` +
+        `means a red error pill or broken element — capture the window with ${CAPTURE_TOOL} ` +
+        'and inspect the shelves before reporting Done',
+    };
+  } catch {
+    // Best-effort by contract: an unexpected capture/scan failure yields no finding rather than
+    // failing the apply this rides on. The caller treats null as "nothing to report".
     return null;
   }
-
-  const scan = scanPngForErrorRed(captured.value.bytes);
-  if (!scan || !isSuspiciousErrorRed(scan)) {
-    return null;
-  }
-
-  const pct = Math.round(scan.maxCellRedFraction * 100);
-  return {
-    severity: 'warning',
-    source: 'visual',
-    message:
-      `the densest region of the applied window is ${pct}% saturated red, which usually ` +
-      `means a red error pill or broken element — capture the window with ${CAPTURE_TOOL} ` +
-      'and inspect the shelves before reporting Done',
-  };
 }

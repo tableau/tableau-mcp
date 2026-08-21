@@ -22,6 +22,8 @@ import {
   formatVerificationWarnings,
   readbackFindingsToVerification,
   type VerificationFinding,
+  type VerificationReport,
+  withVerificationFinding,
 } from '../../../desktop/validation/readback-verify.js';
 import { loadWorksheetXml } from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
@@ -88,11 +90,7 @@ type ApplyWorksheetResult =
       title: string;
       applied: true;
       retrySafe: false;
-      verification: {
-        ok: boolean;
-        status: 'passed' | 'warning' | 'failed' | 'skipped';
-        message?: string;
-      };
+      verification: VerificationReport;
     };
 
 export const getApplyWorksheetTool = (
@@ -173,12 +171,21 @@ export const getApplyWorksheetTool = (
                 worksheetName: outcome.receipt.title,
               });
 
-              // The artifact apply already carries the verification outcome
-              // (applyWorksheetArtifact resolves the skipped fallback), so the
-              // structured receipt references that same object rather than
-              // deriving a second account of the readback.
-              const verification = outcome.receipt.verification;
-              const verificationRan = verification.status !== 'skipped';
+              // The artifact apply already carries the readback verification outcome
+              // (applyWorksheetArtifact resolves the skipped fallback). When AUTO_VISUAL_CHECK
+              // is on, fold a visual finding into that SAME report so the structured receipt
+              // has one account of the apply — readback plus (optionally) the rendered-window
+              // check — rather than a second sibling field. verificationRan keys off the
+              // readback status alone so the receipt's "read back" claim stays honest even when
+              // only the visual check found something.
+              const readbackReport = outcome.receipt.verification;
+              const verification = extra.config.autoVisualCheck
+                ? withVerificationFinding(
+                    readbackReport,
+                    await runVisualErrorCheck({ executor, signal: extra.signal }),
+                  )
+                : readbackReport;
+              const verificationRan = readbackReport.status !== 'skipped';
               return Ok(
                 withNextAction(
                   {
@@ -261,8 +268,16 @@ export const getApplyWorksheetTool = (
               worksheetName: outcome.receipt.title,
             });
 
-            const verification = outcome.receipt.verification;
-            const verificationRan = verification.status !== 'skipped';
+            // Same fold as the artifact mode: readback report plus an optional visual finding
+            // in one report; verificationRan reflects the readback status alone.
+            const readbackReport = outcome.receipt.verification;
+            const verification = extra.config.autoVisualCheck
+              ? withVerificationFinding(
+                  readbackReport,
+                  await runVisualErrorCheck({ executor, signal: extra.signal }),
+                )
+              : readbackReport;
+            const verificationRan = readbackReport.status !== 'skipped';
             return Ok(
               withNextAction(
                 {
