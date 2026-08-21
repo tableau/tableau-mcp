@@ -61,7 +61,6 @@ const allowedNonToolTokens = new Set<string>([
   'excel-direct',
   'export-image-layout-options',
   'extension-version',
-  'fast-path',
   'field-captions',
   'field-level',
   'file-name',
