@@ -73,12 +73,8 @@ const paramsSchema = {
   title: z.string().trim().min(1).max(255).optional(),
   layoutType: z.enum(['auto-grid', 'rows', 'columns', 'executive-summary']).optional(),
   gridColumns: z.number().int().min(1).max(6).optional(),
-  kpiWorksheetNames: z
-    .array(z.string().trim().min(1).max(255))
-    .min(1)
-    .max(5)
-    .optional()
-    .describe('KPI names.'),
+  kpiWorksheetNames: z.array(z.string().trim().min(1).max(255)).min(1).max(5).optional(),
+  replaceExisting: z.boolean().optional(),
 };
 
 type AppliedState = true | false | 'unknown';
@@ -168,7 +164,7 @@ export const getRunDashboardBatchTool = (
     server,
     name: 'run-dashboard-batch',
     title,
-    description: 'Apply; compose.',
+    description: 'Create.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -186,6 +182,7 @@ export const getRunDashboardBatchTool = (
         layoutType,
         gridColumns,
         kpiWorksheetNames,
+        replaceExisting = false,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -203,6 +200,7 @@ export const getRunDashboardBatchTool = (
           layoutType,
           gridColumns,
           kpiWorksheetNames,
+          replaceExisting,
         },
         callback: async (): Promise<Result<RunDashboardBatchResult, McpToolError>> => {
           const orderedArtifactIds = artifactIds ?? [];
@@ -285,6 +283,18 @@ export const getRunDashboardBatchTool = (
             }
             const workbookXml = workbookResult.value.xml;
             const liveInstanceId = workbookResult.value.instanceId;
+            const existingDashboardName = listWorkbookDashboards(workbookXml).find((name) =>
+              xmlNamesEqual(name, dashboardName),
+            );
+            if (existingDashboardName && !replaceExisting) {
+              return preflightInputFailure(
+                steps,
+                orderedArtifactIds,
+                dashboardName,
+                `Dashboard "${dashboardName}" already exists and will not be rebuilt. replaceExisting is only for an explicit user request to rebuild or replace this dashboard.`,
+                'existingDashboard',
+              );
+            }
             const conflictingWorksheetName = [
               ...findAllWorksheets(parseXML(workbookXml)).map((worksheet) => worksheet['@_name']),
               ...reservations.map((reservation) => reservation.artifact.title),
@@ -417,9 +427,6 @@ export const getRunDashboardBatchTool = (
               }
             }
 
-            const existingDashboardName = listWorkbookDashboards(candidateXml).find((name) =>
-              xmlNamesEqual(name, dashboardName),
-            );
             const replaced = existingDashboardName !== undefined;
             try {
               if (existingDashboardName) {

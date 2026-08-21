@@ -99,7 +99,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard',
     trigger: 'a dashboard ask',
     action:
-      'build focused worksheet artifacts first, then pass artifactIds to run-dashboard-batch to place them and compose once. Put only existing worksheets in existingWorksheetNames; omit artifactIds for compose-only. Never replay a partial or unknown batch; inspect live workbook state first.',
+      'run-dashboard-batch is for new dashboards: build focused worksheet artifacts first; place them and compose once with artifactIds. Use existing worksheets in existingWorksheetNames; omit artifactIds for compose-only. Never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. Never replay a partial or unknown batch; inspect live workbook state first.',
     toolSequence: ['run-dashboard-batch'],
     stopConditions: [
       'place them and compose once',
