@@ -66,45 +66,6 @@ describe('rewriteFieldReferences — raw-vs-escaped boundary (named contract)', 
   });
 });
 
-describe('rewriteFieldReferences — donor number formats', () => {
-  const xml =
-    '<workbook><worksheets><worksheet><table><view>' +
-    "<column datatype='real' name='[Profit]' role='measure' type='quantitative'/>" +
-    "<column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]'/>" +
-    '</view><style><style-rule element="label">' +
-    '<format attr="text-format" field="[Donor].[sum:Profit:qk]" value="c&amp;quot;£&amp;quot;#,##0,K;-&amp;quot;£&amp;quot;#,##0,K"/>' +
-    '<format attr="text-format" field="[Donor].[sum:Unmapped:qk]" value="n#,##0.00"/>' +
-    '</style-rule></style><rows>[Donor].[sum:Profit:qk]</rows>' +
-    '</table></worksheet></worksheets></workbook>';
-
-  it('removes a donor currency override from a rewritten target field', () => {
-    const out = rewriteFieldReferences(
-      xml,
-      { Profit: '[Superstore].[sum:Sales:qk]' },
-      'Superstore',
-    );
-
-    expect(out).toContain('[Superstore].[sum:Sales:qk]');
-    expect(out).not.toContain('£');
-  });
-
-  it('preserves an unrelated neutral numeric format', () => {
-    const out = rewriteFieldReferences(
-      xml,
-      { Profit: '[Superstore].[sum:Sales:qk]' },
-      'Superstore',
-    );
-
-    expect(out).toContain('value="n#,##0.00"');
-  });
-
-  it('does not alter donor formatting when no field is bound', () => {
-    const out = rewriteFieldReferences(xml, {}, 'Superstore');
-
-    expect(out).toContain('£');
-  });
-});
-
 describe('rewriteFieldReferences — fallback and error behavior', () => {
   const concreteXml =
     '<workbook><worksheets><worksheet><table><view>' +

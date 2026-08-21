@@ -8,7 +8,10 @@ import { blockingValidationIssues, runValidation } from '../validation/registry.
 import { bookmarkToTemplateWorkbook, deriveTemplatePass1Eligibility } from './bookmarkTemplate.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 import { inferBindingDescriptor, inferFromBookmark } from './inferSlots.js';
-import { buildInjectedWorkbookXml } from './injectTemplateCore.js';
+import {
+  buildInjectedWorkbookXml,
+  stripDonorCurrencyOrLocaleFormats,
+} from './injectTemplateCore.js';
 
 interface RoleAnchoredRef {
   derivation: string;
@@ -390,7 +393,7 @@ describe('TBM engine corpus invariants', { timeout: 30_000 }, () => {
         const { mapping, targetByToken } = mappingFor(template, mode);
         try {
           const rewritten = rewriteFieldReferences(
-            template.xml,
+            stripDonorCurrencyOrLocaleFormats(template.xml, mapping),
             mapping,
             'Unrelated DS',
             undefined,
@@ -449,9 +452,13 @@ describe('TBM engine corpus invariants', { timeout: 30_000 }, () => {
 
     for (const template of corpus) {
       const { mapping } = mappingFor(template, 'qualified');
-      const rewritten = rewriteFieldReferences(template.xml, mapping, 'Unrelated DS', undefined, {
-        templateSlots: template.slots,
-      });
+      const rewritten = rewriteFieldReferences(
+        stripDonorCurrencyOrLocaleFormats(template.xml, mapping),
+        mapping,
+        'Unrelated DS',
+        undefined,
+        { templateSlots: template.slots },
+      );
       const leaked = donorCurrencyOrLocaleFormats(rewritten);
       if (leaked.length > 0) failures.push(`${template.name}: ${leaked.join(', ')}`);
     }
