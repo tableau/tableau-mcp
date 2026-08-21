@@ -258,7 +258,9 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // author-parameter now edits the live document in place — its obsolete stagePath param leaves the
 // schema (-30 bytes) and it adopts the sibling `datasource` selector param (+31 bytes) for a net
 // +1; dynamic authoring 45_742 -> 45_743 (18-char slack kept, 46k product ceiling untouched).
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 45_743;
+// Re-pinned 2026-08-21: executive-summary adds KPI names to run-dashboard-batch while trimming its
+// older field prose; dynamic authoring 45_743 -> 45_758 without raising the 46k product ceiling.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 45_758;
 const DYNAMIC_AUTHORING_SURFACE_BUDGET = 45_761;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
 const FULL_TOOL_SURFACE_BUDGET = 60_022;

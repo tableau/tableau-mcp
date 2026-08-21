@@ -48,17 +48,19 @@ export type Zone =
       text: string;
       bold: string;
       fontAlignment: string;
-      fontColor: string;
-      fontName: string;
+      fontColor?: string;
+      fontName?: string;
       fontSize: string;
     }
   | { kind: 'worksheet'; h: number; id: number; name: string; w: number; x: number; y: number };
 
 export function buildZoneXml(zone: Zone): string {
   if (zone.kind === 'text') {
+    const fontColor = zone.fontColor ? ` fontcolor="${zone.fontColor}"` : '';
+    const fontName = zone.fontName ? ` fontname="${zone.fontName}"` : '';
     return `<zone h="${zone.h}" id="${zone.id}" type-v2="text" w="${zone.w}" x="${zone.x}" y="${zone.y}">
           <formatted-text>
-            <run bold="${zone.bold}" fontalignment="${zone.fontAlignment}" fontcolor="${zone.fontColor}" fontname="${zone.fontName}" fontsize="${zone.fontSize}">${zone.text}</run>
+            <run bold="${zone.bold}" fontalignment="${zone.fontAlignment}"${fontColor}${fontName} fontsize="${zone.fontSize}">${zone.text}</run>
           </formatted-text>
           ${ZONE_STYLE}
         </zone>`;
@@ -103,8 +105,6 @@ export function computeZones(titleText: string | undefined, layoutSpec: LayoutSp
       text: escapeXml(titleText),
       bold: 'true',
       fontAlignment: '1',
-      fontColor: '#1f77b4',
-      fontName: 'Tableau Semibold',
       fontSize: '16',
     });
     currentY += 8000;
@@ -180,14 +180,19 @@ export function computeZones(titleText: string | undefined, layoutSpec: LayoutSp
       const chartWidth = Math.floor(100000 / cols);
       const chartHeight = Math.floor(chartAreaHeight / rows);
       for (let i = 0; i < charts.length; i++) {
+        const row = Math.floor(i / cols);
+        const isLastRow = row === rows - 1;
+        const lastRowCount = charts.length - row * cols;
+        const rowColumns = isLastRow ? Math.min(cols, lastRowCount) : cols;
+        const rowChartWidth = isLastRow ? Math.floor(100000 / rowColumns) : chartWidth;
         zones.push({
           kind: 'worksheet',
           h: chartHeight,
           id: nextId++,
           name: charts[i],
-          w: chartWidth,
-          x: (i % cols) * chartWidth,
-          y: chartYOffset + Math.floor(i / cols) * chartHeight,
+          w: rowChartWidth,
+          x: (i % cols) * rowChartWidth,
+          y: chartYOffset + row * chartHeight,
         });
       }
     }
