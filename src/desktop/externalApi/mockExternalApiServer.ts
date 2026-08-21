@@ -422,6 +422,9 @@ export async function startMockExternalApiServer(
         locale: 'en_US',
         repositoryLocation: '/Users/tableau/Documents/My Tableau Repository',
         logLocation: '/Users/tableau/Library/Logs/Tableau',
+        isStartPageVisible: false,
+        isDataSourcePageActive: false,
+        isPresentationMode: false,
       });
       return;
     }
