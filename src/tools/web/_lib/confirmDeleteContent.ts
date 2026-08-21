@@ -46,6 +46,7 @@ export const getConfirmDeleteContentTool = (server: WebMcpServer): WebTool<typeo
       async () =>
         !config.adminToolsEnabled || !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
     ),
+    requiresAdmin: true,
     description: `
 Confirms and executes a content deletion previously previewed by \`delete-content\`. This tool is
 **not visible to the model** — it is invoked only by an explicit human confirmation gesture inside

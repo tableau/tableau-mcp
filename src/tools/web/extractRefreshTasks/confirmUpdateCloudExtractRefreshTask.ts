@@ -52,6 +52,7 @@ export const getConfirmUpdateCloudExtractRefreshTaskTool = (
       async () =>
         !config.adminToolsEnabled || !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
     ),
+    requiresAdmin: true,
     description: `
 Confirms and applies a schedule change to an extract refresh task on Tableau Cloud, previously
 previewed by \`update-cloud-extract-refresh-task\`. This tool is **not visible to the model** — it is

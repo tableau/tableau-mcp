@@ -107,6 +107,7 @@ export const getQueryAdminInsightsTool = (server: WebMcpServer): WebTool<typeof 
     server,
     name: 'query-admin-insights',
     disabled: !config.adminToolsEnabled,
+    requiresAdmin: true,
     description: `
 Queries the Tableau Admin Insights datasources on the current site. Restricted to site
 administrators on Tableau Cloud sites with Admin Insights enabled.

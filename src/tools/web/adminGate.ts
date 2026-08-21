@@ -6,16 +6,6 @@ import { milliseconds } from '../../utils/milliseconds.js';
 import { parseNumber } from '../../utils/parseNumber.js';
 import { TableauWebRequestHandlerExtra } from './toolContext.js';
 
-const ADMIN_SITE_ROLES = new Set([
-  'SiteAdministratorCreator',
-  'SiteAdministratorExplorer',
-  'ServerAdministrator',
-]);
-
-function isAdminSiteRole(siteRole: string | undefined): boolean {
-  return !!siteRole && ADMIN_SITE_ROLES.has(siteRole);
-}
-
 // Lazy-initialized cache to avoid module-level parseNumber call
 let cache: ExpiringMap<string, string> | null = null;
 

@@ -61,8 +61,9 @@ export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = To
   TableauWebRequestHandlerExtra,
   TableauWebToolCallback<Args>,
   Args
-> &
-  (
+> & {
+  requiresAdmin?: boolean;
+} & (
     | {
         app?: AppDetails;
         meta?: never;
@@ -110,6 +111,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
   Args
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
+  requiresAdmin: boolean;
   app?: AppDetails;
   meta?: ToolMeta;
 
@@ -121,12 +123,14 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     annotations,
     callback,
     disabled,
+    requiresAdmin,
     app,
     meta,
   }: WebToolParams<Args>) {
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
+    this.requiresAdmin = requiresAdmin ?? false;
     this.app = app;
     this.meta = meta;
   }

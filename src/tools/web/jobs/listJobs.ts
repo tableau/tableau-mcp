@@ -24,6 +24,7 @@ export const getListJobsTool = (server: WebMcpServer): WebTool<typeof paramsSche
     server,
     name: 'list-jobs',
     disabled: !config.adminToolsEnabled,
+    requiresAdmin: true,
     description: `
   Retrieves a list of background jobs for the Tableau site. Each job represents a background task such as an extract refresh, subscription delivery, flow run, or other asynchronous operations.
 

@@ -118,6 +118,7 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
     server,
     name: 'update-cloud-extract-refresh-task',
     disabled: !config.adminToolsEnabled,
+    requiresAdmin: true,
     ...(mcpAppsEnabled
       ? { app: getAppConfig('update-cloud-extract-refresh-task', 'hitl-confirm') }
       : {}),

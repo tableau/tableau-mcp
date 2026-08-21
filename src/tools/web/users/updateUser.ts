@@ -59,6 +59,7 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
     server,
     name: 'update-user',
     disabled: !config.adminToolsEnabled,
+    requiresAdmin: true,
     description: `
   Updates the site role of a user on the Tableau site. Primary use case: downgrade inactive users to "Unlicensed" to reclaim licenses.
 

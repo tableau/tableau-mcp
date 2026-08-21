@@ -25,6 +25,7 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
     server,
     name: 'list-users',
     disabled: !config.adminToolsEnabled,
+    requiresAdmin: true,
     description: `
   Retrieves a list of users on the Tableau site. Each user includes profile information such as site role, email, full name, and last login time.
 
