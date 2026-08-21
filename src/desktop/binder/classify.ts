@@ -3258,7 +3258,10 @@ function resolveExplicitCorrelationBubble(
         isCategorical,
       )
     : [];
-  if ((dimensions.length === 2 && colorCandidates.length !== 1) || dimensions.length === 1 && colorMatch) {
+  if (
+    (dimensions.length === 2 && colorCandidates.length !== 1) ||
+    (dimensions.length === 1 && colorMatch)
+  ) {
     return null;
   }
   const colorField = colorCandidates[0];
