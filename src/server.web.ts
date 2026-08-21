@@ -19,10 +19,13 @@ import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { registerPrompts } from './prompts/index.js';
+import { RestApiArgs } from './restApiInstance';
+import { isAdminSiteRole } from './sdks/tableau/types/user.js';
 import { ClientInfo, Server } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
+import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { webToolFactories } from './tools/web/tools.js';
@@ -114,12 +117,16 @@ export class WebMcpServer extends Server {
     tableauAuthInfo?: TableauAuthInfo,
   ): Promise<Array<WebTool<any>>> => {
     const config = getConfig();
+    // Constructing args for invoking REST APIs outside of tool context
+    const restApiArgs: RestApiArgs = {
+      server: this,
+      tableauAuthInfo,
+      config,
+      signal: AbortSignal.timeout(config.maxRequestTimeoutMs),
+      disableLogging: true, // MCP server is not connected yet so we can't send logging notifications
+    };
     const configOverrides = await getConfigWithOverrides({
-      restApiArgs: {
-        server: this,
-        tableauAuthInfo,
-        disableLogging: true, // MCP server is not connected yet so we can't send logging notifications
-      },
+      restApiArgs,
       requestOverrides: {}, // request overrides are not relevant when getting tools
     });
 
@@ -130,11 +137,28 @@ export class WebMcpServer extends Server {
     const allTools = await Promise.all(
       webToolFactories.map((toolFactory) => toolFactory(this, tableauServerInfo.productVersion)),
     );
+
+    // Fetched lazily so we only issue the /users/{userId} call when at least one candidate tool
+    // gates on a site role. Fail-closed: `getCurrentUserSiteRole` returns `undefined` on any
+    // error, so `isAdminSiteRole(undefined)` (and any future role predicate) evaluates to false
+    // and the tool stays hidden. Cached as a sentinel-holding object so a legitimately-undefined
+    // role isn't re-fetched every iteration.
+    let cachedSiteRole: { value: string | undefined } | undefined;
+    const resolveSiteRole = async (): Promise<string | undefined> => {
+      if (cachedSiteRole === undefined) {
+        cachedSiteRole = {
+          value: await getCurrentUserSiteRole(restApiArgs),
+        };
+      }
+      return cachedSiteRole.value;
+    };
+
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
+      if (tool.requiresAdmin && !isAdminSiteRole(await resolveSiteRole())) continue;
       toolsToRegister.push(tool);
     }
 

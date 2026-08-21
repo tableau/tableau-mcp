@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
     isFeatureEnabled: vi.fn(() => false),
   },
   mockReadFile: vi.fn(),
+  mockGetCurrentUserSiteRole: vi.fn(),
+  mockAssertAdmin: vi.fn(),
 }));
 
 vi.mock('@modelcontextprotocol/ext-apps/server', () => ({
@@ -34,6 +36,11 @@ vi.mock('fs/promises', () => ({
   readFile: (...args: any[]) => mocks.mockReadFile(...args),
 }));
 
+vi.mock('./tools/web/adminGate.js', () => ({
+  getCurrentUserSiteRole: mocks.mockGetCurrentUserSiteRole,
+  assertAdmin: mocks.mockAssertAdmin,
+}));
+
 describe('server', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
@@ -42,6 +49,8 @@ describe('server', () => {
     mocks.mockRegisterAppResource.mockClear();
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
     mocks.mockReadFile.mockClear();
+    mocks.mockGetCurrentUserSiteRole.mockReset().mockResolvedValue('SiteAdministratorCreator');
+    mocks.mockAssertAdmin.mockReset();
   });
 
   afterEach(() => {
@@ -72,6 +81,7 @@ describe('server', () => {
       callback: vi.fn(),
       disabled: false,
       requiredApiScopes: [],
+      requiresAdmin: false,
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
       app: {
@@ -359,6 +369,61 @@ describe('server', () => {
         },
       },
     });
+  });
+
+  function createMockAdminTool(): WebTool<any> {
+    return {
+      name: 'mock-admin-tool' as WebToolName,
+      server: {} as any,
+      title: 'Mock Admin Tool',
+      description: 'Mock Admin Tool',
+      paramsSchema: {},
+      annotations: {
+        title: 'Mock Admin Tool',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      callback: vi.fn(),
+      disabled: false,
+      requiresAdmin: true,
+      requiredApiScopes: [],
+      logAndExecute: vi.fn(),
+      notifyInvocation: vi.fn(),
+    } as unknown as WebTool<any>;
+  }
+
+  it('does not register a requiresAdmin tool when the caller is not an admin', async () => {
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('registers a requiresAdmin tool when the caller is an admin', async () => {
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
   });
 
   it('should register as standard tool when mcp-apps feature flag is disabled', async () => {

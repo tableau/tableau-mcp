@@ -1,6 +1,8 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
+import { RestApiArgs, useRestApi } from '../../restApiInstance.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
+import { isAdminSiteRole } from '../../sdks/tableau/types/user.js';
 import { ExpiringMap } from '../../utils/expiringMap.js';
 import { milliseconds } from '../../utils/milliseconds.js';
 import { parseNumber } from '../../utils/parseNumber.js';
@@ -23,6 +25,22 @@ function getCache(): ExpiringMap<string, string> {
   return cache;
 }
 
+async function resolveSiteRole(
+  siteId: string,
+  userId: string,
+  fetchRole: () => Promise<string>,
+): Promise<string> {
+  const cacheKey = `${siteId}:${userId}`;
+  const adminCache = getCache();
+  const cached = adminCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const siteRole = await fetchRole();
+  adminCache.set(cacheKey, siteRole);
+  return siteRole;
+}
+
 /**
  * Checks if the current user has admin permissions.
  *
@@ -40,15 +58,10 @@ export async function assertAdmin(
     return new Err('This tool requires site administrator permissions');
   }
 
-  const cacheKey = `${siteId}:${userId}`;
-  const adminCache = getCache();
-  let siteRole = adminCache.get(cacheKey);
-
-  if (!siteRole) {
+  const siteRole = await resolveSiteRole(siteId, userId, async () => {
     const user = await restApi.usersMethods.queryUserOnSite({ siteId, userId });
-    siteRole = user.siteRole ?? '';
-    adminCache.set(cacheKey, siteRole);
-  }
+    return user.siteRole ?? '';
+  });
 
   if (!isAdminSiteRole(siteRole)) {
     const message = siteRole
@@ -58,4 +71,40 @@ export async function assertAdmin(
   }
 
   return new Ok(true);
+}
+
+/**
+ * Fetches the site role of the caller identified by `tableauAuthInfo`.
+ *
+ * Used at tool-registration time to gate tools by role — callers pair this with
+ * {@link isAdminSiteRole} (or future role predicates) to decide which tools to expose.
+ * Fail-closed: returns `undefined` for any error (missing auth, network failure) so a
+ * failure never grants access via a falsy role predicate. Reuses the same TTL cache as
+ * {@link assertAdmin}, so a subsequent call-time check hits the cache instead of
+ * re-querying.
+ */
+export async function getCurrentUserSiteRole(
+  restApiArgs: RestApiArgs,
+): Promise<string | undefined> {
+  const { tableauAuthInfo } = restApiArgs;
+  const siteId = tableauAuthInfo?.siteId;
+  const userId = tableauAuthInfo?.userId;
+  if (!siteId || !userId) {
+    return undefined;
+  }
+
+  try {
+    return await resolveSiteRole(siteId, userId, () =>
+      useRestApi({
+        ...restApiArgs,
+        jwtScopes: ['tableau:users:read'],
+        callback: async (restApi) => {
+          const user = await restApi.usersMethods.queryUserOnSite({ siteId, userId });
+          return user.siteRole ?? '';
+        },
+      }),
+    );
+  } catch {
+    return undefined;
+  }
 }
