@@ -236,10 +236,31 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Dynamic stays below the 46k product ceiling with 18 bytes of ratchet slack.
 // Re-pinned 2026-08-19: workbook-bound theme apply adds the required target fingerprint input;
 // both profiles move by 95 bytes; dynamic keeps 18 bytes and full keeps 36 bytes of ratchet slack.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 41_667;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 41_685;
+// Re-pinned 2026-08-19: apply-worksheet now infers the target from a cached worksheet fragment, so
+// its worksheetName describe drops the redundant "worksheet" (-3 bytes); dynamic authoring 40_099 -> 40_096.
+// Re-pinned 2026-08-19: surfaced type/isExtract/hasDownloadFilePermission on
+// list-workbook-datasources (+89 on its description), and added publish-workbook,
+// refresh-datasource-data, and refresh-datasource-extract over the External Client API 0.2.8
+// routes, gated to a 0.2.8 floor. All three join DYNAMIC_AUTHORING_TOOL_PROFILE, so dynamic
+// authoring moves 40_096 -> 42_521 (budget kept at the 18-char slack) and the full surface
+// 56_799 -> 59_224. Dynamic still clears the 46k cliff.
+// Re-pinned 2026-08-20: get-app-info's description now also documents the live UI-state fields
+// (Start Page visibility, Data Source page active, presentation mode) added to /v0/app in External
+// Client API 0.2.9. get-app-info is outside DYNAMIC_AUTHORING_TOOL_PROFILE, so only the full surface
+// moves: 59_224 -> 59_313 (retaining the 18-char slack).
+// Re-pinned 2026-08-21: search-workbook-fields (#797) and dropping list-site-datasources
+// (#815) land together. Dynamic authoring 42_521 -> 42_739 (net of both changes, budget
+// kept at the 18-char slack) and the full surface 59_313 -> 60_064 (search-workbook-fields
+// only; list-site-datasources stays on the full profile).
+// Re-pinned 2026-08-21: get-summary-data is a clean API wrapper; its description drops the
+// terminal/retry prose (-60 bytes), so dynamic authoring moves 42_739 -> 42_679 and the full
+// surface 60_064 -> 60_004, retaining the 18-character slack.
+// Merging native Custom Theme support with this surface yields 44_250 dynamic and 61_554 full;
+// the budgets retain 18 and 36 bytes of slack, respectively.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 44_250;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 44_268;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 58_403;
+const FULL_TOOL_SURFACE_BUDGET = 61_590;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -331,7 +352,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2585], // raised 2026-08-10 (#734 review fold): +skip_validation, the server-gated trust flag for the deterministic build_viz path — a genuinely new param (name + boolean schema, description dropped since the LLM must never set it), ~118B over the prior cap so shrinking prose could not fund it; ratcheted to the measured 2585 (down from a transient 2675) once the description was removed; earlier raise with sign-off (2026-08-05): agreed UI-label title 'Matching template' costs a few bytes over 'Bind Template'; earlier raise (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
+    ['bind-template', 2576], // ratcheted 2026-08-21 after funding the optional calc datasource selector by trimming existing parameter prose; raised 2026-08-10 (#734 review fold): +skip_validation, the server-gated trust flag for the deterministic build_viz path — a genuinely new param (name + boolean schema, description dropped since the LLM must never set it), ~118B over the prior cap so shrinking prose could not fund it; ratcheted to the measured 2585 (down from a transient 2675) once the description was removed; earlier raise with sign-off (2026-08-05): agreed UI-label title 'Matching template' costs a few bytes over 'Bind Template'; earlier raise (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['apply-worksheet', 1604], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
@@ -496,10 +517,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 54-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 57-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(54);
+    expect(selected).toHaveLength(57);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -524,7 +545,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'get-summary-data',
       'get-workbook-inventory',
       'list-workbook-datasources',
-      'list-site-datasources',
       'activate-sheet',
       'delete-sheet',
       'rename-sheet',
@@ -533,6 +553,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'redo-workbook',
       'list-instances',
       'list-available-fields',
+      'search-workbook-fields',
       'list-worksheets',
       'list-dashboards',
       'list-worksheet-logical-tables',
@@ -543,6 +564,9 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'open-file',
       'save-workbook',
       'workbook-export-as',
+      'publish-workbook',
+      'refresh-datasource-data',
+      'refresh-datasource-extract',
       'get-workbook-xml',
       'apply-workbook',
       'apply-workbook-style',
@@ -566,6 +590,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'validate-workbook-xml',
       'validate-worksheet-xml',
       'inject-template',
+      'list-site-datasources',
       'list-site-workbooks',
       'get-app-info',
       'get-health',
@@ -584,6 +609,18 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);
     }
+  });
+
+  it('registers search-workbook-fields once in full and dynamic-authoring profiles', () => {
+    const tools = allTools();
+
+    expect(tools.filter((tool) => tool.name === 'search-workbook-fields')).toHaveLength(1);
+    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('search-workbook-fields')).toBe(true);
+    expect(
+      selectToolsForProfile(tools, 'dynamic-authoring').filter(
+        (tool) => tool.name === 'search-workbook-fields',
+      ),
+    ).toHaveLength(1);
   });
 
   it('dynamic-authoring surface sits well under the 46k tools/list cliff (the whole point of a lean profile)', async () => {
@@ -728,6 +765,9 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('add-storyboard')).toBe('0.2.6');
     expect(floors.get('export-storyboard-image')).toBe('0.2.7');
     expect(floors.get('workbook-export-as')).toBe('0.2.7');
+    expect(floors.get('publish-workbook')).toBe('0.2.8');
+    expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
+    expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
   });
 
   it('a connected 0.2.5 Desktop hides only the 0.2.6 tools from the profile surface', () => {

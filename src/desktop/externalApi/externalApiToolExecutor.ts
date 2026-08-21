@@ -38,6 +38,8 @@ import {
   dashboardRoute,
   DatasourceList,
   datasourceListSchema,
+  datasourceRefreshDataRoute,
+  datasourceRefreshExtractRoute,
   ExportAsWorkbookRequest,
   EXTERNAL_API_ROUTES,
   ExternalApiError,
@@ -50,6 +52,7 @@ import {
   OperationEnvelope,
   OperationError,
   OperationWarning,
+  RefreshExtractRequest,
   sheetActionRoute,
   SheetRef,
   Site,
@@ -671,6 +674,36 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(EXTERNAL_API_ROUTES.workbookExportAs, request, signal),
       'export-workbook-as',
+    );
+  }
+
+  async publishWorkbook(
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(EXTERNAL_API_ROUTES.workbookPublish, signal),
+      'workbook-publish',
+    );
+  }
+
+  async refreshDatasourceData(
+    datasourceId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(datasourceRefreshDataRoute(datasourceId), signal),
+      'datasource-refresh-data',
+    );
+  }
+
+  async refreshDatasourceExtract(
+    datasourceId: string,
+    request: RefreshExtractRequest,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postJsonEnvelope(datasourceRefreshExtractRoute(datasourceId), request, signal),
+      'datasource-refresh-extract',
     );
   }
 

@@ -216,25 +216,31 @@ describe('ask-router — shared behavioral parity with classify.ts (selection ou
   </datasources>
 </workbook>`;
 
-  it.each(['bar chart of sales by region', 'gibberish asdf qwerty zxcv'])(
-    'classifyNoLlm and selectEligible pick the same template for: %s',
-    (ask) => {
-      const cls = classifyNoLlm(ask, manifestMap, summarizeSchema(COMBO_WORKBOOK_XML));
-      const routed = selectEligible(ask, manifests, ask);
-      expect(routed?.template ?? null).toBe(cls?.template ?? null);
-    },
-  );
+  it.each([
+    'bar chart of sales by region',
+    'Symbol map of Goals For by Country Code.',
+    'gibberish asdf qwerty zxcv',
+  ])('classifyNoLlm and selectEligible pick the same template for: %s', (ask) => {
+    const cls = classifyNoLlm(ask, manifestMap, summarizeSchema(COMBO_WORKBOOK_XML));
+    const routed = selectEligible(ask, manifests, ask);
+    expect(routed?.template ?? null).toBe(cls?.template ?? null);
+  });
 
   it.each([
-    'Symbol map of Goals For by Country Code.',
     'Map the countries by Goals For — bigger, warmer dots',
     'Map the countries by Goals For with bigger warmer dots total',
     'Map the countries by Goals For with bigger, warmer circles',
-  ])('keeps schema-free spatial shortlisting separate from schema-aware binding for: %s', (ask) => {
+  ])('keeps schema-free routing and semantic geo binding aligned for: %s', (ask) => {
     const cls = classifyNoLlm(ask, manifestMap, summarizeSchema(COMBO_WORKBOOK_XML));
     const routed = selectEligible(ask, manifests, ask);
-    expect(routed?.family).toBe('spatial');
-    expect(cls).toBeNull();
+    expect(routed?.template).toBe('spatial-symbol-map');
+    expect(cls).toMatchObject({
+      template: 'spatial-symbol-map',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Goals For' },
+        { slot_id: 'field_base_2', field: 'Country Code' },
+      ],
+    });
   });
 
   it('keeps routing and schema-aware binding aligned on the canonical choropleth', () => {

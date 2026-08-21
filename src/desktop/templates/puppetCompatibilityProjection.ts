@@ -17,10 +17,12 @@ const GENERIC_INTENT_WORDS = new Set(['chart', 'plot', 'map']);
 const PUPPET_DEFAULT_CHARTS = new Map([['bar-chart', 'ranking-ordered-bar']]);
 const AUTOMATIC_NOUN_ALIASES = new Map<string, string[]>([
   ['ranking-ordered-bar', ['bar', 'sorted-bar']],
+  ['magnitude-paired-bar', ['grouped-bar', 'grouped-bar-chart', 'paired-bar']],
   ['ranking-ordered-column', ['column', 'sorted-column', 'vertical-bar']],
   ['part-to-whole-stacked-bar-chart', ['stacked-bar']],
   ['part-to-whole-treemap-chart', ['treemap']],
   ['part-to-whole-pie-chart', ['pie', 'donut']],
+  ['correlation-scatter-trendline-chart', ['with-trend-line']],
   ['trend-line-chart', ['line', 'trend', 'over-time', 'timeline']],
   ['gantt-task-rollup-chart', ['gantt']],
   ['distribution-histogram', ['histogram']],

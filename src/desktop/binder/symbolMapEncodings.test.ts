@@ -87,14 +87,21 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
     );
   });
 
-  it('fails closed when generated geo lacks the TBM-required state, city, and color fields', () => {
+  it('binds generated geo with one semantic target and one size measure', () => {
     const result = classifyNoLlm(
       'Symbol map of Points by Country. Put SUM(Points) on Size. Put SUM(Points) on Color. Put Points on Tooltip.',
       manifests,
       summarizeSchema(generatedGeoXml),
     );
 
-    expect(result).toBeNull();
+    expect(result).toEqual({
+      template: 'spatial-symbol-map',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Points' },
+        { slot_id: 'field_base_2', field: 'Country' },
+      ],
+      encodings: { filled: ['size'], unfilled: ['color', 'tooltip'] },
+    });
   });
 
   it('reuses the size measure for natural color and hover cues in one lat/lon bind', () => {

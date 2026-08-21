@@ -26,7 +26,9 @@ describe('listFieldsTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getListFieldsTool(new DesktopMcpServer());
     expect(tool.name).toBe('list-fields');
-    expect(tool.description).toBe('List fields on a worksheet.');
+    expect(tool.description).toContain('one cached worksheet file');
+    expect(tool.description).not.toContain('XML');
+    expect(tool.description).toContain('fields placed on Rows, Columns, or Marks');
     expect(tool.paramsSchema).toMatchObject({ worksheetFile: expect.any(Object) });
     expect(tool.annotations).toMatchObject({ readOnlyHint: true });
   });

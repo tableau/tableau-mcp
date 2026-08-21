@@ -35,7 +35,10 @@ import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTab
 import { getListWorksheetsTool } from './api/listWorksheets.js';
 import { getOpenFileTool } from './api/openFile.js';
 import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
+import { getPublishWorkbookTool } from './api/publishWorkbook.js';
 import { getRedoWorkbookTool } from './api/redoWorkbook.js';
+import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
+import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
@@ -55,6 +58,7 @@ import { getListAvailableFieldsTool } from './authoring/fields/listAvailableFiel
 import { getListFieldsTool } from './authoring/fields/listFields.js';
 import { getRemoveFieldTool } from './authoring/fields/removeField.js';
 import { getResolveFieldTool } from './authoring/fields/resolveField.js';
+import { getSearchWorkbookFieldsTool } from './authoring/fields/searchWorkbookFields.js';
 import { getApplyDashboardWithViewpointsTool } from './authoring/sheets/applyDashboardWithViewpoints.js';
 import { getBatchCreateAndCacheSheetsTool } from './authoring/sheets/batchCreateAndCacheSheets.js';
 import { getBuildAndApplyDashboardTool } from './authoring/sheets/buildAndApplyDashboard.js';
@@ -96,6 +100,9 @@ export const desktopToolFactories = [
   getAddWorksheetTool,
   getAddDashboardTool,
   getAddStoryboardTool,
+  getPublishWorkbookTool,
+  getRefreshDatasourceDataTool,
+  getRefreshDatasourceExtractTool,
   getListWorksheetsTool,
   getListDashboardsTool,
   getGetWorksheetXmlTool,
@@ -118,6 +125,7 @@ export const desktopToolFactories = [
   getApplyWorkbookStyleTool,
   getInspectCustomThemeTool,
   getExportCustomThemeTool,
+  getSearchWorkbookFieldsTool,
   getSearchExamplesTool,
   getSearchCommandsTool,
   getLookupWorkbookSchemaTool,
