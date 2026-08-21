@@ -52,6 +52,8 @@ import * as xpath from 'xpath';
 const TEXT_NODE = 3;
 const ELEMENT_NODE = 1;
 const ATTRIBUTE_NODE = 2;
+const DONOR_CURRENCY_OR_LOCALE_FORMAT =
+  /[$£€¥₹₩₽₺₫₪₴₦₱฿₡₲₵₭₮₸₼₾₿]|\[\$-[^\]]+\]|^c(?=["#0*])/u;
 
 /** Resolved actual-field info written into the template for a mapped field. */
 interface FieldInfo {
@@ -227,6 +229,7 @@ export function rewriteFieldReferencesWithDiagnostics(
   for (const k of Object.keys(bareKeyInfo)) mappedFields.add(k);
   for (const k of Object.keys(qualifiedKeyInfo))
     mappedFields.add(k.substring(0, k.lastIndexOf('@')));
+  if (mappedFields.size > 0) removeDonorCurrencyOrLocaleFormats(doc);
   const structurallyDescribedFields = new Set(
     options?.templateSlots
       ?.filter((slot) => slot.bindable !== false)
@@ -682,6 +685,17 @@ export function rewriteFieldReferencesWithDiagnostics(
       message.replace(/\{\{DATASOURCE\}\}/g, () => datasourceName),
     ),
   };
+}
+
+function removeDonorCurrencyOrLocaleFormats(doc: Document): void {
+  const formats = selectElements("//format[@attr='text-format'][@value]", doc);
+  for (const format of formats) {
+    const value = format.getAttribute('value');
+    if (value && DONOR_CURRENCY_OR_LOCALE_FORMAT.test(value)) {
+      // Removing the worksheet override lets the target field's format win; Desktop supplies a neutral default otherwise.
+      format.parentNode?.removeChild(format);
+    }
+  }
 }
 
 /**
