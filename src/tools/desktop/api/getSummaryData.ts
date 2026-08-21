@@ -7,7 +7,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { deprecatedArtifactAliasParam, resolveArtifactNameArg } from '../params.js';
 import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
-import { fetchWorksheetSummaryData } from './summaryDataCore.js';
+import { fetchWorksheetSummaryData, type SummaryRowOrder } from './summaryDataCore.js';
 
 const DEFAULT_MAX_ROWS = 200;
 const MAX_ROWS_CAP = 1000;
@@ -27,6 +27,7 @@ type SummaryDataResult = {
   worksheet: { id: string; name: string };
   maxRows: number;
   shape: string;
+  rowOrder: SummaryRowOrder;
   summaryData: { columns: unknown[]; rows: unknown[] };
 };
 
@@ -83,6 +84,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                 worksheet: { id: resolvedWorksheet.id, name: resolvedWorksheet.name },
                 maxRows: resolvedMaxRows,
                 shape: `${dataRows.length} rows x ${dataColumns.length} columns`,
+                rowOrder: summaryResult.value.rowOrder,
                 summaryData: { columns: dataColumns, rows: dataRows },
               });
             },

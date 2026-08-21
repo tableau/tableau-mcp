@@ -107,7 +107,7 @@ function ensureCommandsSearchIndex(): any {
   const blockingNames = new Set<string>(ref.command_names_opening_blocking_dialog || []);
   const recommendation: string =
     ref.routing_recommendation ||
-    'If no command above does the job: for a chart or viz, call list-templates, then build-worksheets-from-templates and apply-worksheet. To change an existing sheet — put a field on color, size or detail, or on rows/cols — call add-field (target=encoding, encodingType=color) then apply-worksheet; refine-worksheet only does top-N and sort. For calculated fields, parameters, sets and actions, call author-calc, author-parameter, author-set or author-action.';
+    'Chart route precedence: preview/no-change and open multi-chart requests skip bind-template and use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet only when a write is requested. A recognizable single-view visualization request uses bind-template first: an explicit chart name may bind immediately; a semantic ask may return one bounded proposal. Existing-sheet edits use existing-sheet tools only: add-field then apply-worksheet for encodings, and refine-worksheet only for top-N or sort. For an unnamed derived metric, call author-calc before the artifact flow; use author-parameter, author-set, or author-action for those semantics.';
 
   const invocable = allCommands.filter((cmd: any) => {
     if (!cmd || typeof cmd !== 'object') return false;

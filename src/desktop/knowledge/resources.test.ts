@@ -65,6 +65,19 @@ describe('desktop knowledge resources', () => {
     expect(content).not.toContain('dashboard-auto-apply');
   });
 
+  it('teaches one chart-route precedence without unavailable apply paths', () => {
+    const content = readKnowledgeResource('expertise://tableau/tactics/workflow/templates');
+
+    expect(content).toContain('Preview/no-change');
+    expect(content).toContain('open multi-chart');
+    expect(content).toContain('skip `bind-template`');
+    expect(content).toContain('Recognizable single-view visualization');
+    expect(content).toContain('semantic ask may return one bounded proposal');
+    expect(content).toContain('existing-sheet tools only');
+    expect(content).toContain('Unnamed derived metric');
+    expect(content).not.toMatch(/build-and-apply-worksheet|inject-template|apply-workbook/);
+  });
+
   it('surfaces the Tableau vocabulary entry for user-facing narration prompts', () => {
     const resource = listKnowledgeResources().find(
       (entry) => entry.uri === 'expertise://tableau/tactics/workflow/tableau-vocabulary',
@@ -81,15 +94,23 @@ describe('desktop knowledge resources', () => {
     expect(content).toContain('True/False');
   });
 
-  it('teaches the guarded template path without a bind-first inspection gate', () => {
+  it('teaches binder-first explicit charts with a guarded artifact fallback', () => {
     const uri = 'expertise://tableau/personalization/discovery-first-authoring';
     const content = readKnowledgeResource(uri);
 
     expect(content).toContain('`list-templates`');
+    expect(content).toContain('`bind-template`');
+    expect(content).toContain('`auto_apply:true`');
+    expect(content).toContain('one exact `call_2_contract` proposal');
+    expect(content).toContain(
+      '`applied:true` plus clean host verification, or a verified fallback `apply-worksheet` receipt',
+    );
+    expect(content).toContain(
+      'If that second call still proposes, or any result escalates or blocks',
+    );
     expect(content).toContain('`build-worksheets-from-templates`');
     expect(content).toContain('`apply-worksheet`');
     expect(content).toContain('`get-worksheet-xml` is available before or after authoring');
-    expect(content).not.toContain('`bind-template`');
     expect(content).not.toContain('after an authoring attempt');
     expect(content).not.toMatch(/get-worksheet-xml.{0,80}(?:unlock|after an authoring attempt)/i);
     expect(content).not.toMatch(/(?:redirect|gate).{0,80}bind-template/i);

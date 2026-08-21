@@ -115,6 +115,7 @@ describe('server', () => {
       const expectedToolNames = desktopToolNames.filter((name) =>
         DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
       );
+      expect(expectedToolNames).toContain('bind-template');
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });
@@ -199,6 +200,7 @@ describe('server', () => {
       const expectedDesktopToolNames = desktopToolNames.filter((name) =>
         DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
       );
+      expect(expectedDesktopToolNames).toContain('bind-template');
       const expectedToolNames = [...expectedDesktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);

@@ -90,7 +90,7 @@ vi.mock('fs', async (importOriginal) => {
 
 const XML = '<?xml version="1.0"?><workbook></workbook>';
 const NOT_APPLIED_GUIDANCE =
-  'NOT APPLIED — the worksheet is unchanged. Resubmit this exact call with auto_apply:true to apply the bind.';
+  'NOT APPLIED — the worksheet is unchanged. Resubmit this exact bind-template call with auto_apply:true to apply the bind.';
 
 let bundledRuntimeCatalog: Map<string, RuntimeTemplateCatalogSnapshot> | undefined;
 
@@ -329,6 +329,15 @@ const boundResult: BinderResult = {
     field_mapping: { cat: '[Region]', val: '[Sales]' },
   },
 };
+const LEGACY_APPLY_INSTRUCTION =
+  'tabdoc:new-worksheet tableau-apply-worksheet tableau-inject-template apply-workbook build-and-apply-worksheet';
+const FORBIDDEN_LEGACY_APPLY_DIALECT = [
+  'tableau-',
+  'tabdoc:',
+  'inject-template',
+  'apply-workbook',
+  'build-and-apply-worksheet',
+];
 
 const proposeResult: BinderResult = {
   status: 'propose',
@@ -501,10 +510,6 @@ const changedProposal: BindingProposal & { confidence: number } = {
     { slot_id: 'cat', field: 'Region' },
     { slot_id: 'val', field: 'Profit' },
   ],
-};
-const changedProposalAgain: BindingProposal & { confidence: number } = {
-  ...changedProposal,
-  sort: { by: 'Profit', direction: 'desc' },
 };
 const missingCountryProposal: BindingProposal & { confidence: number } = {
   ...sampleProposal,
@@ -694,13 +699,11 @@ describe('bindTemplateTool', () => {
       datasource: expect.any(Object),
       calcs: expect.any(Object),
     });
-    expect(paramsSchema['session']!.description).toBe('Desktop PID; omit for default.');
-    expect(paramsSchema['target_worksheet']!.description).toBe(
-      'Worksheet id/name; omit to create.',
-    );
+    expect(paramsSchema['session']!.description).toBe('Desktop PID; omit if pinned or sole.');
+    expect(paramsSchema['target_worksheet']!.description).toBe('Sheet id/name; omit to add.');
     expect(paramsSchema['auto_apply']!.description).toBe('Apply now.');
-    expect(paramsSchema['datasource']!.description).toBe('Calc datasource id/name.');
-    expect(paramsSchema['calcs']!.description).toBe('Fields to author.');
+    expect(paramsSchema['datasource']!.description).toBe('Calc source id/name.');
+    expect(paramsSchema['calcs']!.description).toBe('Author fields.');
     expect(
       paramsSchema['calcs']!.safeParse([
         { caption: 'Margin', formula: '[Profit] / [Sales]', datatype: 'number' },
@@ -740,12 +743,70 @@ describe('bindTemplateTool', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('bound');
     expect(body.args.template_name).toBe('bar-basic');
-    expect(body.guidance).toBe(`${NOT_APPLIED_GUIDANCE} ${boundResult.apply_instruction}`);
+    expect(body.guidance).toBe(NOT_APPLIED_GUIDANCE);
     expect(body.guidance.startsWith(NOT_APPLIED_GUIDANCE)).toBe(true);
     expect(body.guidance).toContain('auto_apply:true');
     expect(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).toHaveBeenCalledWith({
       automaticOnly: true,
     });
+  });
+
+  it('replaces live legacy apply instructions with one exact auto-apply retry', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue({
+      ...boundResult,
+      apply_instruction: LEGACY_APPLY_INSTRUCTION,
+      args: {
+        ...boundResult.args,
+        apply_instruction: LEGACY_APPLY_INSTRUCTION,
+      },
+    } as unknown as BinderResult);
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'create a bar chart of Sales by Category',
+      auto_apply: false,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const rendered = result.content[0].text;
+    const body = JSON.parse(rendered);
+    expect(body.status).toBe('bound');
+    expect(body.guidance).toBe(NOT_APPLIED_GUIDANCE);
+    expect(body.apply_instruction).toBeUndefined();
+    expect(body.apply_hint).toBeUndefined();
+    expect(body.args.apply_instruction).toBeUndefined();
+    for (const unavailableName of FORBIDDEN_LEGACY_APPLY_DIALECT) {
+      expect(rendered).not.toContain(unavailableName);
+    }
+  });
+
+  it.each([
+    ['propose', proposeResult],
+    ['escalate', escalateResult],
+  ])('does not serialize legacy apply instructions on a %s result', async (_status, outcome) => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue({
+      ...outcome,
+      apply_instruction: LEGACY_APPLY_INSTRUCTION,
+      args: { apply_instruction: LEGACY_APPLY_INSTRUCTION },
+    } as unknown as BinderResult);
+
+    const result = await getToolResult({
+      session: '1',
+      ask: `create a ${_status} chart`,
+      auto_apply: false,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const rendered = result.content[0].text;
+    const body = JSON.parse(rendered);
+    expect(body.status).toBe(_status);
+    expect(body.apply_instruction).toBeUndefined();
+    expect(body.args).toBeUndefined();
+    for (const unavailableName of FORBIDDEN_LEGACY_APPLY_DIALECT) {
+      expect(rendered).not.toContain(unavailableName);
+    }
   });
 
   it('returns the standard MCP content-block envelope, not a bare JSON string', async () => {
@@ -761,8 +822,10 @@ describe('bindTemplateTool', () => {
     expect(result.content).toHaveLength(1);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual({
-      ...boundResult,
-      guidance: `${NOT_APPLIED_GUIDANCE} ${boundResult.apply_instruction}`,
+      status: 'bound',
+      used_llm: false,
+      args: boundResult.args,
+      guidance: NOT_APPLIED_GUIDANCE,
     });
   });
 
@@ -1224,12 +1287,12 @@ describe('bindTemplateTool', () => {
         ask: 'P&L waterfall',
         proposal,
       });
-      expect(call2.isError).toBe(false);
+      expect(call2.isError).toBe(true);
       invariant(call2.content[0].type === 'text');
       const call2Body = JSON.parse(call2.content[0].text);
-      expect(call2Body.status).toBe('escalate');
-      expect(call2Body.reason).toBe(escalation.reason);
-      expect(call2Body.guidance).toContain(`Escalated (${escalation.reason})`);
+      expect(call2Body).toMatchObject({ status: 'blocked', reason: 'fallback_required' });
+      expect(call2Body).not.toHaveProperty('call_2_contract');
+      expect(call2Body.guidance).toContain('Stop calling bind-template');
     },
   );
 
@@ -1250,23 +1313,19 @@ describe('bindTemplateTool', () => {
     const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect(body.guidance).toBe(
       'Escalated (field-not-found). No worksheet was produced. Blockers: ' +
-        '[field-not-found] slot \'val\' No field named "Revenue".. Next: Resolve the field(s) ' +
-        'with the resolve-field tool, then call bind-template again with a corrected proposal; ' +
-        'otherwise ask the user with ask-user (present the candidates).' +
-        ' The candidate templates and the fields that fit each of their slots are in ' +
-        'call_2_contract.proposal_choices below — bind from those; do not go hunting with ' +
-        'search-commands or the knowledge tools.',
+        '[field-not-found] slot \'val\' No field named "Revenue".. Next: use the guarded ' +
+        'artifact path: list-templates, list-available-fields, build-worksheets-from-templates, ' +
+        'then apply-worksheet. This is a normal path, not a failure.',
     );
-    // A recoverable escalation now hands over the same shortlist the propose branch does.
-    expect(body.call_2_contract).toBeDefined();
+    expect(body.call_2_contract).toBeUndefined();
     expectStructuredBlock(result, {
-      label: 'Resolve the fields first; otherwise ask the user',
+      label: 'Use template artifact fallback',
       kind: 'prefill',
     });
     expect(body.status).toBe('escalate');
     expect(body.reason).toBe('field-not-found');
     expect(body.guidance).toContain('field-not-found');
-    expect(body.guidance).toContain('resolve-field');
+    expect(body.guidance).not.toContain('bind-template again');
   });
 
   it('frames non-fast-path escalation as normal, profile-visible direct authoring', async () => {
@@ -1283,11 +1342,14 @@ describe('bindTemplateTool', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('escalate');
-    expect(body.guidance).toContain('No fast-path template fits this ask/data');
-    expect(body.guidance).toContain('build-and-apply-worksheet');
-    expect(body.guidance).toContain('add-field then');
+    expect(body.guidance).toContain('No worksheet was produced');
+    expect(body.guidance).toContain('list-templates');
+    expect(body.guidance).toContain('list-available-fields');
+    expect(body.guidance).toContain('build-worksheets-from-templates');
+    expect(body.guidance).toContain('apply-worksheet');
     expect(body.guidance).toContain('This is a normal path, not a failure');
-    expect(body.guidance).toContain('If the inject-template/apply-workbook tools are available');
+    expect(body.guidance).not.toContain('inject-template');
+    expect(body.guidance).not.toContain('build-and-apply-worksheet');
     expect(body.guidance).not.toContain('manual chain');
   });
 
@@ -1402,32 +1464,92 @@ describe('bindTemplateTool bind recovery gate', () => {
     vi.clearAllMocks();
   });
 
-  it('allows the designed Call 1 propose to Call 2 proposal transition without consuming retry budget', async () => {
+  it('allows exactly one proposal-bearing Call 2, then blocks Call 3 before Desktop work', async () => {
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate)
       .mockResolvedValueOnce(proposeResult)
       .mockResolvedValueOnce(escalateResult);
+    const getExecutor = vi.fn().mockResolvedValue({});
+    const ask = 'bar chart of Revenue by Region';
 
-    const call1 = await getToolResult({ session: '1', ask: 'bar chart of Revenue by Region' });
+    const call1 = await getToolResult({ session: '1', ask, getExecutor });
     const call2 = await getToolResult({
       session: '1',
-      ask: 'bar chart of Revenue by Region',
+      ask,
       proposal: sampleProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    const call3 = await getToolResult({
+      session: '1',
+      ask,
+      proposal: changedProposal,
+      auto_apply: true,
+      getExecutor,
     });
 
     expect(call1.isError).toBe(false);
-    expect(call2.isError).toBe(false);
+    expect(call2.isError).toBe(true);
+    expect(call3.isError).toBe(true);
     invariant(call2.content[0].type === 'text');
-    expect(JSON.parse(call2.content[0].text).status).toBe('escalate');
+    invariant(call3.content[0].type === 'text');
+    expect(JSON.parse(call2.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
+    expect(JSON.parse(call2.content[0].text)).not.toHaveProperty('call_2_contract');
+    expect(JSON.parse(call3.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
+    expect(getExecutor).toHaveBeenCalledTimes(2);
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
-    const record = sessionRouteState.getBindRecovery(
-      '1',
-      normalizeAskForMatch('bar chart of Revenue by Region'),
-    );
-    expect(record?.phase).toBe('proposal-attempted');
+    const record = sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask));
+    expect(record?.phase).toBe('terminal');
     expect(record?.attempts.map((attempt) => attempt.outcome)).toEqual(['propose', 'escalate']);
     expect(record?.attempts.map((attempt) => attempt.consumesRetryBudget)).toEqual([false, false]);
+  });
+
+  it('does not turn an unapplied proposal bind into a third bind call', async () => {
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(boundViaProposalResult);
+    const getExecutor = vi.fn().mockResolvedValue({});
+    const ask = 'bar chart of Revenue by Region';
+
+    await getToolResult({ session: '1', ask, getExecutor });
+    const unappliedCall2 = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+      auto_apply: false,
+      getExecutor,
+    });
+    const call3 = await getToolResult({
+      session: '1',
+      ask,
+      proposal: changedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(unappliedCall2.content[0].type === 'text');
+    invariant(call3.content[0].type === 'text');
+    expect(JSON.parse(unappliedCall2.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
+    expect(JSON.parse(call3.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
+    expect(getExecutor).toHaveBeenCalledTimes(2);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
 
   it('blocks a repeat proposal-absent call while awaiting the designed Call 2 proposal', async () => {
@@ -1506,8 +1628,8 @@ describe('bindTemplateTool bind recovery gate', () => {
       reason: 'fallback_required',
       call_2_contract: proposedBody.call_2_contract,
     });
-    expect(JSON.parse(terminal.content[0].text).guidance).toContain('build-and-apply-worksheet');
-    expectStructuredBlock(terminal, { label: 'Use build-and-apply-worksheet', kind: 'prefill' });
+    expect(JSON.parse(terminal.content[0].text).guidance).toContain('list-templates');
+    expectStructuredBlock(terminal, { label: 'Use template artifact fallback', kind: 'prefill' });
     expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toMatchObject({
       phase: 'terminal',
       consecutiveBareResubmitCount: 2,
@@ -1516,7 +1638,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
   });
 
-  it('resets the bare-resubmit counter when a filled proposal is supplied', async () => {
+  it('closes recovery after the one filled proposal does not bind', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate)
       .mockResolvedValueOnce(proposeResult)
@@ -1533,7 +1655,10 @@ describe('bindTemplateTool bind recovery gate', () => {
     });
 
     invariant(corrected.content[0].type === 'text');
-    expect(JSON.parse(corrected.content[0].text).status).toBe('escalate');
+    expect(JSON.parse(corrected.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
     expect(sessionRouteState.getBindRecovery('1', askKey)?.consecutiveBareResubmitCount ?? 0).toBe(
       0,
     );
@@ -1541,10 +1666,9 @@ describe('bindTemplateTool bind recovery gate', () => {
     const restartedBareResubmit = await getToolResult({ session: '1', ask, auto_apply: true });
 
     invariant(restartedBareResubmit.content[0].type === 'text');
-    expect(JSON.parse(restartedBareResubmit.content[0].text).reason).toBe('awaiting_proposal');
+    expect(JSON.parse(restartedBareResubmit.content[0].text).reason).toBe('fallback_required');
     expect(sessionRouteState.getBindRecovery('1', askKey)).toMatchObject({
-      phase: 'proposal-attempted',
-      consecutiveBareResubmitCount: 1,
+      phase: 'terminal',
     });
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
@@ -1572,9 +1696,9 @@ describe('bindTemplateTool bind recovery gate', () => {
     invariant(blocked.content[0].type === 'text');
     const body = JSON.parse(blocked.content[0].text);
     expect(body.status).toBe('blocked');
-    expect(body.reason).toBe('unchanged_proposal');
-    expect(body.guidance).toContain('Title/confidence only changes do not count');
-    expectStructuredBlock(blocked, { label: 'Change proposal or ask user', kind: 'prefill' });
+    expect(body.reason).toBe('fallback_required');
+    expect(body.guidance).toContain('single structured bind correction');
+    expectStructuredBlock(blocked, { label: 'Use template artifact fallback', kind: 'prefill' });
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
@@ -1611,7 +1735,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     invariant(blocked.content[0].type === 'text');
     const body = JSON.parse(blocked.content[0].text);
     expect(body.status).toBe('blocked');
-    expect(body.reason).toBe('unchanged_proposal');
+    expect(body.reason).toBe('fallback_required');
     expect(getExecutor).toHaveBeenCalledTimes(2);
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
@@ -1656,29 +1780,27 @@ describe('bindTemplateTool bind recovery gate', () => {
     invariant(blocked.content[0].type === 'text');
     const blockedBody = JSON.parse(blocked.content[0].text);
     expect(blockedBody.status).toBe('blocked');
-    expect(blockedBody.reason).toBe('unchanged_proposal');
+    expect(blockedBody.reason).toBe('fallback_required');
     expect(getExecutor).toHaveBeenCalledTimes(2);
 
     resolveExecutor({});
     const completed = await inFlight;
     invariant(completed.content[0].type === 'text');
-    expect(JSON.parse(completed.content[0].text).status).toBe('escalate');
+    expect(JSON.parse(completed.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
   });
 
-  it('correlates concurrent different-signature Call 2 outcomes to their own reservations', async () => {
+  it('admits only one concurrent proposal-bearing Call 2 across distinct signatures', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     let resolveFirstCall2!: (result: BinderResult) => void;
-    let resolveSecondCall2!: (result: BinderResult) => void;
     const firstCall2Bind = new Promise<BinderResult>((resolve) => {
       resolveFirstCall2 = resolve;
     });
-    const secondCall2Bind = new Promise<BinderResult>((resolve) => {
-      resolveSecondCall2 = resolve;
-    });
     vi.mocked(binderModule.bindTemplate)
       .mockResolvedValueOnce(proposeResult)
-      .mockImplementationOnce(() => firstCall2Bind)
-      .mockImplementationOnce(() => secondCall2Bind);
+      .mockImplementationOnce(() => firstCall2Bind);
     const getExecutor = vi.fn().mockResolvedValue({});
     const ask = 'bar chart of Revenue by Region';
     const askKey = normalizeAskForMatch(ask);
@@ -1697,101 +1819,37 @@ describe('bindTemplateTool bind recovery gate', () => {
       proposal: changedProposal,
       getExecutor,
     });
-    await vi.waitFor(() => expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3));
-
-    resolveSecondCall2(escalateResult);
     const secondCompleted = await secondCall2;
     resolveFirstCall2(escalateResult);
     const firstCompleted = await firstCall2;
 
     invariant(firstCompleted.content[0].type === 'text');
     invariant(secondCompleted.content[0].type === 'text');
-    expect(JSON.parse(firstCompleted.content[0].text).status).toBe('escalate');
-    expect(JSON.parse(secondCompleted.content[0].text).status).toBe('escalate');
+    expect(JSON.parse(firstCompleted.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
+    expect(JSON.parse(secondCompleted.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
+    expect(getExecutor).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
     const record = sessionRouteState.getBindRecovery('1', askKey)!;
-    expect(record.phase).toBe('retry-used');
-    expect(record.lastProposalSignature).toBe(proposalSignature(changedProposal));
+    expect(record.phase).toBe('terminal');
+    expect(record.lastProposalSignature).toBe(proposalSignature(sampleProposal));
     expect(record.attempts).toMatchObject([
       { outcome: 'propose', consumesRetryBudget: false },
       { outcome: 'escalate', consumesRetryBudget: false },
-      { outcome: 'escalate', consumesRetryBudget: true },
     ]);
     expect(record.attempts.some((attempt) => attempt.outcome === undefined)).toBe(false);
-    expect(record.attempts.map((attempt) => attempt.outcome)).toEqual([
-      'propose',
-      'escalate',
-      'escalate',
-    ]);
+    expect(record.attempts.map((attempt) => attempt.outcome)).toEqual(['propose', 'escalate']);
     expect(serializeRouteReceipt(sessionRouteState.get('1'))?.bind_attempts).toEqual({
-      count: 3,
-      outcomes: ['propose', 'escalate', 'escalate'],
-      phase: 'retry-used',
-      retry_budget_consumed: 1,
+      count: 2,
+      outcomes: ['propose', 'escalate'],
+      phase: 'terminal',
+      retry_budget_consumed: 0,
     });
-  });
-
-  it('allows genuinely new corrected proposals and then blocks repeated signatures', async () => {
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
-    vi.mocked(binderModule.bindTemplate)
-      .mockResolvedValueOnce(proposeResult)
-      .mockResolvedValueOnce(escalateResult)
-      .mockResolvedValueOnce(escalateResult)
-      .mockResolvedValueOnce(escalateResult);
-
-    await getToolResult({ session: '1', ask: 'bar chart of Revenue by Region' });
-    await getToolResult({
-      session: '1',
-      ask: 'bar chart of Revenue by Region',
-      proposal: sampleProposal,
-    });
-    const changedRetry = await getToolResult({
-      session: '1',
-      ask: 'bar chart of Revenue by Region',
-      proposal: changedProposal,
-    });
-    const changedAgainRetry = await getToolResult({
-      session: '1',
-      ask: 'bar chart of Revenue by Region',
-      proposal: changedProposalAgain,
-    });
-    const repeated = await getToolResult({
-      session: '1',
-      ask: 'bar chart of Revenue by Region',
-      proposal: changedProposalAgain,
-    });
-    const repeatedAgain = await getToolResult({
-      session: '1',
-      ask: 'bar chart of Revenue by Region',
-      proposal: changedProposalAgain,
-    });
-
-    expect(changedRetry.isError).toBe(false);
-    invariant(changedRetry.content[0].type === 'text');
-    expect(JSON.parse(changedRetry.content[0].text).status).toBe('escalate');
-    expect(changedAgainRetry.isError).toBe(false);
-    invariant(changedAgainRetry.content[0].type === 'text');
-    expect(JSON.parse(changedAgainRetry.content[0].text).status).toBe('escalate');
-    expect(repeated.isError).toBe(true);
-    expect(repeatedAgain.isError).toBe(true);
-    invariant(repeated.content[0].type === 'text');
-    const body = JSON.parse(repeated.content[0].text);
-    expect(body.status).toBe('blocked');
-    expect(body.reason).toBe('retry_budget_exhausted');
-    expect(body.guidance).toContain('repeats an attempted signature');
-    expectStructuredBlock(repeated, { label: 'Use fallback path or ask user', kind: 'prefill' });
-    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(4);
-    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(4);
-    const record = sessionRouteState.getBindRecovery(
-      '1',
-      normalizeAskForMatch('bar chart of Revenue by Region'),
-    );
-    expect(record?.phase).toBe('retry-used');
-    expect(record?.attempts.map((attempt) => attempt.consumesRetryBudget)).toEqual([
-      false,
-      false,
-      true,
-      true,
-    ]);
   });
 
   it('routes Tier-2 escalation straight to fallback and closes the retry path', async () => {
@@ -1814,121 +1872,112 @@ describe('bindTemplateTool bind recovery gate', () => {
 
     invariant(tier2.content[0].type === 'text');
     const tier2Body = JSON.parse(tier2.content[0].text);
-    expect(tier2Body.status).toBe('escalate');
-    expect(tier2Body.guidance).toContain('No fast-path template fits this ask/data');
-    expect(tier2Body.guidance).toContain('build-and-apply-worksheet');
+    expect(tier2Body).toMatchObject({ status: 'blocked', reason: 'fallback_required' });
+    expect(tier2Body.guidance).toContain('build-worksheets-from-templates');
+    expect(tier2Body.guidance).not.toContain('build-and-apply-worksheet');
     expect(tier2Body.guidance).not.toContain('corrected proposal');
     expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');
     const blockedBody = JSON.parse(blocked.content[0].text);
     expect(blockedBody.status).toBe('blocked');
     expect(blockedBody.reason).toBe('fallback_required');
-    expect(blockedBody.guidance).toContain('not recoverable in the fast path');
-    expectStructuredBlock(blocked, { label: 'Use fallback authoring path', kind: 'prefill' });
+    expect(blockedBody.guidance).toContain('single structured bind correction');
+    expectStructuredBlock(blocked, { label: 'Use template artifact fallback', kind: 'prefill' });
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
 
-  it('admits exactly one Tier-2 repair that names the sole blocked slot', async () => {
+  it('routes a first-call Tier-2 escalation to fallback and blocks repair before Desktop work', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
-    vi.mocked(binderModule.bindTemplate)
-      .mockResolvedValueOnce(missingCountryEscalateResult)
-      .mockResolvedValueOnce(boundResult);
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(missingCountryEscalateResult);
+    const getExecutor = vi.fn().mockResolvedValue({});
     const ask = 'symbol map of Sales by State';
 
-    const tier2 = await getToolResult({ session: '1', ask });
-    const admittedRepair = await getToolResult({
+    const tier2 = await getToolResult({ session: '1', ask, getExecutor });
+    const blockedRepair = await getToolResult({
       session: '1',
       ask,
       proposal: repairedCountryProposal,
-    });
-    const terminal = await getToolResult({
-      session: '1',
-      ask,
-      proposal: repairedCountryProposal,
+      getExecutor,
     });
 
     invariant(tier2.content[0].type === 'text');
-    invariant(admittedRepair.content[0].type === 'text');
-    invariant(terminal.content[0].type === 'text');
-    expect(JSON.parse(tier2.content[0].text).reason).toBe('missing-required-slot');
-    expect(JSON.parse(admittedRepair.content[0].text).status).toBe('bound');
-    expect(terminal.isError).toBe(true);
-    expect(JSON.parse(terminal.content[0].text)).toMatchObject({
+    invariant(blockedRepair.content[0].type === 'text');
+    const tier2Body = JSON.parse(tier2.content[0].text);
+    expect(tier2Body).toMatchObject({ status: 'escalate', reason: 'missing-required-slot' });
+    expect(tier2Body.call_2_contract).toBeUndefined();
+    expectStructuredBlock(tier2, { label: 'Use template artifact fallback', kind: 'prefill' });
+    expect(blockedRepair.isError).toBe(true);
+    expect(JSON.parse(blockedRepair.content[0].text)).toMatchObject({
       status: 'blocked',
       reason: 'fallback_required',
     });
     expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toMatchObject({
       phase: 'terminal',
-      terminalRepairAllowance: {
-        template: missingCountryProposal.template,
-        slotId: 'country',
-        remaining: 0,
-      },
     });
-    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
-    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+    expect(getExecutor).toHaveBeenCalledTimes(1);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the ask terminal when an admitted Tier-2 repair proposes again', async () => {
+  it('routes a recoverable escalation to fallback and blocks Call 2 before Desktop work', async () => {
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
-    vi.mocked(binderModule.bindTemplate)
-      .mockResolvedValueOnce(missingCountryEscalateResult)
-      .mockResolvedValueOnce(proposeResult)
-      .mockResolvedValueOnce(proposeResult);
-    const ask = 'symbol map of Sales by State';
-    const differentRepair = {
-      ...repairedCountryProposal,
-      bindings: repairedCountryProposal.bindings.map((binding) =>
-        binding.slot_id === 'val' ? { ...binding, field: 'Profit' } : binding,
-      ),
-    };
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(escalateResult);
+    const getExecutor = vi.fn().mockResolvedValue({});
+    const ask = 'bar chart of Revenue by Region';
 
-    await getToolResult({ session: '1', ask });
-    const admittedRepair = await getToolResult({
-      session: '1',
-      ask,
-      proposal: repairedCountryProposal,
-    });
+    const escalated = await getToolResult({ session: '1', ask, getExecutor });
     const blocked = await getToolResult({
       session: '1',
       ask,
-      proposal: differentRepair,
+      proposal: sampleProposal,
+      getExecutor,
     });
 
-    invariant(admittedRepair.content[0].type === 'text');
+    invariant(escalated.content[0].type === 'text');
     invariant(blocked.content[0].type === 'text');
-    expect(JSON.parse(admittedRepair.content[0].text).status).toBe('propose');
-    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toMatchObject({
-      phase: 'terminal',
-      terminalRepairAllowance: {
-        template: missingCountryProposal.template,
-        slotId: 'country',
-        remaining: 0,
-      },
+    const escalatedBody = JSON.parse(escalated.content[0].text);
+    expect(escalatedBody.status).toBe('escalate');
+    expect(escalatedBody.call_2_contract).toBeUndefined();
+    expect(escalatedBody.guidance).toContain('build-worksheets-from-templates');
+    expect(escalatedBody.guidance).not.toContain('call bind-template again');
+    expectStructuredBlock(escalated, {
+      label: 'Use template artifact fallback',
+      kind: 'prefill',
     });
     expect(blocked.isError).toBe(true);
     expect(JSON.parse(blocked.content[0].text)).toMatchObject({
       status: 'blocked',
       reason: 'fallback_required',
     });
-    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+    expect(getExecutor).toHaveBeenCalledTimes(1);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
   });
 
   it('clears the recovery record after a terminal bound result', async () => {
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    const { getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      structuralReadback: true,
+    });
     vi.mocked(binderModule.bindTemplate)
       .mockResolvedValueOnce(proposeResult)
       .mockResolvedValueOnce(boundResult);
     const ask = 'bar chart of Sales by Region';
 
-    await getToolResult({ session: '1', ask });
+    await getToolResult({ session: '1', ask, getExecutor });
     expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))?.phase).toBe(
       'awaiting-proposal',
     );
 
-    const bound = await getToolResult({ session: '1', ask, proposal: sampleProposal });
+    const bound = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+      auto_apply: true,
+      getExecutor,
+    });
 
     expect(bound.isError).toBe(false);
     invariant(bound.content[0].type === 'text');
@@ -1936,7 +1985,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toBeUndefined();
   });
 
-  it('does not label proposal-absent non-Tier-2 escalation as awaiting a proposal', async () => {
+  it('keeps proposal-absent escalation terminal instead of awaiting a proposal', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValue(escalateResult);
     const ask = 'bar chart of Revenue by Region';
@@ -1948,11 +1997,12 @@ describe('bindTemplateTool bind recovery gate', () => {
     invariant(second.content[0].type === 'text');
     expect(JSON.parse(first.content[0].text).status).toBe('escalate');
     const secondBody = JSON.parse(second.content[0].text);
-    expect(secondBody.status).toBe('escalate');
-    expect(secondBody.status).not.toBe('blocked');
-    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toBeUndefined();
-    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
-    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+    expect(secondBody).toMatchObject({ status: 'blocked', reason: 'fallback_required' });
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))?.phase).toBe(
+      'terminal',
+    );
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -2026,6 +2076,7 @@ function setupAutoApplyMocks({
   dispatch = Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '', result: {} }),
   activationDispatch,
   workbookReads = [XML],
+  structuralReadback = false,
 }: {
   bind?: BinderResult;
   fastPathEligible?: boolean;
@@ -2034,6 +2085,7 @@ function setupAutoApplyMocks({
   dispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
   activationDispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
   workbookReads?: string[];
+  structuralReadback?: boolean;
 } = {}): {
   executeCommand: ReturnType<typeof vi.fn>;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
@@ -2098,6 +2150,7 @@ function setupAutoApplyMocks({
     executeCommand,
     getWorkbookDocument,
     applyWorkbookDocument,
+    ...(structuralReadback ? { listWorksheets: vi.fn(routeMissing) } : {}),
   });
   return { executeCommand, applyWorkbookDocument, getWorkbookDocument, getExecutor };
 }
@@ -2183,8 +2236,10 @@ describe('bindTemplateTool auto_apply gate', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body).toEqual({
-      ...boundResult,
-      guidance: `${NOT_APPLIED_GUIDANCE} ${boundResult.apply_instruction}`,
+      status: 'bound',
+      used_llm: false,
+      args: boundResult.args,
+      guidance: NOT_APPLIED_GUIDANCE,
     });
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
     expect(executeCommand).not.toHaveBeenCalled();
@@ -2233,6 +2288,11 @@ describe('bindTemplateTool auto_apply gate', () => {
           { name: 'Profit', dataType: 'real' },
         ],
         rows: [['Acme', 100, -75000]],
+      },
+      summary_rows_order: {
+        status: 'unspecified',
+        usableFor: 'value_readback',
+        notUsableFor: 'visual_sort_verification',
       },
     });
     expect(body.guidance).toContain('not the user’s stated choice');
@@ -2495,7 +2555,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     );
   });
 
-  it('activation failure preserves the applied:true response envelope byte-for-byte', async () => {
+  it('activation failure preserves applied:true but cannot mint terminal success without readback', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
     const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
@@ -2515,13 +2575,14 @@ describe('bindTemplateTool auto_apply gate', () => {
       JSON.stringify({
         status: 'bound',
         guidance:
-          'Applied "Sales by Region" to the live workbook (bind 0ms, inject 0ms, apply 0ms). Done — no further tool calls needed.',
+          'Applied "Sales by Region" to the live workbook (bind 0ms, inject 0ms, apply 0ms). Post-apply state is uncertain: inspect live worksheet state with get-worksheet-xml before any correction. Do NOT call bind-template again or replay apply.',
         applied: true,
         sheet_name: 'Sales by Region',
         phase_ms: { bind: 0, inject: 0, apply: 0 },
         summary_rows_error: 'activeExecutor.listWorksheets is not a function',
       }),
     );
+    expect(result.structuredContent).toBeUndefined();
     expect(logSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         level: 'warning',
@@ -3835,16 +3896,15 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     expect(body.applied).toBe(false);
     expect(body.apply_error).toContain('inject failed');
     expect(body.apply_error).toContain('not well-formed');
-    // The bind is never lost — args are intact for the visible build-and-apply fallback
-    // and, where available, the template chain.
+    // The bind is never lost, but recovery must reacquire raw field refs before rebuilding.
     expect(body.args).toEqual(boundResult.status === 'bound' ? boundResult.args : undefined);
-    // P1-5 contrast: inject/validation/apply failures did NOT stem from a stale
-    // workbook, so the "fall back using the returned args" guidance
-    // is correct here and must be retained (only the events-dirty branch drops it).
-    expect(String(body.guidance)).toContain(
-      'fall back to build-and-apply-worksheet using the returned args',
-    );
-    expect(String(body.guidance)).toContain('the template chain');
+    // Recovery treats the escaped binder args as evidence only: inspect live state and
+    // reacquire raw refs before constructing a fresh guarded artifact.
+    expect(String(body.guidance)).toContain('inspect live worksheet state');
+    expect(String(body.guidance)).toContain('list-available-fields');
+    expect(String(body.guidance)).toContain('RAW column_ref');
+    expect(String(body.guidance)).not.toContain('returned args');
+    expect(String(body.guidance)).not.toContain('inject-template');
     // Apply is not attempted once inject fails.
     expect(executeCommand).not.toHaveBeenCalled();
   });
@@ -3888,15 +3948,16 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
-  it('admits one same-signature retry after a pre-dispatch apply failure', async () => {
+  it('blocks a third bind after a pre-dispatch Call-2 apply failure', async () => {
     const { getExecutor } = setupAutoApplyMocks({ bind: boundViaProposalResult });
     vi.mocked(binderModule.bindTemplate)
       .mockResolvedValueOnce(proposeResult)
       .mockResolvedValueOnce(boundViaProposalResult)
       .mockResolvedValueOnce(boundViaProposalResult);
-    vi.mocked(buildInjectedWorkbookXml)
-      .mockReturnValueOnce({ ok: false, issues: ['broken fragment'] })
-      .mockReturnValueOnce({ ok: false, issues: ['still broken'] });
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValueOnce({
+      ok: false,
+      issues: ['broken fragment'],
+    });
     const ask = 'bar chart of Revenue by Region';
 
     await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
@@ -3925,19 +3986,20 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     expect(failed.isError).toBe(true);
     expect(admittedRetry.isError).toBe(true);
     invariant(admittedRetry.content[0].type === 'text');
-    expect(JSON.parse(admittedRetry.content[0].text).apply_error).toContain('still broken');
+    expect(JSON.parse(admittedRetry.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
     invariant(blockedRepeat.content[0].type === 'text');
     expect(JSON.parse(blockedRepeat.content[0].text)).toMatchObject({
       status: 'blocked',
-      reason: 'unchanged_proposal',
+      reason: 'fallback_required',
     });
-    // 5 = the three user-visible calls plus one context-measure dry re-classify
-    // per bound Call-2 proposal (both dries no-op: the base mock is already bound).
-    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(5);
-    expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3);
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(1);
   });
 
-  it('admits one same-signature retry after workbook drift prevents dispatch', async () => {
+  it('blocks a third bind after workbook drift prevents Call-2 dispatch', async () => {
     const { applyWorkbookDocument, getWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundViaProposalResult,
     });
@@ -3984,14 +4046,17 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     );
     expect(admittedRetry.isError).toBe(true);
     invariant(admittedRetry.content[0].type === 'text');
-    expect(JSON.parse(admittedRetry.content[0].text).apply_error).toContain('apply failed');
+    expect(JSON.parse(admittedRetry.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
     invariant(blockedRepeat.content[0].type === 'text');
     expect(JSON.parse(blockedRepeat.content[0].text)).toMatchObject({
       status: 'blocked',
-      reason: 'unchanged_proposal',
+      reason: 'fallback_required',
     });
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
-    expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(1);
   });
 
   it('does not admit a same-signature retry after post-dispatch timeout', async () => {
@@ -4024,7 +4089,7 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     invariant(blockedRetry.content[0].type === 'text');
     expect(JSON.parse(blockedRetry.content[0].text)).toMatchObject({
       status: 'blocked',
-      reason: 'unchanged_proposal',
+      reason: 'fallback_required',
     });
     // 3 = two user-visible calls plus the context-measure dry re-classify on the
     // bound Call-2 proposal (no-op: the base mock is already bound).
@@ -4331,8 +4396,10 @@ describe('bindTemplateTool route-state recording', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body).toEqual({
-      ...boundResult,
-      guidance: `${NOT_APPLIED_GUIDANCE} ${boundResult.apply_instruction}`,
+      status: 'bound',
+      used_llm: false,
+      args: boundResult.args,
+      guidance: NOT_APPLIED_GUIDANCE,
     });
     expect(body.current_ask).toBeUndefined();
     expect(body.next_route).toBeUndefined();
@@ -4434,6 +4501,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
   it('a repeated ask reuses the sheet, then its guided target rebuild applies', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      structuralReadback: true,
     });
     const ask = 'bar chart of Sales by Region';
 
@@ -4491,6 +4559,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
   it('eventually blocks repeated bare same-ask calls after a reuse hit', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      structuralReadback: true,
     });
     const ask = 'bar chart of Sales by Region';
 
@@ -4512,7 +4581,8 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
       status: 'blocked',
       reason: 'fallback_required',
     });
-    expect(terminal.guidance).toContain('build-and-apply-worksheet');
+    expect(terminal.guidance).toContain('list-templates');
+    expect(terminal.guidance).not.toContain('build-and-apply-worksheet');
     expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toMatchObject({
       phase: 'terminal',
       consecutiveBareResubmitCount: 2,
@@ -4523,9 +4593,14 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
 
   it('reports calc writes honestly when the sheet itself is reused', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const workbookWithAppliedSheet = CALC_BASE_XML.replace(
+      '</worksheets>',
+      "<worksheet name='Sales by Region'><table /></worksheet></worksheets>",
+    );
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
-      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
-      workbookReads: [CALC_BASE_XML, CALC_BASE_XML, CALC_BASE_XML, CALC_READBACK_XML],
+      inject: { ok: true, xml: workbookWithAppliedSheet },
+      workbookReads: [CALC_BASE_XML],
+      structuralReadback: true,
     });
 
     await getToolResult({
@@ -4564,6 +4639,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
   it('holds across a run of rewordings — the third and fourth restatement reuse too', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      structuralReadback: true,
     });
 
     await getToolResult({ session: '1', ask: REWORDED_TITLES[0], auto_apply: true, getExecutor });
@@ -4580,6 +4656,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
   it('a second bind for a DIFFERENT chart is not reused — it applies normally', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      structuralReadback: true,
     });
 
     await getToolResult({
@@ -4617,6 +4694,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     // The ranking fixture carries the rows/cols the sort and top-N splices need.
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      structuralReadback: true,
     });
 
     await getToolResult({
@@ -4657,6 +4735,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
   it('an explicit target_worksheet always applies, even for byte-identical args', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      structuralReadback: true,
     });
 
     await getToolResult({
@@ -4681,15 +4760,13 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
   });
 
-  it('admits an explicit target_worksheet rebuild through a terminal same-ask record', async () => {
+  it('blocks an explicit target_worksheet rebuild after a terminal escalation', async () => {
     const ask = 'bar chart of Sales by Region';
     const askKey = normalizeAskForMatch(ask);
     sessionRouteState.recordBindRecoveryTerminal('1', askKey, { outcome: 'escalate' });
-    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
-      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
-    });
+    const getExecutor = vi.fn().mockResolvedValue({});
 
-    const rebuilt = body(
+    const blocked = body(
       await getToolResult({
         session: '1',
         ask,
@@ -4699,18 +4776,48 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
       }),
     );
 
-    expect(rebuilt).toMatchObject({
-      status: 'bound',
-      applied: true,
-      sheet_name: 'Sales by Region',
-    });
-    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(sessionRouteState.getBindRecovery('1', askKey)).toBeUndefined();
+    expect(blocked).toMatchObject({ status: 'blocked', reason: 'fallback_required' });
+    expect(getExecutor).not.toHaveBeenCalled();
+    expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    expect(sessionRouteState.getBindRecovery('1', askKey)?.phase).toBe('terminal');
   });
+
+  it.each(['proposal-attempted', 'terminal'] as const)(
+    'blocks an explicit target_worksheet rebuild after a %s Call 2',
+    async (phase) => {
+      const ask = 'bar chart of Sales by Region';
+      const askKey = normalizeAskForMatch(ask);
+      sessionRouteState.recordBindRecoveryAttempt('1', askKey, { outcome: 'propose' });
+      const call2 = { outcome: 'escalate' as const, proposalSignature: 'call-2-signature' };
+      if (phase === 'terminal') {
+        sessionRouteState.recordBindRecoveryTerminal('1', askKey, call2);
+      } else {
+        sessionRouteState.recordBindRecoveryAttempt('1', askKey, call2);
+      }
+      const getExecutor = vi.fn().mockResolvedValue({});
+
+      const blocked = body(
+        await getToolResult({
+          session: '1',
+          ask,
+          auto_apply: true,
+          target_worksheet: 'Sales by Region',
+          getExecutor,
+        }),
+      );
+
+      expect(blocked).toMatchObject({ status: 'blocked', reason: 'fallback_required' });
+      expect(getExecutor).not.toHaveBeenCalled();
+      expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
+      expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    },
+  );
 
   it('rebuilds when the remembered sheet is no longer in the workbook', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      structuralReadback: true,
     });
 
     await getToolResult({
@@ -4924,7 +5031,10 @@ describe('bind-template — reports what it actually built', () => {
   });
 
   it('a fully satisfied bind still reports done exactly as today (no regression)', async () => {
-    const { getExecutor } = setupAutoApplyMocks();
+    const { getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      structuralReadback: true,
+    });
 
     const result = await getToolResult({
       session: '1',
@@ -5129,6 +5239,7 @@ describe('bindTemplateTool incomplete bind is not remembered as applied', () => 
   it('a complete bind is still remembered — the reuse path is untouched', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      structuralReadback: true,
     });
 
     await getToolResult({
@@ -5245,10 +5356,15 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     ).not.toBe('done');
   });
 
-  it('an unreadable sheet adds no line rather than claiming a check that never ran', async () => {
+  it('an unreadable sheet requires live inspection and never retries the bind', async () => {
     // The default executor has no listWorksheets, so the readback cannot run at all.
-    const { getExecutor } = setupAutoApplyMocks({
+    const mocks = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+    const getExecutor = vi.fn().mockResolvedValue({
+      executeCommand: mocks.executeCommand,
+      getWorkbookDocument: mocks.getWorkbookDocument,
+      applyWorkbookDocument: mocks.applyWorkbookDocument,
     });
 
     const result = await getToolResult({
@@ -5258,19 +5374,23 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
       getExecutor,
     });
     const applied = body(result);
-    const receipt = terminalReceipt(result);
 
     expect(applied.applied).toBe(true);
     expect(applied.guidance).not.toContain('HOST VERIFICATION');
-    expect(applied.guidance).toContain('Done — no further tool calls needed');
-    expect(receipt.unverified.join(' ')).not.toContain('readback compares XML structure');
-    expect(receipt.unverified.join(' ')).toContain('structural readback did not run');
+    expect(applied.guidance).not.toContain('Done — no further tool calls needed');
+    expect(applied.guidance).toContain('inspect live worksheet state');
+    expect(applied.guidance).toContain('get-worksheet-xml');
+    expect(applied.guidance).toContain('Do NOT call bind-template again');
+    expect(
+      (result.structuredContent as { nextAction?: { kind: string } } | undefined)?.nextAction?.kind,
+    ).not.toBe('done');
   });
 
   it('does not claim all encodings were bound when no encoding analysis ran', async () => {
     const { getExecutor } = setupAutoApplyMocks({
       bind: { ...boundResult, encodings: undefined },
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      structuralReadback: true,
     });
 
     const result = await getToolResult({
@@ -5289,6 +5409,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     const { getExecutor } = setupAutoApplyMocks({
       bind: { ...boundResult, encodings: { filled: ['size', 'color'], unfilled: [] } },
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      structuralReadback: true,
     });
 
     const result = await getToolResult({
@@ -5362,11 +5483,9 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
 });
 
 // ── A recoverable escalation hands over the candidate shortlist ───────────────
-// Only `propose` used to carry candidate_templates. An agent told to re-propose after an
-// ambiguous-field / field-not-found / low-confidence escalation had nothing to propose from
-// and went hunting — the live transcript shows search-commands answering an encoding ask
-// with mapbox logging and device-layout removal, then a whole knowledge document read.
-describe('bindTemplateTool escalate candidate handover', () => {
+// Only `propose` may carry the single structured Call 2 contract. Every escalation sends the
+// caller to the guarded artifact path and makes the same-ask bind recovery state terminal.
+describe('bindTemplateTool escalation fallback', () => {
   const ESCALATE_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>
   <datasources>
@@ -5391,7 +5510,7 @@ describe('bindTemplateTool escalate candidate handover', () => {
     );
   });
 
-  it('names a template and the fields that fit each of its slots', async () => {
+  it('withholds a Call 2 contract on a recoverable escalation', async () => {
     vi.mocked(binderModule.bindTemplate).mockResolvedValue({
       status: 'escalate',
       reason: 'low-confidence',
@@ -5402,21 +5521,10 @@ describe('bindTemplateTool escalate candidate handover', () => {
       await getToolResult({ session: '1', ask: 'bar chart of Sales by Region' }),
     );
 
-    const contract = escalated.call_2_contract as {
-      tool: string;
-      proposal_choices: Array<{
-        template: string;
-        slots: Array<{ slot_id: string; compatible_field_names: string[] }>;
-      }>;
-    };
-    expect(contract.tool).toBe('bind-template');
-    expect(contract.proposal_choices.length).toBeGreaterThan(0);
-    const everyCompatibleName = contract.proposal_choices.flatMap((choice) =>
-      choice.slots.flatMap((slot) => slot.compatible_field_names),
-    );
-    expect(everyCompatibleName).toContain('Sales');
-    expect(everyCompatibleName).toContain('Region');
-    expect(escalated.guidance).toContain('call_2_contract.proposal_choices');
+    expect(escalated.call_2_contract).toBeUndefined();
+    expect(escalated.guidance).not.toContain('call_2_contract');
+    expect(escalated.guidance).not.toContain('bind-template again');
+    expect(escalated.guidance).toContain('build-worksheets-from-templates');
   });
 
   it('withholds the contract on a Tier-2 escalation, whose next call is blocked anyway', async () => {
@@ -5430,6 +5538,7 @@ describe('bindTemplateTool escalate candidate handover', () => {
     expect(escalated.call_2_contract).toBeUndefined();
     // Never advertise a payload that is not there.
     expect(escalated.guidance).not.toContain('call_2_contract.proposal_choices');
-    expect(escalated.guidance).toContain('build-and-apply-worksheet');
+    expect(escalated.guidance).toContain('build-worksheets-from-templates');
+    expect(escalated.guidance).not.toContain('build-and-apply-worksheet');
   });
 });

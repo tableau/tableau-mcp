@@ -189,6 +189,24 @@ export interface InjectTemplateCoreParams {
    * (see dateparseTemporalAxis.ts). Undefined for every normal apply → no-op.
    */
   dateparseAxis?: DateparseAxisSpec;
+  /** Validated histogram-only bin width; undefined preserves the authored template byte. */
+  histogramBinSize?: number;
+}
+
+function spliceHistogramBinSize(templateXml: string, binSize: number | undefined): string {
+  if (binSize === undefined) return templateXml;
+  const binCalculation = /<calculation\b(?=[^>]*\bclass=(['"])bin\1)[^>]*>/g;
+  const matches = [...templateXml.matchAll(binCalculation)];
+  if (matches.length !== 1) {
+    throw new Error(
+      `Histogram bin_size requires exactly one authored bin calculation; found ${matches.length}`,
+    );
+  }
+  return templateXml.replace(binCalculation, (tag) =>
+    /\bsize=(['"])[^'"]*\1/.test(tag)
+      ? tag.replace(/\bsize=(['"])[^'"]*\1/, `size='${binSize}'`)
+      : tag.replace(/\s*\/>$|>$/, (end) => ` size='${binSize}'${end}`),
+  );
 }
 
 /**
@@ -314,13 +332,17 @@ export function buildInjectedWorkbookXml({
   applyNonce,
   optionalFieldPrunes,
   dateparseAxis,
+  histogramBinSize,
 }: InjectTemplateCoreParams): InjectTemplateCoreResult {
   // W60 demo-idempotence: a worksheet inject with a colliding title replaces the
   // existing sheet rather than accumulating "Name (1)" copies.
   const baseWorkbookXml =
     sheetType === 'worksheet' ? removeSameNamedWorksheet(workbookXml, title) : workbookXml;
 
-  let processed = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(title));
+  let processed = spliceHistogramBinSize(templateXml, histogramBinSize).replace(
+    /\{\{TITLE\}\}/g,
+    escapeXml(title),
+  );
   const rewriteWarnings: string[] = [];
 
   if (templateParameters) {

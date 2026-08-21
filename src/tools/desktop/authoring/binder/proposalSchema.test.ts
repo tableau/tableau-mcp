@@ -15,15 +15,24 @@ describe('proposalSchema — strict object contract', () => {
   };
 
   it('tells callers to copy the immediately preceding proposal contract exactly', () => {
-    expect(proposalSchema.description).toContain('Omit Call 1');
-    expect(proposalSchema.description).toContain('exact returned template/slots');
-    expect(proposalSchema.description).toContain('same ask/target');
+    expect(proposalSchema.description).toContain('Call 2');
+    expect(proposalSchema.description).toContain('returned template/slots');
+    expect(proposalSchema.description).toContain('reuse ask/target');
     expect(proposalSchema.description).toContain('top-level auto_apply:true');
     expect(bindingSchema.shape.field.description).toMatch(/exact llm_input\.fields\[\]\.name/i);
   });
 
   it('accepts a well-formed proposal', () => {
     expect(proposalSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('accepts only a positive finite histogram bin_size', () => {
+    expect(proposalSchema.safeParse({ ...valid, bin_size: 25 }).success).toBe(true);
+    expect(proposalSchema.safeParse({ ...valid, bin_size: 0 }).success).toBe(false);
+    expect(proposalSchema.safeParse({ ...valid, bin_size: -1 }).success).toBe(false);
+    expect(proposalSchema.safeParse({ ...valid, bin_size: Number.POSITIVE_INFINITY }).success).toBe(
+      false,
+    );
   });
 
   it('accepts optional sort and top_n vocabulary', () => {

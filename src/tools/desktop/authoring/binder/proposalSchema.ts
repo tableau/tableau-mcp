@@ -61,6 +61,7 @@ export const proposalSchema = z
       .strict()
       .optional(),
     top_n: z.number().int().positive().optional(),
+    bin_size: z.number().finite().positive().optional(),
     // Declarative interactive dimension filters (m7 order-of-operations). Mirrors the
     // library's FilterSpec / PROPOSAL_OUTPUT_SCHEMA `filters` sibling. `.strict()` on each
     // filter object matches the advertised additionalProperties:false so a smuggled key
@@ -83,5 +84,5 @@ export const proposalSchema = z
   })
   .strict()
   .describe(
-    'Omit Call 1; same ask/target, top-level auto_apply:true, exact returned template/slots. top_n ranks; filters interactive; context scopes rank; applied=terminal.',
+    'Call 2: reuse ask/target and returned template/slots. top-level auto_apply:true; top_n ranks; context scopes filters.',
   );

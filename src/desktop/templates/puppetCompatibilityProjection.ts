@@ -21,7 +21,8 @@ const AUTOMATIC_NOUN_ALIASES = new Map<string, string[]>([
   ['ranking-ordered-column', ['column', 'sorted-column', 'vertical-bar']],
   ['part-to-whole-stacked-bar-chart', ['stacked-bar']],
   ['part-to-whole-treemap-chart', ['treemap']],
-  ['part-to-whole-pie-chart', ['pie', 'donut']],
+  ['part-to-whole-pie-chart', ['pie']],
+  ['correlation-highlight-table', ['heatmap', 'highlight-table']],
   ['correlation-scatter-trendline-chart', ['with-trend-line']],
   ['trend-line-chart', ['line', 'trend', 'over-time', 'timeline']],
   ['gantt-task-rollup-chart', ['gantt']],
@@ -36,6 +37,14 @@ const AUTOMATIC_NOUN_ALIASES = new Map<string, string[]>([
   ['spatial-choropleth-map', ['choropleth', 'filled-map', 'region-map']],
 ]);
 const AUTOMATIC_NOUNS = new Set([...AUTOMATIC_NOUN_ALIASES.values()].flat());
+
+export function preferredAutomaticTemplateForNoun(noun: string): string | undefined {
+  const normalized = noun.trim().toLowerCase().replace(/\s+/g, '-');
+  for (const [template, aliases] of AUTOMATIC_NOUN_ALIASES) {
+    if (aliases.includes(normalized)) return template;
+  }
+  return undefined;
+}
 
 function filenameIntentKeywords(template: string): string[] {
   const tokens = new Set(
@@ -58,19 +67,43 @@ function filenameIntentKeywords(template: string): string[] {
   return keywords;
 }
 
-function automaticDescriptor(descriptor: RuntimeTemplateDescriptor): RuntimeTemplateDescriptor {
+function normalizeRequiredSlots(descriptor: RuntimeTemplateDescriptor): RuntimeTemplateDescriptor {
+  if (
+    descriptor.template !== 'correlation-highlight-table' &&
+    descriptor.template !== 'quota-attainment-bullet' &&
+    descriptor.template !== 'correlation-bubble-chart'
+  ) {
+    return descriptor;
+  }
   return {
     ...descriptor,
+    slots: descriptor.slots.map((slot) =>
+      slot.kind === 'quantitative' &&
+      ((descriptor.template === 'correlation-highlight-table' && slot.role.includes('color')) ||
+        (descriptor.template === 'quota-attainment-bullet' &&
+          slot.role.includes('reference-line') &&
+          !slot.role.includes('cols')) ||
+        (descriptor.template === 'correlation-bubble-chart' && slot.role.includes('size')))
+        ? { ...slot, required: true }
+        : slot,
+    ),
+  };
+}
+
+function automaticDescriptor(descriptor: RuntimeTemplateDescriptor): RuntimeTemplateDescriptor {
+  const normalized = normalizeRequiredSlots(descriptor);
+  return {
+    ...normalized,
     intent_keywords: [
       ...new Set([
-        ...descriptor.intent_keywords.filter(
+        ...normalized.intent_keywords.filter(
           (keyword) =>
             (!GENERIC_INTENT_WORDS.has(keyword.toLowerCase()) || descriptor.family === 'spatial') &&
             !AUTOMATIC_NOUNS.has(keyword.toLowerCase()),
         ),
-        ...(AUTOMATIC_NOUN_ALIASES.get(descriptor.template) ?? []),
-        ...(descriptor.family === 'correlation' ? ['scatter-plot', 'scatterplot'] : []),
-        ...filenameIntentKeywords(descriptor.template),
+        ...(AUTOMATIC_NOUN_ALIASES.get(normalized.template) ?? []),
+        ...(normalized.family === 'correlation' ? ['scatter-plot', 'scatterplot'] : []),
+        ...filenameIntentKeywords(normalized.template),
       ]),
     ],
   };
@@ -119,7 +152,10 @@ export function createPuppetCompatibilityProjection(
   runtimeCatalog: ReadonlyMap<string, RuntimeTemplateCatalogSnapshot>,
 ): PuppetCompatibilityProjection {
   const allDescriptors = new Map(
-    [...runtimeCatalog].map(([template, value]) => [template, value.descriptor]),
+    [...runtimeCatalog].map(([template, value]) => [
+      template,
+      normalizeRequiredSlots(value.descriptor),
+    ]),
   );
   const descriptors = new Map(
     [...runtimeCatalog]
