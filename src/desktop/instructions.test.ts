@@ -231,6 +231,13 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(dashboard?.action).not.toContain('zero worksheet apply tasks');
     expect(dashboard?.action).toContain('Never replay a partial or unknown batch');
     expect(dashboard?.action).toContain('inspect live workbook state first');
+    expect(dashboard?.action).toContain('run-dashboard-batch is for new dashboards');
+    expect(dashboard?.action).toContain(
+      'Never use it for formatting, polish, or refinement of an existing dashboard',
+    );
+    expect(dashboard?.action).toContain(
+      'Set replaceExisting only after an explicit rebuild/replace request',
+    );
     expect(dashboard?.action).not.toContain('dashboard-auto-apply');
   });
 
