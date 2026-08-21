@@ -137,9 +137,9 @@ export const getListAvailableFieldsTool = (
     name: 'list-available-fields',
     title,
     description: [
-      'List datasource fields for exploration/field questions/non-template authoring.',
-      'Available anytime; template building also resolves fields directly.',
-      'Full gives column_ref; slim gives insight candidate tuples.',
+      'List datasource fields available for authoring from a live or cached workbook.',
+      'Does not report worksheet placements.',
+      'Full gives column_ref; slim gives insight candidates.',
     ].join(' '),
     paramsSchema,
     annotations: {

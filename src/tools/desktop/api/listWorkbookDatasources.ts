@@ -20,7 +20,8 @@ export const getListWorkbookDatasourcesTool = (
     name: 'list-workbook-datasources',
     title,
     description:
-      "List the workbook's OWN connected datasources (id/name/caption; luid for published, non-federated ones).",
+      "List the workbook's OWN connected datasources (id/name/caption/type; isExtract = extract vs live). " +
+      'luid is added for published, non-federated ones; hasDownloadFilePermission for published ones.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -62,6 +63,9 @@ function projectDatasource(datasource: DatasourceItem): {
   luid?: string;
   name?: string;
   caption?: string;
+  type?: string;
+  isExtract?: boolean;
+  hasDownloadFilePermission?: boolean;
 } {
   return {
     ...(datasource.id !== undefined ? { id: datasource.id } : {}),
@@ -69,5 +73,11 @@ function projectDatasource(datasource: DatasourceItem): {
     ...(typeof datasource.luid === 'string' ? { luid: datasource.luid } : {}),
     ...(datasource.name !== undefined ? { name: datasource.name } : {}),
     ...(datasource.caption !== undefined ? { caption: datasource.caption } : {}),
+    ...(datasource.type !== undefined ? { type: datasource.type } : {}),
+    ...(datasource.isExtract !== undefined ? { isExtract: datasource.isExtract } : {}),
+    // The API emits hasDownloadFilePermission: null when unpublished (permission N/A); surface only a real boolean.
+    ...(typeof datasource.hasDownloadFilePermission === 'boolean'
+      ? { hasDownloadFilePermission: datasource.hasDownloadFilePermission }
+      : {}),
   };
 }

@@ -22,7 +22,7 @@ export const getListFieldsTool = (server: DesktopMcpServer): DesktopTool<typeof 
     server,
     name: 'list-fields',
     title,
-    description: 'List fields on a worksheet.',
+    description: 'List fields placed on Rows, Columns, or Marks in one cached worksheet file.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
