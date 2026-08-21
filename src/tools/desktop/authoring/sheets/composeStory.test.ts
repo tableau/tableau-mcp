@@ -15,8 +15,18 @@ const STORY_XML = `<dashboard name='Executive Story' type='storyboard'>
   <simple-id uuid='{story-1}' />
 </dashboard>`;
 
-const dashboardXml = (name: string, width = 1400, height = 1000): string =>
-  `<dashboard name='${name}'><size maxheight='${height}' maxwidth='${width}' minheight='${height}' minwidth='${width}' sizing-mode='fixed'/><zones/><simple-id uuid='{${name}}'/></dashboard>`;
+const POPULATED_STORY_XML = STORY_XML.replace(
+  "<story-point captured-sheet='' id='1' />",
+  "<story-point captured-sheet='Sales Overview' caption='Existing point' id='1' />",
+);
+
+const dashboardXml = (
+  name: string,
+  width = 1400,
+  height = 1000,
+  sizingMode: string | undefined = 'fixed',
+): string =>
+  `<dashboard name='${name}'><size maxheight='${height}' maxwidth='${width}' minheight='${height}' minwidth='${width}'${sizingMode ? ` sizing-mode='${sizingMode}'` : ''}/><zones/><simple-id uuid='{${name}}'/></dashboard>`;
 
 describe('composeStoryDocument', () => {
   it('uses the Tableau-authored flipboard shape and matches the common dashboard size', () => {
@@ -66,13 +76,22 @@ describe('composeStoryDocument', () => {
 });
 
 describe('compose-story tool', () => {
-  it('exposes only an existing story and ordered dashboard points', () => {
+  it('exposes bounded replacement and marks explicit replacement destructive', () => {
     const tool = getComposeStoryTool(new DesktopMcpServer());
     expect(tool.name).toBe('compose-story');
-    expect(Object.keys(tool.paramsSchema)).toEqual(['session', 'storyboard', 'points']);
+    expect(Object.keys(tool.paramsSchema)).toEqual([
+      'session',
+      'storyboard',
+      'points',
+      'replaceExisting',
+    ]);
+    const replaceExisting = Object.entries(tool.paramsSchema).find(
+      ([name]) => name === 'replaceExisting',
+    )?.[1];
+    expect(replaceExisting?.safeParse(undefined).success).toBe(true);
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: true,
     });
   });
@@ -97,6 +116,76 @@ describe('compose-story tool', () => {
       verified: true,
     });
     expect(applyStoryboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a populated story by default before applying', async () => {
+    const { result, applyStoryboardDocument } = await callTool(
+      { points: [{ dashboard: 'Regional Performance', caption: 'Regions' }] },
+      { storyboardXml: POPULATED_STORY_XML },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('replaceExisting');
+    expect(applyStoryboardDocument).not.toHaveBeenCalled();
+  });
+
+  it('replaces a populated story only when replaceExisting is true', async () => {
+    const { result, applyStoryboardDocument } = await callTool(
+      {
+        points: [{ dashboard: 'Regional Performance', caption: 'Regions' }],
+        replaceExisting: true,
+      },
+      { storyboardXml: POPULATED_STORY_XML },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(applyStoryboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts an empty Tableau placeholder without replacement permission', async () => {
+    const { result, applyStoryboardDocument } = await callTool({
+      points: [{ dashboard: 'Sales Overview', caption: 'Overview' }],
+    });
+
+    expect(result.isError).toBe(false);
+    expect(applyStoryboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts an exact populated story idempotently without applying', async () => {
+    const exact = POPULATED_STORY_XML.replace("caption='Existing point'", "caption='Overview'")
+      .replace("maxheight='964'", "maxheight='1000'")
+      .replace("maxwidth='1016'", "maxwidth='1400'")
+      .replace("minheight='964'", "minheight='1000'")
+      .replace("minwidth='1016'", "minwidth='1400'");
+    const { result, applyStoryboardDocument } = await callTool(
+      { points: [{ dashboard: 'Sales Overview', caption: 'Overview' }] },
+      { storyboardXml: exact },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(applyStoryboardDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects an explicitly non-fixed dashboard size', async () => {
+    const { result, applyStoryboardDocument } = await callTool(
+      { points: [{ dashboard: 'Sales Overview' }] },
+      { sizingMode: 'automatic' },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('fixed size');
+    expect(applyStoryboardDocument).not.toHaveBeenCalled();
+  });
+
+  it('accepts a legacy dashboard with equal bounds and no sizing mode', async () => {
+    const { result } = await callTool(
+      { points: [{ dashboard: 'Sales Overview' }] },
+      { omitSizingMode: true },
+    );
+
+    expect(result.isError).toBe(false);
   });
 
   it('rejects inconsistent dashboard sizes before applying', async () => {
@@ -125,11 +214,17 @@ describe('compose-story tool', () => {
 
 type Args = {
   points: Array<{ dashboard: string; caption?: string }>;
+  replaceExisting?: boolean;
 };
 
 async function callTool(
   args: Args,
-  options: { secondSize?: { width: number; height: number } } = {},
+  options: {
+    secondSize?: { width: number; height: number };
+    storyboardXml?: string;
+    sizingMode?: string;
+    omitSizingMode?: boolean;
+  } = {},
 ): Promise<{
   result: CallToolResult;
   applyStoryboardDocument: ReturnType<typeof vi.fn>;
@@ -138,7 +233,7 @@ async function callTool(
     { id: 'dashboard-1', name: 'Sales Overview' },
     { id: 'dashboard-2', name: 'Regional Performance' },
   ];
-  let storyboardDocument = STORY_XML;
+  let storyboardDocument = options.storyboardXml ?? STORY_XML;
   const applyStoryboardDocument = vi.fn(async (_id: string, xml: string) => {
     storyboardDocument = xml.replaceAll('/>', ' />');
     return new Ok({ command_id: 'apply-story', status: 'completed', result: null });
@@ -156,7 +251,14 @@ async function callTool(
         id === 'dashboard-2' && options.secondSize
           ? options.secondSize
           : { width: 1400, height: 1000 };
-      return new Ok({ xml: dashboardXml(dashboard.name, size.width, size.height) });
+      return new Ok({
+        xml: dashboardXml(
+          dashboard.name,
+          size.width,
+          size.height,
+          options.omitSizingMode ? undefined : (options.sizingMode ?? 'fixed'),
+        ),
+      });
     }),
     applyStoryboardDocument,
   };
@@ -166,7 +268,12 @@ async function callTool(
   };
   const callback = await Provider.from(getComposeStoryTool(new DesktopMcpServer()).callback);
   const result = await callback(
-    { session: '12345', storyboard: 'Executive Story', points: args.points },
+    {
+      session: '12345',
+      storyboard: 'Executive Story',
+      points: args.points,
+      replaceExisting: args.replaceExisting,
+    },
     extra,
   );
   return { result, applyStoryboardDocument };

@@ -272,6 +272,9 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       stopConditions: ['stay on the scoped story path'],
     });
     expect(storyEdit?.action).toContain('ordered dashboard points');
+    expect(storyEdit?.action).toContain(
+      'Set replaceExisting only after an explicit rebuild/replace request',
+    );
   });
 
   it('reserves whole-workbook apply for datasource definitions or cross-artifact changes', () => {
