@@ -1,3 +1,4 @@
+import { DOMParser, Element as XmlElement } from '@xmldom/xmldom';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
@@ -23,6 +24,7 @@ export type PerSheetKind = 'worksheet' | 'dashboard' | 'storyboard';
  */
 export type PerSheetApplyOutcome =
   | { status: 'applied'; id: string; name: string; fragmentXml: string }
+  | { type: 'dashboard-member-blank-transition'; dashboards: string[] }
   | 'sheet-absent'
   | 'route-missing'
   | 'source-drift'
@@ -79,21 +81,38 @@ export async function tryApplyViaPerSheetRoute({
     return Ok('sheet-absent');
   }
 
+  let liveDocumentXml: string | undefined;
   if (expectedSourceHash !== undefined || validationContext !== undefined) {
     const documentResult = await getDocumentForKind(kind, resolved.value.id, client, signal);
     if (documentResult.isErr()) return Err(documentResult.error);
-    if (
-      expectedSourceHash !== undefined &&
-      sourceSha256(documentResult.value.xml) !== expectedSourceHash
-    ) {
+    liveDocumentXml = documentResult.value.xml;
+    if (expectedSourceHash !== undefined && sourceSha256(liveDocumentXml) !== expectedSourceHash) {
       return Ok('source-drift');
     }
     if (validationContext !== undefined) {
       const introduced = introducedBlockingValidationIssues(
-        runValidation(documentResult.value.xml, validationContext).issues,
+        runValidation(liveDocumentXml, validationContext).issues,
         runValidation(fragmentXml, validationContext).issues,
       );
       if (introduced.length > 0) return Ok({ type: 'validation-failed', issues: introduced });
+    }
+  }
+
+  if (kind === 'worksheet' && worksheetDocumentState(fragmentXml) === 'populated') {
+    if (liveDocumentXml === undefined) {
+      const documentResult = await client.getWorksheetDocument(resolved.value.id, signal);
+      if (documentResult.isErr()) return Err(documentResult.error);
+      liveDocumentXml = documentResult.value.xml;
+    }
+    if (worksheetDocumentState(liveDocumentXml) === 'blank') {
+      const dashboardsResult = await client.listDashboards(signal);
+      if (dashboardsResult.isErr()) return Err(dashboardsResult.error);
+      const dashboards = (dashboardsResult.value.dashboards ?? [])
+        .filter((dashboard) => dashboard.containedSheets?.includes(resolved.value.id))
+        .map((dashboard) => dashboard.name);
+      if (dashboards.length > 0) {
+        return Ok({ type: 'dashboard-member-blank-transition', dashboards });
+      }
     }
   }
 
@@ -144,6 +163,38 @@ export async function tryApplyViaPerSheetRoute({
     name: resolved.value.name,
     fragmentXml: retitledFragment.value,
   });
+}
+
+function worksheetDocumentState(xml: string): 'blank' | 'populated' | 'unknown' {
+  const doc = new DOMParser({ errorHandler: () => {} }).parseFromString(xml.trim(), 'text/xml');
+  const worksheet = doc.documentElement;
+  if (!worksheet || worksheet.tagName !== 'worksheet') return 'unknown';
+  const table = directChild(worksheet, 'table');
+  if (!table) return 'unknown';
+
+  const rows = directChild(table, 'rows')?.textContent?.trim() ?? '';
+  const cols = directChild(table, 'cols')?.textContent?.trim() ?? '';
+  const view = directChild(table, 'view');
+  const datasourceDependencies = view ? directChild(view, 'datasource-dependencies') : undefined;
+  const datasources = view ? directChild(view, 'datasources') : undefined;
+  const datasource = datasources ? directChild(datasources, 'datasource') : undefined;
+
+  return rows === '' &&
+    cols === '' &&
+    datasourceDependencies === undefined &&
+    datasource === undefined
+    ? 'blank'
+    : 'populated';
+}
+
+function directChild(parent: XmlElement, tagName: string): XmlElement | undefined {
+  for (let index = 0; index < parent.childNodes.length; index++) {
+    const child = parent.childNodes.item(index);
+    if (child?.nodeType === 1 && (child as XmlElement).tagName === tagName) {
+      return child as XmlElement;
+    }
+  }
+  return undefined;
 }
 
 function retitleFragment(

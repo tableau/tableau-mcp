@@ -316,6 +316,139 @@ describe('tryApplyViaPerSheetRoute', () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
+  it('blocks populating a blank worksheet that is already a dashboard member', async () => {
+    const blankWorksheet = `<worksheet name='Sheet 1'><table>
+      <view><datasources /><aggregation value='true' /></view>
+      <style /><panes><pane><view><breakdown value='auto' /></view><mark class='Automatic' /></pane></panes>
+      <rows /><cols />
+    </table><simple-id uuid='sheet-1' /></worksheet>`;
+    const populatedWorksheet = `<worksheet name='Sheet 1'><table>
+      <view><datasources><datasource name='Sample - Superstore' /></datasources>
+        <datasource-dependencies datasource='Sample - Superstore' />
+        <aggregation value='true' />
+      </view>
+      <style /><panes><pane><view><breakdown value='auto' /></view><mark class='Automatic' /></pane></panes>
+      <rows>[Sample - Superstore].[none:Category:nk]</rows>
+      <cols>[Sample - Superstore].[sum:Profit:qk]</cols>
+    </table><simple-id uuid='sheet-1' /></worksheet>`;
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      listWorksheets: vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [
+            {
+              id: 'sheet-1',
+              name: 'Sheet 1',
+              hidden: false,
+              isActiveSheet: true,
+              isAutoUpdatesPaused: false,
+              index: 0,
+              datasources: [],
+            },
+          ],
+        }),
+      ),
+      getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: blankWorksheet })),
+      listDashboards: vi.fn().mockResolvedValue(
+        Ok({
+          dashboards: [
+            {
+              id: 'dashboard-1',
+              name: 'Dashboard 1',
+              hidden: false,
+              isActiveSheet: false,
+              isAutoUpdatesPaused: false,
+              index: 1,
+              containedSheets: ['sheet-1'],
+            },
+          ],
+        }),
+      ),
+      applyWorksheetDocument,
+    });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: 'worksheet',
+      sheetName: 'Sheet 1',
+      fragmentXml: populatedWorksheet,
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toEqual({
+        type: 'dashboard-member-blank-transition',
+        dashboards: ['Dashboard 1'],
+      });
+    }
+    expect(applyWorksheetDocument).not.toHaveBeenCalled();
+  });
+
+  it('keeps populated dashboard-member worksheet edits on the per-sheet route', async () => {
+    const liveWorksheet = `<worksheet name='Sheet 1'><table>
+      <view><datasources><datasource name='Sample - Superstore' /></datasources>
+        <datasource-dependencies datasource='Sample - Superstore' />
+      </view>
+      <rows>[Sample - Superstore].[none:Category:nk]</rows>
+      <cols>[Sample - Superstore].[sum:Sales:qk]</cols>
+    </table></worksheet>`;
+    const editedWorksheet = liveWorksheet.replace('[sum:Sales:qk]', '[sum:Profit:qk]');
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      listWorksheets: vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [
+            {
+              id: 'sheet-1',
+              name: 'Sheet 1',
+              hidden: false,
+              isActiveSheet: true,
+              isAutoUpdatesPaused: false,
+              index: 0,
+              datasources: ['Sample - Superstore'],
+            },
+          ],
+        }),
+      ),
+      getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: liveWorksheet })),
+      listDashboards: vi.fn().mockResolvedValue(
+        Ok({
+          dashboards: [
+            {
+              id: 'dashboard-1',
+              name: 'Dashboard 1',
+              hidden: false,
+              isActiveSheet: false,
+              isAutoUpdatesPaused: false,
+              index: 1,
+              containedSheets: ['sheet-1'],
+            },
+          ],
+        }),
+      ),
+      applyWorksheetDocument,
+    });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: 'worksheet',
+      sheetName: 'Sheet 1',
+      fragmentXml: editedWorksheet,
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) expect(result.value).toMatchObject({ status: 'applied' });
+    expect(applyWorksheetDocument).toHaveBeenCalledOnce();
+  });
+
   it.each(FIXTURES.filter(({ kind }) => kind !== 'worksheet'))(
     'refuses a stale $kind source before posting the target fragment',
     async ({ kind, sheetName, fragmentXml, listMethod, listValue, applyMethod, getMethod }) => {

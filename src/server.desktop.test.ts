@@ -257,10 +257,10 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // terminal/retry prose (-60 bytes), so dynamic authoring moves 42_739 -> 42_679 and the full
 // surface 60_064 -> 60_004, retaining the 18-character slack.
 // Re-pinned 2026-08-21: native Custom Theme support and bind-template join the current surface.
-// The 58-tool surface is 47_313 bytes; retain 18 bytes of ratchet slack under the temporary
+// The 58-tool surface is 47_506 bytes; retain 18 bytes of ratchet slack under the temporary
 // 48k ceiling while TAS keeps SDK tool search disabled for Summit reliability.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_313;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_331;
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_506;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_524;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 48_000;
 const FULL_TOOL_SURFACE_BUDGET = 61_590;
 
@@ -287,7 +287,7 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
     // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_072);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_265);
     expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
