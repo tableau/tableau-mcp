@@ -288,7 +288,7 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
     // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_072);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_224);
     expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
