@@ -30,6 +30,10 @@ describe('getKnowledgeNodeTool', () => {
       scopeId: expect.any(Object),
       maxCandidates: expect.any(Object),
     });
+    expect(tool.description).toContain('full node properties');
+    expect(tool.description).toContain('Resolution-only');
+    expect(tool.description).toContain('Never call after search-knowledge-nodes');
+    expect(tool.description).toContain('use that search evidence directly');
     expect(await Provider.from(tool.annotations)).toMatchObject({
       readOnlyHint: true,
       destructiveHint: false,

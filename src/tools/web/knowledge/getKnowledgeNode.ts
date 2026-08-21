@@ -29,7 +29,7 @@ export const getGetKnowledgeNodeTool = (server: WebMcpServer): WebTool<typeof pa
     server,
     name: 'get-knowledge-node',
     description:
-      'Resolves a natural-language query to one full node with its match score, or returns sparse candidates when ambiguous, in an explicit Tableau Cloud knowledge graph.',
+      'Resolution-only lookup that returns full node properties when a natural-language reference has not already been resolved in an explicit Tableau Cloud knowledge graph; ambiguous references return sparse candidates. Never call after search-knowledge-nodes selected a match with an exact id: use that search evidence directly and pass its id to relationship tools. Also do not call merely to expand a connected node whose ID, name, and type are already present in a relationship result.',
     paramsSchema,
     annotations: {
       title: 'Get Knowledge Node',

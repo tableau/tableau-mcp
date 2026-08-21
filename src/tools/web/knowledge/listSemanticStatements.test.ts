@@ -31,6 +31,10 @@ describe('listSemanticStatementsTool', () => {
     expect(tool.paramsSchema).not.toHaveProperty('query');
     expect(tool.paramsSchema).not.toHaveProperty('kind');
     expect(tool.paramsSchema).not.toHaveProperty('limit');
+    expect(tool.description).toContain('Fallback-only');
+    expect(tool.description).toContain('returned no attached statement');
+    expect(tool.description).toContain('Never call it for a node');
+    expect(tool.description).toContain('add latency');
     expect(await Provider.from(tool.annotations)).toMatchObject({
       readOnlyHint: true,
       destructiveHint: false,

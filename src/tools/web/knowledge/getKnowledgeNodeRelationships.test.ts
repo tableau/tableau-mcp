@@ -33,6 +33,13 @@ describe('getKnowledgeNodeRelationshipsTool', () => {
       nodeId: expect.any(Object),
       query: expect.any(Object),
     });
+    expect(tool.description).toContain('scope and immediate graph connections');
+    expect(tool.description).toContain('exact id as nodeId');
+    expect(tool.description).toContain('do not also call get-knowledge-node');
+    expect(tool.description).toContain('authoritative scope');
+    expect(tool.description).toContain('stop and answer');
+    expect(tool.description).toContain('do not search for the connected node');
+    expect(tool.description).toContain('Use query only when no exact node ID is available');
     const callback = await Provider.from(tool.callback);
     const result = await callback({ graphId: 'graph-1' }, getMockRequestHandlerExtra());
     expect(result.isError).toBe(true);
