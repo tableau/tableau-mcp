@@ -30,6 +30,7 @@ import {
   formatReadbackVerificationWarnings,
   type VerificationReport,
   verifyWorksheetReadback,
+  withVerificationFinding,
 } from '../../../../desktop/validation/readback-verify.js';
 import {
   blockingValidationIssues,
@@ -55,6 +56,7 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { templateArtifactUnavailableError } from '../../api/applyWorksheetArtifact.js';
+import { runVisualErrorCheck } from '../../api/visualErrorCheck.js';
 import { sessionParam } from '../../params.js';
 import { jsonToolResult, type StructuredResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
@@ -108,7 +110,7 @@ type StepReceipt =
       retrySafe: false;
       worksheets: string[];
       replaced: boolean;
-      verification: { status: 'passed'; issues: [] };
+      verification: VerificationReport;
     }
   | {
       index: number;
@@ -538,6 +540,16 @@ export const getRunDashboardBatchTool = (
               executor,
               signal: extra.signal,
             });
+            // AUTO_VISUAL_CHECK nudge (best-effort): the batch verified structure via XML
+            // readback above, which is blind to a red error pill in the rendered dashboard. With
+            // the dashboard now activated and the flag on, fold a visual-window finding into the
+            // dashboard receipt as a warning — never a hard failure, never flips `applied`.
+            const dashboardVerification: VerificationReport = extra.config.autoVisualCheck
+              ? withVerificationFinding(
+                  { ok: true, status: 'passed' },
+                  await runVisualErrorCheck({ executor, signal: extra.signal }),
+                )
+              : { ok: true, status: 'passed' };
             const successSteps: StepReceipt[] = verification.worksheets.map(
               (
                 { artifactId, title: worksheetTitle, verification: worksheetVerification },
@@ -560,7 +572,7 @@ export const getRunDashboardBatchTool = (
               retrySafe: false,
               worksheets: worksheetNames,
               replaced,
-              verification: { status: 'passed', issues: [] },
+              verification: dashboardVerification,
             });
             return Ok({ applied: true, retrySafe: false, steps: successSteps });
           } catch (error) {

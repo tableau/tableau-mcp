@@ -79,6 +79,7 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { fetchWorksheetSummaryData, type SummaryDataRead } from '../../api/summaryDataCore.js';
+import { runVisualErrorCheckText } from '../../api/visualErrorCheck.js';
 import {
   doneNextAction,
   jsonToolResult,
@@ -1601,6 +1602,17 @@ async function performAutoApply({
   const readbackError = formatReadbackVerificationError(receiptInput.readbackFindings);
   const readbackWarnings = formatReadbackVerificationWarnings(receiptInput.readbackFindings);
   const readbackEvidence = `${readbackError ? `\n\n${readbackError}` : ''}${readbackWarnings}`;
+  // AUTO_VISUAL_CHECK nudge: bind-template applies through loadWorkbookXml, whose readback is
+  // XML-only and blind to a red error pill in the rendered window. When the flag is on, scan the
+  // captured window and append a best-effort warning. It rides the guidance text exactly like
+  // readbackEvidence — a nudge to look before reporting Done — and deliberately does NOT feed the
+  // needsFollowUp/done decision below (Blake's spiral): a soft visual signal must never flip the
+  // terminal receipt that closed the re-bind loop.
+  const visualWarning = await runVisualErrorCheckText({
+    executor,
+    signal,
+    enabled: config.autoVisualCheck,
+  });
 
   // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
@@ -1663,7 +1675,7 @@ async function performAutoApply({
       : needsFollowUp
         ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
         : `${receiptText} ${terminalGuidance}`
-  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
+  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}${visualWarning}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
