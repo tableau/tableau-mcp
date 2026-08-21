@@ -61,12 +61,34 @@ const KPI_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 </datasource></datasources></workbook>`;
 
 let descriptors: Map<string, RuntimeTemplateDescriptor>;
+let allDescriptors: Map<string, RuntimeTemplateDescriptor>;
 
 beforeAll(() => {
-  descriptors = createPuppetCompatibilityProjection(
+  const projection = createPuppetCompatibilityProjection(
     loadRuntimeTemplateCatalogSnapshots({ automaticOnly: true, includeExternal: false }),
-  ).descriptors;
+  );
+  descriptors = projection.descriptors;
+  allDescriptors = projection.allDescriptors;
 });
+
+function workbookWithApproxCount(field: string, count: number): string {
+  return WORKBOOK_XML.replace(
+    '</datasource>',
+    `<connection><metadata-records><metadata-record class='column'><local-name>[${field}]</local-name><approx-count>${count}</approx-count></metadata-record></metadata-records></connection></datasource>`,
+  );
+}
+
+function pieProposal(field = 'Region'): BindingProposal {
+  return {
+    template: 'part-to-whole-pie-chart',
+    title: `Sales by ${field}`,
+    bindings: [
+      { slot_id: 'field_base_1', field },
+      { slot_id: 'field_base_2', field: 'Sales' },
+    ],
+    confidence: 0.9,
+  };
+}
 
 function rankingProposal(title = 'Sales by Region'): BindingProposal {
   return {
@@ -267,6 +289,86 @@ describe('binder/bindTemplate — two-call protocol', () => {
 
     expect(result.status).toBe('escalate');
     if (result.status === 'escalate') expect(result.reason).toBe('missing-required-slot');
+  });
+
+  it('rejects a raw Call-2 heatmap proposal that omits its color measure', async () => {
+    const result = await bindTemplate({
+      ask: 'heatmap of Sales by Category and Region',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        template: 'correlation-highlight-table',
+        title: 'Sales heatmap',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Category' },
+          { slot_id: 'field_base_2', field: 'Region' },
+        ],
+        confidence: 0.9,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status === 'escalate') expect(result.reason).toBe('missing-required-slot');
+  });
+
+  it('rejects a raw Call-2 bullet proposal that reuses the actual as its target', async () => {
+    const result = await bindTemplate({
+      ask: 'bullet chart of Sales vs Sales by Region',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        template: 'quota-attainment-bullet',
+        title: 'Sales vs target',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Region' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+          { slot_id: 'field_base_3', field: 'Sales' },
+        ],
+        confidence: 0.9,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('base-column-conflict');
+    expect(result.blockers[0].detail).toContain('distinct underlying fields');
+  });
+
+  it('rejects a raw Call-2 bullet proposal that omits the target marker field', async () => {
+    const result = await bindTemplate({
+      ask: 'bullet chart of Sales by Region',
+      workbookXml: WORKBOOK_XML,
+      manifests: allDescriptors,
+      proposal: {
+        template: 'quota-attainment-bullet',
+        title: 'Sales bullet',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Region' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+        ],
+        confidence: 0.9,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('missing-required-slot');
+    expect(result.blockers[0].detail).toContain('reference-line');
+  });
+
+  it('rejects a high-cardinality pie proposal on Call 2', async () => {
+    const result = await bindTemplate({
+      ask: 'pie chart of Sales by Region',
+      workbookXml: workbookWithApproxCount('Region', 13),
+      manifests: allDescriptors,
+      proposal: pieProposal(),
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('kind-mismatch');
+    expect(result.blockers[0].detail).toContain('13 distinct values');
+    expect(result.blockers[0].detail).toContain('workable maximum of 12');
   });
 
   it('binds a waterfall proposal with derivation-qualified runtime keys', async () => {
@@ -506,5 +608,17 @@ describe('binder/KPI derivation and injected proposal seam', () => {
 
     expect(result.status).toBe('bound');
     if (result.status === 'bound') expect(result.used_llm).toBe(true);
+  });
+
+  it('rejects an injected-LLM pie proposal above the shared slice boundary', async () => {
+    const result = await bindTemplate({
+      ask: 'pie chart of Sales by Region',
+      workbookXml: workbookWithApproxCount('Region', 13),
+      manifests: descriptors,
+      llmPropose: () => Promise.resolve(pieProposal()),
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status === 'escalate') expect(result.reason).toBe('kind-mismatch');
   });
 });

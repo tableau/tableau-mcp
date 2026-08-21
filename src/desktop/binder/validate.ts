@@ -37,7 +37,7 @@ import {
   optionalFieldPrunesFor,
   type OptionalFieldPruneSpec,
 } from '../templates/optionalFieldPrune.js';
-import { cardinalityAdvice } from './cardinality.js';
+import { cardinalityAdvice, PIE_SLICE_WORKABLE_MAX } from './cardinality.js';
 import { matchAvoidWhen } from './classify.js';
 import { escapeXml } from './escape.js';
 import type {
@@ -448,13 +448,28 @@ export function validateBinding(
     if (b.derivation !== undefined) overrideBySlot.set(b.slot_id, b.derivation);
   }
 
+  const isRequiredSlot = (slot: SlotSpec): boolean =>
+    slot.required ||
+    (m.template === 'correlation-highlight-table' &&
+      slot.bindable &&
+      slot.kind === 'quantitative' &&
+      slot.role.includes('color')) ||
+    (m.template === 'quota-attainment-bullet' &&
+      slot.bindable &&
+      slot.kind === 'quantitative' &&
+      slot.role.includes('reference-line') &&
+      !slot.role.includes('cols'));
+
   // ── Gate 1: slot coverage ────────────────────────────────────────
   for (const slot of m.slots) {
-    if (slot.required && slot.bindable && !boundBySlot.has(slot.slot_id)) {
+    if (isRequiredSlot(slot) && slot.bindable && !boundBySlot.has(slot.slot_id)) {
       blockers.push({
         code: 'missing-required-slot',
         slot_id: slot.slot_id,
-        detail: `required slot '${slot.slot_id}' (${slot.template_field}) has no binding`,
+        detail:
+          m.template === 'quota-attainment-bullet' && slot.role.includes('reference-line')
+            ? `required bullet target reference-line slot '${slot.slot_id}' (${slot.template_field}) has no binding`
+            : `required slot '${slot.slot_id}' (${slot.template_field}) has no binding`,
       });
     }
   }
@@ -619,6 +634,53 @@ export function validateBinding(
     }
 
     resolved.set(slotId, { slot, field: f });
+  }
+
+  // Chart-specific structural invariants belong in this shared validation seam so
+  // Call 1, Call 2, and the eval-only injected proposal path cannot disagree.
+  if (m.template === 'part-to-whole-pie-chart') {
+    const sliceSlot = m.slots.find(
+      (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('color'),
+    );
+    const slice = sliceSlot ? resolved.get(sliceSlot.slot_id)?.field : undefined;
+    if (slice?.approxCount !== undefined && slice.approxCount > PIE_SLICE_WORKABLE_MAX) {
+      blockers.push({
+        code: 'kind-mismatch',
+        slot_id: sliceSlot?.slot_id,
+        detail:
+          `pie slice field "${slice.name}" has ${slice.approxCount} distinct values, above the ` +
+          `workable maximum of ${PIE_SLICE_WORKABLE_MAX}; choose a lower-cardinality dimension`,
+      });
+    }
+  }
+
+  if (m.template === 'quota-attainment-bullet') {
+    const actualSlot = m.slots.find(
+      (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('cols'),
+    );
+    const targetSlot = m.slots.find(
+      (slot) =>
+        slot.bindable &&
+        slot.kind === 'quantitative' &&
+        slot.role.includes('reference-line') &&
+        !slot.role.includes('cols'),
+    );
+    const actual = actualSlot ? resolved.get(actualSlot.slot_id)?.field : undefined;
+    const target = targetSlot ? resolved.get(targetSlot.slot_id)?.field : undefined;
+    if (
+      actual &&
+      target &&
+      actual.datasource === target.datasource &&
+      bareName(actual.columnName) === bareName(target.columnName)
+    ) {
+      blockers.push({
+        code: 'base-column-conflict',
+        slot_id: targetSlot?.slot_id,
+        detail:
+          'bullet actual and target must resolve to distinct underlying fields; ' +
+          `both bindings resolve to "${actual.name}"`,
+      });
+    }
   }
 
   // ── Gate 5: base-column consistency ──────────────────────────────

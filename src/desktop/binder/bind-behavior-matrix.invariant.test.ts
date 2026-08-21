@@ -34,6 +34,17 @@ const FIXTURE = fs.readFileSync(
 
 const EXPECTED_DATASOURCE = 'Sample - Superstore';
 
+const BULLET_WORKBOOK = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Bullet Data'>
+      <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Target]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
 let manifests: Map<string, RuntimeTemplateDescriptor>;
 
 beforeAll(() => {
@@ -42,8 +53,14 @@ beforeAll(() => {
   ).descriptors;
 });
 
-function bind(ask: string): ReturnType<typeof bindTemplate> {
-  return bindTemplate({ ask, workbookXml: FIXTURE, manifests });
+function bind(ask: string, workbookXml: string = FIXTURE): ReturnType<typeof bindTemplate> {
+  return bindTemplate({ ask, workbookXml, manifests });
+}
+
+function withApproxCount(field: string, count: number): string {
+  const localName = `<local-name>[${field}]</local-name>`;
+  if (!FIXTURE.includes(localName)) throw new Error(`Missing fixture metadata for ${field}`);
+  return FIXTURE.replace(localName, `${localName}<approx-count>${count}</approx-count>`);
 }
 
 // ── KNOWN ONE-SHOTS (bound, used_llm=false, correct template) ─────────────────
@@ -59,8 +76,9 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   ],
   ['symbol map of Sales by State/Province', 'spatial-symbol-map'],
   ['treemap of Sales by Category and Sub-Category', 'part-to-whole-treemap-chart'],
-  ['pie chart of Sales by Segment', 'part-to-whole-pie-chart'],
-  ['quota attainment bullet of Sales by Segment', 'quota-attainment-bullet'],
+  ['heatmap of Sales by Category and Region', 'correlation-highlight-table'],
+  ['highlight table of Sales by Category and Region', 'correlation-highlight-table'],
+  ['pie chart of Sales by Region', 'part-to-whole-pie-chart'],
   ['slope chart of Sales by Region over Order Date', 'slope-chart'],
   ['filled map of Profit by State/Province', 'spatial-choropleth-map'],
   ['filled map of Profit by State/Province and Country/Region', 'spatial-choropleth-map'],
@@ -84,6 +102,7 @@ const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
     'symbol map of Sales by Country, State, and City',
     'a neutral geo slot must not accept one exact match while ignoring two other requested geo concepts',
   ],
+  ['bullet chart of Sales by Region', 'a bullet chart requires an explicit target measure'],
   [
     'over-under arrow chart of Sales by Sub-Category',
     // fix b1490be5: ww-ou-arrow carries the compound-string-parse hazard (its calcs SPLIT a
@@ -247,10 +266,84 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
         '{{field_base_2}}': '[Sample - Superstore].[none:State/Province:nk]',
       },
     ],
+    [
+      'treemap of Sales by Category and Sub-Category',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[none:Category:nk]',
+        '{{field_base_2}}': '[Sample - Superstore].[none:Sub-Category:nk]',
+        '{{field_base_3}}': '[Sample - Superstore].[sum:Sales:qk]',
+      },
+    ],
+    [
+      'heatmap of Sales by Category and Region',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[none:Category:nk]',
+        '{{field_base_2}}': '[Sample - Superstore].[none:Region:nk]',
+        '{{field_base_3}}': '[Sample - Superstore].[sum:Sales:qk]',
+      },
+    ],
+    [
+      'pie chart of Sales by Region',
+      {
+        '{{field_base_1}}': '[Sample - Superstore].[none:Region:nk]',
+        '{{field_base_2}}': '[Sample - Superstore].[sum:Sales:qk]',
+      },
+    ],
   ] as const)('maps the must-demo contract for %s', async (ask, expectedMapping) => {
     const res = await bind(ask);
     expect(res.status, JSON.stringify(res)).toBe('bound');
     if (res.status === 'bound') expect(res.args.field_mapping).toEqual(expectedMapping);
+  });
+
+  it('binds a pie chart to the workbook datasource after it is renamed', async () => {
+    const datasource = 'Regional Orders';
+    const res = await bind(
+      'pie chart of Sales by Region',
+      FIXTURE.replaceAll(EXPECTED_DATASOURCE, datasource),
+    );
+
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.args.template_parameters.DATASOURCE).toBe(datasource);
+    expect(res.args.field_mapping).toEqual({
+      '{{field_base_1}}': `[${datasource}].[none:Region:nk]`,
+      '{{field_base_2}}': `[${datasource}].[sum:Sales:qk]`,
+    });
+    expect(JSON.stringify(res.args)).not.toContain(EXPECTED_DATASOURCE);
+  });
+
+  it('requires and maps an explicit bullet target measure', async () => {
+    const res = await bind('bullet chart of Sales vs Target by Region', BULLET_WORKBOOK);
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status !== 'bound') return;
+    expect(res.args.template_name).toBe('quota-attainment-bullet');
+    expect(res.args.field_mapping).toEqual({
+      '{{field_base_1}}': '[Bullet Data].[none:Region:nk]',
+      '{{field_base_2}}': '[Bullet Data].[sum:Sales:qk]',
+      '{{field_base_3}}': '[Bullet Data].[sum:Target:qk]',
+    });
+  });
+
+  it.each([
+    ['Category', 3, 'bound'],
+    ['Region', 12, 'bound'],
+    ['Region', 13, 'propose'],
+    ['Product Name', 1850, 'propose'],
+  ] as const)(
+    'uses real cardinality metadata for pie dimension %s (%i members)',
+    async (dimension, count, expectedStatus) => {
+      const res = await bind(
+        `pie chart of Sales by ${dimension}`,
+        withApproxCount(dimension, count),
+      );
+      expect(res.status, JSON.stringify(res)).toBe(expectedStatus);
+    },
+  );
+
+  it('does not fabricate missing pie cardinality metadata', async () => {
+    const res = await bind('pie chart of Sales by Product Name');
+    expect(res.status, JSON.stringify(res)).toBe('bound');
+    if (res.status === 'bound') expect(res.args.template_name).toBe('part-to-whole-pie-chart');
   });
 
   it.each(['Country/Region', 'State/Province', 'City'])(

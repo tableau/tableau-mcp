@@ -22,6 +22,17 @@ const PL_WORKBOOK = `<?xml version='1.0' encoding='utf-8'?>
   </datasources>
 </workbook>`;
 
+const BULLET_WORKBOOK = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Bullet Data'>
+      <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Target]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
 let realRuntimeCatalog: Map<string, RuntimeTemplateCatalogSnapshot>;
 let superstoreWorkbook: string;
 
@@ -65,6 +76,9 @@ beforeAll(() => {
     'connected-scatterplot',
     'magnitude-paired-bar',
     'spatial-symbol-map',
+    'correlation-highlight-table',
+    'part-to-whole-pie-chart',
+    'quota-attainment-bullet',
   ]);
   superstoreWorkbook = readFileSync(
     join(process.cwd(), 'src', 'desktop', 'binder', 'fixtures', 'superstore-scratch-ref.xml'),
@@ -89,6 +103,11 @@ describe('createPuppetCompatibilityProjection', () => {
     expect([...projection.descriptors.keys()].some((template) => template.includes('__'))).toBe(
       false,
     );
+    expect(
+      projection.allDescriptors
+        .get('correlation-highlight-table')
+        ?.slots.find((slot) => slot.role.includes('color'))?.required,
+    ).toBe(true);
   });
 
   it('keeps the waterfall raw qualified slots and only adds a post-bind anchor mapping', async () => {
@@ -251,6 +270,117 @@ describe('createPuppetCompatibilityProjection', () => {
         expect(xml).not.toContain('<column name="[City]"');
       },
     },
+    {
+      template: 'part-to-whole-treemap-chart',
+      ask: 'treemap of Sales by Category and Sub-Category',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Category' },
+        { slot_id: 'field_base_2', field: 'Sub-Category' },
+        { slot_id: 'field_base_3', field: 'Sales' },
+      ],
+      slots: [
+        {
+          slot_id: 'field_base_1',
+          kind: 'categorical',
+          derivation: 'none',
+          role: ['lod', 'text'],
+        },
+        {
+          slot_id: 'field_base_2',
+          kind: 'categorical',
+          derivation: 'none',
+          role: ['lod', 'text'],
+        },
+        {
+          slot_id: 'field_base_3',
+          kind: 'quantitative',
+          derivation: 'sum',
+          role: ['size', 'tooltip'],
+        },
+      ],
+      assertions: (xml: string) => {
+        expect(xml).toContain('<mark class="Square"');
+        expect(xml).toContain('<lod column="[Sample - Superstore].[none:Category:nk]"');
+        expect(xml).toContain('<text column="[Sample - Superstore].[none:Category:nk]"');
+        expect(xml).toContain('<lod column="[Sample - Superstore].[none:Sub-Category:nk]"');
+        expect(xml).toContain('<text column="[Sample - Superstore].[none:Sub-Category:nk]"');
+        expect(xml).toContain('<size column="[Sample - Superstore].[sum:Sales:qk]"');
+        expect(xml).toContain('<tooltip column="[Sample - Superstore].[sum:Sales:qk]"');
+        expect(xml).not.toContain('Customer Name');
+        expect(xml).not.toContain('Product Name');
+        expect(xml).not.toContain('Profit');
+      },
+    },
+    {
+      template: 'correlation-highlight-table',
+      ask: 'heatmap of Sales by Category and Region',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Category' },
+        { slot_id: 'field_base_2', field: 'Region' },
+        { slot_id: 'field_base_3', field: 'Sales' },
+      ],
+      slots: [
+        { slot_id: 'field_base_1', kind: 'categorical', derivation: 'none', role: ['rows'] },
+        { slot_id: 'field_base_2', kind: 'categorical', derivation: 'none', role: ['cols'] },
+        {
+          slot_id: 'field_base_3',
+          kind: 'quantitative',
+          derivation: 'sum',
+          role: ['color', 'text', 'tooltip'],
+          required: true,
+        },
+      ],
+      assertions: (xml: string) => {
+        expect(xml).toContain('<mark class="Square"');
+        expect(xml).toContain('<rows>[Sample - Superstore].[none:Category:nk]</rows>');
+        expect(xml).toContain('<cols>[Sample - Superstore].[none:Region:nk]</cols>');
+        expect(xml).toContain('<color column="[Sample - Superstore].[sum:Sales:qk]"');
+        expect(xml).toContain(
+          '<encoding attr="color" field="[Sample - Superstore].[sum:Sales:qk]"',
+        );
+        expect(xml).not.toContain('Calculation_1368249927221915648');
+        expect(xml).not.toContain('Order Date');
+        expect(xml).not.toContain('<filter');
+        expect(xml).not.toContain('<slices');
+      },
+    },
+    {
+      template: 'part-to-whole-pie-chart',
+      ask: 'pie chart of Sales by Region',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales' },
+      ],
+      slots: [
+        {
+          slot_id: 'field_base_1',
+          kind: 'categorical',
+          derivation: 'none',
+          role: ['color', 'text'],
+        },
+        {
+          slot_id: 'field_base_2',
+          kind: 'quantitative',
+          derivation: 'sum',
+          role: ['wedge-size', 'tooltip', 'text'],
+        },
+      ],
+      assertions: (xml: string) => {
+        expect(xml).toContain('<mark class="Pie"');
+        expect(xml).toContain('<color column="[Sample - Superstore].[none:Region:nk]"');
+        expect(xml).toContain('<text column="[Sample - Superstore].[none:Region:nk]"');
+        expect(xml).toContain('<wedge-size column="[Sample - Superstore].[sum:Sales:qk]"');
+        expect(xml).toContain('<tooltip column="[Sample - Superstore].[sum:Sales:qk]"');
+        expect(xml).toContain(
+          '<column-instance column="[Sales]" derivation="Sum" name="[pcto:sum:Sales:qk]"',
+        );
+        expect(xml).toContain('<table-calc ordering-type="Table" type="PctTotal"');
+        expect(xml).toContain('<text column="[Sample - Superstore].[pcto:sum:Sales:qk]"');
+        expect(xml).toContain('value="p0.0%"');
+        expect(xml).not.toContain('Customer Name');
+        expect(xml).not.toContain('Profit');
+      },
+    },
   ])(
     'injects an explicit raw-slot $template bind without placeholder residue',
     async (testCase) => {
@@ -258,8 +388,13 @@ describe('createPuppetCompatibilityProjection', () => {
       const catalogValue = realRuntimeCatalog.get(testCase.template);
       expect(catalogValue).toBeDefined();
       if (!catalogValue) return;
-      expect(catalogValue.descriptor.slots).toEqual(
-        testCase.slots.map((slot) => expect.objectContaining({ ...slot, required: true })),
+      expect(projection.allDescriptors.get(testCase.template)?.slots).toEqual(
+        testCase.slots.map((slot) =>
+          expect.objectContaining({
+            ...slot,
+            required: 'required' in slot ? slot.required : true,
+          }),
+        ),
       );
       const result = await bindTemplate({
         ask: testCase.ask,
@@ -298,6 +433,83 @@ describe('createPuppetCompatibilityProjection', () => {
       testCase.assertions(worksheetXml!);
     },
   );
+
+  it('injects a bullet with an actual bar and explicit target reference marker', async () => {
+    const template = 'quota-attainment-bullet';
+    const catalogValue = realRuntimeCatalog.get(template);
+    const projection = createPuppetCompatibilityProjection(realRuntimeCatalog);
+    expect(catalogValue).toBeDefined();
+    if (!catalogValue) return;
+    expect(projection.allDescriptors.get(template)?.slots).toEqual([
+      expect.objectContaining({
+        slot_id: 'field_base_1',
+        kind: 'categorical',
+        derivation: 'none',
+        role: ['rows'],
+        required: true,
+      }),
+      expect.objectContaining({
+        slot_id: 'field_base_2',
+        kind: 'quantitative',
+        derivation: 'sum',
+        role: ['cols', 'tooltip', 'reference-line'],
+        required: true,
+      }),
+      expect.objectContaining({
+        slot_id: 'field_base_3',
+        kind: 'quantitative',
+        derivation: 'sum',
+        role: ['tooltip', 'reference-line'],
+        required: true,
+      }),
+    ]);
+    expect(projection.descriptors.get(template)?.slots).toEqual(
+      projection.allDescriptors.get(template)?.slots,
+    );
+
+    const result = await bindTemplate({
+      ask: 'bullet chart of Sales vs Target by Region',
+      workbookXml: BULLET_WORKBOOK,
+      manifests: projection.allDescriptors,
+      proposal: {
+        template,
+        title: template,
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Region' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+          { slot_id: 'field_base_3', field: 'Target' },
+        ],
+        confidence: 0.9,
+      },
+    });
+    expect(result.status, JSON.stringify(result)).toBe('bound');
+    if (result.status !== 'bound') return;
+    const injected = buildInjectedWorkbookXml({
+      workbookXml: BULLET_WORKBOOK,
+      templateXml: catalogValue.snapshot.xml,
+      title: result.args.title,
+      sheetType: result.args.sheet_type,
+      templateParameters: result.args.template_parameters,
+      fieldMapping: result.args.field_mapping,
+      templateSlots: catalogValue.snapshot.descriptor.slots,
+      optionalFieldPrunes: result.args.optional_field_prunes,
+      applyNonce: 'quota-attainment-bullet-actual-target',
+    });
+    expect(injected.ok).toBe(true);
+    if (!injected.ok) return;
+    const worksheetXml = injected.xml.match(
+      /<worksheet name="quota-attainment-bullet">([\s\S]*?)<\/worksheet>/,
+    )?.[0];
+    expect(worksheetXml).toBeDefined();
+    expect(worksheetXml).toContain('<mark class="Bar"');
+    expect(worksheetXml).toContain('<rows>[Bullet Data].[none:Region:nk]</rows>');
+    expect(worksheetXml).toContain('<cols>[Bullet Data].[sum:Sales:qk]</cols>');
+    expect(worksheetXml).not.toContain('<lod column="[Bullet Data].[sum:Target:qk]"');
+    expect(worksheetXml).toContain('<tooltip column="[Bullet Data].[sum:Target:qk]"');
+    expect(worksheetXml).toContain('axis-column="[Bullet Data].[sum:Sales:qk]"');
+    expect(worksheetXml).toContain('value-column="[Bullet Data].[sum:Target:qk]"');
+    expect(worksheetXml).not.toMatch(/\{\{(?:DATASOURCE|field_base_[1-9]\d*)\}\}/);
+  });
 
   it('keeps an explicit three-slot scatter trendline carrier', () => {
     const snapshot = getRuntimeTemplateSnapshot('correlation-scatter-trendline-chart', {

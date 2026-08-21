@@ -7,16 +7,13 @@ export interface CardinalityBand {
   rationale: string;
 }
 
+export const PIE_SLICE_WORKABLE_MAX = 12;
+
 const ROLE_BANDS: Readonly<Record<string, CardinalityBand>> = {
   color: {
     ideal_max: 12,
     workable_max: 20,
     rationale: 'one legend entry per member; beyond ~12 the colors stop being distinguishable',
-  },
-  'wedge-size': {
-    ideal_max: 8,
-    workable_max: 12,
-    rationale: 'one wedge per member; a pie with many thin slices cannot be compared',
   },
   rows: {
     ideal_max: 25,
