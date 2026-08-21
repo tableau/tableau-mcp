@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Config } from '../../../config.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import {
@@ -24,16 +25,18 @@ export type ImageToolResult =
 
 /**
  * Given rendered image bytes, either upload them to S3 and return a presigned
- * URL (when MCP_S3_BUCKET is configured), or carry the raw bytes for inline
- * base64. On any S3 failure this falls back to inline bytes so image retrieval
- * never hard-fails; the failure is logged as a warning so a persistently broken
- * S3 configuration is observable.
+ * URL (when the `view-file-mode` feature is enabled and MCP_S3_BUCKET is
+ * configured), or carry the raw bytes for inline base64. On any S3 failure this
+ * falls back to inline bytes so image retrieval never hard-fails; the failure is
+ * logged as a warning so a persistently broken S3 configuration is observable.
  *
- * `bucketS3.enabled` (MCP_S3_BUCKET) governs the entire S3-offload path: the
+ * The `view-file-mode` feature gate governs the entire S3-offload path: the
  * presigned-URL result and the Slack `_meta` block it carries (emitted in
  * `convertViewImageUrlToToolResult`) only exist on the `kind: 'url'` branch, so
- * an unset bucket keeps both behind that gate and preserves the original
- * inline-base64 behavior.
+ * disabling the flag keeps both behind the gate and preserves the original
+ * inline-base64 behavior. The `bucketS3.enabled` check still guards against a
+ * missing bucket so an enabled flag without config doesn't attempt a doomed
+ * upload on every request.
  *
  * `keyPrefixSegment` is the caller's per-tool folder (e.g. `view-images/`); it
  * is appended to the shared base prefix (MCP_IMAGE_PREFIX) so each tool
@@ -55,7 +58,7 @@ export async function buildImageToolResult({
   toolName: string;
   keyPrefixSegment: string;
 }): Promise<ImageToolResult> {
-  if (!config.bucketS3.enabled) {
+  if (!config.bucketS3.enabled || !(await getFeatureGate().isFeatureEnabled('view-file-mode'))) {
     return { kind: 'inline', imageData, format };
   }
 
