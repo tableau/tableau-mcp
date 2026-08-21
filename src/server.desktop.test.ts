@@ -204,7 +204,7 @@ describe('desktop tools/list serialized surface', () => {
 
     // Tool search, not an aggregate tools/list payload, owns discovery. Keep only the
     // instruction pin and per-tool budget so useful tools do not fund one shared ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_304);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_372);
   });
 });
 
