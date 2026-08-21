@@ -868,6 +868,42 @@ describe('ExternalApiToolExecutor', () => {
       }
     });
 
+    it('reports a poll-timeout behind a self-clearing progress dialog without blocking-dialog guidance', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-progress'));
+      server.setOperation('op-progress', {
+        poll: [
+          {
+            id: 'op-progress',
+            kind: 'tabdoc:sort',
+            state: 'RUNNING',
+            progressWindows: [
+              { objectName: 'progress', title: 'Exporting…', className: 'QProgressDialog' },
+            ],
+          },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        clientOptions: { pollDeadlineMs: 50 },
+      });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'sort',
+        signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-timed-out');
+      if (error.type === 'command-timed-out') {
+        expect(error.error).toContain('Exporting…');
+        expect(error.error).toContain('list-instances');
+        expect(error.error).not.toContain('Do not retry');
+      }
+    });
+
     it('maps a CANCELLED terminal operation to a command-failed error', async () => {
       server.setOverride('POST /v0/app:invokeCommand', accepted202('op-cancel'));
       server.setOperation('op-cancel', {
