@@ -1,7 +1,6 @@
 import Fuse from 'fuse.js';
-import { join } from 'path';
 
-import { getResourcesRoot, listKnowledgeSlugs, readKnowledgeBySlug } from '../assets.js';
+import { getConfiguredKnowledgeDir, listKnowledgeSlugs, readKnowledgeBySlug } from '../assets.js';
 
 export interface KnowledgeResource {
   uri: string;
@@ -10,12 +9,10 @@ export interface KnowledgeResource {
   mimeType: 'text/markdown';
 }
 
-export function getKnowledgeDir(): string {
-  return join(getResourcesRoot(), 'knowledge');
-}
-
 function knowledgeCorpusEmptyError(): Error {
-  return new Error(`Knowledge corpus is empty; expected assets under ${getKnowledgeDir()}`);
+  return new Error(
+    `Knowledge corpus is empty; expected assets under ${getConfiguredKnowledgeDir()}`,
+  );
 }
 
 export function getKnowledgeCorpusEntryCount(): number {

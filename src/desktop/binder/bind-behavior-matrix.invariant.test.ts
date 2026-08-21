@@ -359,6 +359,14 @@ describe('binder/bind-behavior-matrix — KNOWN one-shots', () => {
     },
   );
 
+  it('documents the neutral-geo boundary: extra geo vocabulary fails closed to proposal', async () => {
+    const res = await bind('symbol map of Sales by Country/Region for the admin dashboard');
+    expect(res.status, JSON.stringify(res)).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.decline_reason.code).toBe('no_llm_classifier_declined');
+    }
+  });
+
   it.each([
     ['Country', 'Country/Region'],
     ['State', 'State/Province'],

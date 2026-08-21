@@ -24,6 +24,9 @@ const resultSchema = z.object({
       luid: z.string().optional(),
       name: z.string().optional(),
       caption: z.string().optional(),
+      type: z.string().optional(),
+      isExtract: z.boolean().optional(),
+      hasDownloadFilePermission: z.boolean().optional(),
     }),
   ),
 });
@@ -39,7 +42,8 @@ describe('listWorkbookDatasourcesTool', () => {
 
     expect(tool.name).toBe('list-workbook-datasources');
     expect(tool.description).toContain("workbook's OWN connected datasources");
-    expect(tool.description).toContain('luid for published');
+    expect(tool.description).toContain('isExtract');
+    expect(tool.description).toContain('published, non-federated');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       readOnlyHint: true,
@@ -63,17 +67,27 @@ describe('listWorkbookDatasourcesTool', () => {
       const result = await callback({ session: undefined }, extra);
 
       expect(result.isError).toBe(false);
-      // The published datasource surfaces its server LUID; the embedded one
-      // (luid: null) and the legacy one (luid absent — the nullish() undefined
-      // leg) both omit it. Only a non-null string luid is projected.
+      // The published datasource surfaces its server LUID and a real hasDownloadFilePermission; the
+      // embedded one (luid: null, hasDownloadFilePermission: null) omits both, keeping isExtract:
+      // false; the legacy one predates all three added fields (luid/type/isExtract/permission absent)
+      // and omits each. Only a non-null string luid and a real boolean permission are projected.
       expect(parseResult(result).datasources).toEqual([
         {
           id: 'wb-ds-superstore',
           luid: 'luid-superstore',
           name: 'Sample - Superstore',
           caption: 'Sample - Superstore',
+          type: 'relational',
+          isExtract: true,
+          hasDownloadFilePermission: true,
         },
-        { id: 'wb-ds-quota', name: 'Quota Targets', caption: 'Quota Targets' },
+        {
+          id: 'wb-ds-quota',
+          name: 'Quota Targets',
+          caption: 'Quota Targets',
+          type: 'federated',
+          isExtract: false,
+        },
         { id: 'wb-ds-legacy', name: 'Legacy Extract', caption: 'Legacy Extract' },
       ]);
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/datasources');

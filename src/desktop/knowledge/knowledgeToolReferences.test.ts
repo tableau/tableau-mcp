@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'fs';
 import { join, relative } from 'path';
 
 import { desktopToolNames } from '../../tools/desktop/toolName.js';
-import { getKnowledgeDir } from './index.js';
+import { getConfiguredKnowledgeDir } from '../assets.js';
 
 const registeredDesktopToolNames = new Set<string>(desktopToolNames);
 
@@ -240,7 +240,7 @@ function isAllowedReference(token: string): boolean {
 
 describe('desktop knowledge tool references', () => {
   it('only teaches registered desktop tools', () => {
-    const knowledgeDir = getKnowledgeDir();
+    const knowledgeDir = getConfiguredKnowledgeDir();
     const offenders = listMarkdownFiles(knowledgeDir)
       .flatMap((file) =>
         extractCandidateReferences(relative(knowledgeDir, file), readFileSync(file, 'utf-8')),
@@ -258,7 +258,7 @@ describe('desktop knowledge tool references', () => {
 
   it('never teaches underscore aliases for the knowledge tools', () => {
     const forbiddenAliases = ['search_knowledge', 'read_knowledge_resource'];
-    const knowledgeDir = getKnowledgeDir();
+    const knowledgeDir = getConfiguredKnowledgeDir();
     const offenders = listMarkdownFiles(knowledgeDir).flatMap((file) => {
       const relativeFile = relative(knowledgeDir, file);
       return readFileSync(file, 'utf-8')

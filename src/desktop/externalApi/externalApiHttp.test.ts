@@ -359,8 +359,19 @@ describe('ExternalApiHttp', () => {
         luid: 'luid-superstore',
         name: 'Sample - Superstore',
         caption: 'Sample - Superstore',
+        type: 'relational',
+        isExtract: true,
+        hasDownloadFilePermission: true,
       },
-      { id: 'wb-ds-quota', luid: null, name: 'Quota Targets', caption: 'Quota Targets' },
+      {
+        id: 'wb-ds-quota',
+        luid: null,
+        name: 'Quota Targets',
+        caption: 'Quota Targets',
+        type: 'federated',
+        isExtract: false,
+        hasDownloadFilePermission: null,
+      },
       { id: 'wb-ds-legacy', name: 'Legacy Extract', caption: 'Legacy Extract' },
     ]);
 
