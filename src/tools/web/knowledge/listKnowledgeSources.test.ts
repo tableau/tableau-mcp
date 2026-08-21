@@ -43,6 +43,8 @@ describe('listKnowledgeSourcesTool', () => {
   it('has the expected arguments and read-only metadata', async () => {
     const tool = getTool();
     expect(tool.name).toBe('list-knowledge-sources');
+    expect(tool.description).toContain("source's top-level id is a Knowledge graph node ID");
+    expect(tool.description).toContain('properties.luid as the Tableau content LUID');
     expect(tool.description).toContain('published data sources and workbooks');
     expect(tool.description).toContain('do not invent one');
     expect(tool.paramsSchema).toHaveProperty('graphId');

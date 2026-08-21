@@ -8,6 +8,8 @@ Before using this tool, you should:
 2. Understand what parameters are available and their types
 3. Understand the data structure and field relationships
 
+When Tableau Knowledge evidence defines a requested value, query only fields explicitly bound by that evidence and confirmed queryable by datasource metadata. Do not substitute similarly named or proxy fields for missing bindings.
+
 ## Best Practices
 
 ### Data Volume Management

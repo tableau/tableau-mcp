@@ -33,7 +33,7 @@ export const getGetKnowledgeNodeRelationshipsTool = (
     server,
     name: 'get-knowledge-node-relationships',
     description:
-      "Returns authoritative scope and immediate graph connections around one node in an explicit Tableau Knowledge graph. After search-knowledge-nodes, pass the selected match's exact id as nodeId; that id is already resolved, so do not also call get-knowledge-node. A returned edge such as DESCRIBES establishes the connected node's scope from its ID, name, and type. Once that answers the scope question, stop and answer: do not search for the connected node or call this tool again. Use query only when no exact node ID is available.",
+      "Returns immediate relationships around one node in an explicit Tableau Knowledge graph. After search-knowledge-nodes, pass the selected match's exact id as nodeId; that id is already resolved, so do not also call get-knowledge-node. Use edgeType and direction for targeted one-hop inspection: DESCRIBES establishes scope, while CONTAINS and HAS expose source hierarchy. Check mcp.resultInfo.truncated before treating missing edges as evidence that no relationship exists. Do not search again for a connected node whose ID, name, and type are already returned. Use query only when no exact node ID is available.",
     paramsSchema,
     annotations: {
       title: 'Get Knowledge Node Relationships',

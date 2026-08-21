@@ -87,6 +87,19 @@ describe('queryDatasourceTool', () => {
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
   });
 
+  it.each([
+    { value: '2025.2.0', build: '20252.25.0101.0001' },
+    testProductVersion2025_3,
+    testProductVersion,
+  ])('guards governed formulas from proxy substitutions on $value', async (productVersion) => {
+    const tool = getQueryDatasourceTool(new WebMcpServer(), productVersion);
+    const description = await Provider.from(tool.description);
+    expect(description).toContain('When Tableau Knowledge evidence defines a requested value');
+    expect(description).toContain('fields explicitly bound by that evidence');
+    expect(description).toContain('confirmed queryable by datasource metadata');
+    expect(description).toContain('Do not substitute similarly named or proxy fields');
+  });
+
   it('should return error when query args fail validation', async () => {
     const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
     const callback = await Provider.from(queryDatasourceTool.callback);

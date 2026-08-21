@@ -24,7 +24,7 @@ export const getListKnowledgeSourcesTool = (server: WebMcpServer): WebTool<typeo
     server,
     name: 'list-knowledge-sources',
     description:
-      'Lists published data sources and workbooks in an explicit Tableau Cloud knowledge graph for browsing available sources and obtaining source IDs. The graph ID must come from Tableau Knowledge configuration or a prior workflow; do not invent one.',
+      "Lists published data sources and workbooks in an explicit Tableau Cloud knowledge graph for browsing available sources and obtaining source IDs. A source's top-level id is a Knowledge graph node ID; use properties.luid as the Tableau content LUID when present. The graph ID must come from Tableau Knowledge configuration or a prior workflow; do not invent one.",
     paramsSchema,
     annotations: {
       title: 'List Knowledge Sources',
