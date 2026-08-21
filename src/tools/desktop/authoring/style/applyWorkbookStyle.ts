@@ -114,7 +114,7 @@ export const getApplyWorkbookStyleTool = (
                 themeName,
                 themeSha256,
                 'The current workbook target could not be confirmed; the theme command was not sent.',
-                'Preview the style guide again before applying it',
+                'Review the style guide again before applying it',
               );
             }
             if (inventoryResult.isErr()) {
@@ -122,15 +122,15 @@ export const getApplyWorkbookStyleTool = (
                 themeName,
                 themeSha256,
                 'The current workbook target could not be confirmed; the theme command was not sent.',
-                'Preview the style guide again before applying it',
+                'Review the style guide again before applying it',
               );
             }
             if (workbookTargetFingerprint(inventoryResult.value) !== expectedWorkbookTarget) {
               return preInvocationFailure(
                 themeName,
                 themeSha256,
-                'The current workbook changed after preview; the theme command was not sent.',
-                'Preview the style guide again before applying it',
+                'The current workbook changed after review; the theme command was not sent.',
+                'Review the style guide again before applying it',
               );
             }
             try {

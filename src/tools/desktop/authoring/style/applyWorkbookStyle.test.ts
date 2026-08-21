@@ -204,11 +204,15 @@ describe('apply-workbook-style', () => {
     expect(bodyOf(result)).toMatchObject({
       applied: false,
       retrySafe: true,
-      verification: { status: 'not-run', themeReference: 'not-run' },
+      verification: {
+        status: 'not-run',
+        themeReference: 'not-run',
+        message: 'The current workbook changed after review; the theme command was not sent.',
+      },
     });
     expect(result.structuredContent?.nextAction).toEqual({
       kind: 'prefill',
-      label: 'Preview the style guide again before applying it',
+      label: 'Review the style guide again before applying it',
     });
     expect(executor.executeCommand).not.toHaveBeenCalled();
     expect(executor.getWorkbookDocument).not.toHaveBeenCalled();
@@ -229,7 +233,7 @@ describe('apply-workbook-style', () => {
     expect(bodyOf(result)).toMatchObject({ applied: false, retrySafe: true });
     expect(result.structuredContent?.nextAction).toEqual({
       kind: 'prefill',
-      label: 'Preview the style guide again before applying it',
+      label: 'Review the style guide again before applying it',
     });
     expect(executor.executeCommand).not.toHaveBeenCalled();
   });
@@ -244,7 +248,7 @@ describe('apply-workbook-style', () => {
     expect(result.isError).toBe(true);
     expect(result.structuredContent?.nextAction).toEqual({
       kind: 'prefill',
-      label: 'Preview the style guide again before applying it',
+      label: 'Review the style guide again before applying it',
     });
     expect(JSON.stringify(result)).not.toContain('PRIVATE WORKBOOK DETAIL');
     expect(executor.executeCommand).not.toHaveBeenCalled();
