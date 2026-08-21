@@ -14,6 +14,7 @@ import { artifactFileParam, sessionParam } from '../params.js';
 import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { acceptedNoReadbackApplyResult, runApplyPreamble } from './applyPreamble.js';
+import { runVisualErrorCheckText } from './visualErrorCheck.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -98,6 +99,15 @@ export const getApplyWorkbookTool = (
             });
           }
 
+          // A whole-workbook apply has no structural readback, so — when AUTO_VISUAL_CHECK is on —
+          // the rendered-window scan is the only post-apply signal: a dense error-red cluster nudges
+          // the model to look before reporting Done. Best-effort and never fails the apply.
+          const visualWarning = await runVisualErrorCheckText({
+            executor,
+            signal: extra.signal,
+            enabled: extra.config.autoVisualCheck,
+          });
+
           // The shared structured receipt mirrors the text above and nothing more:
           // dispatch and preflight warnings were observed; the applied structure was
           // not, so it is listed as unverified (promise_outcome 'unverified' above).
@@ -106,6 +116,7 @@ export const getApplyWorkbookTool = (
               kind: 'workbook',
               resultWarnings: validationWarnings,
               hostVerification,
+              visualWarning,
             }),
           );
         },

@@ -1,5 +1,8 @@
 import { WithExecutorAndAbortSignal } from '../../../desktop/externalApi/executorTypes.js';
-import { VerificationFinding } from '../../../desktop/validation/readback-verify.js';
+import {
+  formatVerificationWarnings,
+  VerificationFinding,
+} from '../../../desktop/validation/readback-verify.js';
 import { captureMainWindowImage } from './captureWindowScreenshot.js';
 import { isSuspiciousErrorRed, scanPngForErrorRed } from './errorRedScan.js';
 
@@ -50,4 +53,23 @@ export async function runVisualErrorCheck({
     // failing the apply this rides on. The caller treats null as "nothing to report".
     return null;
   }
+}
+
+/**
+ * The text-channel form of the visual check, for apply paths that carry no structured
+ * VerificationReport to fold into (dashboard, workbook). Runs the check only when `enabled`
+ * (the AUTO_VISUAL_CHECK gate) and renders a hit as the SAME agent-facing warning text the
+ * worksheet text-mode apply uses via formatVerificationWarnings. Returns '' when the flag is
+ * off or nothing was found, so a caller can unconditionally append it to its message.
+ */
+export async function runVisualErrorCheckText({
+  executor,
+  signal,
+  enabled,
+}: WithExecutorAndAbortSignal & { enabled: boolean }): Promise<string> {
+  if (!enabled) {
+    return '';
+  }
+  const finding = await runVisualErrorCheck({ executor, signal });
+  return finding ? formatVerificationWarnings([finding]) : '';
 }

@@ -4,7 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
-import { runVisualErrorCheck } from './visualErrorCheck.js';
+import { runVisualErrorCheck, runVisualErrorCheckText } from './visualErrorCheck.js';
 
 // runVisualErrorCheck resolves the chosen capture through chooseMainWindowImage, which reads
 // files off disk; stub statSync/readFileSync so the synthetic PNG stands in for a real capture.
@@ -121,5 +121,49 @@ describe('runVisualErrorCheck', () => {
     });
 
     expect(finding).toBeNull();
+  });
+});
+
+describe('runVisualErrorCheckText', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns empty and never captures when disabled', async () => {
+    const executor = { executeCommand: vi.fn() };
+
+    const text = await runVisualErrorCheckText({
+      executor: executor as never,
+      signal: new AbortController().signal,
+      enabled: false,
+    });
+
+    expect(text).toBe('');
+    expect(executor.executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('renders the visual-check warning text when enabled and the window is densely red', async () => {
+    const executor = executorReturning(REDDISH_PNG);
+
+    const text = await runVisualErrorCheckText({
+      executor: executor as never,
+      signal: new AbortController().signal,
+      enabled: true,
+    });
+
+    expect(text).toMatch(/⚠️ Visual check —/);
+    expect(text).toMatch(/capture-window-screenshot/);
+  });
+
+  it('returns empty when enabled but the window is clean', async () => {
+    const executor = executorReturning(CLEAN_PNG);
+
+    const text = await runVisualErrorCheckText({
+      executor: executor as never,
+      signal: new AbortController().signal,
+      enabled: true,
+    });
+
+    expect(text).toBe('');
   });
 });

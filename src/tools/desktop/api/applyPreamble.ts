@@ -95,6 +95,7 @@ export function acceptedNoReadbackApplyResult({
   appliedName,
   resultWarnings,
   hostVerification,
+  visualWarning = '',
 }: {
   kind: NoReadbackApplyKind;
   /** Sheet name for the per-sheet applies; a whole-workbook apply names none. */
@@ -103,6 +104,13 @@ export function acceptedNoReadbackApplyResult({
   resultWarnings: readonly unknown[];
   /** Host verification line appended to the message text. */
   hostVerification: string;
+  /**
+   * Optional visual-check warning text (from runVisualErrorCheckText) appended after the host
+   * verification line. These applies have no structural readback, so a dense error-red cluster
+   * in the rendered window is the only post-apply signal — it rides the message as a nudge, never
+   * as a hard failure. '' (the default) when the check is off or found nothing.
+   */
+  visualWarning?: string;
 }): StructuredResult<{ message: string }> {
   const { noun, scope } = NO_READBACK_WORDING[kind];
   const target = appliedName === undefined ? '' : ` for "${appliedName}"`;
@@ -110,7 +118,7 @@ export function acceptedNoReadbackApplyResult({
   const capitalized = kind.charAt(0).toUpperCase() + kind.slice(1);
   return withNextAction(
     {
-      message: `Successfully applied ${kind} update${target}. The ${kind} has been updated.${hostVerification}`,
+      message: `Successfully applied ${kind} update${target}. The ${kind} has been updated.${hostVerification}${visualWarning}`,
     },
     doneNextAction(
       receipt({
