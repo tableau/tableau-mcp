@@ -1,5 +1,9 @@
 import { rewriteFieldReferences } from '../templates/fieldReferenceRewriter.js';
-import { getRuntimeTemplateSnapshot } from '../templates/runtimeTemplateCatalog.js';
+import { createPuppetCompatibilityProjection } from '../templates/puppetCompatibilityProjection.js';
+import {
+  getRuntimeTemplateSnapshot,
+  loadRuntimeTemplateCatalogSnapshots,
+} from '../templates/runtimeTemplateCatalog.js';
 import { bindTemplate, classifyNoLlm, summarizeSchema } from './binder.js';
 import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
@@ -69,6 +73,9 @@ const symbolMap: RuntimeTemplateDescriptor = {
   calcs: [],
 };
 const manifests = new Map([[symbolMap.template, symbolMap]]);
+const runtimeManifests = createPuppetCompatibilityProjection(
+  loadRuntimeTemplateCatalogSnapshots(),
+).descriptors;
 
 /** The live-shaped World Cup schema Matt hit the flat-blue symbol map against. */
 const worldCupXml = `<workbook><datasources><datasource name='federated.wc' caption='teams+'>
@@ -84,6 +91,14 @@ const cueNamedFieldXml = `<workbook><datasources><datasource name='Points'>
   <column name='[Country]' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[Name]' />
   <column name='[Warm]' role='measure' type='quantitative' datatype='integer' />
   <column name='[Hover]' role='measure' type='quantitative' datatype='integer' />
+</datasource></datasources></workbook>`;
+
+const latlonXml = `<workbook><datasources><datasource name='Points'>
+  <column name='[Country]' role='dimension' type='nominal' datatype='string' />
+  <column name='[City]' role='dimension' type='nominal' datatype='string' />
+  <column name='[Latitude]' role='measure' type='quantitative' datatype='real' />
+  <column name='[Longitude]' role='measure' type='quantitative' datatype='real' />
+  <column name='[Points]' role='measure' type='quantitative' datatype='integer' />
 </datasource></datasources></workbook>`;
 
 /**
@@ -190,6 +205,24 @@ describe('binder encoding honesty — requested vs filled', () => {
     expect(unfilled.xml).not.toContain('<color ');
 
     expect(runtimeSlots.some((slot) => slot.role.includes('color'))).toBe(false);
+
+    const filledSnapshot = getRuntimeTemplateSnapshot('spatial-symbol-map-latlon')!;
+    const filled = await bindTemplate({
+      ask: 'Build a symbol map using Latitude and Longitude with Country and City for detail. Put SUM(Points) on Size. Put SUM(Points) on Color. Put Country/Points on Tooltip.',
+      workbookXml: latlonXml,
+      manifests: runtimeManifests,
+    });
+    expect(filled.status, JSON.stringify(filled)).toBe('bound');
+    if (filled.status !== 'bound') throw new Error('expected bound');
+    expect(filled.encodings?.filled).toContain('color');
+    const filledXml = rewriteFieldReferences(
+      filledSnapshot.xml,
+      filled.args.field_mapping,
+      filled.args.template_parameters.DATASOURCE,
+      undefined,
+      { templateSlots: filledSnapshot.descriptor.slots },
+    );
+    expect(filledXml).toContain('<color ');
   });
 
   it('carries the unfilled encodings onto the bound result the tool layer reads', async () => {
