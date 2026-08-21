@@ -5,6 +5,15 @@ covers only the tableau-mcp side. Full cross-repo plan (context + tabhf-mcp-svc 
 sequencing): `/Users/j.song/.claude/plans/concurrent-pondering-pudding.md` (orchestrator
 workspace, not checked into this repo).
 
+**Update (2026-08-20): no change on this side.** tabhf-mcp-svc's custom provider was redesigned
+after this PR opened — its `getUploadUrl` now mints via a real S3 multipart `UploadId` instead of
+a self-issued HMAC token, and its write route recovers `key`/`bucket` via
+`ListMultipartUploadsCommand` instead of trusting a signed payload (see tabhf-mcp-svc's
+`docs/plans/upload-url-provider.md` and `/Users/j.song/.claude/plans/cozy-purring-adleman.md`).
+The `UploadUrlProvider` interface below (`getUploadUrl` params/return shape) is unaffected — the
+`uploadUrl` string is opaque to tableau-mcp either way, so this redesign is 100% internal to the
+tabhf-mcp-svc implementation and requires no changes here.
+
 ## Context
 
 `request-workbook-upload` currently mints a raw S3 presigned PUT URL and hands it straight to
