@@ -121,12 +121,6 @@ export interface BindRecoveryRecord {
   lastProposalSignature?: string;
   proposalContext?: BindRecoveryProposalContext;
   consecutiveBareResubmitCount?: number;
-  /** One repair may re-enter a Tier-2 terminal record by binding its sole missing slot. */
-  terminalRepairAllowance?: {
-    template: string;
-    slotId: string;
-    remaining: 0 | 1;
-  };
   /** One-shot retry for an apply failure proven to have occurred before mutation dispatch. */
   preDispatchRetryAllowance?: {
     proposalSignature: string;
@@ -141,7 +135,6 @@ export interface BindRecoveryAttemptInput {
   proposalSignature?: string;
   proposalContext?: BindRecoveryProposalContext;
   reservationId?: number;
-  terminalRepairAllowance?: BindRecoveryRecord['terminalRepairAllowance'];
   /** Explicit terminal-done marker; callers use this only after final bind processing concludes. */
   terminal?: boolean;
 }
@@ -578,15 +571,6 @@ export class SessionRouteStateStore {
       : {};
   }
 
-  private withTerminalRepairAllowance(
-    previous: BindRecoveryRecord | undefined,
-    next?: BindRecoveryRecord['terminalRepairAllowance'],
-  ): Pick<BindRecoveryRecord, 'terminalRepairAllowance'> {
-    // Once consumed, the same ask cannot mint a fresh allowance by escalating again.
-    const allowance = previous?.terminalRepairAllowance ?? next;
-    return allowance ? { terminalRepairAllowance: allowance } : {};
-  }
-
   private withProposalContext(
     previous: BindRecoveryRecord | undefined,
     proposalContext: BindRecoveryProposalContext | undefined,
@@ -702,7 +686,6 @@ export class SessionRouteStateStore {
         admission.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
       ),
       ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
-      ...this.withTerminalRepairAllowance(previous),
       ...this.withUncorrelatedOutcomeCount(previous, false),
     };
 
@@ -768,7 +751,6 @@ export class SessionRouteStateStore {
         attempt.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
       ),
       ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
-      ...this.withTerminalRepairAllowance(previous),
       ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
     };
 
@@ -824,37 +806,11 @@ export class SessionRouteStateStore {
         attempt.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
       ),
       ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
-      ...this.withTerminalRepairAllowance(previous, attempt.terminalRepairAllowance),
       ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
     };
 
     this.touchBindRecovery(state, ask, record);
     return state;
-  }
-
-  consumeTerminalRepairAllowance(
-    sessionId: string | undefined,
-    ask: string,
-    template: string,
-    slotId: string,
-  ): boolean {
-    const state = this.get(sessionId);
-    const record = state?.bindRecoveryByAsk.get(ask);
-    const allowance = record?.terminalRepairAllowance;
-    if (
-      !state ||
-      !record ||
-      record.phase !== 'terminal' ||
-      allowance?.remaining !== 1 ||
-      allowance.template !== template ||
-      allowance.slotId !== slotId
-    ) {
-      return false;
-    }
-    return this.touchBindRecovery(state, ask, {
-      ...record,
-      terminalRepairAllowance: { ...allowance, remaining: 0 },
-    });
   }
 
   grantPreDispatchRetryAllowance(
