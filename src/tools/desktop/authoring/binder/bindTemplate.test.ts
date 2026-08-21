@@ -305,6 +305,16 @@ const CALC_BASE_XML = [
 const CALC_COLUMN_XML =
   "<column caption='Margin' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Sales] * 0.2' /></column>";
 const CALC_READBACK_XML = CALC_BASE_XML.replace('</datasource>', `${CALC_COLUMN_XML}</datasource>`);
+const MULTI_DATASOURCE_CALC_BASE_XML = CALC_BASE_XML.replace(
+  '</datasources>',
+  "<datasource name='Inventory'><column caption='Quantity' datatype='integer' name='[Quantity]' role='measure' type='quantitative' /></datasource></datasources>",
+);
+const INVENTORY_CALC_COLUMN_XML =
+  "<column caption='Double Quantity' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Quantity] * 2' /></column>";
+const MULTI_DATASOURCE_CALC_READBACK_XML = MULTI_DATASOURCE_CALC_BASE_XML.replace(
+  '</datasource></datasources>',
+  `${INVENTORY_CALC_COLUMN_XML}</datasource></datasources>`,
+);
 
 const boundResult: BinderResult = {
   status: 'bound',
@@ -681,16 +691,16 @@ describe('bindTemplateTool', () => {
       proposal: expect.any(Object),
       minConfidence: expect.any(Object),
       auto_apply: expect.any(Object),
+      datasource: expect.any(Object),
       calcs: expect.any(Object),
     });
-    expect(paramsSchema['session']!.description).toBe(
-      'Desktop process ID; omit to use the pinned or only running instance.',
-    );
+    expect(paramsSchema['session']!.description).toBe('Desktop PID; omit for default.');
     expect(paramsSchema['target_worksheet']!.description).toBe(
-      'Worksheet id or name; omit to create.',
+      'Worksheet id/name; omit to create.',
     );
-    expect(paramsSchema['auto_apply']!.description).toBe('Apply immediately.');
-    expect(paramsSchema['calcs']!.description).toBe('Derived fields to author before binding.');
+    expect(paramsSchema['auto_apply']!.description).toBe('Apply now.');
+    expect(paramsSchema['datasource']!.description).toBe('Calc datasource id/name.');
+    expect(paramsSchema['calcs']!.description).toBe('Fields to author.');
     expect(
       paramsSchema['calcs']!.safeParse([
         { caption: 'Margin', formula: '[Profit] / [Sales]', datatype: 'number' },
@@ -1953,6 +1963,7 @@ async function getToolResult({
   minConfidence,
   auto_apply,
   target_worksheet,
+  datasource,
   calcs,
   customSignal,
   getExecutor,
@@ -1965,6 +1976,7 @@ async function getToolResult({
   minConfidence?: number;
   auto_apply?: boolean;
   target_worksheet?: string;
+  datasource?: string;
   calcs?: Array<{
     caption: string;
     formula: string;
@@ -1986,7 +1998,16 @@ async function getToolResult({
   };
 
   return await callback(
-    { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs } as any,
+    {
+      session,
+      ask,
+      proposal,
+      minConfidence,
+      auto_apply,
+      target_worksheet,
+      datasource,
+      calcs,
+    } as any,
     extra,
   );
 }
@@ -3414,6 +3435,53 @@ describe('bindTemplateTool auto_apply gate', () => {
       expect.objectContaining({ workbookXml: CALC_READBACK_XML }),
     );
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it('authors inline calcs in the requested datasource of a multi-datasource workbook', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [MULTI_DATASOURCE_CALC_BASE_XML, MULTI_DATASOURCE_CALC_READBACK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Double Quantity by Region',
+      datasource: 'Inventory',
+      calcs: [{ caption: 'Double Quantity', formula: '[Quantity] * 2' }],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(applyWorkbookDocument.mock.calls[0]?.[0]).toContain(
+      `<datasource name='Inventory'><column caption='Quantity' datatype='integer' name='[Quantity]' role='measure' type='quantitative' />${INVENTORY_CALC_COLUMN_XML}</datasource>`,
+    );
+    expect(binderModule.bindTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ workbookXml: MULTI_DATASOURCE_CALC_READBACK_XML }),
+    );
+  });
+
+  it('returns an actionable error when the requested calc datasource is absent', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [MULTI_DATASOURCE_CALC_BASE_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Double Quantity by Region',
+      datasource: 'Missing Datasource',
+      calcs: [{ caption: 'Double Quantity', formula: '[Quantity] * 2' }],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'Datasource "Missing Datasource" was not found. Candidates: Superstore, Inventory',
+    );
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
   });
 
   it('resolves loose calc references and percent-formats a ratio in the same bind call', async () => {
