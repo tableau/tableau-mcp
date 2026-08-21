@@ -18,6 +18,7 @@ export class ConsentFlow extends Flow {
   };
 
   private fill = async (): Promise<void> => {
-    await this.page.locator('button[type="submit"]').click();
+    // The consent page has multiple submit buttons (Switch site/username), so target Allow by id.
+    await this.page.locator('#allow-button').click();
   };
 }
