@@ -8,18 +8,6 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { workbookLoadToolError } from './workbookLoadToolError.js';
 
-/**
- * The apply-and-verify skeleton shared by the datasource `author-*` tools
- * (`author-calc`, `author-set`, `author-action`, `author-parameter`). Each splices a
- * non-visual object (a calc/set/action/parameter) into the live document, applies it in
- * place, and confirms the object survived the round-trip.
- *
- * The disposition is fixed to `restore`: these writes produce nothing new to look at, so
- * the user gets their sheet back. The whole-workbook apply is guarded against its live
- * baseline (`expectedWorkbookXml: baselineXml`). The tool-specific "did not apply" wording
- * stays at each call site via the `not-applied` outcome (which carries the readback so the
- * caller can inspect what did survive); only the transport/verify mechanics live here.
- */
 export type ApplyAndVerifyOutcome =
   | { status: 'applied'; workbookXml: string }
   | { status: 'not-applied'; workbookXml: string }
