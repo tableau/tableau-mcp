@@ -65,6 +65,26 @@ describe('setDashboardNavigationDocument', () => {
     expect(second.xml).toBe(first.xml);
   });
 
+  it('fails closed when exact navigation overlaps an additional preserved root zone', () => {
+    const first = setDashboardNavigationDocument(
+      dashboardXml('Sales Overview'),
+      'Sales Overview',
+      TARGETS,
+    );
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const source = first.xml.replace(
+      '</zones>',
+      "<zone h='8000' id='14' name='User control' w='30000' x='70000' y='0'/></zones>",
+    );
+
+    const result = setDashboardNavigationDocument(source, 'Sales Overview', TARGETS);
+
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) return;
+    expect(result.message).toContain('overlap');
+  });
+
   it('fails closed when a different root top-row goto-sheet object already exists', () => {
     const existing =
       "<zone h='8000' id='12' type-v2='dashboard-object' w='15000' x='85000' y='0'><button button-type='text' action='tabdoc:goto-sheet window-id=&quot;{window-other}&quot;'><button-visual-state><caption>Other</caption></button-visual-state></button></zone>";

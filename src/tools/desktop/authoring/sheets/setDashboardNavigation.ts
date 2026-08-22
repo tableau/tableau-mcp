@@ -249,22 +249,27 @@ export function setDashboardNavigationDocument(
       childXml.includes('tabdoc:goto-sheet')
     );
   });
+  let exactRequestedNavigation = false;
   if (existingTopNavigation.length > 0) {
     const existingButtons = existingTopNavigation.map(({ openTag, start, end }) =>
       readNavigationButton(openTag, rootInner.slice(start, end)),
     );
-    const exactRequestedNavigation =
+    exactRequestedNavigation =
       readIntegerAttribute(titleBand.openTag, 'w') === titleWidth &&
       existingButtons.every((button) => button !== undefined) &&
       JSON.stringify(existingButtons) === JSON.stringify(expectedButtons);
-    if (exactRequestedNavigation) return { ok: true, xml: dashboardXml };
-    return {
-      ok: false,
-      message: 'A different existing navigation row occupies the top title band.',
-    };
+    if (!exactRequestedNavigation) {
+      return {
+        ok: false,
+        message: 'A different existing navigation row occupies the top title band.',
+      };
+    }
   }
   const overlappingZone = rootChildren.find(
-    (child) => child !== layout && overlapsNavigationBand(child.openTag, titleHeight),
+    (child) =>
+      child !== layout &&
+      !(exactRequestedNavigation && existingTopNavigation.includes(child)) &&
+      overlapsNavigationBand(child.openTag, titleHeight),
   );
   if (overlappingZone) {
     return {
@@ -272,6 +277,7 @@ export function setDashboardNavigationDocument(
       message: 'A preserved root zone would overlap the generated title or navigation buttons.',
     };
   }
+  if (exactRequestedNavigation) return { ok: true, xml: dashboardXml };
 
   const nextTitleTag = upsertAttribute(titleBand.openTag, 'w', String(titleWidth));
   const nextLayoutInner =
