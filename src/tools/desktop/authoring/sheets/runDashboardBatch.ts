@@ -55,7 +55,6 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { templateArtifactUnavailableError } from '../../api/applyWorksheetArtifact.js';
-import { sessionParam } from '../../params.js';
 import { jsonToolResult, type StructuredResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import {
@@ -66,14 +65,19 @@ import {
 } from './composeDashboardCore.js';
 
 const paramsSchema = {
-  session: sessionParam({ max: 64 }),
+  session: z.string().max(64).optional(),
   artifactIds: z.array(z.string().trim().min(1).max(255)).max(6).optional(),
   dashboardName: z.string().trim().min(1).max(255),
   existingWorksheetNames: z.array(z.string().trim().min(1).max(255)).max(6).optional(),
   title: z.string().trim().min(1).max(255).optional(),
   layoutType: z.enum(['auto-grid', 'rows', 'columns', 'executive-summary']).optional(),
   gridColumns: z.number().int().min(1).max(6).optional(),
-  kpiWorksheetNames: z.array(z.string().trim().min(1).max(255)).min(1).max(5).optional(),
+  kpiWorksheetNames: z
+    .array(z.string().trim().min(1).max(255))
+    .min(1)
+    .max(5)
+    .optional()
+    .describe('Ordered KPIs.'),
   replaceExisting: z.boolean().optional(),
 };
 
