@@ -232,6 +232,11 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-19: list-templates now exposes derived template-fit metadata and filters by
 // required visible channels. Its schema adds 149 bytes; tighter route prose removes 131 from the
 // served profile, while the full schema-only surface moves 56_650 -> 56_799.
+// Re-pinned 2026-08-19: added native Custom Theme apply, inspect, and export tools to the Desktop
+// authoring suite. The later apply-worksheet name inference trims three bytes from both profiles.
+// Dynamic stays below the 46k product ceiling with 18 bytes of ratchet slack.
+// Re-pinned 2026-08-19: workbook-bound theme apply adds the required target fingerprint input;
+// both profiles move by 95 bytes; dynamic keeps 18 bytes and full keeps 36 bytes of ratchet slack.
 // Re-pinned 2026-08-19: apply-worksheet now infers the target from a cached worksheet fragment, so
 // its worksheetName describe drops the redundant "worksheet" (-3 bytes); dynamic authoring 40_099 -> 40_096.
 // Re-pinned 2026-08-19: surfaced type/isExtract/hasDownloadFilePermission on
@@ -262,10 +267,13 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // older field prose; dynamic authoring 45_743 -> 45_758 without raising the 46k product ceiling.
 // Re-pinned 2026-08-21: mark KPI names as ordered; 45_758 -> 45_761 consumes the existing slack
 // without raising either budget.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 45_761;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 45_761;
-const DYNAMIC_AUTHORING_PRODUCT_CEILING = 46_000;
-const FULL_TOOL_SURFACE_BUDGET = 60_022;
+// Re-pinned 2026-08-21: native Custom Theme support and named blank-sheet routing join the merged
+// surface. Retain 18 bytes of ratchet slack under the temporary 48k ceiling while TAS keeps SDK
+// tool search disabled for Summit reliability.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_525;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_543;
+const DYNAMIC_AUTHORING_PRODUCT_CEILING = 48_000;
+const FULL_TOOL_SURFACE_BUDGET = 61_590;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -290,7 +298,7 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
     // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_072);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_265);
     expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
@@ -522,10 +530,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 55-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 58-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(55);
+    expect(selected).toHaveLength(58);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -575,6 +583,9 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'refresh-datasource-extract',
       'get-workbook-xml',
       'apply-workbook',
+      'apply-workbook-style',
+      'inspect-custom-theme',
+      'export-custom-theme',
       'get-dashboard-xml',
       'apply-dashboard',
       'get-storyboard-xml',
@@ -625,7 +636,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     ).toHaveLength(1);
   });
 
-  it('dynamic-authoring surface sits well under the 46k tools/list cliff (the whole point of a lean profile)', async () => {
+  it('dynamic-authoring surface stays under its explicit tools/list ceiling', async () => {
     const server = new DesktopMcpServer();
     const selected = selectToolsForProfile(
       desktopToolFactories.map((f) => f(server)),

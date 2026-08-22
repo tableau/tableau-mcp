@@ -180,6 +180,27 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(plainChart?.action).not.toMatch(/confirm|expire|same.session|re-list/i);
   });
 
+  it('uses template binding for a chart requested on an explicitly named blank worksheet', () => {
+    const plainChart = routes.find((route) => route.id === 'plain-chart');
+
+    expect(plainChart?.action).toContain('explicitly named existing blank worksheet');
+    expect(plainChart?.action).toContain('chart-creation target, not an edit');
+    expect(plainChart?.action).toContain('bind-template with target_worksheet');
+  });
+
+  it('keeps populated existing-sheet edits on the manual edit-in-place route', () => {
+    const plainChart = routes.find((route) => route.id === 'plain-chart');
+    const editInPlace = routes.find((route) => route.id === 'edit-in-place');
+
+    expect(plainChart?.action).toContain(
+      'Existing-sheet edits on populated worksheets stay on the edit-in-place route',
+    );
+    expect(editInPlace?.trigger).toContain('populated');
+    expect(editInPlace?.action).toContain('add-field');
+    expect(editInPlace?.action).toContain('apply-worksheet');
+    expect(editInPlace?.action).not.toContain('bind-template');
+  });
+
   it('asks only when ambiguity changes written workbook content', () => {
     const ambiguity = DESKTOP_ROUTE_TABLE.find((entry) => entry.id === 'ask-user-ambiguity');
 

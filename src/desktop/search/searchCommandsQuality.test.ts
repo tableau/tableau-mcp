@@ -275,6 +275,17 @@ describe('search-commands routing recommendation', () => {
     expect(recommendation).not.toMatch(/build-and-apply-worksheet|inject-template|apply-workbook/);
   });
 
+  it('distinguishes named blank-sheet chart creation from populated-sheet edits', () => {
+    const { recommendation } = searchCommandsByKeywords(['field']) as {
+      recommendation?: string;
+    };
+
+    expect(recommendation).toContain('explicitly named existing blank worksheet');
+    expect(recommendation).toContain('bind-template with target_worksheet');
+    expect(recommendation).toMatch(/populated worksheet edits/i);
+    expect(recommendation).toContain('add-field then apply-worksheet');
+  });
+
   it('names the registered execute-tableau-command tool in blocking-surface warnings', () => {
     const { commands } = searchCommandsByKeywords(['editor']) as {
       commands: Array<{ warning?: string }>;

@@ -56,6 +56,7 @@ export type LoadWorksheetXmlError =
   // Only surfaced when a caller opts in with `requireExistingSheet` (apply-worksheet);
   // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
   | { type: 'sheet-absent'; message: string }
+  | { type: 'dashboard-member-blank-transition'; message: string }
   | { type: 'artifact-drift'; message: string };
 
 /** Non-fatal readback warnings surfaced on a successful apply (sort drops/changes). */
@@ -509,6 +510,23 @@ export async function loadWorksheetXml({
           ...outcomeResult.value,
           appliedName: applyOutcome.name,
           validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
+        });
+      }
+      if (
+        typeof applyOutcome === 'object' &&
+        applyOutcome.type === 'dashboard-member-blank-transition'
+      ) {
+        const dashboardNames = applyOutcome.dashboards.map((name) => `"${name}"`).join(', ');
+        const dashboardLabel = applyOutcome.dashboards.length === 1 ? 'dashboard' : 'dashboards';
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: {
+            type: 'dashboard-member-blank-transition',
+            message:
+              `Worksheet "${canonicalName}" is blank and already used by ${dashboardLabel} ${dashboardNames}. ` +
+              'Desktop cannot safely populate it while it belongs to a dashboard. ' +
+              'Remove it from the dashboard, build the chart, then add it back. No changes were sent to Tableau.',
+          },
         });
       }
       if (typeof applyOutcome === 'object') {

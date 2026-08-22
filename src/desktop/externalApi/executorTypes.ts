@@ -36,6 +36,7 @@ export type ExecuteCommandArgs<Z extends z.ZodTypeAny | undefined = undefined> =
   namespace: 'tabui' | 'tabdoc';
   args?: Record<string, any>;
   schema?: Z;
+  expectedInstanceId?: string;
 } & WithAbortSignal;
 
 export type ExecuteCommandError =
