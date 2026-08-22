@@ -174,17 +174,43 @@ function worksheetDocumentState(xml: string): 'blank' | 'populated' | 'unknown' 
 
   const rows = directChild(table, 'rows')?.textContent?.trim() ?? '';
   const cols = directChild(table, 'cols')?.textContent?.trim() ?? '';
-  const view = directChild(table, 'view');
-  const datasourceDependencies = view ? directChild(view, 'datasource-dependencies') : undefined;
-  const datasources = view ? directChild(view, 'datasources') : undefined;
-  const datasource = datasources ? directChild(datasources, 'datasource') : undefined;
+  return rows === '' && cols === '' && !hasPlacedFieldReference(table) ? 'blank' : 'populated';
+}
 
-  return rows === '' &&
-    cols === '' &&
-    datasourceDependencies === undefined &&
-    datasource === undefined
-    ? 'blank'
-    : 'populated';
+function hasPlacedFieldReference(table: XmlElement): boolean {
+  const stack = [table];
+  while (stack.length > 0) {
+    const element = stack.pop()!;
+    // Datasource declarations can survive clearing a sheet; they do not prove chart content.
+    if (
+      element.tagName === 'datasources' ||
+      element.tagName === 'datasource-dependencies' ||
+      element.tagName === 'style'
+    ) {
+      continue;
+    }
+
+    for (let index = 0; index < element.attributes.length; index++) {
+      const attribute = element.attributes.item(index);
+      if (
+        attribute &&
+        (attribute.value.includes('].[') ||
+          ((attribute.name === 'column' || attribute.name.endsWith('field')) &&
+            attribute.value.includes('[')))
+      ) {
+        return true;
+      }
+    }
+    for (let index = 0; index < element.childNodes.length; index++) {
+      const child = element.childNodes.item(index);
+      if (child?.nodeType === 1) {
+        stack.push(child as XmlElement);
+      } else if (child?.nodeValue?.includes('].[')) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function directChild(parent: XmlElement, tagName: string): XmlElement | undefined {

@@ -318,7 +318,13 @@ describe('tryApplyViaPerSheetRoute', () => {
 
   it('blocks populating a blank worksheet that is already a dashboard member', async () => {
     const blankWorksheet = `<worksheet name='Sheet 1'><table>
-      <view><datasources /><aggregation value='true' /></view>
+      <view><datasources><datasource name='Sample - Superstore' /></datasources>
+        <datasource-dependencies datasource='Sample - Superstore'>
+          <column name='[Category]' datatype='string' role='dimension' type='nominal' />
+          <column-instance name='[none:Category:nk]' column='[Category]' derivation='None' pivot='key' type='nominal' />
+        </datasource-dependencies>
+        <aggregation value='true' />
+      </view>
       <style /><panes><pane><view><breakdown value='auto' /></view><mark class='Automatic' /></pane></panes>
       <rows /><cols />
     </table><simple-id uuid='sheet-1' /></worksheet>`;
@@ -386,6 +392,72 @@ describe('tryApplyViaPerSheetRoute', () => {
       });
     }
     expect(applyWorksheetDocument).not.toHaveBeenCalled();
+  });
+
+  it('keeps encoding-only dashboard-member worksheet edits on the per-sheet route', async () => {
+    const liveWorksheet = `<worksheet name='Sheet 1'><table>
+      <view><datasources><datasource name='Sample - Superstore' /></datasources>
+        <datasource-dependencies datasource='Sample - Superstore'>
+          <column name='[Category]' datatype='string' role='dimension' type='nominal' />
+          <column-instance name='[none:Category:nk]' column='[Category]' derivation='None' pivot='key' type='nominal' />
+        </datasource-dependencies>
+      </view>
+      <panes><pane><encodings><encoding attr='color' field='[none:Category:nk]' type='palette' /></encodings></pane></panes>
+      <rows /><cols />
+    </table></worksheet>`;
+    const editedWorksheet = liveWorksheet.replace(
+      '<rows />',
+      '<rows>[Sample - Superstore].[none:Category:nk]</rows>',
+    );
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      listWorksheets: vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [
+            {
+              id: 'sheet-1',
+              name: 'Sheet 1',
+              hidden: false,
+              isActiveSheet: true,
+              isAutoUpdatesPaused: false,
+              index: 0,
+              datasources: ['Sample - Superstore'],
+            },
+          ],
+        }),
+      ),
+      getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: liveWorksheet })),
+      listDashboards: vi.fn().mockResolvedValue(
+        Ok({
+          dashboards: [
+            {
+              id: 'dashboard-1',
+              name: 'Dashboard 1',
+              hidden: false,
+              isActiveSheet: false,
+              isAutoUpdatesPaused: false,
+              index: 1,
+              containedSheets: ['sheet-1'],
+            },
+          ],
+        }),
+      ),
+      applyWorksheetDocument,
+    });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: 'worksheet',
+      sheetName: 'Sheet 1',
+      fragmentXml: editedWorksheet,
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk() && result.value).toMatchObject({ status: 'applied' });
+    expect(applyWorksheetDocument).toHaveBeenCalledOnce();
   });
 
   it('keeps populated dashboard-member worksheet edits on the per-sheet route', async () => {
