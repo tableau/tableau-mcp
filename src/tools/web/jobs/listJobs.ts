@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Job } from '../../../sdks/tableau/types/job.js';
+import { ADMIN_SITE_ROLES } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
@@ -24,7 +25,7 @@ export const getListJobsTool = (server: WebMcpServer): WebTool<typeof paramsSche
     server,
     name: 'list-jobs',
     disabled: !config.adminToolsEnabled,
-    requiresAdmin: true,
+    requiredRoles: ADMIN_SITE_ROLES,
     description: `
   Retrieves a list of background jobs for the Tableau site. Each job represents a background task such as an extract refresh, subscription delivery, flow run, or other asynchronous operations.
 

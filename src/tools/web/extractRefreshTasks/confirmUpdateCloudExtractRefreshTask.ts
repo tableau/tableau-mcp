@@ -7,6 +7,7 @@ import { UnknownError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { updateCloudExtractRefreshScheduleSchema } from '../../../sdks/tableau/types/extractRefreshTask.js';
+import { ADMIN_SITE_ROLES } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { AppApprovalEvidence } from '../_lib/evidence.js';
@@ -52,7 +53,7 @@ export const getConfirmUpdateCloudExtractRefreshTaskTool = (
       async () =>
         !config.adminToolsEnabled || !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
     ),
-    requiresAdmin: true,
+    requiredRoles: ADMIN_SITE_ROLES,
     description: `
 Confirms and applies a schedule change to an extract refresh task on Tableau Cloud, previously
 previewed by \`update-cloud-extract-refresh-task\`. This tool is **not visible to the model** — it is

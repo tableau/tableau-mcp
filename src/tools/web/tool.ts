@@ -62,7 +62,12 @@ export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = To
   TableauWebToolCallback<Args>,
   Args
 > & {
-  requiresAdmin?: boolean;
+  /**
+   * Site roles allowed to see this tool at registration time. Empty/omitted →
+   * everyone. When non-empty, the caller's site role must be in this list or
+   * the tool is not registered for that caller.
+   */
+  requiredRoles?: ReadonlyArray<string>;
 } & (
     | {
         app?: AppDetails;
@@ -111,7 +116,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
   Args
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
-  requiresAdmin: boolean;
+  requiredRoles: ReadonlyArray<string>;
   app?: AppDetails;
   meta?: ToolMeta;
 
@@ -123,14 +128,14 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     annotations,
     callback,
     disabled,
-    requiresAdmin,
+    requiredRoles,
     app,
     meta,
   }: WebToolParams<Args>) {
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
-    this.requiresAdmin = requiresAdmin ?? false;
+    this.requiredRoles = requiredRoles ?? [];
     this.app = app;
     this.meta = meta;
   }

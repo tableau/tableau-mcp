@@ -81,7 +81,7 @@ describe('server', () => {
       callback: vi.fn(),
       disabled: false,
       requiredApiScopes: [],
-      requiresAdmin: false,
+      requiredRoles: [],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
       app: {
@@ -387,14 +387,14 @@ describe('server', () => {
       },
       callback: vi.fn(),
       disabled: false,
-      requiresAdmin: true,
+      requiredRoles: ['SiteAdministratorCreator', 'SiteAdministratorExplorer'],
       requiredApiScopes: [],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
     } as unknown as WebTool<any>;
   }
 
-  it('does not register a requiresAdmin tool when the caller is not an admin', async () => {
+  it('does not register a tool when the caller lacks a requiredRoles role', async () => {
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
 
     const server = getServer();
@@ -410,7 +410,7 @@ describe('server', () => {
     );
   });
 
-  it('registers a requiresAdmin tool when the caller is an admin', async () => {
+  it('registers a tool when the caller has a role listed in requiredRoles', async () => {
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
 
     const server = getServer();
@@ -423,6 +423,22 @@ describe('server', () => {
       'mock-admin-tool',
       expect.anything(),
       expect.any(Function),
+    );
+  });
+
+  it('does not register a tool when the caller has no site role (fetch failed)', async () => {
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.anything(),
     );
   });
 

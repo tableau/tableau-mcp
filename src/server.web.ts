@@ -20,7 +20,6 @@ import { getFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { registerPrompts } from './prompts/index.js';
 import { RestApiArgs } from './restApiInstance';
-import { isAdminSiteRole } from './sdks/tableau/types/user.js';
 import { ClientInfo, Server } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
@@ -139,10 +138,10 @@ export class WebMcpServer extends Server {
     );
 
     // Fetched lazily so we only issue the /users/{userId} call when at least one candidate tool
-    // gates on a site role. Fail-closed: `getCurrentUserSiteRole` returns `undefined` on any
-    // error, so `isAdminSiteRole(undefined)` (and any future role predicate) evaluates to false
-    // and the tool stays hidden. Cached as a sentinel-holding object so a legitimately-undefined
-    // role isn't re-fetched every iteration.
+    // declares `requiredRoles`. Fail-closed: `getCurrentUserSiteRole` returns `undefined` on any
+    // error, and an undefined role is never in a `requiredRoles` list, so the tool stays hidden.
+    // Cached as a sentinel-holding object so a legitimately-undefined role isn't re-fetched every
+    // iteration.
     let cachedSiteRole: { value: string | undefined } | undefined;
     const resolveSiteRole = async (): Promise<string | undefined> => {
       if (cachedSiteRole === undefined) {
@@ -158,7 +157,10 @@ export class WebMcpServer extends Server {
       if (await Provider.from(tool.disabled)) continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
-      if (tool.requiresAdmin && !isAdminSiteRole(await resolveSiteRole())) continue;
+      if (tool.requiredRoles.length > 0) {
+        const siteRole = await resolveSiteRole();
+        if (!siteRole || !tool.requiredRoles.includes(siteRole)) continue;
+      }
       toolsToRegister.push(tool);
     }
 
