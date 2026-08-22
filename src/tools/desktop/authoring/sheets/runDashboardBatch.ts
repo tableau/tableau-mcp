@@ -55,7 +55,6 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { templateArtifactUnavailableError } from '../../api/applyWorksheetArtifact.js';
-import { sessionParam } from '../../params.js';
 import { jsonToolResult, type StructuredResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import {
@@ -66,7 +65,7 @@ import {
 } from './composeDashboardCore.js';
 
 const paramsSchema = {
-  session: sessionParam({ max: 64 }),
+  session: z.string().max(64).optional(),
   artifactIds: z.array(z.string().trim().min(1).max(255)).max(6).optional(),
   dashboardName: z.string().trim().min(1).max(255),
   existingWorksheetNames: z.array(z.string().trim().min(1).max(255)).max(6).optional(),
@@ -79,6 +78,7 @@ const paramsSchema = {
     .max(5)
     .optional()
     .describe('Ordered KPIs.'),
+  replaceExisting: z.boolean().optional(),
 };
 
 type AppliedState = true | false | 'unknown';
@@ -168,7 +168,7 @@ export const getRunDashboardBatchTool = (
     server,
     name: 'run-dashboard-batch',
     title,
-    description: 'Apply; compose.',
+    description: 'Create.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -186,6 +186,7 @@ export const getRunDashboardBatchTool = (
         layoutType,
         gridColumns,
         kpiWorksheetNames,
+        replaceExisting = false,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -203,6 +204,7 @@ export const getRunDashboardBatchTool = (
           layoutType,
           gridColumns,
           kpiWorksheetNames,
+          replaceExisting,
         },
         callback: async (): Promise<Result<RunDashboardBatchResult, McpToolError>> => {
           const orderedArtifactIds = artifactIds ?? [];
@@ -285,6 +287,18 @@ export const getRunDashboardBatchTool = (
             }
             const workbookXml = workbookResult.value.xml;
             const liveInstanceId = workbookResult.value.instanceId;
+            const existingDashboardName = listWorkbookDashboards(workbookXml).find((name) =>
+              xmlNamesEqual(name, dashboardName),
+            );
+            if (existingDashboardName && !replaceExisting) {
+              return preflightInputFailure(
+                steps,
+                orderedArtifactIds,
+                dashboardName,
+                `Dashboard "${dashboardName}" already exists and will not be rebuilt. replaceExisting is only for an explicit user request to rebuild or replace this dashboard.`,
+                'existingDashboard',
+              );
+            }
             const conflictingWorksheetName = [
               ...findAllWorksheets(parseXML(workbookXml)).map((worksheet) => worksheet['@_name']),
               ...reservations.map((reservation) => reservation.artifact.title),
@@ -417,9 +431,6 @@ export const getRunDashboardBatchTool = (
               }
             }
 
-            const existingDashboardName = listWorkbookDashboards(candidateXml).find((name) =>
-              xmlNamesEqual(name, dashboardName),
-            );
             const replaced = existingDashboardName !== undefined;
             try {
               if (existingDashboardName) {

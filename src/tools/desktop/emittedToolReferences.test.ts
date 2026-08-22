@@ -168,6 +168,7 @@ const NON_TOOL_VOCABULARY = [
   'template-artifact-unavailable',
   'template-not-found',
   'template-owned',
+  'text-format',
   'too-new',
   'top-level',
   'top-n',

@@ -48,13 +48,37 @@ describe('run-dashboard-batch transactional apply', () => {
     vi.useRealTimers();
   });
 
+  it('refuses to rebuild an existing dashboard by default before any workbook apply', async () => {
+    const harness = statefulExecutor();
+
+    const result = await callBatch(artifactStore([]), harness.executor, []);
+
+    expect(bodyOf(result)).toMatchObject({
+      applied: false,
+      retrySafe: true,
+      steps: [
+        {
+          operation: 'dashboard',
+          state: 'failed',
+          stage: 'existingDashboard',
+          error: expect.stringContaining('already exists and will not be rebuilt'),
+        },
+      ],
+    });
+    expect(bodyOf(result).steps[0].error).toContain(
+      'replaceExisting is only for an explicit user request to rebuild or replace',
+    );
+    expect(harness.posts).toHaveLength(0);
+    expect(harness.executor.applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('builds two worksheets and replaces one dashboard with one guarded POST and one shared readback', async () => {
     const store = artifactStore(['a1', 'a2']);
     const consume = vi.spyOn(store, 'consume');
     const release = vi.spyOn(store, 'release');
     const harness = statefulExecutor();
 
-    const result = await callBatch(store, harness.executor, ['a1', 'a2']);
+    const result = await callBatch(store, harness.executor, ['a1', 'a2'], true);
 
     expect(result.isError).toBe(false);
     expect(harness.posts).toHaveLength(1);
@@ -84,7 +108,7 @@ describe('run-dashboard-batch transactional apply', () => {
     const store = artifactStore([]);
     const harness = statefulExecutor({ staleReadbackCount: 1 });
 
-    const resultPromise = callBatch(store, harness.executor, []);
+    const resultPromise = callBatch(store, harness.executor, [], true);
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
@@ -117,7 +141,7 @@ describe('run-dashboard-batch transactional apply', () => {
       },
     });
 
-    const resultPromise = callBatch(store, harness.executor, ['a1']);
+    const resultPromise = callBatch(store, harness.executor, ['a1'], true);
     await concurrentApplyStarted;
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     const activatedWhileApplyWasInFlight = vi.mocked(harness.executor.executeCommand).mock.calls
@@ -144,7 +168,7 @@ describe('run-dashboard-batch transactional apply', () => {
     const consume = vi.spyOn(store, 'consume');
     const harness = statefulExecutor();
 
-    const result = await callBatch(store, harness.executor, ['a1', 'a2']);
+    const result = await callBatch(store, harness.executor, ['a1', 'a2'], true);
 
     expect(bodyOf(result)).toMatchObject({ applied: false, retrySafe: true });
     expect(harness.posts).toHaveLength(0);
@@ -161,7 +185,7 @@ describe('run-dashboard-batch transactional apply', () => {
     const release = vi.spyOn(store, 'release');
     const harness = statefulExecutor();
 
-    const result = await callBatch(store, harness.executor, ['a1', 'a2']);
+    const result = await callBatch(store, harness.executor, ['a1', 'a2'], true);
 
     expect(bodyOf(result)).toMatchObject({ applied: false, retrySafe: true });
     expect(harness.posts).toHaveLength(0);
@@ -174,7 +198,7 @@ describe('run-dashboard-batch transactional apply', () => {
     const changed = BASELINE.replace('<worksheet name="Existing">', '<worksheet name="Changed">');
     const harness = statefulExecutor({ guardedReadXml: changed });
 
-    const result = await callBatch(store, harness.executor, ['a1']);
+    const result = await callBatch(store, harness.executor, ['a1'], true);
 
     expect(bodyOf(result)).toMatchObject({ applied: false, retrySafe: true });
     expect(harness.posts).toHaveLength(0);
@@ -187,7 +211,7 @@ describe('run-dashboard-batch transactional apply', () => {
     const release = vi.spyOn(store, 'release');
     const harness = statefulExecutor({ failAfterDispatch: true });
 
-    const result = await callBatch(store, harness.executor, ['a1', 'a2']);
+    const result = await callBatch(store, harness.executor, ['a1', 'a2'], true);
 
     expect(bodyOf(result)).toMatchObject({ applied: 'unknown', retrySafe: false });
     expect(harness.posts).toHaveLength(1);
@@ -206,7 +230,7 @@ describe('run-dashboard-batch transactional apply', () => {
       readbackTransform: (xml) => xml.replace('<mark class="Bar"', '<mark class="Circle"'),
     });
 
-    const promise = callBatch(store, harness.executor, ['a1']);
+    const promise = callBatch(store, harness.executor, ['a1'], true);
     await vi.runAllTimersAsync();
     const result = await promise;
 
@@ -221,6 +245,7 @@ async function callBatch(
   store: TemplateArtifactStore,
   executor: ExternalApiToolExecutor,
   artifactIds: string[],
+  replaceExisting?: boolean,
 ): Promise<CallToolResult> {
   const tool = getRunDashboardBatchTool(new DesktopMcpServer(), { store });
   const callback = await Provider.from(tool.callback);
@@ -234,6 +259,7 @@ async function callBatch(
       layoutType: 'columns',
       gridColumns: undefined,
       kpiWorksheetNames: undefined,
+      replaceExisting,
     },
     {
       ...getMockRequestHandlerExtra(),
