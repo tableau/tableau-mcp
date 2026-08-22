@@ -12,9 +12,12 @@
 // inject-template tool passes agent-supplied raw strings; bind-template passes the
 // binder's args as-is (matching what the manual inject-template call would receive).
 
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
+
 import { listAvailableFields } from '../metadata/field-builder.js';
 import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
 import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types.js';
+import { unsubstitutedTemplateTokenRule } from '../validation/rules/unsubstitutedTemplateToken.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparseTemporalAxis.js';
 import { spliceBoundFacet } from './facetSplice.js';
@@ -30,6 +33,38 @@ import {
 import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
 import { type OptionalFieldPruneSpec, pruneUnboundOptionalFields } from './optionalFieldPrune.js';
 import { spliceWaterfallAnchorFilter } from './waterfallAnchorFilter.js';
+
+const AUTHORED_TITLE_SENTINEL = '__TABLEAU_MCP_AUTHORED_TITLE_4D9E7A1B__';
+const DONOR_CURRENCY_OR_LOCALE_FORMAT = /[$£€¥₹₩₽₺₫₪₴₦₱฿₡₲₵₭₮₸₼₾₿]|\[\$-[^\]]+\]|^c(?=["#0*])/u;
+
+/** Remove donor locale overrides only on the automatic field-binding path. */
+export function stripDonorCurrencyOrLocaleFormats(
+  templateXml: string,
+  fieldMapping: Record<string, string> | undefined,
+): string {
+  if (!fieldMapping || Object.keys(fieldMapping).length === 0) return templateXml;
+  const rewritesAuthoredField = Object.keys(fieldMapping).some((mappingKey) => {
+    const field = mappingKey.replace(/@[A-Za-z][A-Za-z0-9-]*$/, '');
+    const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\[${escaped}\\]|:${escaped}:`).test(templateXml);
+  });
+  if (!rewritesAuthoredField) return templateXml;
+  const document = new DOMParser().parseFromString(templateXml, 'text/xml');
+  for (const format of Array.from(
+    document.getElementsByTagName('format'),
+  ) as unknown as Element[]) {
+    const value = format.getAttribute('value');
+    if (
+      format.getAttribute('attr') === 'text-format' &&
+      value &&
+      DONOR_CURRENCY_OR_LOCALE_FORMAT.test(value)
+    ) {
+      // Dropping the donor override lets the target field win; Desktop supplies a neutral default otherwise.
+      format.parentNode?.removeChild(format);
+    }
+  }
+  return new XMLSerializer().serializeToString(document);
+}
 
 /** Escape the five XML metacharacters (identical to the inject-template tool). */
 /**
@@ -341,7 +376,7 @@ export function buildInjectedWorkbookXml({
 
   let processed = spliceHistogramBinSize(templateXml, histogramBinSize).replace(
     /\{\{TITLE\}\}/g,
-    escapeXml(title),
+    AUTHORED_TITLE_SENTINEL,
   );
   const rewriteWarnings: string[] = [];
 
@@ -376,6 +411,7 @@ export function buildInjectedWorkbookXml({
     // Month-Trunc CI alone — the axis truncates a parsed date instead of a raw string.
     processed = spliceDateparseTemporalAxis(processed, dateparseAxis ?? null);
     processed = spliceBoundFacet(processed, fieldMapping ?? {}, templateSlots);
+    processed = stripDonorCurrencyOrLocaleFormats(processed, fieldMapping);
     const rewrite = rewriteFieldReferencesWithDiagnostics(
       processed,
       fieldMapping ?? {},
@@ -389,6 +425,13 @@ export function buildInjectedWorkbookXml({
     processed = spliceBoundCalcDefinitions(processed, fieldMapping, workbookXml);
     processed = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
   }
+
+  const templateTokenIssues = unsubstitutedTemplateTokenRule.validate(processed);
+  if (templateTokenIssues.length > 0) {
+    return { ok: false, issues: templateTokenIssues.map((issue) => issue.message) };
+  }
+
+  processed = processed.replace(new RegExp(AUTHORED_TITLE_SENTINEL, 'g'), escapeXml(title));
 
   const modifiedXml = injectTemplate(
     baseWorkbookXml,

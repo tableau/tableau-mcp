@@ -62,20 +62,23 @@ import {
   buildDashboardCandidateXml,
   dashboardCandidateReadbackIssues,
   resolveRenderedWorksheetNames,
+  validateComposeDashboardInput,
 } from './composeDashboardCore.js';
 
 const paramsSchema = {
   session: sessionParam({ max: 64 }),
-  artifactIds: z.array(z.string().trim().min(1).max(255)).max(6).optional().describe('IDs.'),
-  dashboardName: z.string().trim().min(1).max(255).describe('Name.'),
-  existingWorksheetNames: z
+  artifactIds: z.array(z.string().trim().min(1).max(255)).max(6).optional(),
+  dashboardName: z.string().trim().min(1).max(255),
+  existingWorksheetNames: z.array(z.string().trim().min(1).max(255)).max(6).optional(),
+  title: z.string().trim().min(1).max(255).optional(),
+  layoutType: z.enum(['auto-grid', 'rows', 'columns', 'executive-summary']).optional(),
+  gridColumns: z.number().int().min(1).max(6).optional(),
+  kpiWorksheetNames: z
     .array(z.string().trim().min(1).max(255))
-    .max(6)
+    .min(1)
+    .max(5)
     .optional()
-    .describe('Live sheets.'),
-  title: z.string().trim().min(1).max(255).optional().describe('Title.'),
-  layoutType: z.enum(['auto-grid', 'rows', 'columns']).optional().describe('Layout.'),
-  gridColumns: z.number().int().min(1).max(6).optional().describe('Cols.'),
+    .describe('Ordered KPIs.'),
 };
 
 type AppliedState = true | false | 'unknown';
@@ -165,7 +168,7 @@ export const getRunDashboardBatchTool = (
     server,
     name: 'run-dashboard-batch',
     title,
-    description: 'Apply artifacts; compose.',
+    description: 'Apply; compose.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -182,6 +185,7 @@ export const getRunDashboardBatchTool = (
         title: dashboardTitle,
         layoutType,
         gridColumns,
+        kpiWorksheetNames,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -198,6 +202,7 @@ export const getRunDashboardBatchTool = (
           title: dashboardTitle,
           layoutType,
           gridColumns,
+          kpiWorksheetNames,
         },
         callback: async (): Promise<Result<RunDashboardBatchResult, McpToolError>> => {
           const orderedArtifactIds = artifactIds ?? [];
@@ -377,6 +382,19 @@ export const getRunDashboardBatchTool = (
               ...(resolvedExistingNames as string[]),
               ...canonicalArtifactNames,
             ];
+            const layoutError = validateComposeDashboardInput(worksheetNames, {
+              layoutType,
+              gridColumns,
+              kpiWorksheetNames,
+            });
+            if (layoutError) {
+              return preflightInputFailure(
+                steps,
+                orderedArtifactIds,
+                dashboardName,
+                layoutError.getErrorText(),
+              );
+            }
 
             let candidateXml = workbookXml;
             for (const [index, reservation] of reservations.entries()) {
@@ -415,6 +433,7 @@ export const getRunDashboardBatchTool = (
                 layout: {
                   layoutType: layoutType ?? 'auto-grid',
                   ...(gridColumns ? { gridColumns } : {}),
+                  ...(kpiWorksheetNames ? { kpiWorksheetNames } : {}),
                 },
               });
             } catch (error) {

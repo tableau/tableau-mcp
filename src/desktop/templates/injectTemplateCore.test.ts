@@ -11,6 +11,7 @@ import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
   removeSameNamedWorksheet,
+  stripDonorCurrencyOrLocaleFormats,
 } from './injectTemplateCore.js';
 import { getRuntimeTemplateSnapshot } from './runtimeTemplateCatalog.js';
 import { readTemplate } from './templatePath.js';
@@ -30,6 +31,35 @@ const DUPLICATED_WORKBOOK_XML = [
   '<window class="dashboard" name="Sales"/></windows>',
   '</workbook>',
 ].join('');
+
+describe('stripDonorCurrencyOrLocaleFormats', () => {
+  const templateXml =
+    '<workbook><style><style-rule element="label">' +
+    '<format attr="text-format" field="[Donor].[sum:Profit:qk]" value="c&amp;quot;£&amp;quot;#,##0"/>' +
+    '<format attr="text-format" field="[Donor].[sum:Quantity:qk]" value="n#,##0.00"/>' +
+    '</style-rule></style></workbook>';
+
+  it('removes donor currency while preserving neutral precision during a bind', () => {
+    const out = stripDonorCurrencyOrLocaleFormats(templateXml, {
+      Profit: '[Superstore].[sum:Sales:qk]',
+    });
+
+    expect(out).not.toContain('£');
+    expect(out).toContain('value="n#,##0.00"');
+  });
+
+  it('leaves the template byte-identical without a field bind', () => {
+    expect(stripDonorCurrencyOrLocaleFormats(templateXml, {})).toBe(templateXml);
+  });
+
+  it('leaves the template byte-identical when the mapping names no authored field', () => {
+    expect(
+      stripDonorCurrencyOrLocaleFormats(templateXml, {
+        Nonexistent: '[Superstore].[sum:Sales:qk]',
+      }),
+    ).toBe(templateXml);
+  });
+});
 
 describe('removeSameNamedWorksheet — quote-agnostic strip (adversary P0-3)', () => {
   it('strips a double-quoted worksheet + window (the serializer emits double quotes)', () => {
@@ -620,6 +650,47 @@ describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
     const normalizeUuid = (xml: string): string =>
       xml.replace(/uuid="\{[^}]*\}"/g, 'uuid="{UUID}"');
     expect(normalizeUuid(guarded.xml)).toBe(normalizeUuid(previousBehavior.xml));
+  });
+
+  it('rejects a literal title token supplied through a bound field instead of rewriting it', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: RANKING_TEMPLATE,
+      title: 'Goals by Country',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'World Cup' },
+      fieldMapping: {
+        region: '[World Cup].[none:{{TITLE}}:nk]',
+        sales: '[World Cup].[sum:Goals For:qk]',
+      },
+      templateSlots: RANKING_SLOTS,
+      applyNonce: 'literal-title-field',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues.join('\n')).toContain('{{TITLE}}');
+  });
+
+  it('rejects a literal title token supplied through a template parameter instead of rewriting it', () => {
+    const templateXml = [
+      "<?xml version='1.0'?><workbook>",
+      "<worksheets><worksheet name='{{TITLE}}'><table><style value='{{LABEL}}'/></table></worksheet></worksheets>",
+      "<windows><window class='worksheet' name='{{TITLE}}'/></windows>",
+      '</workbook>',
+    ].join('');
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml,
+      title: 'Goals by Country',
+      sheetType: 'worksheet',
+      templateParameters: { LABEL: '{{TITLE}}' },
+      applyNonce: 'literal-title-parameter',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues.join('\n')).toContain('{{TITLE}}');
   });
 });
 

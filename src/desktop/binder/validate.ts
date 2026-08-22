@@ -37,6 +37,7 @@ import {
   optionalFieldPrunesFor,
   type OptionalFieldPruneSpec,
 } from '../templates/optionalFieldPrune.js';
+import { templateLiveSupportBlocker } from '../templates/templateLiveSupport.js';
 import { cardinalityAdvice, PIE_SLICE_WORKABLE_MAX } from './cardinality.js';
 import { matchAvoidWhen, parseExplicitBoxRolePhrases } from './classify.js';
 import { escapeXml } from './escape.js';
@@ -1012,6 +1013,14 @@ export function validateBinding(
     } else {
       for (const dep of calc.depends_on_slots) checkDep(dep, 'dependency');
     }
+  }
+
+  const liveSupportBlocker = templateLiveSupportBlocker(m.template);
+  if (liveSupportBlocker !== undefined) {
+    blockers.push({
+      code: 'kind-mismatch',
+      detail: liveSupportBlocker,
+    });
   }
 
   if (blockers.length > 0) return { ok: false, blockers };

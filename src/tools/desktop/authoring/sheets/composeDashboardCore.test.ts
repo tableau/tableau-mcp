@@ -34,6 +34,11 @@ const WITH_EXISTING = PRISTINE.replace(
   '<window class="dashboard" name="Sales Dashboard"><viewpoints><viewpoint name="Sales"/></viewpoints></window></windows>',
 );
 
+const WITH_ORDERS = PRISTINE.replace(
+  '</worksheets>',
+  '<worksheet name="Orders"><table/></worksheet></worksheets>',
+).replace('</windows>', '<window class="worksheet" name="Orders"/></windows>');
+
 describe('buildDashboardCandidateXml', () => {
   it('builds an escaped dashboard with layout zones and viewpoints into the baseline workbook', () => {
     const candidateXml = buildDashboardCandidateXml({
@@ -55,6 +60,38 @@ describe('buildDashboardCandidateXml', () => {
     expect(candidateXml).toContain(
       '<viewpoint name="Profit"><zoom type="entire-view"/></viewpoint>',
     );
+  });
+
+  it('places named KPI worksheets in the executive-summary strip', () => {
+    const candidateXml = buildDashboardCandidateXml({
+      baselineXml: PRISTINE,
+      dashboardName: 'Sales Dashboard',
+      canonicalWorksheetNames: ['Sales', 'Profit'],
+      title: 'Executive Overview',
+      layout: {
+        layoutType: 'executive-summary',
+        kpiWorksheetNames: ['Sales'],
+      },
+    });
+
+    expect(candidateXml).toContain('h="20000" id="11" name="Sales" w="100000" x="0" y="8000"');
+    expect(candidateXml).toContain('h="72000" id="12" name="Profit" w="100000" x="0" y="28000"');
+  });
+
+  it('places multiple KPI worksheets left to right in the requested order', () => {
+    const candidateXml = buildDashboardCandidateXml({
+      baselineXml: WITH_ORDERS,
+      dashboardName: 'Sales Dashboard',
+      canonicalWorksheetNames: ['Sales', 'Profit', 'Orders'],
+      layout: {
+        layoutType: 'executive-summary',
+        kpiWorksheetNames: ['Profit', 'Sales'],
+      },
+    });
+
+    expect(candidateXml).toContain('h="20000" id="10" name="Profit" w="50000" x="0" y="0"');
+    expect(candidateXml).toContain('h="20000" id="11" name="Sales" w="50000" x="50000" y="0"');
+    expect(candidateXml).toContain('h="80000" id="12" name="Orders" w="100000" x="0" y="20000"');
   });
 });
 

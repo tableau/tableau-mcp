@@ -1,14 +1,17 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { DOMParser } from '@xmldom/xmldom';
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
 import { canonicalShortDerivation } from '../derivations.js';
 import { blockingValidationIssues, runValidation } from '../validation/registry.js';
 import { bookmarkToTemplateWorkbook, deriveTemplatePass1Eligibility } from './bookmarkTemplate.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 import { inferBindingDescriptor, inferFromBookmark } from './inferSlots.js';
-import { buildInjectedWorkbookXml } from './injectTemplateCore.js';
+import {
+  buildInjectedWorkbookXml,
+  stripDonorCurrencyOrLocaleFormats,
+} from './injectTemplateCore.js';
 
 interface RoleAnchoredRef {
   derivation: string;
@@ -202,6 +205,31 @@ function calcColumnIdentities(xml: string): string[] {
     .filter((name): name is string => !!name);
 }
 
+function isDonorCurrencyOrLocaleFormat(value: string): boolean {
+  return /[$£€¥₹₩₽₺₫₪₴₦₱฿₡₲₵₭₮₸₼₾₿]|\[\$-[^\]]+\]|^c(?=["#0*])/u.test(value);
+}
+
+function donorCurrencyOrLocaleFormats(xml: string): string[] {
+  const document = new DOMParser().parseFromString(xml, 'text/xml');
+  return (Array.from(document.getElementsByTagName('format')) as unknown as Element[])
+    .filter((format) => format.getAttribute('attr') === 'text-format')
+    .map((format) => format.getAttribute('value') ?? '')
+    .filter(isDonorCurrencyOrLocaleFormat);
+}
+
+function withoutDonorCurrencyOrLocaleFormats(xml: string): string {
+  const document = new DOMParser().parseFromString(xml, 'text/xml');
+  for (const format of Array.from(
+    document.getElementsByTagName('format'),
+  ) as unknown as Element[]) {
+    const value = format.getAttribute('value') ?? '';
+    if (format.getAttribute('attr') === 'text-format' && isDonorCurrencyOrLocaleFormat(value)) {
+      format.parentNode?.removeChild(format);
+    }
+  }
+  return new XMLSerializer().serializeToString(document);
+}
+
 describe('TBM engine corpus invariants', { timeout: 30_000 }, () => {
   let corpus: EligibleTemplate[];
 
@@ -347,9 +375,9 @@ describe('TBM engine corpus invariants', { timeout: 30_000 }, () => {
       const failures: string[] = [];
 
       for (const template of templates) {
-        const originalRefs = qualifiedRefs(template.xml).filter((ref) =>
-          FIELD_TOKEN.test(ref.field),
-        );
+        const originalRefs = qualifiedRefs(
+          withoutDonorCurrencyOrLocaleFormats(template.xml),
+        ).filter((ref) => FIELD_TOKEN.test(ref.field));
         const declaredByToken = new Map<string, Set<string>>();
         for (const slot of template.slots) {
           const derivations = declaredByToken.get(slot.template_field) ?? new Set<string>();
@@ -365,7 +393,7 @@ describe('TBM engine corpus invariants', { timeout: 30_000 }, () => {
         const { mapping, targetByToken } = mappingFor(template, mode);
         try {
           const rewritten = rewriteFieldReferences(
-            template.xml,
+            stripDonorCurrencyOrLocaleFormats(template.xml, mapping),
             mapping,
             'Unrelated DS',
             undefined,
@@ -418,6 +446,25 @@ describe('TBM engine corpus invariants', { timeout: 30_000 }, () => {
       ).toEqual([]);
     },
   );
+
+  it('removes donor currency and locale formats from every eligible rewritten template', () => {
+    const failures: string[] = [];
+
+    for (const template of corpus) {
+      const { mapping } = mappingFor(template, 'qualified');
+      const rewritten = rewriteFieldReferences(
+        stripDonorCurrencyOrLocaleFormats(template.xml, mapping),
+        mapping,
+        'Unrelated DS',
+        undefined,
+        { templateSlots: template.slots },
+      );
+      const leaked = donorCurrencyOrLocaleFormats(rewritten);
+      if (leaked.length > 0) failures.push(`${template.name}: ${leaked.join(', ')}`);
+    }
+
+    expect(failures).toEqual([]);
+  });
 
   it('carries required namespace declarations through worksheet injection', () => {
     const failures: string[] = [];

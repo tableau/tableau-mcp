@@ -256,11 +256,22 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-21: get-summary-data is a clean API wrapper; its description drops the
 // terminal/retry prose (-60 bytes), so dynamic authoring moves 42_739 -> 42_679 and the full
 // surface 60_064 -> 60_004, retaining the 18-character slack.
-// Re-pinned 2026-08-21: native Custom Theme support and bind-template join the current surface.
-// The 58-tool surface is 47_506 bytes; retain 18 bytes of ratchet slack under the temporary
-// 48k ceiling while TAS keeps SDK tool search disabled for Summit reliability.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_506;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_524;
+// Re-pinned 2026-08-21: bind-template joins the current 54-tool base as the bounded fast path
+// for recognizable single-view asks. The 55-tool surface is 45_742 bytes; retain the current
+// 18-character ratchet slack without raising the 46k product ceiling.
+// Re-pinned 2026-08-21 (merge of dev/myu404 in-place author-parameter into feature/desktop):
+// author-parameter now edits the live document in place — its obsolete stagePath param leaves the
+// schema (-30 bytes) and it adopts the sibling `datasource` selector param (+31 bytes) for a net
+// +1; dynamic authoring 45_742 -> 45_743 (18-char slack kept, 46k product ceiling untouched).
+// Re-pinned 2026-08-21: executive-summary adds KPI names to run-dashboard-batch while trimming its
+// older field prose; dynamic authoring 45_743 -> 45_758 without raising the 46k product ceiling.
+// Re-pinned 2026-08-21: mark KPI names as ordered; 45_758 -> 45_761 consumes the existing slack
+// without raising either budget.
+// Re-pinned 2026-08-21: native Custom Theme support and named blank-sheet routing join the merged
+// surface. Retain 18 bytes of ratchet slack under the temporary 48k ceiling while TAS keeps SDK
+// tool search disabled for Summit reliability.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_525;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_543;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 48_000;
 const FULL_TOOL_SURFACE_BUDGET = 61_590;
 
