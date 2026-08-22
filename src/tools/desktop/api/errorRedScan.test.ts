@@ -1,7 +1,18 @@
 import { encode as encodePng } from 'fast-png';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
-import { DecodedImage, decodePng, isErrorRed, scanForErrorRed } from './errorRedScan.js';
+import {
+  DecodedImage,
+  decodePng,
+  isErrorRed,
+  scanForErrorRed,
+  scanPngForErrorRed,
+} from './errorRedScan.js';
+
+const fixture = (name: string): Buffer =>
+  readFileSync(join(process.cwd(), 'src', 'tools', 'desktop', 'api', '__fixtures__', name));
 
 // Build a synthetic RGB DecodedImage from a (x,y)->[r,g,b] painter, so pixel-level tests
 // run without constructing PNG bytes.
@@ -142,6 +153,28 @@ describe('scanForErrorRed — pill-shape detection', () => {
     expect(scan.pillFound).toBe(false); // but no capsule-shaped component
   });
 
+  it('flags a pill clipped at the image edge (only one rounded cap visible)', () => {
+    // A pill running off the left edge: its left cap is cut to a square edge at x=0, so only
+    // the right cap survives. caps === 1 must still flag — this exercises the `caps < 1` gate.
+    const image = makeImage(200, 120, pillPainter(-30, 40, 120, 24));
+    const scan = scanForErrorRed(image);
+
+    expect(scan.pillFound).toBe(true);
+    expect(scan.pill?.caps).toBe(1); // left cap clipped away, right cap intact
+  });
+
+  it('does NOT flag a thin horizontal red reference line (too short to be a pill body)', () => {
+    // A 2px-tall red rule spanning the view: wide, but its plateau height is below the floor,
+    // so the "red is overloaded" case (reference lines) does not trip the detector.
+    const image = makeImage(240, 120, (x, y) =>
+      x >= 20 && x < 220 && y >= 59 && y < 61 ? ERROR_RED : WHITE,
+    );
+    const scan = scanForErrorRed(image);
+
+    expect(scan.redPixels).toBeGreaterThan(300); // plenty of red...
+    expect(scan.pillFound).toBe(false); // ...but only 2px tall, no pill body
+  });
+
   it('does NOT flag a solid red disc (a round mark peaks for one column, no flat body)', () => {
     const cx = 120;
     const cy = 60;
@@ -192,5 +225,31 @@ describe('decodePng', () => {
   it('returns null for a non-PNG or unsupported variant', () => {
     expect(decodePng(Buffer.from('not a png'))).toBeNull();
     expect(decodePng(Buffer.alloc(4))).toBeNull();
+  });
+});
+
+// Regression fixtures captured from a live Tableau Desktop window (via take-all-screenshots),
+// cropped at native resolution — real anti-aliased pill edges and real UI chrome, not synthetic
+// capsules. These guard the two failure modes that actually happened in the field.
+describe('scanForErrorRed — real captured windows', () => {
+  it('flags the real red pill the old density scan missed (false-negative regression)', () => {
+    // This exact window is what the previous density detector scored as "no dense red cluster
+    // (29% red)" — a false negative. The cap-profile detector must flag its #E84858 pill.
+    const scan = scanPngForErrorRed(fixture('real-window-red-pill.png'));
+
+    expect(scan).not.toBeNull();
+    expect(scan!.pillFound).toBe(true);
+    expect(scan!.pill?.caps).toBeGreaterThanOrEqual(1);
+    expect(scan!.pill?.plateauHeight).toBeGreaterThanOrEqual(8);
+    expect(scan!.pill?.fill).toBeGreaterThan(0.6);
+  });
+
+  it('does NOT flag a real clean window (no pill among real chrome, gridlines, valid pills)', () => {
+    // A genuinely clean capture: real toolbar/gridlines/valid (non-red) pills, no error pill.
+    // Guards against false positives the synthetic negatives can't reproduce.
+    const scan = scanPngForErrorRed(fixture('real-window-clean.png'));
+
+    expect(scan).not.toBeNull();
+    expect(scan!.pillFound).toBe(false);
   });
 });

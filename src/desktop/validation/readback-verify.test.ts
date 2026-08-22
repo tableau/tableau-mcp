@@ -241,7 +241,7 @@ describe('formatVerificationWarnings', () => {
   const visualWarning: VerificationFinding = {
     severity: 'warning',
     source: 'visual',
-    message: 'the densest region of the applied window is 47% saturated red',
+    message: 'a red field pill shape was detected on a shelf',
   };
 
   it('returns empty when there are no warnings', () => {
@@ -257,7 +257,7 @@ describe('formatVerificationWarnings', () => {
 
   it('renders a visual warning under its own lead-in', () => {
     expect(formatVerificationWarnings([visualWarning])).toBe(
-      '\n\n⚠️ Visual check — the densest region of the applied window is 47% saturated red.',
+      '\n\n⚠️ Visual check — a red field pill shape was detected on a shelf.',
     );
   });
 
@@ -288,7 +288,7 @@ describe('withVerificationFinding', () => {
   const visualWarning: VerificationFinding = {
     severity: 'warning',
     source: 'visual',
-    message: 'the densest region of the applied window is 47% saturated red',
+    message: 'a red field pill shape was detected on a shelf',
   };
 
   it('returns the report unchanged for a null finding (the common no-op)', () => {
