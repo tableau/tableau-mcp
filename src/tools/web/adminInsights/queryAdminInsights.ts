@@ -6,6 +6,7 @@ import { getConfig } from '../../../config.js';
 import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { ADMIN_SITE_ROLES } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
@@ -107,6 +108,7 @@ export const getQueryAdminInsightsTool = (server: WebMcpServer): WebTool<typeof 
     server,
     name: 'query-admin-insights',
     disabled: !config.adminToolsEnabled,
+    requiredRoles: ADMIN_SITE_ROLES,
     description: `
 Queries the Tableau Admin Insights datasources on the current site. Restricted to site
 administrators on Tableau Cloud sites with Admin Insights enabled.

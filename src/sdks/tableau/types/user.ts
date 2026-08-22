@@ -20,15 +20,15 @@ export const userSchema = z.object({
 
 export type User = z.infer<typeof userSchema>;
 
-export const ADMIN_SITE_ROLES = new Set([
+export const ADMIN_SITE_ROLES: readonly string[] = [
   'SiteAdministratorCreator',
   'SiteAdministratorExplorer',
   'ServerAdministrator',
-]);
+];
 
 export function isAdminSiteRole(siteRole: string | undefined): boolean {
   if (!siteRole) {
     return false;
   }
-  return ADMIN_SITE_ROLES.has(siteRole);
+  return ADMIN_SITE_ROLES.includes(siteRole);
 }

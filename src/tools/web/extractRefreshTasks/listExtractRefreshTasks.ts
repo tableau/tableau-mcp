@@ -6,6 +6,7 @@ import { getConfig } from '../../../config.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { ExtractRefreshTask } from '../../../sdks/tableau/types/extractRefreshTask.js';
+import { ADMIN_SITE_ROLES } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
@@ -29,6 +30,7 @@ export const getListExtractRefreshTasksTool = (
     server,
     name: 'list-extract-refresh-tasks',
     disabled: !config.adminToolsEnabled,
+    requiredRoles: ADMIN_SITE_ROLES,
     description: `
   Retrieves a list of extract refresh tasks for the Tableau site. Each task describes a scheduled refresh for a **data source** or **workbook** extract and includes schedule information (e.g. frequency, next run time, schedule name on Server).
 
