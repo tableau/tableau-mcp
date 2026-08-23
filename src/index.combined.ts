@@ -13,6 +13,7 @@ import { isNotificationLevel, notifier, setNotificationLevel } from './logging/n
 import { RestApi } from './sdks/tableau/restApi.js';
 import { DesktopMcpServer } from './server.desktop.js';
 import { WebMcpServer } from './server.web.js';
+import { buildServerInstructions } from './serverInstructions.js';
 
 const serverName = 'tableau-combined-mcp';
 const serverVersion = pkg.version;
@@ -61,6 +62,7 @@ async function startServer(): Promise<void> {
         logging: {},
         tools: {},
       },
+      instructions: buildServerInstructions({ adminToolsEnabled: config.adminToolsEnabled }),
     },
   );
 
