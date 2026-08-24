@@ -50,6 +50,21 @@ describe('setDashboardNavigationDocument', () => {
     expect(result.xml).toMatch(/<\/zone>\s*<zone h='8000' id='12' type-v2='dashboard-object'/);
   });
 
+  it('ignores id suffix attributes when allocating navigation zone IDs', () => {
+    const source = dashboardXml('Sales Overview').replace(
+      '  <simple-id',
+      "  <devicelayouts><devicelayout name='Phone'><zones><zone id='99' pane-specification-id='0'/></zones></devicelayout></devicelayouts>\n  <simple-id",
+    );
+
+    const result = setDashboardNavigationDocument(source, 'Sales Overview', TARGETS);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain("<zone id='99' pane-specification-id='0'/>");
+    expect(result.xml).toContain("id='100' type-v2='dashboard-object'");
+    expect(result.xml).toContain("id='101' type-v2='dashboard-object'");
+  });
+
   it('accepts exact requested navigation idempotently without changing it', () => {
     const first = setDashboardNavigationDocument(
       dashboardXml('Sales Overview'),

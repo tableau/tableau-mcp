@@ -628,7 +628,9 @@ function readNavigationButton(
 function maxZoneId(xml: string): number {
   return Math.max(
     0,
-    ...[...xml.matchAll(/<zone\b[^>]*\bid=(['"])(\d+)\1/g)].map((match) => Number(match[2])),
+    ...[...xml.matchAll(/<zone\b[^>]*?\s+id\s*=\s*(['"])(\d+)\1/g)].map((match) =>
+      Number(match[2]),
+    ),
   );
 }
 
