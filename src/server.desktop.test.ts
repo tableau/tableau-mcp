@@ -270,8 +270,11 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-21: native Custom Theme support and named blank-sheet routing join the merged
 // surface. Retain 18 bytes of ratchet slack under the temporary 48k ceiling while TAS keeps SDK
 // tool search disabled for Summit reliability.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_525;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_543;
+// Re-pinned 2026-08-22 (W-23928173): author-set gains a condition (rule-based) set mode — the
+// 'condition' mode enum value plus the conditionExpression param add +52 bytes; dynamic authoring
+// 47_525 -> 47_577 (18-byte ratchet slack kept, well under the temporary 48k product ceiling).
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_577;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_595;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 48_000;
 const FULL_TOOL_SURFACE_BUDGET = 61_590;
 
