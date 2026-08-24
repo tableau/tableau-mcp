@@ -231,7 +231,9 @@ describe('resolveWorkbookInput', () => {
         },
         workbookFilePath: '/tmp/x.twb',
       }),
-    ).rejects.toThrow('workbookFilePath is only supported when staged S3 uploads are not configured');
+    ).rejects.toThrow(
+      'workbookFilePath is only supported when staged S3 uploads are not configured',
+    );
   });
 
   it('throws when workbookUploadId is provided but staged S3 uploads are not configured', async () => {

@@ -243,9 +243,9 @@ async function getToolResult(
   );
 }
 
-function getMockExtra({
-  bucketS3Enabled = true,
-}: { bucketS3Enabled?: boolean } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
+function getMockExtra({ bucketS3Enabled = true }: { bucketS3Enabled?: boolean } = {}): ReturnType<
+  typeof getMockRequestHandlerExtra
+> {
   const extra = getMockRequestHandlerExtra();
   return {
     ...extra,

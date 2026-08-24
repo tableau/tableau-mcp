@@ -227,9 +227,7 @@ async function getToolResult(
 
 function getMockExtra({
   boundedProjectIds = null,
-}: { boundedProjectIds?: Set<string> | null } = {}): ReturnType<
-  typeof getMockRequestHandlerExtra
-> {
+}: { boundedProjectIds?: Set<string> | null } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
   const extra = getMockRequestHandlerExtra();
   return {
     ...extra,

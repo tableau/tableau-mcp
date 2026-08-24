@@ -70,7 +70,12 @@ export type WebToolGroupName = (typeof webToolGroupNames)[number];
 export const webToolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook', 'download-workbook'],
-  authoring: ['request-workbook-upload', 'upload-workbook', 'validate-workbook', 'publish-workbook'],
+  authoring: [
+    'request-workbook-upload',
+    'upload-workbook',
+    'validate-workbook',
+    'publish-workbook',
+  ],
   project: ['list-projects'],
   view: [
     'list-views',
