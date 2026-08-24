@@ -10,7 +10,7 @@ import { getHttpStatus } from '../../../utils/getHttpStatus.js';
  * message) follows the existing convention in `viewsMethods` and lets callers
  * recover from a specific Tableau condition without parsing axios internals.
  */
-function extractTableauError(
+export function extractTableauError(
   error: unknown,
 ): { code?: string; summary?: string; detail?: string } | null {
   // Tableau error surfaced in a 2xx body and normalized by the SDK method.
@@ -35,7 +35,7 @@ function extractTableauError(
 }
 
 /** Format `{ code, summary, detail }` as `Tableau [code]: summary: detail`. */
-function formatTableauError(t: { code?: string; summary?: string; detail?: string }): string {
+export function formatTableauError(t: { code?: string; summary?: string; detail?: string }): string {
   const head = `Tableau${t.code ? ` [${t.code}]` : ''}`;
   const body = t.detail && t.summary ? `${t.summary}: ${t.detail}` : t.summary || t.detail || '';
   return body ? `${head}: ${body}` : head;

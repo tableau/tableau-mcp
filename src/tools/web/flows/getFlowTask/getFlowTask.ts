@@ -10,6 +10,7 @@ import { WebMcpServer } from '../../../../server.web.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../../../utils/getHttpStatus.js';
 import { WebTool } from '../../tool.js';
+import { extractTableauError, formatTableauError } from '../flowWriteErrors.js';
 
 const paramsSchema = {
   taskId: z.string().nonempty(),
@@ -98,7 +99,8 @@ function mapGetFlowTaskError(error: unknown): McpToolError {
   }
 
   const status = error instanceof Error ? getHttpStatus(error) : '';
-  const cause = getExceptionMessage(error);
+  const tableauError = extractTableauError(error);
+  const cause = tableauError ? formatTableauError(tableauError) : getExceptionMessage(error);
 
   if (status === '403') {
     return new McpToolError({

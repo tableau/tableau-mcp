@@ -79,12 +79,15 @@ describe('getFlowTaskTool', () => {
   });
 
   it('maps a 404 into a clear task-not-found error', async () => {
-    mocks.mockGetFlowRunTask.mockRejectedValue(makeAxiosError(404));
+    mocks.mockGetFlowRunTask.mockRejectedValue(
+      makeAxiosError(404, { code: '404036', summary: 'Flow task not found' }),
+    );
     const result = await getToolResult({ taskId: TASK_ID });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Could not find this flow task');
     expect(result.content[0].text).toContain('list-flow-tasks');
+    expect(result.content[0].text).toContain('Tableau [404036]: Flow task not found');
   });
 
   it('maps a 403 into a clear ownership/permission error', async () => {
@@ -108,13 +111,16 @@ describe('getFlowTaskTool', () => {
   });
 });
 
-function makeAxiosError(status: number): Error {
+function makeAxiosError(
+  status: number,
+  tableauError?: { code?: string; summary?: string; detail?: string },
+): Error {
   const err = new Error(`Request failed with status code ${status}`) as Error & {
     isAxiosError: boolean;
-    response: { status: number };
+    response: { status: number; data?: unknown };
   };
   err.isAxiosError = true;
-  err.response = { status };
+  err.response = { status, data: tableauError ? { error: tableauError } : undefined };
   return err;
 }
 
