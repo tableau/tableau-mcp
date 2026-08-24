@@ -29,8 +29,8 @@ const vizFilter = `<worksheet name="W"><table><view>
 </view></table></worksheet>`;
 
 // The valid NESTED condition (rule-based) set: a function='filter' groupfilter that
-// WRAPS a level-members child. Verified byte-for-byte against a live Desktop readback
-// (W-23928173). The old substring detector false-positived on this; it must NOT be flagged.
+// WRAPS a level-members child. Verified byte-for-byte against a live Desktop readback.
+// The old substring detector false-positived on this; it must NOT be flagged.
 const conditionSet = `<workbook><datasources><datasource name="Sample - Superstore">
   <group caption="High Sales Cities" name="[High Sales Cities]" name-style="unqualified" user:ui-builder="filter-group">
     <groupfilter expression="SUM([Sales])&gt;=60000" function="filter" user:ui-filter-by-field="true" user:ui-marker="filter-by">
