@@ -292,7 +292,7 @@ describe('scopes', () => {
     it('should not require content read for publish-workbook', () => {
       const scopes = getRequiredApiScopesForTool('publish-workbook');
 
-      expect(scopes).toEqual(['tableau:workbooks:create', 'tableau:file_uploads:create']);
+      expect(scopes).toEqual(['tableau:workbooks:create']);
       expect(scopes).not.toContain('tableau:content:read');
     });
 

@@ -1,3 +1,5 @@
+import { readFile } from 'fs/promises';
+
 import { BucketS3Config } from '../s3Client.js';
 import {
   buildWorkbookUploadS3Key,
@@ -5,11 +7,16 @@ import {
   MAX_STAGED_WORKBOOK_BYTES,
   requestStagedWorkbookUpload,
   resolveStagedWorkbookUpload,
+  resolveWorkbookInput,
 } from './stagedWorkbookUpload.js';
 
 const mocks = vi.hoisted(() => ({
   createPresignedPutUrlToS3: vi.fn(),
   downloadObjectFromS3IfExists: vi.fn(),
+}));
+
+vi.mock('fs/promises', () => ({
+  readFile: vi.fn(),
 }));
 
 vi.mock('../s3Client.js', async (importOriginal) => ({
@@ -171,6 +178,129 @@ describe('buildWorkbookUploadS3Key', () => {
     expect(buildWorkbookUploadS3Key('/base', uploadId, 'twbx')).toBe(
       `base/workbook-uploads/${uploadId}/workbook.twbx`,
     );
+  });
+});
+
+describe('resolveWorkbookInput', () => {
+  const mockReadFile = readFile as unknown as ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadFile.mockReset();
+  });
+
+  it('throws when both workbookFilePath and workbookUploadId are provided', async () => {
+    await expect(
+      resolveWorkbookInput({
+        config: {
+          enabled: true,
+          bucket: 'b',
+          region: 'us-east-1',
+          keyPrefix: '',
+          presignTtlSeconds: 300,
+        },
+        workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
+        workbookFilePath: '/tmp/x.twb',
+      }),
+    ).rejects.toThrow('Provide either workbookFilePath or workbookUploadId, not both.');
+  });
+
+  it('throws when neither workbookFilePath nor workbookUploadId are provided', async () => {
+    await expect(
+      resolveWorkbookInput({
+        config: {
+          enabled: true,
+          bucket: 'b',
+          region: 'us-east-1',
+          keyPrefix: '',
+          presignTtlSeconds: 300,
+        },
+      }),
+    ).rejects.toThrow('Either workbookFilePath or workbookUploadId must be provided');
+  });
+
+  it('throws when workbookFilePath is provided but staged S3 uploads are configured', async () => {
+    await expect(
+      resolveWorkbookInput({
+        config: {
+          enabled: true,
+          bucket: 'b',
+          region: 'us-east-1',
+          keyPrefix: '',
+          presignTtlSeconds: 300,
+        },
+        workbookFilePath: '/tmp/x.twb',
+      }),
+    ).rejects.toThrow(
+      'workbookFilePath is only supported when staged S3 uploads are not configured',
+    );
+  });
+
+  it('throws when workbookUploadId is provided but staged S3 uploads are not configured', async () => {
+    await expect(
+      resolveWorkbookInput({
+        config: {
+          enabled: false,
+          bucket: 'b',
+          region: 'us-east-1',
+          keyPrefix: '',
+          presignTtlSeconds: 300,
+        },
+        workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
+      }),
+    ).rejects.toThrow('MCP_S3_BUCKET must be configured');
+  });
+
+  it('reads a local .twb file when workbookFilePath is provided and S3 is not configured', async () => {
+    mockReadFile.mockResolvedValue(Buffer.from('<workbook source="local" />'));
+
+    const result = await resolveWorkbookInput({
+      config: {
+        enabled: false,
+        bucket: 'b',
+        region: 'us-east-1',
+        keyPrefix: '',
+        presignTtlSeconds: 300,
+      },
+      workbookFilePath: '/tmp/source-superstore.twb',
+    });
+
+    expect(result).toEqual({
+      fileName: 'source-superstore.twb',
+      bytes: Buffer.from('<workbook source="local" />'),
+    });
+  });
+
+  it('throws when the local file is neither .twb nor .twbx', async () => {
+    await expect(
+      resolveWorkbookInput({
+        config: {
+          enabled: false,
+          bucket: 'b',
+          region: 'us-east-1',
+          keyPrefix: '',
+          presignTtlSeconds: 300,
+        },
+        workbookFilePath: '/tmp/source-superstore.xml',
+      }),
+    ).rejects.toThrow('workbookFilePath must point to a .twb or .twbx file');
+  });
+
+  it('throws when the local file is empty', async () => {
+    mockReadFile.mockResolvedValue(Buffer.from(''));
+
+    await expect(
+      resolveWorkbookInput({
+        config: {
+          enabled: false,
+          bucket: 'b',
+          region: 'us-east-1',
+          keyPrefix: '',
+          presignTtlSeconds: 300,
+        },
+        workbookFilePath: '/tmp/source-superstore.twb',
+      }),
+    ).rejects.toThrow('workbookFilePath must not point to an empty workbook file');
   });
 });
 
