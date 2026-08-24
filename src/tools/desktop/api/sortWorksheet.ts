@@ -146,8 +146,8 @@ export const getSortWorksheetTool = (
             message:
               result.value.status === 'completed'
                 ? clearSort
-                  ? `Cleared the sort on "${column}" in worksheet "${worksheetName}".`
-                  : `Sorted worksheet "${worksheetName}" by "${column}".`
+                  ? `Desktop accepted the request to clear the sort on "${column}" in worksheet "${worksheetName}". The result was not independently verified.`
+                  : `Desktop accepted the request to sort worksheet "${worksheetName}" by "${column}". The result was not independently verified.`
                 : `Requested sort on worksheet "${worksheetName}"; Desktop is still applying it.`,
           });
         },

@@ -151,6 +151,40 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     }
   });
 
+  it.each([
+    {
+      label: 'sort',
+      args: { direction: 'desc' },
+      accepted: 'Desktop accepted the request to sort worksheet',
+    },
+    {
+      label: 'clear',
+      args: { clearSort: true },
+      accepted: 'Desktop accepted the request to clear the sort',
+    },
+  ])(
+    'reports a terminal SUCCEEDED discrete $label request as accepted but unverified',
+    async ({ args, accepted }) => {
+      const harness = await startHarness(getSortWorksheetTool);
+      try {
+        const { result } = await run(harness, {
+          worksheet: WORKSHEET_NAME,
+          fieldName: 'Region',
+          ...args,
+        });
+
+        expect(result.isError).toBe(false);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain(accepted);
+        expect(result.content[0].text).toContain('The result was not independently verified.');
+        expect(result.content[0].text).not.toContain('Sorted worksheet');
+        expect(result.content[0].text).not.toContain('Cleared the sort');
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
   it('sort-worksheet resolves a calculated shelf field by caption and POSTs its member order', async () => {
     const harness = await startHarness(getSortWorksheetTool);
     harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
