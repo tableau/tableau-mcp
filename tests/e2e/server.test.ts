@@ -66,6 +66,8 @@ describe('server', () => {
       // authoring tools are gated off by default (authoring-tools feature flag)
       const authoringTools: ReadonlyArray<WebToolName> = [
         'request-workbook-upload',
+        'upload-workbook',
+        'validate-workbook',
         'publish-workbook',
       ];
 
@@ -187,6 +189,8 @@ describe('server', () => {
       // authoring tools are gated off by default (authoring-tools feature flag)
       const authoringTools: ReadonlyArray<WebToolName> = [
         'request-workbook-upload',
+        'upload-workbook',
+        'validate-workbook',
         'publish-workbook',
       ];
 
