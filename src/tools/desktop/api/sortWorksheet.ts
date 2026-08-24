@@ -19,11 +19,11 @@ import { resolveShelfField } from './resolveShelfField.js';
 const paramsSchema = {
   session: sessionParam(),
   worksheet: z.string().describe('Worksheet name/id to sort.'),
-  fieldName: z.string().min(1).describe('Worksheet field name (e.g. "Sales").'),
-  direction: z
-    .enum(['asc', 'desc'])
-    .optional()
-    .describe('Direction; default asc. Numeric desc: largest first.'),
+  fieldName: z
+    .string()
+    .min(1)
+    .describe('On-shelf discrete field to order (for example, "Region").'),
+  direction: z.enum(['asc', 'desc']).optional().describe('Member order direction; default asc.'),
   sortType: z
     .enum(['data-source-order', 'alpha'])
     .optional()
@@ -42,7 +42,8 @@ export const getSortWorksheetTool = (
     server,
     name: 'sort-worksheet',
     title,
-    description: 'Apply or clear a sort on a field of a worksheet without opening the sort dialog.',
+    description:
+      'Order members of a discrete field. For measure ranking, use refine-worksheet with operation sort_by_field.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -99,6 +100,16 @@ export const getSortWorksheetTool = (
                     (shelfField.onShelf.length > 0
                       ? `Fields on this worksheet: ${shelfField.onShelf.join(', ')}.`
                       : 'This worksheet has no fields on its shelves.'),
+                ).toErr();
+              }
+              if (shelfField.type === 'quantitative') {
+                return new ArgsValidationError(
+                  `Field "${fieldName}" resolves to a quantitative/continuous shelf field, but sort-worksheet only orders members of a discrete shelf field. To rank a dimension by a measure, use refine-worksheet with operation sort_by_field.`,
+                ).toErr();
+              }
+              if (shelfField.type !== 'nominal' && shelfField.type !== 'ordinal') {
+                return new ArgsValidationError(
+                  `Field "${fieldName}" is on the worksheet shelf, but its field type could not be verified. sort-worksheet did not send a request.`,
                 ).toErr();
               }
               return new Ok({

@@ -273,10 +273,12 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-22: author-set gains a condition (rule-based) set mode — the
 // 'condition' mode enum value plus the conditionExpression param add +52 bytes; dynamic authoring
 // 47_525 -> 47_577 (18-byte ratchet slack kept, well under the temporary 48k product ceiling).
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_577;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_595;
+// Re-pinned 2026-08-24: the native sort contract moves dynamic 47_577 -> 47_608 and full
+// 61_590 -> 61_618; both budgets retain 18-byte slack and the dynamic ceiling stays 48k.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_608;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_626;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 48_000;
-const FULL_TOOL_SURFACE_BUDGET = 61_590;
+const FULL_TOOL_SURFACE_BUDGET = 61_636;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
