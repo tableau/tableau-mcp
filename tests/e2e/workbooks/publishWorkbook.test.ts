@@ -6,27 +6,16 @@ import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { buildVariant } from '../build.js';
 import { McpClient } from '../mcpClient.js';
 
-const validationFindingSchema = z.object({
-  severity: z.string(),
-  message: z.string(),
-  line: z.number(),
-  column: z.number(),
-  elementName: z.string(),
+const uploadWorkbookResultSchema = z.object({
+  uploadSessionId: z.string(),
+  workbookType: z.enum(['twb', 'twbx']),
 });
 
-const publishWorkbookResultSchema = z.discriminatedUnion('status', [
-  z.object({
-    status: z.literal('published'),
-    data: workbookSchema,
-    url: z.string(),
-    warnings: z.array(validationFindingSchema),
-  }),
-  z.object({
-    status: z.literal('invalid'),
-    errors: z.array(validationFindingSchema),
-    warnings: z.array(validationFindingSchema),
-  }),
-]);
+const publishWorkbookResultSchema = z.object({
+  status: z.literal('published'),
+  data: workbookSchema,
+  url: z.string(),
+});
 
 const defaultWorkbookFilePath = resolve('tests/e2e/fixtures/workbooks/superstore-datasource.twb');
 const twbxWorkbookFilePath = resolve('tests/e2e/fixtures/workbooks/forecast.twbx');
@@ -59,13 +48,19 @@ describe('publish-workbook local file', () => {
     await client?.close();
   });
 
-  it('validates and publishes a workbook (.twb) from a local file path', async () => {
+  it('uploads then publishes a workbook (.twb) from a local file path', async () => {
     const smokeConfig = getPublishWorkbookSmokeConfig();
+
+    const uploadResult = await client!.callTool('upload-workbook', {
+      schema: uploadWorkbookResultSchema,
+      toolArgs: { workbookFilePath: smokeConfig.workbookFilePath },
+    });
 
     const publishResult = await client!.callTool('publish-workbook', {
       schema: publishWorkbookResultSchema,
       toolArgs: {
-        workbookFilePath: smokeConfig.workbookFilePath,
+        uploadSessionId: uploadResult.uploadSessionId,
+        workbookType: uploadResult.workbookType,
         name: smokeConfig.workbookName,
         projectId: smokeConfig.projectId,
         overwrite: true,
@@ -73,20 +68,24 @@ describe('publish-workbook local file', () => {
     });
 
     expect(publishResult.status).toBe('published');
-    if (publishResult.status === 'published') {
-      expect(publishResult.data.name).toBe(smokeConfig.workbookName);
-      expect(publishResult.url).toEqual(expect.any(String));
-    }
+    expect(publishResult.data.name).toBe(smokeConfig.workbookName);
+    expect(publishResult.url).toEqual(expect.any(String));
   });
 
-  it('validates and publishes a .twbx workbook from a local file path', async () => {
+  it('uploads then publishes a .twbx workbook from a local file path', async () => {
     const smokeConfig = getPublishWorkbookSmokeConfig();
     const workbookName = `${smokeConfig.workbookName} TWBX`;
+
+    const uploadResult = await client!.callTool('upload-workbook', {
+      schema: uploadWorkbookResultSchema,
+      toolArgs: { workbookFilePath: twbxWorkbookFilePath },
+    });
 
     const publishResult = await client!.callTool('publish-workbook', {
       schema: publishWorkbookResultSchema,
       toolArgs: {
-        workbookFilePath: twbxWorkbookFilePath,
+        uploadSessionId: uploadResult.uploadSessionId,
+        workbookType: uploadResult.workbookType,
         name: workbookName,
         projectId: smokeConfig.projectId,
         overwrite: true,
@@ -94,10 +93,8 @@ describe('publish-workbook local file', () => {
     });
 
     expect(publishResult.status).toBe('published');
-    if (publishResult.status === 'published') {
-      expect(publishResult.data.name).toBe(workbookName);
-      expect(publishResult.url).toEqual(expect.any(String));
-    }
+    expect(publishResult.data.name).toBe(workbookName);
+    expect(publishResult.url).toEqual(expect.any(String));
   });
 });
 
