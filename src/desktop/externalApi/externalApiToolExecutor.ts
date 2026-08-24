@@ -1027,10 +1027,10 @@ function mapClientError(
         return {
           type: 'command-timed-out',
           error:
-            'The async operation did not reach a terminal state within the poll deadline. Desktop was ' +
-            'last seen showing a self-clearing progress dialog rather than one a person must dismiss, ' +
-            'so this is most likely a slow operation rather than a wedged instance. If it keeps ' +
-            `happening, call list-instances to confirm the session is still reachable before retrying.${describeWindows(progressWindows)}`,
+            'The async operation did not reach a terminal state within the poll deadline. It may ' +
+            'still be running on Desktop — the poll gave up locally but did not cancel it, so only ' +
+            'retry if the command is safe to run twice. Desktop was last seen showing a self-clearing ' +
+            `progress dialog, so this is likely just slow; if it recurs, call list-instances to confirm the session is still reachable.${describeWindows(progressWindows)}`,
         };
       }
       return {

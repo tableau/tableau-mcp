@@ -900,6 +900,7 @@ describe('ExternalApiToolExecutor', () => {
       if (error.type === 'command-timed-out') {
         expect(error.error).toContain('Exporting…');
         expect(error.error).toContain('list-instances');
+        expect(error.error).toContain('may still be running');
         expect(error.error).not.toContain('Do not retry');
       }
     });
