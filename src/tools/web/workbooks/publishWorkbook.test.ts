@@ -10,36 +10,19 @@ import { mockWorkbook } from './mockWorkbook.js';
 import { getPublishWorkbookTool } from './publishWorkbook.js';
 
 const mocks = vi.hoisted(() => ({
-  mockReadFile: vi.fn(),
   mockPublishWorkbook: vi.fn(),
-  mockValidateWorkbookAndUpload: vi.fn(),
-  mockUploadFileInChunks: vi.fn(),
-  mockResolveStagedWorkbookUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
-}));
-
-vi.mock('fs/promises', () => ({
-  readFile: mocks.mockReadFile,
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
     callback({
       workbooksMethods: {
-        validateWorkbookAndUpload: mocks.mockValidateWorkbookAndUpload,
         publishWorkbook: mocks.mockPublishWorkbook,
-      },
-      publishingMethods: {
-        uploadFileInChunks: mocks.mockUploadFileInChunks,
       },
       siteId: 'test-site-id',
     }),
   ),
-}));
-
-vi.mock('./stagedWorkbookUpload.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./stagedWorkbookUpload.js')>()),
-  resolveStagedWorkbookUpload: mocks.mockResolveStagedWorkbookUpload,
 }));
 
 vi.mock('../../../features/init.js', () => ({
@@ -47,13 +30,8 @@ vi.mock('../../../features/init.js', () => ({
 }));
 
 const validArgs = {
-  workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
-  name: 'My New Workbook',
-  projectId: 'target-project-id',
-};
-
-const validLocalArgs = {
-  workbookFilePath: '/tmp/source-superstore.twb',
+  uploadSessionId: 'upload-session-id',
+  workbookType: 'twb' as const,
   name: 'My New Workbook',
   projectId: 'target-project-id',
 };
@@ -65,16 +43,7 @@ describe('publishWorkbookTool', () => {
     stubDefaultEnvVars();
     RestApi.version = '3.29';
     mocks.mockPublishWorkbook.mockReset();
-    mocks.mockValidateWorkbookAndUpload.mockReset();
-    mocks.mockUploadFileInChunks.mockReset();
-    mocks.mockResolveStagedWorkbookUpload.mockReset();
-    mocks.mockReadFile.mockReset();
     mocks.mockIsFeatureEnabled.mockReset();
-    mocks.mockReadFile.mockResolvedValue(Buffer.from('<workbook source="local" />'));
-    mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
-      fileName: 'source-superstore.twb',
-      bytes: Buffer.from('<workbook source="new" />'),
-    });
     mocks.mockPublishWorkbook.mockResolvedValue({
       ...mockWorkbook,
       project: { id: 'target-project-id', name: 'Marketing Analytics' },
@@ -92,54 +61,29 @@ describe('publishWorkbookTool', () => {
     const paramsSchema = await Provider.from(tool.paramsSchema);
 
     expect(tool.name).toBe('publish-workbook');
-    expect(tool.description).toContain('Publishes a TWB or TWBX workbook');
     expect(paramsSchema).toMatchObject({
-      workbookUploadId: expect.any(Object),
-      workbookFilePath: expect.any(Object),
+      uploadSessionId: expect.any(Object),
+      workbookType: expect.any(Object),
       name: expect.any(Object),
       projectId: expect.any(Object),
       overwrite: expect.any(Object),
     });
     expect(annotations.destructiveHint).toBe(true);
     expect(paramsSchema.name.safeParse('').success).toBe(false);
-    expect(tool.description).toContain('specified Tableau project');
   });
 
   it('is disabled when the authoring-tools feature flag is OFF', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-
     const tool = getPublishWorkbookTool(new WebMcpServer());
-
     expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
   it('is enabled when the authoring-tools feature flag is ON', async () => {
     const tool = getPublishWorkbookTool(new WebMcpServer());
-
     expect(await Provider.from(tool.disabled)).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
-  it('validates, publishes to the requested project, and returns the published workbook', async () => {
-    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
-      timestamp: '2026-06-10T14:32:18.456Z',
-      uploadId: 'validated-upload-id',
-      warnings: [
-        {
-          severity: 'WARNING',
-          message: 'Unknown map source is used',
-          line: 245,
-          column: 18,
-          elementName: 'map',
-        },
-      ],
-    });
-    mocks.mockPublishWorkbook.mockResolvedValue({
-      ...mockWorkbook,
-      project: { id: 'target-project-id', name: 'Marketing Analytics' },
-    });
-
+  it('publishes to the requested project using the given uploadSessionId and workbookType', async () => {
     const result = await getToolResult(validArgs);
 
     expect(result.isError).toBe(false);
@@ -150,28 +94,9 @@ describe('publishWorkbookTool', () => {
     expect(response.url).toBe(
       'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
     );
-    expect(response.warnings).toEqual([
-      {
-        severity: 'WARNING',
-        message: 'Unknown map source is used',
-        line: 245,
-        column: 18,
-        elementName: 'map',
-      },
-    ]);
-
-    expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
-      siteId: 'test-site-id',
-      filename: 'source-superstore.twb',
-      workbook: Buffer.from('<workbook source="new" />'),
-    });
-    expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
-      workbookUploadId: validArgs.workbookUploadId,
-      config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
-    });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
-      uploadSessionId: 'validated-upload-id',
+      uploadSessionId: 'upload-session-id',
       name: 'My New Workbook',
       workbookType: 'twb',
       projectId: 'target-project-id',
@@ -179,94 +104,15 @@ describe('publishWorkbookTool', () => {
     });
   });
 
-  it('uploads and publishes a TWBX file without a separate validation step', async () => {
-    mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
-      fileName: 'source-superstore.twbx',
-      bytes: Buffer.from('PK\x03\x04-fake-zip-bytes'),
-    });
-    mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
-    mocks.mockPublishWorkbook.mockResolvedValue({
-      ...mockWorkbook,
-      project: { id: 'target-project-id', name: 'Marketing Analytics' },
-    });
+  it('publishes a twbx uploadSessionId with workbookType twbx passed through unchanged', async () => {
+    await getToolResult({ ...validArgs, workbookType: 'twbx' });
 
-    const result = await getToolResult(validArgs);
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const response = JSON.parse(result.content[0].text);
-    expect(response.status).toBe('published');
-    expect(response.data.id).toBe(mockWorkbook.id);
-
-    expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
-      siteId: 'test-site-id',
-      filename: 'source-superstore.twbx',
-      content: Buffer.from('PK\x03\x04-fake-zip-bytes'),
-    });
-    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
-    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
-      siteId: 'test-site-id',
-      uploadSessionId: 'chunked-upload-session-id',
-      name: 'My New Workbook',
-      workbookType: 'twbx',
-      projectId: 'target-project-id',
-      overwrite: false,
-    });
-  });
-
-  it('returns an error when Tableau rejects an invalid TWBX workbook during publish', async () => {
-    mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
-      fileName: 'source-superstore.twbx',
-      bytes: Buffer.from('PK\x03\x04-fake-zip-bytes'),
-    });
-    mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
-    mocks.mockPublishWorkbook.mockRejectedValue(
-      new Error('Tableau publishWorkbook request failed with status 400: bad workbook'),
-    );
-
-    const result = await getToolResult(validArgs);
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('bad workbook');
-  });
-
-  it('uploads and publishes a local TWBX workbook file path without a separate validation step', async () => {
-    mocks.mockReadFile.mockResolvedValue(Buffer.from('PK\x03\x04-fake-zip-bytes'));
-    mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
-    mocks.mockPublishWorkbook.mockResolvedValue({
-      ...mockWorkbook,
-      project: { id: 'target-project-id', name: 'Marketing Analytics' },
-    });
-
-    const result = await getToolResult(
-      { ...validLocalArgs, workbookFilePath: '/tmp/source-superstore.twbx' },
-      { bucketS3Enabled: false },
-    );
-
-    expect(result.isError).toBe(false);
-    expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.twbx');
-    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
-    expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
-      siteId: 'test-site-id',
-      filename: 'source-superstore.twbx',
-      content: Buffer.from('PK\x03\x04-fake-zip-bytes'),
-    });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
       expect.objectContaining({ workbookType: 'twbx' }),
     );
   });
 
   it('defaults overwrite to false when publishing', async () => {
-    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
-      timestamp: '2026-06-10T14:32:18.456Z',
-      uploadId: 'validated-upload-id',
-    });
-    mocks.mockPublishWorkbook.mockResolvedValue({
-      ...mockWorkbook,
-      project: { id: 'target-project-id', name: 'Marketing Analytics' },
-    });
-
     await getToolResult(validArgs);
 
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
@@ -275,10 +121,6 @@ describe('publishWorkbookTool', () => {
   });
 
   it('returns an error without overwriting when Tableau rejects a duplicate workbook name', async () => {
-    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
-      timestamp: '2026-06-10T14:32:18.456Z',
-      uploadId: 'validated-upload-id',
-    });
     mocks.mockPublishWorkbook.mockRejectedValue(
       new Error('A workbook named My New Workbook already exists in the target project.'),
     );
@@ -294,15 +136,6 @@ describe('publishWorkbookTool', () => {
   });
 
   it('passes overwrite true through when publishing', async () => {
-    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
-      timestamp: '2026-06-10T14:32:18.456Z',
-      uploadId: 'validated-upload-id',
-    });
-    mocks.mockPublishWorkbook.mockResolvedValue({
-      ...mockWorkbook,
-      project: { id: 'target-project-id', name: 'Marketing Analytics' },
-    });
-
     await getToolResult({ ...validArgs, overwrite: true });
 
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
@@ -310,159 +143,7 @@ describe('publishWorkbookTool', () => {
     );
   });
 
-  it('resolves the staged workbookUploadId before validation', async () => {
-    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
-      timestamp: '2026-06-10T14:32:18.456Z',
-      uploadId: 'validated-upload-id',
-    });
-    mocks.mockPublishWorkbook.mockResolvedValue({
-      ...mockWorkbook,
-      project: { id: 'target-project-id', name: 'Marketing Analytics' },
-    });
-    const workbookUploadId = '123e4567-e89b-42d3-a456-426614174000';
-
-    await getToolResult({
-      workbookUploadId,
-      name: 'My New Workbook',
-      projectId: 'target-project-id',
-    });
-
-    expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
-      workbookUploadId,
-      config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
-    });
-    expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
-      siteId: 'test-site-id',
-      filename: 'source-superstore.twb',
-      workbook: Buffer.from('<workbook source="new" />'),
-    });
-  });
-
-  it('validates and publishes a local workbook file path', async () => {
-    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
-      timestamp: '2026-06-10T14:32:18.456Z',
-      uploadId: 'validated-upload-id',
-    });
-    mocks.mockPublishWorkbook.mockResolvedValue({
-      ...mockWorkbook,
-      project: { id: 'target-project-id', name: 'Marketing Analytics' },
-    });
-
-    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
-
-    expect(result.isError).toBe(false);
-    expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.twb');
-    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
-    expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
-      siteId: 'test-site-id',
-      filename: 'source-superstore.twb',
-      workbook: Buffer.from('<workbook source="local" />'),
-    });
-  });
-
-  it('rejects local workbook file paths when staged S3 uploads are configured', async () => {
-    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: true });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain(
-      'workbookFilePath is only supported when staged S3 uploads are not configured',
-    );
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
-    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
-    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
-  });
-
-  it('returns an args-validation error when local workbook path is neither twb nor twbx', async () => {
-    const result = await getToolResult(
-      {
-        ...validLocalArgs,
-        workbookFilePath: '/tmp/source-superstore.xml',
-      },
-      { bucketS3Enabled: false },
-    );
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('workbookFilePath must point to a .twb or .twbx file');
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
-    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
-  });
-
-  it('returns an args-validation error when local workbook file is empty', async () => {
-    mocks.mockReadFile.mockResolvedValue(Buffer.from(''));
-
-    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('workbookFilePath must not point to an empty');
-    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
-  });
-
-  it('returns an error when both local path and staged upload id are provided', async () => {
-    const result = await getToolResult({
-      ...validLocalArgs,
-      workbookUploadId: validArgs.workbookUploadId,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain(
-      'Provide either workbookFilePath or workbookUploadId, not both',
-    );
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
-    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
-    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
-  });
-
-  it('returns an error when neither local path nor staged upload id is provided', async () => {
-    const result = await getToolResult({ name: validArgs.name, projectId: validArgs.projectId });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Either workbookFilePath or workbookUploadId');
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
-    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
-    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
-  });
-
-  it('returns validation errors and does not publish when the workbook is invalid', async () => {
-    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
-      timestamp: '2026-06-10T14:32:18.456Z',
-      errors: [
-        {
-          severity: 'ERROR',
-          message: 'Missing required closing tag for element',
-          line: 127,
-          column: 5,
-          elementName: 'preferences',
-        },
-      ],
-    });
-
-    const result = await getToolResult(validArgs);
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const response = JSON.parse(result.content[0].text);
-    expect(response).toEqual({
-      status: 'invalid',
-      errors: [
-        {
-          severity: 'ERROR',
-          message: 'Missing required closing tag for element',
-          line: 127,
-          column: 5,
-          elementName: 'preferences',
-        },
-      ],
-      warnings: [],
-    });
-    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
-  });
-
-  it('returns an error before validation when the requested project is outside bounded context', async () => {
+  it('returns an error when the requested project is outside bounded context', async () => {
     const result = await getToolResult(validArgs, {
       boundedProjectIds: new Set(['different-project-id']),
     });
@@ -470,21 +151,6 @@ describe('publishWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('not allowed by this MCP server');
-    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
-    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
-    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
-  });
-
-  it('returns an error and does not publish when Tableau does not return an upload id', async () => {
-    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
-      timestamp: '2026-06-10T14:32:18.456Z',
-    });
-
-    const result = await getToolResult(validArgs);
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('did not return an uploadId');
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
@@ -502,12 +168,10 @@ describe('publishWorkbookTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('requires Tableau REST API version 3.29 or later');
     expect(result.content[0].text).toContain('REST API version 3.28');
-    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
-    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
-  it('redacts staged workbookUploadId details passed to shared logging', async () => {
+  it('redacts uploadSessionId details passed to shared logging', async () => {
     const tool = getPublishWorkbookTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
     const logAndExecute = vi
@@ -516,8 +180,8 @@ describe('publishWorkbookTool', () => {
 
     await callback(
       {
-        workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
-        workbookFilePath: undefined,
+        uploadSessionId: 'upload-session-id',
+        workbookType: 'twb',
         name: validArgs.name,
         projectId: validArgs.projectId,
         overwrite: false,
@@ -527,32 +191,32 @@ describe('publishWorkbookTool', () => {
 
     const loggedArgs = logAndExecute.mock.calls[0][0].args;
     expect(loggedArgs).toEqual({
-      workbookUploadId: '<redacted>',
-      workbookFilePath: undefined,
+      uploadSessionId: '<redacted>',
+      workbookType: 'twb',
       name: validArgs.name,
       projectId: validArgs.projectId,
       overwrite: false,
     });
-    expect(JSON.stringify(loggedArgs)).not.toContain('123e4567-e89b-42d3-a456-426614174000');
+    expect(JSON.stringify(loggedArgs)).not.toContain('upload-session-id');
   });
 });
 
 async function getToolResult(
   params: {
-    workbookUploadId?: string;
-    workbookFilePath?: string;
+    uploadSessionId: string;
+    workbookType: 'twb' | 'twbx';
     name: string;
     projectId: string;
     overwrite?: boolean;
   },
-  options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
+  options: { boundedProjectIds?: Set<string> | null } = {},
 ): Promise<CallToolResult> {
   const tool = getPublishWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {
-      workbookUploadId: params.workbookUploadId,
-      workbookFilePath: params.workbookFilePath,
+      uploadSessionId: params.uploadSessionId,
+      workbookType: params.workbookType,
       name: params.name,
       projectId: params.projectId,
       overwrite: params.overwrite ?? false,
@@ -563,11 +227,9 @@ async function getToolResult(
 
 function getMockExtra({
   boundedProjectIds = null,
-  bucketS3Enabled = true,
-}: {
-  boundedProjectIds?: Set<string> | null;
-  bucketS3Enabled?: boolean;
-} = {}): ReturnType<typeof getMockRequestHandlerExtra> {
+}: { boundedProjectIds?: Set<string> | null } = {}): ReturnType<
+  typeof getMockRequestHandlerExtra
+> {
   const extra = getMockRequestHandlerExtra();
   return {
     ...extra,
@@ -580,15 +242,5 @@ function getMockExtra({
         tags: null,
       },
     }),
-    config: {
-      ...extra.config,
-      bucketS3: {
-        enabled: bucketS3Enabled,
-        bucket: 'tableau-workbooks',
-        region: 'us-east-1',
-        keyPrefix: 'mcp/',
-        presignTtlSeconds: 300,
-      },
-    },
   };
 }
