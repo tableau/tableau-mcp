@@ -70,6 +70,19 @@ describe('composeStoryDocument', () => {
     expect(result.xml).toContain("caption='Sales &lt; Profit'");
   });
 
+  it('preserves dollar replacement tokens in story point attributes', () => {
+    const result = composeStoryDocument(STORY_XML, {
+      width: 1400,
+      height: 1000,
+      points: [{ dashboard: 'Sales $$ Overview', caption: "Revenue $& O'Brien" }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain("captured-sheet='Sales $$ Overview'");
+    expect(result.xml).toContain("caption='Revenue $&amp; O&apos;Brien'");
+  });
+
   it('fails closed when the story has no Tableau-authored story-points container', () => {
     const result = composeStoryDocument(
       STORY_XML.replace(

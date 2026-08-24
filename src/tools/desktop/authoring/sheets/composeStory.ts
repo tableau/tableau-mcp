@@ -242,9 +242,9 @@ export function composeStoryDocument(
   return {
     ok: true,
     xml: storyboardXml
-      .replace(size[0], nextSize)
-      .replace(flipboard[0], nextFlipboard)
-      .replace(storyPoints[0], nextStoryPoints),
+      .replace(size[0], () => nextSize)
+      .replace(flipboard[0], () => nextFlipboard)
+      .replace(storyPoints[0], () => nextStoryPoints),
   };
 }
 
