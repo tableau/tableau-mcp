@@ -328,7 +328,7 @@ function findFirstElement(xml: string, tag: string): ElementBounds | undefined {
 }
 
 function findDirectElements(xml: string, tag: string): ElementBounds[] {
-  const token = new RegExp(`<\\/?${tag}\\b[^>]*>`, 'g');
+  const token = new RegExp(`<\\/?${tag}(?=\\s|/|>)[^>]*>`, 'g');
   const results: ElementBounds[] = [];
   let depth = 0;
   let current: Omit<ElementBounds, 'contentEnd' | 'end'> | undefined;

@@ -50,6 +50,30 @@ describe('setDashboardNavigationDocument', () => {
     expect(result.xml).toMatch(/<\/zone>\s*<zone h='8000' id='12' type-v2='dashboard-object'/);
   });
 
+  it('accepts compose-dashboard zones that contain zone-style children', () => {
+    const source = `<dashboard enable-sort-zone-taborder='true' name='Sales Overview'>
+  <size maxheight='1000' maxwidth='1400' minheight='1000' minwidth='1400' sizing-mode='fixed' />
+  <zones>
+    <zone h='100000' id='9' type-v2='layout-basic' w='100000' x='0' y='0'>
+      <zone h='8000' id='10' type-v2='text' w='100000' x='0' y='0'>
+        <formatted-text><run>Sales Overview</run></formatted-text>
+        <zone-style><format attr='margin' value='4' /></zone-style>
+      </zone>
+      <zone h='92000' id='11' name='Chart' w='100000' x='0' y='8000'>
+        <zone-style><format attr='margin' value='4' /></zone-style>
+      </zone>
+    </zone>
+  </zones>
+</dashboard>`;
+
+    const result = setDashboardNavigationDocument(source, 'Sales Overview', TARGETS);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain('<zone-style>');
+    expect(result.xml.match(/type-v2='dashboard-object'/g)).toHaveLength(2);
+  });
+
   it('ignores id suffix attributes when allocating navigation zone IDs', () => {
     const source = dashboardXml('Sales Overview').replace(
       '  <simple-id',
