@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Zod, Vitest, MCP SDK (`@modelcontextprotocol/sdk`), Tableau REST API SDK layer (`src/sdks/tableau/`).
 
-**Spec:** `plans/workbook-upload-validate-publish-split-spec.md`
+**Spec:** `design/specs/workbook-upload-validate-publish-split-spec.md`
 
 ## Global Constraints
 
