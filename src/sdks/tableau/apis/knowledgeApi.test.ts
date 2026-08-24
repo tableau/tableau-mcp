@@ -202,15 +202,26 @@ describe('knowledge node endpoints', () => {
         expect.objectContaining({
           alias: 'searchNodes',
           method: 'post',
-          path: '/graphs/:graph_id/nodes/search',
+          path: '/nodes/search',
         }),
         expect.objectContaining({
           alias: 'resolveNode',
           method: 'post',
-          path: '/graphs/:graph_id/nodes/resolve',
+          path: '/nodes/resolve',
         }),
       ]),
     );
+  });
+
+  it('exposes graph_id as an optional query param on every knowledge endpoint', () => {
+    for (const endpoint of knowledgeApis) {
+      const graphIdParam = endpoint.parameters?.find((p) => p.name === 'graph_id');
+      expect(graphIdParam, `${endpoint.alias} is missing graph_id`).toBeDefined();
+      expect(graphIdParam!.type).toBe('Query');
+      // Optional: an omitted graph_id targets the site's active graph server-side.
+      expect(graphIdParam!.schema.isOptional()).toBe(true);
+      expect(endpoint.path).not.toContain(':graph_id');
+    }
   });
 
   it('parses ranked matches with optional semantic-context statements', () => {
@@ -261,17 +272,17 @@ describe('knowledge traversal endpoints', () => {
         expect.objectContaining({
           alias: 'searchNodeRelationships',
           method: 'post',
-          path: '/graphs/:graph_id/edges/search',
+          path: '/edges/search',
         }),
         expect.objectContaining({
           alias: 'getLineage',
           method: 'get',
-          path: '/graphs/:graph_id/lineage/:node_id',
+          path: '/lineage/:node_id',
         }),
         expect.objectContaining({
           alias: 'getNodeImpact',
           method: 'get',
-          path: '/graphs/:graph_id/nodes/:node_id/impact',
+          path: '/nodes/:node_id/impact',
         }),
       ]),
     );
@@ -327,22 +338,22 @@ describe('semantic statement endpoints', () => {
         expect.objectContaining({
           alias: 'createSemanticStatements',
           method: 'post',
-          path: '/graphs/:graph_id/semantic-statements',
+          path: '/semantic-statements',
         }),
         expect.objectContaining({
           alias: 'listSemanticStatements',
           method: 'post',
-          path: '/graphs/:graph_id/semantic-statements/search',
+          path: '/semantic-statements/search',
         }),
         expect.objectContaining({
           alias: 'listNodeSemanticStatements',
           method: 'post',
-          path: '/graphs/:graph_id/nodes/:node_id/semantic-statements/search',
+          path: '/nodes/:node_id/semantic-statements/search',
         }),
         expect.objectContaining({
           alias: 'updateSemanticStatements',
           method: 'patch',
-          path: '/graphs/:graph_id/semantic-statements/:ctx_id',
+          path: '/semantic-statements/:ctx_id',
         }),
       ]),
     );

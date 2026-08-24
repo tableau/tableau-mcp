@@ -11,7 +11,7 @@ backend error.
 
 | Parameter | Type             | Required | Description         |
 | --------- | ---------------- | -------- | ------------------- |
-| `graphId` | string           | Yes      | Knowledge graph ID. |
+| `graphId` | string | No | Knowledge graph ID. Omit to target the site's active (default) graph. |
 | `nodeId`  | non-empty string | Yes      | Exact node ID.      |
 
 The tool returns at most 100 affected assets, further constrained by configured result limits, and

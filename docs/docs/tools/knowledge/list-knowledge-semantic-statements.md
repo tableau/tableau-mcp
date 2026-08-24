@@ -4,13 +4,13 @@ sidebar_position: 9
 
 # List Semantic Statements
 
-Lists semantic statements from an explicit Tableau Knowledge graph.
+Lists semantic statements from a Tableau Knowledge graph.
 
 ## Arguments
 
 | Parameter  | Type    | Required | Description                                                         |
 | ---------- | ------- | -------- | ------------------------------------------------------------------- |
-| `graphId`  | string  | Yes      | Knowledge graph ID from configuration or a prior workflow.          |
+| `graphId` | string | No | Knowledge graph ID from configuration or a prior workflow. Omit to target the site's active (default) graph. |
 | `nodeId`   | string  | No       | Return statements attached to this node plus all global statements. |
 | `isGlobal` | boolean | No       | Filter a graph-wide list. Cannot be combined with `nodeId`.         |
 

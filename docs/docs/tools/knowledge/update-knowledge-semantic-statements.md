@@ -17,7 +17,7 @@ confirmation step. The `knowledge-write-tools` feature flag must be enabled.
 
 | Parameter      | Type             | Required | Description                                                          |
 | -------------- | ---------------- | -------- | -------------------------------------------------------------------- |
-| `graphId`      | string           | Yes      | Knowledge graph ID from configuration or a prior workflow.           |
+| `graphId` | string | No | Knowledge graph ID from configuration or a prior workflow. Omit to target the site's active (default) graph. |
 | `contextId`    | string           | Yes      | Semantic context ID returned by create or list.                      |
 | `statements`   | array            | No       | Non-empty replacement array of trimmed, 5–1000 character statements. |
 | `targetNodeId` | string or `null` | No       | Replace the attached node, or explicitly detach with `null`.         |

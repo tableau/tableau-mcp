@@ -4,7 +4,7 @@ sidebar_position: 5
 
 # Get Knowledge Node Relationships
 
-Returns relationships around one node in an explicit Tableau Knowledge graph. Anchor the request
+Returns relationships around one node in a Tableau Knowledge graph. Anchor the request
 with at least one of an exact `nodeId` or a natural-language `query`. When both are supplied,
 `nodeId` takes precedence and `query` acts as fallback context.
 
@@ -12,7 +12,7 @@ with at least one of an exact `nodeId` or a natural-language `query`. When both 
 
 | Parameter   | Type                    | Required    | Description                                            |
 | ----------- | ----------------------- | ----------- | ------------------------------------------------------ |
-| `graphId`   | string                  | Yes         | Knowledge graph ID.                                    |
+| `graphId` | string | No | Knowledge graph ID. Omit to target the site's active (default) graph. |
 | `nodeId`    | non-empty string        | Conditional | Exact anchor node ID. At least one anchor is required. |
 | `query`     | non-empty string        | Conditional | Natural-language query used to resolve an anchor.      |
 | `edgeType`  | string                  | No          | Restrict results to one relationship type.             |

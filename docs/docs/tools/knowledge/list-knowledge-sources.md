@@ -18,7 +18,7 @@ Knowledge configuration or a prior workflow; the tool does not discover graphs.
 
 | Parameter  | Type                | Required | Description                                         |
 | ---------- | ------------------- | -------- | --------------------------------------------------- |
-| `graphId`  | string              | Yes      | Knowledge graph ID.                                 |
+| `graphId` | string | No | Knowledge graph ID. Omit to target the site's active (default) graph. |
 | `nodeType` | `PDS` or `WORKBOOK` | No       | Filter the returned sources by knowledge node type. |
 | `limit`    | integer, 1–100      | No       | Maximum sources returned.                           |
 

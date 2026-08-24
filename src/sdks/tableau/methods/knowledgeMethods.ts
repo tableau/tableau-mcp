@@ -30,7 +30,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     type,
     limit,
   }: {
-    graphId: string;
+    graphId?: string;
     pdsId?: string | null;
     severity?: SuggestionSeverity | null;
     type?: string | null;
@@ -38,19 +38,19 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
   }): Promise<SuggestionReport> =>
     this._apiClient.searchSuggestions(
       { pds_id: pdsId, severity, type, limit },
-      { params: { graph_id: graphId }, ...this.authHeader },
+      { queries: { graph_id: graphId }, ...this.authHeader },
     );
 
   listKnowledgeSources = async ({
     graphId,
     nodeType,
   }: {
-    graphId: string;
+    graphId?: string;
     nodeType?: KnowledgeSourceNodeType | null;
   }): Promise<KnowledgeSource[]> =>
     this._apiClient.searchSources(
       { node_type: nodeType },
-      { params: { graph_id: graphId }, ...this.authHeader },
+      { queries: { graph_id: graphId }, ...this.authHeader },
     );
 
   searchKnowledgeNodes = async ({
@@ -60,7 +60,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     scopeId,
     limit,
   }: {
-    graphId: string;
+    graphId?: string;
     query: string;
     nodeType?: string | null;
     scopeId?: string | null;
@@ -68,7 +68,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
   }): Promise<KnowledgeNodeSearchResponse> =>
     this._apiClient.searchNodes(
       { query, node_type: nodeType, scope_id: scopeId, limit },
-      { params: { graph_id: graphId }, ...this.authHeader },
+      { queries: { graph_id: graphId }, ...this.authHeader },
     );
 
   getKnowledgeNode = async ({
@@ -78,7 +78,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     scopeId,
     maxCandidates,
   }: {
-    graphId: string;
+    graphId?: string;
     query: string;
     nodeType?: string | null;
     scopeId?: string | null;
@@ -86,7 +86,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
   }): Promise<KnowledgeNodeResolveResponse> =>
     this._apiClient.resolveNode(
       { query, node_type: nodeType, scope_id: scopeId, max_candidates: maxCandidates },
-      { params: { graph_id: graphId }, ...this.authHeader },
+      { queries: { graph_id: graphId }, ...this.authHeader },
     );
 
   getKnowledgeNodeRelationships = async ({
@@ -96,7 +96,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     edgeType,
     direction,
   }: {
-    graphId: string;
+    graphId?: string;
     nodeId?: string | null;
     query?: string | null;
     edgeType?: string | null;
@@ -104,18 +104,19 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
   }): Promise<KnowledgeNodeRelationships> =>
     this._apiClient.searchNodeRelationships(
       { node_id: nodeId, query, edge_type: edgeType, direction },
-      { params: { graph_id: graphId }, ...this.authHeader },
+      { queries: { graph_id: graphId }, ...this.authHeader },
     );
 
   getKnowledgeLineage = async ({
     graphId,
     nodeId,
   }: {
-    graphId: string;
+    graphId?: string;
     nodeId: string;
   }): Promise<KnowledgeLineage> =>
     this._apiClient.getLineage({
-      params: { graph_id: graphId, node_id: encodeURIComponent(nodeId) },
+      params: { node_id: encodeURIComponent(nodeId) },
+      queries: { graph_id: graphId },
       ...this.authHeader,
     });
 
@@ -123,11 +124,12 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     graphId,
     nodeId,
   }: {
-    graphId: string;
+    graphId?: string;
     nodeId: string;
   }): Promise<KnowledgeNodeImpact> =>
     this._apiClient.getNodeImpact({
-      params: { graph_id: graphId, node_id: encodeURIComponent(nodeId) },
+      params: { node_id: encodeURIComponent(nodeId) },
+      queries: { graph_id: graphId },
       ...this.authHeader,
     });
 
@@ -138,7 +140,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     isGlobal,
     name,
   }: {
-    graphId: string;
+    graphId?: string;
     statements: SemanticStatementInput[];
     targetNodeId?: string | null;
     isGlobal?: boolean | null;
@@ -151,7 +153,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
         is_global: isGlobal,
         name,
       },
-      { params: { graph_id: graphId }, ...this.authHeader },
+      { queries: { graph_id: graphId }, ...this.authHeader },
     );
 
   listSemanticStatements = async ({
@@ -159,19 +161,20 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     nodeId,
     isGlobal,
   }: {
-    graphId: string;
+    graphId?: string;
     nodeId?: string;
     isGlobal?: boolean | null;
   }): Promise<SemanticStatementContext[]> =>
     nodeId === undefined
       ? this._apiClient.listSemanticStatements(
           { is_global: isGlobal },
-          { params: { graph_id: graphId }, ...this.authHeader },
+          { queries: { graph_id: graphId }, ...this.authHeader },
         )
       : this._apiClient.listNodeSemanticStatements(
           {},
           {
-            params: { graph_id: graphId, node_id: encodeURIComponent(nodeId) },
+            params: { node_id: encodeURIComponent(nodeId) },
+            queries: { graph_id: graphId },
             ...this.authHeader,
           },
         );
@@ -184,7 +187,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     isGlobal,
     name,
   }: {
-    graphId: string;
+    graphId?: string;
     contextId: string;
     statements?: SemanticStatementInput[] | null;
     targetNodeId?: string | null;
@@ -199,7 +202,8 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
         name,
       },
       {
-        params: { graph_id: graphId, ctx_id: encodeURIComponent(contextId) },
+        params: { ctx_id: encodeURIComponent(contextId) },
+        queries: { graph_id: graphId },
         ...this.authHeader,
       },
     );

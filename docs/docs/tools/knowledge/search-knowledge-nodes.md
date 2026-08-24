@@ -6,14 +6,14 @@ sidebar_position: 3
 
 Semantically searches nodes in a Tableau knowledge graph and returns ranked matches.
 
-Supply an explicit `graphId` from Tableau Knowledge configuration or a prior workflow; this tool
+Omit `graphId` to search the site's default graph, or supply one from Tableau Knowledge configuration or a prior workflow; this tool
 does not discover graphs. The tool requires Tableau Knowledge on Tableau Cloud.
 
 ## Arguments
 
 | Parameter  | Type             | Required | Description                                                  |
 | ---------- | ---------------- | -------- | ------------------------------------------------------------ |
-| `graphId`  | string           | Yes      | Knowledge graph ID.                                          |
+| `graphId` | string | No | Knowledge graph ID. Omit to target the site's active (default) graph. |
 | `query`    | non-empty string | Yes      | Natural-language description of nodes to find.               |
 | `nodeType` | string           | No       | Restrict matches to one knowledge node type.                 |
 | `scopeId`  | string           | No       | Restrict matches to one source/container subtree.            |

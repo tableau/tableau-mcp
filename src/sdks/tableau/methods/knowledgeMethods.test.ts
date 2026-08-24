@@ -50,15 +50,19 @@ describe('KnowledgeMethods', () => {
         is_global: null,
         name: null,
       },
-      { params: { graph_id: 'graph-1' }, ...auth },
+      { queries: { graph_id: 'graph-1' }, ...auth },
     );
     expect(listSemanticStatements).toHaveBeenCalledWith(
       { is_global: true },
-      { params: { graph_id: 'graph-1' }, ...auth },
+      { queries: { graph_id: 'graph-1' }, ...auth },
     );
     expect(listNodeSemanticStatements).toHaveBeenCalledWith(
       {},
-      { params: { graph_id: 'graph-1', node_id: 'field%2FRevenue%20Total' }, ...auth },
+      {
+        params: { node_id: 'field%2FRevenue%20Total' },
+        queries: { graph_id: 'graph-1' },
+        ...auth,
+      },
     );
     expect(updateSemanticStatements).toHaveBeenCalledWith(
       {
@@ -67,7 +71,11 @@ describe('KnowledgeMethods', () => {
         is_global: null,
         name: null,
       },
-      { params: { graph_id: 'graph-1', ctx_id: 'semctx%3Arule%201' }, ...auth },
+      {
+        params: { ctx_id: 'semctx%3Arule%201' },
+        queries: { graph_id: 'graph-1' },
+        ...auth,
+      },
     );
   });
 
@@ -96,7 +104,7 @@ describe('KnowledgeMethods', () => {
         edge_type: 'DEPENDS_ON',
         direction: 'incoming',
       },
-      { params: { graph_id: 'graph-1' }, headers: { Authorization: 'Bearer token' } },
+      { queries: { graph_id: 'graph-1' }, headers: { Authorization: 'Bearer token' } },
     );
   });
 
@@ -123,11 +131,13 @@ describe('KnowledgeMethods', () => {
     });
 
     expect(getLineage).toHaveBeenCalledWith({
-      params: { graph_id: 'graph-1', node_id: 'field%3AProfit%20Ratio' },
+      params: { node_id: 'field%3AProfit%20Ratio' },
+      queries: { graph_id: 'graph-1' },
       headers: { Authorization: 'Bearer token' },
     });
     expect(getNodeImpact).toHaveBeenCalledWith({
-      params: { graph_id: 'graph-1', node_id: 'field%3ASales' },
+      params: { node_id: 'field%3ASales' },
+      queries: { graph_id: 'graph-1' },
       headers: { Authorization: 'Bearer token' },
     });
   });
@@ -162,8 +172,13 @@ describe('KnowledgeMethods', () => {
     });
 
     expect(requests.map(({ url }) => url)).toEqual([
-      '/graphs/graph-1/lineage/field%3AProfit%20Ratio',
-      '/graphs/graph-1/nodes/field%3AProfit%20Ratio/impact',
+      '/lineage/field%3AProfit%20Ratio',
+      '/nodes/field%3AProfit%20Ratio/impact',
+    ]);
+    // graph_id rides as a query param now, not a path segment.
+    expect(requests.map(({ params }) => params)).toEqual([
+      { graph_id: 'graph-1' },
+      { graph_id: 'graph-1' },
     ]);
   });
   it('forwards node search filters and limit with bearer auth', async () => {
@@ -187,7 +202,7 @@ describe('KnowledgeMethods', () => {
 
     expect(searchNodes).toHaveBeenCalledWith(
       { query: 'revenue', node_type: 'FIELD', scope_id: 'pds-1', limit: 12 },
-      { params: { graph_id: 'graph-1' }, headers: { Authorization: 'Bearer token' } },
+      { queries: { graph_id: 'graph-1' }, headers: { Authorization: 'Bearer token' } },
     );
   });
 
@@ -233,7 +248,7 @@ describe('KnowledgeMethods', () => {
 
     expect(resolveNode).toHaveBeenCalledWith(
       { query: 'revenue', node_type: 'FIELD', scope_id: 'pds-1', max_candidates: 7 },
-      { params: { graph_id: 'graph-1' }, headers: { 'X-Tableau-Auth': 'session-token' } },
+      { queries: { graph_id: 'graph-1' }, headers: { 'X-Tableau-Auth': 'session-token' } },
     );
   });
 
@@ -265,7 +280,7 @@ describe('KnowledgeMethods', () => {
 
     expect(searchSuggestions).toHaveBeenCalledWith(
       { pds_id: 'pds-1', severity: 'medium', type: 'missing-description', limit: 5 },
-      { params: { graph_id: 'graph-1' }, headers: { Authorization: 'Bearer token' } },
+      { queries: { graph_id: 'graph-1' }, headers: { Authorization: 'Bearer token' } },
     );
   });
 
@@ -288,7 +303,7 @@ describe('KnowledgeMethods', () => {
 
     expect(searchSuggestions).toHaveBeenCalledWith(
       { pds_id: undefined, severity: undefined, type: undefined, limit: undefined },
-      { params: { graph_id: 'graph-1' }, headers: { 'X-Tableau-Auth': 'session-token' } },
+      { queries: { graph_id: 'graph-1' }, headers: { 'X-Tableau-Auth': 'session-token' } },
     );
   });
 
@@ -306,7 +321,7 @@ describe('KnowledgeMethods', () => {
 
     expect(searchSources).toHaveBeenCalledWith(
       { node_type: 'PDS' },
-      { params: { graph_id: 'graph-1' }, headers: { Authorization: 'Bearer token' } },
+      { queries: { graph_id: 'graph-1' }, headers: { Authorization: 'Bearer token' } },
     );
   });
 
@@ -348,7 +363,7 @@ describe('KnowledgeMethods', () => {
 
     expect(searchSources).toHaveBeenCalledWith(
       { node_type: undefined },
-      { params: { graph_id: 'graph-1' }, headers: { 'X-Tableau-Auth': 'session-token' } },
+      { queries: { graph_id: 'graph-1' }, headers: { 'X-Tableau-Auth': 'session-token' } },
     );
   });
 });

@@ -111,7 +111,7 @@ describe('secretMask', () => {
     const request = maskRequest({
       method: 'POST',
       baseUrl: 'https://example.com/api/v1/knowledge',
-      url: '/graphs/graph-1/semantic-statements',
+      url: '/semantic-statements',
       headers: {},
       data: { statements: [{ statement: 'Revenue excludes refunds.' }] },
     });
@@ -119,7 +119,7 @@ describe('secretMask', () => {
       status: 200,
       baseUrl: 'https://example.com/api/v1/knowledge',
       params: {},
-      url: '/graphs/graph-1/semantic-statements/search',
+      url: '/semantic-statements/search',
       headers: {},
       data: {
         result: {
@@ -139,7 +139,7 @@ describe('secretMask', () => {
       status: 400,
       baseUrl: 'https://example.com/api/v1/knowledge',
       params: {},
-      url: '/graphs/graph-1/semantic-statements/context-1',
+      url: '/semantic-statements/context-1',
       headers: {},
       data: {
         error: {
@@ -153,7 +153,7 @@ describe('secretMask', () => {
     });
   });
 
-  it.each(['/graphs/graph-1/nodes/search', '/graphs/graph-1/nodes/resolve'])(
+  it.each(['/nodes/search', '/nodes/resolve'])(
     'masks candidate statements in Knowledge response %s',
     (url) => {
       const response = maskResponse({

@@ -5,16 +5,13 @@ import { z } from 'zod';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
+import { knowledgeGraphIdSchema } from './semanticStatementSchemas.js';
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 1000;
 
 const paramsSchema = {
-  graphId: z
-    .string()
-    .regex(/^[A-Za-z0-9._-]{1,128}$/)
-    .refine((value) => value !== '.' && value !== '..')
-    .describe('Knowledge graph ID.'),
+  graphId: knowledgeGraphIdSchema,
   pdsId: z.string().max(256).optional().describe('Scope the report to one PDS subtree.'),
   severity: z.enum(['high', 'medium', 'low']).optional(),
   type: z.string().max(128).optional().describe('Filter suggestions by suggestion type.'),
@@ -34,7 +31,7 @@ export const getGetKnowledgeSuggestionsTool = (
     server,
     name: 'get-knowledge-suggestions',
     description:
-      'Returns the full health report and improvement suggestions for an explicit Tableau Cloud knowledge graph. The graph ID must come from Tableau Knowledge configuration or a prior workflow; do not invent one. Suggestions can be filtered by PDS, severity, and type.',
+      "Returns the full health report and improvement suggestions for a Tableau Cloud knowledge graph. Omit graphId to report on the site's default graph, or pass one from Tableau Knowledge configuration or a prior workflow; do not invent a graph ID. Suggestions can be filtered by PDS, severity, and type.",
     paramsSchema,
     annotations: {
       title: 'Get Knowledge Suggestions',

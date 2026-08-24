@@ -234,11 +234,11 @@ export const knowledgeNodeResolveResponseSchema = z.discriminatedUnion('needs_di
 
 const searchSuggestionsEndpoint = makeEndpoint({
   method: 'post',
-  path: '/graphs/:graph_id/suggestions/search',
+  path: '/suggestions/search',
   alias: 'searchSuggestions',
   description: 'Returns a graph-health suggestions report.',
   parameters: [
-    { name: 'graph_id', type: 'Path', schema: z.string() },
+    { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     {
       name: 'body',
       type: 'Body',
@@ -255,11 +255,11 @@ const searchSuggestionsEndpoint = makeEndpoint({
 
 const searchSourcesEndpoint = makeEndpoint({
   method: 'post',
-  path: '/graphs/:graph_id/sources/search',
+  path: '/sources/search',
   alias: 'searchSources',
   description: 'Returns published data sources and workbooks in a knowledge graph.',
   parameters: [
-    { name: 'graph_id', type: 'Path', schema: z.string() },
+    { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     {
       name: 'body',
       type: 'Body',
@@ -271,11 +271,11 @@ const searchSourcesEndpoint = makeEndpoint({
 
 const searchNodesEndpoint = makeEndpoint({
   method: 'post',
-  path: '/graphs/:graph_id/nodes/search',
+  path: '/nodes/search',
   alias: 'searchNodes',
   description: 'Semantically searches nodes in a knowledge graph.',
   parameters: [
-    { name: 'graph_id', type: 'Path', schema: z.string() },
+    { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     {
       name: 'body',
       type: 'Body',
@@ -292,11 +292,11 @@ const searchNodesEndpoint = makeEndpoint({
 
 const resolveNodeEndpoint = makeEndpoint({
   method: 'post',
-  path: '/graphs/:graph_id/nodes/resolve',
+  path: '/nodes/resolve',
   alias: 'resolveNode',
   description: 'Resolves a natural-language query to one knowledge node or candidates.',
   parameters: [
-    { name: 'graph_id', type: 'Path', schema: z.string() },
+    { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     {
       name: 'body',
       type: 'Body',
@@ -313,11 +313,11 @@ const resolveNodeEndpoint = makeEndpoint({
 
 const searchNodeRelationshipsEndpoint = makeEndpoint({
   method: 'post',
-  path: '/graphs/:graph_id/edges/search',
+  path: '/edges/search',
   alias: 'searchNodeRelationships',
   description: 'Returns relationships around one knowledge node.',
   parameters: [
-    { name: 'graph_id', type: 'Path', schema: z.string() },
+    { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     {
       name: 'body',
       type: 'Body',
@@ -334,11 +334,11 @@ const searchNodeRelationshipsEndpoint = makeEndpoint({
 
 const getLineageEndpoint = makeEndpoint({
   method: 'get',
-  path: '/graphs/:graph_id/lineage/:node_id',
+  path: '/lineage/:node_id',
   alias: 'getLineage',
   description: 'Returns lineage around one knowledge node.',
   parameters: [
-    { name: 'graph_id', type: 'Path', schema: z.string() },
+    { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     { name: 'node_id', type: 'Path', schema: z.string() },
   ],
   response: knowledgeLineageSchema,
@@ -346,11 +346,11 @@ const getLineageEndpoint = makeEndpoint({
 
 const getNodeImpactEndpoint = makeEndpoint({
   method: 'get',
-  path: '/graphs/:graph_id/nodes/:node_id/impact',
+  path: '/nodes/:node_id/impact',
   alias: 'getNodeImpact',
   description: 'Returns assets transitively affected by one knowledge node.',
   parameters: [
-    { name: 'graph_id', type: 'Path', schema: z.string() },
+    { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     { name: 'node_id', type: 'Path', schema: z.string() },
   ],
   response: knowledgeNodeImpactSchema,
@@ -358,11 +358,11 @@ const getNodeImpactEndpoint = makeEndpoint({
 
 const createSemanticStatementsEndpoint = makeEndpoint({
   method: 'post',
-  path: '/graphs/:graph_id/semantic-statements',
+  path: '/semantic-statements',
   alias: 'createSemanticStatements',
   description: 'Creates semantic statements in a knowledge graph.',
   parameters: [
-    { name: 'graph_id', type: 'Path', schema: z.string() },
+    { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     { name: 'body', type: 'Body', schema: createSemanticStatementsBodySchema },
   ],
   response: semanticStatementContextSchema,
@@ -370,11 +370,11 @@ const createSemanticStatementsEndpoint = makeEndpoint({
 
 const listSemanticStatementsEndpoint = makeEndpoint({
   method: 'post',
-  path: '/graphs/:graph_id/semantic-statements/search',
+  path: '/semantic-statements/search',
   alias: 'listSemanticStatements',
   description: 'Lists semantic statements in a knowledge graph.',
   parameters: [
-    { name: 'graph_id', type: 'Path', schema: z.string() },
+    { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     {
       name: 'body',
       type: 'Body',
@@ -386,11 +386,11 @@ const listSemanticStatementsEndpoint = makeEndpoint({
 
 const listNodeSemanticStatementsEndpoint = makeEndpoint({
   method: 'post',
-  path: '/graphs/:graph_id/nodes/:node_id/semantic-statements/search',
+  path: '/nodes/:node_id/semantic-statements/search',
   alias: 'listNodeSemanticStatements',
   description: 'Lists attached and global semantic statements for a knowledge node.',
   parameters: [
-    { name: 'graph_id', type: 'Path', schema: z.string() },
+    { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     { name: 'node_id', type: 'Path', schema: z.string() },
     { name: 'body', type: 'Body', schema: z.object({}) },
   ],
@@ -399,11 +399,11 @@ const listNodeSemanticStatementsEndpoint = makeEndpoint({
 
 const updateSemanticStatementsEndpoint = makeEndpoint({
   method: 'patch',
-  path: '/graphs/:graph_id/semantic-statements/:ctx_id',
+  path: '/semantic-statements/:ctx_id',
   alias: 'updateSemanticStatements',
   description: 'Updates semantic statements or their attachment.',
   parameters: [
-    { name: 'graph_id', type: 'Path', schema: z.string() },
+    { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     { name: 'ctx_id', type: 'Path', schema: z.string() },
     { name: 'body', type: 'Body', schema: updateSemanticStatementsBodySchema },
   ],

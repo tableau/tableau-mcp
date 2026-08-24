@@ -4,7 +4,8 @@ export const knowledgeGraphIdSchema = z
   .string()
   .regex(/^[A-Za-z0-9._-]{1,128}$/)
   .refine((value) => value !== '.' && value !== '..')
-  .describe('Knowledge graph ID.');
+  .optional()
+  .describe("Knowledge graph ID. Omit to target the site's active (default) graph.");
 
 export const knowledgePathIdSchema = z
   .string()

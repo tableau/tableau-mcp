@@ -46,7 +46,7 @@ describe('listKnowledgeSourcesTool', () => {
     expect(tool.description).toContain("source's top-level id is a Knowledge graph node ID");
     expect(tool.description).toContain('properties.luid as the Tableau content LUID');
     expect(tool.description).toContain('published data sources and workbooks');
-    expect(tool.description).toContain('do not invent one');
+    expect(tool.description).toContain('do not invent a graph ID');
     expect(tool.paramsSchema).toHaveProperty('graphId');
     expect(tool.paramsSchema).toHaveProperty('nodeType');
     expect(tool.paramsSchema).toHaveProperty('limit');

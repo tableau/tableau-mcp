@@ -32,7 +32,7 @@ export const getCreateSemanticStatementsTool = (
     server,
     name: 'create-knowledge-semantic-statements',
     description:
-      'Creates one semantic context containing business-rule statements in an explicit Tableau Knowledge graph. Attach it to exactly one node, or set isGlobal true.',
+      "Creates one semantic context containing business-rule statements in a Tableau Knowledge graph. Omit graphId to use the site's default graph. Attach it to exactly one node, or set isGlobal true.",
     paramsSchema,
     annotations: {
       title: 'Create Semantic Statements',

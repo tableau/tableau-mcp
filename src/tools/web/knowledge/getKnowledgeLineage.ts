@@ -1,18 +1,14 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
-import { z } from 'zod';
 
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
-import { knowledgePathIdSchema } from './semanticStatementSchemas.js';
+import { knowledgeGraphIdSchema, knowledgePathIdSchema } from './semanticStatementSchemas.js';
 import { getTraversalLimit } from './truncateKnowledgeTraversal.js';
 
 const paramsSchema = {
-  graphId: z
-    .string()
-    .regex(/^[A-Za-z0-9._-]{1,128}$/)
-    .refine((value) => value !== '.' && value !== '..'),
+  graphId: knowledgeGraphIdSchema,
   nodeId: knowledgePathIdSchema,
 };
 
@@ -20,7 +16,8 @@ export const getGetKnowledgeLineageTool = (server: WebMcpServer): WebTool<typeof
   const tool = new WebTool({
     server,
     name: 'get-knowledge-lineage',
-    description: 'Returns dependency lineage for one node in an explicit Tableau Knowledge graph.',
+    description:
+      "Returns dependency lineage for one node in a Tableau Knowledge graph. Omit graphId to use the site's default graph.",
     paramsSchema,
     annotations: {
       title: 'Get Knowledge Lineage',

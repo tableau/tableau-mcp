@@ -5,16 +5,13 @@ import { z } from 'zod';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
+import { knowledgeGraphIdSchema } from './semanticStatementSchemas.js';
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
 
 const paramsSchema = {
-  graphId: z
-    .string()
-    .regex(/^[A-Za-z0-9._-]{1,128}$/)
-    .refine((value) => value !== '.' && value !== '..')
-    .describe('Knowledge graph ID.'),
+  graphId: knowledgeGraphIdSchema,
   query: z.string().trim().min(1).describe('Natural-language description of the nodes to find.'),
   nodeType: z.string().trim().min(1).optional().describe('Optional knowledge node type filter.'),
   scopeId: z.string().trim().min(1).optional().describe('Optional source/container node ID scope.'),
@@ -32,7 +29,7 @@ export const getSearchKnowledgeNodesTool = (server: WebMcpServer): WebTool<typeo
     server,
     name: 'search-knowledge-nodes',
     description:
-      "Semantically searches an explicit Tableau Cloud knowledge graph. Use this tool once first for governed business terms, definitions, metrics, fields, and formulas; for one requested term, set limit to 10 or less to reduce latency and irrelevant evidence. Search matches include their attached semantic statements: when a selected match's statement answers the meaning or formula question, treat that evidence as complete and do not call list-knowledge-semantic-statements for the same node. An attached statement can establish a governed definition or formula, but it is not a computed datasource value. A term in the query is not scope evidence: when the answer must be scoped to a product, datasource, or field, call get-knowledge-node-relationships with the selected match's exact id. If that result establishes the requested scope, answer immediately; do not search again for the connected node or repeat either lookup. Prefer this tool over search-content or list-datasources, which find Tableau assets, and get-datasource-metadata, which returns technical metadata for an already selected datasource. If no graph ID is available from Tableau Knowledge configuration or a prior workflow, ask the user for it; do not invent, infer, or default one.",
+      "Semantically searches an explicit Tableau Cloud knowledge graph. Use this tool once first for governed business terms, definitions, metrics, fields, and formulas; for one requested term, set limit to 10 or less to reduce latency and irrelevant evidence. Search matches include their attached semantic statements: when a selected match's statement answers the meaning or formula question, treat that evidence as complete and do not call list-knowledge-semantic-statements for the same node. An attached statement can establish a governed definition or formula, but it is not a computed datasource value. A term in the query is not scope evidence: when the answer must be scoped to a product, datasource, or field, call get-knowledge-node-relationships with the selected match's exact id. If that result establishes the requested scope, answer immediately; do not search again for the connected node or repeat either lookup. Prefer this tool over search-content or list-datasources, which find Tableau assets, and get-datasource-metadata, which returns technical metadata for an already selected datasource. graphId is optional: omit it to search the site's active (default) graph, or pass one from Tableau Knowledge configuration or a prior workflow; do not invent a graph ID.",
     paramsSchema,
     annotations: {
       title: 'Search Knowledge Nodes',

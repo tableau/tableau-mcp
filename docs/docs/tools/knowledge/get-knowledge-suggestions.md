@@ -17,7 +17,7 @@ Knowledge configuration or a prior workflow; the tool does not discover graphs.
 
 | Parameter  | Type                       | Required | Description                                               |
 | ---------- | -------------------------- | -------- | --------------------------------------------------------- |
-| `graphId`  | string                     | Yes      | Knowledge graph ID.                                       |
+| `graphId` | string | No | Knowledge graph ID. Omit to target the site's active (default) graph. |
 | `pdsId`    | string                     | No       | Scope the report to one PDS subtree.                      |
 | `severity` | `high`, `medium`, or `low` | No       | Filter suggestion lists by severity.                      |
 | `type`     | string                     | No       | Filter suggestion lists by suggestion type.               |
