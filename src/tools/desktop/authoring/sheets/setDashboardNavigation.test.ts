@@ -85,12 +85,71 @@ describe('setDashboardNavigationDocument', () => {
     expect(result.message).toContain('overlap');
   });
 
+  it('fails closed when a nested preserved zone overlaps the proposed navigation band', () => {
+    const source = dashboardXml('Sales Overview').replace(
+      "      <zone h='92000'",
+      "      <zone h='8000' id='12' name='User control' w='30000' x='70000' y='0'/>\n      <zone h='92000'",
+    );
+
+    const result = setDashboardNavigationDocument(source, 'Sales Overview', TARGETS);
+
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) return;
+    expect(result.message).toContain('overlap');
+  });
+
+  it('fails closed when a nested preserved zone has unknown geometry', () => {
+    const source = dashboardXml('Sales Overview').replace(
+      "      <zone h='92000'",
+      "      <zone h='8000' id='12' name='User control' w='30000' y='0'/>\n      <zone h='92000'",
+    );
+
+    const result = setDashboardNavigationDocument(source, 'Sales Overview', TARGETS);
+
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) return;
+    expect(result.message).toContain('geometry');
+  });
+
   it('fails closed when a different root top-row goto-sheet object already exists', () => {
     const existing =
       "<zone h='8000' id='12' type-v2='dashboard-object' w='15000' x='85000' y='0'><button button-type='text' action='tabdoc:goto-sheet window-id=&quot;{window-other}&quot;'><button-visual-state><caption>Other</caption></button-visual-state></button></zone>";
     const source = dashboardXml('Sales Overview').replace('</zones>', `${existing}</zones>`);
 
     const result = setDashboardNavigationDocument(source, 'Sales Overview', TARGETS);
+
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) return;
+    expect(result.message).toContain('existing navigation');
+  });
+
+  it('fails closed when a different nested goto-sheet object already exists', () => {
+    const existing =
+      "<zone h='8000' id='12' type-v2='dashboard-object' w='15000' x='85000' y='0'><button button-type='text' action='tabdoc:goto-sheet window-id=&quot;{window-other}&quot;'><button-visual-state><caption>Other</caption></button-visual-state></button></zone>";
+    const source = dashboardXml('Sales Overview').replace(
+      "      <zone h='92000'",
+      `      ${existing}\n      <zone h='92000'`,
+    );
+
+    const result = setDashboardNavigationDocument(source, 'Sales Overview', TARGETS);
+
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) return;
+    expect(result.message).toContain('existing navigation');
+  });
+
+  it('fails closed when exact requested navigation is nested under layout-basic', () => {
+    const targets = TARGETS.slice(0, 2);
+    const first = setDashboardNavigationDocument(
+      dashboardXml('Sales Overview'),
+      'Sales Overview',
+      targets,
+    );
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const source = nestRootNavigationUnderLayout(first.xml);
+
+    const result = setDashboardNavigationDocument(source, 'Sales Overview', targets);
 
     expect(result).toMatchObject({ ok: false });
     if (result.ok) return;
@@ -192,12 +251,26 @@ describe('set-dashboard-navigation tool', () => {
       sourceXmlTransform: (xml) =>
         xml.replace(
           "      <zone h='8000'",
-          "      <zone h='1000' id='99' type-v2='text' w='12345' x='5000' y='5000'/>\n      <zone h='8000'",
+          "      <zone h='1000' id='99' type-v2='text' w='12345' x='5000' y='16000'/>\n      <zone h='8000'",
         ),
       readbackTransform: (xml) =>
         xml.replace(
           "type-v2='text' w='85000' x='0' y='0'",
           "type-v2='text' w='100000' x='0' y='0'",
+        ),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+  });
+
+  it('rejects readback that introduces an overlapping nested preserved zone', async () => {
+    const { result } = await callTool({
+      readbackTransform: (xml) =>
+        xml.replace(
+          "      <zone h='92000'",
+          "      <zone h='8000' id='99' name='Injected control' w='15000' x='85000' y='0'/>\n      <zone h='92000'",
         ),
     });
 

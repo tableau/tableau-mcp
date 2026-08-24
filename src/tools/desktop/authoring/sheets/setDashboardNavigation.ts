@@ -231,7 +231,7 @@ export function setDashboardNavigationDocument(
   const buttonWidth = 15_000;
   const titleWidth = 100_000 - buttonWidth * links.length;
   const titleHeight = readIntegerAttribute(titleBand.openTag, 'h')!;
-  const expectedButtons = links.map((target, index) => ({
+  const expectedButtons: NavigationButtonSignature[] = links.map((target, index) => ({
     type: 'dashboard-object',
     x: titleWidth + index * buttonWidth,
     y: 0,
@@ -241,43 +241,18 @@ export function setDashboardNavigationDocument(
     action: `tabdoc:goto-sheet window-id=&quot;${escapeXml(target.windowUuid)}&quot;`,
     caption: escapeXml(target.label),
   }));
-  const existingTopNavigation = rootChildren.filter(({ openTag, start, end }) => {
-    const childXml = rootInner.slice(start, end);
-    return (
-      hasAttributeValue(openTag, 'type-v2', 'dashboard-object') &&
-      readIntegerAttribute(openTag, 'y') === 0 &&
-      childXml.includes('tabdoc:goto-sheet')
-    );
+  const safety = checkNavigationBandSafety({
+    rootInner,
+    rootChildren,
+    layout,
+    layoutInner,
+    titleBand,
+    titleHeight,
+    titleWidth,
+    expectedButtons,
   });
-  let exactRequestedNavigation = false;
-  if (existingTopNavigation.length > 0) {
-    const existingButtons = existingTopNavigation.map(({ openTag, start, end }) =>
-      readNavigationButton(openTag, rootInner.slice(start, end)),
-    );
-    exactRequestedNavigation =
-      readIntegerAttribute(titleBand.openTag, 'w') === titleWidth &&
-      existingButtons.every((button) => button !== undefined) &&
-      JSON.stringify(existingButtons) === JSON.stringify(expectedButtons);
-    if (!exactRequestedNavigation) {
-      return {
-        ok: false,
-        message: 'A different existing navigation row occupies the top title band.',
-      };
-    }
-  }
-  const overlappingZone = rootChildren.find(
-    (child) =>
-      child !== layout &&
-      !(exactRequestedNavigation && existingTopNavigation.includes(child)) &&
-      overlapsNavigationBand(child.openTag, titleHeight),
-  );
-  if (overlappingZone) {
-    return {
-      ok: false,
-      message: 'A preserved root zone would overlap the generated title or navigation buttons.',
-    };
-  }
-  if (exactRequestedNavigation) return { ok: true, xml: dashboardXml };
+  if (!safety.ok) return safety;
+  if (safety.exactRequestedNavigation) return { ok: true, xml: dashboardXml };
 
   const nextTitleTag = upsertAttribute(titleBand.openTag, 'w', String(titleWidth));
   const nextLayoutInner =
@@ -340,6 +315,14 @@ type ElementBounds = {
   openTag: string;
 };
 
+type NavigationBandZone = {
+  element: ElementBounds;
+  xml: string;
+  parentage: 'root' | `layout:${number}`;
+};
+
+type NavigationBandGeometry = 'clear' | 'overlap' | 'unknown';
+
 function findFirstElement(xml: string, tag: string): ElementBounds | undefined {
   return findDirectElements(xml, tag)[0];
 }
@@ -382,6 +365,123 @@ function findDirectElements(xml: string, tag: string): ElementBounds[] {
   return results;
 }
 
+function findElementsAtAnyDepth(
+  xml: string,
+  tag: string,
+  depth = 1,
+  offset = 0,
+): Array<{ element: ElementBounds; depth: number }> {
+  return findDirectElements(xml, tag).flatMap((element) => {
+    const shifted = {
+      ...element,
+      start: element.start + offset,
+      openEnd: element.openEnd + offset,
+      contentStart: element.contentStart + offset,
+      contentEnd: element.contentEnd + offset,
+      end: element.end + offset,
+    };
+    const inner = xml.slice(element.contentStart, element.contentEnd);
+    return [
+      { element: shifted, depth },
+      ...findElementsAtAnyDepth(inner, tag, depth + 1, offset + element.contentStart),
+    ];
+  });
+}
+
+function collectNavigationBandZones(
+  rootInner: string,
+  rootChildren: ElementBounds[],
+  layout: ElementBounds,
+  layoutInner: string,
+  titleBand: ElementBounds,
+): NavigationBandZone[] {
+  const rootZones = rootChildren
+    .filter((child) => child !== layout)
+    .map((element) => ({
+      element,
+      xml: rootInner.slice(element.start, element.end),
+      parentage: 'root' as const,
+    }));
+  const layoutZones = findElementsAtAnyDepth(layoutInner, 'zone')
+    .filter(({ element }) => element.start !== titleBand.start || element.end !== titleBand.end)
+    .map(({ element, depth }) => ({
+      element,
+      xml: layoutInner.slice(element.start, element.end),
+      parentage: `layout:${depth}` as const,
+    }));
+  return [...rootZones, ...layoutZones];
+}
+
+function checkNavigationBandSafety({
+  rootInner,
+  rootChildren,
+  layout,
+  layoutInner,
+  titleBand,
+  titleHeight,
+  titleWidth,
+  expectedButtons,
+}: {
+  rootInner: string;
+  rootChildren: ElementBounds[];
+  layout: ElementBounds;
+  layoutInner: string;
+  titleBand: ElementBounds;
+  titleHeight: number;
+  titleWidth: number;
+  expectedButtons: NavigationButtonSignature[];
+}): { ok: true; exactRequestedNavigation: boolean } | { ok: false; message: string } {
+  const zones = collectNavigationBandZones(
+    rootInner,
+    rootChildren,
+    layout,
+    layoutInner,
+    titleBand,
+  ).map((zone) => ({
+    ...zone,
+    geometry: navigationBandGeometry(zone.element.openTag, titleHeight),
+  }));
+  const existingTopNavigation = zones.filter(
+    ({ xml, geometry }) => xml.includes('tabdoc:goto-sheet') && geometry !== 'clear',
+  );
+  let exactRequestedNavigation = false;
+  if (existingTopNavigation.length > 0) {
+    const existingButtons = existingTopNavigation.map(({ element, xml }) =>
+      readNavigationButton(element.openTag, xml),
+    );
+    exactRequestedNavigation =
+      existingTopNavigation.every(({ parentage }) => parentage === 'root') &&
+      readIntegerAttribute(titleBand.openTag, 'w') === titleWidth &&
+      existingButtons.every((button) => button !== undefined) &&
+      JSON.stringify(existingButtons) === JSON.stringify(expectedButtons);
+    if (!exactRequestedNavigation) {
+      return {
+        ok: false,
+        message: 'A different existing navigation row occupies the top title band.',
+      };
+    }
+  }
+
+  const unsafeZone = zones.find(
+    (zone) =>
+      !(exactRequestedNavigation && existingTopNavigation.includes(zone)) &&
+      zone.geometry !== 'clear',
+  );
+  if (unsafeZone?.geometry === 'unknown') {
+    return {
+      ok: false,
+      message: 'A preserved zone has unknown geometry, so navigation overlap cannot be ruled out.',
+    };
+  }
+  if (unsafeZone) {
+    return {
+      ok: false,
+      message: 'A preserved zone would overlap the generated title or navigation buttons.',
+    };
+  }
+  return { ok: true, exactRequestedNavigation };
+}
+
 function navigationMatches(actualXml: string, intendedXml: string): boolean {
   const actual = navigationSignature(actualXml);
   const intended = navigationSignature(intendedXml);
@@ -410,14 +510,41 @@ function navigationSignature(xml: string): string | undefined {
     width: readIntegerAttribute(titleBand.openTag, 'w'),
     height: readIntegerAttribute(titleBand.openTag, 'h'),
   };
-  const buttons = children.flatMap<NavigationButtonSignature | { invalid: string }>((child) => {
-    if (!hasAttributeValue(child.openTag, 'type-v2', 'dashboard-object')) return [];
-    const childXml = inner.slice(child.start, child.end);
-    if (!childXml.includes('tabdoc:goto-sheet')) return [];
-    const button = readNavigationButton(child.openTag, childXml);
-    return button ? [button] : [{ invalid: childXml }];
+  if (title.width === undefined || title.height === undefined) return undefined;
+  const navigationZones = collectNavigationBandZones(
+    inner,
+    children,
+    layout,
+    layoutInner,
+    titleBand,
+  ).filter(
+    ({ element, xml: zoneXml }) =>
+      zoneXml.includes('tabdoc:goto-sheet') &&
+      navigationBandGeometry(element.openTag, title.height!) !== 'clear',
+  );
+  const buttons = navigationZones.map(({ element, xml: zoneXml }) =>
+    readNavigationButton(element.openTag, zoneXml),
+  );
+  if (buttons.some((button) => button === undefined)) return undefined;
+  const validButtons = buttons as NavigationButtonSignature[];
+  const safety = checkNavigationBandSafety({
+    rootInner: inner,
+    rootChildren: children,
+    layout,
+    layoutInner,
+    titleBand,
+    titleHeight: title.height,
+    titleWidth: title.width,
+    expectedButtons: validButtons,
   });
-  return JSON.stringify({ title, buttons });
+  if (!safety.ok) return undefined;
+  return JSON.stringify({
+    title,
+    buttons: validButtons.map((button, index) => ({
+      ...button,
+      parentage: navigationZones[index].parentage,
+    })),
+  });
 }
 
 function findTitleBand(layoutInner: string): ElementBounds | undefined {
@@ -438,15 +565,15 @@ function findTitleBand(layoutInner: string): ElementBounds | undefined {
   });
 }
 
-function overlapsNavigationBand(openTag: string, height: number): boolean {
+function navigationBandGeometry(openTag: string, height: number): NavigationBandGeometry {
   const x = readIntegerAttribute(openTag, 'x');
   const y = readIntegerAttribute(openTag, 'y');
   const width = readIntegerAttribute(openTag, 'w');
   const zoneHeight = readIntegerAttribute(openTag, 'h');
   if (x === undefined || y === undefined || width === undefined || zoneHeight === undefined) {
-    return false;
+    return 'unknown';
   }
-  return x < 100_000 && x + width > 0 && y < height && y + zoneHeight > 0;
+  return x < 100_000 && x + width > 0 && y < height && y + zoneHeight > 0 ? 'overlap' : 'clear';
 }
 
 type NavigationButtonSignature = {
