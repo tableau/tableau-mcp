@@ -27,6 +27,10 @@ const BASE_XML = [
 const EMPTY_CATEGORY_SET_XML =
   "<group caption='Category Set' name='[Category Set]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter function='empty-level' member='[Category]' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' /></group>";
 
+// Note '>=' is escaped to '&gt;=' by escapeXml.
+const CONDITION_CITY_SET_XML =
+  "<group caption='High Sales Cities' name='[High Sales Cities]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter expression='SUM([Sales]) &gt;= 60000' function='filter' user:ui-filter-by-field='true' user:ui-marker='filter-by'><groupfilter function='level-members' level='[City]' user:ui-enumeration='all' user:ui-marker='enumerate' /></groupfilter></group>";
+
 describe('authorSetTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -80,6 +84,133 @@ describe('authorSetTool', () => {
     expect(appliedDocumentXml(applyWorkbookDocument)).toBe(
       withGroup(BASE_XML, EMPTY_CATEGORY_SET_XML),
     );
+  });
+
+  it('emits the exact nested condition group shape for condition mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'condition',
+        caption: 'High Sales Cities',
+        dimension: 'City',
+        conditionExpression: 'SUM([Sales]) >= 60000',
+      },
+      readbackXml: withGroup(BASE_XML, CONDITION_CITY_SET_XML),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toBe(
+      withGroup(BASE_XML, CONDITION_CITY_SET_XML),
+    );
+  });
+
+  it('requires conditionExpression in condition mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'condition',
+        caption: 'High Sales Cities',
+        dimension: 'City',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('conditionExpression is required in condition mode');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it.each(['top-n', 'empty'] as const)(
+    'rejects conditionExpression outside condition mode (%s)',
+    async (mode) => {
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          mode,
+          caption: 'High Sales Cities',
+          dimension: 'City',
+          conditionExpression: 'SUM([Sales]) >= 60000',
+          ...(mode === 'top-n' ? { orderBy: 'SUM([Sales])', count: '5' } : {}),
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe('conditionExpression is only valid in condition mode');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['orderBy', 'count'] as const)(
+    'rejects condition mode when %s is supplied',
+    async (signal) => {
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          mode: 'condition',
+          caption: 'High Sales Cities',
+          dimension: 'City',
+          conditionExpression: 'SUM([Sales]) >= 60000',
+          [signal]: signal === 'orderBy' ? 'SUM([Profit])' : '5',
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe('orderBy and count cannot be supplied in condition mode');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it('condition set is not flagged by the malformed-set-groupfilter validator', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'condition',
+        caption: 'High Sales Cities',
+        dimension: 'City',
+        conditionExpression: 'SUM([Sales]) >= 60000',
+      },
+      readbackXml: withGroup(BASE_XML, CONDITION_CITY_SET_XML),
+    });
+
+    // If the preflight validator false-positived, applyWorkbookDocument would never
+    // be called and the result would be a validation error. It reaches apply.
+    expect(result.isError).toBe(false);
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
+  it('treats blank ("") orderBy/count as absent in condition mode (does not reject)', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'condition',
+        caption: 'High Sales Cities',
+        dimension: 'City',
+        conditionExpression: 'SUM([Sales]) >= 60000',
+        orderBy: '',
+        count: '   ',
+      },
+      readbackXml: withGroup(BASE_XML, CONDITION_CITY_SET_XML),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
+  it('treats a blank ("") conditionExpression as absent in top-n mode (does not reject)', async () => {
+    const readbackXml = withGroup(
+      BASE_XML,
+      "<group caption='Top Categories' name='[Top Categories]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter count='5' end='top' function='end' units='records' user:ui-marker='end' user:ui-top-by-field='true'><groupfilter direction='DESC' expression='SUM([Profit])' function='order' user:ui-marker='order'><groupfilter function='level-members' level='[Category]' user:ui-enumeration='all' user:ui-marker='enumerate' /></groupfilter></groupfilter></group>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'top-n',
+        caption: 'Top Categories',
+        dimension: 'Category',
+        orderBy: 'SUM([Profit])',
+        count: '5',
+        conditionExpression: '   ',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
   });
 
   it.each(['orderBy', 'count'] as const)(
@@ -356,11 +487,12 @@ function withGroup(baseXml: string, groupXml: string): string {
 
 type AuthorSetArgs = {
   session?: string;
-  mode?: 'top-n' | 'empty';
+  mode?: 'top-n' | 'empty' | 'condition';
   caption: string;
   dimension: string;
   orderBy?: string;
   count?: string;
+  conditionExpression?: string;
   end?: 'top' | 'bottom';
   datasource?: string;
 };
@@ -410,6 +542,7 @@ async function getToolResult({
       mode: args.mode ?? 'top-n',
       orderBy: args.orderBy,
       count: args.count,
+      conditionExpression: args.conditionExpression,
       end: args.end ?? 'top',
       datasource: args.datasource,
     },

@@ -212,7 +212,7 @@ export function composeStoryDocument(
     };
   }
 
-  let nextSize = size[0];
+  let nextSize = upsertAttribute(size[0], 'sizing-mode', 'fixed');
   for (const [name, value] of [
     ['maxheight', request.height],
     ['maxwidth', request.width],

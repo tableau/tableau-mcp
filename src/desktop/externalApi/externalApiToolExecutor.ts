@@ -213,6 +213,7 @@ export class ExternalApiToolExecutor {
     signal,
     args,
     schema,
+    expectedInstanceId,
   }: ExecuteCommandArgs<z.ZodTypeAny | undefined>): Promise<
     Result<
       ExecuteCommandResult<undefined> | ExecuteCommandResult<z.ZodTypeAny>,
@@ -222,6 +223,13 @@ export class ExternalApiToolExecutor {
     const resolvedArgs = args ?? {};
 
     const outcomeResult = await this.withRescan('command', async (http) => {
+      if (expectedInstanceId !== undefined && http.instanceId !== expectedInstanceId) {
+        return Err({
+          type: 'instance-mismatch' as const,
+          expected: expectedInstanceId,
+          actual: http.instanceId,
+        });
+      }
       const result = await http.postJsonEnvelope(
         EXTERNAL_API_ROUTES.invokeCommand,
         { namespace, command, parameters: resolvedArgs },

@@ -510,6 +510,63 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
   });
 
+  it('returns an actionable error before populating a blank dashboard-member worksheet', async () => {
+    const liveBlankXml = `<worksheet name='Sheet 1'><table>
+      <view><datasources /><aggregation value='true' /></view>
+      <style /><panes><pane><view><breakdown value='auto' /></view><mark class='Automatic' /></pane></panes>
+      <rows /><cols />
+    </table><simple-id uuid='sheet-1' /></worksheet>`;
+    const populatedXml = `<worksheet name='Sheet 1'><table>
+      <view><datasources><datasource name='Sample - Superstore' /></datasources>
+        <datasource-dependencies datasource='Sample - Superstore' />
+      </view>
+      <rows>[Sample - Superstore].[none:Category:nk]</rows>
+      <cols>[Sample - Superstore].[sum:Profit:qk]</cols>
+    </table><simple-id uuid='sheet-1' /></worksheet>`;
+    const applyWorksheetDocument = vi.fn();
+    const executor = makeExecutorMock({
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName, hidden: false }] }),
+        ),
+      getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: liveBlankXml })),
+      listDashboards: vi.fn().mockResolvedValue(
+        Ok({
+          dashboards: [
+            {
+              id: 'dashboard-1',
+              name: 'Dashboard 1',
+              hidden: false,
+              containedSheets: ['sheet-1'],
+            },
+          ],
+        }),
+      ),
+      applyWorksheetDocument,
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: populatedXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error).toEqual({
+        type: 'dashboard-member-blank-transition',
+        message:
+          'Worksheet "Sheet 1" is blank and already used by dashboard "Dashboard 1". Desktop cannot safely populate it while it belongs to a dashboard. Remove it from the dashboard, build the chart, then add it back. No changes were sent to Tableau.',
+      });
+    }
+    expect(applyWorksheetDocument).not.toHaveBeenCalled();
+  });
+
   it('goes straight to the whole-workbook apply for an absent sheet when requireExistingSheet is off', async () => {
     const { executor, calls } = absentSheetExecutor(['Some Other Sheet']);
 
