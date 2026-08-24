@@ -67,6 +67,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     requiredEvidence: ['each applied worksheet returns a success receipt'],
   },
   {
+    kind: 'prose',
+    id: 'dense-scatter-bubble',
+    text: 'Many/diverse scatter/bubble + categorical color overrides bind-template “Done—no further tool calls needed”: get-worksheet-xml(mode:inline) → add-field → apply-worksheet. Detail: bounded, semantic, discrete, finer than Color; absent/equal/no-finer Detail is missing—replace/supplement. Claim neither until apply receipt proves both. Skip one-mark-per-category, continuous color, no semantic lower grain.',
+  },
+  {
     kind: 'route',
     id: 'derived-metric',
     trigger:

@@ -53,6 +53,24 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(plainChart?.action).toContain('guarded artifact');
   });
 
+  it('adds bounded lower-grain Detail and categorical Color only for dense scatter intent', () => {
+    const plainChartIndex = DESKTOP_ROUTE_TABLE.findIndex((entry) => entry.id === 'plain-chart');
+    const guidance = DESKTOP_ROUTE_TABLE[plainChartIndex + 1];
+
+    expect(guidance).toMatchObject({ kind: 'prose', id: 'dense-scatter-bubble' });
+    const rendered = renderInstructionEntry(guidance!);
+    expect(rendered).toContain('Many/diverse scatter/bubble + categorical color');
+    expect(rendered).toContain('overrides bind-template “Done—no further tool calls needed”');
+    expect(rendered).toContain('get-worksheet-xml(mode:inline) → add-field → apply-worksheet');
+    expect(rendered).toContain('Detail: bounded, semantic, discrete, finer than Color');
+    expect(rendered).toContain('absent/equal/no-finer Detail is missing');
+    expect(rendered).toContain('replace/supplement');
+    expect(rendered).toContain('Claim neither until apply receipt proves both');
+    expect(rendered).toContain('one-mark-per-category');
+    expect(rendered).toContain('continuous color');
+    expect(rendered).toContain('no semantic lower grain');
+  });
+
   // Live incident (v11 bundle): asked to move "warmer" onto color, the agent had no route
   // for an encoding edit. refine-worksheet does top-N and sort only, so the edit-in-place
   // route has to name the tool pair that can re-encode a sheet.

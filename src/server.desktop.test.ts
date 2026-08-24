@@ -273,8 +273,10 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-22: author-set gains a condition (rule-based) set mode — the
 // 'condition' mode enum value plus the conditionExpression param add +52 bytes; dynamic authoring
 // 47_525 -> 47_577 (18-byte ratchet slack kept, well under the temporary 48k product ceiling).
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_577;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_595;
+// Re-pinned 2026-08-24: bounded dense scatter/bubble guidance adds 405 instruction bytes;
+// dynamic authoring 47_577 -> 47_982, retaining 18 bytes of ratchet slack at the 48k ceiling.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_982;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 48_000;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 48_000;
 const FULL_TOOL_SURFACE_BUDGET = 61_590;
 
@@ -301,7 +303,7 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
     // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_265);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_670);
     expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
