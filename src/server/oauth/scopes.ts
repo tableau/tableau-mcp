@@ -53,6 +53,7 @@ export type TableauApiScope =
   | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
+  | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
@@ -188,9 +189,9 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:create'],
     api: new Set([]),
   },
-  'validate-upload-and-publish-workbook': {
+  'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
-    api: new Set(['tableau:workbooks:create']),
+    api: new Set(['tableau:workbooks:create', 'tableau:file_uploads:create']),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -426,7 +427,8 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
 
   if (!authoringToolsEnabled) {
     enabledTools.delete('request-workbook-upload');
-    enabledTools.delete('validate-upload-and-publish-workbook');
+    enabledTools.delete('publish-workbook');
+    enabledTools.delete('download-workbook');
   }
 
   return enabledTools;

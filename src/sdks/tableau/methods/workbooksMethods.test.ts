@@ -4,6 +4,93 @@ import { describe, expect, it, vi } from 'vitest';
 import WorkbooksMethods from './workbooksMethods.js';
 
 describe('WorkbooksMethods', () => {
+  describe('queryWorkbookConnections', () => {
+    it('extracts each connection with its datasource id and name', async () => {
+      const mockQueryWorkbookConnections = vi.fn().mockResolvedValue({
+        connections: {
+          connection: [
+            {
+              id: 'conn-1',
+              type: 'sqlserver',
+              datasource: { id: 'ds-1', name: 'Superstore' },
+            },
+            {
+              id: 'conn-2',
+              type: 'postgres',
+              datasource: { id: 'ds-2', name: 'Orders' },
+            },
+          ],
+        },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        queryWorkbookConnections: mockQueryWorkbookConnections,
+      };
+
+      const connections = await workbooksMethods.queryWorkbookConnections({
+        siteId: 'site-1',
+        workbookId: 'wb-1',
+      });
+
+      expect(connections).toEqual([
+        { id: 'conn-1', type: 'sqlserver', datasource: { id: 'ds-1', name: 'Superstore' } },
+        { id: 'conn-2', type: 'postgres', datasource: { id: 'ds-2', name: 'Orders' } },
+      ]);
+      expect(connections.map((c) => c.datasource)).toEqual([
+        { id: 'ds-1', name: 'Superstore' },
+        { id: 'ds-2', name: 'Orders' },
+      ]);
+      expect(mockQueryWorkbookConnections).toHaveBeenCalledWith({
+        params: { siteId: 'site-1', workbookId: 'wb-1' },
+        headers: { Authorization: 'Bearer test' },
+      });
+    });
+
+    it('passes through connections that omit datasource or its name', async () => {
+      const connection = [
+        { id: 'conn-1', type: 'sqlserver', datasource: { id: 'ds-1' } },
+        { id: 'conn-2', type: 'postgres' },
+      ];
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 't' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        queryWorkbookConnections: vi.fn().mockResolvedValue({ connections: { connection } }),
+      };
+
+      expect(
+        await workbooksMethods.queryWorkbookConnections({ siteId: 'site-1', workbookId: 'wb-1' }),
+      ).toEqual(connection);
+    });
+
+    it('returns an empty array when the workbook has no connections', async () => {
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        queryWorkbookConnections: vi.fn().mockResolvedValue({ connections: {} }),
+      };
+
+      const connections = await workbooksMethods.queryWorkbookConnections({
+        siteId: 'site-1',
+        workbookId: 'wb-1',
+      });
+
+      expect(connections).toEqual([]);
+    });
+  });
+
   describe('publishWorkbook', () => {
     it('POSTs a single-part multipart/mixed body containing the tsRequest XML', async () => {
       const mockPost = vi.fn().mockResolvedValue({

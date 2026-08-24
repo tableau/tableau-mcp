@@ -87,10 +87,7 @@ describe('OverridableConfig', () => {
       vi.stubEnv('INCLUDE_TOOLS', 'authoring');
 
       const config = new OverridableConfig({});
-      expect(config.includeTools).toEqual([
-        'request-workbook-upload',
-        'validate-upload-and-publish-workbook',
-      ]);
+      expect(config.includeTools).toEqual(['request-workbook-upload', 'publish-workbook']);
     });
 
     it('should filter out invalid tool names from INCLUDE_TOOLS', () => {
