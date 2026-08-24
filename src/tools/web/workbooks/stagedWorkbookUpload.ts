@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
-import { extname } from 'path';
+import { readFile } from 'fs/promises';
+import { basename, extname } from 'path';
 
 import {
   BucketS3Config,
@@ -135,4 +136,54 @@ function assertWorkbookUploadId(workbookUploadId: string): void {
   ) {
     throw new Error('Workbook upload id is invalid.');
   }
+}
+
+export async function resolveWorkbookInput({
+  config,
+  workbookUploadId,
+  workbookFilePath,
+}: {
+  config: BucketS3Config & { enabled: boolean };
+  workbookUploadId?: string;
+  workbookFilePath?: string;
+}): Promise<ResolvedWorkbook> {
+  if (workbookUploadId && workbookFilePath) {
+    throw new Error('Provide either workbookFilePath or workbookUploadId, not both.');
+  }
+
+  if (workbookFilePath) {
+    if (config.enabled) {
+      throw new Error(
+        'workbookFilePath is only supported when staged S3 uploads are not configured. Call request-workbook-upload first and pass workbookUploadId.',
+      );
+    }
+    return await resolveLocalWorkbookFile(workbookFilePath);
+  }
+
+  if (!workbookUploadId) {
+    throw new Error(
+      'Either workbookFilePath or workbookUploadId must be provided. For local MCP servers, pass workbookFilePath. For hosted clients, call request-workbook-upload first and pass workbookUploadId.',
+    );
+  }
+  if (!config.enabled) {
+    throw new Error('MCP_S3_BUCKET must be configured before publishing staged workbook uploads.');
+  }
+  return await resolveStagedWorkbookUpload({
+    workbookUploadId,
+    config,
+  });
+}
+
+async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {
+  const fileName = basename(workbookFilePath);
+  if (!getWorkbookFileType(fileName)) {
+    throw new Error('workbookFilePath must point to a .twb or .twbx file.');
+  }
+
+  const bytes = await readFile(workbookFilePath);
+  if (bytes.byteLength === 0) {
+    throw new Error('workbookFilePath must not point to an empty workbook file.');
+  }
+
+  return { fileName, bytes };
 }
