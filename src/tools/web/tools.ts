@@ -41,6 +41,8 @@ import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
+import { getUploadWorkbookTool } from './workbooks/uploadWorkbook.js';
+import { getValidateWorkbookTool } from './workbooks/validateWorkbook.js';
 
 export const webToolFactories = [
   getGetDatasourceMetadataTool,
@@ -70,6 +72,8 @@ export const webToolFactories = [
   getDownloadWorkbookTool,
   getGetWorkbookTool,
   getRequestWorkbookUploadTool,
+  getUploadWorkbookTool,
+  getValidateWorkbookTool,
   getPublishWorkbookTool,
   getGetViewTool,
   getGetViewDataTool,

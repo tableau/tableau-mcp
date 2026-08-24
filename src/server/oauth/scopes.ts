@@ -189,9 +189,17 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:create'],
     api: new Set([]),
   },
+  'upload-workbook': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set(['tableau:file_uploads:create']),
+  },
+  'validate-workbook': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set(['tableau:workbooks:create']),
+  },
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
-    api: new Set(['tableau:workbooks:create', 'tableau:file_uploads:create']),
+    api: new Set(['tableau:workbooks:create']),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -427,6 +435,8 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
 
   if (!authoringToolsEnabled) {
     enabledTools.delete('request-workbook-upload');
+    enabledTools.delete('upload-workbook');
+    enabledTools.delete('validate-workbook');
     enabledTools.delete('publish-workbook');
     enabledTools.delete('download-workbook');
   }
