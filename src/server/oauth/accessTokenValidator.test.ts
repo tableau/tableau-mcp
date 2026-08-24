@@ -357,6 +357,35 @@ describe('TableauAccessTokenValidator', () => {
       expect(result.isOk()).toBe(true);
     });
 
+    it('accepts a loopback aud whose host differs from the resource URI form (localhost vs 127.0.0.1)', async () => {
+      // Resource URI configured with the 127.0.0.1 default form; token stamped with the
+      // equivalent localhost form (a locally-run server is reached at either).
+      vi.stubEnv('OAUTH_RESOURCE_URI', 'http://127.0.0.1:3927');
+      const audValidator = new TableauAccessTokenValidator();
+
+      for (const aud of [
+        'http://localhost:3927/tableau-mcp',
+        'http://127.0.0.1:3927/tableau-mcp',
+        'http://[::1]:3927/tableau-mcp',
+      ]) {
+        const result = await audValidator.validate(makeBearer(basePayload({ aud })));
+        expect(result.isOk()).toBe(true);
+      }
+    });
+
+    it('still rejects a loopback aud on a different port or scheme', async () => {
+      vi.stubEnv('OAUTH_RESOURCE_URI', 'http://127.0.0.1:3927');
+      const audValidator = new TableauAccessTokenValidator();
+
+      for (const aud of [
+        'http://localhost:9999/tableau-mcp', // wrong port
+        'https://localhost:3927/tableau-mcp', // wrong scheme
+      ]) {
+        const result = await audValidator.validate(makeBearer(basePayload({ aud })));
+        expect(result.isErr()).toBe(true);
+      }
+    });
+
     it('rejects an aud not present in a comma-separated OAUTH_GLOBAL_RESOURCE_URIS', async () => {
       vi.stubEnv(
         'OAUTH_GLOBAL_RESOURCE_URIS',
