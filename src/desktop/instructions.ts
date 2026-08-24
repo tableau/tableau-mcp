@@ -113,10 +113,20 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard-edit-fallback',
     trigger: 'an existing dashboard edit the bounded batch cannot express',
     action:
-      'use get-dashboard-xml -> read-cached-xml -> write-cached-xml -> apply-dashboard; stay on the scoped dashboard path.',
-    toolSequence: ['get-dashboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-dashboard'],
-    stopConditions: ['stay on the scoped dashboard path'],
-    requiredEvidence: ['dashboard apply receipt'],
+      'use list-dashboards -> format-worksheets for constituent worksheet properties; reserve cached dashboard editing for dashboard-level properties: get-dashboard-xml -> read-cached-xml -> write-cached-xml -> apply-dashboard; stay on the scoped dashboard path.',
+    toolSequence: [
+      'list-dashboards',
+      'format-worksheets',
+      'get-dashboard-xml',
+      'read-cached-xml',
+      'write-cached-xml',
+      'apply-dashboard',
+    ],
+    stopConditions: [
+      'reserve cached dashboard editing for dashboard-level properties',
+      'stay on the scoped dashboard path',
+    ],
+    requiredEvidence: ['format-worksheets readback receipt or dashboard apply receipt'],
   },
   {
     kind: 'route',
