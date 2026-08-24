@@ -20,6 +20,14 @@ const POPULATED_STORY_XML = STORY_XML.replace(
   "<story-point captured-sheet='Sales Overview' caption='Existing point' id='1' />",
 );
 
+const AUTOMATIC_MATCHING_STORY_XML = `<dashboard name='Executive Story' type='storyboard'>
+  <size sizing-mode='automatic' />
+  <zones><zone type-v2='flipboard'><flipboard active-id='1' nav-type='caption' show-nav-arrows='true'>
+    <story-points><story-point captured-sheet='Sales Overview' caption='Overview' id='1' /></story-points>
+  </flipboard></zone></zones>
+  <simple-id uuid='{story-1}' />
+</dashboard>`;
+
 const dashboardXml = (
   name: string,
   width = 1400,
@@ -167,6 +175,50 @@ describe('compose-story tool', () => {
     expect(applyStoryboardDocument).not.toHaveBeenCalled();
   });
 
+  it('recomposes a matching automatic story as fixed before reporting verified', async () => {
+    const { result, applyStoryboardDocument } = await callTool(
+      {
+        points: [{ dashboard: 'Sales Overview', caption: 'Overview' }],
+        replaceExisting: true,
+      },
+      { storyboardXml: AUTOMATIC_MATCHING_STORY_XML },
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      size: { width: 1400, height: 1000 },
+      verified: true,
+    });
+    expect(applyStoryboardDocument).toHaveBeenCalledTimes(1);
+    expect(applyStoryboardDocument.mock.calls[0]?.[1]).toContain("sizing-mode='fixed'");
+  });
+
+  it('does not report verified when story readback remains automatic', async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = callTool(
+        {
+          points: [{ dashboard: 'Sales Overview', caption: 'Overview' }],
+          replaceExisting: true,
+        },
+        {
+          storyboardXml: AUTOMATIC_MATCHING_STORY_XML,
+          persistAutomaticSizingMode: true,
+        },
+      );
+      await vi.runAllTimersAsync();
+      const { result, applyStoryboardDocument } = await pending;
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('points or size did not survive readback');
+      expect(applyStoryboardDocument).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rejects an explicitly non-fixed dashboard size', async () => {
     const { result, applyStoryboardDocument } = await callTool(
       { points: [{ dashboard: 'Sales Overview' }] },
@@ -224,6 +276,7 @@ async function callTool(
     storyboardXml?: string;
     sizingMode?: string;
     omitSizingMode?: boolean;
+    persistAutomaticSizingMode?: boolean;
   } = {},
 ): Promise<{
   result: CallToolResult;
@@ -236,6 +289,12 @@ async function callTool(
   let storyboardDocument = options.storyboardXml ?? STORY_XML;
   const applyStoryboardDocument = vi.fn(async (_id: string, xml: string) => {
     storyboardDocument = xml.replaceAll('/>', ' />');
+    if (options.persistAutomaticSizingMode) {
+      storyboardDocument = storyboardDocument.replace(
+        "sizing-mode='fixed'",
+        "sizing-mode='automatic'",
+      );
+    }
     return new Ok({ command_id: 'apply-story', status: 'completed', result: null });
   });
   const executor = {
