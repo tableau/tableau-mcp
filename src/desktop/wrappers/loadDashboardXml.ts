@@ -216,7 +216,7 @@ export async function loadDashboardXml({
         validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
       });
     }
-    if (typeof outcome === 'object') {
+    if (typeof outcome === 'object' && outcome.type === 'validation-failed') {
       return Err({
         type: 'load-dashboard-xml-error',
         error: { type: 'validation-failed', issues: outcome.issues },
