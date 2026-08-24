@@ -131,6 +131,55 @@ describe('formatWorksheetDocument', () => {
     expect(result.xml).not.toContain("element='cell'");
   });
 
+  it.each([
+    {
+      requestedField: "O'Brien",
+      metadataField: 'O&apos;Brien',
+      shelfField: "O'Brien",
+    },
+    {
+      requestedField: 'R&D Spend',
+      metadataField: 'R&amp;D Spend',
+      shelfField: 'R&#38;D Spend',
+    },
+  ])(
+    'writes a label format for $requestedField when its shelf uses a different entity encoding',
+    ({ requestedField, metadataField, shelfField }) => {
+      const shelfOnly = WORKSHEET_XML.replaceAll('Sales', metadataField)
+        .replace(
+          `<encodings><text column='[Sample - Superstore].[sum:${metadataField}:qk]'/></encodings>`,
+          '<encodings/>',
+        )
+        .replace(
+          `<cols>[Sample - Superstore].[sum:${metadataField}:qk]</cols>`,
+          `<cols>[Sample - Superstore].[sum:${shelfField}:qk]</cols>`,
+        );
+      const result = formatWorksheetDocument(shelfOnly, {
+        numberFormats: [{ field: requestedField, kind: 'number', decimals: 0 }],
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.xml).toContain("element='label'");
+      expect(result.xml).not.toContain("element='cell'");
+    },
+  );
+
+  it('writes a label format for a field whose name literally contains an entity', () => {
+    const shelfOnly = WORKSHEET_XML.replaceAll('Sales', 'R&amp;amp;D Spend').replace(
+      "<encodings><text column='[Sample - Superstore].[sum:R&amp;amp;D Spend:qk]'/></encodings>",
+      '<encodings/>',
+    );
+    const result = formatWorksheetDocument(shelfOnly, {
+      numberFormats: [{ field: 'R&amp;D Spend', kind: 'number', decimals: 0 }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain("element='label'");
+    expect(result.xml).not.toContain("element='cell'");
+  });
+
   it('is idempotent when the same format is applied twice', () => {
     const first = formatWorksheetDocument(WORKSHEET_XML, {
       showLabels: true,
