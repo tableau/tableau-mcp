@@ -137,5 +137,18 @@ describe('FlowsMethods', () => {
         flowsMethods.cancelFlowRun({ siteId: 'site-1', flowRunId: 'run-1' }),
       ).rejects.toMatchObject({ name: 'TableauRestError', statusCode: '403' });
     });
+
+    it('throws TableauRestError for a detail-only error envelope', async () => {
+      const mockApiClient = {
+        cancelFlowRun: vi.fn().mockResolvedValue({
+          error: { detail: "Flow run 'run-1' is complete." },
+        }),
+      };
+      const flowsMethods = makeMethods(mockApiClient);
+
+      await expect(
+        flowsMethods.cancelFlowRun({ siteId: 'site-1', flowRunId: 'run-1' }),
+      ).rejects.toMatchObject({ name: 'TableauRestError' });
+    });
   });
 });
