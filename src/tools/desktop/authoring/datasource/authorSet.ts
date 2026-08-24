@@ -16,11 +16,12 @@ import { DesktopTool } from '../../tool.js';
 import { applyAndVerify } from './applyAndVerify.js';
 
 const endSchema = z.enum(['top', 'bottom']);
-const modeSchema = z.enum(['top-n', 'empty']);
+const modeSchema = z.enum(['top-n', 'empty', 'condition']);
 
-// Primitives in, groupfilter XML server-side, readback out. Authors either an
-// initially empty set or a computed Top/Bottom-N set on a dimension; the Top-N
-// shape retains its provenance from the WW2021W44 golden workbook.
+// Primitives in, groupfilter XML server-side, readback out. Authors create an initially
+// empty set, a computed Top/Bottom-N set, or a condition (rule-based) set on a
+// dimension; the Top-N shape retains its provenance from the WW2021W44 golden
+// workbook, and the condition shape matches Desktop's own filter-group serialization.
 const paramsSchema = {
   session: sessionParam(),
   mode: modeSchema.default('top-n').describe(''),
@@ -28,6 +29,7 @@ const paramsSchema = {
   dimension: z.string().describe(''),
   orderBy: z.string().optional().describe(''),
   count: z.string().optional().describe(''),
+  conditionExpression: z.string().optional().describe(''),
   end: endSchema.default('top').describe(''),
   datasource: z.string().optional().describe(''),
 };
@@ -64,12 +66,32 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
       idempotentHint: false,
     },
     callback: async (
-      { session, mode = 'top-n', caption, dimension, orderBy, count, end = 'top', datasource },
+      {
+        session,
+        mode = 'top-n',
+        caption,
+        dimension,
+        orderBy,
+        count,
+        conditionExpression,
+        end = 'top',
+        datasource,
+      },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute<AuthorSetResult>({
         extra,
-        args: { session, mode, caption, dimension, orderBy, count, end, datasource },
+        args: {
+          session,
+          mode,
+          caption,
+          dimension,
+          orderBy,
+          count,
+          conditionExpression,
+          end,
+          datasource,
+        },
         callback: async () => {
           if (caption.trim().length === 0) {
             return new ArgsValidationError('caption empty').toErr();
@@ -77,9 +99,22 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
           if (dimension.trim().length === 0) {
             return new ArgsValidationError('dimension empty').toErr();
           }
-          if (mode === 'empty' && (orderBy !== undefined || count !== undefined)) {
+          // Treat a blank ('' / whitespace-only) optional param as ABSENT, matching the
+          // mode-specific required-arg checks below (which use .trim().length). Without this a
+          // caller that passes orderBy='' alongside a condition set — or conditionExpression=''
+          // alongside a top-n set — would be wrongly rejected for "supplying" an irrelevant param.
+          const hasOrderBy = orderBy !== undefined && orderBy.trim().length > 0;
+          const hasCount = count !== undefined && count.trim().length > 0;
+          const hasConditionExpression =
+            conditionExpression !== undefined && conditionExpression.trim().length > 0;
+          if ((mode === 'empty' || mode === 'condition') && (hasOrderBy || hasCount)) {
             return new ArgsValidationError(
-              'orderBy and count cannot be supplied in empty mode',
+              `orderBy and count cannot be supplied in ${mode} mode`,
+            ).toErr();
+          }
+          if (mode !== 'condition' && hasConditionExpression) {
+            return new ArgsValidationError(
+              'conditionExpression is only valid in condition mode',
             ).toErr();
           }
 
@@ -132,6 +167,18 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
               orderBy,
               count,
               end,
+            });
+          } else if (mode === 'condition') {
+            if (conditionExpression === undefined || conditionExpression.trim().length === 0) {
+              return new ArgsValidationError(
+                'conditionExpression is required in condition mode',
+              ).toErr();
+            }
+            groupXml = renderConditionGroupSet({
+              caption,
+              setName,
+              dimension,
+              conditionExpression,
             });
           } else {
             groupXml = renderEmptyGroupSet({ caption, setName, dimension });
@@ -331,6 +378,26 @@ function renderEmptyGroupSet({
     `<group caption='${escapeXml(caption)}' name='${escapeXml(setName)}' name-style='unqualified' user:ui-builder='filter-group'>` +
     `<groupfilter function='empty-level' member='${escapeXml(bracketize(dimension))}' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />` +
     '</group>'
+  );
+}
+
+function renderConditionGroupSet({
+  caption,
+  setName,
+  dimension,
+  conditionExpression,
+}: {
+  caption: string;
+  setName: string;
+  dimension: string;
+  conditionExpression: string;
+}): string {
+  const level = bracketize(dimension);
+  return (
+    `<group caption='${escapeXml(caption)}' name='${escapeXml(setName)}' name-style='unqualified' user:ui-builder='filter-group'>` +
+    `<groupfilter expression='${escapeXml(conditionExpression)}' function='filter' user:ui-filter-by-field='true' user:ui-marker='filter-by'>` +
+    `<groupfilter function='level-members' level='${escapeXml(level)}' user:ui-enumeration='all' user:ui-marker='enumerate' />` +
+    '</groupfilter></group>'
   );
 }
 
