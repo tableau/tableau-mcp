@@ -99,9 +99,10 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * through execute-tableau-command) PLUS the five author-* verbs that keep the primary
  * semantic path agent-XML-free — author-calc (ratios/rank/
  * running-total/LOD), author-set (param-linked Top/Bottom-N), author-parameter (the
- * key signature, born at OPEN), author-action (parameter-change wiring), format-labels
- * (mark labels) — PLUS ask-user (ambiguity goes to the human, never to a guess) and
- * search-commands (how the singer discovers the execute-tableau-command dialect) — PLUS
+ * key signature, born at OPEN), author-action (parameter-change wiring), format-worksheets
+ * (per-sheet mark labels and field number formats) — PLUS ask-user (ambiguity goes to the
+ * human, never to a guess) and search-commands (how the singer discovers the
+ * execute-tableau-command dialect) — PLUS
  * bind-template for recognizable single-view asks, plus the guarded list/build/apply template
  * artifact fallback and refine-worksheet, the primitives-only
  * top-N/sort editor that carries

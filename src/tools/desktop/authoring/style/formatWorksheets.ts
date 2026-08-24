@@ -102,18 +102,13 @@ export const getFormatWorksheetsTool = (
         extra,
         args: { session, worksheets },
         callback: async () => {
-          const worksheetNames = worksheets.map(({ name }) => name);
-          if (new Set(worksheetNames).size !== worksheetNames.length) {
-            return new ArgsValidationError('Worksheet names must not contain duplicates.').toErr();
-          }
-
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) return sessionResult.error.toErr();
           const executor = await extra.getExecutor(sessionResult.value);
           const listed = await executor.listWorksheets(extra.signal);
           if (listed.isErr()) return new DesktopCommandExecutionError(listed.error).toErr();
 
-          const prepared = [];
+          const resolved = [];
           for (const request of worksheets) {
             const item = resolveItemByNameOrId(
               'Worksheet',
@@ -121,7 +116,23 @@ export const getFormatWorksheetsTool = (
               listed.value.worksheets ?? [],
             );
             if (item.isErr()) return item.error.toErr();
-            const document = await executor.getWorksheetDocument(item.value.id, extra.signal);
+            resolved.push({
+              request,
+              worksheetId: item.value.id,
+              worksheetName: item.value.name,
+            });
+          }
+
+          const worksheetIds = resolved.map(({ worksheetId }) => worksheetId);
+          if (new Set(worksheetIds).size !== worksheetIds.length) {
+            return new ArgsValidationError(
+              'Worksheet targets must not contain duplicates.',
+            ).toErr();
+          }
+
+          const prepared = [];
+          for (const { request, worksheetId, worksheetName } of resolved) {
+            const document = await executor.getWorksheetDocument(worksheetId, extra.signal);
             if (document.isErr()) {
               return new DesktopCommandExecutionError(document.error).toErr();
             }
@@ -131,7 +142,8 @@ export const getFormatWorksheetsTool = (
             });
             if (!edited.ok) return new ArgsValidationError(edited.message).toErr();
             prepared.push({
-              worksheet: item.value,
+              worksheetId,
+              worksheetName,
               xml: edited.xml,
               sourceHash: sourceSha256(document.value.xml),
               alreadyFormatted: hasRequestedFormatting(document.value.xml, edited.xml),
@@ -139,18 +151,24 @@ export const getFormatWorksheetsTool = (
           }
 
           const formatted: FormattedWorksheet[] = [];
-          for (const { worksheet, xml, sourceHash, alreadyFormatted } of prepared) {
+          for (const {
+            worksheetId,
+            worksheetName,
+            xml,
+            sourceHash,
+            alreadyFormatted,
+          } of prepared) {
             if (alreadyFormatted) {
-              formatted.push({ worksheet: worksheet.name, verified: true });
+              formatted.push({ worksheet: worksheetName, verified: true });
               continue;
             }
             const applied = await withApplyLock(async () => {
-              const latest = await executor.getWorksheetDocument(worksheet.id, extra.signal);
+              const latest = await executor.getWorksheetDocument(worksheetId, extra.signal);
               if (latest.isErr()) return { kind: 'error' as const, error: latest.error };
               if (sourceSha256(latest.value.xml) !== sourceHash) {
                 return { kind: 'drift' as const };
               }
-              const result = await executor.applyWorksheetDocument(worksheet.id, xml, extra.signal);
+              const result = await executor.applyWorksheetDocument(worksheetId, xml, extra.signal);
               return result.isErr()
                 ? { kind: 'error' as const, error: result.error }
                 : { kind: 'applied' as const };
@@ -160,12 +178,12 @@ export const getFormatWorksheetsTool = (
             }
             if (applied.kind === 'drift') {
               return new XmlModificationError(
-                `Worksheet "${worksheet.name}" changed while formatting was being applied. ${formatted.length} earlier formatted sheets may already be updated.`,
+                `Worksheet "${worksheetName}" changed while formatting was being applied. ${formatted.length} earlier formatted sheets may already be updated.`,
               ).toErr();
             }
 
             const readback = await pollReadback({
-              read: async () => await executor.getWorksheetDocument(worksheet.id, extra.signal),
+              read: async () => await executor.getWorksheetDocument(worksheetId, extra.signal),
               settled: (value) =>
                 hasRequestedFormatting(value.xml, xml) &&
                 !verifyWorksheetReadback(xml, value.xml).some(
@@ -178,10 +196,10 @@ export const getFormatWorksheetsTool = (
             }
             if (!readback.settled) {
               return new XmlModificationError(
-                `Desktop accepted formatting for "${worksheet.name}", but the requested formatting did not survive readback or Tableau dropped worksheet semantics.`,
+                `Desktop accepted formatting for "${worksheetName}", but the requested formatting did not survive readback or Tableau dropped worksheet semantics.`,
               ).toErr();
             }
-            formatted.push({ worksheet: worksheet.name, verified: true });
+            formatted.push({ worksheet: worksheetName, verified: true });
           }
 
           return new Ok({ formatted });
@@ -375,7 +393,7 @@ function numberFormatElements(xml: string, column: string): Array<'cell' | 'labe
       new RegExp(`\\bcolumn=(['"])${escapeRegExp(escapeAttribute(column))}\\1`).test(encodings),
   );
   const shelf = [...xml.matchAll(/<(rows|cols)\b[^>]*>([\s\S]*?)<\/\1>/g)].some((match) =>
-    match[2].includes(column),
+    match[2].includes(escapeAttribute(column)),
   );
   return [...(markValue ? (['cell'] as const) : []), ...(shelf ? (['label'] as const) : [])];
 }

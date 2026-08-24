@@ -116,6 +116,21 @@ describe('formatWorksheetDocument', () => {
     expect(result.xml).not.toContain("element='cell'");
   });
 
+  it('writes a label format for an entity-encoded field used only on a shelf', () => {
+    const shelfOnly = WORKSHEET_XML.replaceAll('Sales', 'R&amp;D Spend').replace(
+      "<encodings><text column='[Sample - Superstore].[sum:R&amp;D Spend:qk]'/></encodings>",
+      '<encodings/>',
+    );
+    const result = formatWorksheetDocument(shelfOnly, {
+      numberFormats: [{ field: 'R&D Spend', kind: 'number', decimals: 0 }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain("element='label'");
+    expect(result.xml).not.toContain("element='cell'");
+  });
+
   it('is idempotent when the same format is applied twice', () => {
     const first = formatWorksheetDocument(WORKSHEET_XML, {
       showLabels: true,
@@ -215,6 +230,19 @@ describe('format-worksheets tool', () => {
     });
 
     expect(result.isError).toBe(true);
+    expect(applyWorksheetDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects one worksheet selected by both name and id before applying', async () => {
+    const { result, getWorksheetDocument, applyWorksheetDocument } = await callTool({
+      worksheets: [
+        { name: 'Sales by Category', showLabels: true },
+        { name: 'worksheet-1', showLabels: true },
+      ],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(getWorksheetDocument).not.toHaveBeenCalled();
     expect(applyWorksheetDocument).not.toHaveBeenCalled();
   });
 
@@ -354,6 +382,7 @@ async function callTool(
   } = {},
 ): Promise<{
   result: CallToolResult;
+  getWorksheetDocument: ReturnType<typeof vi.fn>;
   applyWorksheetDocument: ReturnType<typeof vi.fn>;
 }> {
   const worksheets = args.worksheets.map(({ name }, index) => ({
@@ -390,10 +419,11 @@ async function callTool(
     }
     return new Ok({ command_id: 'apply-1', status: 'completed', result: null });
   });
+  const getWorksheetDocument = vi.fn(async (id: string) => new Ok({ xml: documents.get(id)! }));
   const executor = {
     instanceId: 'desktop-instance',
     listWorksheets: vi.fn().mockResolvedValue(new Ok({ worksheets })),
-    getWorksheetDocument: vi.fn(async (id: string) => new Ok({ xml: documents.get(id)! })),
+    getWorksheetDocument,
     applyWorksheetDocument,
   };
   const extra = {
@@ -409,7 +439,7 @@ async function callTool(
     },
     extra,
   );
-  return { result, applyWorksheetDocument };
+  return { result, getWorksheetDocument, applyWorksheetDocument };
 }
 
 function moveMarkLabelFormatToSecondPane(xml: string): string {
