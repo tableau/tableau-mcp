@@ -9,6 +9,7 @@ import { verifyWorksheetReadback } from '../../../../desktop/validation/readback
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
+import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -393,7 +394,7 @@ function numberFormatElements(xml: string, column: string): Array<'cell' | 'labe
       new RegExp(`\\bcolumn=(['"])${escapeRegExp(escapeAttribute(column))}\\1`).test(encodings),
   );
   const shelf = [...xml.matchAll(/<(rows|cols)\b[^>]*>([\s\S]*?)<\/\1>/g)].some((match) =>
-    match[2].includes(escapeAttribute(column)),
+    decodeXmlEntities(match[2]).includes(column),
   );
   return [...(markValue ? (['cell'] as const) : []), ...(shelf ? (['label'] as const) : [])];
 }
