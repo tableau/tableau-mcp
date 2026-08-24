@@ -292,6 +292,20 @@ describe('format-worksheets tool', () => {
     expect(result.content[0].text).toContain('did not survive readback');
   });
 
+  it('rejects readback that keeps formatting but drops a worksheet shelf', async () => {
+    const { result } = await callTool(
+      { worksheets: [{ name: 'Sales by Category', showLabels: true }] },
+      {
+        readbackTransform: (xml) =>
+          xml.replace('    <rows>[Sample - Superstore].[none:Category:nk]</rows>\n', ''),
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('worksheet semantics');
+  });
+
   it('does not post a worksheet that drifts from Bar to Line after preparation', async () => {
     const { result, applyWorksheetDocument } = await callTool(
       {

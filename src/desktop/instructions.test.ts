@@ -271,18 +271,32 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('routes unsupported dashboard edits through the scoped dashboard fallback', () => {
     const dashboardEdit = routes.find((route) => route.id === 'dashboard-edit-fallback');
 
-    expect(dashboardEdit).toMatchObject({
-      trigger: 'an existing dashboard edit the bounded batch cannot express',
-      toolSequence: [
-        'set-dashboard-navigation',
-        'get-dashboard-xml',
-        'read-cached-xml',
-        'write-cached-xml',
-        'apply-dashboard',
-      ],
-      stopConditions: ['stay on the scoped dashboard path'],
-    });
+    expect(dashboardEdit?.trigger).toBe(
+      'an existing dashboard edit the bounded batch cannot express',
+    );
     expect(dashboardEdit?.action).toContain('dashboard-suite navigation');
+    expect(dashboardEdit?.action).toContain(
+      'list-dashboards -> format-worksheets for constituent worksheet properties',
+    );
+    expect(dashboardEdit?.action).toContain(
+      'reserve cached dashboard editing for dashboard-level properties',
+    );
+    expect(dashboardEdit?.toolSequence).toEqual([
+      'set-dashboard-navigation',
+      'list-dashboards',
+      'format-worksheets',
+      'get-dashboard-xml',
+      'read-cached-xml',
+      'write-cached-xml',
+      'apply-dashboard',
+    ]);
+    expect(dashboardEdit?.stopConditions).toEqual([
+      'reserve cached dashboard editing for dashboard-level properties',
+      'stay on the scoped dashboard path',
+    ]);
+    expect(dashboardEdit?.requiredEvidence).toEqual([
+      'navigation verification, format-worksheets readback, or dashboard apply receipt',
+    ]);
   });
 
   it('routes story edits through the scoped story fallback', () => {

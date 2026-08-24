@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
 import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
+import { verifyWorksheetReadback } from '../../../../desktop/validation/readback-verify.js';
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
@@ -165,7 +166,11 @@ export const getFormatWorksheetsTool = (
 
             const readback = await pollReadback({
               read: async () => await executor.getWorksheetDocument(worksheet.id, extra.signal),
-              settled: (value) => hasRequestedFormatting(value.xml, xml),
+              settled: (value) =>
+                hasRequestedFormatting(value.xml, xml) &&
+                !verifyWorksheetReadback(xml, value.xml).some(
+                  (finding) => finding.severity === 'error',
+                ),
               signal: extra.signal,
             });
             if (!readback.ok) {
@@ -173,7 +178,7 @@ export const getFormatWorksheetsTool = (
             }
             if (!readback.settled) {
               return new XmlModificationError(
-                `Desktop accepted formatting for "${worksheet.name}", but the requested labels or number formats did not survive readback.`,
+                `Desktop accepted formatting for "${worksheet.name}", but the requested formatting did not survive readback or Tableau dropped worksheet semantics.`,
               ).toErr();
             }
             formatted.push({ worksheet: worksheet.name, verified: true });
