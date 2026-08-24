@@ -232,7 +232,7 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
     });
     const tableauError = (body as { error?: { code?: string; summary?: string; detail?: string } })
       ?.error;
-    if (tableauError && (tableauError.code || tableauError.summary)) {
+    if (tableauError && (tableauError.code || tableauError.summary || tableauError.detail)) {
       throw new TableauRestError(tableauError);
     }
   };
