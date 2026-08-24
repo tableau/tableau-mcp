@@ -69,6 +69,7 @@ import { getDashboardHealthCheckTool } from './authoring/sheets/dashboardHealthC
 import { getPlanDashboardCreationTool } from './authoring/sheets/planDashboardCreation.js';
 import { getRefineWorksheetTool } from './authoring/sheets/refineWorksheet.js';
 import { getRunDashboardBatchTool } from './authoring/sheets/runDashboardBatch.js';
+import { getSetDashboardNavigationTool } from './authoring/sheets/setDashboardNavigation.js';
 import { getApplyWorkbookStyleTool } from './authoring/style/applyWorkbookStyle.js';
 import { getExportCustomThemeTool } from './authoring/style/exportCustomTheme.js';
 import { getFormatWorksheetsTool } from './authoring/style/formatWorksheets.js';
@@ -137,6 +138,7 @@ export const desktopToolFactories = [
   getAskUserTool,
   getBindTemplateTool,
   getRunDashboardBatchTool,
+  getSetDashboardNavigationTool,
   getComposeDashboardTool,
   getDashboardHealthCheckTool,
   getListTemplatesTool,

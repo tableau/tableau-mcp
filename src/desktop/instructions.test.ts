@@ -274,6 +274,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(dashboardEdit?.trigger).toBe(
       'an existing dashboard edit the bounded batch cannot express',
     );
+    expect(dashboardEdit?.action).toContain('dashboard-suite navigation');
     expect(dashboardEdit?.action).toContain(
       'list-dashboards -> format-worksheets for constituent worksheet properties',
     );
@@ -281,6 +282,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'reserve cached dashboard editing for dashboard-level properties',
     );
     expect(dashboardEdit?.toolSequence).toEqual([
+      'set-dashboard-navigation',
       'list-dashboards',
       'format-worksheets',
       'get-dashboard-xml',
@@ -293,7 +295,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'stay on the scoped dashboard path',
     ]);
     expect(dashboardEdit?.requiredEvidence).toEqual([
-      'format-worksheets readback receipt or dashboard apply receipt',
+      'navigation verification, format-worksheets readback, or dashboard apply receipt',
     ]);
   });
 
