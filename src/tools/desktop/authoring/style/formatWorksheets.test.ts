@@ -1,6 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
+import {
+  READBACK_POLL_INTERVAL_MS,
+  READBACK_POLL_MAX_ATTEMPTS,
+} from '../../../../desktop/wrappers/pollReadback.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -231,6 +235,10 @@ describe('formatWorksheetDocument', () => {
 });
 
 describe('format-worksheets tool', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('uses a bounded public schema and never accepts a raw number-format string', () => {
     const tool = getFormatWorksheetsTool(new DesktopMcpServer());
     expect(tool.name).toBe('format-worksheets');
@@ -408,6 +416,61 @@ describe('format-worksheets tool', () => {
     expect(result.content[0].text).toContain('worksheet semantics');
   });
 
+  it('accepts semantically equal quotes in a currency format read back by Tableau', async () => {
+    const { result } = await callTool(
+      {
+        worksheets: [
+          {
+            name: 'Sales by Category',
+            numberFormats: [{ field: 'Sales', kind: 'currency', currencySymbol: '$', decimals: 0 }],
+          },
+        ],
+      },
+      { readbackTransform: (xml) => xml.replaceAll('&quot;', '"') },
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
+  it.each(['command', 'readback'] as const)(
+    'reports earlier updates when the second worksheet hits a %s error',
+    async (secondFailure) => {
+      const { result } = await callTool(
+        {
+          worksheets: [
+            { name: 'Sales by Category', showLabels: true },
+            { name: 'Profit KPI', showLabels: true },
+          ],
+        },
+        { secondFailure },
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('1 earlier worksheet may already be updated.');
+    },
+  );
+
+  it('reports earlier updates when the second worksheet never settles on readback', async () => {
+    vi.useFakeTimers();
+    const resultPromise = callTool(
+      {
+        worksheets: [
+          { name: 'Sales by Category', showLabels: true },
+          { name: 'Profit KPI', showLabels: true },
+        ],
+      },
+      { secondFailure: 'unsettled' },
+    );
+
+    await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS * READBACK_POLL_MAX_ATTEMPTS);
+    const { result } = await resultPromise;
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('1 earlier worksheet may already be updated.');
+  });
+
   it('does not post a worksheet that drifts from Bar to Line after preparation', async () => {
     const { result, applyWorksheetDocument } = await callTool(
       {
@@ -422,7 +485,7 @@ describe('format-worksheets tool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Profit KPI');
-    expect(result.content[0].text).toContain('earlier formatted sheets may already be updated');
+    expect(result.content[0].text).toContain('1 earlier worksheet may already be updated.');
     expect(applyWorksheetDocument).toHaveBeenCalledTimes(1);
     expect(applyWorksheetDocument).not.toHaveBeenCalledWith(
       'worksheet-2',
@@ -453,6 +516,7 @@ async function callTool(
     sourceTransform?: (xml: string) => string;
     readbackTransform?: (xml: string) => string;
     driftSecondBeforeApply?: boolean;
+    secondFailure?: 'command' | 'readback' | 'unsettled';
   } = {},
 ): Promise<{
   result: CallToolResult;
@@ -483,8 +547,18 @@ async function callTool(
       return [id, prepared?.ok ? prepared.xml.replaceAll('/>', ' />') : transformedSource];
     }),
   );
+  const appliedIds = new Set<string>();
   const applyWorksheetDocument = vi.fn(async (id: string, xml: string) => {
-    documents.set(id, (options.readbackTransform?.(xml) ?? xml).replaceAll('/>', ' />'));
+    if (id === 'worksheet-2' && options.secondFailure === 'command') {
+      return new Err({
+        type: 'command-failed' as const,
+        error: { code: 'apply-failed', message: 'Apply failed.', recoverable: false },
+      });
+    }
+    if (!(id === 'worksheet-2' && options.secondFailure === 'unsettled')) {
+      documents.set(id, (options.readbackTransform?.(xml) ?? xml).replaceAll('/>', ' />'));
+    }
+    appliedIds.add(id);
     if (options.driftSecondBeforeApply && id === 'worksheet-1') {
       documents.set(
         'worksheet-2',
@@ -493,7 +567,12 @@ async function callTool(
     }
     return new Ok({ command_id: 'apply-1', status: 'completed', result: null });
   });
-  const getWorksheetDocument = vi.fn(async (id: string) => new Ok({ xml: documents.get(id)! }));
+  const getWorksheetDocument = vi.fn(async (id: string) => {
+    if (id === 'worksheet-2' && options.secondFailure === 'readback' && appliedIds.has(id)) {
+      return new Err({ type: 'command-timed-out' as const, error: 'Readback timed out.' });
+    }
+    return new Ok({ xml: documents.get(id)! });
+  });
   const executor = {
     instanceId: 'desktop-instance',
     listWorksheets: vi.fn().mockResolvedValue(new Ok({ worksheets })),

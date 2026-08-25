@@ -152,6 +152,7 @@ export const getFormatWorksheetsTool = (
           }
 
           const formatted: FormattedWorksheet[] = [];
+          let updatedWorksheetCount = 0;
           for (const {
             worksheetId,
             worksheetName,
@@ -175,11 +176,14 @@ export const getFormatWorksheetsTool = (
                 : { kind: 'applied' as const };
             });
             if (applied.kind === 'error') {
-              return new DesktopCommandExecutionError(applied.error).toErr();
+              return new DesktopCommandExecutionError(
+                applied.error,
+                earlierUpdatesWarning(updatedWorksheetCount),
+              ).toErr();
             }
             if (applied.kind === 'drift') {
               return new XmlModificationError(
-                `Worksheet "${worksheetName}" changed while formatting was being applied. ${formatted.length} earlier formatted sheets may already be updated.`,
+                `Worksheet "${worksheetName}" changed while formatting was being applied. ${earlierUpdatesWarning(updatedWorksheetCount)}`,
               ).toErr();
             }
 
@@ -193,13 +197,17 @@ export const getFormatWorksheetsTool = (
               signal: extra.signal,
             });
             if (!readback.ok) {
-              return new DesktopCommandExecutionError(readback.error).toErr();
+              return new DesktopCommandExecutionError(
+                readback.error,
+                earlierUpdatesWarning(updatedWorksheetCount),
+              ).toErr();
             }
             if (!readback.settled) {
               return new XmlModificationError(
-                `Desktop accepted formatting for "${worksheetName}", but the requested formatting did not survive readback or Tableau dropped worksheet semantics.`,
+                `Desktop accepted formatting for "${worksheetName}", but the requested formatting did not survive readback or Tableau dropped worksheet semantics. ${earlierUpdatesWarning(updatedWorksheetCount)}`,
               ).toErr();
             }
+            updatedWorksheetCount += 1;
             formatted.push({ worksheet: worksheetName, verified: true });
           }
 
@@ -406,7 +414,12 @@ function numberFormatElements(xml: string, column: string): Array<'cell' | 'labe
 }
 
 function readXmlAttribute(tag: string, name: string): string | undefined {
-  return new RegExp(`\\b${name}\\s*=\\s*(['"])(.*?)\\1`, 'i').exec(tag)?.[2];
+  const value = new RegExp(`\\b${name}\\s*=\\s*(['"])(.*?)\\1`, 'i').exec(tag)?.[2];
+  return value === undefined ? undefined : decodeXmlEntities(value);
+}
+
+function earlierUpdatesWarning(count: number): string {
+  return `${count} earlier ${count === 1 ? 'worksheet' : 'worksheets'} may already be updated.`;
 }
 
 function firstElementBounds(xml: string, tag: string): { start: number; end: number } | undefined {

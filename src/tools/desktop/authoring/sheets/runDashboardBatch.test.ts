@@ -75,6 +75,11 @@ describe('runDashboardBatchTool', () => {
     const entry = await getDesktopToolListEntry(tool);
     expect(entry.inputSchema).toMatchObject({
       properties: {
+        session: {
+          type: 'string',
+          maxLength: 64,
+          description: 'Session ID; optional if pinned or unique.',
+        },
         artifactIds: { type: 'array', items: { type: 'string' } },
         dashboardName: { type: 'string' },
         existingWorksheetNames: { type: 'array', items: { type: 'string' } },
@@ -84,7 +89,7 @@ describe('runDashboardBatchTool', () => {
         kpiWorksheetNames: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Ordered KPIs.',
+          description: 'Ordered KPIs',
         },
         replaceExisting: { type: 'boolean' },
       },
