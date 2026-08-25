@@ -38,7 +38,7 @@ export const getUploadWorkbookTool = (server: WebMcpServer): WebTool<typeof para
     server,
     name: 'upload-workbook',
     description:
-      'Uploads a TWB or TWBX workbook from a local file path or staged upload id into a Tableau file upload session, without validating or publishing it. Returns an uploadSessionId and workbookType to pass to validate-workbook and/or publish-workbook. Handles TWB and TWBX identically.',
+      'First step of the publishing workflow: uploads a TWB or TWBX workbook from a local file path or staged upload id into a Tableau file upload session, without validating or publishing it. Returns an uploadSessionId and workbookType. Standard workflow: upload-workbook, then validate-workbook (recommended for TWB), then publish-workbook. Handles TWB and TWBX identically.',
     paramsSchema,
     annotations: {
       title: 'Upload Workbook',

@@ -46,7 +46,7 @@ export const getValidateWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
     server,
     name: 'validate-workbook',
     description:
-      'Validates a TWB workbook from a local file path or staged upload id and returns any errors or warnings, without uploading a session for publishing or publishing it. This is an optional pre-publish check. TWBX workbooks cannot be validated by Tableau ahead of publishing (Tableau can only validate the inner TWB XML, not extracts packaged inside a TWBX), so calling this on a TWBX is a no-op that always returns status "valid" with no warnings.',
+      'Recommended second step of the publishing workflow, after upload-workbook and before publish-workbook: validates a TWB workbook from a local file path or staged upload id and returns any errors or warnings, without uploading a session for publishing or publishing it. Callers may skip straight from upload-workbook to publish-workbook if pre-publish validation is not needed. TWBX workbooks cannot be validated by Tableau ahead of publishing (Tableau can only validate the inner TWB XML, not extracts packaged inside a TWBX), so calling this on a TWBX is a no-op that always returns status "valid" with no warnings.',
     paramsSchema,
     annotations: {
       title: 'Validate Workbook',

@@ -47,7 +47,7 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
     server,
     name: 'publish-workbook',
     description:
-      'Commits a previously uploaded TWB or TWBX workbook (via upload-workbook) to the specified Tableau project. Use list-projects to discover project IDs. Call validate-workbook first if you want pre-publish validation errors/warnings for a TWB workbook.',
+      'Final step of the publishing workflow: commits a previously uploaded TWB or TWBX workbook (via upload-workbook) to the specified Tableau project. Use list-projects to discover project IDs. Standard workflow: upload-workbook, then validate-workbook (recommended for TWB), then publish-workbook.',
     paramsSchema,
     annotations: {
       title: 'Publish Workbook',
