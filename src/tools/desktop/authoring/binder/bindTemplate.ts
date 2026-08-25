@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -20,6 +20,11 @@ import {
   summarizeSchema,
   WATERFALL_ORDER_FIELD_RE,
 } from '../../../../desktop/binder/binder.js';
+import {
+  type ExactFilterIntent,
+  type ExactFilterValueConstraint,
+  parseExactFilterIntent,
+} from '../../../../desktop/binder/classify.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
 import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
@@ -39,6 +44,8 @@ import {
 } from '../../../../desktop/refine/refineWorksheet.js';
 import {
   type AppliedSheetRecord,
+  type BindRecoveryCorrectionChange,
+  type BindRecoveryCorrectionInvariant,
   type BindRecoveryProposalContext,
   classifyBindProposalProgress,
   MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS,
@@ -209,9 +216,15 @@ type BlockedBindTemplateResult = {
     | 'awaiting_proposal'
     | 'unchanged_proposal'
     | 'retry_budget_exhausted'
-    | 'fallback_required';
+    | 'fallback_required'
+    | 'ambiguous_filter_intent'
+    | 'proposal_contract_mismatch'
+    | 'proposal_filter_resolution_failed';
   guidance: string;
   call_2_contract?: Call2Contract;
+  mismatches?: ProposalContractMismatch[];
+  blockers?: Blocker[];
+  rejected_proposal?: BindingProposal;
 };
 
 type BindTemplateToolResult =
@@ -221,7 +234,32 @@ type BindTemplateToolResult =
   | BlockedBindTemplateResult;
 type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>;
 
-type Call2Contract = BindRecoveryProposalContext;
+type Call2Contract = BindRecoveryProposalContext & {
+  required_filter_values?: ExactFilterValueConstraint[];
+};
+
+type FilterValueReport = { field: string; values?: string[] };
+
+type ProposalContractMismatch =
+  | {
+      code:
+        | 'template-not-offered'
+        | 'slot-not-offered'
+        | 'required-slot-missing'
+        | 'field-not-compatible';
+      template: string;
+      slot_id?: string;
+      field?: string;
+      choices: string[];
+    }
+  | {
+      code: 'required_filter_fields_mismatch';
+      template: string;
+      required_filter_fields: string[];
+      provided_filter_fields: string[];
+      required_filter_values?: ExactFilterValueConstraint[];
+      provided_filter_values?: FilterValueReport[];
+    };
 
 const NOT_APPLIED_GUIDANCE =
   'NOT APPLIED — the worksheet is unchanged. Resubmit this exact bind-template call with auto_apply:true to apply the bind.';
@@ -247,6 +285,7 @@ const TOP_N_APPLIED_GUIDANCE =
   'The requested top-N limit is ALREADY applied. Do NOT add another limit.';
 const PROPOSAL_ATTEMPTED_PHASE = ['proposal', 'attempted'].join('-');
 const RETRY_USED_PHASE = ['retry', 'used'].join('-');
+const MAX_PROPOSAL_MISMATCH_CHOICES = 5;
 const SUMMARY_ROWS_MAX_ROWS = 20;
 const EMPTY_SUMMARY_ROWS_ERROR = 'empty readback — verify with get-summary-data';
 const EMPTY_SUMMARY_ROWS_GUIDANCE =
@@ -477,6 +516,546 @@ function correctionFallbackResult(): StructuredBindTemplateToolResult {
   );
 }
 
+function proposalContractMismatches(
+  proposal: BindingProposal,
+  contract: Call2Contract,
+): ProposalContractMismatch[] {
+  const mismatches: ProposalContractMismatch[] = [];
+  if (contract.required_filter_fields !== undefined) {
+    const filterMismatch = requiredFilterFieldsMismatch(
+      proposal,
+      contract.required_filter_fields,
+      contract.required_filter_values,
+    );
+    if (filterMismatch !== undefined) mismatches.push(filterMismatch);
+  }
+  const choice = contract.proposal_choices.find(
+    (candidate) => candidate.template === proposal.template,
+  );
+  if (!choice) {
+    return [
+      ...mismatches,
+      {
+        code: 'template-not-offered',
+        template: proposal.template,
+        choices: contract.proposal_choices
+          .map((candidate) => candidate.template)
+          .slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+      },
+    ];
+  }
+
+  const slotById = new Map(choice.slots.map((slot) => [slot.slot_id, slot]));
+  const boundSlotIds = new Set(proposal.bindings.map((binding) => binding.slot_id));
+  const addMismatch = (mismatch: ProposalContractMismatch): boolean => {
+    mismatches.push(mismatch);
+    return mismatches.length >= MAX_PROPOSAL_MISMATCH_CHOICES;
+  };
+  for (const binding of proposal.bindings) {
+    const slot = slotById.get(binding.slot_id);
+    if (!slot) {
+      if (
+        addMismatch({
+          code: 'slot-not-offered',
+          template: proposal.template,
+          slot_id: binding.slot_id,
+          field: binding.field,
+          choices: choice.slots
+            .map((candidate) => candidate.slot_id)
+            .slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+        })
+      ) {
+        return mismatches;
+      }
+      continue;
+    }
+    if (!slot.compatible_field_names.includes(binding.field)) {
+      if (
+        addMismatch({
+          code: 'field-not-compatible',
+          template: proposal.template,
+          slot_id: binding.slot_id,
+          field: binding.field,
+          choices: slot.compatible_field_names.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+        })
+      ) {
+        return mismatches;
+      }
+    }
+  }
+  for (const slot of choice.slots) {
+    if (slot.required && !boundSlotIds.has(slot.slot_id)) {
+      if (
+        addMismatch({
+          code: 'required-slot-missing',
+          template: proposal.template,
+          slot_id: slot.slot_id,
+          choices: slot.compatible_field_names.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+        })
+      ) {
+        return mismatches;
+      }
+    }
+  }
+  return mismatches;
+}
+
+function sameExactFieldSet(required: string[], provided: string[]): boolean {
+  return (
+    required.length === provided.length &&
+    new Set(provided).size === provided.length &&
+    required.every((field) => provided.includes(field))
+  );
+}
+
+function requiredFilterFieldsMismatch(
+  proposal: BindingProposal,
+  requiredFilterFields: string[],
+  requiredFilterValues: ExactFilterValueConstraint[] = [],
+): Extract<ProposalContractMismatch, { code: 'required_filter_fields_mismatch' }> | undefined {
+  const providedFilterFields = (proposal.filters ?? []).map((filter) => filter.field);
+  const fieldsMatch = sameExactFieldSet(requiredFilterFields, providedFilterFields);
+  const valuesMatch = requiredFilterValues.every((required) => {
+    const matchingFilters = (proposal.filters ?? []).filter(
+      (filter) => filter.field === required.field,
+    );
+    const provided = matchingFilters.length === 1 ? (matchingFilters[0].values ?? []) : [];
+    return sameExactFieldSet(required.values, provided);
+  });
+  if (fieldsMatch && valuesMatch) return undefined;
+
+  const providedFilterValues = requiredFilterValues.map<FilterValueReport>((required) => {
+    const matchingFilters = (proposal.filters ?? []).filter(
+      (filter) => filter.field === required.field,
+    );
+    const values = matchingFilters.length === 1 ? matchingFilters[0].values : undefined;
+    return {
+      field: required.field,
+      ...(values !== undefined
+        ? {
+            values: values
+              .slice(0, MAX_PROPOSAL_MISMATCH_CHOICES)
+              .map((value) => value.slice(0, 80)),
+          }
+        : {}),
+    };
+  });
+  return {
+    code: 'required_filter_fields_mismatch',
+    template: proposal.template,
+    required_filter_fields: requiredFilterFields,
+    provided_filter_fields: providedFilterFields.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+    ...(!valuesMatch
+      ? {
+          required_filter_values: requiredFilterValues,
+          provided_filter_values: providedFilterValues,
+        }
+      : {}),
+  };
+}
+
+const MAX_CORRECTION_CHANGES = 5;
+
+function correctionProposalFingerprint(
+  proposal: BindingProposal,
+  allowedChanges: BindRecoveryCorrectionChange[],
+  requireExactChoices: boolean,
+): string | undefined {
+  const templateChange = allowedChanges.find((change) => change.kind === 'template');
+  const filterSetChange = allowedChanges.find((change) => change.kind === 'filter_set');
+  if (
+    templateChange?.kind === 'template' &&
+    requireExactChoices &&
+    !templateChange.choices.includes(proposal.template)
+  ) {
+    return undefined;
+  }
+  if (
+    filterSetChange?.kind === 'filter_set' &&
+    requireExactChoices &&
+    !sameExactFieldSet(
+      filterSetChange.choices,
+      (proposal.filters ?? []).map((filter) => filter.field),
+    )
+  ) {
+    return undefined;
+  }
+
+  let valid = true;
+  const bindings = proposal.bindings.map((binding, index) => {
+    const fieldChange = allowedChanges.find(
+      (change) => change.kind === 'binding-field' && change.index === index,
+    );
+    const slotChange = allowedChanges.find(
+      (change) => change.kind === 'binding-slot' && change.index === index,
+    );
+    if (
+      fieldChange?.kind === 'binding-field' &&
+      requireExactChoices &&
+      !fieldChange.choices.includes(binding.field)
+    ) {
+      valid = false;
+    }
+    if (
+      slotChange?.kind === 'binding-slot' &&
+      requireExactChoices &&
+      !slotChange.choices.includes(binding.slot_id)
+    ) {
+      valid = false;
+    }
+    return {
+      slot_id: slotChange ? `__correctable_binding_slot_${index}__` : binding.slot_id,
+      field: fieldChange ? `__correctable_binding_field_${index}__` : binding.field,
+      ...(binding.derivation !== undefined ? { derivation: binding.derivation } : {}),
+    };
+  });
+
+  const filters = filterSetChange
+    ? '__correctable_filter_set__'
+    : proposal.filters?.map((filter, index) => {
+        const fieldChange = allowedChanges.find(
+          (change) => change.kind === 'filter-field' && change.index === index,
+        );
+        if (
+          fieldChange?.kind === 'filter-field' &&
+          requireExactChoices &&
+          !fieldChange.choices.includes(filter.field)
+        ) {
+          valid = false;
+        }
+        return {
+          field: fieldChange ? `__correctable_filter_field_${index}__` : filter.field,
+          ...(filter.values !== undefined ? { values: filter.values } : {}),
+          ...(filter.context !== undefined ? { context: filter.context } : {}),
+        };
+      });
+  if (!valid) return undefined;
+  for (const change of allowedChanges) {
+    if (
+      change.kind !== 'template' &&
+      change.kind !== 'filter_set' &&
+      (change.kind === 'filter-field' ? filters?.[change.index] : bindings[change.index]) ===
+        undefined
+    ) {
+      return undefined;
+    }
+  }
+
+  const templateParameters =
+    proposal.template_parameters === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(proposal.template_parameters).sort(([left], [right]) =>
+            left.localeCompare(right),
+          ),
+        );
+  const canonical = JSON.stringify({
+    template: templateChange ? '__correctable_template__' : proposal.template,
+    title: proposal.title,
+    bindings,
+    ...(proposal.sort !== undefined ? { sort: proposal.sort } : {}),
+    ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
+    ...(proposal.bin_size !== undefined ? { bin_size: proposal.bin_size } : {}),
+    ...(filters !== undefined ? { filters } : {}),
+    ...(templateParameters !== undefined ? { template_parameters: templateParameters } : {}),
+    ...(proposal.confidence !== undefined ? { confidence: proposal.confidence } : {}),
+  });
+  return createHash('sha256').update(canonical).digest('hex');
+}
+
+function correctionInvariant(
+  source: BindRecoveryCorrectionInvariant['source'],
+  proposal: BindingProposal,
+  allowedChanges: BindRecoveryCorrectionChange[],
+): BindRecoveryCorrectionInvariant | undefined {
+  if (
+    allowedChanges.length === 0 ||
+    allowedChanges.length > MAX_CORRECTION_CHANGES ||
+    allowedChanges.some(
+      (change) =>
+        (change.kind !== 'filter_set' && change.choices.length === 0) ||
+        change.choices.length > MAX_CORRECTION_CHANGES,
+    )
+  ) {
+    return undefined;
+  }
+  const proposalFingerprint = correctionProposalFingerprint(proposal, allowedChanges, false);
+  return proposalFingerprint === undefined
+    ? undefined
+    : { source, proposalFingerprint, allowedChanges };
+}
+
+function contractCorrectionInvariant(
+  proposal: BindingProposal,
+  mismatches: ProposalContractMismatch[],
+): BindRecoveryCorrectionInvariant | undefined {
+  const allowedChanges: BindRecoveryCorrectionChange[] = [];
+  for (const mismatch of mismatches) {
+    if (mismatch.code === 'required_filter_fields_mismatch') {
+      allowedChanges.push({ kind: 'filter_set', choices: mismatch.required_filter_fields });
+      continue;
+    }
+    if (mismatch.code === 'required-slot-missing') return undefined;
+    if (mismatch.code === 'template-not-offered') {
+      allowedChanges.push({ kind: 'template', choices: mismatch.choices });
+      continue;
+    }
+    const index = proposal.bindings.findIndex(
+      (binding) =>
+        binding.slot_id === mismatch.slot_id &&
+        (mismatch.field === undefined || binding.field === mismatch.field),
+    );
+    if (index < 0) return undefined;
+    allowedChanges.push({
+      kind: mismatch.code === 'slot-not-offered' ? 'binding-slot' : 'binding-field',
+      index,
+      choices: mismatch.choices,
+    });
+  }
+  return correctionInvariant(
+    mismatches.every((mismatch) => mismatch.code === 'required_filter_fields_mismatch')
+      ? 'required_filter_set'
+      : 'contract',
+    proposal,
+    allowedChanges,
+  );
+}
+
+function filterCorrectionInvariant(
+  proposal: BindingProposal,
+  blockers: Blocker[],
+): BindRecoveryCorrectionInvariant | undefined {
+  const allowedChanges = (proposal.filters ?? []).flatMap<BindRecoveryCorrectionChange>(
+    (filter, index) => {
+      const blocker = blockers.find(
+        (candidate) =>
+          candidate.detail.includes(`filter field "${filter.field}"`) ||
+          candidate.detail.includes(`filter field named "${filter.field}"`),
+      );
+      return blocker?.candidates
+        ? [
+            {
+              kind: 'filter-field',
+              index,
+              choices: blocker.candidates.slice(0, MAX_CORRECTION_CHANGES),
+            },
+          ]
+        : [];
+    },
+  );
+  return correctionInvariant('filter', proposal, allowedChanges);
+}
+
+function correctionMatchesInvariant(
+  proposal: BindingProposal,
+  invariant: BindRecoveryCorrectionInvariant,
+): boolean {
+  return (
+    correctionProposalFingerprint(proposal, invariant.allowedChanges, true) ===
+    invariant.proposalFingerprint
+  );
+}
+
+function correctionInvariantViolationResult({
+  contract,
+  proposal,
+  source,
+}: {
+  contract: Call2Contract;
+  proposal: BindingProposal;
+  source: BindRecoveryCorrectionInvariant['source'];
+}): StructuredBindTemplateToolResult {
+  const filterSource = source === 'filter' || source === 'required_filter_set';
+  const hasFilters = (proposal.filters?.length ?? 0) > 0;
+  return withNextAction(
+    {
+      status: 'blocked',
+      reason: filterSource ? 'proposal_filter_resolution_failed' : 'proposal_contract_mismatch',
+      call_2_contract: contract,
+      rejected_proposal: proposal,
+      guidance:
+        'Blocked before Desktop work: the correction changed or removed proposal fields outside the exact rejected field choices. The one correction allowance is exhausted. ' +
+        (filterSource || hasFilters
+          ? 'Use ask-user; the artifact fallback cannot preserve proposal.filters. Do not guess with raw XML.'
+          : 'Use ask-user or the template artifact fallback.'),
+    },
+    prefillNextAction(
+      filterSource || hasFilters ? 'Ask user to resolve proposal' : 'Use fallback or ask user',
+    ),
+  );
+}
+
+function proposalContractMismatchResult({
+  contract,
+  proposal,
+  mismatches,
+  correctionAvailable,
+}: {
+  contract: Call2Contract;
+  proposal: BindingProposal;
+  mismatches: ProposalContractMismatch[];
+  correctionAvailable: boolean;
+}): StructuredBindTemplateToolResult {
+  const hasFilters = (proposal.filters?.length ?? 0) > 0;
+  const filterSetMismatch = mismatches.some(
+    (mismatch) => mismatch.code === 'required_filter_fields_mismatch',
+  );
+  const filterValueMismatch = mismatches.some(
+    (mismatch) =>
+      mismatch.code === 'required_filter_fields_mismatch' &&
+      mismatch.required_filter_values !== undefined,
+  );
+  const bindingMismatch = mismatches.some(
+    (mismatch) => mismatch.code !== 'required_filter_fields_mismatch',
+  );
+  const correctionGuidance = correctionAvailable
+    ? filterSetMismatch && bindingMismatch
+      ? filterValueMismatch
+        ? 'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and repair only the invalid bindings to exact listed choices.'
+        : 'One corrected proposal may proceed: use exactly required_filter_fields once each and repair only the invalid bindings to exact listed choices.'
+      : filterSetMismatch
+        ? filterValueMismatch
+          ? 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order, with the exact required_filter_values. Context may vary.'
+          : 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order. Values and context may vary.'
+        : 'One changed corrected proposal may proceed.'
+    : hasFilters
+      ? 'The correction allowance is exhausted. Stop and use ask-user: the artifact fallback cannot preserve proposal.filters. Do not guess with raw XML.'
+      : 'The correction allowance is exhausted; stop calling bind-template and ask the user or use the artifact fallback.';
+  return withNextAction(
+    {
+      status: 'blocked',
+      reason: 'proposal_contract_mismatch',
+      mismatches,
+      call_2_contract: contract,
+      rejected_proposal: proposal,
+      guidance:
+        `Blocked before Desktop work: the proposal violates the retained call_2_contract. ${correctionGuidance} ` +
+        (filterSetMismatch && bindingMismatch
+          ? 'Preserve every other proposal field unchanged.'
+          : filterSetMismatch
+            ? 'Preserve template, title, bindings, sort, and top_n unchanged.'
+            : 'Change only the invalid bindings to one exact listed choice; preserve filters, sort, and top_n unchanged. Do not guess a measure.'),
+    },
+    prefillNextAction(
+      correctionAvailable
+        ? 'Correct invalid bindings'
+        : hasFilters
+          ? 'Ask user to resolve proposal'
+          : 'Use fallback or ask user',
+    ),
+  );
+}
+
+function boundedBlockers(blockers: Blocker[]): Blocker[] {
+  return blockers.slice(0, 5).map((blocker) => ({
+    ...blocker,
+    ...(blocker.candidates ? { candidates: blocker.candidates.slice(0, 5) } : {}),
+  }));
+}
+
+function proposalFilterResolutionFailedResult({
+  contract,
+  proposal,
+  blockers,
+  correctionAvailable,
+}: {
+  contract: Call2Contract;
+  proposal: BindingProposal;
+  blockers: Blocker[];
+  correctionAvailable: boolean;
+}): StructuredBindTemplateToolResult {
+  const correctionGuidance = correctionAvailable
+    ? 'One changed corrected proposal may proceed: change only the unresolved filter field to one exact candidate and preserve every other binding and modifier.'
+    : 'The correction allowance is exhausted. Stop calling bind-template.';
+  return withNextAction(
+    {
+      status: 'blocked',
+      reason: 'proposal_filter_resolution_failed',
+      blockers: boundedBlockers(blockers),
+      call_2_contract: contract,
+      rejected_proposal: proposal,
+      guidance:
+        `Blocked: at least one requested filter did not resolve to one dimension. ${correctionGuidance} ` +
+        'Use ask-user with the bounded candidates above. The artifact fallback cannot preserve proposal.filters. Do not guess with raw XML or drop a filter.',
+    },
+    prefillNextAction(
+      correctionAvailable
+        ? 'Correct filter from bounded candidates'
+        : 'Ask user to resolve filter field',
+    ),
+  );
+}
+
+function ambiguousFilterIntentResult(
+  candidateFieldRefs: string[] = [],
+): StructuredBindTemplateToolResult {
+  return withNextAction(
+    {
+      status: 'blocked',
+      reason: 'ambiguous_filter_intent',
+      guidance:
+        'Blocked before Desktop mutation: the explicit filter intent is ambiguous, unresolved, duplicated across datasources, or exceeds the retained limit. Use ask-user to choose at most five exact filter fields; for a member constraint, use Field = Value or "filtered to Field Value" and quote multiword values. Then make a new bind-template ask. If the filter field is being created by calcs in this call, author it first and retry.',
+      ...(candidateFieldRefs.length > 0
+        ? {
+            blockers: [
+              {
+                code: 'ambiguous-field' as const,
+                detail: 'explicit filter field matches multiple qualified schema fields',
+                candidates: candidateFieldRefs,
+              },
+            ],
+          }
+        : {}),
+    },
+    prefillNextAction('Ask user to choose exact filter fields'),
+  );
+}
+
+function directProposalFilterMismatchResult(
+  proposal: BindingProposal,
+  mismatch: Extract<ProposalContractMismatch, { code: 'required_filter_fields_mismatch' }>,
+): StructuredBindTemplateToolResult {
+  const requiresExactValues = mismatch.required_filter_values !== undefined;
+  return withNextAction(
+    {
+      status: 'blocked',
+      reason: 'proposal_contract_mismatch',
+      mismatches: [mismatch],
+      rejected_proposal: proposal,
+      guidance:
+        'Blocked before binder or Desktop mutation: this initial proposal must use every exact filter field named in the ask once, in any order. Correct proposal.filters and retry this direct call; ' +
+        (requiresExactValues
+          ? 'use the exact required_filter_values. Context may vary.'
+          : 'values and context may vary.'),
+    },
+    prefillNextAction('Correct direct proposal filters'),
+  );
+}
+
+function clearFilterPreflightRecoveryFailOpen(session: string, askKey: string): void {
+  try {
+    sessionRouteState.clearBindRecovery(session, askKey);
+  } catch {
+    /* fail-open */
+  }
+}
+
+function isProposalFilterResolutionFailure(
+  result: Extract<BinderResult, { status: 'escalate' }>,
+  proposal: BindingProposal,
+): boolean {
+  return (
+    (proposal.filters?.length ?? 0) > 0 &&
+    result.blockers.some((blocker) =>
+      proposal.filters?.some(
+        (filter) =>
+          blocker.detail.includes(`filter field "${filter.field}"`) ||
+          blocker.detail.includes(`filter field named "${filter.field}"`),
+      ),
+    )
+  );
+}
+
 function recoveryGateBlock(
   record: ReturnType<typeof sessionRouteState.getBindRecovery>,
   currentProposalSignature: string | undefined,
@@ -505,11 +1084,21 @@ function recoveryGateBlock(
   }
 
   // A target can request a legitimate rebuild, but it cannot erase a completed Call 2.
-  if (record.attempts.some((attempt) => attempt.proposalSignature !== undefined)) {
+  const correctionPending =
+    record.phase === PROPOSAL_ATTEMPTED_PHASE &&
+    record.proposalContext !== undefined &&
+    record.correctionInvariant !== undefined &&
+    record.attempts.some(
+      (attempt) => attempt.proposalSignature !== undefined && attempt.outcome === 'escalate',
+    );
+  if (
+    record.attempts.some((attempt) => attempt.proposalSignature !== undefined) &&
+    !correctionPending
+  ) {
     return correctionFallbackResult();
   }
 
-  if (targetWorksheet !== undefined) {
+  if (targetWorksheet !== undefined && !correctionPending) {
     return undefined;
   }
 
@@ -772,11 +1361,15 @@ function buildCall2Contract({
   session,
   ask,
   targetWorksheet,
+  requiredFilterFields,
+  requiredFilterValues,
 }: {
   llmInput: LlmProposeInput;
   session: string;
   ask: string;
   targetWorksheet?: string;
+  requiredFilterFields?: string[];
+  requiredFilterValues?: ExactFilterValueConstraint[];
 }): Call2Contract {
   return {
     tool: 'bind-template',
@@ -811,6 +1404,10 @@ function buildCall2Contract({
         ? 'Use compatible_field_options labels to compare table grain, then bind its exact name from compatible_field_names; do not rename or infer a field.'
         : 'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
     },
+    ...(requiredFilterFields !== undefined ? { required_filter_fields: requiredFilterFields } : {}),
+    ...(requiredFilterValues !== undefined && requiredFilterValues.length > 0
+      ? { required_filter_values: requiredFilterValues }
+      : {}),
   };
 }
 
@@ -1217,7 +1814,7 @@ function spliceCardIntoWindowBody(inner: string, card: string, columnRef: string
   if (leftStripRe.test(inner)) {
     return inner.replace(
       leftStripRe,
-      (_w, open: string, _q, _q2, body: string, close: string) => `${open}${body}${card}${close}`,
+      (_w, open: string, _q, body: string, close: string) => `${open}${body}${card}${close}`,
     );
   }
   if (cardsBlockRe.test(inner)) {
@@ -1285,6 +1882,17 @@ function attrValue(attrs: string, key: string): string | null {
   return m[1] ?? m[2] ?? '';
 }
 
+function worksheetXmlByTitle(xml: string, literalTitle: string): string | null {
+  const worksheetRe = /<worksheet\b([^>]*)>[\s\S]*?<\/worksheet>/g;
+  for (const match of xml.matchAll(worksheetRe)) {
+    const nameAttr = attrValue(match[1] ?? '', 'name');
+    if (nameAttr !== null && fullyDecodeXmlEntities(nameAttr) === literalTitle) {
+      return match[0];
+    }
+  }
+  return null;
+}
+
 function applyProposalSplices({
   xml,
   args,
@@ -1299,9 +1907,17 @@ function applyProposalSplices({
 }):
   | { ok: true; xml: string; warnings: string[]; appliedFilterCount: number }
   | { ok: false; reason: string } {
-  let out = xml;
+  if (!args.sort && args.top_n === undefined && (!args.filters || args.filters.length === 0)) {
+    return { ok: true, xml, warnings: [], appliedFilterCount: 0 };
+  }
+  const originalWorksheetXml = worksheetXmlByTitle(xml, literalTitle);
+  if (originalWorksheetXml === null) {
+    return { ok: false, reason: `proposal splice target worksheet "${literalTitle}" not found` };
+  }
+  let out = originalWorksheetXml;
   const warnings: string[] = [];
   let appliedFilterCount = 0;
+  const shownFilterColumns: string[] = [];
   if (args.sort) {
     const sortField = resolveInSummary(schemaSummary, args.sort.by);
     if (sortField.kind !== 'exact' && sortField.kind !== 'rewritten') {
@@ -1367,13 +1983,18 @@ function applyProposalSplices({
         values: filter.values,
       });
       declared.xml = insertFilterNodeAndSlice(declared.xml, filterNode, declared.columnRef);
-      // The SHOWN card is what the judge's filter_action_wired gate checks — an OoO-correct
-      // context filter with no control is invisible. Best-effort (no-op if the window is absent).
-      out = insertShownFilterCard(declared.xml, literalTitle, declared.columnRef);
+      out = declared.xml;
+      shownFilterColumns.push(declared.columnRef);
       appliedFilterCount += 1;
     }
   }
-  return { ok: true, xml: out, warnings, appliedFilterCount };
+  let workbookXml = xml.replace(originalWorksheetXml, out);
+  for (const columnRef of shownFilterColumns) {
+    // The SHOWN card is what the judge's filter_action_wired gate checks — an OoO-correct
+    // context filter with no control is invisible. Best-effort (no-op if the window is absent).
+    workbookXml = insertShownFilterCard(workbookXml, literalTitle, columnRef);
+  }
+  return { ok: true, xml: workbookXml, warnings, appliedFilterCount };
 }
 
 /**
@@ -1749,6 +2370,7 @@ function recordBindRecoveryAttemptFailOpen({
   outcome,
   currentProposalSignature,
   proposalContext,
+  correctionInvariant,
   reservationId,
   terminal = false,
   terminalFallback = false,
@@ -1758,6 +2380,7 @@ function recordBindRecoveryAttemptFailOpen({
   outcome: BinderResult['status'];
   currentProposalSignature?: string;
   proposalContext?: BindRecoveryProposalContext;
+  correctionInvariant?: BindRecoveryCorrectionInvariant;
   reservationId?: number;
   terminal?: boolean;
   terminalFallback?: boolean;
@@ -1769,6 +2392,7 @@ function recordBindRecoveryAttemptFailOpen({
         ? { proposalSignature: currentProposalSignature }
         : {}),
       ...(proposalContext !== undefined ? { proposalContext } : {}),
+      ...(correctionInvariant !== undefined ? { correctionInvariant } : {}),
       ...(reservationId !== undefined ? { reservationId } : {}),
     };
     if (terminalFallback) {
@@ -1961,7 +2585,38 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             priorRecovery?.attempts.some(
               (attempt) => attempt.outcome === 'propose' && attempt.proposalSignature === undefined,
             ) === true;
+          const priorProposalEscalation =
+            priorRecovery?.phase === PROPOSAL_ATTEMPTED_PHASE &&
+            priorRecovery.attempts.some(
+              (attempt) =>
+                attempt.proposalSignature !== undefined && attempt.outcome === 'escalate',
+            );
           let bindRecoveryReservationId: number | undefined;
+
+          if (
+            proposal !== undefined &&
+            priorRecovery?.correctionInvariant !== undefined &&
+            priorRecovery.proposalContext !== undefined &&
+            !correctionMatchesInvariant(
+              proposal as BindingProposal,
+              priorRecovery.correctionInvariant,
+            )
+          ) {
+            recordBindRecoveryAttemptFailOpen({
+              session: resolvedSession,
+              askKey,
+              outcome: 'escalate',
+              currentProposalSignature,
+              terminalFallback: true,
+            });
+            return new IncompleteOperationError(
+              correctionInvariantViolationResult({
+                contract: priorRecovery.proposalContext,
+                proposal: proposal as BindingProposal,
+                source: priorRecovery.correctionInvariant.source,
+              }),
+            ).toErr();
+          }
 
           try {
             const blocked = recoveryGateBlock(
@@ -1987,6 +2642,39 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             /* fail-open */
           }
 
+          const retainedCall2Contract = priorRecovery?.proposalContext as Call2Contract | undefined;
+          if (proposal !== undefined && retainedCall2Contract !== undefined) {
+            const mismatches = proposalContractMismatches(
+              proposal as BindingProposal,
+              retainedCall2Contract,
+            );
+            if (mismatches.length > 0) {
+              const nextCorrectionInvariant = contractCorrectionInvariant(
+                proposal as BindingProposal,
+                mismatches,
+              );
+              const correctionAvailable =
+                !priorProposalEscalation && nextCorrectionInvariant !== undefined;
+              recordBindRecoveryAttemptFailOpen({
+                session: resolvedSession,
+                askKey,
+                outcome: 'escalate',
+                currentProposalSignature,
+                reservationId: bindRecoveryReservationId,
+                correctionInvariant: nextCorrectionInvariant,
+                terminalFallback: !correctionAvailable,
+              });
+              return new IncompleteOperationError(
+                proposalContractMismatchResult({
+                  contract: retainedCall2Contract,
+                  proposal: proposal as BindingProposal,
+                  mismatches,
+                  correctionAvailable,
+                }),
+              ).toErr();
+            }
+          }
+
           const executor = await extra.getExecutor(resolvedSession);
 
           // Phase timing (only reported when auto_apply performs). The bind phase
@@ -1998,6 +2686,31 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new DesktopCommandExecutionError(xmlResult.error).toErr();
           }
           let workbookXml = xmlResult.value;
+          let baselineSchemaSummary: SchemaSummary | undefined;
+          let baselineFilterIntent: ExactFilterIntent | undefined;
+          if (priorRecovery === undefined) {
+            baselineSchemaSummary = summarizeSchema(workbookXml);
+            baselineFilterIntent = parseExactFilterIntent(ask, baselineSchemaSummary);
+            if (baselineFilterIntent.kind === 'ambiguous') {
+              clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
+              return new IncompleteOperationError(
+                ambiguousFilterIntentResult(baselineFilterIntent.candidateFieldRefs),
+              ).toErr();
+            }
+            if (proposal !== undefined && baselineFilterIntent.kind === 'exact') {
+              const mismatch = requiredFilterFieldsMismatch(
+                proposal as BindingProposal,
+                baselineFilterIntent.fieldNames,
+                baselineFilterIntent.valueConstraints,
+              );
+              if (mismatch !== undefined) {
+                clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
+                return new IncompleteOperationError(
+                  directProposalFilterMismatchResult(proposal as BindingProposal, mismatch),
+                ).toErr();
+              }
+            }
+          }
           let authoredCalcCaptions: string[] = [];
           if (calcs && calcs.length > 0) {
             const percentAsk = asksForPercent(ask);
@@ -2077,6 +2790,14 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
 
           let res: BinderResult;
           let appliedDefault: AppliedDefault | undefined;
+          let schemaSummary: SchemaSummary | undefined =
+            calcs && calcs.length > 0 ? undefined : baselineSchemaSummary;
+          const requiredFilterFields =
+            baselineFilterIntent?.kind === 'exact' ? baselineFilterIntent.fieldNames : undefined;
+          const requiredFilterValues =
+            baselineFilterIntent?.kind === 'exact'
+              ? baselineFilterIntent.valueConstraints
+              : undefined;
           try {
             res = await bindTemplate({
               ask,
@@ -2089,7 +2810,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               proposal === undefined &&
               auto_apply === true &&
               res.status === 'propose' &&
-              res.llm_input.recommended
+              res.llm_input.recommended &&
+              requiredFilterFields === undefined
             ) {
               const recommended = res.llm_input.recommended;
               res = await bindTemplate({
@@ -2149,7 +2871,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             res = { ...res, args: { ...res.args, title: canonicalTargetWorksheet } };
           }
           const bindMs = Date.now() - bindStart;
-          const schemaSummary = summarizeSchema(workbookXml);
+          schemaSummary ??= summarizeSchema(workbookXml);
           res = puppetCompatibility.expandBinderResult(res, schemaSummary);
 
           // ── One structured correction boundary ─────────────────────────
@@ -2161,9 +2883,24 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   session: resolvedSession,
                   ask,
                   targetWorksheet: resolvedTarget?.id ?? target_worksheet,
+                  requiredFilterFields,
+                  requiredFilterValues,
                 })
               : undefined;
           if (isStructuredCorrectionCall && res.status !== 'bound') {
+            const filterResolutionFailure =
+              res.status === 'escalate' &&
+              proposal !== undefined &&
+              retainedCall2Contract !== undefined &&
+              isProposalFilterResolutionFailure(res, proposal as BindingProposal);
+            const nextCorrectionInvariant =
+              filterResolutionFailure && res.status === 'escalate' && proposal !== undefined
+                ? filterCorrectionInvariant(proposal as BindingProposal, res.blockers)
+                : undefined;
+            const correctionAvailable =
+              filterResolutionFailure &&
+              !priorProposalEscalation &&
+              nextCorrectionInvariant !== undefined;
             try {
               sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
               recordBindRecoveryAttemptFailOpen({
@@ -2172,10 +2909,21 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 outcome: res.status,
                 currentProposalSignature,
                 reservationId: bindRecoveryReservationId,
-                terminalFallback: true,
+                correctionInvariant: nextCorrectionInvariant,
+                terminalFallback: !correctionAvailable,
               });
             } catch {
               /* fail-open */
+            }
+            if (filterResolutionFailure && res.status === 'escalate' && proposal !== undefined) {
+              return new IncompleteOperationError(
+                proposalFilterResolutionFailedResult({
+                  contract: retainedCall2Contract!,
+                  proposal: proposal as BindingProposal,
+                  blockers: res.blockers,
+                  correctionAvailable,
+                }),
+              ).toErr();
             }
             return new IncompleteOperationError(correctionFallbackResult()).toErr();
           }

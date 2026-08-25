@@ -144,6 +144,24 @@ export function bindExplicitTemplate(
     };
   }
 
+  if (contract.template === 'kpi-text') {
+    const bindingCount = Array.isArray(input) ? input.length : Object.keys(input).length;
+    if (bindingCount !== 1) {
+      const inputKind = Array.isArray(input) ? 'ordered binding' : 'field mapping';
+      const blocker: Blocker = {
+        code: 'kind-mismatch',
+        detail: `kpi-text ${inputKind} requires exactly one field; received ${bindingCount}`,
+      };
+      return {
+        ok: false,
+        template: templateName,
+        blockers: [blocker],
+        errors: [blockerToFixError(blocker)],
+        warnings: [],
+      };
+    }
+  }
+
   const warnings: string[] = [];
   const built = Array.isArray(input)
     ? buildProposalFromOrderedRefs(contract, input, schema, opts.title)

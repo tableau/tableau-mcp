@@ -456,37 +456,56 @@ function validateAndBuild(
     };
   }
 
-  // Declarative interactive filters (m7). Resolve each filter.field the same way sort.by is
-  // resolved: keep only filters whose field is a real dimension in the schema, dropping the
-  // rest with a warning rather than escalating (a bad filter must never sink an otherwise-good
-  // bind). The apply-side splice (bindTemplate.applyProposalSplices) re-resolves the field to
-  // its CI, declares the dependency, and emits the context filter + shown card.
-  let filters = proposal.filters;
+  // Declarative interactive filters (m7). Every requested filter must resolve to one real
+  // dimension. Applying the chart after dropping one would silently change the user's ask.
+  // The apply-side splice (bindTemplate.applyProposalSplices) re-resolves the accepted field
+  // to its CI, declares the dependency, and emits the context filter + shown card.
   if (proposal.filters && proposal.filters.length > 0) {
-    const kept: FilterSpec[] = [];
     for (const filter of proposal.filters) {
       const r = resolveInSummary(summary, filter.field);
       if (r.kind === 'ambiguous') {
-        warnings.push(
-          `filter field "${filter.field}" matches ${r.candidates?.length ?? 0} fields; ignoring this filter`,
-        );
-        continue;
+        return {
+          status: 'escalate',
+          reason: 'ambiguous-field',
+          blockers: [
+            {
+              code: 'ambiguous-field',
+              detail: `filter field "${filter.field}" matches ${r.candidates?.length ?? 0} fields; use one datasource-qualified field`,
+              candidates: (r.candidates ?? []).slice(0, 5).map((candidate) => candidate.column_ref),
+            },
+          ],
+          proposal,
+        };
       }
       if (r.kind === 'not_found' || !r.field) {
-        warnings.push(
-          `no filter field named "${filter.field}" in datasource(s); ignoring this filter`,
-        );
-        continue;
+        return {
+          status: 'escalate',
+          reason: 'field-not-found',
+          blockers: [
+            {
+              code: 'field-not-found',
+              detail: `no filter field named "${filter.field}" in datasource(s)`,
+              candidates: (r.candidates ?? []).slice(0, 5).map((candidate) => candidate.column_ref),
+            },
+          ],
+          proposal,
+        };
       }
       if (r.field.role !== 'dimension') {
-        warnings.push(
-          `filter field "${filter.field}" is a measure, not a dimension; ignoring this filter (interactive dimension filters only)`,
-        );
-        continue;
+        return {
+          status: 'escalate',
+          reason: 'kind-mismatch',
+          blockers: [
+            {
+              code: 'kind-mismatch',
+              detail: `filter field "${filter.field}" is a measure, not a dimension; interactive filters require dimensions`,
+              candidates: [r.field.column_ref],
+            },
+          ],
+          proposal,
+        };
       }
-      kept.push(filter);
     }
-    filters = kept.length > 0 ? kept : undefined;
   }
 
   if (proposal.confidence !== undefined && proposal.confidence < minConfidence) {
@@ -519,7 +538,7 @@ function validateAndBuild(
     ...(sort ? { sort } : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
     ...(proposal.bin_size !== undefined ? { bin_size: proposal.bin_size } : {}),
-    ...(filters && filters.length > 0 ? { filters } : {}),
+    ...(proposal.filters && proposal.filters.length > 0 ? { filters: proposal.filters } : {}),
     ...(v.dateparse_axis ? { dateparse_axis: v.dateparse_axis } : {}),
     ...(v.optional_field_prunes ? { optional_field_prunes: v.optional_field_prunes } : {}),
   };
@@ -560,8 +579,8 @@ export async function bindTemplate(args: {
   // ≈ 2.9s of synchronous event-loop block) is a per-call DoS. Over the cap we do NOT
   // classify a truncated subset (which would risk a silent wrong bind); we escalate
   // honestly (bounded time — this returns BEFORE the per-field hot loop) so the caller
-  // routes to the general authoring flow. Call-2 above is intentionally NOT capped: a
-  // filled proposal resolves only its handful of bound fields and never hits the loop.
+  // routes to the general authoring flow. Call-2 validators cap any template-specific
+  // schema scan themselves; ordinary proposals resolve only their handful of bound fields.
   if (summary.fields.length > MAX_CLASSIFIABLE_FIELDS) {
     return {
       status: 'escalate',

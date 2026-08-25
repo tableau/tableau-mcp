@@ -53,15 +53,57 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(plainChart?.action).toContain('guarded artifact');
   });
 
+  it('preserves named measures, breakdowns, and filters in the second bind call', () => {
+    const plainChart = routes.find((route) => route.id === 'plain-chart');
+
+    expect(plainChart?.action).toContain(
+      'Call 2 must preserve every named measure, breakdown, and filter from the exact ask; if the contract cannot resolve one, call ask-user instead of substituting a measure or dropping a filter.',
+    );
+  });
+
+  it('keeps filter-bearing blocked proposals instead of sending them to artifact fallback', () => {
+    const plainChart = routes.find((route) => route.id === 'plain-chart');
+
+    expect(plainChart?.action).toContain(
+      'On a blocked Call 2 with retained filters, call ask-user and keep the proposal.',
+    );
+    expect(plainChart?.action).toContain(
+      'Use the guarded artifact fallback only for a block without retained filters',
+    );
+  });
+
+  it('resolves a real lower-grain Detail before repairing dense scatter encodings', () => {
+    const plainChartIndex = DESKTOP_ROUTE_TABLE.findIndex((entry) => entry.id === 'plain-chart');
+    const guidance = DESKTOP_ROUTE_TABLE[plainChartIndex + 1];
+
+    expect(guidance).toMatchObject({ kind: 'prose', id: 'dense-scatter-bubble' });
+    const rendered = renderInstructionEntry(guidance!);
+    expect(rendered).toContain('Dense scatter/bubble + categorical color');
+    expect(rendered).toContain('overrides terminal bind');
+    expect(rendered).toContain(
+      'get-worksheet-xml(mode:inline) → list-available-fields → add-field → apply-worksheet',
+    );
+    expect(rendered).toContain('Replace/supplement with bounded semantic discrete Detail');
+    expect(rendered).toContain('finer than Color');
+    expect(rendered).toContain('use exact column_ref');
+    expect(rendered).toContain('None: report/ask-user; never invent');
+    expect(rendered).toContain('one-mark-per-category');
+    expect(rendered).toContain('continuous color');
+    expect(rendered).toContain('claim only Detail/Color persisted');
+    expect(rendered).toContain('mark density unverified');
+  });
+
   // Live incident (v11 bundle): asked to move "warmer" onto color, the agent had no route
-  // for an encoding edit. refine-worksheet does top-N and sort only, so the edit-in-place
-  // route has to name the tool pair that can re-encode a sheet.
+  // for an encoding edit. refine-worksheet handles bounded structural refinements, while
+  // the edit-in-place route still has to name the tool pair that can re-encode a sheet.
   it('names add-field then apply-worksheet as the encoding edit path', () => {
     const editInPlace = routes.find((route) => route.id === 'edit-in-place');
 
     expect(editInPlace?.action).toContain('add-field');
     expect(editInPlace?.action).toContain('apply-worksheet');
     expect(editInPlace?.action).toContain('color');
+    expect(editInPlace?.action).toContain('explicit mark-type changes');
+    expect(editInPlace?.action).toContain('Never use shell commands or raw whole-workbook XML');
     expect(editInPlace?.toolSequence).toEqual([
       'list-worksheets',
       'list-dashboards',
@@ -74,10 +116,10 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(editInPlace?.action).not.toContain('requested new chart');
   });
 
-  it('census scopes refine-worksheet to top-N/sort and names the encoding pair', () => {
+  it('census routes mark-type changes through refine-worksheet and names the encoding pair', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
 
-    expect(rendered).toContain('refine-worksheet edits top-N/sort');
+    expect(rendered).toContain('refine-worksheet edits top-N/sort/mark type');
     expect(rendered).toContain('add-field + apply-worksheet change encodings.');
   });
 
@@ -86,6 +128,19 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(dynamicAuthoring?.trigger).toContain('WITHOUT a conventional name');
     expect(dynamicAuthoring?.action).toContain('author-calc');
+    expect(dynamicAuthoring?.action).toContain('format-worksheets');
+    expect(dynamicAuthoring?.action).not.toContain('format-labels');
+    expect(dynamicAuthoring?.toolSequence).toEqual([
+      'author-parameter',
+      'author-set',
+      'author-calc',
+      'author-action',
+      'format-worksheets',
+      'list-templates',
+      'list-available-fields',
+      'build-worksheets-from-templates',
+      'apply-worksheet',
+    ]);
     expect(dynamicAuthoring?.action).toContain('build-worksheets-from-templates');
   });
 
@@ -136,7 +191,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     );
     expect(plainChart?.action).toContain('Never rephrase or resubmit the bare ask');
     expect(plainChart?.action).toContain(
-      'If that second call still proposes, or any result escalates or blocks',
+      'Use the guarded artifact fallback only for a block without retained filters, or when Call 2 still proposes or escalates',
     );
     expect(plainChart?.action).toContain('templatePlan');
     expect(plainChart?.action).toContain('Open intent builds several distinct worksheets.');
@@ -172,6 +227,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(plainChart?.action).toContain('semantic ask may return one bounded proposal');
     expect(plainChart?.toolSequence).toEqual([
       'bind-template',
+      'ask-user',
       'list-templates',
       'list-available-fields',
       'build-worksheets-from-templates',
@@ -231,14 +287,47 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
   it('routes dashboard composition through one bounded batch', () => {
     const dashboard = routes.find((route) => route.id === 'dashboard');
-    expect(dashboard?.toolSequence).toEqual(['run-dashboard-batch']);
-    expect(dashboard?.action).toContain('build focused worksheet artifacts first');
-    expect(dashboard?.action).toContain('place them and compose once');
-    expect(dashboard?.action).toContain('existing worksheets');
-    expect(dashboard?.action).toContain('omit artifactIds');
+    expect(dashboard).toMatchObject({
+      trigger: 'a dashboard ask',
+      action:
+        'For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. run-dashboard-batch is for new dashboards only; never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
+      toolSequence: ['bind-template', 'run-dashboard-batch'],
+      forbiddenTools: ['sort-worksheet'],
+      stopConditions: [
+        'use the normal bind-template proposal protocol with auto_apply:true on every call',
+        'finish one applied sheet per analytical view',
+        'finish one applied kpi-text sheet per KPI metric',
+        'never downgrade executive-summary',
+        'Never replay a partial or unknown batch',
+        'inspect live workbook state first',
+      ],
+      requiredEvidence: [
+        'one applied worksheet receipt per requested KPI metric and analytical view',
+        'one batch receipt with the requested layout',
+      ],
+    });
+    expect(dashboard?.action).toContain('auto_apply:true');
+    expect(dashboard?.action).toContain('only live non-KPI chart names');
+    expect(dashboard?.action).toContain('ordered live KPI names');
+    expect(dashboard?.action).toContain('KPI worksheet and title');
+    expect(dashboard?.action).toContain('never pass a generic starter name');
+    expect(dashboard?.action).toContain('separate guarded artifact fallback');
+    expect(dashboard?.action).toContain('Top 10 before composition');
+    expect(dashboard?.action).toContain('topN:10');
+    expect(dashboard?.action).toContain('never add a native sort call');
+    expect(dashboard?.action).toContain('clear measures from the data');
+    expect(dashboard?.action).toContain('omit KPIs and ask');
+    expect(dashboard?.action).not.toContain('otherwise Sales, Profit');
     expect(dashboard?.action).not.toContain('zero worksheet apply tasks');
     expect(dashboard?.action).toContain('Never replay a partial or unknown batch');
     expect(dashboard?.action).toContain('inspect live workbook state first');
+    expect(dashboard?.action).toContain('run-dashboard-batch is for new dashboards only');
+    expect(dashboard?.action).toContain(
+      'never use it for formatting, polish, or refinement of an existing dashboard',
+    );
+    expect(dashboard?.action).toContain(
+      'Set replaceExisting only after an explicit rebuild/replace request',
+    );
     expect(dashboard?.action).not.toContain('dashboard-auto-apply');
   });
 
@@ -251,11 +340,30 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('routes unsupported dashboard edits through the scoped dashboard fallback', () => {
     const dashboardEdit = routes.find((route) => route.id === 'dashboard-edit-fallback');
 
-    expect(dashboardEdit).toMatchObject({
-      trigger: 'an existing dashboard edit the bounded batch cannot express',
-      toolSequence: ['get-dashboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-dashboard'],
-      stopConditions: ['stay on the scoped dashboard path'],
-    });
+    expect(dashboardEdit?.trigger).toBe(
+      'an existing dashboard edit the bounded batch cannot express',
+    );
+    expect(dashboardEdit?.action).toContain(
+      'list-dashboards -> format-worksheets for constituent worksheet properties',
+    );
+    expect(dashboardEdit?.action).toContain(
+      'reserve cached dashboard editing for dashboard-level properties',
+    );
+    expect(dashboardEdit?.toolSequence).toEqual([
+      'list-dashboards',
+      'format-worksheets',
+      'get-dashboard-xml',
+      'read-cached-xml',
+      'write-cached-xml',
+      'apply-dashboard',
+    ]);
+    expect(dashboardEdit?.stopConditions).toEqual([
+      'reserve cached dashboard editing for dashboard-level properties',
+      'stay on the scoped dashboard path',
+    ]);
+    expect(dashboardEdit?.requiredEvidence).toEqual([
+      'format-worksheets readback receipt or dashboard apply receipt',
+    ]);
   });
 
   it('routes story edits through the scoped story fallback', () => {
@@ -264,6 +372,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(storyEdit).toMatchObject({
       trigger: 'an existing story edit',
       toolSequence: [
+        'compose-story',
         'get-storyboard-xml',
         'read-cached-xml',
         'write-cached-xml',
@@ -271,6 +380,10 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       ],
       stopConditions: ['stay on the scoped story path'],
     });
+    expect(storyEdit?.action).toContain('ordered dashboard points');
+    expect(storyEdit?.action).toContain(
+      'Set replaceExisting only after an explicit rebuild/replace request',
+    );
   });
 
   it('reserves whole-workbook apply for datasource definitions or cross-artifact changes', () => {

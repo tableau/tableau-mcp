@@ -849,6 +849,64 @@ describe('binder/validate — gate 4/7: aggregated calc forces usr', () => {
   });
 });
 
+describe('binder/validate — KPI ask coverage', () => {
+  const kpiProposal = (fieldName: string): BindingProposal => ({
+    template: 'kpi-text',
+    title: `${fieldName} KPI`,
+    bindings: [{ slot_id: 'field_base_1', field: fieldName }],
+  });
+
+  it('rejects kpi-text when the ask names more than one measure', () => {
+    const m = manifests.get('kpi-text')!;
+    const r = validateBinding(
+      m,
+      kpiProposal('Sales'),
+      SUMMARY,
+      'KPI tiles showing total Sales, Profit, and Quantity',
+    );
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.blockers).toContainEqual(
+        expect.objectContaining({
+          code: 'kind-mismatch',
+          detail: expect.stringContaining('one measure per worksheet'),
+        }),
+      );
+    }
+  });
+
+  it('rejects kpi-text when the ask names a different measure from the bound field', () => {
+    const m = manifests.get('kpi-text')!;
+    const r = validateBinding(m, kpiProposal('Sales'), SUMMARY, 'show Profit as a KPI');
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.blockers).toContainEqual(
+        expect.objectContaining({
+          code: 'kind-mismatch',
+          detail: expect.stringContaining('names "Profit" but the KPI binds "Sales"'),
+        }),
+      );
+    }
+  });
+
+  it('keeps a valid single-measure KPI and an ask with no named measure unchanged', () => {
+    const m = manifests.get('kpi-text')!;
+
+    expect(validateBinding(m, kpiProposal('Sales'), SUMMARY, 'show Sales as a KPI').ok).toBe(true);
+    expect(validateBinding(m, kpiProposal('Sales'), SUMMARY, 'show this as a KPI').ok).toBe(true);
+  });
+
+  it('keeps the most-specific single KPI measure when field names overlap', () => {
+    const m = manifests.get('kpi-text')!;
+
+    expect(
+      validateBinding(m, kpiProposal('Profit Ratio'), SUMMARY, 'show Profit Ratio as a KPI').ok,
+    ).toBe(true);
+  });
+});
+
 describe('binder/validate — derivation override', () => {
   it('legal override on a numeric measure emits the override in the field_mapping value', () => {
     // kpi-text 'value' slot's template default is sum; overriding to avg must

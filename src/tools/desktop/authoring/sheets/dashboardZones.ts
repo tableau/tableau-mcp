@@ -19,7 +19,10 @@ export const layoutSpecSchema = z.object({
   customZones: z.array(customZoneSchema).optional(),
 });
 
-export type LayoutSpec = z.infer<typeof layoutSpecSchema>;
+type DirectLayoutSpec = z.infer<typeof layoutSpecSchema>;
+export type LayoutSpec = Omit<DirectLayoutSpec, 'layoutType'> & {
+  layoutType: DirectLayoutSpec['layoutType'] | 'executive-summary';
+};
 
 const ZONE_STYLE = `<zone-style>
             <format attr="border-color" value="#000000"/>
@@ -83,21 +86,18 @@ export function buildDashboardXml(dashboardName: string, zones: Zone[]): string 
 </dashboard>`;
 }
 
-/**
- * Compute the zone tree for a dashboard from an optional title and a layout spec —
- * lifted verbatim (same math, same zone-id sequencing) from
- * buildAndApplyDashboard.ts's inline callback body so both tools produce
- * byte-identical XML via {@link buildDashboardXml}.
- */
+/** Compute the shared zone tree used by direct and batched dashboard composition. */
 export function computeZones(titleText: string | undefined, layoutSpec: LayoutSpec): Zone[] {
   const zones: Zone[] = [];
   let nextId = 10;
   let currentY = 0;
+  const isExecutiveSummary = layoutSpec.layoutType === 'executive-summary';
+  const titleHeight = isExecutiveSummary ? 6000 : 8000;
 
   if (titleText) {
     zones.push({
       kind: 'text',
-      h: 8000,
+      h: titleHeight,
       id: nextId++,
       w: 100000,
       x: 0,
@@ -107,10 +107,10 @@ export function computeZones(titleText: string | undefined, layoutSpec: LayoutSp
       fontAlignment: '1',
       fontSize: '16',
     });
-    currentY += 8000;
+    currentY += titleHeight;
   }
 
-  const kpiStripHeightPct = layoutSpec.kpiStripHeight ?? 20;
+  const kpiStripHeightPct = isExecutiveSummary ? 12 : (layoutSpec.kpiStripHeight ?? 20);
   const kpiStripHeight = Math.floor(100000 * (kpiStripHeightPct / 100));
   const chartYOffset = layoutSpec.kpis.length > 0 ? currentY + kpiStripHeight : currentY;
   const chartAreaHeight = 100000 - chartYOffset;
@@ -118,13 +118,14 @@ export function computeZones(titleText: string | undefined, layoutSpec: LayoutSp
   if (layoutSpec.kpis.length > 0) {
     const kpiWidth = Math.floor(100000 / layoutSpec.kpis.length);
     for (let i = 0; i < layoutSpec.kpis.length; i++) {
+      const executiveWidth = partitionSpan(100000, layoutSpec.kpis.length, i);
       zones.push({
         kind: 'worksheet',
         h: kpiStripHeight,
         id: nextId++,
         name: layoutSpec.kpis[i],
-        w: kpiWidth,
-        x: i * kpiWidth,
+        w: isExecutiveSummary ? executiveWidth.size : kpiWidth,
+        x: isExecutiveSummary ? executiveWidth.offset : i * kpiWidth,
         y: currentY,
       });
     }
@@ -133,7 +134,15 @@ export function computeZones(titleText: string | undefined, layoutSpec: LayoutSp
   if (layoutSpec.charts.length > 0) {
     const { layoutType, charts, gridColumns, customZones } = layoutSpec;
 
-    if (layoutType === 'custom' && customZones) {
+    if (layoutType === 'executive-summary') {
+      appendExecutiveChartZones({
+        zones,
+        charts,
+        chartYOffset,
+        chartAreaHeight,
+        nextId,
+      });
+    } else if (layoutType === 'custom' && customZones) {
       for (const cz of customZones) {
         if (charts.includes(cz.worksheetName)) {
           zones.push({
@@ -199,4 +208,122 @@ export function computeZones(titleText: string | undefined, layoutSpec: LayoutSp
   }
 
   return zones;
+}
+
+function appendExecutiveChartZones({
+  zones,
+  charts,
+  chartYOffset,
+  chartAreaHeight,
+  nextId,
+}: {
+  zones: Zone[];
+  charts: string[];
+  chartYOffset: number;
+  chartAreaHeight: number;
+  nextId: number;
+}): void {
+  if (charts.length === 1) {
+    zones.push({
+      kind: 'worksheet',
+      h: chartAreaHeight,
+      id: nextId++,
+      name: charts[0],
+      w: 100000,
+      x: 0,
+      y: chartYOffset,
+    });
+    return;
+  }
+
+  if (charts.length === 2) {
+    zones.push(
+      {
+        kind: 'worksheet',
+        h: chartAreaHeight,
+        id: nextId++,
+        name: charts[0],
+        w: 60000,
+        x: 0,
+        y: chartYOffset,
+      },
+      {
+        kind: 'worksheet',
+        h: chartAreaHeight,
+        id: nextId++,
+        name: charts[1],
+        w: 40000,
+        x: 60000,
+        y: chartYOffset,
+      },
+    );
+    return;
+  }
+
+  if (charts.length === 3) {
+    const primaryHeight = Math.floor(chartAreaHeight * 0.6);
+    const supportingHeight = chartAreaHeight - primaryHeight;
+    zones.push(
+      {
+        kind: 'worksheet',
+        h: primaryHeight,
+        id: nextId++,
+        name: charts[0],
+        w: 100000,
+        x: 0,
+        y: chartYOffset,
+      },
+      {
+        kind: 'worksheet',
+        h: supportingHeight,
+        id: nextId++,
+        name: charts[1],
+        w: 50000,
+        x: 0,
+        y: chartYOffset + primaryHeight,
+      },
+      {
+        kind: 'worksheet',
+        h: supportingHeight,
+        id: nextId++,
+        name: charts[2],
+        w: 50000,
+        x: 50000,
+        y: chartYOffset + primaryHeight,
+      },
+    );
+    return;
+  }
+
+  const columns = charts.length === 4 ? 2 : 3;
+  const rows = Math.ceil(charts.length / columns);
+  for (let index = 0; index < charts.length; index++) {
+    const row = Math.floor(index / columns);
+    const column = index % columns;
+    const rowSpan = partitionSpan(chartAreaHeight, rows, row);
+    const chartsInRow = Math.min(columns, charts.length - row * columns);
+    const columnSpan = partitionSpan(100000, chartsInRow, column);
+    zones.push({
+      kind: 'worksheet',
+      h: rowSpan.size,
+      id: nextId++,
+      name: charts[index],
+      w: columnSpan.size,
+      x: columnSpan.offset,
+      y: chartYOffset + rowSpan.offset,
+    });
+  }
+}
+
+function partitionSpan(
+  total: number,
+  count: number,
+  index: number,
+): { offset: number; size: number } {
+  const baseSize = Math.floor(total / count);
+  const offset = baseSize * index;
+  return {
+    offset,
+    size: index === count - 1 ? total - offset : baseSize,
+  };
 }

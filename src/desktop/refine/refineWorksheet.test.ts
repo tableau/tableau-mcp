@@ -6,9 +6,11 @@ import { runValidation } from '../validation/registry.js';
 import { parseXml } from '../validation/rules/parseXml.js';
 import {
   appliedSortByFieldDirection,
+  confirmMarkTypeApplied,
   confirmSortByFieldApplied,
   confirmSortDirectionApplied,
   confirmTopNApplied,
+  planMarkType,
   planSortByField,
   planSortByFieldOnCategoricalAxis,
   planSortDirection,
@@ -68,6 +70,111 @@ const LINE_ITEM_CI =
   "<column-instance column='[line_item]' derivation='None' name='[none:line_item:nk]' pivot='key' type='nominal' />";
 const DISPLAY_ORDER_CI =
   "<column-instance column='[display_order]' derivation='Sum' name='[sum:display_order:qk]' pivot='key' type='quantitative' />";
+
+describe('planMarkType', () => {
+  it.each([
+    ['automatic', 'Automatic'],
+    ['bar', 'Bar'],
+    ['line', 'Line'],
+    ['area', 'Area'],
+    ['square', 'Square'],
+    ['circle', 'Circle'],
+    ['shape', 'Shape'],
+    ['text', 'Text'],
+    ['pie', 'Pie'],
+    ['gantt_bar', 'GanttBar'],
+    ['polygon', 'Polygon'],
+  ] as const)('changes one single-pane worksheet to %s', (markType, markClass) => {
+    const result = planMarkType(BASE, { markType });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.markClass).toBe(markClass);
+    expect(result.xml).toContain(`<mark class='${markClass}' />`);
+    expect(result.xml.replace(`<mark class='${markClass}' />`, "<mark class='Bar' />")).toBe(BASE);
+    expect(confirmMarkTypeApplied(result.xml, markClass)).toBe(true);
+  });
+
+  it('refuses an unsupported mark type', () => {
+    const result = planMarkType(BASE, {
+      markType: 'hexbin' as Parameters<typeof planMarkType>[1]['markType'],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/unsupported mark type.*hexbin/i);
+  });
+
+  it.each(['map', 'density'] as const)('refuses the unevidenced %s XML mark class', (markType) => {
+    const result = planMarkType(BASE, {
+      markType: markType as Parameters<typeof planMarkType>[1]['markType'],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(new RegExp(`unsupported mark type.*${markType}`, 'i'));
+  });
+
+  it('ignores suffixed mark tags and changes only the exact mark element', () => {
+    const xml = BASE.replace(
+      "<mark class='Bar' />",
+      "<mark-style class='Bar' /><mark class='Line' />",
+    );
+
+    const result = planMarkType(xml, { markType: 'area' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain("<mark-style class='Bar' />");
+    expect(result.xml).toContain("<mark class='Area' />");
+  });
+
+  it('ignores hyphenated attributes and changes only the exact class attribute', () => {
+    const xml = BASE.replace("<mark class='Bar' />", "<mark data-class='metadata' class='Line' />");
+
+    const result = planMarkType(xml, { markType: 'area' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain("<mark data-class='metadata' class='Area' />");
+  });
+
+  it('recognizes a self-closing pane as a pane before refusing its missing mark', () => {
+    const xml = '<worksheet><table><panes><pane/></panes></table></worksheet>';
+
+    const result = planMarkType(xml, { markType: 'area' });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/exactly one mark.*found 0/i);
+  });
+
+  it('refuses a multi-pane worksheet without changing either mark', () => {
+    const multiPane = BASE.replace(
+      '</panes>',
+      "  <pane><view><breakdown value='auto' /></view><mark class='Line' /></pane>\n    </panes>",
+    );
+
+    const result = planMarkType(multiPane, { markType: 'area' });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/exactly one pane/i);
+  });
+
+  it('does not confirm a different or ambiguous readback mark', () => {
+    expect(confirmMarkTypeApplied(BASE, 'Area')).toBe(false);
+    expect(
+      confirmMarkTypeApplied(
+        BASE.replace(
+          '</panes>',
+          "  <pane><view><breakdown value='auto' /></view><mark class='Area' /></pane>\n    </panes>",
+        ),
+        'Area',
+      ),
+    ).toBe(false);
+  });
+});
 
 describe('planTopN — happy path', () => {
   it('inserts a function=end top filter and a slices entry before aggregation', () => {

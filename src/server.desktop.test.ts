@@ -186,131 +186,25 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
   });
 });
 
-/**
- * Serialize a single desktop tool's tools/list entry exactly as the sum-budget
- * test below does, so the per-tool accounting numbers reconcile against the sum
- * (Σ per-tool bytes + DESKTOP_INSTRUCTIONS.length === the sum test's total).
- */
+/** Serialize one tool entry for the per-tool size ratchets below. */
 async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<string> {
   return JSON.stringify(await getDesktopToolListEntry(tool));
 }
 
-// Re-pinned 2026-08-10: added pause-auto-updates and resume-auto-updates over the External
-// Client API per-sheet auto-update routes — both in DYNAMIC_AUTHORING_TOOL_PROFILE, so the
-// served surface moves 29_380 -> 30_627 and the full surface 49_076 -> 50_323.
-// Raised 2026-08-10 (#734 review fold) 48_958 -> 49_076: bind-template gained
-// skip_validation, the server-gated trust flag for the deterministic build_viz path.
-// It is a genuinely new param (name + boolean schema, description dropped since the
-// LLM must never set it), so shrinking prose could not fund it. At that historical point,
-// bind-template was not in DYNAMIC_AUTHORING_TOOL_PROFILE, so #734 did not move that ratchet.
-// Re-pinned 2026-08-07: added delete-sheet, rename-sheet, sort-worksheet,
-// list-worksheet-logical-tables, and get-worksheet-underlying-data over the External
-// Client API sheet-action and logical-table routes, and dropped delete-worksheet.
-// Re-pinned 2026-08-10: apply-worksheet gained the direct templatePlan mode so an
-// explicit single-view request can build+apply in one call without widening the tool set.
-// The combined surface moves 30_627 -> 31_485; full moves 50_323 -> 51_101.
-// Re-pinned 2026-08-11: added open-file, save-workbook, add-worksheet, add-dashboard, and
-// add-storyboard over the External Client API 0.2.6 routes, with open-file/save-workbook
-// descriptions carrying the new-window/session-binding and blocking-Save-As caveats the 0.2.6
-// descriptions spell out. All five join the dynamic-authoring profile: served moves
-// 31_485 -> 34_581 (still well under the 46k cliff), full moves 51_101 -> 54_197.
-// Re-pinned 2026-08-14: the fallback/apply work plus list-worksheets/list-dashboards/list-storyboards
-// returning each item's full External Client API payload (hidden, index, active sheet, auto-updates,
-// datasources/contained sheets). Retain the established 18-character ratchet slack.
-// Re-pinned 2026-08-17: added export-storyboard-image over the External Client API storyboard
-// image route, mirroring export-worksheet-image and export-dashboard-image. Like those two it
-// stays out of DYNAMIC_AUTHORING_TOOL_PROFILE, so those ratchets are unchanged; full moves
-// 54_759 -> 55_656 (surface 54_741 -> 55_638, +897 for the tool, retaining the 18-char slack).
-// Its description states the deliberate V0 scope — only the active story point renders; other
-// points are not included and cannot be selected.
-// Re-pinned 2026-08-18: added workbook-export-as over the External Client API workbook:exportAs
-// route (pdf/powerpoint/packaged-workbook/prior-version, headless write to filePath), gated to a
-// 0.2.7 minApiVersion floor (the gate is server-side metadata, not serialized surface). Unlike the
-// image exports it joins DYNAMIC_AUTHORING_TOOL_PROFILE, so it moves both surfaces by +1012:
-// dynamic authoring 39_069 -> 40_081 (budget 39_087 -> 40_099, keeping the 18-char slack), full
-// surface 55_638 -> 56_650 (budget 55_656 -> 56_668).
-// Re-pinned 2026-08-19: list-templates now exposes derived template-fit metadata and filters by
-// required visible channels. Its schema adds 149 bytes; tighter route prose removes 131 from the
-// served profile, while the full schema-only surface moves 56_650 -> 56_799.
-// Re-pinned 2026-08-19: added native Custom Theme apply, inspect, and export tools to the Desktop
-// authoring suite. The later apply-worksheet name inference trims three bytes from both profiles.
-// Dynamic stays below the 46k product ceiling with 18 bytes of ratchet slack.
-// Re-pinned 2026-08-19: workbook-bound theme apply adds the required target fingerprint input;
-// both profiles move by 95 bytes; dynamic keeps 18 bytes and full keeps 36 bytes of ratchet slack.
-// Re-pinned 2026-08-19: apply-worksheet now infers the target from a cached worksheet fragment, so
-// its worksheetName describe drops the redundant "worksheet" (-3 bytes); dynamic authoring 40_099 -> 40_096.
-// Re-pinned 2026-08-19: surfaced type/isExtract/hasDownloadFilePermission on
-// list-workbook-datasources (+89 on its description), and added publish-workbook,
-// refresh-datasource-data, and refresh-datasource-extract over the External Client API 0.2.8
-// routes, gated to a 0.2.8 floor. All three join DYNAMIC_AUTHORING_TOOL_PROFILE, so dynamic
-// authoring moves 40_096 -> 42_521 (budget kept at the 18-char slack) and the full surface
-// 56_799 -> 59_224. Dynamic still clears the 46k cliff.
-// Re-pinned 2026-08-20: get-app-info's description now also documents the live UI-state fields
-// (Start Page visibility, Data Source page active, presentation mode) added to /v0/app in External
-// Client API 0.2.9. get-app-info is outside DYNAMIC_AUTHORING_TOOL_PROFILE, so only the full surface
-// moves: 59_224 -> 59_313 (retaining the 18-char slack).
-// Re-pinned 2026-08-21: search-workbook-fields (#797) and dropping list-site-datasources
-// (#815) land together. Dynamic authoring 42_521 -> 42_739 (net of both changes, budget
-// kept at the 18-char slack) and the full surface 59_313 -> 60_064 (search-workbook-fields
-// only; list-site-datasources stays on the full profile).
-// Re-pinned 2026-08-21: get-summary-data is a clean API wrapper; its description drops the
-// terminal/retry prose (-60 bytes), so dynamic authoring moves 42_739 -> 42_679 and the full
-// surface 60_064 -> 60_004, retaining the 18-character slack.
-// Re-pinned 2026-08-21: bind-template joins the current 54-tool base as the bounded fast path
-// for recognizable single-view asks. The 55-tool surface is 45_742 bytes; retain the current
-// 18-character ratchet slack without raising the 46k product ceiling.
-// Re-pinned 2026-08-21 (merge of dev/myu404 in-place author-parameter into feature/desktop):
-// author-parameter now edits the live document in place — its obsolete stagePath param leaves the
-// schema (-30 bytes) and it adopts the sibling `datasource` selector param (+31 bytes) for a net
-// +1; dynamic authoring 45_742 -> 45_743 (18-char slack kept, 46k product ceiling untouched).
-// Re-pinned 2026-08-21: executive-summary adds KPI names to run-dashboard-batch while trimming its
-// older field prose; dynamic authoring 45_743 -> 45_758 without raising the 46k product ceiling.
-// Re-pinned 2026-08-21: mark KPI names as ordered; 45_758 -> 45_761 consumes the existing slack
-// without raising either budget.
-// Re-pinned 2026-08-21: native Custom Theme support and named blank-sheet routing join the merged
-// surface. Retain 18 bytes of ratchet slack under the temporary 48k ceiling while TAS keeps SDK
-// tool search disabled for Summit reliability.
-// Re-pinned 2026-08-24: author-action gains a url mode for first-class URL actions (params url,
-// sourceDashboard, excludeSheets, urlTarget, zoneId, urlEncode + the mode/urlTarget enums). Dynamic
-// authoring 47_525 -> 47_799 and the full surface 61_535 -> 61_809 (author-action is on both
-// profiles); each keeps the 18-char slack and dynamic still clears the temporary 48k product ceiling.
-// Re-pinned again 2026-08-24: the url param gets a lean describe (the only non-empty stub on this
-// tool) so agents pass a raw, unescaped URL with <[Field Name]> substitution instead of a
-// pre-escaped string that double-escapes into a dead literal. +127 on author-action lifts dynamic
-// 47_799 -> 47_926 (74 bytes under the 48k ceiling) and the full surface 61_809 -> 61_936.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_926;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_944;
-const DYNAMIC_AUTHORING_PRODUCT_CEILING = 48_000;
-const FULL_TOOL_SURFACE_BUDGET = 61_954;
-
+// Aggregate tools/list size is no longer a product contract: TAS discovers tools through search.
+// Keep the selected profile and its instruction text pinned, plus per-tool caps below.
 describe('desktop tools/list serialized surface', () => {
-  it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
+  it('serves the selected dynamic authoring profile with pinned instructions', () => {
     const server = new DesktopMcpServer();
     const tools = desktopToolFactories.map((toolFactory) => toolFactory(server));
     const dynamicAuthoringTools = selectToolsForProfile(tools, 'dynamic-authoring');
-    let dynamicAuthoringTotal = DESKTOP_INSTRUCTIONS.length;
-    let fullToolSurfaceTotal = 0;
-
-    for (const tool of tools) {
-      const bytes = (await serializeDesktopToolSurface(tool)).length;
-      fullToolSurfaceTotal += bytes;
-      if (DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name)) {
-        dynamicAuthoringTotal += bytes;
-      }
-    }
     expect(new Set(dynamicAuthoringTools.map((tool) => tool.name))).toEqual(
       DYNAMIC_AUTHORING_TOOL_PROFILE,
     );
 
-    // The default served surface includes instructions. Full-profile tool schemas are
-    // pinned separately so intentional route prose does not fund schema growth.
-    // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
-    // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_265);
-    expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
-    expect(fullToolSurfaceTotal).toBeLessThanOrEqual(FULL_TOOL_SURFACE_BUDGET);
+    // Tool search owns discovery; pin the merged filter recovery, dense-scatter repair,
+    // and executive-dashboard guidance without restoring an aggregate tools/list ceiling.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(6_687);
   });
 });
 
@@ -358,9 +252,8 @@ describe('desktop tools/list Tableau vocabulary', () => {
 });
 
 describe('desktop tools/list per-tool byte accounting', () => {
-  // Per-tool ceiling. The sum test above pins the SURFACE; this pins ATTRIBUTION:
-  // when the sum reddens it names WHICH tool got fat, with numbers. Kept well
-  // under the sum's slack so a single tool can't silently eat the whole budget.
+  // Tool search owns aggregate discovery. Keep each individual tool bounded so a
+  // schema cannot grow without its own measured, reviewable ratchet change.
   const PER_TOOL_BUDGET = 1_020;
 
   // Tools already over PER_TOOL_BUDGET at this base (feature/authoring @ 241a67e7).
@@ -377,10 +270,15 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['apply-worksheet', 1579], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
-    ['refine-worksheet', 1465], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
+    ['refine-worksheet', 1684], // raised 2026-08-25: bounded mark-type changes keep a discoverable target enum and useful defaults/examples; earlier raise with sign-off (2026-08-05) for the UI title and omitted-targetField axis detection
+    ['build-worksheets-from-templates', 1150], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
+    ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
     ['author-action', 1376], // grew 2026-08-24 for the url mode (url/sourceDashboard/excludeSheets/urlTarget/zoneId/urlEncode params + mode/urlTarget enums); +127 the same day for the lean url describe that steers agents to a raw, unescaped URL with <[Field Name]> substitution — the one non-empty stub here, earning its bytes on the most misauthored param; do not grow
+    // Approved with the tool-search transition: the per-sheet schema prevents partial
+    // cross-field bulk edits; preserve that contract instead of compressing its names.
+    ['format-worksheets', 1097],
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
@@ -539,10 +437,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 58-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 59-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(58);
+    expect(selected).toHaveLength(59);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -551,7 +449,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'author-set',
       'author-parameter',
       'author-action',
-      'format-labels',
+      'format-worksheets',
+      'compose-story',
       'ask-user',
       'search-commands',
       'list-templates',
@@ -643,21 +542,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
         (tool) => tool.name === 'search-workbook-fields',
       ),
     ).toHaveLength(1);
-  });
-
-  it('dynamic-authoring surface stays under its explicit tools/list ceiling', async () => {
-    const server = new DesktopMcpServer();
-    const selected = selectToolsForProfile(
-      desktopToolFactories.map((f) => f(server)),
-      'dynamic-authoring',
-    );
-    let total = DESKTOP_INSTRUCTIONS.length;
-    for (const tool of selected) {
-      total += (await serializeDesktopToolSurface(tool)).length;
-    }
-    expect(total).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
-    expect(total).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
-    expect(total).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {

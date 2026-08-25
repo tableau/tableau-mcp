@@ -64,12 +64,14 @@ import { getBatchCreateAndCacheSheetsTool } from './authoring/sheets/batchCreate
 import { getBuildAndApplyDashboardTool } from './authoring/sheets/buildAndApplyDashboard.js';
 import { getBuildAndApplyWorksheetTool } from './authoring/sheets/buildAndApplyWorksheet.js';
 import { getComposeDashboardTool } from './authoring/sheets/composeDashboard.js';
+import { getComposeStoryTool } from './authoring/sheets/composeStory.js';
 import { getDashboardHealthCheckTool } from './authoring/sheets/dashboardHealthCheck.js';
 import { getPlanDashboardCreationTool } from './authoring/sheets/planDashboardCreation.js';
 import { getRefineWorksheetTool } from './authoring/sheets/refineWorksheet.js';
 import { getRunDashboardBatchTool } from './authoring/sheets/runDashboardBatch.js';
 import { getApplyWorkbookStyleTool } from './authoring/style/applyWorkbookStyle.js';
 import { getExportCustomThemeTool } from './authoring/style/exportCustomTheme.js';
+import { getFormatWorksheetsTool } from './authoring/style/formatWorksheets.js';
 import { getInspectCustomThemeTool } from './authoring/style/inspectCustomTheme.js';
 import { getBuildWorksheetsFromTemplatesTool } from './authoring/templates/buildWorksheetsFromTemplates.js';
 import { getInjectTemplateTool } from './authoring/templates/injectTemplate.js';
@@ -100,6 +102,7 @@ export const desktopToolFactories = [
   getAddWorksheetTool,
   getAddDashboardTool,
   getAddStoryboardTool,
+  getComposeStoryTool,
   getPublishWorkbookTool,
   getRefreshDatasourceDataTool,
   getRefreshDatasourceExtractTool,
@@ -145,6 +148,7 @@ export const desktopToolFactories = [
   getAuthorSetTool,
   getAuthorActionTool,
   getFormatLabelsTool,
+  getFormatWorksheetsTool,
   getAuthorParameterTool,
   getHealthTool,
   getWorksheetInfoTool,

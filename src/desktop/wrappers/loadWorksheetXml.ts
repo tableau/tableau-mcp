@@ -2,7 +2,11 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
 import { sanitizeValue } from '../../logging/sanitize.js';
-import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
+import {
+  ExecuteCommandError,
+  ExecuteCommandWarning,
+  WithExecutorAndAbortSignal,
+} from '../externalApi/executorTypes.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import {
   extractSheetXml,
@@ -52,6 +56,10 @@ export type LoadWorksheetXmlError =
   // changed an intent-bearing node (the silently-dropped-pill killer, W4). `message`
   // carries the agent-facing fix recipe; `findings` the structured evidence.
   | { type: 'readback-failed'; findings: ReadbackFinding[]; message: string }
+  // Apply reported SUCCEEDED, but Desktop attached a document-warning: it accepted the
+  // document while dropping part of what was submitted. `message` carries Desktop's own
+  // warning text — the only per-drop detail that survives the wire; `warnings` the raw list.
+  | { type: 'document-warning'; warnings: ExecuteCommandWarning[]; message: string }
   | { type: 'source-drift'; message: string }
   // Only surfaced when a caller opts in with `requireExistingSheet` (apply-worksheet);
   // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
@@ -233,6 +241,25 @@ function readbackOutcome(
   return Ok({
     readbackWarnings: findings,
     readbackVerification: publicReadbackVerificationResult(verification),
+  });
+}
+
+// The per-drop Tableau code is discarded before the wire, so a warning's message text is
+// the only field-level detail — join and surface it verbatim for the agent to act on.
+function documentWarningOutcome(warnings: ExecuteCommandWarning[]): LoadWorksheetXmlResult {
+  const details = warnings
+    .map((warning) => warning.message)
+    .filter(Boolean)
+    .join('; ');
+  return Err({
+    type: 'load-worksheet-xml-error',
+    error: {
+      type: 'document-warning',
+      warnings,
+      message:
+        `apply succeeded but Tableau could not honor part of the document and dropped it: ${details}. ` +
+        'The rendered chart does NOT match the intent. Fix the flagged node(s) in the worksheet XML and re-apply.',
+    },
   });
 }
 
@@ -455,6 +482,9 @@ export async function loadWorksheetXml({
       if (applyResult.isErr()) {
         return Err({ type: 'execute-command-error', error: applyResult.error });
       }
+      if (applyResult.value.documentWarnings.length > 0) {
+        return documentWarningOutcome(applyResult.value.documentWarnings);
+      }
 
       const verification = await verifyPostApplyArtifactReadback(
         canonicalName,
@@ -493,6 +523,9 @@ export async function loadWorksheetXml({
       }
       const applyOutcome = outcome.value;
       if (typeof applyOutcome === 'object' && 'status' in applyOutcome) {
+        if (applyOutcome.documentWarnings.length > 0) {
+          return documentWarningOutcome(applyOutcome.documentWarnings);
+        }
         const verification = await verifyPostApplyWorksheetReadback(
           applyOutcome.id,
           applyOutcome.fragmentXml,
@@ -649,6 +682,9 @@ async function loadWorksheetXmlViaExternalApi({
     const applyResult = await applyWorkbookText({ xml: workbookDoc, focus, executor, signal });
     if (applyResult.isErr()) {
       return Err({ type: 'execute-command-error', error: applyResult.error });
+    }
+    if (applyResult.value.documentWarnings.length > 0) {
+      return documentWarningOutcome(applyResult.value.documentWarnings);
     }
 
     log({

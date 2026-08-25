@@ -88,7 +88,7 @@ export function buildDashboardCandidateXml({
   const zones = computeZones(title, {
     kpis,
     charts,
-    layoutType: isExecutiveSummary ? 'auto-grid' : (layoutType ?? 'auto-grid'),
+    layoutType: isExecutiveSummary ? 'executive-summary' : (layoutType ?? 'auto-grid'),
     gridColumns: layout?.gridColumns,
   });
   const dashboardXml = buildDashboardXml(dashboardName, zones);
@@ -110,7 +110,7 @@ export function dashboardCandidateReadbackIssues(
 
   const expectedShape = dashboardShape(candidateXml, dashboardName);
   const actualShape = dashboardShape(readbackXml, dashboardName);
-  if (expectedShape && actualShape && expectedShape !== actualShape) {
+  if (expectedShape && actualShape && !dashboardShapesEqual(expectedShape, actualShape)) {
     issues.push(
       `Dashboard "${dashboardName}" readback did not match the requested title and layout.`,
     );
@@ -311,7 +311,16 @@ const DASHBOARD_SHAPE_ATTRIBUTES = [
   'fontsize',
 ] as const;
 
-function dashboardShape(workbookXml: string, dashboardName: string): string | null {
+interface DashboardShapeElement {
+  tagName: string;
+  attributes: Record<string, string>;
+  text?: string;
+}
+
+function dashboardShape(
+  workbookXml: string,
+  dashboardName: string,
+): DashboardShapeElement[] | null {
   const doc = new DOMParser({ errorHandler: () => {} }).parseFromString(
     workbookXml.trim() || '<empty/>',
     'text/xml',
@@ -328,10 +337,9 @@ function dashboardShape(workbookXml: string, dashboardName: string): string | nu
   }
   if (!dashboard) return null;
 
-  const elements = ['size', 'zone', 'run'].flatMap((tagName) => {
+  return ['size', 'zone', 'run'].flatMap((tagName) => {
     const found = dashboard!.getElementsByTagName(tagName);
-    const values: Array<{ tagName: string; attributes: Record<string, string>; text?: string }> =
-      [];
+    const values: DashboardShapeElement[] = [];
     for (let index = 0; index < found.length; index++) {
       const element = found.item(index);
       if (!element) continue;
@@ -349,7 +357,47 @@ function dashboardShape(workbookXml: string, dashboardName: string): string | nu
     }
     return values;
   });
-  return JSON.stringify(elements);
+}
+
+const ZONE_GEOMETRY_ATTRIBUTES = new Set(['x', 'y', 'w', 'h']);
+
+function dashboardShapesEqual(
+  expected: DashboardShapeElement[],
+  actual: DashboardShapeElement[],
+): boolean {
+  if (expected.length !== actual.length) return false;
+  return expected.every((expectedElement, index) => {
+    const actualElement = actual[index];
+    if (
+      !actualElement ||
+      expectedElement.tagName !== actualElement.tagName ||
+      expectedElement.text !== actualElement.text
+    ) {
+      return false;
+    }
+    const expectedAttributes = Object.keys(expectedElement.attributes);
+    const actualAttributes = Object.keys(actualElement.attributes);
+    if (
+      expectedAttributes.length !== actualAttributes.length ||
+      expectedAttributes.some((attributeName) => !(attributeName in actualElement.attributes))
+    ) {
+      return false;
+    }
+    return expectedAttributes.every((attributeName) => {
+      const expectedValue = expectedElement.attributes[attributeName];
+      const actualValue = actualElement.attributes[attributeName];
+      if (expectedElement.tagName === 'zone' && ZONE_GEOMETRY_ATTRIBUTES.has(attributeName)) {
+        const expectedGeometry = Number(expectedValue);
+        const actualGeometry = Number(actualValue);
+        return (
+          Number.isInteger(expectedGeometry) &&
+          Number.isInteger(actualGeometry) &&
+          Math.abs(expectedGeometry - actualGeometry) <= 1
+        );
+      }
+      return expectedValue === actualValue;
+    });
+  });
 }
 
 function loadFailureOutcome({

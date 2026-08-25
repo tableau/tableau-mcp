@@ -11,6 +11,7 @@ export type DesktopInstructionRoute = {
   readonly toolSequence: readonly DesktopToolName[];
   readonly stopConditions: readonly string[];
   readonly requiredEvidence: readonly string[];
+  readonly forbiddenTools?: readonly DesktopToolName[];
 };
 
 export type DesktopInstructionProse = {
@@ -49,9 +50,10 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a single-view visualization request with enough analytic intent or field cues to recognize, including explicit chart names and common semantic asks',
     action:
-      "route precedence: Preview/no-change or open multi-chart asks skip bind-template and use the artifact flow. An explicitly named existing blank worksheet is a chart-creation target, not an edit: call bind-template with target_worksheet set to that sheet. Existing-sheet edits on populated worksheets stay on the edit-in-place route. Unnamed derived metrics stay on the derived-metric route. Otherwise call bind-template with the user's exact ask and auto_apply:true first; an explicit chart name may bind immediately, while a semantic ask may return one bounded proposal. If call 1 proposes, make one second bind-template call with one exact call_2_contract proposal. Terminal only with applied:true plus clean host verification, or a verified fallback apply receipt (passed or warnings); Never rephrase or resubmit the bare ask. If that second call still proposes, or any result escalates or blocks, use the guarded artifact fallback: list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet. Put named channels in requiredChannels. Preview artifacts stop before apply-worksheet; artifacts coexist. Open intent builds several distinct worksheets. Apply exact templatePlan sequentially; never replay uncertain apply.",
+      "route precedence: Preview/no-change or open multi-chart asks skip bind-template and use the artifact flow. An explicitly named existing blank worksheet is a chart-creation target, not an edit: call bind-template with target_worksheet set to that sheet. Existing-sheet edits on populated worksheets stay on the edit-in-place route. Unnamed derived metrics stay on the derived-metric route. Otherwise call bind-template with the user's exact ask and auto_apply:true first; an explicit chart name may bind immediately, while a semantic ask may return one bounded proposal. If call 1 proposes, make one second bind-template call with one exact call_2_contract proposal. Call 2 must preserve every named measure, breakdown, and filter from the exact ask; if the contract cannot resolve one, call ask-user instead of substituting a measure or dropping a filter. On a blocked Call 2 with retained filters, call ask-user and keep the proposal. Use the guarded artifact fallback only for a block without retained filters, or when Call 2 still proposes or escalates: list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet. Terminal only with applied:true plus clean host verification, or a verified fallback apply receipt (passed or warnings); Never rephrase or resubmit the bare ask. Put named channels in requiredChannels. Preview artifacts stop before apply-worksheet; artifacts coexist. Open intent builds several distinct worksheets. Apply exact templatePlan sequentially; never replay uncertain apply.",
     toolSequence: [
       'bind-template',
+      'ask-user',
       'list-templates',
       'list-available-fields',
       'build-worksheets-from-templates',
@@ -65,6 +67,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'never replay uncertain apply',
     ],
     requiredEvidence: ['each applied worksheet returns a success receipt'],
+  },
+  {
+    kind: 'prose',
+    id: 'dense-scatter-bubble',
+    text: 'Dense scatter/bubble + categorical color overrides terminal bind: get-worksheet-xml(mode:inline) → list-available-fields → add-field → apply-worksheet. Replace/supplement with bounded semantic discrete Detail finer than Color; use exact column_ref. None: report/ask-user; never invent. Skip one-mark-per-category or continuous color. Readback: claim only Detail/Color persisted; mark density unverified.',
   },
   {
     kind: 'route',
@@ -99,32 +106,55 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard',
     trigger: 'a dashboard ask',
     action:
-      'build focused worksheet artifacts first, then pass artifactIds to run-dashboard-batch to place them and compose once. Put only existing worksheets in existingWorksheetNames; omit artifactIds for compose-only. Never replay a partial or unknown batch; inspect live workbook state first.',
-    toolSequence: ['run-dashboard-batch'],
+      'For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. run-dashboard-batch is for new dashboards only; never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
+    toolSequence: ['bind-template', 'run-dashboard-batch'],
+    forbiddenTools: ['sort-worksheet'],
     stopConditions: [
-      'place them and compose once',
+      'use the normal bind-template proposal protocol with auto_apply:true on every call',
+      'finish one applied sheet per analytical view',
+      'finish one applied kpi-text sheet per KPI metric',
+      'never downgrade executive-summary',
       'Never replay a partial or unknown batch',
       'inspect live workbook state first',
     ],
-    requiredEvidence: ['each batch step returns a receipt'],
+    requiredEvidence: [
+      'one applied worksheet receipt per requested KPI metric and analytical view',
+      'one batch receipt with the requested layout',
+    ],
   },
   {
     kind: 'route',
     id: 'dashboard-edit-fallback',
     trigger: 'an existing dashboard edit the bounded batch cannot express',
     action:
-      'use get-dashboard-xml -> read-cached-xml -> write-cached-xml -> apply-dashboard; stay on the scoped dashboard path.',
-    toolSequence: ['get-dashboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-dashboard'],
-    stopConditions: ['stay on the scoped dashboard path'],
-    requiredEvidence: ['dashboard apply receipt'],
+      'use list-dashboards -> format-worksheets for constituent worksheet properties; reserve cached dashboard editing for dashboard-level properties: get-dashboard-xml -> read-cached-xml -> write-cached-xml -> apply-dashboard; stay on the scoped dashboard path.',
+    toolSequence: [
+      'list-dashboards',
+      'format-worksheets',
+      'get-dashboard-xml',
+      'read-cached-xml',
+      'write-cached-xml',
+      'apply-dashboard',
+    ],
+    stopConditions: [
+      'reserve cached dashboard editing for dashboard-level properties',
+      'stay on the scoped dashboard path',
+    ],
+    requiredEvidence: ['format-worksheets readback receipt or dashboard apply receipt'],
   },
   {
     kind: 'route',
     id: 'story-edit-fallback',
     trigger: 'an existing story edit',
     action:
-      'use get-storyboard-xml -> read-cached-xml -> write-cached-xml -> apply-storyboard; stay on the scoped story path.',
-    toolSequence: ['get-storyboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-storyboard'],
+      'use compose-story for ordered dashboard points and matching size. Set replaceExisting only after an explicit rebuild/replace request; otherwise use get-storyboard-xml -> read-cached-xml -> write-cached-xml -> apply-storyboard; stay on the scoped story path.',
+    toolSequence: [
+      'compose-story',
+      'get-storyboard-xml',
+      'read-cached-xml',
+      'write-cached-xml',
+      'apply-storyboard',
+    ],
     stopConditions: ['stay on the scoped story path'],
     requiredEvidence: ['story apply receipt'],
   },
@@ -156,13 +186,13 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total and LOD)',
     action:
-      'use author-parameter first, then author-set, author-calc, author-action, and format-labels as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+      'use author-parameter first, then author-set, author-calc, author-action, and format-worksheets as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
     toolSequence: [
       'author-parameter',
       'author-set',
       'author-calc',
       'author-action',
-      'format-labels',
+      'format-worksheets',
       'list-templates',
       'list-available-fields',
       'build-worksheets-from-templates',
@@ -181,7 +211,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'an edit to a populated current/existing sheet/chart/view',
     action:
-      'use existing-sheet tools only: resolve target with list-worksheets -> list-dashboards -> ask-user when ambiguous, then use refine-worksheet or add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never create new sheets unless asked.',
+      'use existing-sheet tools only: list-worksheets -> list-dashboards -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, or explicit mark-type changes; add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
     toolSequence: [
       'list-worksheets',
       'list-dashboards',
@@ -196,7 +226,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
   },
   {
     kind: 'prose',

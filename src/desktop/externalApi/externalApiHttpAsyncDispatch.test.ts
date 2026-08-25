@@ -175,6 +175,66 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
       }
     });
 
+    it('does not fail fast on progressWindows — self-clearing, polling continues to success', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-progress-1'));
+      server.setOperation('op-progress-1', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'op-progress-1',
+            kind: 'tabdoc:sort',
+            state: 'RUNNING',
+            progressWindows: [
+              { objectName: 'progress', title: 'Exporting…', className: 'QProgressDialog' },
+            ],
+          },
+          {
+            id: 'op-progress-1',
+            kind: 'tabdoc:sort',
+            state: 'SUCCEEDED',
+            result: { sorted: true },
+          },
+        ],
+      });
+
+      const result = await http.postJsonEnvelope(
+        EXTERNAL_API_ROUTES.invokeCommand,
+        invokeBody('tabdoc', 'sort'),
+      );
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().state).toBe('SUCCEEDED');
+    });
+
+    it('returns poll-timeout carrying the last-seen progressWindows', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-progress-2'));
+      server.setOperation('op-progress-2', {
+        poll: [
+          {
+            id: 'op-progress-2',
+            kind: 'tabdoc:sort',
+            state: 'RUNNING',
+            progressWindows: [
+              { objectName: 'progress', title: 'Exporting…', className: 'QProgressDialog' },
+            ],
+          },
+        ],
+      });
+      const shortHttp = new ExternalApiHttp(makeInstance(server.baseUrl), { pollDeadlineMs: 50 });
+
+      const result = await shortHttp.postJsonEnvelope(
+        EXTERNAL_API_ROUTES.invokeCommand,
+        invokeBody('tabdoc', 'sort'),
+      );
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('poll-timeout');
+      if (error.type === 'poll-timeout') {
+        expect(error.progressWindows).toEqual([
+          { objectName: 'progress', title: 'Exporting…', className: 'QProgressDialog' },
+        ]);
+      }
+    });
+
     it('returns operation-expired when the polled operation 404s', async () => {
       server.setOverride('POST /v0/app:invokeCommand', accepted202('op-gone-1'));
       // No setOperation → the poll route 404s operation-not-found.
