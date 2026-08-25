@@ -1002,6 +1002,126 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       vi.useRealTimers();
     }
   });
+
+  it('hard-fails a per-sheet apply that reports SUCCEEDED with a document-warning drop', async () => {
+    const applyWorksheetDocument = vi.fn().mockResolvedValue(
+      Ok({
+        command_id: 'cmd-apply',
+        status: 'completed',
+        submitted_at: '',
+        warnings: [{ code: 'document-warning', message: 'Dropped filter on [Country/Region].' }],
+      }),
+    );
+    const executor = makeExecutorMock({
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] })),
+      getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: validXml })),
+      applyWorksheetDocument,
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'document-warning');
+      expect(result.error.error.warnings).toEqual([
+        { code: 'document-warning', message: 'Dropped filter on [Country/Region].' },
+      ]);
+      expect(result.error.error.message).toContain('Dropped filter on [Country/Region].');
+      expect(result.error.error.message).toContain('does NOT match the intent');
+    }
+    expect(applyWorksheetDocument).toHaveBeenCalledOnce();
+  });
+
+  it('hard-fails the whole-workbook worksheet apply on a document-warning drop', async () => {
+    const applyWorkbookDocument = vi.fn().mockResolvedValue(
+      Ok({
+        command_id: 'cmd-apply',
+        status: 'completed',
+        submitted_at: '',
+        warnings: [{ code: 'document-warning', message: 'Dropped rows shelf field.' }],
+      }),
+    );
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: liveWorkbook(['Sheet 1']),
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      ),
+      applyWorkbookDocument,
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'document-warning');
+      expect(result.error.error.message).toContain('Dropped rows shelf field.');
+    }
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
+  it('hard-fails an artifact apply on a document-warning drop', async () => {
+    const baseline = liveWorkbook(['Sheet 1']);
+    const dispatchState = { attempted: false };
+    const applyWorkbookDocument = vi.fn(
+      async (_xml: string, _signal: AbortSignal, options?: { onDispatch?: () => void }) => {
+        options?.onDispatch?.();
+        return Ok({
+          command_id: 'apply-artifact',
+          status: 'completed' as const,
+          submitted_at: '',
+          warnings: [{ code: 'document-warning', message: 'Dropped color encoding.' }],
+        });
+      },
+    );
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn(async () =>
+        Ok({ xml: baseline, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      ),
+      applyWorkbookDocument,
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      artifactApply: {
+        windowXml: `<window class='worksheet' name='${worksheetName}' />`,
+        expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, validXml),
+        expectedInstanceId: 'inst-build',
+        dispatchState,
+      },
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'document-warning');
+      expect(result.error.error.message).toContain('Dropped color encoding.');
+    }
+    expect(dispatchState.attempted).toBe(true);
+  });
 });
 
 describe('verifyPostApplyWorksheetReadback (async-settle poll)', () => {

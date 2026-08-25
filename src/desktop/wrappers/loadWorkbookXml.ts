@@ -4,6 +4,7 @@ import { log } from '../../logging/logger.js';
 import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandError,
+  ExecuteCommandWarning,
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
 import {
@@ -194,7 +195,9 @@ export async function applyWorkbookText({
   xml: string;
   focus: ApplyFocus;
   applyOptions?: ApplyWorkbookDocumentOptions;
-} & WithExecutorAndAbortSignal): Promise<Result<void, ExecuteCommandError>> {
+} & WithExecutorAndAbortSignal): Promise<
+  Result<{ documentWarnings: ExecuteCommandWarning[] }, ExecuteCommandError>
+> {
   const result = await executor.applyWorkbookDocument(xml, signal, applyOptions);
 
   if (result.isErr()) {
@@ -221,5 +224,5 @@ export async function applyWorkbookText({
   // fails the apply that already landed.
   await dispatchApplyFocus({ focus, postedXml: xml, executor, signal });
 
-  return Ok.EMPTY;
+  return Ok({ documentWarnings: result.value.warnings ?? [] });
 }
