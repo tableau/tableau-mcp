@@ -534,6 +534,177 @@ describe('loadDashboardXml (External Client API transport)', () => {
     }
   });
 
+  // A dashboard sheet zone that names a worksheet Desktop has no registered worksheet-class
+  // window for makes Desktop assert (oWindowID) the moment it resolves the zone — and then
+  // delete/undo on that dashboard hard-fail. apply-dashboard applies only the <dashboard>
+  // fragment, so the workbook-context rules that catch this never run; this guard reads live
+  // state and refuses before the POST. See dashboardZonesReferenceIncludedWorksheets /
+  // worksheetMissingWindow (both workbook-context only).
+  describe('zone worksheet-window guard (requireExistingSheet dashboards)', () => {
+    function guardWorkbook(
+      worksheets: Array<{ name: string; windowed: boolean }>,
+      dashboards: string[] = [dashboardName],
+    ): string {
+      const worksheetXml = worksheets
+        .map((worksheet) => `<worksheet name='${worksheet.name}'><table /></worksheet>`)
+        .join('');
+      const dashboardXml = dashboards
+        .map((name) => `<dashboard name='${name}'><zones /></dashboard>`)
+        .join('');
+      const worksheetWindows = worksheets
+        .filter((worksheet) => worksheet.windowed)
+        .map((worksheet) => `<window class='worksheet' name='${worksheet.name}' />`)
+        .join('');
+      const dashboardWindows = dashboards
+        .map((name) => `<window class='dashboard' name='${name}' />`)
+        .join('');
+      return `<?xml version='1.0'?><workbook><worksheets>${worksheetXml}</worksheets><dashboards>${dashboardXml}</dashboards><windows>${worksheetWindows}${dashboardWindows}</windows></workbook>`;
+    }
+
+    function perSheetExecutor(workbookXml: string): {
+      executor: ExternalApiToolExecutor;
+      applyDashboardDocument: ReturnType<typeof vi.fn>;
+      getWorkbookDocument: ReturnType<typeof vi.fn>;
+    } {
+      const applyDashboardDocument = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
+        );
+      const getWorkbookDocument = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ xml: workbookXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        );
+      const executor = makeExecutorMock({
+        listDashboards: vi
+          .fn()
+          .mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: dashboardName }] })),
+        getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: validXml })),
+        getWorkbookDocument,
+        applyDashboardDocument,
+      });
+      return { executor, applyDashboardDocument, getWorkbookDocument };
+    }
+
+    const zoneFragment = (worksheetName: string): string =>
+      `<dashboard name='${dashboardName}'><zones><zone id='9' type-v2='layout-basic' w='100000' h='100000' x='0' y='0'><zone name='${worksheetName}' w='100000' h='100000' x='0' y='0' /></zone></zones></dashboard>`;
+
+    it('blocks the apply when a zone references a worksheet with no live worksheet window', async () => {
+      const { executor, applyDashboardDocument } = perSheetExecutor(
+        guardWorkbook([{ name: 'Sheet 1', windowed: true }]),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: zoneFragment('Ghost Sheet'),
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-dashboard-xml-error');
+        invariant(result.error.error.type === 'validation-failed');
+        expect(result.error.error.issues.map((issue) => issue.message).join(' ')).toContain(
+          'Ghost Sheet',
+        );
+      }
+      expect(applyDashboardDocument).not.toHaveBeenCalled();
+    });
+
+    it('blocks a worksheet that exists in the document but has no worksheet-class window', async () => {
+      const { executor, applyDashboardDocument } = perSheetExecutor(
+        guardWorkbook([
+          { name: 'Sheet 1', windowed: true },
+          { name: 'Sheet 2', windowed: false },
+        ]),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: zoneFragment('Sheet 2'),
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-dashboard-xml-error');
+        expect(result.error.error.type).toBe('validation-failed');
+      }
+      expect(applyDashboardDocument).not.toHaveBeenCalled();
+    });
+
+    it('applies when every zone worksheet is a live, windowed worksheet', async () => {
+      const { executor, applyDashboardDocument } = perSheetExecutor(
+        guardWorkbook([{ name: 'Sheet 1', windowed: true }]),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: zoneFragment('Sheet 1'),
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(applyDashboardDocument).toHaveBeenCalledOnce();
+    });
+
+    it('does not read the workbook when the fragment has no worksheet zones', async () => {
+      const { executor, applyDashboardDocument, getWorkbookDocument } = perSheetExecutor(
+        guardWorkbook([{ name: 'Sheet 1', windowed: true }]),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: `<dashboard name='${dashboardName}'><zones><zone id='9' type-v2='layout-basic' w='100000' h='100000' x='0' y='0'/></zones></dashboard>`,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(getWorkbookDocument).not.toHaveBeenCalled();
+      expect(applyDashboardDocument).toHaveBeenCalledOnce();
+    });
+
+    it('surfaces a workbook read failure as an execute-command-error', async () => {
+      const readError = {
+        type: 'command-failed' as const,
+        error: { code: 'ERROR', message: 'Failed', recoverable: false },
+      };
+      const executor = makeExecutorMock({
+        listDashboards: vi
+          .fn()
+          .mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: dashboardName }] })),
+        getWorkbookDocument: vi.fn().mockResolvedValue(Err(readError)),
+      });
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: zoneFragment('Sheet 1'),
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.type).toBe('execute-command-error');
+      }
+    });
+  });
+
   it('should pass the abort signal to the workbook apply', async () => {
     const customSignal = new AbortController().signal;
     const { executor } = dispatchingExecutor(liveWorkbook(['Sales Dashboard']));
