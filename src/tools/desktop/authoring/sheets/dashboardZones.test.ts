@@ -2,15 +2,19 @@ import { describe, expect, it } from 'vitest';
 
 import { buildDashboardXml, computeZones, type LayoutSpec, type Zone } from './dashboardZones.js';
 
-// Characterization suite (W60 spec §5/Q2, §7 test-plan item 1): this module is a
-// byte-for-byte extraction of buildAndApplyDashboard.ts's inline zone-computation
-// callback body. buildAndApplyDashboard.ts now imports computeZones/buildDashboardXml
-// directly, so buildAndApplyDashboard.test.ts staying green (it asserts on the
-// serialized XML: `<zone`, `type-v2="text"`, kpiCount/chartCount/viewpointCount) is
-// itself the no-op-refactor proof. This suite locks the pure zone math independently.
+// Literal zone expectations keep direct and batched dashboard composition on the same math.
 
 function spec(overrides: Partial<LayoutSpec> = {}): LayoutSpec {
   return { kpis: [], charts: [], layoutType: 'auto-grid', ...overrides };
+}
+
+function executiveSpec(overrides: Partial<LayoutSpec> = {}): LayoutSpec {
+  return {
+    kpis: [],
+    charts: [],
+    layoutType: 'executive-summary',
+    ...overrides,
+  };
 }
 
 describe('computeZones — auto-grid', () => {
@@ -66,18 +70,170 @@ describe('computeZones — rows / columns', () => {
 });
 
 describe('computeZones — title zone', () => {
-  it('an 8% title text zone is prepended and pushes the chart area down', () => {
+  it('retains the 8% title band for non-executive layouts', () => {
     const zones = computeZones('Q1 Sales', spec({ charts: ['A', 'B'] }));
     expect(zones[0]).toMatchObject({ kind: 'text', h: 8000, id: 10, y: 0 });
     const chartZones = zones.slice(1);
     expect(chartZones.every((z) => z.kind === 'worksheet')).toBe(true);
-    // Chart area height is 100000 - 8000 = 92000, one row => each chart h=92000.
     expect(chartZones[0]).toMatchObject({ h: 92000, y: 8000 });
   });
 
   it('no title text zone when title is omitted', () => {
     const zones = computeZones(undefined, spec({ charts: ['A', 'B'] }));
     expect(zones.every((z) => z.kind === 'worksheet')).toBe(true);
+  });
+});
+
+describe('computeZones — executive summary', () => {
+  it('puts ordered KPIs in a 12% strip below the title and gives one chart the rest', () => {
+    const zones = computeZones(
+      'Executive Overview',
+      executiveSpec({ kpis: ['Sales', 'Profit', 'Orders'], charts: ['Trend'] }),
+    );
+
+    expect(zones).toEqual([
+      {
+        kind: 'text',
+        h: 6000,
+        id: 10,
+        w: 100000,
+        x: 0,
+        y: 0,
+        text: 'Executive Overview',
+        bold: 'true',
+        fontAlignment: '1',
+        fontSize: '16',
+      },
+      { kind: 'worksheet', h: 12000, id: 11, name: 'Sales', w: 33333, x: 0, y: 6000 },
+      {
+        kind: 'worksheet',
+        h: 12000,
+        id: 12,
+        name: 'Profit',
+        w: 33333,
+        x: 33333,
+        y: 6000,
+      },
+      {
+        kind: 'worksheet',
+        h: 12000,
+        id: 13,
+        name: 'Orders',
+        w: 33334,
+        x: 66666,
+        y: 6000,
+      },
+      { kind: 'worksheet', h: 82000, id: 14, name: 'Trend', w: 100000, x: 0, y: 18000 },
+    ]);
+  });
+
+  it('gives two charts a 60/40 primary-secondary split in input order', () => {
+    const zones = computeZones(
+      undefined,
+      executiveSpec({ kpis: ['KPI'], charts: ['Primary', 'Secondary'] }),
+    );
+
+    expect(zones).toEqual([
+      { kind: 'worksheet', h: 12000, id: 10, name: 'KPI', w: 100000, x: 0, y: 0 },
+      {
+        kind: 'worksheet',
+        h: 88000,
+        id: 11,
+        name: 'Primary',
+        w: 60000,
+        x: 0,
+        y: 12000,
+      },
+      {
+        kind: 'worksheet',
+        h: 88000,
+        id: 12,
+        name: 'Secondary',
+        w: 40000,
+        x: 60000,
+        y: 12000,
+      },
+    ]);
+  });
+
+  it('keeps the executive KPI strip at 12% when a legacy height override is present', () => {
+    const zones = computeZones(
+      undefined,
+      executiveSpec({ kpis: ['KPI'], charts: ['Primary'], kpiStripHeight: 50 }),
+    );
+
+    expect(zones).toEqual([
+      { kind: 'worksheet', h: 12000, id: 10, name: 'KPI', w: 100000, x: 0, y: 0 },
+      {
+        kind: 'worksheet',
+        h: 88000,
+        id: 11,
+        name: 'Primary',
+        w: 100000,
+        x: 0,
+        y: 12000,
+      },
+    ]);
+  });
+
+  it('puts one primary chart above two equal supporting charts', () => {
+    const zones = computeZones(
+      undefined,
+      executiveSpec({ charts: ['Primary', 'Left support', 'Right support'] }),
+    );
+
+    expect(zones).toEqual([
+      {
+        kind: 'worksheet',
+        h: 60000,
+        id: 10,
+        name: 'Primary',
+        w: 100000,
+        x: 0,
+        y: 0,
+      },
+      {
+        kind: 'worksheet',
+        h: 40000,
+        id: 11,
+        name: 'Left support',
+        w: 50000,
+        x: 0,
+        y: 60000,
+      },
+      {
+        kind: 'worksheet',
+        h: 40000,
+        id: 12,
+        name: 'Right support',
+        w: 50000,
+        x: 50000,
+        y: 60000,
+      },
+    ]);
+  });
+
+  it('tiles four charts as an exact two-by-two grid', () => {
+    const zones = computeZones(undefined, executiveSpec({ charts: ['A', 'B', 'C', 'D'] }));
+
+    expect(zones).toEqual([
+      { kind: 'worksheet', h: 50000, id: 10, name: 'A', w: 50000, x: 0, y: 0 },
+      { kind: 'worksheet', h: 50000, id: 11, name: 'B', w: 50000, x: 50000, y: 0 },
+      { kind: 'worksheet', h: 50000, id: 12, name: 'C', w: 50000, x: 0, y: 50000 },
+      { kind: 'worksheet', h: 50000, id: 13, name: 'D', w: 50000, x: 50000, y: 50000 },
+    ]);
+  });
+
+  it('tiles more than four charts across deterministic three-column rows without gaps', () => {
+    const zones = computeZones(undefined, executiveSpec({ charts: ['A', 'B', 'C', 'D', 'E'] }));
+
+    expect(zones).toEqual([
+      { kind: 'worksheet', h: 50000, id: 10, name: 'A', w: 33333, x: 0, y: 0 },
+      { kind: 'worksheet', h: 50000, id: 11, name: 'B', w: 33333, x: 33333, y: 0 },
+      { kind: 'worksheet', h: 50000, id: 12, name: 'C', w: 33334, x: 66666, y: 0 },
+      { kind: 'worksheet', h: 50000, id: 13, name: 'D', w: 50000, x: 0, y: 50000 },
+      { kind: 'worksheet', h: 50000, id: 14, name: 'E', w: 50000, x: 50000, y: 50000 },
+    ]);
   });
 });
 

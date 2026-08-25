@@ -11,6 +11,7 @@ export type DesktopInstructionRoute = {
   readonly toolSequence: readonly DesktopToolName[];
   readonly stopConditions: readonly string[];
   readonly requiredEvidence: readonly string[];
+  readonly forbiddenTools?: readonly DesktopToolName[];
 };
 
 export type DesktopInstructionProse = {
@@ -104,14 +105,21 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard',
     trigger: 'a dashboard ask',
     action:
-      'run-dashboard-batch is for new dashboards: build focused worksheet artifacts first; place them and compose once with artifactIds. Use existing worksheets in existingWorksheetNames; omit artifactIds for compose-only. Never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. Never replay a partial or unknown batch; inspect live workbook state first.',
-    toolSequence: ['run-dashboard-batch'],
+      'For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. run-dashboard-batch is for new dashboards only; never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
+    toolSequence: ['bind-template', 'run-dashboard-batch'],
+    forbiddenTools: ['sort-worksheet'],
     stopConditions: [
-      'place them and compose once',
+      'use the normal bind-template proposal protocol with auto_apply:true on every call',
+      'finish one applied sheet per analytical view',
+      'finish one applied kpi-text sheet per KPI metric',
+      'never downgrade executive-summary',
       'Never replay a partial or unknown batch',
       'inspect live workbook state first',
     ],
-    requiredEvidence: ['each batch step returns a receipt'],
+    requiredEvidence: [
+      'one applied worksheet receipt per requested KPI metric and analytical view',
+      'one batch receipt with the requested layout',
+    ],
   },
   {
     kind: 'route',

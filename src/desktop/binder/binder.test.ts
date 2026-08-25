@@ -1128,6 +1128,28 @@ describe('binder/schema width cap', () => {
       ),
     ).toBeNull();
   });
+
+  it('keeps KPI Call 2 bounded above the field cap', async () => {
+    const count = MAX_CLASSIFIABLE_FIELDS + 1;
+    const result = await bindTemplate({
+      ask: 'show F0 as a KPI',
+      workbookXml: wideWorkbookXml(count),
+      manifests: descriptors,
+      proposal: {
+        template: 'kpi-text',
+        title: 'F0 KPI',
+        bindings: [{ slot_id: 'field_base_1', field: 'F0' }],
+        confidence: 1,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('schema-too-large');
+    expect(result.blockers[0].detail).toBe(
+      `schema-too-large: ${count} fields > ${MAX_CLASSIFIABLE_FIELDS} cap`,
+    );
+  });
 });
 
 describe('binder/KPI derivation and injected proposal seam', () => {
@@ -1144,6 +1166,45 @@ describe('binder/KPI derivation and injected proposal seam', () => {
     expect(result.args.field_mapping).toEqual({
       '{{field_base_1}}': '[Bets].[avg:O/U Line:qk]',
     });
+  });
+
+  it('Call 1 declines a live-shaped multi-measure KPI ask instead of binding only Sales', async () => {
+    const result = await bindTemplate({
+      ask: 'KPI tiles showing total Sales, Profit, and Quantity',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+    });
+
+    expect(result.status).toBe('propose');
+    if (result.status === 'propose') {
+      expect(result.decline_reason).toEqual(
+        expect.objectContaining({ code: 'no_llm_validation_declined' }),
+      );
+    }
+  });
+
+  it('Call 2 rejects a live-shaped multi-measure KPI proposal instead of binding only Sales', async () => {
+    const result = await bindTemplate({
+      ask: 'KPI tiles showing total Sales, Profit, and Quantity',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: {
+        template: 'kpi-text',
+        title: 'Sales, Profit, and Quantity',
+        bindings: [{ slot_id: 'field_base_1', field: 'Sales' }],
+        confidence: 1,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status === 'escalate') {
+      expect(result.blockers).toContainEqual(
+        expect.objectContaining({
+          code: 'kind-mismatch',
+          detail: expect.stringContaining('one measure per worksheet'),
+        }),
+      );
+    }
   });
 
   it('closes a Call-1 miss through an injected raw-slot proposal', async () => {

@@ -560,8 +560,8 @@ export async function bindTemplate(args: {
   // ≈ 2.9s of synchronous event-loop block) is a per-call DoS. Over the cap we do NOT
   // classify a truncated subset (which would risk a silent wrong bind); we escalate
   // honestly (bounded time — this returns BEFORE the per-field hot loop) so the caller
-  // routes to the general authoring flow. Call-2 above is intentionally NOT capped: a
-  // filled proposal resolves only its handful of bound fields and never hits the loop.
+  // routes to the general authoring flow. Call-2 validators cap any template-specific
+  // schema scan themselves; ordinary proposals resolve only their handful of bound fields.
   if (summary.fields.length > MAX_CLASSIFIABLE_FIELDS) {
     return {
       status: 'escalate',
