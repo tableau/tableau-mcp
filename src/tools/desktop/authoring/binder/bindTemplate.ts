@@ -1689,6 +1689,17 @@ function attrValue(attrs: string, key: string): string | null {
   return m[1] ?? m[2] ?? '';
 }
 
+function worksheetXmlByTitle(xml: string, literalTitle: string): string | null {
+  const worksheetRe = /<worksheet\b([^>]*)>[\s\S]*?<\/worksheet>/g;
+  for (const match of xml.matchAll(worksheetRe)) {
+    const nameAttr = attrValue(match[1] ?? '', 'name');
+    if (nameAttr !== null && fullyDecodeXmlEntities(nameAttr) === literalTitle) {
+      return match[0];
+    }
+  }
+  return null;
+}
+
 function applyProposalSplices({
   xml,
   args,
@@ -1703,9 +1714,17 @@ function applyProposalSplices({
 }):
   | { ok: true; xml: string; warnings: string[]; appliedFilterCount: number }
   | { ok: false; reason: string } {
-  let out = xml;
+  if (!args.sort && args.top_n === undefined && (!args.filters || args.filters.length === 0)) {
+    return { ok: true, xml, warnings: [], appliedFilterCount: 0 };
+  }
+  const originalWorksheetXml = worksheetXmlByTitle(xml, literalTitle);
+  if (originalWorksheetXml === null) {
+    return { ok: false, reason: `proposal splice target worksheet "${literalTitle}" not found` };
+  }
+  let out = originalWorksheetXml;
   const warnings: string[] = [];
   let appliedFilterCount = 0;
+  const shownFilterColumns: string[] = [];
   if (args.sort) {
     const sortField = resolveInSummary(schemaSummary, args.sort.by);
     if (sortField.kind !== 'exact' && sortField.kind !== 'rewritten') {
@@ -1771,13 +1790,18 @@ function applyProposalSplices({
         values: filter.values,
       });
       declared.xml = insertFilterNodeAndSlice(declared.xml, filterNode, declared.columnRef);
-      // The SHOWN card is what the judge's filter_action_wired gate checks — an OoO-correct
-      // context filter with no control is invisible. Best-effort (no-op if the window is absent).
-      out = insertShownFilterCard(declared.xml, literalTitle, declared.columnRef);
+      out = declared.xml;
+      shownFilterColumns.push(declared.columnRef);
       appliedFilterCount += 1;
     }
   }
-  return { ok: true, xml: out, warnings, appliedFilterCount };
+  let workbookXml = xml.replace(originalWorksheetXml, out);
+  for (const columnRef of shownFilterColumns) {
+    // The SHOWN card is what the judge's filter_action_wired gate checks — an OoO-correct
+    // context filter with no control is invisible. Best-effort (no-op if the window is absent).
+    workbookXml = insertShownFilterCard(workbookXml, literalTitle, columnRef);
+  }
+  return { ok: true, xml: workbookXml, warnings, appliedFilterCount };
 }
 
 /**

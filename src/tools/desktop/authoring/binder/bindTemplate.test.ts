@@ -11,6 +11,7 @@ import { normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
 import type { SchemaField } from '../../../../desktop/binder/schema-summary.js';
 import * as externalDiscovery from '../../../../desktop/externalApi/discovery.js';
 import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
+import { extractSheetXml, extractWorksheetWindowXml } from '../../../../desktop/metadata/sheets.js';
 import type { ParsedWindow } from '../../../../desktop/metadata/types.js';
 import { serializeRouteReceipt, sessionRouteState } from '../../../../desktop/route/route-state.js';
 import {
@@ -623,6 +624,57 @@ const INJECTED_M7_RANKING_XML = `<?xml version='1.0' encoding='utf-8'?>
     </window>
   </windows>
 </workbook>`;
+const INJECTED_M7_TWO_WORKSHEET_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <worksheets>
+    <worksheet name='Sibling' xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <table>
+        <view>
+          <datasources><datasource caption='M7' name='M7' /></datasources>
+          <datasource-dependencies datasource='M7'>
+            <column caption='Product' datatype='string' name='[product]' role='dimension' type='nominal' />
+            <column caption='Sales' datatype='integer' name='[sales]' role='measure' type='quantitative' />
+            <column-instance column='[product]' derivation='None' name='[none:product:nk]' pivot='key' type='nominal' />
+            <column-instance column='[sales]' derivation='Sum' name='[sum:sales:qk]' pivot='key' type='quantitative' />
+          </datasource-dependencies>
+          <aggregation value='true' />
+        </view>
+        <style><style-rule element='sibling-sentinel' /></style>
+        <panes><pane><view><breakdown value='auto' /></view><mark class='Bar' /></pane></panes>
+        <rows>[M7].[none:product:nk]</rows>
+        <cols>[M7].[sum:sales:qk]</cols>
+      </table>
+      <simple-id uuid='00000000-0000-0000-0000-000000000011' />
+    </worksheet>
+    <worksheet name='Sheet 1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <table>
+        <view>
+          <datasources><datasource caption='M7' name='M7' /></datasources>
+          <datasource-dependencies datasource='M7'>
+            <column caption='Product' datatype='string' name='[product]' role='dimension' type='nominal' />
+            <column caption='Sales' datatype='integer' name='[sales]' role='measure' type='quantitative' />
+            <column-instance column='[product]' derivation='None' name='[none:product:nk]' pivot='key' type='nominal' />
+            <column-instance column='[sales]' derivation='Sum' name='[sum:sales:qk]' pivot='key' type='quantitative' />
+          </datasource-dependencies>
+          <aggregation value='true' />
+        </view>
+        <style><style-rule element='target-sentinel' /></style>
+        <panes><pane><view><breakdown value='auto' /></view><mark class='Bar' /></pane></panes>
+        <rows>[M7].[none:product:nk]</rows>
+        <cols>[M7].[sum:sales:qk]</cols>
+      </table>
+      <simple-id uuid='00000000-0000-0000-0000-000000000012' />
+    </worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' name='Sibling'><cards /><simple-id uuid='00000000-0000-0000-0000-000000000013' /></window>
+    <window class='worksheet' name='Sheet 1'><cards /><simple-id uuid='00000000-0000-0000-0000-000000000014' /></window>
+  </windows>
+</workbook>`;
+const M7_RETURNS_FILTER_WORKBOOK_XML = M7_WORKBOOK_XML.replace(
+  "<column caption='Segment' name='[segment]' role='dimension' type='nominal' datatype='string' />",
+  "<column caption='Regional Manager' name='[regional manager]' role='dimension' type='nominal' datatype='string' />",
+);
 const boundM7TopNContextFilterResult: BinderResult = {
   ...boundViaProposalResult,
   args: {
@@ -4090,6 +4142,58 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).toContain("<card mode='dropdown' param='[M7].[none:region:nk]' type='filter' />");
     expect(xml).toContain("<card mode='dropdown' param='[M7].[none:segment:nk]' type='filter' />");
     expect(xml).toContain('<rows>[M7].[none:product:nk]</rows>');
+  });
+
+  it('keeps filter, sort, and top-N splices on the named target worksheet', async () => {
+    const bind = {
+      ...boundM7TopNContextFilterResult,
+      args: {
+        ...boundM7TopNContextFilterResult.args,
+        sort: { by: 'Sales', direction: 'desc' },
+        filters: [
+          { field: 'Region', context: true },
+          { field: 'Regional Manager', values: ['Taylor'] },
+        ],
+      },
+    } as BinderResult;
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind,
+      inject: { ok: true, xml: INJECTED_M7_TWO_WORKSHEET_XML },
+      workbookReads: [M7_RETURNS_FILTER_WORKBOOK_XML],
+    });
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+    const siblingBefore = extractSheetXml(INJECTED_M7_TWO_WORKSHEET_XML, 'Sibling');
+    const siblingWindowBefore = extractWorksheetWindowXml(INJECTED_M7_TWO_WORKSHEET_XML, 'Sibling');
+
+    const result = await getToolResult({
+      session: 'returns-filter-target',
+      ask: 'top 10 products by sales with Region and Regional Manager filters',
+      auto_apply: true,
+      target_worksheet: 'Sheet 1',
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+    expect(extractSheetXml(xml, 'Sibling')).toBe(siblingBefore);
+    expect(extractWorksheetWindowXml(xml, 'Sibling')).toBe(siblingWindowBefore);
+    const target = extractSheetXml(xml, 'Sheet 1');
+    const targetWindow = extractWorksheetWindowXml(xml, 'Sheet 1');
+    expect(target).toMatch(/<column\b[^>]*name="\[region\]"[^>]*role="dimension"/);
+    expect(target).toMatch(
+      /<column-instance\b[^>]*column="\[region\]"[^>]*name="\[none:region:nk\]"/,
+    );
+    expect(target).toMatch(
+      /<column-instance\b[^>]*column="\[regional manager\]"[^>]*name="\[none:regional manager:nk\]"/,
+    );
+    expect(target).toContain('column="[M7].[none:region:nk]" context="true"');
+    expect(target).toContain('column="[M7].[none:regional manager:nk]"');
+    expect(target).toContain('<column>[M7].[none:region:nk]</column>');
+    expect(target).toContain('<column>[M7].[none:regional manager:nk]</column>');
+    expect(target).toContain('direction="DESC" using="[M7].[sum:sales:qk]"');
+    expect(target).toContain('function="end" end="top" count="10"');
+    expect(targetWindow).toContain('param="[M7].[none:region:nk]" type="filter"');
+    expect(targetWindow).toContain('param="[M7].[none:regional manager:nk]" type="filter"');
   });
 
   it('bad sort.by escalation never reaches auto-apply', async () => {

@@ -3509,48 +3509,65 @@ function topNFromAsk(ask: string): number | undefined {
 
 /**
  * Dimensions explicitly paired with a filter cue. A field may follow the cue
- * ("filter down to one Region", "filter by Region") or immediately precede it
- * ("with a Region filter"). Returning every candidate lets the caller fail closed
- * when an either/or phrase names more than one dimension.
+ * ("filter down to one Region", "filter by Region") or precede it in a scoped
+ * clause ("with interactive Region and Segment filters"). Multi-field clauses
+ * accept only comma/and lists; an explicit or-choice fails closed.
  */
-function filterDimensionsFromAsk(ask: string, summary: SchemaSummary): SchemaField[] {
+function filterDimensionsFromAsk(ask: string, summary: SchemaSummary): SchemaField[] | null {
   const dimensions = summary.fields.filter((field) => field.role === 'dimension');
   if (dimensions.length === 0) return [];
   const dimensionSummary: SchemaSummary = { datasource: summary.datasource, fields: dimensions };
-  const exactNames = fieldExactNames(dimensions);
   const found = new Set<SchemaField>();
   const filterCue = /\bfilter(?:s|ed|ing)?\b/gi;
+  const laterModifier =
+    /(?:,\s*|\band\s+)(?:label(?:ed)?|colou?r(?:ed)?|size(?:d)?|detail(?:ed)?|tooltip(?:ped)?|sort(?:ed)?|order(?:ed)?|rank(?:ed)?|facet(?:ed)?|split|group(?:ed)?)\s+(?:by|on|with)\b/i;
+
+  const parseClause = (clause: string): SchemaField[] | null => {
+    const fields = matchFieldsInAsk(clause, dimensionSummary);
+    if (fields.length === 0) return [];
+    if (/\bor\b/i.test(clause)) return null;
+    if (fields.length === 1) return fields;
+
+    const fieldSet = new Set(fields);
+    const hits = literalFieldMatchesInAsk(clause, dimensionSummary).filter(
+      (hit) => fieldSet.has(hit.field) && hit.start !== undefined && hit.end !== undefined,
+    );
+    if (new Set(hits.map((hit) => hit.field)).size !== fields.length) return null;
+    for (let index = 1; index < hits.length; index += 1) {
+      const previousEnd = hits[index - 1].end;
+      const currentStart = hits[index].start;
+      if (previousEnd === undefined || currentStart === undefined) return null;
+      const connector = clause.slice(previousEnd, currentStart);
+      if (!/^\s*(?:,|and|,\s*and)\s*$/i.test(connector)) return null;
+    }
+    return fields;
+  };
+
+  const scopedAfter = (text: string): string => {
+    const ends = [text.search(/[.;]/), text.search(laterModifier)].filter((index) => index >= 0);
+    return text.slice(0, ends.length > 0 ? Math.min(...ends) : text.length);
+  };
 
   for (const cue of ask.matchAll(filterCue)) {
     const cueIndex = cue.index;
     const afterStart = cueIndex + cue[0].length;
-    const sentenceEndOffset = ask.slice(afterStart).search(/[.;]/);
-    const afterEnd =
-      sentenceEndOffset >= 0 ? afterStart + sentenceEndOffset : ask.length;
-    for (const field of matchFieldsInAsk(ask.slice(afterStart, afterEnd), dimensionSummary)) {
-      found.add(field);
+    let fields = parseClause(scopedAfter(ask.slice(afterStart)));
+    if (fields === null) return null;
+
+    if (fields.length === 0) {
+      const before = ask.slice(0, cueIndex);
+      const withMatches = [...before.matchAll(/\bwith\b/gi)];
+      const lastWith = withMatches.at(-1);
+      const sentenceStart = Math.max(before.lastIndexOf('.'), before.lastIndexOf(';')) + 1;
+      const beforeStart =
+        lastWith && lastWith.index >= sentenceStart
+          ? lastWith.index + lastWith[0].length
+          : sentenceStart;
+      fields = parseClause(before.slice(beforeStart));
+      if (fields === null) return null;
     }
 
-    const before = ask.slice(0, cueIndex);
-    for (const field of dimensions) {
-      const names = [bareName(field.columnName), field.caption, field.name].filter(
-        (name): name is string => !!name && name.length > 0,
-      );
-      if (
-        names.some((name) => {
-          const lower = name.toLowerCase();
-          const pluralSuffix =
-            !lower.endsWith('s') && !exactNames.has(`${lower}s`) ? 's?' : '';
-          const body = escapeRegex(lower).replace(/-/g, '[\\s-]+');
-          return new RegExp(
-            `(?:^|[^a-z0-9])(?:a|an|the|one)?\\s*${body}${pluralSuffix}\\s*$`,
-            'i',
-          ).test(before);
-        })
-      ) {
-        found.add(field);
-      }
-    }
+    for (const field of fields) found.add(field);
   }
 
   return [...found];
@@ -3564,24 +3581,17 @@ function attachAskModifiers(
 ): NoLlmClassification {
   const topN = topNFromAsk(ask);
   const boundFields = new Set(classification.bindings.map((binding) => binding.field));
-  const filter =
-    filterCandidates.length === 1 && !boundFields.has(filterCandidates[0].name)
-      ? filterCandidates[0]
-      : undefined;
+  const filters = filterCandidates
+    .filter((candidate) => !boundFields.has(candidate.name))
+    .map((candidate) => ({
+      field: candidate.name,
+      ...(topN !== undefined ? { context: true } : {}),
+    }));
 
   return {
     ...classification,
     ...(topN !== undefined ? { top_n: topN } : {}),
-    ...(filter
-      ? {
-          filters: [
-            {
-              field: filter.name,
-              ...(topN !== undefined ? { context: true } : {}),
-            },
-          ],
-        }
-      : {}),
+    ...(filters.length > 0 ? { filters } : {}),
   };
 }
 
@@ -3630,8 +3640,10 @@ export function classifyNoLlm(
   // read as an aggregation word; field↔slot matching still uses the raw ask.
   const maskedAsk = maskFieldNames(ask, summary);
   const aggOverride = detectAggregationOverride(maskedAsk);
-  const matched = matchFieldsInAsk(ask, summary);
   const filterCandidates = filterDimensionsFromAsk(ask, summary);
+  if (filterCandidates === null) return null;
+  const filterFields = new Set(filterCandidates);
+  const matched = matchFieldsInAsk(ask, summary).filter((field) => !filterFields.has(field));
   // The full dimension pool a required geo slot widens into when the ask names no
   // affine candidate for it (W60 geo-slot completion).
   const schemaDims = summary.fields.filter((f) => f.role === 'dimension');

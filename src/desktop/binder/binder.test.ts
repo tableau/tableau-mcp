@@ -36,6 +36,11 @@ const WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
   </datasources>
 </workbook>`;
 
+const RETURNS_PEOPLE_WORKBOOK_XML = WORKBOOK_XML.replace(
+  '</datasource>',
+  "<column name='[Returned]' role='dimension' type='nominal' datatype='string' /><column name='[Regional Manager]' role='dimension' type='nominal' datatype='string' /></datasource>",
+);
+
 const GRAIN_AMBIGUOUS_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>
   <datasources>
@@ -275,6 +280,101 @@ describe('binder/classifyNoLlm', () => {
 
   it('fails closed when the ask has no chart intent', () => {
     expect(classifyNoLlm('hello there', descriptors, summarizeSchema(WORKBOOK_XML))).toBeNull();
+  });
+
+  it.each([
+    'with interactive Region and Regional Manager filters',
+    'filter by Region and Regional Manager',
+  ])('binds every explicit conjunction filter in ask order: %s', async (filterClause) => {
+    const result = await bindTemplate({
+      ask: `bar chart of Sales by Category ${filterClause}`,
+      workbookXml: RETURNS_PEOPLE_WORKBOOK_XML,
+      manifests: descriptors,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.filters).toEqual([{ field: 'Region' }, { field: 'Regional Manager' }]);
+  });
+
+  it('binds the live returns trend with color and both People filters', async () => {
+    const result = await bindTemplate({
+      ask: 'Create a line chart of SUM(Quantity) by Ship Date, color by Returned, with interactive Region and Regional Manager filters.',
+      workbookXml: RETURNS_PEOPLE_WORKBOOK_XML,
+      manifests: descriptors,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.template_name).toBe('trend-line-chart');
+    expect(result.args.field_mapping).toEqual({
+      '{{field_base_1}}': '[Superstore].[sum:Quantity:qk]',
+      '{{field_base_2}}': '[Superstore].[tmn:Ship Date:qk]',
+      '{{field_base_3}}': '[Superstore].[none:Returned:nk]',
+    });
+    expect(result.args.filters).toEqual([{ field: 'Region' }, { field: 'Regional Manager' }]);
+  });
+
+  it('fails closed for an either-or filter choice', () => {
+    expect(
+      classifyNoLlm(
+        'bar chart of Sales by Category, filter by either Region or Regional Manager',
+        descriptors,
+        summarizeSchema(RETURNS_PEOPLE_WORKBOOK_XML),
+      ),
+    ).toBeNull();
+  });
+
+  it('keeps a later label modifier out of the filter clause', async () => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Category, filter by Region and Regional Manager, label by Customer Name',
+      workbookXml: RETURNS_PEOPLE_WORKBOOK_XML,
+      manifests: descriptors,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.filters).toEqual([{ field: 'Region' }, { field: 'Regional Manager' }]);
+  });
+
+  it('keeps Order Date in a multi-filter clause instead of treating it as a modifier', async () => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Category, filter by Region and Order Date',
+      workbookXml: RETURNS_PEOPLE_WORKBOOK_XML,
+      manifests: descriptors,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.filters).toEqual([{ field: 'Region' }, { field: 'Order Date' }]);
+  });
+
+  it('does not bind leading filter-only fields into chart slots', async () => {
+    const result = await bindTemplate({
+      ask: 'Filter by Region and Regional Manager. Create a bar chart of Sales by Category.',
+      workbookXml: RETURNS_PEOPLE_WORKBOOK_XML,
+      manifests: descriptors,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.field_mapping).toEqual({
+      '{{field_base_1}}': '[Superstore].[none:Category:nk]',
+      '{{field_base_2}}': '[Superstore].[sum:Sales:qk]',
+    });
+    expect(result.args.filters).toEqual([{ field: 'Region' }, { field: 'Regional Manager' }]);
+  });
+
+  it('scopes a trailing singular filter after an unrelated prior-sentence with', async () => {
+    const result = await bindTemplate({
+      ask: 'Bar chart of Sales with Category. Region filter',
+      workbookXml: RETURNS_PEOPLE_WORKBOOK_XML,
+      manifests: descriptors,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.filters).toEqual([{ field: 'Region' }]);
   });
 
   it('keeps the unproven task-level gantt span off the no-LLM path', () => {
