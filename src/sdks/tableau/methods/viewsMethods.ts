@@ -234,12 +234,15 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       }
     }
 
-    return await this._apiClient.queryViewData({
-      params: { siteId, viewId },
-      queries,
-      ...this.authHeader,
-      responseType: 'text',
-    });
+    const response = await this._apiClient.axios.get<string>(
+      `/sites/${siteId}/views/${viewId}/data`,
+      {
+        ...this.authHeader,
+        params: queries,
+        responseType: 'text',
+      },
+    );
+    return response.data;
   };
 
   /**

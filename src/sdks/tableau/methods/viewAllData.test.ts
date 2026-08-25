@@ -136,9 +136,9 @@ describe('ViewsMethods.queryViewData', () => {
       },
       {},
     );
-    const queryViewData = vi.fn().mockResolvedValue('Region,Sales\nWest,100');
-    // @ts-expect-error - Replacing the Zodios method for transport configuration coverage.
-    viewsMethods._apiClient.queryViewData = queryViewData;
+    const get = vi.fn().mockResolvedValue({ data: 'Region,Sales\nWest,100' });
+    // @ts-expect-error - Replacing the Axios client for transport configuration coverage.
+    viewsMethods._apiClient.axios.get = get;
 
     await expect(
       viewsMethods.queryViewData({
@@ -147,10 +147,9 @@ describe('ViewsMethods.queryViewData', () => {
         viewFilters: { Region: 'West', vf_Category: 'Furniture' },
       }),
     ).resolves.toBe('Region,Sales\nWest,100');
-    expect(queryViewData).toHaveBeenCalledWith({
-      params: { siteId: 'site-1', viewId: 'view-1' },
-      queries: { vf_Region: 'West', vf_Category: 'Furniture' },
+    expect(get).toHaveBeenCalledWith('/sites/site-1/views/view-1/data', {
       headers: { Authorization: 'Bearer token' },
+      params: { vf_Region: 'West', vf_Category: 'Furniture' },
       responseType: 'text',
     });
   });
