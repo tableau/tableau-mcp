@@ -386,6 +386,20 @@ describe('TableauAccessTokenValidator', () => {
       }
     });
 
+    it('rejects a loopback-form aud when the resource URI is a custom (non-loopback) host', async () => {
+      // Default validator from beforeEach is configured with MOCK_RESOURCE_URI
+      // ('https://mcp.example.com'), a custom deployment host. Loopback-host canonicalization
+      // must not widen matching to accept localhost/127.0.0.1/[::1] against it.
+      for (const aud of [
+        'http://localhost:3927/tableau-mcp',
+        'http://127.0.0.1:3927/tableau-mcp',
+        'http://[::1]:3927/tableau-mcp',
+      ]) {
+        const result = await validator.validate(makeBearer(basePayload({ aud })));
+        expect(result.isErr()).toBe(true);
+      }
+    });
+
     it('rejects an aud not present in a comma-separated OAUTH_GLOBAL_RESOURCE_URIS', async () => {
       vi.stubEnv(
         'OAUTH_GLOBAL_RESOURCE_URIS',
