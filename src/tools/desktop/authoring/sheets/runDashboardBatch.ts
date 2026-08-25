@@ -86,6 +86,7 @@ const paramsSchema = {
     .max(5)
     .optional()
     .describe('Live KPI worksheet names in display order from left to right.'),
+  replaceExisting: z.boolean().optional(),
 };
 
 type AppliedState = true | false | 'unknown';
@@ -163,7 +164,6 @@ type BatchReadbackVerification = {
   dashboardIssues: string[];
 };
 
-const title = 'Dashboard';
 const MAX_DYNAMIC_TEXT_LENGTH = 384;
 const MAX_BATCH_WORKSHEETS = 7;
 
@@ -175,7 +175,7 @@ export const getRunDashboardBatchTool = (
   const tool = new DesktopTool({
     server,
     name: 'run-dashboard-batch',
-    title,
+    title: 'Dashboard',
     description: 'Apply staged worksheets and compose live KPI/chart sheets into one dashboard.',
     paramsSchema,
     annotations: {
@@ -194,6 +194,7 @@ export const getRunDashboardBatchTool = (
         layoutType,
         gridColumns,
         kpiWorksheetNames,
+        replaceExisting = false,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -211,6 +212,7 @@ export const getRunDashboardBatchTool = (
           layoutType,
           gridColumns,
           kpiWorksheetNames,
+          replaceExisting,
         },
         callback: async (): Promise<Result<RunDashboardBatchResult, McpToolError>> => {
           const orderedArtifactIds = artifactIds ?? [];
@@ -298,6 +300,18 @@ export const getRunDashboardBatchTool = (
             }
             const workbookXml = workbookResult.value.xml;
             const liveInstanceId = workbookResult.value.instanceId;
+            const existingDashboardName = listWorkbookDashboards(workbookXml).find((name) =>
+              xmlNamesEqual(name, dashboardName),
+            );
+            if (existingDashboardName && !replaceExisting) {
+              return preflightInputFailure(
+                steps,
+                orderedArtifactIds,
+                dashboardName,
+                `Dashboard "${dashboardName}" already exists and will not be rebuilt. replaceExisting is only for an explicit user request to rebuild or replace this dashboard.`,
+                'existingDashboard',
+              );
+            }
             const conflictingWorksheetName = [
               ...findAllWorksheets(parseXML(workbookXml)).map((worksheet) => worksheet['@_name']),
               ...reservations.map((reservation) => reservation.artifact.title),
@@ -467,9 +481,6 @@ export const getRunDashboardBatchTool = (
               }
             }
 
-            const existingDashboardName = listWorkbookDashboards(candidateXml).find((name) =>
-              xmlNamesEqual(name, dashboardName),
-            );
             const replaced = existingDashboardName !== undefined;
             try {
               if (existingDashboardName) {

@@ -47,6 +47,9 @@ describe('runDashboardBatchTool', () => {
     expect(
       schema.safeParse({ session: '12345', artifactIds: ['a1', 'a2'], ...BATCH }).success,
     ).toBe(true);
+    expect(schema.safeParse({ session: '12345', ...BATCH, replaceExisting: true }).success).toBe(
+      true,
+    );
     expect(
       schema.safeParse({
         session: '12345',
@@ -81,11 +84,17 @@ describe('runDashboardBatchTool', () => {
     expect(schema.safeParse({ ...BATCH, title: tooLong }).success).toBe(false);
 
     const entry = await getDesktopToolListEntry(tool);
+    expect(entry.title).toBe('Dashboard');
     expect(entry.description).toBe(
       'Apply staged worksheets and compose live KPI/chart sheets into one dashboard.',
     );
     expect(entry.inputSchema).toMatchObject({
       properties: {
+        session: {
+          type: 'string',
+          maxLength: 64,
+          description: 'Session ID; optional if pinned or unique.',
+        },
         artifactIds: { type: 'array', items: { type: 'string' } },
         dashboardName: { type: 'string' },
         existingWorksheetNames: {
@@ -104,12 +113,14 @@ describe('runDashboardBatchTool', () => {
           items: { type: 'string' },
           description: 'Live KPI worksheet names in display order from left to right.',
         },
+        replaceExisting: { type: 'boolean' },
       },
       required: expect.arrayContaining(['dashboardName']),
     });
     expect(entry.inputSchema.required).not.toContain('existingWorksheetNames');
+    expect(entry.inputSchema.required).not.toContain('replaceExisting');
     expect(entry.inputSchema.properties).not.toHaveProperty('tasks');
-    expect(JSON.stringify(entry).length).toBe(1_278);
+    expect(JSON.stringify(entry).length).toBe(1_315);
   });
 
   it('records bounded success telemetry without workbook identifiers', async () => {
@@ -636,6 +647,7 @@ async function callBatch(
       gridColumns: options.gridColumns,
       layoutType: options.layoutType ?? BATCH.layoutType,
       kpiWorksheetNames: options.kpiWorksheetNames,
+      replaceExisting: false,
       ...(options.existingWorksheetNames !== undefined
         ? { existingWorksheetNames: options.existingWorksheetNames }
         : {}),

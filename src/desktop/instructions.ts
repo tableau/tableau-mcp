@@ -68,6 +68,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     requiredEvidence: ['each applied worksheet returns a success receipt'],
   },
   {
+    kind: 'prose',
+    id: 'dense-scatter-bubble',
+    text: 'Dense scatter/bubble + categorical color overrides terminal bind: get-worksheet-xml(mode:inline) → list-available-fields → add-field → apply-worksheet. Replace/supplement with bounded semantic discrete Detail finer than Color; use exact column_ref. None: report/ask-user; never invent. Skip one-mark-per-category or continuous color. Readback: claim only Detail/Color persisted; mark density unverified.',
+  },
+  {
     kind: 'route',
     id: 'derived-metric',
     trigger:
@@ -100,7 +105,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard',
     trigger: 'a dashboard ask',
     action:
-      'For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
+      'For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. run-dashboard-batch is for new dashboards only; never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
     toolSequence: ['bind-template', 'run-dashboard-batch'],
     forbiddenTools: ['sort-worksheet'],
     stopConditions: [
@@ -121,18 +126,34 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard-edit-fallback',
     trigger: 'an existing dashboard edit the bounded batch cannot express',
     action:
-      'use get-dashboard-xml -> read-cached-xml -> write-cached-xml -> apply-dashboard; stay on the scoped dashboard path.',
-    toolSequence: ['get-dashboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-dashboard'],
-    stopConditions: ['stay on the scoped dashboard path'],
-    requiredEvidence: ['dashboard apply receipt'],
+      'use list-dashboards -> format-worksheets for constituent worksheet properties; reserve cached dashboard editing for dashboard-level properties: get-dashboard-xml -> read-cached-xml -> write-cached-xml -> apply-dashboard; stay on the scoped dashboard path.',
+    toolSequence: [
+      'list-dashboards',
+      'format-worksheets',
+      'get-dashboard-xml',
+      'read-cached-xml',
+      'write-cached-xml',
+      'apply-dashboard',
+    ],
+    stopConditions: [
+      'reserve cached dashboard editing for dashboard-level properties',
+      'stay on the scoped dashboard path',
+    ],
+    requiredEvidence: ['format-worksheets readback receipt or dashboard apply receipt'],
   },
   {
     kind: 'route',
     id: 'story-edit-fallback',
     trigger: 'an existing story edit',
     action:
-      'use get-storyboard-xml -> read-cached-xml -> write-cached-xml -> apply-storyboard; stay on the scoped story path.',
-    toolSequence: ['get-storyboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-storyboard'],
+      'use compose-story for ordered dashboard points and matching size. Set replaceExisting only after an explicit rebuild/replace request; otherwise use get-storyboard-xml -> read-cached-xml -> write-cached-xml -> apply-storyboard; stay on the scoped story path.',
+    toolSequence: [
+      'compose-story',
+      'get-storyboard-xml',
+      'read-cached-xml',
+      'write-cached-xml',
+      'apply-storyboard',
+    ],
     stopConditions: ['stay on the scoped story path'],
     requiredEvidence: ['story apply receipt'],
   },
@@ -164,13 +185,13 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total and LOD)',
     action:
-      'use author-parameter first, then author-set, author-calc, author-action, and format-labels as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+      'use author-parameter first, then author-set, author-calc, author-action, and format-worksheets as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
     toolSequence: [
       'author-parameter',
       'author-set',
       'author-calc',
       'author-action',
-      'format-labels',
+      'format-worksheets',
       'list-templates',
       'list-available-fields',
       'build-worksheets-from-templates',

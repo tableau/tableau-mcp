@@ -99,9 +99,10 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * through execute-tableau-command) PLUS the five author-* verbs that keep the primary
  * semantic path agent-XML-free — author-calc (ratios/rank/
  * running-total/LOD), author-set (param-linked Top/Bottom-N), author-parameter (the
- * key signature, born at OPEN), author-action (parameter-change wiring), format-labels
- * (mark labels) — PLUS ask-user (ambiguity goes to the human, never to a guess) and
- * search-commands (how the singer discovers the execute-tableau-command dialect) — PLUS
+ * key signature, born at OPEN), author-action (parameter-change wiring), format-worksheets
+ * (per-sheet mark labels and field number formats) — PLUS ask-user (ambiguity goes to the
+ * human, never to a guess) and search-commands (how the singer discovers the
+ * execute-tableau-command dialect) — PLUS
  * bind-template for recognizable single-view asks, plus the guarded list/build/apply template
  * artifact fallback and refine-worksheet, the primitives-only
  * top-N/sort editor that carries
@@ -116,8 +117,8 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * first-class workbook/data reads/navigation, scoped dashboard/story cached-XML fallbacks, and a
  * narrow whole-workbook cached-XML fallback. Standalone validation and unrelated info/site tools
  * stay out. This is the
- * "make it shorter" answer — a lean, semantically-named surface under the 46k tools/list cliff,
- * not a describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19 (CODA):
+ * "make it shorter" answer — a lean, semantically-named surface for direct/default clients while
+ * TAS discovers the wider surface through tool search. Mechanism map live-proven 2026-07-19 (CODA):
  * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
  */
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
@@ -159,6 +160,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'add-worksheet',
     'add-dashboard',
     'add-storyboard',
+    'compose-story',
     'open-file',
     'save-workbook',
     'workbook-export-as',
@@ -185,7 +187,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'author-set',
     'author-parameter',
     'author-action',
-    'format-labels',
+    'format-worksheets',
     'read-knowledge-resource',
     'search-knowledge',
   ]);
