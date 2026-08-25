@@ -86,6 +86,19 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(dynamicAuthoring?.trigger).toContain('WITHOUT a conventional name');
     expect(dynamicAuthoring?.action).toContain('author-calc');
+    expect(dynamicAuthoring?.action).toContain('format-worksheets');
+    expect(dynamicAuthoring?.action).not.toContain('format-labels');
+    expect(dynamicAuthoring?.toolSequence).toEqual([
+      'author-parameter',
+      'author-set',
+      'author-calc',
+      'author-action',
+      'format-worksheets',
+      'list-templates',
+      'list-available-fields',
+      'build-worksheets-from-templates',
+      'apply-worksheet',
+    ]);
     expect(dynamicAuthoring?.action).toContain('build-worksheets-from-templates');
   });
 
@@ -239,6 +252,13 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(dashboard?.action).not.toContain('zero worksheet apply tasks');
     expect(dashboard?.action).toContain('Never replay a partial or unknown batch');
     expect(dashboard?.action).toContain('inspect live workbook state first');
+    expect(dashboard?.action).toContain('run-dashboard-batch is for new dashboards');
+    expect(dashboard?.action).toContain(
+      'Never use it for formatting, polish, or refinement of an existing dashboard',
+    );
+    expect(dashboard?.action).toContain(
+      'Set replaceExisting only after an explicit rebuild/replace request',
+    );
     expect(dashboard?.action).not.toContain('dashboard-auto-apply');
   });
 
@@ -251,11 +271,30 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('routes unsupported dashboard edits through the scoped dashboard fallback', () => {
     const dashboardEdit = routes.find((route) => route.id === 'dashboard-edit-fallback');
 
-    expect(dashboardEdit).toMatchObject({
-      trigger: 'an existing dashboard edit the bounded batch cannot express',
-      toolSequence: ['get-dashboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-dashboard'],
-      stopConditions: ['stay on the scoped dashboard path'],
-    });
+    expect(dashboardEdit?.trigger).toBe(
+      'an existing dashboard edit the bounded batch cannot express',
+    );
+    expect(dashboardEdit?.action).toContain(
+      'list-dashboards -> format-worksheets for constituent worksheet properties',
+    );
+    expect(dashboardEdit?.action).toContain(
+      'reserve cached dashboard editing for dashboard-level properties',
+    );
+    expect(dashboardEdit?.toolSequence).toEqual([
+      'list-dashboards',
+      'format-worksheets',
+      'get-dashboard-xml',
+      'read-cached-xml',
+      'write-cached-xml',
+      'apply-dashboard',
+    ]);
+    expect(dashboardEdit?.stopConditions).toEqual([
+      'reserve cached dashboard editing for dashboard-level properties',
+      'stay on the scoped dashboard path',
+    ]);
+    expect(dashboardEdit?.requiredEvidence).toEqual([
+      'format-worksheets readback receipt or dashboard apply receipt',
+    ]);
   });
 
   it('routes story edits through the scoped story fallback', () => {
@@ -264,6 +303,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(storyEdit).toMatchObject({
       trigger: 'an existing story edit',
       toolSequence: [
+        'compose-story',
         'get-storyboard-xml',
         'read-cached-xml',
         'write-cached-xml',
@@ -271,6 +311,10 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       ],
       stopConditions: ['stay on the scoped story path'],
     });
+    expect(storyEdit?.action).toContain('ordered dashboard points');
+    expect(storyEdit?.action).toContain(
+      'Set replaceExisting only after an explicit rebuild/replace request',
+    );
   });
 
   it('reserves whole-workbook apply for datasource definitions or cross-artifact changes', () => {

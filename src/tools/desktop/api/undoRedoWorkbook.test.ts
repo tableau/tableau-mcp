@@ -8,6 +8,7 @@ import {
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
 import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
+import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -43,13 +44,24 @@ describe('undo-workbook / redo-workbook tools', () => {
       await harness.close();
     }
   });
+
+  it.each([
+    { makeTool: getUndoWorkbookTool, method: 'undo' as const },
+    { makeTool: getRedoWorkbookTool, method: 'redo' as const },
+  ])('waits for an in-flight apply before calling $method', async ({ makeTool, method }) => {
+    await expectMutationWaitsForApplyLock(makeTool, method);
+  });
 });
 
-async function startHarness(makeTool: (server: DesktopMcpServer) => DesktopTool<any>): Promise<{
+type Harness = {
   server: MockExternalApiServer;
   callTool: (args: Record<string, unknown>) => Promise<CallToolResult>;
   close: () => Promise<void>;
-}> {
+};
+
+async function startHarness(
+  makeTool: (server: DesktopMcpServer) => DesktopTool<any>,
+): Promise<Harness> {
   const server = await startMockExternalApiServer();
   const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
   await executor.start();
@@ -71,6 +83,74 @@ async function startHarness(makeTool: (server: DesktopMcpServer) => DesktopTool<
       await server.close();
     },
   };
+}
+
+async function expectMutationWaitsForApplyLock(
+  makeTool: (server: DesktopMcpServer) => DesktopTool<any>,
+  method: 'undo' | 'redo',
+): Promise<void> {
+  let markLockHeld!: () => void;
+  const lockHeld = new Promise<void>((resolve) => {
+    markLockHeld = resolve;
+  });
+  let releaseLock!: () => void;
+  const lockReleased = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
+  const blocker = withApplyLock(async () => {
+    markLockHeld();
+    await lockReleased;
+  });
+  await lockHeld;
+
+  const mutation = vi.fn(
+    async () => new Ok({ command_id: method, status: 'completed' as const, result: null }),
+  );
+  const executor = {
+    undo: method === 'undo' ? mutation : vi.fn(),
+    redo: method === 'redo' ? mutation : vi.fn(),
+  };
+  let markExecutorRequested!: () => void;
+  const executorRequested = new Promise<void>((resolve) => {
+    markExecutorRequested = resolve;
+  });
+  let provideExecutor!: () => void;
+  const getExecutor = vi.fn(
+    async () =>
+      await new Promise<ExternalApiToolExecutor>((resolve) => {
+        provideExecutor = () => resolve(executor as unknown as ExternalApiToolExecutor);
+        markExecutorRequested();
+      }),
+  );
+  const tool = makeTool(new DesktopMcpServer());
+  const callback = (await Provider.from(tool.callback)) as (
+    args: Record<string, unknown>,
+    extra: ReturnType<typeof getMockRequestHandlerExtra>,
+  ) => Promise<CallToolResult>;
+  const extra = {
+    ...getMockRequestHandlerExtra(),
+    getExecutor,
+  };
+  let pending: Promise<CallToolResult> | undefined;
+  try {
+    pending = callback({}, extra);
+    await executorRequested;
+    provideExecutor();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mutation).not.toHaveBeenCalled();
+
+    releaseLock();
+    await blocker;
+
+    const result = await pending;
+    expect(result.isError).toBeFalsy();
+    expect(mutation).toHaveBeenCalledTimes(1);
+  } finally {
+    releaseLock();
+    await blocker;
+    await pending?.catch(() => undefined);
+  }
 }
 
 function instanceFor(server: MockExternalApiServer): ExternalApiInstance {

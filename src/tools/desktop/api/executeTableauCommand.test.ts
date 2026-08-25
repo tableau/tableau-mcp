@@ -5,6 +5,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import * as discoveryModule from '../../../desktop/externalApi/discovery.js';
 import { _resetExternalApiCommandRegistryForTest } from '../../../desktop/externalApi/paramWireRegistry.js';
+import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -188,6 +189,53 @@ describe('executeTableauCommandTool', () => {
         args: {},
       }),
     );
+  });
+
+  it('waits for an in-flight apply before executing an allowed command', async () => {
+    let markLockHeld!: () => void;
+    const lockHeld = new Promise<void>((resolve) => {
+      markLockHeld = resolve;
+    });
+    let releaseLock!: () => void;
+    const lockReleased = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    const blocker = withApplyLock(async () => {
+      markLockHeld();
+      await lockReleased;
+    });
+    await lockHeld;
+
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const extra = makeExtra(executeCommand);
+    const executor = await extra.getExecutor(SESSION);
+    let provideExecutor!: () => void;
+    const executorReady = new Promise<void>((resolve) => {
+      provideExecutor = resolve;
+    });
+    extra.getExecutor = vi.fn(async () => {
+      await executorReady;
+      return executor;
+    });
+
+    let pending: Promise<CallToolResult> | undefined;
+    try {
+      pending = getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+      provideExecutor();
+      await executorReady;
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(executeCommand).not.toHaveBeenCalled();
+    } finally {
+      releaseLock();
+      await blocker;
+    }
+
+    const result = await pending;
+    expect(result.isError).toBeFalsy();
+    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 
   it('should return success with result JSON when command produces data', async () => {
