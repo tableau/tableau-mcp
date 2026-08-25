@@ -106,6 +106,7 @@ describe('tryApplyViaPerSheetRoute', () => {
           id,
           name: sheetName,
           fragmentXml,
+          documentWarnings: [],
         });
       }
       // The route resolves by id, and the posted body is the sheet fragment as-is (Tableau Desktop

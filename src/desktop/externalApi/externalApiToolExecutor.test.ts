@@ -135,6 +135,35 @@ describe('ExternalApiToolExecutor', () => {
       expect(last?.body).toBe(xml);
     });
 
+    it('surfaces the tableauErrorCode extension from a client-rejected apply as tableau-error-code', async () => {
+      server.setOverride('POST /v0/workbook/worksheets/sheet-sales/document', {
+        status: 422,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({
+          type: 'problem',
+          title: 'Invalid workbook DOM',
+          status: 422,
+          instance: '/v0/mock',
+          detail: 'Tableau could not load the submitted worksheet.',
+          code: 'operation-failed',
+          tableauErrorCode: '0xC0FFEE',
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.applyWorksheetDocument('sheet-sales', '<worksheet />', signal);
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('operation-failed');
+        expect(error.error?.message).toBe('Tableau could not load the submitted worksheet.');
+        expect((error.error as Record<string, unknown>)['tableau-error-code']).toBe('0xC0FFEE');
+      }
+    });
+
     it('rejects a different expected instance before the workbook POST', async () => {
       const executor = new ExternalApiToolExecutor({
         discover: () => [{ ...instanceFor(server), instanceId: 'inst-new' }],

@@ -505,6 +505,7 @@ async function mapErrorResponse(res: Response): Promise<ExternalApiError> {
       code: problem.data.code,
       title: problem.data.title,
       detail: problem.data.detail ?? (text || undefined),
+      tableauErrorCode: problem.data.tableauErrorCode,
     };
   }
 
