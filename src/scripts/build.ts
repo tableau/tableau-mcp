@@ -111,7 +111,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   // ONLY the entries below, so a large asset can never silently ride into the npm tarball.
   // The earlier blanket `copyDirectory('./src/desktop/data', ...)` defeated this list and was
   // removed. Every entry is resolved package-relative via DATA_ROOT and feeds a shipped
-  // search tool: workbook-schema-reference.json (lookup-workbook-schema), corpus.json +
+  // search tool: twb_2026.2.0.xsd (lookup-workbook-schema), corpus.json +
   // examples/ (search-examples / search-workbook-examples), and twb-example-index.json —
   // the committed TRIMMED index (~920 KB). Its ~10 MB ungzipped source lives OUTSIDE this
   // dir at src/desktop/data-source/ and is never staged. search-commands (and the name/param
@@ -128,7 +128,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     const desktopDataSrc = './src/desktop/data';
     const desktopDataOut = './build/desktop/data';
     const stagedDesktopData = [
-      'workbook-schema-reference.json', // searchLibrary SCHEMA_REFERENCE_PATH — lookup-workbook-schema
+      'twb_2026.2.0.xsd', // searchLibrary WORKBOOK_XSD_PATH — lookup-workbook-schema
       'corpus.json', // searchExamples/searchWorkbookExamples CORPUS_PATH
       'twb-example-index.json', // searchLibrary TWB_INDEX_PATH — committed trimmed index (~920 KB)
       'examples', // searchLibrary EXAMPLES_DIR — search-examples

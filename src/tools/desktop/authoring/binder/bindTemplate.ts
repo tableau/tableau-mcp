@@ -20,6 +20,11 @@ import {
   summarizeSchema,
   WATERFALL_ORDER_FIELD_RE,
 } from '../../../../desktop/binder/binder.js';
+import {
+  type ExactFilterIntent,
+  type ExactFilterValueConstraint,
+  parseExactFilterIntent,
+} from '../../../../desktop/binder/classify.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
 import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
@@ -212,6 +217,7 @@ type BlockedBindTemplateResult = {
     | 'unchanged_proposal'
     | 'retry_budget_exhausted'
     | 'fallback_required'
+    | 'ambiguous_filter_intent'
     | 'proposal_contract_mismatch'
     | 'proposal_filter_resolution_failed';
   guidance: string;
@@ -228,19 +234,32 @@ type BindTemplateToolResult =
   | BlockedBindTemplateResult;
 type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>;
 
-type Call2Contract = BindRecoveryProposalContext;
-
-type ProposalContractMismatch = {
-  code:
-    | 'template-not-offered'
-    | 'slot-not-offered'
-    | 'required-slot-missing'
-    | 'field-not-compatible';
-  template: string;
-  slot_id?: string;
-  field?: string;
-  choices: string[];
+type Call2Contract = BindRecoveryProposalContext & {
+  required_filter_values?: ExactFilterValueConstraint[];
 };
+
+type FilterValueReport = { field: string; values?: string[] };
+
+type ProposalContractMismatch =
+  | {
+      code:
+        | 'template-not-offered'
+        | 'slot-not-offered'
+        | 'required-slot-missing'
+        | 'field-not-compatible';
+      template: string;
+      slot_id?: string;
+      field?: string;
+      choices: string[];
+    }
+  | {
+      code: 'required_filter_fields_mismatch';
+      template: string;
+      required_filter_fields: string[];
+      provided_filter_fields: string[];
+      required_filter_values?: ExactFilterValueConstraint[];
+      provided_filter_values?: FilterValueReport[];
+    };
 
 const NOT_APPLIED_GUIDANCE =
   'NOT APPLIED — the worksheet is unchanged. Resubmit this exact bind-template call with auto_apply:true to apply the bind.';
@@ -501,11 +520,21 @@ function proposalContractMismatches(
   proposal: BindingProposal,
   contract: Call2Contract,
 ): ProposalContractMismatch[] {
+  const mismatches: ProposalContractMismatch[] = [];
+  if (contract.required_filter_fields !== undefined) {
+    const filterMismatch = requiredFilterFieldsMismatch(
+      proposal,
+      contract.required_filter_fields,
+      contract.required_filter_values,
+    );
+    if (filterMismatch !== undefined) mismatches.push(filterMismatch);
+  }
   const choice = contract.proposal_choices.find(
     (candidate) => candidate.template === proposal.template,
   );
   if (!choice) {
     return [
+      ...mismatches,
       {
         code: 'template-not-offered',
         template: proposal.template,
@@ -518,7 +547,6 @@ function proposalContractMismatches(
 
   const slotById = new Map(choice.slots.map((slot) => [slot.slot_id, slot]));
   const boundSlotIds = new Set(proposal.bindings.map((binding) => binding.slot_id));
-  const mismatches: ProposalContractMismatch[] = [];
   const addMismatch = (mismatch: ProposalContractMismatch): boolean => {
     mismatches.push(mismatch);
     return mismatches.length >= MAX_PROPOSAL_MISMATCH_CHOICES;
@@ -572,6 +600,60 @@ function proposalContractMismatches(
   return mismatches;
 }
 
+function sameExactFieldSet(required: string[], provided: string[]): boolean {
+  return (
+    required.length === provided.length &&
+    new Set(provided).size === provided.length &&
+    required.every((field) => provided.includes(field))
+  );
+}
+
+function requiredFilterFieldsMismatch(
+  proposal: BindingProposal,
+  requiredFilterFields: string[],
+  requiredFilterValues: ExactFilterValueConstraint[] = [],
+): Extract<ProposalContractMismatch, { code: 'required_filter_fields_mismatch' }> | undefined {
+  const providedFilterFields = (proposal.filters ?? []).map((filter) => filter.field);
+  const fieldsMatch = sameExactFieldSet(requiredFilterFields, providedFilterFields);
+  const valuesMatch = requiredFilterValues.every((required) => {
+    const matchingFilters = (proposal.filters ?? []).filter(
+      (filter) => filter.field === required.field,
+    );
+    const provided = matchingFilters.length === 1 ? (matchingFilters[0].values ?? []) : [];
+    return sameExactFieldSet(required.values, provided);
+  });
+  if (fieldsMatch && valuesMatch) return undefined;
+
+  const providedFilterValues = requiredFilterValues.map<FilterValueReport>((required) => {
+    const matchingFilters = (proposal.filters ?? []).filter(
+      (filter) => filter.field === required.field,
+    );
+    const values = matchingFilters.length === 1 ? matchingFilters[0].values : undefined;
+    return {
+      field: required.field,
+      ...(values !== undefined
+        ? {
+            values: values
+              .slice(0, MAX_PROPOSAL_MISMATCH_CHOICES)
+              .map((value) => value.slice(0, 80)),
+          }
+        : {}),
+    };
+  });
+  return {
+    code: 'required_filter_fields_mismatch',
+    template: proposal.template,
+    required_filter_fields: requiredFilterFields,
+    provided_filter_fields: providedFilterFields.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+    ...(!valuesMatch
+      ? {
+          required_filter_values: requiredFilterValues,
+          provided_filter_values: providedFilterValues,
+        }
+      : {}),
+  };
+}
+
 const MAX_CORRECTION_CHANGES = 5;
 
 function correctionProposalFingerprint(
@@ -580,10 +662,21 @@ function correctionProposalFingerprint(
   requireExactChoices: boolean,
 ): string | undefined {
   const templateChange = allowedChanges.find((change) => change.kind === 'template');
+  const filterSetChange = allowedChanges.find((change) => change.kind === 'filter_set');
   if (
     templateChange?.kind === 'template' &&
     requireExactChoices &&
     !templateChange.choices.includes(proposal.template)
+  ) {
+    return undefined;
+  }
+  if (
+    filterSetChange?.kind === 'filter_set' &&
+    requireExactChoices &&
+    !sameExactFieldSet(
+      filterSetChange.choices,
+      (proposal.filters ?? []).map((filter) => filter.field),
+    )
   ) {
     return undefined;
   }
@@ -617,27 +710,30 @@ function correctionProposalFingerprint(
     };
   });
 
-  const filters = proposal.filters?.map((filter, index) => {
-    const fieldChange = allowedChanges.find(
-      (change) => change.kind === 'filter-field' && change.index === index,
-    );
-    if (
-      fieldChange?.kind === 'filter-field' &&
-      requireExactChoices &&
-      !fieldChange.choices.includes(filter.field)
-    ) {
-      valid = false;
-    }
-    return {
-      field: fieldChange ? `__correctable_filter_field_${index}__` : filter.field,
-      ...(filter.values !== undefined ? { values: filter.values } : {}),
-      ...(filter.context !== undefined ? { context: filter.context } : {}),
-    };
-  });
+  const filters = filterSetChange
+    ? '__correctable_filter_set__'
+    : proposal.filters?.map((filter, index) => {
+        const fieldChange = allowedChanges.find(
+          (change) => change.kind === 'filter-field' && change.index === index,
+        );
+        if (
+          fieldChange?.kind === 'filter-field' &&
+          requireExactChoices &&
+          !fieldChange.choices.includes(filter.field)
+        ) {
+          valid = false;
+        }
+        return {
+          field: fieldChange ? `__correctable_filter_field_${index}__` : filter.field,
+          ...(filter.values !== undefined ? { values: filter.values } : {}),
+          ...(filter.context !== undefined ? { context: filter.context } : {}),
+        };
+      });
   if (!valid) return undefined;
   for (const change of allowedChanges) {
     if (
       change.kind !== 'template' &&
+      change.kind !== 'filter_set' &&
       (change.kind === 'filter-field' ? filters?.[change.index] : bindings[change.index]) ===
         undefined
     ) {
@@ -676,7 +772,9 @@ function correctionInvariant(
     allowedChanges.length === 0 ||
     allowedChanges.length > MAX_CORRECTION_CHANGES ||
     allowedChanges.some(
-      (change) => change.choices.length === 0 || change.choices.length > MAX_CORRECTION_CHANGES,
+      (change) =>
+        (change.kind !== 'filter_set' && change.choices.length === 0) ||
+        change.choices.length > MAX_CORRECTION_CHANGES,
     )
   ) {
     return undefined;
@@ -693,6 +791,10 @@ function contractCorrectionInvariant(
 ): BindRecoveryCorrectionInvariant | undefined {
   const allowedChanges: BindRecoveryCorrectionChange[] = [];
   for (const mismatch of mismatches) {
+    if (mismatch.code === 'required_filter_fields_mismatch') {
+      allowedChanges.push({ kind: 'filter_set', choices: mismatch.required_filter_fields });
+      continue;
+    }
     if (mismatch.code === 'required-slot-missing') return undefined;
     if (mismatch.code === 'template-not-offered') {
       allowedChanges.push({ kind: 'template', choices: mismatch.choices });
@@ -710,7 +812,13 @@ function contractCorrectionInvariant(
       choices: mismatch.choices,
     });
   }
-  return correctionInvariant('contract', proposal, allowedChanges);
+  return correctionInvariant(
+    mismatches.every((mismatch) => mismatch.code === 'required_filter_fields_mismatch')
+      ? 'required_filter_set'
+      : 'contract',
+    proposal,
+    allowedChanges,
+  );
 }
 
 function filterCorrectionInvariant(
@@ -757,7 +865,7 @@ function correctionInvariantViolationResult({
   proposal: BindingProposal;
   source: BindRecoveryCorrectionInvariant['source'];
 }): StructuredBindTemplateToolResult {
-  const filterSource = source === 'filter';
+  const filterSource = source === 'filter' || source === 'required_filter_set';
   const hasFilters = (proposal.filters?.length ?? 0) > 0;
   return withNextAction(
     {
@@ -789,8 +897,27 @@ function proposalContractMismatchResult({
   correctionAvailable: boolean;
 }): StructuredBindTemplateToolResult {
   const hasFilters = (proposal.filters?.length ?? 0) > 0;
+  const filterSetMismatch = mismatches.some(
+    (mismatch) => mismatch.code === 'required_filter_fields_mismatch',
+  );
+  const filterValueMismatch = mismatches.some(
+    (mismatch) =>
+      mismatch.code === 'required_filter_fields_mismatch' &&
+      mismatch.required_filter_values !== undefined,
+  );
+  const bindingMismatch = mismatches.some(
+    (mismatch) => mismatch.code !== 'required_filter_fields_mismatch',
+  );
   const correctionGuidance = correctionAvailable
-    ? 'One changed corrected proposal may proceed.'
+    ? filterSetMismatch && bindingMismatch
+      ? filterValueMismatch
+        ? 'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and repair only the invalid bindings to exact listed choices.'
+        : 'One corrected proposal may proceed: use exactly required_filter_fields once each and repair only the invalid bindings to exact listed choices.'
+      : filterSetMismatch
+        ? filterValueMismatch
+          ? 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order, with the exact required_filter_values. Context may vary.'
+          : 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order. Values and context may vary.'
+        : 'One changed corrected proposal may proceed.'
     : hasFilters
       ? 'The correction allowance is exhausted. Stop and use ask-user: the artifact fallback cannot preserve proposal.filters. Do not guess with raw XML.'
       : 'The correction allowance is exhausted; stop calling bind-template and ask the user or use the artifact fallback.';
@@ -803,7 +930,11 @@ function proposalContractMismatchResult({
       rejected_proposal: proposal,
       guidance:
         `Blocked before Desktop work: the proposal violates the retained call_2_contract. ${correctionGuidance} ` +
-        'Change only the invalid bindings to one exact listed choice; preserve filters, sort, and top_n unchanged. Do not guess a measure.',
+        (filterSetMismatch && bindingMismatch
+          ? 'Preserve every other proposal field unchanged.'
+          : filterSetMismatch
+            ? 'Preserve template, title, bindings, sort, and top_n unchanged.'
+            : 'Change only the invalid bindings to one exact listed choice; preserve filters, sort, and top_n unchanged. Do not guess a measure.'),
     },
     prefillNextAction(
       correctionAvailable
@@ -853,6 +984,60 @@ function proposalFilterResolutionFailedResult({
         : 'Ask user to resolve filter field',
     ),
   );
+}
+
+function ambiguousFilterIntentResult(
+  candidateFieldRefs: string[] = [],
+): StructuredBindTemplateToolResult {
+  return withNextAction(
+    {
+      status: 'blocked',
+      reason: 'ambiguous_filter_intent',
+      guidance:
+        'Blocked before Desktop mutation: the explicit filter intent is ambiguous, unresolved, duplicated across datasources, or exceeds the retained limit. Use ask-user to choose at most five exact filter fields; for a member constraint, use Field = Value or "filtered to Field Value" and quote multiword values. Then make a new bind-template ask. If the filter field is being created by calcs in this call, author it first and retry.',
+      ...(candidateFieldRefs.length > 0
+        ? {
+            blockers: [
+              {
+                code: 'ambiguous-field' as const,
+                detail: 'explicit filter field matches multiple qualified schema fields',
+                candidates: candidateFieldRefs,
+              },
+            ],
+          }
+        : {}),
+    },
+    prefillNextAction('Ask user to choose exact filter fields'),
+  );
+}
+
+function directProposalFilterMismatchResult(
+  proposal: BindingProposal,
+  mismatch: Extract<ProposalContractMismatch, { code: 'required_filter_fields_mismatch' }>,
+): StructuredBindTemplateToolResult {
+  const requiresExactValues = mismatch.required_filter_values !== undefined;
+  return withNextAction(
+    {
+      status: 'blocked',
+      reason: 'proposal_contract_mismatch',
+      mismatches: [mismatch],
+      rejected_proposal: proposal,
+      guidance:
+        'Blocked before binder or Desktop mutation: this initial proposal must use every exact filter field named in the ask once, in any order. Correct proposal.filters and retry this direct call; ' +
+        (requiresExactValues
+          ? 'use the exact required_filter_values. Context may vary.'
+          : 'values and context may vary.'),
+    },
+    prefillNextAction('Correct direct proposal filters'),
+  );
+}
+
+function clearFilterPreflightRecoveryFailOpen(session: string, askKey: string): void {
+  try {
+    sessionRouteState.clearBindRecovery(session, askKey);
+  } catch {
+    /* fail-open */
+  }
 }
 
 function isProposalFilterResolutionFailure(
@@ -1176,11 +1361,15 @@ function buildCall2Contract({
   session,
   ask,
   targetWorksheet,
+  requiredFilterFields,
+  requiredFilterValues,
 }: {
   llmInput: LlmProposeInput;
   session: string;
   ask: string;
   targetWorksheet?: string;
+  requiredFilterFields?: string[];
+  requiredFilterValues?: ExactFilterValueConstraint[];
 }): Call2Contract {
   return {
     tool: 'bind-template',
@@ -1215,6 +1404,10 @@ function buildCall2Contract({
         ? 'Use compatible_field_options labels to compare table grain, then bind its exact name from compatible_field_names; do not rename or infer a field.'
         : 'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
     },
+    ...(requiredFilterFields !== undefined ? { required_filter_fields: requiredFilterFields } : {}),
+    ...(requiredFilterValues !== undefined && requiredFilterValues.length > 0
+      ? { required_filter_values: requiredFilterValues }
+      : {}),
   };
 }
 
@@ -2449,7 +2642,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             /* fail-open */
           }
 
-          const retainedCall2Contract = priorRecovery?.proposalContext;
+          const retainedCall2Contract = priorRecovery?.proposalContext as Call2Contract | undefined;
           if (proposal !== undefined && retainedCall2Contract !== undefined) {
             const mismatches = proposalContractMismatches(
               proposal as BindingProposal,
@@ -2493,6 +2686,31 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new DesktopCommandExecutionError(xmlResult.error).toErr();
           }
           let workbookXml = xmlResult.value;
+          let baselineSchemaSummary: SchemaSummary | undefined;
+          let baselineFilterIntent: ExactFilterIntent | undefined;
+          if (priorRecovery === undefined) {
+            baselineSchemaSummary = summarizeSchema(workbookXml);
+            baselineFilterIntent = parseExactFilterIntent(ask, baselineSchemaSummary);
+            if (baselineFilterIntent.kind === 'ambiguous') {
+              clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
+              return new IncompleteOperationError(
+                ambiguousFilterIntentResult(baselineFilterIntent.candidateFieldRefs),
+              ).toErr();
+            }
+            if (proposal !== undefined && baselineFilterIntent.kind === 'exact') {
+              const mismatch = requiredFilterFieldsMismatch(
+                proposal as BindingProposal,
+                baselineFilterIntent.fieldNames,
+                baselineFilterIntent.valueConstraints,
+              );
+              if (mismatch !== undefined) {
+                clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
+                return new IncompleteOperationError(
+                  directProposalFilterMismatchResult(proposal as BindingProposal, mismatch),
+                ).toErr();
+              }
+            }
+          }
           let authoredCalcCaptions: string[] = [];
           if (calcs && calcs.length > 0) {
             const percentAsk = asksForPercent(ask);
@@ -2572,6 +2790,14 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
 
           let res: BinderResult;
           let appliedDefault: AppliedDefault | undefined;
+          let schemaSummary: SchemaSummary | undefined =
+            calcs && calcs.length > 0 ? undefined : baselineSchemaSummary;
+          const requiredFilterFields =
+            baselineFilterIntent?.kind === 'exact' ? baselineFilterIntent.fieldNames : undefined;
+          const requiredFilterValues =
+            baselineFilterIntent?.kind === 'exact'
+              ? baselineFilterIntent.valueConstraints
+              : undefined;
           try {
             res = await bindTemplate({
               ask,
@@ -2584,7 +2810,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               proposal === undefined &&
               auto_apply === true &&
               res.status === 'propose' &&
-              res.llm_input.recommended
+              res.llm_input.recommended &&
+              requiredFilterFields === undefined
             ) {
               const recommended = res.llm_input.recommended;
               res = await bindTemplate({
@@ -2644,7 +2871,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             res = { ...res, args: { ...res.args, title: canonicalTargetWorksheet } };
           }
           const bindMs = Date.now() - bindStart;
-          const schemaSummary = summarizeSchema(workbookXml);
+          schemaSummary ??= summarizeSchema(workbookXml);
           res = puppetCompatibility.expandBinderResult(res, schemaSummary);
 
           // ── One structured correction boundary ─────────────────────────
@@ -2656,6 +2883,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   session: resolvedSession,
                   ask,
                   targetWorksheet: resolvedTarget?.id ?? target_worksheet,
+                  requiredFilterFields,
+                  requiredFilterValues,
                 })
               : undefined;
           if (isStructuredCorrectionCall && res.status !== 'bound') {

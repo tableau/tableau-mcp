@@ -41,6 +41,17 @@ const RETURNS_PEOPLE_WORKBOOK_XML = WORKBOOK_XML.replace(
   "<column name='[Returned]' role='dimension' type='nominal' datatype='string' /><column name='[Regional Manager]' role='dimension' type='nominal' datatype='string' /></datasource>",
 );
 
+const LATLON_FILTER_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Points'>
+      <column name='[Country]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Latitude]' role='measure' type='quantitative' datatype='real' semantic-role='[Geographical].[Latitude]' />
+      <column name='[Longitude]' role='measure' type='quantitative' datatype='real' semantic-role='[Geographical].[Longitude]' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
 const GRAIN_AMBIGUOUS_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>
   <datasources>
@@ -313,6 +324,49 @@ describe('binder/classifyNoLlm', () => {
       '{{field_base_3}}': '[Superstore].[none:Returned:nk]',
     });
     expect(result.args.filters).toEqual([{ field: 'Region' }, { field: 'Regional Manager' }]);
+  });
+
+  it('preserves an interactive date filter when a proposal also binds the date on the view', async () => {
+    const result = await bindTemplate({
+      ask: 'Create a line chart of Sales over Order Date, color by Category, with an interactive Order Date filter.',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: {
+        template: 'trend-line-chart',
+        title: 'Sales over Order Date',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Sales' },
+          { slot_id: 'field_base_2', field: 'Order Date' },
+          { slot_id: 'field_base_3', field: 'Category' },
+        ],
+        confidence: 1,
+        filters: [{ field: 'Order Date' }],
+      },
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.template_name).toBe('trend-line-chart');
+    expect(result.args.field_mapping).toEqual({
+      '{{field_base_1}}': '[Superstore].[sum:Sales:qk]',
+      '{{field_base_2}}': '[Superstore].[tmn:Order Date:qk]',
+      '{{field_base_3}}': '[Superstore].[none:Category:nk]',
+    });
+    expect(result.args.filters).toEqual([{ field: 'Order Date' }]);
+  });
+
+  it('preserves an explicit filter when the no-LLM path also binds that field', () => {
+    const result = classifyNoLlm(
+      'Build a symbol map using Latitude and Longitude with Country for detail. Filter by Country.',
+      descriptors,
+      summarizeSchema(LATLON_FILTER_WORKBOOK_XML),
+    );
+
+    expect(result?.template).toBe('spatial-symbol-map-latlon');
+    expect(result?.bindings).toEqual(
+      expect.arrayContaining([{ slot_id: 'field_base_6', field: 'Country' }]),
+    );
+    expect(result?.filters).toEqual([{ field: 'Country' }]);
   });
 
   it('fails closed for an either-or filter choice', () => {
@@ -1274,6 +1328,28 @@ describe('binder/schema width cap', () => {
       ),
     ).toBeNull();
   });
+
+  it('keeps KPI Call 2 bounded above the field cap', async () => {
+    const count = MAX_CLASSIFIABLE_FIELDS + 1;
+    const result = await bindTemplate({
+      ask: 'show F0 as a KPI',
+      workbookXml: wideWorkbookXml(count),
+      manifests: descriptors,
+      proposal: {
+        template: 'kpi-text',
+        title: 'F0 KPI',
+        bindings: [{ slot_id: 'field_base_1', field: 'F0' }],
+        confidence: 1,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('schema-too-large');
+    expect(result.blockers[0].detail).toBe(
+      `schema-too-large: ${count} fields > ${MAX_CLASSIFIABLE_FIELDS} cap`,
+    );
+  });
 });
 
 describe('binder/KPI derivation and injected proposal seam', () => {
@@ -1290,6 +1366,45 @@ describe('binder/KPI derivation and injected proposal seam', () => {
     expect(result.args.field_mapping).toEqual({
       '{{field_base_1}}': '[Bets].[avg:O/U Line:qk]',
     });
+  });
+
+  it('Call 1 declines a live-shaped multi-measure KPI ask instead of binding only Sales', async () => {
+    const result = await bindTemplate({
+      ask: 'KPI tiles showing total Sales, Profit, and Quantity',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+    });
+
+    expect(result.status).toBe('propose');
+    if (result.status === 'propose') {
+      expect(result.decline_reason).toEqual(
+        expect.objectContaining({ code: 'no_llm_validation_declined' }),
+      );
+    }
+  });
+
+  it('Call 2 rejects a live-shaped multi-measure KPI proposal instead of binding only Sales', async () => {
+    const result = await bindTemplate({
+      ask: 'KPI tiles showing total Sales, Profit, and Quantity',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+      proposal: {
+        template: 'kpi-text',
+        title: 'Sales, Profit, and Quantity',
+        bindings: [{ slot_id: 'field_base_1', field: 'Sales' }],
+        confidence: 1,
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status === 'escalate') {
+      expect(result.blockers).toContainEqual(
+        expect.objectContaining({
+          code: 'kind-mismatch',
+          detail: expect.stringContaining('one measure per worksheet'),
+        }),
+      );
+    }
   });
 
   it('closes a Call-1 miss through an injected raw-slot proposal', async () => {

@@ -202,9 +202,9 @@ describe('desktop tools/list serialized surface', () => {
       DYNAMIC_AUTHORING_TOOL_PROFILE,
     );
 
-    // Tool search, not an aggregate tools/list payload, owns discovery. Keep only the
-    // instruction pin and per-tool budget so useful tools do not fund one shared ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(5_101);
+    // Tool search owns discovery; pin the merged filter recovery, dense-scatter repair,
+    // and executive-dashboard guidance without restoring an aggregate tools/list ceiling.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(6_687);
   });
 });
 
@@ -252,9 +252,8 @@ describe('desktop tools/list Tableau vocabulary', () => {
 });
 
 describe('desktop tools/list per-tool byte accounting', () => {
-  // Per-tool ceiling. The sum test above pins the SURFACE; this pins ATTRIBUTION:
-  // when the sum reddens it names WHICH tool got fat, with numbers. Kept well
-  // under the sum's slack so a single tool can't silently eat the whole budget.
+  // Tool search owns aggregate discovery. Keep each individual tool bounded so a
+  // schema cannot grow without its own measured, reviewable ratchet change.
   const PER_TOOL_BUDGET = 1_020;
 
   // Tools already over PER_TOOL_BUDGET at this base (feature/authoring @ 241a67e7).
@@ -272,6 +271,8 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['apply-worksheet', 1579], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1684], // raised 2026-08-25: bounded mark-type changes keep a discoverable target enum and useful defaults/examples; earlier raise with sign-off (2026-08-05) for the UI title and omitted-targetField axis detection
+    ['build-worksheets-from-templates', 1150], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
+    ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
     // Approved with the tool-search transition: the per-sheet schema prevents partial

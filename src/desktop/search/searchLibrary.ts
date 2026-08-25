@@ -1,6 +1,8 @@
+import { DOMParser, Element as XmlElement, XMLSerializer } from '@xmldom/xmldom';
+import { createHash } from 'crypto';
 import fs from 'fs';
 import Fuse from 'fuse.js';
-import { join } from 'path';
+import { basename, join } from 'path';
 
 import { listDataAssetNames, readDataAsset } from '../assets.js';
 import { checkCommandPolicy } from '../guards/commandPolicy.js';
@@ -220,51 +222,262 @@ export function searchCommandsByKeywords(keywords: string[]): any {
 
 // --- Workbook schema search ---
 
-let _schemaCache: any = null;
-let _schemaEnumFuse: Fuse<any> | null = null;
-let _schemaElementFuse: Fuse<any> | null = null;
-let _schemaParentIndex: Record<string, string[]> | null = null;
-let _schemaElementToGroup: Record<string, string[]> | null = null;
+const WORKBOOK_XSD_ASSET = 'twb_2026.2.0.xsd';
+const XSD_NAMESPACE = 'http://www.w3.org/2001/XMLSchema';
+const DECLARATION_KINDS = new Set([
+  'attribute',
+  'attributeGroup',
+  'complexType',
+  'element',
+  'group',
+  'simpleType',
+]);
+const REFERENCE_ATTRIBUTES = new Set(['base', 'itemType', 'memberTypes', 'ref', 'type']);
+const XSD_EXPANSION_BYTES_MAX = 8 * 1024;
+const XSD_RESPONSE_BYTES_MAX = 64 * 1024;
+const XSD_RESPONSE_TARGET_BYTES = 60 * 1024;
 
-function loadSchemaReference(): any {
-  if (_schemaCache) return _schemaCache;
-  const raw = process.env.SCHEMA_REFERENCE_PATH
-    ? fs.readFileSync(process.env.SCHEMA_REFERENCE_PATH, 'utf8')
-    : readDataAsset('workbook-schema-reference.json');
-  if (raw === null) {
-    throw new Error('Workbook schema reference not available: workbook-schema-reference.json');
+type XsdDeclaration = {
+  kind: string;
+  name: string;
+  refs: string[];
+  xsd: string;
+};
+
+type WorkbookSchemaIndex = {
+  source: string;
+  version: string;
+  declarations: XsdDeclaration[];
+  byName: Map<string, XsdDeclaration>;
+  parentIndex: Map<string, string[]>;
+  enumFuse: Fuse<XsdDeclaration>;
+  elementFuse: Fuse<XsdDeclaration>;
+};
+
+type ExpansionState = {
+  remainingBytes: number;
+  unexpandedNames: Set<string>;
+};
+
+function untrustedTextSummary(label: string, value: string): string {
+  const bytes = Buffer.byteLength(value, 'utf8');
+  const digest = createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 12);
+  return `${label} (${bytes} bytes, sha256:${digest})`;
+}
+
+function safeDeclarationLabel(name: string): string {
+  const bytes = Buffer.byteLength(name, 'utf8');
+  if (bytes <= 128 && /^[A-Za-z_][A-Za-z0-9_.:-]*$/.test(name)) return `"${name}"`;
+  return untrustedTextSummary('name', name);
+}
+
+function safeWorkbookXsdOverrideLocation(overridePath: string | undefined): string {
+  const filename = overridePath ? basename(overridePath) : undefined;
+  return filename &&
+    Buffer.byteLength(filename, 'utf8') <= 128 &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(filename)
+    ? ` at "${filename}"`
+    : overridePath
+      ? ` at ${untrustedTextSummary('override path', overridePath)}`
+      : '';
+}
+
+function workbookXsdError(
+  context: string,
+  overridePath: string | undefined,
+  diagnosticLabel: string,
+  diagnostic: unknown,
+): Error {
+  const diagnosticText = diagnostic instanceof Error ? diagnostic.message : String(diagnostic);
+  return new Error(
+    `${context}${safeWorkbookXsdOverrideLocation(overridePath)}: ${untrustedTextSummary(diagnosticLabel, diagnosticText)}`,
+  );
+}
+
+function invalidWorkbookXsdError(overridePath: string | undefined, diagnostic: unknown): Error {
+  return workbookXsdError(
+    'Workbook XSD is not valid XML',
+    overridePath,
+    'parser diagnostic',
+    diagnostic,
+  );
+}
+
+function unavailableWorkbookXsdError(overridePath: string | undefined, diagnostic: unknown): Error {
+  return workbookXsdError('Workbook XSD not available', overridePath, 'read failure', diagnostic);
+}
+
+function throwOversizedSchemaResponse(declarations: Array<{ name: string }>): never {
+  const labels = [
+    ...new Set(declarations.map((declaration) => safeDeclarationLabel(declaration.name))),
+  ];
+  throw new Error(
+    `Workbook schema response for ${labels.join(', ')} exceeds the 64 KiB response ceiling after pruning optional expansions; query declarations separately by exact name.`,
+  );
+}
+
+let _schemaCache: WorkbookSchemaIndex | null = null;
+
+function collectReferenceNames(node: XmlElement): string[] {
+  const candidates = new Set<string>();
+
+  function visit(current: XmlElement): void {
+    for (let index = 0; index < current.attributes.length; index += 1) {
+      const attr = current.attributes.item(index);
+      if (!attr) continue;
+      const attrName = attr.localName || attr.name;
+      if (!REFERENCE_ATTRIBUTES.has(attrName)) continue;
+      for (const token of attr.value.split(/\s+/).filter(Boolean)) {
+        if (token.startsWith('xs:') || token.startsWith('xml:') || token.startsWith('user:')) {
+          continue;
+        }
+        candidates.add(token.includes(':') ? token.slice(token.lastIndexOf(':') + 1) : token);
+      }
+    }
+    for (let child = current.firstChild; child; child = child.nextSibling) {
+      if (child.nodeType === 1) visit(child as XmlElement);
+    }
   }
-  _schemaCache = JSON.parse(raw);
+
+  visit(node);
+  return [...candidates];
+}
+
+function loadWorkbookSchema(): WorkbookSchemaIndex {
+  if (_schemaCache) return _schemaCache;
+
+  const workbookOverridePath = process.env.WORKBOOK_XSD_PATH;
+  const legacyOverridePath = process.env.SCHEMA_REFERENCE_PATH;
+  const overridePath = workbookOverridePath || legacyOverridePath;
+  let raw: string | null;
+  try {
+    raw = overridePath ? fs.readFileSync(overridePath, 'utf8') : readDataAsset(WORKBOOK_XSD_ASSET);
+  } catch (error) {
+    throw unavailableWorkbookXsdError(overridePath, error);
+  }
+  if (raw === null) {
+    throw new Error(`Workbook XSD not available: ${WORKBOOK_XSD_ASSET}`);
+  }
+  const rawStart = raw.trimStart();
+  if (
+    !workbookOverridePath &&
+    legacyOverridePath &&
+    (rawStart.startsWith('{') || rawStart.startsWith('['))
+  ) {
+    throw new Error(
+      'SCHEMA_REFERENCE_PATH is deprecated and must point to raw XSD; flattened JSON is not supported.',
+    );
+  }
+
+  const parseErrors: string[] = [];
+  let doc;
+  try {
+    doc = new DOMParser({
+      onError: (_level, message) => {
+        parseErrors.push(String(message));
+      },
+    }).parseFromString(raw, 'application/xml');
+  } catch (error) {
+    throw invalidWorkbookXsdError(overridePath, error);
+  }
+  if (!doc.documentElement || parseErrors.length > 0) {
+    throw invalidWorkbookXsdError(overridePath, parseErrors[0] ?? 'missing document element');
+  }
+  const rootKind =
+    doc.documentElement.localName || doc.documentElement.nodeName.replace(/^.*:/, '');
+  if (doc.documentElement.namespaceURI !== XSD_NAMESPACE || rootKind !== 'schema') {
+    throw new Error(
+      `Workbook XSD root must be xs:schema${safeWorkbookXsdOverrideLocation(overridePath)}`,
+    );
+  }
+
+  const serializer = new XMLSerializer();
+  const declarations: XsdDeclaration[] = [];
+  for (let node = doc.documentElement.firstChild; node; node = node.nextSibling) {
+    if (node.nodeType !== 1) continue;
+    const element = node as XmlElement;
+    const kind = element.localName || element.nodeName.replace(/^.*:/, '');
+    const name = element.getAttribute('name');
+    if (element.namespaceURI !== XSD_NAMESPACE || !DECLARATION_KINDS.has(kind) || !name) continue;
+    declarations.push({
+      kind,
+      name,
+      refs: collectReferenceNames(element),
+      xsd: serializer.serializeToString(element),
+    });
+  }
+  if (declarations.length === 0) {
+    throw new Error(
+      `Workbook XSD contains no named declarations${safeWorkbookXsdOverrideLocation(overridePath)}`,
+    );
+  }
+  const schemaSource = overridePath ? basename(overridePath) : WORKBOOK_XSD_ASSET;
+  const schemaVersion = doc.documentElement.getAttribute('version') || 'unknown';
+  for (const declaration of declarations) {
+    const rawResult: any = {
+      kind: declaration.kind,
+      name: declaration.name,
+      xsd: declaration.xsd,
+    };
+    if (declaration.refs.length > 0) rawResult.refs = declaration.refs;
+    const envelope = {
+      source: schemaSource,
+      version: schemaVersion,
+      enums: declaration.kind === 'simpleType' ? [rawResult] : [],
+      elements: declaration.kind === 'simpleType' ? [] : [rawResult],
+    };
+    if (serializedSchemaBytes(envelope) >= XSD_RESPONSE_BYTES_MAX) {
+      throw new Error(
+        `Workbook XSD declaration ${safeDeclarationLabel(declaration.name)} exceeds the 64 KiB response ceiling`,
+      );
+    }
+  }
+
+  const byName = new Map(declarations.map((entry) => [entry.name, entry]));
+  for (const declaration of declarations) {
+    declaration.refs = declaration.refs.filter(
+      (name) => name !== declaration.name && byName.has(name),
+    );
+  }
+
+  const parentIndex = new Map<string, string[]>();
+  for (const declaration of declarations) {
+    for (const ref of declaration.refs) {
+      const parents = parentIndex.get(ref) ?? [];
+      parents.push(declaration.name);
+      parentIndex.set(ref, parents);
+    }
+  }
+
+  const fuseOptions = {
+    keys: ['name', { name: 'xsd', weight: 0.35 }],
+    threshold: 0.3,
+    ignoreLocation: true,
+  };
+  _schemaCache = {
+    source: schemaSource,
+    version: schemaVersion,
+    declarations,
+    byName,
+    parentIndex,
+    enumFuse: new Fuse(
+      declarations.filter((entry) => entry.kind === 'simpleType'),
+      fuseOptions,
+    ),
+    elementFuse: new Fuse(
+      declarations.filter((entry) => entry.kind !== 'simpleType'),
+      fuseOptions,
+    ),
+  };
   return _schemaCache;
 }
 
-function ensureSchemaIndexes(): void {
-  if (_schemaParentIndex) return;
-  const schema = loadSchemaReference();
-  _schemaParentIndex = {};
-  _schemaElementToGroup = {};
-  for (const entry of schema.elements || []) {
-    if (entry.refs) {
-      for (const ref of entry.refs) {
-        if (!_schemaParentIndex[ref]) _schemaParentIndex[ref] = [];
-        _schemaParentIndex[ref].push(entry.name);
-      }
-    }
-    if (entry.elements) {
-      for (const el of entry.elements) {
-        if (!_schemaElementToGroup![el]) _schemaElementToGroup![el] = [];
-        _schemaElementToGroup![el].push(entry.name);
-      }
-    }
-  }
-}
-
 function computeAncestorPaths(entryName: string, maxDepth = 6): string[] {
-  ensureSchemaIndexes();
+  const schema = loadWorkbookSchema();
   const rawPaths: string[][] = [];
 
   function walk(name: string, trail: string[], visited: Set<string>): void {
-    const parents = _schemaParentIndex![name] || [];
+    const parents = schema.parentIndex.get(name) ?? [];
     if (parents.length === 0 || trail.length >= maxDepth) {
       rawPaths.push([...trail].reverse());
       return;
@@ -301,62 +514,245 @@ function computeAncestorPaths(entryName: string, maxDepth = 6): string[] {
   return result;
 }
 
-function computeElementPaths(elementName: string, maxDepth = 6): string[] {
-  ensureSchemaIndexes();
-  const groups = _schemaElementToGroup![elementName] || [];
-  if (groups.length === 0) return [];
-  const allPaths: string[] = [];
-  for (const group of groups) {
-    const groupPaths = computeAncestorPaths(group, maxDepth);
-    for (const p of groupPaths) {
-      allPaths.push(p + ' > ' + elementName);
+function formatDeclaration(
+  declaration: XsdDeclaration,
+  shouldExpand: boolean,
+  depth = 0,
+  visited: Set<string> = new Set(),
+  expansionState?: ExpansionState,
+): any {
+  const schema = loadWorkbookSchema();
+  const isRoot = expansionState === undefined;
+  const state = expansionState ?? {
+    remainingBytes: Math.max(
+      0,
+      XSD_EXPANSION_BYTES_MAX - Buffer.byteLength(declaration.xsd, 'utf8'),
+    ),
+    unexpandedNames: new Set<string>(),
+  };
+  const result: any = {
+    kind: declaration.kind,
+    name: declaration.name,
+    xsd: declaration.xsd,
+  };
+  if (declaration.refs.length > 0) result.refs = declaration.refs;
+  const parentPaths = computeAncestorPaths(declaration.name);
+  if (parentPaths.length > 0) result.parentPaths = parentPaths;
+  if (!shouldExpand || depth >= 3 || declaration.refs.length === 0) return result;
+
+  const expandedRefs: Record<string, any> = {};
+  const nextVisited = new Set(visited).add(declaration.name);
+  for (const refName of declaration.refs) {
+    const referenced = schema.byName.get(refName);
+    if (!referenced) continue;
+    if (nextVisited.has(refName)) {
+      expandedRefs[refName] = {
+        kind: referenced.kind,
+        name: referenced.name,
+        xsd: referenced.xsd,
+        recursive: true,
+      };
+      continue;
     }
+    const referencedBytes = Buffer.byteLength(referenced.xsd, 'utf8');
+    if (referencedBytes > state.remainingBytes) {
+      state.unexpandedNames.add(refName);
+      expandedRefs[refName] = {
+        kind: referenced.kind,
+        name: referenced.name,
+        unexpanded: true,
+      };
+      continue;
+    }
+    state.remainingBytes -= referencedBytes;
+    expandedRefs[refName] = formatDeclaration(referenced, true, depth + 1, nextVisited, state);
   }
-  return [...new Set(allPaths)];
+  if (Object.keys(expandedRefs).length > 0) result.expandedRefs = expandedRefs;
+  if (isRoot && state.unexpandedNames.size > 0) {
+    result.expansionTruncated = true;
+    result.unexpandedRefs = [...state.unexpandedNames];
+    result.expansionHint = 'Query an unexpanded declaration by name to inspect its complete XSD.';
+  }
+  return result;
 }
 
-function ensureSchemaFuse(): void {
-  if (_schemaEnumFuse && _schemaElementFuse) return;
-  const schema = loadSchemaReference();
-  _schemaEnumFuse = new Fuse(schema.enums || [], {
-    keys: ['name', 'values'],
-    threshold: 0.3,
-    ignoreLocation: true,
-  });
-  _schemaElementFuse = new Fuse(schema.elements || [], {
-    keys: ['name', 'elements', 'attributes[].name', 'attributes[].type', 'refs'],
-    threshold: 0.3,
-    ignoreLocation: true,
-  });
+function findDeclarations(
+  query: string,
+  declarations: XsdDeclaration[],
+  fuse: Fuse<XsdDeclaration>,
+): XsdDeclaration[] {
+  const cleaned = query.trim().toLowerCase();
+  if (!cleaned) return [];
+  const exact = declarations.find((entry) => entry.name.toLowerCase() === cleaned);
+  if (exact) return [exact];
+
+  const nameMatches = declarations
+    .filter((entry) => entry.name.toLowerCase().includes(cleaned))
+    .sort((left, right) => {
+      const leftPrefix = left.name.toLowerCase().startsWith(cleaned);
+      const rightPrefix = right.name.toLowerCase().startsWith(cleaned);
+      if (leftPrefix !== rightPrefix) return leftPrefix ? -1 : 1;
+      return left.name.length - right.name.length || left.name.localeCompare(right.name);
+    });
+  const bodyOnly = declarations.filter(
+    (entry) =>
+      !entry.name.toLowerCase().includes(cleaned) && entry.xsd.toLowerCase().includes(cleaned),
+  );
+  const bodyOnlyNames = new Set(bodyOnly.map((entry) => entry.name));
+  const fuzzy = fuse
+    .search(cleaned)
+    .map((result) => result.item)
+    .filter((entry) => !bodyOnlyNames.has(entry.name));
+  return [
+    ...new Map(
+      [...nameMatches, ...fuzzy, ...bodyOnly].map((entry) => [entry.name, entry]),
+    ).values(),
+  ].slice(0, 10);
 }
 
-function enrichWithPaths(entry: any): any {
-  const enriched = { ...entry };
-  const groupPaths = computeAncestorPaths(entry.name);
-  const elementPaths: Record<string, string[]> = {};
-  if (entry.elements) {
-    for (const el of entry.elements) {
-      const elPaths = computeElementPaths(el);
-      if (elPaths.length > 0) elementPaths[el] = elPaths;
-    }
-  }
-  if (groupPaths.length > 0) enriched.parentPaths = groupPaths;
-  if (Object.keys(elementPaths).length > 0) enriched.elementPaths = elementPaths;
-  return enriched;
+function declarationKey(declaration: { kind: string; name: string }): string {
+  return `${declaration.kind}\u0000${declaration.name}`;
 }
 
-function expandRefsInline(element: any, schema: any, depth: number, maxDepth: number): any {
-  if (!element.refs || depth >= maxDepth) return element;
-  const expanded = { ...element };
-  expanded.expandedRefs = {};
-  for (const refName of element.refs) {
-    const refElement = (schema.elements || []).find((e: any) => e.name === refName);
-    if (refElement) {
-      const enriched = enrichWithPaths(refElement);
-      expanded.expandedRefs[refName] = expandRefsInline(enriched, schema, depth + 1, maxDepth);
+function serializedSchemaBytes(value: any): number {
+  return Buffer.byteLength(JSON.stringify(value, null, 2), 'utf8');
+}
+
+function omitOneExpandedReference(declaration: any): boolean {
+  const expandedRefs = declaration.expandedRefs;
+  if (!expandedRefs || typeof expandedRefs !== 'object') return false;
+
+  const names = Object.keys(expandedRefs);
+  for (let index = names.length - 1; index >= 0; index -= 1) {
+    const refName = names[index];
+    const expanded = expandedRefs[refName];
+    if (!expanded || expanded.unexpanded === true) continue;
+    expandedRefs[refName] = {
+      kind: expanded.kind,
+      name: expanded.name,
+      unexpanded: true,
+    };
+    declaration.expansionTruncated = true;
+    declaration.unexpandedRefs = [
+      ...new Set([...(declaration.unexpandedRefs ?? []), expanded.name ?? refName]),
+    ];
+    declaration.expansionHint =
+      'Query an unexpanded declaration by name to inspect its complete XSD.';
+    return true;
+  }
+  return false;
+}
+
+function boundSchemaResponse(results: any, requiredDeclarationKeys: Set<string>): void {
+  const unorderedCandidates = [
+    ...results.enums.map((declaration: any) => ({ collection: 'enums', declaration })),
+    ...results.elements.map((declaration: any) => ({ collection: 'elements', declaration })),
+  ].map((candidate) => ({
+    ...candidate,
+    required: requiredDeclarationKeys.has(declarationKey(candidate.declaration)),
+  }));
+  const candidates = [
+    ...unorderedCandidates.filter((candidate) => candidate.required),
+    ...unorderedCandidates.filter((candidate) => !candidate.required),
+  ];
+
+  for (const candidate of candidates) {
+    const singleResult = {
+      source: results.source,
+      version: results.version,
+      enums: candidate.collection === 'enums' ? [candidate.declaration] : [],
+      elements: candidate.collection === 'elements' ? [candidate.declaration] : [],
+    };
+    while (
+      serializedSchemaBytes(singleResult) >= XSD_RESPONSE_BYTES_MAX &&
+      omitOneExpandedReference(candidate.declaration)
+    ) {
+      // Keep the requested declaration complete; only replace optional expansions with named stubs.
+    }
+    if (serializedSchemaBytes(singleResult) >= XSD_RESPONSE_BYTES_MAX) {
+      throwOversizedSchemaResponse([candidate.declaration]);
     }
   }
-  return expanded;
+
+  if (candidates.length <= 1) return;
+
+  const requiredCandidates = candidates.filter((candidate) => candidate.required);
+  const optionalCandidates = candidates.filter((candidate) => !candidate.required);
+  const kept: typeof candidates = [...requiredCandidates];
+  const omitted: typeof candidates = [];
+  results.enums = [];
+  results.elements = [];
+
+  const rebuildCollections = (): void => {
+    results.enums = kept
+      .filter((candidate) => candidate.collection === 'enums')
+      .map((candidate) => candidate.declaration);
+    results.elements = kept
+      .filter((candidate) => candidate.collection === 'elements')
+      .map((candidate) => candidate.declaration);
+  };
+
+  rebuildCollections();
+  while (serializedSchemaBytes(results) >= XSD_RESPONSE_TARGET_BYTES) {
+    let pruned = false;
+    for (let index = requiredCandidates.length - 1; index >= 0; index -= 1) {
+      if (omitOneExpandedReference(requiredCandidates[index].declaration)) {
+        pruned = true;
+        break;
+      }
+    }
+    if (!pruned) break;
+  }
+  if (serializedSchemaBytes(results) >= XSD_RESPONSE_BYTES_MAX) {
+    throwOversizedSchemaResponse(requiredCandidates.map((candidate) => candidate.declaration));
+  }
+
+  for (const candidate of optionalCandidates) {
+    kept.push(candidate);
+    rebuildCollections();
+    if (serializedSchemaBytes(results) >= XSD_RESPONSE_TARGET_BYTES) {
+      kept.pop();
+      omitted.push(candidate);
+      rebuildCollections();
+    }
+  }
+
+  if (omitted.length === 0) {
+    if (serializedSchemaBytes(results) >= XSD_RESPONSE_BYTES_MAX) {
+      throwOversizedSchemaResponse(kept.map((candidate) => candidate.declaration));
+    }
+    return;
+  }
+  const applyTruncationMetadata = (): void => {
+    results.responseTruncated = true;
+    results.omittedDeclarations = omitted.map(({ declaration }) => ({
+      kind: declaration.kind,
+      name: declaration.name,
+    }));
+    results.responseHint = 'Query an omitted declaration by name to inspect its complete XSD.';
+  };
+  applyTruncationMetadata();
+
+  while (serializedSchemaBytes(results) >= XSD_RESPONSE_BYTES_MAX) {
+    if (kept.length > requiredCandidates.length) {
+      omitted.unshift(kept.pop()!);
+      rebuildCollections();
+      applyTruncationMetadata();
+      continue;
+    }
+    let pruned = false;
+    for (let index = requiredCandidates.length - 1; index >= 0; index -= 1) {
+      if (omitOneExpandedReference(requiredCandidates[index].declaration)) {
+        pruned = true;
+        break;
+      }
+    }
+    if (!pruned) break;
+  }
+  if (serializedSchemaBytes(results) >= XSD_RESPONSE_BYTES_MAX) {
+    const declarations = requiredCandidates.length > 0 ? requiredCandidates : kept;
+    throwOversizedSchemaResponse(declarations.map((candidate) => candidate.declaration));
+  }
 }
 
 export function searchWorkbookSchema(args: {
@@ -365,65 +761,46 @@ export function searchWorkbookSchema(args: {
   keywords?: string[];
   expandRefs?: boolean;
 }): any {
-  const schema = loadSchemaReference();
-  ensureSchemaFuse();
-  ensureSchemaIndexes();
-  const results: { enums: any[]; elements: any[]; hint?: string } = { enums: [], elements: [] };
+  const schema = loadWorkbookSchema();
+  const enumDeclarations = schema.declarations.filter((entry) => entry.kind === 'simpleType');
+  const elementDeclarations = schema.declarations.filter((entry) => entry.kind !== 'simpleType');
+  const results: { source: string; version: string; enums: any[]; elements: any[]; hint?: string } =
+    {
+      source: schema.source,
+      version: schema.version,
+      enums: [],
+      elements: [],
+    };
   const shouldExpand = args.expandRefs === true;
+  const requiredDeclarationKeys = new Set<string>();
 
   if (args.enumType) {
-    const q = args.enumType.trim();
-    const exact = (schema.enums || []).find(
-      (e: any) => e.name === q || e.name.toLowerCase() === q.toLowerCase(),
-    );
-    if (exact) {
-      results.enums.push(exact);
-    } else {
-      results.enums = _schemaEnumFuse!
-        .search(q)
-        .slice(0, 10)
-        .map((r: any) => r.item);
-    }
+    const declarations = findDeclarations(args.enumType, enumDeclarations, schema.enumFuse);
+    if (declarations[0]) requiredDeclarationKeys.add(declarationKey(declarations[0]));
+    results.enums = declarations.map((entry) => formatDeclaration(entry, shouldExpand));
   }
 
   if (args.elementType) {
-    const q = args.elementType.trim();
-    const exact = (schema.elements || []).find(
-      (e: any) => e.name === q || e.name.toLowerCase() === q.toLowerCase(),
+    const declarations = findDeclarations(
+      args.elementType,
+      elementDeclarations,
+      schema.elementFuse,
     );
-    if (exact) {
-      let enriched = enrichWithPaths(exact);
-      if (shouldExpand) enriched = expandRefsInline(enriched, schema, 0, 3);
-      results.elements.push(enriched);
-    } else {
-      results.elements = _schemaElementFuse!
-        .search(q)
-        .slice(0, 10)
-        .map((r: any) => {
-          let enriched = enrichWithPaths(r.item);
-          if (shouldExpand) enriched = expandRefsInline(enriched, schema, 0, 3);
-          return enriched;
-        });
-    }
+    if (declarations[0]) requiredDeclarationKeys.add(declarationKey(declarations[0]));
+    results.elements = declarations.map((entry) => formatDeclaration(entry, shouldExpand));
   }
 
   if (args.keywords && Array.isArray(args.keywords) && args.keywords.length > 0) {
     const query = args.keywords.join(' ');
     if (results.enums.length === 0) {
-      results.enums = _schemaEnumFuse!
-        .search(query)
-        .slice(0, 10)
-        .map((r: any) => r.item);
+      results.enums = findDeclarations(query, enumDeclarations, schema.enumFuse).map((entry) =>
+        formatDeclaration(entry, shouldExpand),
+      );
     }
     if (results.elements.length === 0) {
-      results.elements = _schemaElementFuse!
-        .search(query)
-        .slice(0, 10)
-        .map((r: any) => {
-          let enriched = enrichWithPaths(r.item);
-          if (shouldExpand) enriched = expandRefsInline(enriched, schema, 0, 3);
-          return enriched;
-        });
+      results.elements = findDeclarations(query, elementDeclarations, schema.elementFuse).map(
+        (entry) => formatDeclaration(entry, shouldExpand),
+      );
     }
   }
 
@@ -431,6 +808,7 @@ export function searchWorkbookSchema(args: {
     results.hint =
       'No matches found. Try broader keywords, or search for specific enum names like "PrimitiveType-ST" or element names like "Zone-G".';
   }
+  boundSchemaResponse(results, requiredDeclarationKeys);
   return results;
 }
 

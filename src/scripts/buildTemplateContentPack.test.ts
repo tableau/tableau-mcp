@@ -520,6 +520,15 @@ describe('two-artifact packaging boundary', () => {
     expect(allowlist).not.toMatch(/['"]data-visualization-templates-xml['"]/);
   });
 
+  it('stages the raw 2026.2 workbook XSD instead of the flattened schema snapshot', async () => {
+    const buildScript = await readFile(join(process.cwd(), 'src', 'scripts', 'build.ts'), 'utf8');
+    const allowlist = buildScript.match(/const stagedDesktopData = \[([\s\S]*?)\];/)?.[1];
+
+    expect(allowlist).toBeDefined();
+    expect(allowlist).toMatch(/['"]twb_2026\.2\.0\.xsd['"]/);
+    expect(allowlist).not.toMatch(/['"]workbook-schema-reference\.json['"]/);
+  });
+
   it('lists, reads, and binds an extracted generated pack mounted through TEMPLATES_DIR', async () => {
     const { inputDir, outputDir } = await fixture();
     const mountedDir = join(outputDir, 'mounted');

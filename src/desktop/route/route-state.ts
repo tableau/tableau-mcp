@@ -100,10 +100,13 @@ export interface BindRecoveryProposalContext {
     confidence: string;
     field_selection: string;
   };
+  /** Exact explicit filter field set retained from the full workbook schema, when proven. */
+  required_filter_fields?: string[];
 }
 
 export type BindRecoveryCorrectionChange =
   | { kind: 'template'; choices: string[] }
+  | { kind: 'filter_set'; choices: string[] }
   | {
       kind: 'binding-field' | 'binding-slot' | 'filter-field';
       index: number;
@@ -112,7 +115,7 @@ export type BindRecoveryCorrectionChange =
 
 /** Private, bounded proof of what one rejected Call-2 correction may change. */
 export interface BindRecoveryCorrectionInvariant {
-  source: 'contract' | 'filter';
+  source: 'contract' | 'filter' | 'required_filter_set';
   proposalFingerprint: string;
   allowedChanges: BindRecoveryCorrectionChange[];
 }

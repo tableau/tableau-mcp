@@ -39,7 +39,12 @@ import {
 } from '../templates/optionalFieldPrune.js';
 import { templateLiveSupportBlocker } from '../templates/templateLiveSupport.js';
 import { cardinalityAdvice, PIE_SLICE_WORKABLE_MAX } from './cardinality.js';
-import { matchAvoidWhen, parseExplicitBoxRolePhrases } from './classify.js';
+import {
+  matchAvoidWhen,
+  MAX_CLASSIFIABLE_FIELDS,
+  parseExplicitBoxRolePhrases,
+  resolveEncodingFieldInAsk,
+} from './classify.js';
 import { escapeXml } from './escape.js';
 import type {
   BlockerCode,
@@ -640,6 +645,45 @@ export function validateBinding(
     }
 
     resolved.set(slotId, { slot, field: f });
+  }
+
+  if (m.template === 'kpi-text' && ask) {
+    const valueSlot = m.slots.find(
+      (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('text'),
+    );
+    const boundMeasure = valueSlot ? resolved.get(valueSlot.slot_id)?.field : undefined;
+
+    if (s.fields.length > MAX_CLASSIFIABLE_FIELDS) {
+      blockers.push({
+        code: 'schema-too-large',
+        detail: `schema-too-large: ${s.fields.length} fields > ${MAX_CLASSIFIABLE_FIELDS} cap`,
+      });
+    } else {
+      const namedResolution = resolveEncodingFieldInAsk(ask, 'size', s);
+      const namedMeasures = namedResolution.field
+        ? [namedResolution.field]
+        : namedResolution.candidates;
+
+      if (namedMeasures.length > 1) {
+        blockers.push({
+          code: 'kind-mismatch',
+          slot_id: valueSlot?.slot_id,
+          detail:
+            `kpi-text supports one measure per worksheet, but the ask names ${namedMeasures.length}: ` +
+            `${namedMeasures.map((field) => `"${field.name}"`).join(', ')}; create one KPI worksheet per measure`,
+        });
+      } else if (
+        namedMeasures.length === 1 &&
+        boundMeasure &&
+        namedMeasures[0].column_ref !== boundMeasure.column_ref
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          slot_id: valueSlot?.slot_id,
+          detail: `kpi-text ask names "${namedMeasures[0].name}" but the KPI binds "${boundMeasure.name}"`,
+        });
+      }
+    }
   }
 
   // Chart-specific structural invariants belong in this shared validation seam so

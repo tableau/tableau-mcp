@@ -28,6 +28,15 @@ const paramsSchema = {
   fieldMapping: z
     .record(z.string().trim().min(1).max(128), z.string().trim().min(1).max(255))
     .describe('Map slot ID to exact returned column_ref.'),
+  topN: z
+    .number()
+    .int()
+    .min(1)
+    .max(50)
+    .optional()
+    .describe(
+      'Limit a simple ranked worksheet to its first N members before storing the artifact.',
+    ),
 };
 
 interface BuildWorksheetsFromTemplatesDependencies {
@@ -54,12 +63,12 @@ export const getBuildWorksheetsFromTemplatesTool = (
       idempotentHint: false,
     },
     callback: async (
-      { session, templateName, title, datasource, fieldMapping },
+      { session, templateName, title, datasource, fieldMapping, topN },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { session, templateName, title, datasource, fieldMapping },
+        args: { session, templateName, title, datasource, fieldMapping, topN },
         getSuccessResult: (payload) => jsonToolResult(payload, { isError: false }),
         callback: async () => {
           const sessionResult = resolveSession(session);
@@ -80,7 +89,13 @@ export const getBuildWorksheetsFromTemplatesTool = (
           }
 
           const artifactId = createId();
-          const plan: WorksheetTemplatePlan = { templateName, title, datasource, fieldMapping };
+          const plan: WorksheetTemplatePlan = {
+            templateName,
+            title,
+            datasource,
+            fieldMapping,
+            topN,
+          };
           const built = buildTemplateWorksheetArtifact({
             artifactId,
             sessionId: resolvedSession,
@@ -104,6 +119,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
             datasource: built.value.artifact.datasource,
             provenance: built.value.provenance,
             bindings: built.value.bindings,
+            ...(topN !== undefined ? { topN } : {}),
           });
         },
       });

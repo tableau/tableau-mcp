@@ -7,6 +7,7 @@ import {
   buildDashboardCandidateXml,
   composeDashboardCore,
   type ComposeDashboardCoreArgs,
+  dashboardCandidateReadbackIssues,
 } from './composeDashboardCore.js';
 
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
@@ -74,8 +75,8 @@ describe('buildDashboardCandidateXml', () => {
       },
     });
 
-    expect(candidateXml).toContain('h="20000" id="11" name="Sales" w="100000" x="0" y="8000"');
-    expect(candidateXml).toContain('h="72000" id="12" name="Profit" w="100000" x="0" y="28000"');
+    expect(candidateXml).toContain('h="12000" id="11" name="Sales" w="100000" x="0" y="6000"');
+    expect(candidateXml).toContain('h="82000" id="12" name="Profit" w="100000" x="0" y="18000"');
   });
 
   it('places multiple KPI worksheets left to right in the requested order', () => {
@@ -89,9 +90,94 @@ describe('buildDashboardCandidateXml', () => {
       },
     });
 
-    expect(candidateXml).toContain('h="20000" id="10" name="Profit" w="50000" x="0" y="0"');
-    expect(candidateXml).toContain('h="20000" id="11" name="Sales" w="50000" x="50000" y="0"');
-    expect(candidateXml).toContain('h="80000" id="12" name="Orders" w="100000" x="0" y="20000"');
+    expect(candidateXml).toContain('h="12000" id="10" name="Profit" w="50000" x="0" y="0"');
+    expect(candidateXml).toContain('h="12000" id="11" name="Sales" w="50000" x="50000" y="0"');
+    expect(candidateXml).toContain('h="88000" id="12" name="Orders" w="100000" x="0" y="12000"');
+  });
+
+  it('uses the executive primary-secondary chart split instead of the generic grid', () => {
+    const candidateXml = buildDashboardCandidateXml({
+      baselineXml: WITH_ORDERS,
+      dashboardName: 'Sales Dashboard',
+      canonicalWorksheetNames: ['Sales', 'Profit', 'Orders'],
+      layout: {
+        layoutType: 'executive-summary',
+        kpiWorksheetNames: ['Sales'],
+      },
+    });
+
+    expect(candidateXml).toContain('h="88000" id="11" name="Profit" w="60000" x="0" y="12000"');
+    expect(candidateXml).toContain('h="88000" id="12" name="Orders" w="40000" x="60000" y="12000"');
+  });
+});
+
+describe('dashboardCandidateReadbackIssues', () => {
+  it('accepts Desktop rounding each zone geometry attribute by one unit', () => {
+    const candidateXml = buildDashboardCandidateXml({
+      baselineXml: PRISTINE,
+      dashboardName: 'Sales Dashboard',
+      canonicalWorksheetNames: ['Sales', 'Profit'],
+      layout: { layoutType: 'columns' },
+    });
+    const readbackXml = candidateXml.replace(
+      'h="100000" id="10" name="Sales" w="50000" x="0" y="0"',
+      'h="99999" id="10" name="Sales" w="50001" x="1" y="1"',
+    );
+    expect(readbackXml).not.toBe(candidateXml);
+
+    expect(
+      dashboardCandidateReadbackIssues(readbackXml, candidateXml, 'Sales Dashboard', [
+        'Sales',
+        'Profit',
+      ]),
+    ).toEqual([]);
+  });
+
+  it('rejects a zone geometry difference of two units', () => {
+    const candidateXml = buildDashboardCandidateXml({
+      baselineXml: PRISTINE,
+      dashboardName: 'Sales Dashboard',
+      canonicalWorksheetNames: ['Sales', 'Profit'],
+      layout: { layoutType: 'columns' },
+    });
+    const readbackXml = candidateXml.replace(
+      'h="100000" id="10" name="Sales" w="50000" x="0" y="0"',
+      'h="100000" id="10" name="Sales" w="50002" x="0" y="0"',
+    );
+    expect(readbackXml).not.toBe(candidateXml);
+
+    expect(
+      dashboardCandidateReadbackIssues(readbackXml, candidateXml, 'Sales Dashboard', [
+        'Sales',
+        'Profit',
+      ]),
+    ).toEqual([
+      'Dashboard "Sales Dashboard" readback did not match the requested title and layout.',
+    ]);
+  });
+
+  it('still rejects non-geometry structural differences', () => {
+    const candidateXml = buildDashboardCandidateXml({
+      baselineXml: PRISTINE,
+      dashboardName: 'Sales Dashboard',
+      canonicalWorksheetNames: ['Sales', 'Profit'],
+      title: 'Executive Overview',
+      layout: { layoutType: 'columns' },
+    });
+    const readbackXml = candidateXml.replace(
+      'bold="true" fontalignment="1" fontsize="16"',
+      'bold="false" fontalignment="1" fontsize="16"',
+    );
+    expect(readbackXml).not.toBe(candidateXml);
+
+    expect(
+      dashboardCandidateReadbackIssues(readbackXml, candidateXml, 'Sales Dashboard', [
+        'Sales',
+        'Profit',
+      ]),
+    ).toEqual([
+      'Dashboard "Sales Dashboard" readback did not match the requested title and layout.',
+    ]);
   });
 });
 

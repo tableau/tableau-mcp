@@ -276,6 +276,25 @@ describe('planDashboardCreationTool', () => {
     expect(result.content[0].text).toContain('kpi-text');
   });
 
+  it.each([
+    ['no fields', []],
+    ['more than one field', ['Sales', 'Profit']],
+  ])('should reject a KPI worksheet with %s before resolving anything', async (_, fields) => {
+    const result = await getResult({
+      session: SESSION,
+      dashboardName: 'My Dashboard',
+      worksheets: [{ name: 'Invalid KPI', type: 'kpi', fields }],
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'KPI worksheet "Invalid KPI" requires exactly one field',
+    );
+    expect(resolveField).not.toHaveBeenCalled();
+    expect(getWorkbookXml).not.toHaveBeenCalled();
+  });
+
   it('should recommend parallelization for 5+ worksheets', async () => {
     vi.mocked(resolveField).mockReturnValue(makeExactResolution('Sales'));
 

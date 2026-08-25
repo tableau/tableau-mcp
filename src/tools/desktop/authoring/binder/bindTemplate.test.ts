@@ -5,6 +5,10 @@ import { z } from 'zod';
 import { listDataAssetNames, readDataAsset } from '../../../../desktop/assets.js';
 import type { BinderResult, BindingProposal } from '../../../../desktop/binder/binder.js';
 import * as binderModule from '../../../../desktop/binder/binder.js';
+import {
+  extractExactFilterFieldNames,
+  MAX_CLASSIFIABLE_FIELDS,
+} from '../../../../desktop/binder/classify.js';
 import type { RuntimeTemplateDescriptor } from '../../../../desktop/binder/manifest-types.js';
 import * as routeSpecModule from '../../../../desktop/binder/route-spec.js';
 import { normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
@@ -1156,6 +1160,583 @@ describe('bindTemplateTool', () => {
     expect(body.call_2_contract.proposal_choices[0].slots[0]).not.toHaveProperty('field');
   });
 
+  it('fails the exact filter parser closed before scanning an over-cap full schema', () => {
+    const fields: SchemaField[] = Array.from(
+      { length: MAX_CLASSIFIABLE_FIELDS + 1 },
+      (_, index) => ({
+        name: index === 0 ? 'Region' : `Field ${index}`,
+        columnName: index === 0 ? '[Region]' : `[Field ${index}]`,
+        role: 'dimension',
+        type: 'nominal',
+        datatype: 'string',
+        datasource: 'Wide',
+        isAggregated: false,
+        column_ref: `[Wide].[none:Field ${index}:nk]`,
+      }),
+    );
+
+    expect(
+      extractExactFilterFieldNames('Show sales with a Region filter.', {
+        datasource: 'Wide',
+        fields,
+      }),
+    ).toBeNull();
+  });
+
+  it('retains exact requested filters in recovery and admits the same field set in any order', async () => {
+    const ask = 'Show sales by Region with Region and Segment filters.';
+    const proposal = {
+      ...sampleProposal,
+      filters: [
+        { field: 'Segment', context: true },
+        { field: 'Region', values: ['East'] },
+      ],
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(boundViaProposalResult);
+
+    const call1 = await getToolResult({ session: 'required-filter-set', ask, getExecutor });
+    invariant(call1.content[0].type === 'text');
+    const contract = JSON.parse(call1.content[0].text).call_2_contract;
+
+    expect(contract.required_filter_fields).toEqual(['Region', 'Segment']);
+    expect(
+      sessionRouteState.getBindRecovery('required-filter-set', normalizeAskForMatch(ask))
+        ?.proposalContext?.required_filter_fields,
+    ).toEqual(['Region', 'Segment']);
+
+    const call2 = await getToolResult({
+      session: 'required-filter-set',
+      ask,
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(call2.isError, JSON.stringify(call2)).toBe(false);
+    expect(binderModule.bindTemplate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ proposal }),
+    );
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains an explicit filter member and blocks Call 2 value substitution before Desktop work', async () => {
+    const ask = 'Show sales by Product filtered to Region East.';
+    const rejectedProposal = {
+      ...sampleProposal,
+      filters: [{ field: 'Region', values: ['West'] }],
+    };
+    const correctedProposal = {
+      ...rejectedProposal,
+      filters: [{ field: 'Region', values: ['East'], context: true }],
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(boundViaProposalResult);
+
+    const call1 = await getToolResult({ session: 'required-filter-member', ask, getExecutor });
+    invariant(call1.content[0].type === 'text');
+    expect(JSON.parse(call1.content[0].text).call_2_contract).toMatchObject({
+      required_filter_fields: ['Region'],
+      required_filter_values: [{ field: 'Region', values: ['East'] }],
+    });
+
+    const rejected = await getToolResult({
+      session: 'required-filter-member',
+      ask,
+      proposal: rejectedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(rejected.isError).toBe(true);
+    invariant(rejected.content[0].type === 'text');
+    expect(JSON.parse(rejected.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'proposal_contract_mismatch',
+      mismatches: [
+        {
+          code: 'required_filter_fields_mismatch',
+          required_filter_values: [{ field: 'Region', values: ['East'] }],
+          provided_filter_values: [{ field: 'Region', values: ['West'] }],
+        },
+      ],
+    });
+    expect(getExecutor).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+
+    const corrected = await getToolResult({
+      session: 'required-filter-member',
+      ask,
+      proposal: correctedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(corrected.isError, JSON.stringify(corrected)).toBe(false);
+    expect(binderModule.bindTemplate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ proposal: correctedProposal }),
+    );
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks a direct proposal that drops the explicit Region = East member constraint', async () => {
+    const ask = 'Show sales by Product where Region = East.';
+    const proposal = { ...sampleProposal, filters: [{ field: 'Region' }] };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: 'direct-filter-member',
+      ask,
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'proposal_contract_mismatch',
+      mismatches: [
+        {
+          code: 'required_filter_fields_mismatch',
+          required_filter_values: [{ field: 'Region', values: ['East'] }],
+          provided_filter_values: [{ field: 'Region' }],
+        },
+      ],
+    });
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before mutation when an unquoted multiword filter member cannot be proven', async () => {
+    const ask = 'Show sales by Product filtered to Region New York.';
+    const proposal = {
+      ...sampleProposal,
+      filters: [{ field: 'Region', values: ['New York'] }],
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: 'ambiguous-filter-member',
+      ask,
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'ambiguous_filter_intent',
+    });
+    expect(JSON.parse(result.content[0].text).guidance).toContain('quote multiword values');
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('does not let a recommended Call 1 bypass the exact required filter contract', async () => {
+    const ask = 'Show sales by Region with Region and Segment filters.';
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: recommendedProposeResult,
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: 'recommended-filter-contract',
+      ask,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      status: 'propose',
+      call_2_contract: { required_filter_fields: ['Region', 'Segment'] },
+    });
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('blocks a first-call direct proposal with missing exact filters before mutation and admits its correction', async () => {
+    const ask = 'Show sales by Region with Region and Segment filters.';
+    const rejectedProposal = { ...sampleProposal, filters: [{ field: 'Region' }] };
+    const correctedProposal = {
+      ...rejectedProposal,
+      filters: [
+        { field: 'Segment', values: ['Consumer'] },
+        { field: 'Region', context: true },
+      ],
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const rejected = await getToolResult({
+      session: 'direct-filter-contract',
+      ask,
+      proposal: rejectedProposal,
+      auto_apply: true,
+      calcs: [{ caption: 'Margin', formula: '[Sales] / 2' }],
+      getExecutor,
+    });
+
+    expect(rejected.isError).toBe(true);
+    invariant(rejected.content[0].type === 'text');
+    expect(JSON.parse(rejected.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'proposal_contract_mismatch',
+      mismatches: [
+        {
+          code: 'required_filter_fields_mismatch',
+          required_filter_fields: ['Region', 'Segment'],
+          provided_filter_fields: ['Region'],
+        },
+      ],
+      rejected_proposal: rejectedProposal,
+    });
+    expect(
+      sessionRouteState.getBindRecovery('direct-filter-contract', normalizeAskForMatch(ask)),
+    ).toBeUndefined();
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+
+    const corrected = await getToolResult({
+      session: 'direct-filter-contract',
+      ask,
+      proposal: correctedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(corrected.isError, JSON.stringify(corrected)).toBe(false);
+    expect(binderModule.bindTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ proposal: correctedProposal }),
+    );
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks ambiguous explicit filter intent on a first-call direct proposal before mutation', async () => {
+    const ask = 'Show sales by Region with Region or Segment filters.';
+    const proposal = { ...sampleProposal, filters: [{ field: 'Region' }] };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: 'direct-ambiguous-filter',
+      ask,
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'ambiguous_filter_intent',
+    });
+    expect(JSON.parse(result.content[0].text)).not.toHaveProperty('call_2_contract');
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('blocks ordinary Call 1 duplicate-caption filter intent with qualified candidates before calc mutation', async () => {
+    const ask = 'Show sales with a Region filter.';
+    const workbookXml = `<?xml version='1.0'?><workbook><datasources>
+      <datasource name='Orders'><column caption='Region' name='[region]' role='dimension' type='nominal' datatype='string' /></datasource>
+      <datasource name='Returns'><column caption='Region' name='[region]' role='dimension' type='nominal' datatype='string' /></datasource>
+    </datasources></workbook>`;
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: recommendedProposeResult,
+      workbookReads: [workbookXml],
+    });
+
+    const result = await getToolResult({
+      session: 'ordinary-duplicate-filter',
+      ask,
+      auto_apply: true,
+      calcs: [{ caption: 'One', formula: '1' }],
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'ambiguous_filter_intent',
+      blockers: [
+        {
+          code: 'ambiguous-field',
+          candidates: [expect.stringContaining('[Orders].'), expect.stringContaining('[Returns].')],
+        },
+      ],
+    });
+    expect(JSON.parse(result.content[0].text).blockers[0].candidates).toHaveLength(2);
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('preserves first-call direct proposal filters when the ask has no explicit filter cue', async () => {
+    const ask = 'Show sales by Region for returned orders only.';
+    const proposal = { ...sampleProposal, filters: [{ field: 'Returned', values: ['Yes'] }] };
+    const workbookXml = M7_WORKBOOK_XML.replace(
+      "<column caption='Sales' name='[sales]' role='measure' type='quantitative' datatype='integer' />",
+      "<column caption='Returned' name='[returned]' role='dimension' type='nominal' datatype='string' /><column caption='Sales' name='[sales]' role='measure' type='quantitative' datatype='integer' />",
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      workbookReads: [workbookXml],
+    });
+
+    const result = await getToolResult({
+      session: 'direct-no-filter-cue',
+      ask,
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError, JSON.stringify(result)).toBe(false);
+    expect(binderModule.bindTemplate).toHaveBeenCalledWith(expect.objectContaining({ proposal }));
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {
+      break: 'omits Segment',
+      filters: [{ field: 'Region' }],
+    },
+    {
+      break: 'adds Product',
+      filters: [{ field: 'Region' }, { field: 'Segment' }, { field: 'Product' }],
+    },
+    {
+      break: 'duplicates Segment',
+      filters: [{ field: 'Region' }, { field: 'Segment' }, { field: 'Segment' }],
+    },
+    {
+      break: 'changes Segment to Product',
+      filters: [{ field: 'Region' }, { field: 'Product' }],
+    },
+  ])('blocks Call 2 before Desktop work when proposal.filters $break', async ({ filters }) => {
+    const ask = 'Show sales by Region with Region and Segment filters.';
+    const proposal = { ...sampleProposal, filters };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(proposeResult);
+
+    await getToolResult({ session: 'filter-contract-mismatch', ask, getExecutor });
+    const call2 = await getToolResult({
+      session: 'filter-contract-mismatch',
+      ask,
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(call2.isError).toBe(true);
+    invariant(call2.content[0].type === 'text');
+    expect(JSON.parse(call2.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'proposal_contract_mismatch',
+      mismatches: [
+        {
+          code: 'required_filter_fields_mismatch',
+          required_filter_fields: ['Region', 'Segment'],
+          provided_filter_fields: filters.map((filter) => filter.field),
+        },
+      ],
+      rejected_proposal: proposal,
+    });
+    expect(getExecutor).toHaveBeenCalledTimes(1);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('admits one exact filter-set correction while every other proposal field stays fixed', async () => {
+    const ask = 'Show sales by Region with Region and Segment filters.';
+    const rejectedProposal = { ...sampleProposal, filters: [{ field: 'Region' }] };
+    const correctedProposal = {
+      ...rejectedProposal,
+      filters: [
+        { field: 'Segment', values: ['Consumer'] },
+        { field: 'Region', context: true },
+      ],
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(boundViaProposalResult);
+
+    await getToolResult({ session: 'filter-set-correction', ask, getExecutor });
+    const rejected = await getToolResult({
+      session: 'filter-set-correction',
+      ask,
+      proposal: rejectedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    const corrected = await getToolResult({
+      session: 'filter-set-correction',
+      ask,
+      proposal: correctedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(rejected.isError).toBe(true);
+    invariant(rejected.content[0].type === 'text');
+    expect(JSON.parse(rejected.content[0].text).guidance).toContain(
+      'One corrected proposal may proceed',
+    );
+    expect(JSON.parse(rejected.content[0].text).guidance).not.toContain('artifact fallback');
+    expect(corrected.isError, JSON.stringify(corrected)).toBe(false);
+    expect(binderModule.bindTemplate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ proposal: correctedProposal }),
+    );
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves filters unenforced when the ask has no explicit filter cue', async () => {
+    const ask = 'Show sales by Region for returned orders only.';
+    const proposal = { ...sampleProposal, filters: [{ field: 'Returned', values: ['Yes'] }] };
+    const workbookXml = M7_WORKBOOK_XML.replace(
+      "<column caption='Sales' name='[sales]' role='measure' type='quantitative' datatype='integer' />",
+      "<column caption='Returned' name='[returned]' role='dimension' type='nominal' datatype='string' /><column caption='Sales' name='[sales]' role='measure' type='quantitative' datatype='integer' />",
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      workbookReads: [workbookXml],
+    });
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(proposeResult);
+
+    const call1 = await getToolResult({ session: 'no-filter-contract', ask, getExecutor });
+    invariant(call1.content[0].type === 'text');
+    expect(JSON.parse(call1.content[0].text).call_2_contract).not.toHaveProperty(
+      'required_filter_fields',
+    );
+
+    const call2 = await getToolResult({
+      session: 'no-filter-contract',
+      ask,
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(call2.isError, JSON.stringify(call2)).toBe(false);
+    expect(getExecutor).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed before auto-apply when explicit filter intent is Region or Segment', async () => {
+    const ask = 'Show sales by Region with Region or Segment filters.';
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: recommendedProposeResult,
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: 'ambiguous-filter-intent',
+      ask,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'ambiguous_filter_intent',
+    });
+    expect(JSON.parse(result.content[0].text)).not.toHaveProperty('call_2_contract');
+    expect(JSON.parse(result.content[0].text).guidance).toContain('ask-user');
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      break: 'uses one caption from two datasources',
+      ask: 'Show sales with a Region filter.',
+      workbookXml: `<?xml version='1.0'?><workbook><datasources>
+        <datasource name='Orders'><column caption='Region' name='[region]' role='dimension' type='nominal' datatype='string' /></datasource>
+        <datasource name='Returns'><column caption='Region' name='[region]' role='dimension' type='nominal' datatype='string' /></datasource>
+      </datasources></workbook>`,
+    },
+    {
+      break: 'names more than five exact filter fields',
+      ask: 'Show sales with F1, F2, F3, F4, F5, and F6 filters.',
+      workbookXml: `<?xml version='1.0'?><workbook><datasources><datasource name='Wide'>
+        ${['F1', 'F2', 'F3', 'F4', 'F5', 'F6']
+          .map(
+            (field) =>
+              `<column caption='${field}' name='[${field}]' role='dimension' type='nominal' datatype='string' />`,
+          )
+          .join('')}
+      </datasource></datasources></workbook>`,
+    },
+    {
+      break: 'has a filter cue without an exact field',
+      ask: 'Show sales with filters.',
+      workbookXml: M7_WORKBOOK_XML,
+    },
+  ])('fails closed when explicit filter intent $break', async ({ ask, workbookXml }) => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: recommendedProposeResult,
+      workbookReads: [workbookXml],
+    });
+
+    const result = await getToolResult({
+      session: 'unretained-filter-intent',
+      ask,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'ambiguous_filter_intent',
+    });
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('rejects a Call-2 binding outside the retained contract before Desktop work and admits one binding-only correction', async () => {
     const ask = 'Show the top 10 products by sales with Region and Segment filters.';
     const proposalResult: BinderResult = {
@@ -1207,16 +1788,17 @@ describe('bindTemplateTool', () => {
       confidence: 0.9,
       sort: { by: 'Sales', direction: 'desc' },
       top_n: 10,
-      filters: [
-        { field: 'Region', context: true },
-        { field: 'Segment', values: ['Consumer'] },
-      ],
+      filters: [{ field: 'Region', context: true }],
     };
     const correctedProposal: BindingProposal & { confidence: number } = {
       ...rejectedProposal,
       bindings: rejectedProposal.bindings.map((binding) =>
         binding.slot_id === 'field_base_2' ? { ...binding, field: 'Sales' } : binding,
       ),
+      filters: [
+        { field: 'Segment', values: ['Consumer'] },
+        { field: 'Region', context: true },
+      ],
     };
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundM7TwoFilterResult,
@@ -1247,6 +1829,12 @@ describe('bindTemplateTool', () => {
       reason: 'proposal_contract_mismatch',
       mismatches: [
         {
+          code: 'required_filter_fields_mismatch',
+          template: 'ranking-ordered-bar',
+          required_filter_fields: ['Region', 'Segment'],
+          provided_filter_fields: ['Region'],
+        },
+        {
           code: 'field-not-compatible',
           template: 'ranking-ordered-bar',
           slot_id: 'field_base_2',
@@ -1258,10 +1846,10 @@ describe('bindTemplateTool', () => {
       rejected_proposal: rejectedProposal,
     });
     expect(JSON.parse(rejected.content[0].text).guidance).toContain(
-      'Change only the invalid bindings',
+      'use exactly required_filter_fields',
     );
     expect(JSON.parse(rejected.content[0].text).guidance).toContain(
-      'preserve filters, sort, and top_n',
+      'repair only the invalid bindings',
     );
     expect(getExecutor).toHaveBeenCalledTimes(1);
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
@@ -1333,14 +1921,14 @@ describe('bindTemplateTool', () => {
 
     const call1 = await getToolResult({
       session: 'ambiguous-filter',
-      ask: 'P&L waterfall filtered by Region',
+      ask: 'P&L waterfall for Region',
       getExecutor,
     });
     invariant(call1.content[0].type === 'text');
     const retainedContract = JSON.parse(call1.content[0].text).call_2_contract;
     const result = await getToolResult({
       session: 'ambiguous-filter',
-      ask: 'P&L waterfall filtered by Region',
+      ask: 'P&L waterfall for Region',
       proposal,
       auto_apply: true,
       getExecutor,
@@ -1370,7 +1958,7 @@ describe('bindTemplateTool', () => {
 
     const corrected = await getToolResult({
       session: 'ambiguous-filter',
-      ask: 'P&L waterfall filtered by Region',
+      ask: 'P&L waterfall for Region',
       proposal: correctedProposal,
       auto_apply: true,
       getExecutor,
@@ -1393,7 +1981,7 @@ describe('bindTemplateTool', () => {
   });
 
   it('blocks a filter correction that drops the unresolved filter before Desktop work', async () => {
-    const ask = 'P&L waterfall filtered by Region';
+    const ask = 'P&L waterfall for Region';
     const rejectedProposal: BindingProposal & { confidence: number } = {
       template: 'part-to-whole-waterfall',
       title: 'P&L Waterfall',
@@ -1482,7 +2070,7 @@ describe('bindTemplateTool', () => {
       }),
     },
   ])('blocks a filter correction that changes $label before Desktop work', async ({ mutate }) => {
-    const ask = 'P&L waterfall filtered by Region';
+    const ask = 'P&L waterfall for Region';
     const rejectedProposal: BindingProposal & { confidence: number } = {
       template: 'part-to-whole-waterfall',
       title: 'P&L Waterfall',
@@ -1707,7 +2295,7 @@ describe('bindTemplateTool', () => {
   });
 
   it('exhausts the one preflight correction on a second invalid proposal without sending filters to artifact fallback', async () => {
-    const ask = 'P&L waterfall with a Region filter';
+    const ask = 'P&L waterfall for Region';
     const firstInvalid: BindingProposal & { confidence: number } = {
       template: 'part-to-whole-waterfall',
       title: 'P&L Waterfall',
@@ -6215,7 +6803,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
 
     const result = await getToolResult({
       session: '1',
-      ask: 'bar chart of Sales by Region filtered by Missing Region',
+      ask: 'bar chart of Sales by Region for missing-region rows',
       auto_apply: true,
       getExecutor,
     });
