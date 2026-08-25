@@ -270,10 +270,18 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-21: native Custom Theme support and named blank-sheet routing join the merged
 // surface. Retain 18 bytes of ratchet slack under the temporary 48k ceiling while TAS keeps SDK
 // tool search disabled for Summit reliability.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_525;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_543;
+// Re-pinned 2026-08-24: author-action gains a url mode for first-class URL actions (params url,
+// sourceDashboard, excludeSheets, urlTarget, zoneId, urlEncode + the mode/urlTarget enums). Dynamic
+// authoring 47_525 -> 47_799 and the full surface 61_535 -> 61_809 (author-action is on both
+// profiles); each keeps the 18-char slack and dynamic still clears the temporary 48k product ceiling.
+// Re-pinned again 2026-08-24: the url param gets a lean describe (the only non-empty stub on this
+// tool) so agents pass a raw, unescaped URL with <[Field Name]> substitution instead of a
+// pre-escaped string that double-escapes into a dead literal. +127 on author-action lifts dynamic
+// 47_799 -> 47_926 (74 bytes under the 48k ceiling) and the full surface 61_809 -> 61_936.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_926;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_944;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 48_000;
-const FULL_TOOL_SURFACE_BUDGET = 61_590;
+const FULL_TOOL_SURFACE_BUDGET = 61_954;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -372,6 +380,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['refine-worksheet', 1465], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
+    ['author-action', 1376], // grew 2026-08-24 for the url mode (url/sourceDashboard/excludeSheets/urlTarget/zoneId/urlEncode params + mode/urlTarget enums); +127 the same day for the lean url describe that steers agents to a raw, unescaped URL with <[Field Name]> substitution — the one non-empty stub here, earning its bytes on the most misauthored param; do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {

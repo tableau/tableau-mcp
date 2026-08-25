@@ -464,6 +464,583 @@ describe('authorActionTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('sourceWorksheet empty');
   });
+
+  it('emits a byte-faithful worksheet-sourced url action with the URL in link@expression', async () => {
+    const expectedAction =
+      "<action caption='Open Product Details' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Product x Details' />" +
+      "<link caption='' expression='https://www.google.com/search?q=&lt;[Product Name]&gt;' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open Product Details',
+        sourceWorksheet: 'Product x Details',
+        url: 'https://www.google.com/search?q=<[Product Name]>',
+      },
+      readbackXml: withActions(BASE_XML, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.mode).toBe('url');
+    expect(parsed.actionName).toBe('[Action1]');
+    expect(parsed.url).toBe('https://www.google.com/search?q=<[Product Name]>');
+    expect(parsed.target).toBe('https://www.google.com/search?q=<[Product Name]>');
+
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(expectedAction);
+    // The URL must NOT appear as an expression attribute on <action> itself.
+    expect(loaded).not.toMatch(/<action\b[^>]*\bexpression=/);
+    // A URL action must never be emitted as a <command> child.
+    expect(loaded).not.toContain('<command');
+  });
+
+  it('emits a dashboard-scoped url source with exclude-sheet opt-outs', async () => {
+    const expectedAction =
+      "<action caption='Open Sales Person' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' dashboard='Commission Model'>" +
+      "<exclude-sheet name='Sales' /><exclude-sheet name='OTE' />" +
+      '</source>' +
+      "<link caption='' expression='https://www.google.com/search?q=&lt;[Sales Person]&gt;' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open Sales Person',
+        sourceWorksheet: '',
+        sourceDashboard: 'Commission Model',
+        excludeSheets: ['Sales', 'OTE'],
+        url: 'https://www.google.com/search?q=<[Sales Person]>',
+      },
+      readbackXml: withActions(BASE_XML, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(expectedAction);
+  });
+
+  it('emits a combined worksheet+dashboard url source scoped within a dashboard', async () => {
+    const expectedSource =
+      "<source type='sheet' worksheet='QuotaAttainment' dashboard='Commission Model' />";
+    const expectedAction =
+      "<action caption='Open Person' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      expectedSource +
+      "<link caption='' expression='https://example.com/p' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open Person',
+        sourceWorksheet: 'QuotaAttainment',
+        sourceDashboard: 'Commission Model',
+        url: 'https://example.com/p',
+      },
+      readbackXml: withActions(BASE_XML, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(expectedSource);
+  });
+
+  it('emits a url-action-type child for the browser target', async () => {
+    const expectedAction =
+      "<action caption='Open Browser' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://example.com/'>" +
+      '<url-action-type>browser</url-action-type>' +
+      '</link>' +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open Browser',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/',
+        urlTarget: 'browser',
+      },
+      readbackXml: withActions(BASE_XML, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(expectedAction);
+  });
+
+  it('emits url-action-type and url-action-target for a specific zone', async () => {
+    const expectedAction =
+      "<action caption='Open Zone' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://example.com/'>" +
+      '<url-action-type>specific-zone</url-action-type>' +
+      '<url-action-target>4</url-action-target>' +
+      '</link>' +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open Zone',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/',
+        urlTarget: 'specific-zone',
+        zoneId: '4',
+      },
+      readbackXml: withActions(BASE_XML, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(expectedAction);
+  });
+
+  it('emits url-escape when urlEncode is requested', async () => {
+    const expectedLink =
+      "<link caption='' expression='https://example.com/?q=&lt;[Sales Person]&gt;' url-escape='true' />";
+    const expectedAction =
+      "<action caption='Encoded' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      expectedLink +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Encoded',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/?q=<[Sales Person]>',
+        urlEncode: true,
+      },
+      readbackXml: withActions(BASE_XML, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(expectedLink);
+  });
+
+  it('honors a non-default activation for url actions', async () => {
+    const expectedAction =
+      "<action caption='On Menu' name='[Action1]'>" +
+      "<activation type='on-menu' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://example.com/' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'On Menu',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/',
+        activation: 'on-menu',
+      },
+      readbackXml: withActions(BASE_XML, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<activation type='on-menu' />");
+  });
+
+  it('fails url readback when the action landed as a <command> instead of a <link>', async () => {
+    // The exact type-0 failure mode: a hand-authored command action, not a link.
+    const commandAction =
+      "<action caption='Open Product Details' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:url'><param value='https://www.google.com/' /></command>" +
+      '</action>';
+    const { result } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open Product Details',
+        sourceWorksheet: 'Profit',
+        url: 'https://www.google.com/',
+      },
+      readbackXml: withActions(BASE_XML, commandAction),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+  });
+
+  it('fails url readback when no <link> action survives', async () => {
+    const { result } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open Product Details',
+        sourceWorksheet: 'Profit',
+        url: 'https://www.google.com/',
+      },
+      readbackXml: BASE_XML,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+  });
+
+  it('fails url readback when the link expression persisted double-escaped', async () => {
+    // Defense in depth: even if a field reference degraded to the double-escaped
+    // &amp;lt;[City]&amp;gt; signature, that literal must never count as a live URL action.
+    const doubleEscaped =
+      "<action caption='Search City' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://www.google.com/search?q=&amp;lt;[City]&amp;gt;' />" +
+      '</action>';
+    const { result } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Search City',
+        sourceWorksheet: 'Profit',
+        url: 'https://www.google.com/search?q=<[City]>',
+      },
+      readbackXml: withActions(BASE_XML, doubleEscaped),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+  });
+
+  it('rejects a tsl:-prefixed url that would classify as a sheet-link filter', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Bad Scheme',
+        sourceWorksheet: 'Profit',
+        url: 'tsl:sheet=Overview',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('tsl:');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a pre-escaped url so a field reference cannot double-escape', async () => {
+    // The tool escapes the url once. A caller that pre-escapes <[City]> to &lt;[City]&gt;
+    // would have it escaped again into &amp;lt;[City]&amp;gt;, which renders as a literal
+    // string instead of substituting the mark value. Reject it before it can persist.
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Pre Escaped',
+        sourceWorksheet: 'Profit',
+        url: 'https://www.google.com/search?q=&lt;[City]&gt;',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('must be passed unescaped');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('accepts a raw url with an ampersand query separator and escapes it once', async () => {
+    // A literal & between query params is not an XML entity, so it must pass the
+    // pre-escaped-input guard and be escaped exactly once to &amp; in the workbook.
+    const expectedAction =
+      "<action caption='Multi Param' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://example.com/?a=1&amp;b=2' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Multi Param',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/?a=1&b=2',
+      },
+      readbackXml: withActions(BASE_XML, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(expectedAction);
+  });
+
+  it('rejects a url action with no source', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'No Source',
+        sourceWorksheet: '',
+        url: 'https://example.com/',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('url mode requires a source');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing url in url mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'No Url',
+        sourceWorksheet: 'Profit',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('url is required in url mode');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a parameter/set target in url mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Mixed',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/',
+        targetParameter: '[Parameters].[Parameter 1]',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('not allowed in url mode');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects excludeSheets when a worksheet source is present', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Excludes',
+        sourceWorksheet: 'Profit',
+        sourceDashboard: 'Commission Model',
+        excludeSheets: ['Sales'],
+        url: 'https://example.com/',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('excludeSheets is only allowed');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('requires zoneId when urlTarget is specific-zone', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Zone',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/',
+        urlTarget: 'specific-zone',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('zoneId is required');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects zoneId unless urlTarget is specific-zone', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Zone',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/',
+        urlTarget: 'browser',
+        zoneId: '4',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('zoneId is only allowed');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it.each(['0', 'abc', '4a', '-1', ' '])(
+    'rejects a non-positive-integer zoneId (%j) in specific-zone mode',
+    async (zoneId) => {
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          mode: 'url',
+          caption: 'Zone',
+          sourceWorksheet: 'Profit',
+          url: 'https://example.com/',
+          urlTarget: 'specific-zone',
+          zoneId,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      // '0' and whitespace-only are caught by the required check / integer check;
+      // both surface a zoneId error and never reach the apply path.
+      expect(result.content[0].text).toMatch(/zoneId (must be a positive integer|is required)/);
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a duplicate url action with the same url and source', async () => {
+    const existing =
+      "<action caption='Existing URL' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://example.com/x' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'New URL',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/x',
+      },
+      initialXml: withActions(BASE_XML, existing),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('identical URL action');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('allows the same url from a different source', async () => {
+    const existing =
+      "<action caption='Existing URL' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://example.com/x' />" +
+      '</action>';
+    const added =
+      "<action caption='Second URL' name='[Action2]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' dashboard='Commission Model' />" +
+      "<link caption='' expression='https://example.com/x' />" +
+      '</action>';
+    const initialXml = withActions(BASE_XML, existing);
+    const { result } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Second URL',
+        sourceWorksheet: '',
+        sourceDashboard: 'Commission Model',
+        url: 'https://example.com/x',
+      },
+      initialXml,
+      readbackXml: initialXml.replace('</actions>', `${added}</actions>`),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
+  });
+
+  it('rejects a dashboard name slotted into sourceWorksheet and steers to sourceDashboard', async () => {
+    // The 0x5CCCC2BD reproduction: a dashboard name in sourceWorksheet would emit
+    // <source worksheet='<dashboard>'>, which crashes when the action is later edited.
+    const withDashboard = BASE_XML.replace(
+      '</workbook>',
+      "<dashboards><dashboard name='Sales Dashboard' /></dashboards></workbook>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open City',
+        sourceWorksheet: 'Sales Dashboard',
+        url: 'https://example.com/?q=<[City]>',
+      },
+      initialXml: withDashboard,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('is a dashboard, not a worksheet');
+    expect(result.content[0].text).toContain('sourceDashboard');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a worksheet name slotted into sourceDashboard and steers to sourceWorksheet', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open City',
+        sourceWorksheet: '',
+        sourceDashboard: 'Profit',
+        url: 'https://example.com/',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('is a worksheet, not a dashboard');
+    expect(result.content[0].text).toContain('sourceWorksheet');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('emits a dashboard-scoped url source when the dashboard is passed as sourceDashboard', async () => {
+    const withDashboard = BASE_XML.replace(
+      '</workbook>',
+      "<dashboards><dashboard name='Sales Dashboard' /></dashboards></workbook>",
+    );
+    const expectedAction =
+      "<action caption='Open City' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' dashboard='Sales Dashboard' />" +
+      "<link caption='' expression='https://example.com/' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open City',
+        sourceWorksheet: '',
+        sourceDashboard: 'Sales Dashboard',
+        url: 'https://example.com/',
+      },
+      initialXml: withDashboard,
+      readbackXml: withActions(withDashboard, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<source type='sheet' dashboard='Sales Dashboard' />");
+    expect(loaded).not.toContain("worksheet='Sales Dashboard'");
+  });
+
+  it('detects caption collisions with plain <action> url elements', async () => {
+    const existing =
+      "<action caption='Dup' name='[Action1]'>" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://example.com/' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Dup',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/other',
+      },
+      initialXml: withActions(BASE_XML, existing),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('caption collision');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
 });
 
 function withActions(baseXml: string, actionXml: string): string {
@@ -473,7 +1050,7 @@ function withActions(baseXml: string, actionXml: string): string {
 
 type AuthorActionArgs = {
   session?: string;
-  mode?: 'parameter' | 'set';
+  mode?: 'parameter' | 'set' | 'url';
   caption: string;
   sourceWorksheet: string;
   sourceField?: string;
@@ -484,6 +1061,12 @@ type AuthorActionArgs = {
   clearSelection?: 'do-nothing' | 'show-all' | 'exclude-all';
   singleSelect?: boolean;
   activation?: 'on-select' | 'on-hover' | 'on-menu';
+  url?: string;
+  sourceDashboard?: string;
+  excludeSheets?: string[];
+  urlTarget?: 'default-zone-or-browser' | 'browser' | 'specific-zone';
+  zoneId?: string;
+  urlEncode?: boolean;
 };
 
 async function getToolResult({
@@ -537,6 +1120,12 @@ async function getToolResult({
       activation: args.activation ?? 'on-select',
       setMembership: args.setMembership ?? 'assign',
       clearSelection: args.clearSelection ?? 'do-nothing',
+      url: args.url,
+      sourceDashboard: args.sourceDashboard,
+      excludeSheets: args.excludeSheets,
+      urlTarget: args.urlTarget,
+      zoneId: args.zoneId,
+      urlEncode: args.urlEncode,
     },
     extra,
   );

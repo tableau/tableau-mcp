@@ -16,9 +16,10 @@ import { DesktopTool } from '../../tool.js';
 import { applyAndVerify } from './applyAndVerify.js';
 
 const activationSchema = z.enum(['on-select', 'on-hover', 'on-menu']);
-const modeSchema = z.enum(['parameter', 'set']);
+const modeSchema = z.enum(['parameter', 'set', 'url']);
 const setMembershipSchema = z.enum(['assign', 'add', 'remove']);
 const clearSelectionSchema = z.enum(['do-nothing', 'show-all', 'exclude-all']);
+const urlTargetSchema = z.enum(['default-zone-or-browser', 'browser', 'specific-zone']);
 
 // Primitives in, parameter/set action XML server-side, readback out. An action
 // wires a mark interaction on a source sheet to a target parameter or set.
@@ -38,6 +39,17 @@ const paramsSchema = {
   clearSelection: clearSelectionSchema.default('do-nothing').describe(''),
   singleSelect: z.boolean().optional().describe(''),
   activation: activationSchema.default('on-select').describe(''),
+  url: z
+    .string()
+    .optional()
+    .describe(
+      'URL for url mode. Pass it raw and unescaped (the tool escapes it). Use <[Field Name]> to insert a field value.',
+    ),
+  sourceDashboard: z.string().optional().describe(''),
+  excludeSheets: z.array(z.string()).optional().describe(''),
+  urlTarget: urlTargetSchema.optional().describe(''),
+  zoneId: z.string().optional().describe(''),
+  urlEncode: z.boolean().optional().describe(''),
 };
 
 type AuthorActionResultBase = {
@@ -56,6 +68,10 @@ type AuthorActionResult = AuthorActionResultBase &
     | {
         mode: 'set';
         targetSet: string;
+      }
+    | {
+        mode: 'url';
+        url: string;
       }
   );
 
@@ -100,6 +116,12 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
         clearSelection = 'do-nothing',
         singleSelect,
         activation = 'on-select',
+        url,
+        sourceDashboard,
+        excludeSheets,
+        urlTarget,
+        zoneId,
+        urlEncode,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -118,13 +140,74 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           clearSelection,
           singleSelect,
           activation,
+          url,
+          sourceDashboard,
+          excludeSheets,
+          urlTarget,
+          zoneId,
+          urlEncode,
         },
         callback: async () => {
           if (caption.trim().length === 0) {
             return new ArgsValidationError('caption empty').toErr();
           }
-          if (sourceWorksheet.trim().length === 0) {
+          if (mode !== 'url' && sourceWorksheet.trim().length === 0) {
             return new ArgsValidationError('sourceWorksheet empty').toErr();
+          }
+          if (mode === 'url') {
+            if (url === undefined || url.trim().length === 0) {
+              return new ArgsValidationError('url is required in url mode').toErr();
+            }
+            if (/^tsl:/i.test(url.trim())) {
+              return new ArgsValidationError(
+                "url must not start with 'tsl:' — that prefix classifies the action as a sheet-link filter, not a URL action",
+              ).toErr();
+            }
+            // The url is XML-escaped once on the way out. A pre-escaped input (&lt;, &amp;,
+            // …) would be escaped again into &amp;lt; and render as a literal string, so the
+            // field reference silently dies. Reject it and tell the caller to pass raw chars.
+            if (/&(?:lt|gt|amp|quot|apos|#\d+|#x[0-9a-fA-F]+);/.test(url)) {
+              return new ArgsValidationError(
+                'url must be passed unescaped: it contains an XML entity such as &lt; or &amp;. Use literal characters — for field substitution write <[Field Name]>, e.g. https://www.google.com/search?q=<[City]>.',
+              ).toErr();
+            }
+            if ((targetParameter?.trim().length ?? 0) > 0 || (targetSet?.trim().length ?? 0) > 0) {
+              return new ArgsValidationError(
+                'targetParameter/targetSet are not allowed in url mode',
+              ).toErr();
+            }
+            const hasWorksheet = sourceWorksheet.trim().length > 0;
+            const hasDashboard = (sourceDashboard?.trim().length ?? 0) > 0;
+            if (!hasWorksheet && !hasDashboard) {
+              return new ArgsValidationError(
+                'url mode requires a source: set sourceWorksheet, sourceDashboard, or both',
+              ).toErr();
+            }
+            if ((excludeSheets?.length ?? 0) > 0 && (hasWorksheet || !hasDashboard)) {
+              return new ArgsValidationError(
+                'excludeSheets is only allowed with a dashboard-only source (set sourceDashboard, leave sourceWorksheet empty)',
+              ).toErr();
+            }
+            if (urlTarget === 'specific-zone') {
+              const trimmedZoneId = zoneId?.trim() ?? '';
+              if (trimmedZoneId.length === 0) {
+                return new ArgsValidationError(
+                  'zoneId is required when urlTarget is specific-zone',
+                ).toErr();
+              }
+              // Tableau parses <url-action-target> as an integer and treats zone 0 as
+              // "no specific zone", so a non-numeric or zero zoneId would silently
+              // degrade to the default target while readback still reports success.
+              // Reject anything but a positive integer up front.
+              if (!/^[1-9][0-9]*$/.test(trimmedZoneId)) {
+                return new ArgsValidationError('zoneId must be a positive integer zone id').toErr();
+              }
+            }
+            if (urlTarget !== 'specific-zone' && (zoneId?.trim().length ?? 0) > 0) {
+              return new ArgsValidationError(
+                'zoneId is only allowed when urlTarget is specific-zone',
+              ).toErr();
+            }
           }
           if (mode === 'set' && (targetParameter?.trim().length ?? 0) > 0) {
             return new ArgsValidationError(
@@ -169,6 +252,42 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               'caption collision — pick a new caption or edit the existing action',
             ).toErr();
           }
+          if (mode === 'url') {
+            // Sheet names share one namespace across worksheets/dashboards/stories, so a
+            // source name is unambiguously one kind. A dashboard name slotted into
+            // sourceWorksheet emits <source worksheet='<dashboard>'>, which Tableau resolves
+            // through GetWorksheet -> AsWorksheet() on a dashboard doc and throws 0x5CCCC2BD
+            // ("incorrectly expecting worksheet") when the action is later opened/edited.
+            // Reject the miscategorized source before it can persist, and steer the caller to
+            // the correct slot.
+            const worksheetNames = findSheetNames(liveXml, 'worksheets', 'worksheet');
+            const dashboardNames = findSheetNames(liveXml, 'dashboards', 'dashboard');
+            const trimmedWorksheet = sourceWorksheet.trim();
+            const trimmedDashboard = sourceDashboard?.trim() ?? '';
+            if (trimmedWorksheet.length > 0 && dashboardNames.has(trimmedWorksheet)) {
+              return new ArgsValidationError(
+                `'${trimmedWorksheet}' is a dashboard, not a worksheet. Pass it as sourceDashboard and leave sourceWorksheet empty (or set sourceWorksheet to a worksheet inside the dashboard) so the URL action is scoped to the dashboard.`,
+              ).toErr();
+            }
+            if (trimmedDashboard.length > 0 && worksheetNames.has(trimmedDashboard)) {
+              return new ArgsValidationError(
+                `'${trimmedDashboard}' is a worksheet, not a dashboard. Pass it as sourceWorksheet instead.`,
+              ).toErr();
+            }
+          }
+          if (
+            mode === 'url' &&
+            hasUrlActionDuplicate(
+              liveXml,
+              url!.trim(),
+              sourceWorksheet.trim(),
+              sourceDashboard?.trim() ?? '',
+            )
+          ) {
+            return new ArgsValidationError(
+              'an identical URL action (same url and same source) already exists',
+            ).toErr();
+          }
 
           const actionName = nextActionName(liveXml);
           let target: string;
@@ -187,6 +306,20 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               setMembership,
               clearSelection,
               singleSelect,
+              activation,
+            });
+          } else if (mode === 'url') {
+            target = url!.trim();
+            actionXml = renderUrlAction({
+              caption,
+              actionName,
+              sourceWorksheet: sourceWorksheet.trim(),
+              sourceDashboard: sourceDashboard?.trim() ?? '',
+              excludeSheets: (excludeSheets ?? []).map((sheet) => sheet.trim()),
+              url: target,
+              urlTarget: urlTarget ?? 'default-zone-or-browser',
+              zoneId: zoneId?.trim() ?? '',
+              urlEncode: urlEncode ?? false,
               activation,
             });
           } else {
@@ -211,16 +344,27 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new ArgsValidationError(validation.message).toErr();
           }
 
-          const targetParamLanded = (xml: string): boolean =>
-            mode === 'set'
-              ? hasActionWithTargetParam(xml, 'edit-group-action', caption, 'target-group', target)
-              : hasActionWithTargetParam(
-                  xml,
-                  'edit-parameter-action',
-                  caption,
-                  'target-parameter',
-                  target,
-                );
+          const targetParamLanded = (xml: string): boolean => {
+            if (mode === 'set') {
+              return hasActionWithTargetParam(
+                xml,
+                'edit-group-action',
+                caption,
+                'target-group',
+                target,
+              );
+            }
+            if (mode === 'url') {
+              return hasUrlActionWithLink(xml, caption, target);
+            }
+            return hasActionWithTargetParam(
+              xml,
+              'edit-parameter-action',
+              caption,
+              'target-parameter',
+              target,
+            );
+          };
           const outcome = await applyAndVerify({
             xml: editedXml,
             baselineXml: liveXml,
@@ -235,7 +379,9 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new XmlModificationError(
               mode === 'set'
                 ? 'action applied but the target-group param did not survive readback'
-                : 'action applied but the target-parameter param did not survive readback',
+                : mode === 'url'
+                  ? 'action applied but the <link> URL did not survive readback (it may have been dropped or rewritten as a command action)'
+                  : 'action applied but the target-parameter param did not survive readback',
             ).toErr();
           }
 
@@ -247,6 +393,16 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               target,
               targetSet: target,
               hint: 'readback verified the qualified target set; the source sheet must expose marks that can drive the action',
+            });
+          }
+          if (mode === 'url') {
+            return new Ok({
+              actionName,
+              caption,
+              mode,
+              target,
+              url: target,
+              hint: 'readback verified the <link> URL action; the source sheet/dashboard must expose marks that drive the action, and any <[Field]> references must resolve on the source view',
             });
           }
           return new Ok({
@@ -431,6 +587,28 @@ function findDatasourceElements(xml: string): DatasourceElement[] {
   return elements;
 }
 
+// Collect the declared sheet names inside a top-level container (<worksheets> or
+// <dashboards>). The (?=\s) lookahead keeps the plural container tag itself from
+// matching, and scanning only within the block avoids picking up sheet references
+// nested elsewhere in the document.
+function findSheetNames(xml: string, blockTag: string, elementTag: string): Set<string> {
+  const names = new Set<string>();
+  const blockStart = xml.indexOf(`<${blockTag}>`);
+  if (blockStart === -1) {
+    return names;
+  }
+  const blockEnd = xml.indexOf(`</${blockTag}>`, blockStart);
+  const block = xml.slice(blockStart, blockEnd === -1 ? xml.length : blockEnd);
+  const pattern = new RegExp(`<${elementTag}(?=\\s)[^>]*\\bname=(?:'[^']*'|"[^"]*")[^>]*>`, 'g');
+  for (const match of block.matchAll(pattern)) {
+    const name = getAttr(match[0], 'name');
+    if (name !== undefined) {
+      names.add(unescapeXml(name));
+    }
+  }
+  return names;
+}
+
 function findGroupTags(xml: string): string[] {
   return [...xml.matchAll(/<group\b[^>]*>/g)]
     .map((match) => match[0])
@@ -490,6 +668,129 @@ function renderSetAction({
     `<param name='target-group' value='${escapeXml(targetSet)}' /></params>` +
     '</edit-group-action>'
   );
+}
+
+// A URL action is the legacy <action> tag whose payload is a <link> (NOT a
+// <command>): monolith GetActionType classifies it URL(3) iff IsLink() is true and
+// the expression is not tsl:-prefixed. The URL lives in link@expression; an
+// expression attr on <action> itself makes the parser drop the action. The single
+// <source> carries independently-optional worksheet/dashboard attrs (worksheet-only,
+// dashboard-only + <exclude-sheet> opt-outs, or a worksheet scoped within a dashboard).
+function renderUrlAction({
+  caption,
+  actionName,
+  sourceWorksheet,
+  sourceDashboard,
+  excludeSheets,
+  url,
+  urlTarget,
+  zoneId,
+  urlEncode,
+  activation,
+}: {
+  caption: string;
+  actionName: string;
+  sourceWorksheet: string;
+  sourceDashboard: string;
+  excludeSheets: string[];
+  url: string;
+  urlTarget: z.infer<typeof urlTargetSchema>;
+  zoneId: string;
+  urlEncode: boolean;
+  activation: z.infer<typeof activationSchema>;
+}): string {
+  const sourceAttrs =
+    (sourceWorksheet.length > 0 ? ` worksheet='${escapeXml(sourceWorksheet)}'` : '') +
+    (sourceDashboard.length > 0 ? ` dashboard='${escapeXml(sourceDashboard)}'` : '');
+  const excludeChildren = excludeSheets
+    .filter((sheet) => sheet.length > 0)
+    .map((sheet) => `<exclude-sheet name='${escapeXml(sheet)}' />`)
+    .join('');
+  const sourceXml =
+    excludeChildren.length > 0
+      ? `<source type='sheet'${sourceAttrs}>${excludeChildren}</source>`
+      : `<source type='sheet'${sourceAttrs} />`;
+
+  const urlEscapeAttr = urlEncode ? " url-escape='true'" : '';
+  const linkChildren =
+    urlTarget === 'browser'
+      ? '<url-action-type>browser</url-action-type>'
+      : urlTarget === 'specific-zone'
+        ? `<url-action-type>specific-zone</url-action-type><url-action-target>${escapeXml(zoneId)}</url-action-target>`
+        : '';
+  const linkXml =
+    linkChildren.length > 0
+      ? `<link caption='' expression='${escapeXml(url)}'${urlEscapeAttr}>${linkChildren}</link>`
+      : `<link caption='' expression='${escapeXml(url)}'${urlEscapeAttr} />`;
+
+  return (
+    `<action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
+    `<activation type='${activation}' />` +
+    sourceXml +
+    linkXml +
+    '</action>'
+  );
+}
+
+// Readback predicate for url mode: the caption-matched legacy <action> must carry a
+// <link> whose expression survived AND must have NO <command> child (a <command>
+// payload is exactly the type-0 shape the agent used to hand-author, which classifies
+// as Unknown(0) rather than URL(3)).
+function hasUrlActionWithLink(xml: string, caption: string, expression: string): boolean {
+  return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) => {
+    const block = match[0];
+    const openingTag = block.match(/^<action\b[^>]*>/)?.[0];
+    if (openingTag === undefined || unescapeXml(getAttr(openingTag, 'caption') ?? '') !== caption) {
+      return false;
+    }
+    if (/<command\b/.test(block)) {
+      return false;
+    }
+    const linkTag = block.match(/<link\b[^>]*>/)?.[0];
+    if (linkTag === undefined) {
+      return false;
+    }
+    const linkExpression = getAttr(linkTag, 'expression');
+    if (linkExpression === undefined) {
+      return false;
+    }
+    // A double-escaped expression (e.g. &amp;lt;[City]&amp;gt;) means a field reference
+    // degraded into a literal string. It still round-trips through unescapeXml back to the
+    // caller's input, so the equality check below would falsely report success. Reject the
+    // double-escape signature here so a broken URL action surfaces as not-applied.
+    if (/&amp;(?:lt|gt|amp|quot|apos);/.test(linkExpression)) {
+      return false;
+    }
+    return unescapeXml(linkExpression) === expression;
+  });
+}
+
+// Dedup guard: the document-apply path appends, so a same-url + same-source action
+// authored under a different caption would silently double. Caption collision is
+// handled separately by hasActionCaption.
+function hasUrlActionDuplicate(
+  xml: string,
+  expression: string,
+  sourceWorksheet: string,
+  sourceDashboard: string,
+): boolean {
+  return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) => {
+    const block = match[0];
+    const linkTag = block.match(/<link\b[^>]*>/)?.[0];
+    if (linkTag === undefined) {
+      return false;
+    }
+    const linkExpression = getAttr(linkTag, 'expression');
+    if (linkExpression === undefined || unescapeXml(linkExpression) !== expression) {
+      return false;
+    }
+    const sourceTag = block.match(/<source\b[^>]*>/)?.[0];
+    const existingWorksheet =
+      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'worksheet') ?? '');
+    const existingDashboard =
+      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'dashboard') ?? '');
+    return existingWorksheet === sourceWorksheet && existingDashboard === sourceDashboard;
+  });
 }
 
 // Splice a single action into the workbook-level <actions> block, creating the block
