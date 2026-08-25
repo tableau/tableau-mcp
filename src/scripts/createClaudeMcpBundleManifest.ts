@@ -710,6 +710,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  INSIGHT_SENTIMENT_MAP: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Insight sentiment map',
+    description:
+      'JSON object mapping author-facing measure display names to a sentiment token (SENTIMENT_TYPE_UP_IS_GOOD, SENTIMENT_TYPE_DOWN_IS_GOOD, SENTIMENT_TYPE_NONE, or SENTIMENT_TYPE_UNSPECIFIED) used to annotate generated insight cards. Malformed JSON is ignored and treated as an empty map. Defaults to "{}".',
+    required: false,
+    sensitive: false,
+  },
 } satisfies EnvVars;
 
 const userConfig = Object.entries(envVars).reduce<Record<string, McpbUserConfigurationOption>>(
