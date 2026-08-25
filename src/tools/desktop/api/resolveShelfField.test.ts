@@ -18,6 +18,22 @@ const WORKSHEET_XML = `<?xml version="1.0"?>
   </table>
 </worksheet>`;
 
+const TWO_DATE_LEVELS_WORKSHEET_XML = `<?xml version="1.0"?>
+<worksheet name="Sales by Order Date">
+  <table>
+    <view>
+      <datasources><datasource name="Sample - Superstore" /></datasources>
+      <datasource-dependencies datasource="Sample - Superstore">
+        <column caption="Order Date" datatype="date" name="[Order Date]" role="dimension" type="ordinal" />
+        <column-instance column="[Order Date]" derivation="Year" name="[yr:Order Date:ok]" pivot="key" type="ordinal" />
+        <column-instance column="[Order Date]" derivation="Quarter" name="[qr:Order Date:ok]" pivot="key" type="ordinal" />
+      </datasource-dependencies>
+    </view>
+    <rows>[Sample - Superstore].[yr:Order Date:ok]</rows>
+    <cols>[Sample - Superstore].[qr:Order Date:ok]</cols>
+  </table>
+</worksheet>`;
+
 describe('resolveShelfField', () => {
   it('returns an on-shelf column-instance token verbatim', () => {
     const result = resolveShelfField(WORKSHEET_XML, '[Sample - Superstore].[sum:Sales:qk]');
@@ -25,6 +41,27 @@ describe('resolveShelfField', () => {
       ok: true,
       column: '[Sample - Superstore].[sum:Sales:qk]',
       type: 'quantitative',
+    });
+  });
+
+  it('returns an exact canonical date-level token when its base field is ambiguous', () => {
+    expect(
+      resolveShelfField(TWO_DATE_LEVELS_WORKSHEET_XML, '[Sample - Superstore].[qr:Order Date:ok]'),
+    ).toEqual({
+      ok: true,
+      column: '[Sample - Superstore].[qr:Order Date:ok]',
+      type: 'ordinal',
+    });
+  });
+
+  it('reports every matching canonical token when two shelf pills share a base field', () => {
+    expect(resolveShelfField(TWO_DATE_LEVELS_WORKSHEET_XML, 'Order Date')).toEqual({
+      ok: false,
+      kind: 'ambiguous',
+      matches: [
+        '[Sample - Superstore].[yr:Order Date:ok]',
+        '[Sample - Superstore].[qr:Order Date:ok]',
+      ],
     });
   });
 
@@ -79,6 +116,7 @@ describe('resolveShelfField', () => {
     const result = resolveShelfField(WORKSHEET_XML, 'Discount');
     expect(result).toEqual({
       ok: false,
+      kind: 'not-found',
       onShelf: [
         '[Sample - Superstore].[none:Region:nk]',
         '[Sample - Superstore].[usr:Calc:ok:20]',

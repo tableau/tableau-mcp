@@ -95,6 +95,13 @@ export const getSortWorksheetTool = (
 
               const shelfField = resolveShelfField(document.value.xml, fieldName);
               if (!shelfField.ok) {
+                if (shelfField.kind === 'ambiguous') {
+                  return new ArgsValidationError(
+                    `Field "${fieldName}" is ambiguous on worksheet "${resolved.value.name}"'s shelves. ` +
+                      `Matching canonical fields: ${shelfField.matches.join(', ')}. ` +
+                      'Use one of those exact tokens. sort-worksheet did not send a request.',
+                  ).toErr();
+                }
                 return new ArgsValidationError(
                   `Field "${fieldName}" is not on worksheet "${resolved.value.name}"'s shelves, so it cannot be sorted. ` +
                     (shelfField.onShelf.length > 0

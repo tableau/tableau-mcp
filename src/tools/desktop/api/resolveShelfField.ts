@@ -14,7 +14,10 @@ import { ParsedWorksheet } from '../../../desktop/metadata/types.js';
 export function resolveShelfField(
   worksheetXml: string,
   requested: string,
-): { ok: true; column: string; type: string | undefined } | { ok: false; onShelf: Array<string> } {
+):
+  | { ok: true; column: string; type: string | undefined }
+  | { ok: false; kind: 'ambiguous'; matches: Array<string> }
+  | { ok: false; kind: 'not-found'; onShelf: Array<string> } {
   const shelfColumns = listFields(worksheetXml).map((field) => field.column);
   const onShelf = dedupe(shelfColumns);
   const metadata = columnInstanceMetadata(worksheetXml);
@@ -25,15 +28,23 @@ export function resolveShelfField(
   }
 
   const wanted = stripBrackets(trimmed).toLowerCase();
+  const matches: Array<string> = [];
   for (const column of onShelf) {
     const declaration = metadata.get(column);
     const localNames = declaration?.localNames ?? [parseCanonicalColumnRef(column)?.localFieldName];
     if (localNames.some((localName) => localName?.toLowerCase() === wanted)) {
-      return { ok: true, column, type: declaration?.type };
+      matches.push(column);
     }
   }
+  if (matches.length === 1) {
+    const column = matches[0];
+    return { ok: true, column, type: metadata.get(column)?.type };
+  }
+  if (matches.length > 1) {
+    return { ok: false, kind: 'ambiguous', matches };
+  }
 
-  return { ok: false, onShelf };
+  return { ok: false, kind: 'not-found', onShelf };
 }
 
 function columnInstanceMetadata(

@@ -43,6 +43,23 @@ const WORKSHEET_DOCUMENT_XML = `<?xml version="1.0"?>
   <simple-id uuid="sheet-sales" />
 </worksheet>`;
 
+const TWO_DATE_LEVELS_WORKSHEET_XML = `<?xml version="1.0"?>
+<worksheet name="Sales by Region">
+  <table>
+    <view>
+      <datasources><datasource name="Sample - Superstore" /></datasources>
+      <datasource-dependencies datasource="Sample - Superstore">
+        <column caption="Order Date" datatype="date" name="[Order Date]" role="dimension" type="ordinal" />
+        <column-instance column="[Order Date]" derivation="Year" name="[yr:Order Date:ok]" pivot="key" type="ordinal" />
+        <column-instance column="[Order Date]" derivation="Quarter" name="[qr:Order Date:ok]" pivot="key" type="ordinal" />
+      </datasource-dependencies>
+    </view>
+    <rows>[Sample - Superstore].[yr:Order Date:ok]</rows>
+    <cols>[Sample - Superstore].[qr:Order Date:ok]</cols>
+  </table>
+  <simple-id uuid="sheet-sales" />
+</worksheet>`;
+
 describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tools', () => {
   it('describes discrete member ordering separately from measure ranking', async () => {
     const tool = getSortWorksheetTool(new DesktopMcpServer());
@@ -145,6 +162,67 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
         fieldName: '[Sample - Superstore].[none:Region:nk]',
         direction: 'desc',
         sortType: 'alpha',
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('sort-worksheet rejects an ambiguous base field and lists its canonical shelf tokens without POSTing', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
+      status: 200,
+      contentType: 'application/xml',
+      body: TWO_DATE_LEVELS_WORKSHEET_XML,
+    });
+    try {
+      const { result } = await run(harness, {
+        worksheet: WORKSHEET_NAME,
+        fieldName: 'Order Date',
+        direction: 'desc',
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe(
+        'Field "Order Date" is ambiguous on worksheet "Sales by Region"\'s shelves. Matching canonical fields: [Sample - Superstore].[yr:Order Date:ok], [Sample - Superstore].[qr:Order Date:ok]. Use one of those exact tokens. sort-worksheet did not send a request.',
+      );
+      expect(
+        harness.server.requests.filter(
+          (request) =>
+            request.method === 'POST' &&
+            request.path === `/v0/workbook/worksheets/${WORKSHEET_ID}:sort`,
+        ),
+      ).toHaveLength(0);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('sort-worksheet accepts an exact canonical date-level token when its base field is ambiguous', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
+      status: 200,
+      contentType: 'application/xml',
+      body: TWO_DATE_LEVELS_WORKSHEET_XML,
+    });
+    try {
+      const { result } = await run(harness, {
+        worksheet: WORKSHEET_NAME,
+        fieldName: '[Sample - Superstore].[qr:Order Date:ok]',
+        direction: 'desc',
+      });
+
+      expect(result.isError).toBe(false);
+      const posted = harness.server.requests.filter(
+        (request) =>
+          request.method === 'POST' &&
+          request.path === `/v0/workbook/worksheets/${WORKSHEET_ID}:sort`,
+      );
+      expect(posted).toHaveLength(1);
+      expect(JSON.parse(posted[0].body)).toEqual({
+        fieldName: '[Sample - Superstore].[qr:Order Date:ok]',
+        direction: 'desc',
       });
     } finally {
       await harness.close();
