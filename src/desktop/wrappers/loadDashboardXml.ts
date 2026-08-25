@@ -14,6 +14,7 @@ import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import { dashboardFragmentSimpleId } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedDashboard } from '../metadata/types.js';
+import { classifyWorkbookWorksheets } from '../metadata/worksheetRenderState.js';
 import {
   dashboardDatasourceRefusal,
   hasDashboardDatasources,
@@ -372,6 +373,15 @@ export async function loadDashboardXml({
           });
         }
       }
+      if (kind === 'dashboard' && snapshot !== null) {
+        const issues = zoneWorksheetWindowIssues(snapshot.xml, checked.fragmentXml);
+        if (issues.length > 0) {
+          return Err({
+            type: 'load-dashboard-xml-error',
+            error: { type: 'validation-failed', issues },
+          });
+        }
+      }
       if (snapshot !== null && hasDatasourceBlock) {
         let refusal: string | undefined;
         try {
@@ -599,6 +609,45 @@ export async function loadStoryboardXml({
   });
 }
 
+// Desktop asserts on a zone whose worksheet has no worksheet-class window, and the dashboard can then be neither deleted nor undone.
+function zoneWorksheetWindowIssues(workbookXml: string, fragmentXml: string): ValidationIssue[] {
+  const { worksheets, worksheetWindowNames } = classifyWorkbookWorksheets(workbookXml);
+  return dashboardWorksheetNames(fragmentXml).flatMap((name) => {
+    const worksheet = worksheets.find((candidate) => parsedXmlNamesEqual(candidate.name, name));
+    if (!worksheet) return [absentZoneWorksheetIssue(name)];
+    const windowed = worksheetWindowNames.some((windowName) =>
+      parsedXmlNamesEqual(windowName, worksheet.name),
+    );
+    return windowed ? [] : [unwindowedZoneWorksheetIssue(worksheet.name)];
+  });
+}
+
+function absentZoneWorksheetIssue(worksheetName: string): ValidationIssue {
+  return {
+    ruleId: 'dashboard-zone-worksheet-window',
+    severity: 'error',
+    message:
+      `This dashboard has a zone for worksheet "${worksheetName}", but the open workbook has no ` +
+      'worksheet with that name, so Tableau would leave the dashboard unable to delete or undo. ' +
+      'FIX: point the zone at an existing worksheet (see list-worksheets), or build the worksheet ' +
+      'first with build-worksheets-from-templates and apply-worksheet, or add-worksheet then ' +
+      'rename-sheet to the exact zone name. No changes were sent to Tableau.',
+    suggestion: 'Use an existing worksheet name in the zone, or create that worksheet first.',
+  };
+}
+
+function unwindowedZoneWorksheetIssue(worksheetName: string): ValidationIssue {
+  return {
+    ruleId: 'dashboard-zone-worksheet-window',
+    severity: 'error',
+    message:
+      `This dashboard has a zone for worksheet "${worksheetName}", but that worksheet has no ` +
+      'worksheet window in the open workbook, so Tableau would leave the dashboard unable to ' +
+      'delete or undo. FIX: remove that zone from the dashboard XML, or point it at a worksheet ' +
+      'listed by list-worksheets. No changes were sent to Tableau.',
+    suggestion: 'Remove the zone or point it at a worksheet listed by list-worksheets.',
+  };
+}
 function sheetAbsentMessage(kind: LoadDashboardKind, canonicalName: string): string {
   if (kind === 'storyboard') {
     return (

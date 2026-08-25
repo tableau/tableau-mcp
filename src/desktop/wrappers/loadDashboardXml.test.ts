@@ -20,7 +20,11 @@ describe('loadDashboardXml (External Client API transport)', () => {
   const dashboardName = 'Sales Dashboard';
   const validXml = `<dashboard name='${dashboardName}'><zones></zones></dashboard>`;
 
-  function liveWorkbook(dashboardNames: string[], worksheetNames: string[] = ['Sheet 1']): string {
+  function liveWorkbook(
+    dashboardNames: string[],
+    worksheetNames: string[] = ['Sheet 1'],
+    windowedWorksheetNames: string[] = worksheetNames,
+  ): string {
     const worksheets = worksheetNames
       .map(
         (name) =>
@@ -36,7 +40,10 @@ describe('loadDashboardXml (External Client API transport)', () => {
           `<window class='dashboard' name='${name}'><viewpoints>${worksheetNames.map((sheet) => `<viewpoint name='${sheet}'/>`).join('')}</viewpoints></window>`,
       )
       .join('');
-    return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets><dashboards>${dashboards}</dashboards><windows>${windows}</windows></workbook>`;
+    const worksheetWindows = windowedWorksheetNames
+      .map((name) => `<window class='worksheet' name='${name}' />`)
+      .join('');
+    return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets><dashboards>${dashboards}</dashboards><windows>${worksheetWindows}${windows}</windows></workbook>`;
   }
 
   // Navigating moves the live document, so the readback the verify pass reads must
@@ -416,7 +423,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       return (
         `<?xml version='1.0'?><workbook><worksheets><worksheet name='${worksheetName}'>` +
         `<table><rows /><cols /></table></worksheet></worksheets><dashboards>${dashboards}` +
-        `</dashboards><windows>${windows}</windows></workbook>`
+        `</dashboards><windows><window class='worksheet' name='${worksheetName}' />${windows}</windows></workbook>`
       );
     }
 
@@ -747,7 +754,8 @@ describe('loadDashboardXml (External Client API transport)', () => {
         "<?xml version='1.0'?><workbook>" +
         `<worksheets><worksheet name='${worksheetName}'>${table}</worksheet></worksheets>` +
         `<dashboards><dashboard name='${dbName}'><zones><zone name='${worksheetName}' /></zones></dashboard></dashboards>` +
-        `<windows><window class='dashboard' name='${dbName}'>${viewpoints}</window></windows>` +
+        `<windows><window class='worksheet' name='${worksheetName}' />` +
+        `<window class='dashboard' name='${dbName}'>${viewpoints}</window></windows>` +
         '</workbook>'
       );
     }
@@ -1650,6 +1658,74 @@ describe('loadDashboardXml (External Client API transport)', () => {
         expect(result.error.error).toEqual(error);
       }
     }
+  });
+
+  describe('zone worksheet-window guard', () => {
+    const zoneXml = (worksheetName: string): string =>
+      `<dashboard name='${dashboardName}'><zones><zone id='9' type-v2='layout-basic' w='100000' h='100000' x='0' y='0'><zone name='${worksheetName}' w='100000' h='100000' x='0' y='0' /></zone></zones></dashboard>`;
+
+    const causes = [
+      { cause: 'an absent worksheet', worksheetName: 'Ghost Sheet', advice: 'rename-sheet' },
+      {
+        cause: 'a worksheet with no worksheet-class window',
+        worksheetName: 'Sheet 2',
+        advice: 'remove that zone',
+      },
+    ];
+
+    it.each(
+      [true, false].flatMap((requireExistingSheet) =>
+        causes.map((c) => ({ ...c, requireExistingSheet })),
+      ),
+    )(
+      'refuses a zone naming $cause before dispatch (requireExistingSheet: $requireExistingSheet)',
+      async ({ worksheetName, advice, requireExistingSheet }) => {
+        const { executor } = dispatchingExecutor(
+          liveWorkbook([dashboardName], ['Sheet 1', 'Sheet 2'], ['Sheet 1']),
+        );
+        Object.defineProperty(executor, 'desktopApiVersion', { value: '0.2.25' });
+
+        const result = await loadDashboardXml({
+          dashboardName,
+          xml: zoneXml(worksheetName),
+          executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+          requireExistingSheet,
+        });
+
+        invariant(result.isErr());
+        invariant(result.error.type === 'load-dashboard-xml-error');
+        invariant(result.error.error.type === 'validation-failed');
+        expect(result.error.error.issues).toEqual([
+          expect.objectContaining({
+            ruleId: 'dashboard-zone-worksheet-window',
+            message: expect.stringMatching(new RegExp(`"${worksheetName}".*${advice}`)),
+          }),
+        ]);
+        expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+        expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([true, false])(
+      'applies when every zone worksheet has a worksheet-class window (requireExistingSheet: %s)',
+      async (requireExistingSheet) => {
+        const { executor } = dispatchingExecutor(liveWorkbook([dashboardName], ['Sheet 1']));
+
+        const result = await loadDashboardXml({
+          dashboardName,
+          xml: zoneXml('Sheet 1'),
+          executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+          requireExistingSheet,
+        });
+
+        expect(result.isOk()).toBe(true);
+        expect(executor.applyDashboardDocument).toHaveBeenCalledOnce();
+      },
+    );
   });
 
   it('should pass the abort signal to the dashboard apply', async () => {

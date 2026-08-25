@@ -23,7 +23,7 @@ function snapshot(datasources = ''): string {
   </datasources>
   <worksheets>${SHEETS.map((name) => `<worksheet name="${name}"><table><rows /><cols /></table></worksheet>`).join('')}</worksheets>
   <dashboards><dashboard name="DS Dash"><zones /><simple-id uuid="${UUID}" /></dashboard></dashboards>
-  <windows><window class="dashboard" name="DS Dash"><viewpoints>${SHEETS.map((name) => `<viewpoint name="${name}" />`).join('')}</viewpoints></window></windows>
+  <windows>${SHEETS.map((name) => `<window class="worksheet" name="${name}" />`).join('')}<window class="dashboard" name="DS Dash"><viewpoints>${SHEETS.map((name) => `<viewpoint name="${name}" />`).join('')}</viewpoints></window></windows>
 </workbook>`;
 }
 

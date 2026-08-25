@@ -31,7 +31,7 @@ function fixture(
 ): { executor: ReturnType<typeof makeExecutorMock>; original: string; live: () => string } {
   const original = `<workbook><worksheets>${['A', 'B'].map((name) => `<worksheet name="${name}"><table><rows>[ds].[field]</rows></table></worksheet>`).join('')}</worksheets>
     <dashboards>${fragment(names)}<dashboard name="Unrelated"><zones/></dashboard></dashboards>
-    <windows><window class="dashboard" name="D"><viewpoints>${registered.map((name) => `<viewpoint name="${name}"><zoom type="standard"/></viewpoint>`).join('')}</viewpoints></window>
+    <windows>${['A', 'B'].map((name) => `<window class="worksheet" name="${name}"/>`).join('')}<window class="dashboard" name="D"><viewpoints>${registered.map((name) => `<viewpoint name="${name}"><zoom type="standard"/></viewpoint>`).join('')}</viewpoints></window>
     <window class="dashboard" name="Unrelated"><viewpoints/></window></windows></workbook>`;
   let live = original;
   const executor = makeExecutorMock({

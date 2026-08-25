@@ -36,7 +36,7 @@ function workbook(zones: string, size = fixedSize, devices = ''): string {
   const worksheet = (zones + devices).includes('name="A"');
   return `<workbook><worksheets>${worksheet ? '<worksheet name="A"/>' : ''}</worksheets>
     <dashboards><dashboard name="D"><size ${size}/><zones>${zones}</zones>${devices}</dashboard></dashboards>
-    <windows><window class="dashboard" name="D"><viewpoints>${worksheet ? '<viewpoint name="A"/>' : ''}</viewpoints></window></windows></workbook>`;
+    <windows>${worksheet ? '<window class="worksheet" name="A"/>' : ''}<window class="dashboard" name="D"><viewpoints>${worksheet ? '<viewpoint name="A"/>' : ''}</viewpoints></window></windows></workbook>`;
 }
 
 function verify(expected: string, actual: string): boolean {
@@ -262,7 +262,8 @@ describe.each(
     return workbook(flow(cells.join(''), axis, rect))
       .replace('<zones>', pixels ? '<zones is-pixels="true">' : '<zones>')
       .replace('<worksheets>', '<worksheets><worksheet name="B"/>')
-      .replace('<viewpoints>', '<viewpoints><viewpoint name="B"/>');
+      .replace('<viewpoints>', '<viewpoints><viewpoint name="B"/>')
+      .replace('<windows>', '<windows><window class="worksheet" name="B"/>');
   }
 
   afterEach(() => {

@@ -113,7 +113,7 @@ describe.each(
     return `<workbook><worksheets>${names.map((name) => `<worksheet name="${name}"><table><rows/><cols/></table></worksheet>`).join('')}</worksheets>
       <dashboards><dashboard name="D"><size minwidth="1000" maxwidth="1000" minheight="1000" maxheight="1000"/>
         <zones${pixels ? ' is-pixels="true"' : ''}><zone id="1" type-v2="layout-flow" param="${axis}" x="0" y="0" w="${length + (axis === 'horz' ? extraUnits : 0)}" h="${length + (axis === 'vert' ? extraUnits : 0)}">${children.join('')}${spacing}</zone></zones>
-      </dashboard></dashboards><windows><window class="dashboard" name="D"><viewpoints>${names.map((name) => `<viewpoint name="${name}"/>`).join('')}</viewpoints></window></windows></workbook>`;
+      </dashboard></dashboards><windows>${names.map((name) => `<window class="worksheet" name="${name}"/>`).join('')}<window class="dashboard" name="D"><viewpoints>${names.map((name) => `<viewpoint name="${name}"/>`).join('')}</viewpoints></window></windows></workbook>`;
   }
 
   const kinds = ['fixed', 'bounded', 'unbounded'] as const;

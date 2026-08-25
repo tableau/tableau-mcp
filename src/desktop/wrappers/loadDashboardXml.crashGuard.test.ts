@@ -18,7 +18,7 @@ function fixture(
 } {
   const zone = '<zone id="1" name="A" type-v2="worksheet"/>';
   const fragment = `<dashboard name="D"><zones>${phoneOnly ? '' : zone}</zones>${phoneOnly ? `<devicelayouts><devicelayout name="Phone"><zones>${zone}</zones></devicelayout></devicelayouts>` : ''}<simple-id uuid="dash-1"/></dashboard>`;
-  let live = `<workbook><worksheets><worksheet name="A"><table><rows>${blank ? '' : '[Superstore].[sum:Sales:qk]'}</rows><cols/></table></worksheet></worksheets><dashboards>${fragment}</dashboards><windows><window class="dashboard" name="D"><viewpoints><viewpoint name="A"/></viewpoints></window></windows></workbook>`;
+  let live = `<workbook><worksheets><worksheet name="A"><table><rows>${blank ? '' : '[Superstore].[sum:Sales:qk]'}</rows><cols/></table></worksheet></worksheets><dashboards>${fragment}</dashboards><windows><window class="worksheet" name="A"/><window class="dashboard" name="D"><viewpoints><viewpoint name="A"/></viewpoints></window></windows></workbook>`;
   const executor = makeExecutorMock({
     getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: live })),
     listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),

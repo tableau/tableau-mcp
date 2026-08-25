@@ -31,7 +31,8 @@ function workbookFor(fragment: string, names: string[]): string {
     )
     .join('');
   const views = names.map((n) => `<viewpoint name="${n}"/>`).join('');
-  return `<workbook><worksheets>${sheets}</worksheets><dashboards>${fragment}</dashboards><windows><window class="dashboard" name="D"><viewpoints>${views}</viewpoints></window></windows></workbook>`;
+  const worksheetWindows = names.map((n) => `<window class="worksheet" name="${n}"/>`).join('');
+  return `<workbook><worksheets>${sheets}</worksheets><dashboards>${fragment}</dashboards><windows>${worksheetWindows}<window class="dashboard" name="D"><viewpoints>${views}</viewpoints></window></windows></workbook>`;
 }
 
 function executorFor(liveXml: string, names: string[]): ReturnType<typeof makeExecutorMock> {

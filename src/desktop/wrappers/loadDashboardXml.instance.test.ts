@@ -32,7 +32,7 @@ describe('surgical dashboard apply instance identity', () => {
     '$kind populated=$populated: rescan during $phase, restarted=$restarted',
     async ({ kind, populated, phase, restarted }) => {
       const dashboardXml = `<dashboard name="D"${kind === 'storyboard' ? ' type="storyboard"' : ''}><zones>${populated ? '<zone id="1" name="A"/>' : ''}</zones><simple-id uuid="dash-1"/></dashboard>`;
-      const workbookXml = `<workbook><worksheets><worksheet name="A"><table><rows>[ds].[field]</rows></table></worksheet></worksheets><dashboards>${dashboardXml}</dashboards><windows><window class="dashboard" name="D"><viewpoints><viewpoint name="A"/></viewpoints></window></windows></workbook>`;
+      const workbookXml = `<workbook><worksheets><worksheet name="A"><table><rows>[ds].[field]</rows></table></worksheet></worksheets><dashboards>${dashboardXml}</dashboards><windows><window class="worksheet" name="A"/><window class="dashboard" name="D"><viewpoints><viewpoint name="A"/></viewpoints></window></windows></workbook>`;
       const instance = (instanceId: string, token: string): ExternalApiInstance => ({
         baseUrl: 'http://127.0.0.1:1',
         pid: 999,
