@@ -981,6 +981,52 @@ describe('binder/bindTemplate — two-call protocol', () => {
     expect(result.args.sort).toEqual({ by: 'Sales', direction: 'desc' });
     expect(result.args.top_n).toBe(10);
   });
+
+  it.each([
+    {
+      label: 'ambiguous across datasources',
+      field: 'Region',
+      reason: 'ambiguous-field',
+      detail: 'matches 2 fields',
+    },
+    {
+      label: 'not found',
+      field: 'Missing Region',
+      reason: 'field-not-found',
+      detail: 'no filter field named "Missing Region"',
+    },
+    {
+      label: 'a measure',
+      field: 'Sales',
+      reason: 'kind-mismatch',
+      detail: 'is a measure, not a dimension',
+    },
+  ])('fails closed when a filter field is $label', async ({ field, reason, detail }) => {
+    const workbookXml = WORKBOOK_XML.replace(
+      '</datasources>',
+      "<datasource name='Returns'><column name='[Region]' role='dimension' type='nominal' datatype='string' /></datasource></datasources>",
+    );
+    const result = await bindTemplate({
+      ask: `bar chart of Sales by Category filtered by ${field}`,
+      workbookXml,
+      manifests: descriptors,
+      proposal: {
+        ...rankingProposal(),
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Category' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+        ],
+        filters: [{ field, context: true }],
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe(reason);
+    expect(result.blockers[0]).toMatchObject({ code: reason });
+    expect(result.blockers[0].detail).toContain(detail);
+    expect(result.proposal?.filters).toEqual([{ field, context: true }]);
+  });
 });
 
 describe('binder/proposal contract', () => {

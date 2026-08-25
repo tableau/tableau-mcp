@@ -347,8 +347,22 @@ const proposeResult: BinderResult = {
   },
   llm_input: {
     ask: 'bar chart of Sales by Region',
-    candidate_templates: [],
-    fields: [],
+    candidate_templates: [
+      {
+        template: 'bar-basic',
+        description: 'Bar chart',
+        intent_keywords: ['bar'],
+        slots: [
+          { slot_id: 'cat', role: ['dimension'], kind: 'categorical', required: true },
+          { slot_id: 'val', role: ['measure'], kind: 'quantitative', required: true },
+        ],
+      },
+    ],
+    fields: [
+      { name: 'Region', role: 'dimension', type: 'nominal', datatype: 'string' },
+      { name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' },
+      { name: 'Profit', role: 'measure', type: 'quantitative', datatype: 'real' },
+    ],
   } as unknown as Extract<BinderResult, { status: 'propose' }>['llm_input'],
   output_schema: { type: 'object' },
 };
@@ -567,6 +581,7 @@ const M7_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
     <datasource name='M7'>
       <column caption='Product' name='[product]' role='dimension' type='nominal' datatype='string' />
       <column caption='Region' name='[region]' role='dimension' type='nominal' datatype='string' />
+      <column caption='Segment' name='[segment]' role='dimension' type='nominal' datatype='string' />
       <column caption='Sales' name='[sales]' role='measure' type='quantitative' datatype='integer' />
     </datasource>
   </datasources>
@@ -621,6 +636,16 @@ const boundM7TopNContextFilterResult: BinderResult = {
     },
     top_n: 10,
     filters: [{ field: 'Region', context: true }],
+  },
+};
+const boundM7TwoFilterResult: BinderResult = {
+  ...boundM7TopNContextFilterResult,
+  args: {
+    ...boundM7TopNContextFilterResult.args,
+    filters: [
+      { field: 'Region', context: true },
+      { field: 'Segment', values: ['Consumer'] },
+    ],
   },
 };
 const boundWaterfallResult: BinderResult = {
@@ -1079,6 +1104,614 @@ describe('bindTemplateTool', () => {
     expect(body.call_2_contract.proposal_choices[0].slots[0]).not.toHaveProperty('field');
   });
 
+  it('rejects a Call-2 binding outside the retained contract before Desktop work and admits one binding-only correction', async () => {
+    const ask = 'Show the top 10 products by sales with Region and Segment filters.';
+    const proposalResult: BinderResult = {
+      ...proposeResult,
+      llm_input: {
+        ask,
+        candidate_templates: [
+          {
+            template: 'ranking-ordered-bar',
+            description: 'Ordered bar',
+            intent_keywords: ['ranking'],
+            slots: [
+              {
+                slot_id: 'field_base_1',
+                role: ['dimension'],
+                kind: 'categorical',
+                required: true,
+              },
+              {
+                slot_id: 'field_base_2',
+                role: ['measure'],
+                kind: 'quantitative',
+                required: true,
+              },
+            ],
+          },
+        ],
+        fields: [
+          { name: 'Product', role: 'dimension', type: 'nominal', datatype: 'string' },
+          { name: 'Region', role: 'dimension', type: 'nominal', datatype: 'string' },
+          { name: 'Segment', role: 'dimension', type: 'nominal', datatype: 'string' },
+          { name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'integer' },
+          { name: 'Profit', role: 'measure', type: 'quantitative', datatype: 'integer' },
+          { name: 'Margin', role: 'measure', type: 'quantitative', datatype: 'real' },
+          { name: 'Quantity', role: 'measure', type: 'quantitative', datatype: 'integer' },
+          { name: 'Revenue', role: 'measure', type: 'quantitative', datatype: 'real' },
+          { name: 'Cost', role: 'measure', type: 'quantitative', datatype: 'real' },
+          { name: 'Discount', role: 'measure', type: 'quantitative', datatype: 'real' },
+        ],
+      } as Extract<BinderResult, { status: 'propose' }>['llm_input'],
+    };
+    const rejectedProposal: BindingProposal & { confidence: number } = {
+      template: 'ranking-ordered-bar',
+      title: 'Top 10 Products',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Product' },
+        { slot_id: 'field_base_2', field: 'Unknown Measure' },
+      ],
+      confidence: 0.9,
+      sort: { by: 'Sales', direction: 'desc' },
+      top_n: 10,
+      filters: [
+        { field: 'Region', context: true },
+        { field: 'Segment', values: ['Consumer'] },
+      ],
+    };
+    const correctedProposal: BindingProposal & { confidence: number } = {
+      ...rejectedProposal,
+      bindings: rejectedProposal.bindings.map((binding) =>
+        binding.slot_id === 'field_base_2' ? { ...binding, field: 'Sales' } : binding,
+      ),
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundM7TwoFilterResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+      structuralReadback: true,
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposalResult)
+      .mockResolvedValueOnce(boundM7TwoFilterResult)
+      .mockResolvedValueOnce(proposalResult);
+
+    const call1 = await getToolResult({ session: 'contract-recovery', ask, getExecutor });
+    invariant(call1.content[0].type === 'text');
+    const retainedContract = JSON.parse(call1.content[0].text).call_2_contract;
+    const rejected = await getToolResult({
+      session: 'contract-recovery',
+      ask,
+      proposal: rejectedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(rejected.isError).toBe(true);
+    invariant(rejected.content[0].type === 'text');
+    expect(JSON.parse(rejected.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'proposal_contract_mismatch',
+      mismatches: [
+        {
+          code: 'field-not-compatible',
+          template: 'ranking-ordered-bar',
+          slot_id: 'field_base_2',
+          field: 'Unknown Measure',
+          choices: ['Sales', 'Profit', 'Margin', 'Quantity', 'Revenue'],
+        },
+      ],
+      call_2_contract: retainedContract,
+      rejected_proposal: rejectedProposal,
+    });
+    expect(JSON.parse(rejected.content[0].text).guidance).toContain(
+      'Change only the invalid bindings',
+    );
+    expect(JSON.parse(rejected.content[0].text).guidance).toContain(
+      'preserve filters, sort, and top_n',
+    );
+    expect(getExecutor).toHaveBeenCalledTimes(1);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+
+    const corrected = await getToolResult({
+      session: 'contract-recovery',
+      ask,
+      proposal: correctedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(corrected.isError, JSON.stringify(corrected)).toBe(false);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ proposal: correctedProposal }),
+    );
+  });
+
+  it('stops for an ambiguous proposal filter with bounded candidates instead of losing the filter in fallback', async () => {
+    const proposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      confidence: 0.9,
+      filters: [{ field: 'Region', context: true }],
+    };
+    const filterEscalation: BinderResult = {
+      status: 'escalate',
+      reason: 'ambiguous-field',
+      blockers: [
+        {
+          code: 'ambiguous-field',
+          detail: 'filter field "Region" matches 2 fields; use one datasource-qualified field',
+          candidates: ['[Orders].[none:Region:nk]', '[Returns].[none:Region:nk]'],
+        },
+      ],
+      proposal,
+    };
+    const correctedProposal: BindingProposal & { confidence: number } = {
+      ...proposal,
+      filters: [{ field: '[Orders].[none:Region:nk]', context: true }],
+    };
+    const correctedFilterEscalation: BinderResult = {
+      status: 'escalate',
+      reason: 'ambiguous-field',
+      blockers: [
+        {
+          code: 'ambiguous-field',
+          detail: 'filter field "[Orders].[none:Region:nk]" still cannot be resolved uniquely',
+          candidates: ['[Orders].[none:Region:nk]'],
+        },
+      ],
+      proposal: correctedProposal,
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(waterfallProposeResult)
+      .mockResolvedValueOnce(filterEscalation)
+      .mockResolvedValueOnce(correctedFilterEscalation);
+
+    const call1 = await getToolResult({
+      session: 'ambiguous-filter',
+      ask: 'P&L waterfall filtered by Region',
+      getExecutor,
+    });
+    invariant(call1.content[0].type === 'text');
+    const retainedContract = JSON.parse(call1.content[0].text).call_2_contract;
+    const result = await getToolResult({
+      session: 'ambiguous-filter',
+      ask: 'P&L waterfall filtered by Region',
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'proposal_filter_resolution_failed',
+      blockers: filterEscalation.blockers,
+      call_2_contract: retainedContract,
+      rejected_proposal: proposal,
+    });
+    expect(JSON.parse(result.content[0].text).guidance).toContain('ask-user');
+    expect(JSON.parse(result.content[0].text).guidance).toContain(
+      'artifact fallback cannot preserve proposal.filters',
+    );
+    expect(JSON.parse(result.content[0].text).guidance).toContain('Do not guess with raw XML');
+    expect(JSON.parse(result.content[0].text).guidance).toContain(
+      'One changed corrected proposal may proceed',
+    );
+    expect(result.structuredContent?.nextAction).toEqual({
+      label: 'Correct filter from bounded candidates',
+      kind: 'prefill',
+    });
+
+    const corrected = await getToolResult({
+      session: 'ambiguous-filter',
+      ask: 'P&L waterfall filtered by Region',
+      proposal: correctedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    expect(corrected.isError).toBe(true);
+    invariant(corrected.content[0].type === 'text');
+    const correctedBody = JSON.parse(corrected.content[0].text);
+    expect(correctedBody).toMatchObject({
+      status: 'blocked',
+      reason: 'proposal_filter_resolution_failed',
+      rejected_proposal: correctedProposal,
+    });
+    expect(correctedBody.guidance).toContain('correction allowance is exhausted');
+    expect(corrected.structuredContent?.nextAction).toEqual({
+      label: 'Ask user to resolve filter field',
+      kind: 'prefill',
+    });
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('blocks a filter correction that drops the unresolved filter before Desktop work', async () => {
+    const ask = 'P&L waterfall filtered by Region';
+    const rejectedProposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      confidence: 0.9,
+      filters: [{ field: 'Region', context: true }],
+    };
+    const filterEscalation: BinderResult = {
+      status: 'escalate',
+      reason: 'ambiguous-field',
+      blockers: [
+        {
+          code: 'ambiguous-field',
+          detail: 'filter field "Region" matches 2 fields; use one datasource-qualified field',
+          candidates: ['[Orders].[none:Region:nk]', '[Returns].[none:Region:nk]'],
+        },
+      ],
+      proposal: rejectedProposal,
+    };
+    const droppedFilterProposal = { ...rejectedProposal, filters: undefined };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(waterfallProposeResult)
+      .mockResolvedValueOnce(filterEscalation)
+      .mockResolvedValueOnce(boundWaterfallResult);
+
+    await getToolResult({ session: 'filter-drop-correction', ask, getExecutor });
+    await getToolResult({
+      session: 'filter-drop-correction',
+      ask,
+      proposal: rejectedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    const blocked = await getToolResult({
+      session: 'filter-drop-correction',
+      ask,
+      proposal: droppedFilterProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(blocked.isError).toBe(true);
+    invariant(blocked.content[0].type === 'text');
+    const blockedBody = JSON.parse(blocked.content[0].text);
+    expect(blockedBody).toMatchObject({
+      status: 'blocked',
+      reason: 'proposal_filter_resolution_failed',
+      rejected_proposal: {
+        template: droppedFilterProposal.template,
+        title: droppedFilterProposal.title,
+        bindings: droppedFilterProposal.bindings,
+        confidence: droppedFilterProposal.confidence,
+      },
+    });
+    expect(blockedBody.rejected_proposal).not.toHaveProperty('filters');
+    expect(getExecutor).toHaveBeenCalledTimes(2);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: 'a valid binding',
+      mutate: (proposal: BindingProposal & { confidence: number }) => ({
+        ...proposal,
+        bindings: proposal.bindings.map((binding) =>
+          binding.slot_id === 'sub_category' ? { ...binding, field: 'category' } : binding,
+        ),
+        filters: [{ field: '[Orders].[none:Region:nk]', context: true }],
+      }),
+    },
+    {
+      label: 'an unrelated modifier',
+      mutate: (proposal: BindingProposal & { confidence: number }) => ({
+        ...proposal,
+        top_n: 5,
+        filters: [{ field: '[Orders].[none:Region:nk]', context: true }],
+      }),
+    },
+  ])('blocks a filter correction that changes $label before Desktop work', async ({ mutate }) => {
+    const ask = 'P&L waterfall filtered by Region';
+    const rejectedProposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      confidence: 0.9,
+      filters: [{ field: 'Region', context: true }],
+    };
+    const filterEscalation: BinderResult = {
+      status: 'escalate',
+      reason: 'ambiguous-field',
+      blockers: [
+        {
+          code: 'ambiguous-field',
+          detail: 'filter field "Region" matches 2 fields; use one datasource-qualified field',
+          candidates: ['[Orders].[none:Region:nk]', '[Returns].[none:Region:nk]'],
+        },
+      ],
+      proposal: rejectedProposal,
+    };
+    const changedProposal = mutate(rejectedProposal);
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(waterfallProposeResult)
+      .mockResolvedValueOnce(filterEscalation)
+      .mockResolvedValueOnce(boundWaterfallResult);
+
+    await getToolResult({
+      session: `filter-change-${changedProposal.top_n ?? 'binding'}`,
+      ask,
+      getExecutor,
+    });
+    await getToolResult({
+      session: `filter-change-${changedProposal.top_n ?? 'binding'}`,
+      ask,
+      proposal: rejectedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    const blocked = await getToolResult({
+      session: `filter-change-${changedProposal.top_n ?? 'binding'}`,
+      ask,
+      proposal: changedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(blocked.isError).toBe(true);
+    invariant(blocked.content[0].type === 'text');
+    expect(JSON.parse(blocked.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'proposal_filter_resolution_failed',
+      rejected_proposal: changedProposal,
+    });
+    expect(getExecutor).toHaveBeenCalledTimes(2);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: 'a valid binding',
+      mutate: (proposal: BindingProposal & { confidence: number }) => ({
+        ...proposal,
+        bindings: proposal.bindings.map((binding) =>
+          binding.slot_id === 'sub_category'
+            ? { ...binding, field: 'category' }
+            : { ...binding, field: 'amount' },
+        ),
+      }),
+    },
+    {
+      label: 'an unrelated modifier',
+      mutate: (proposal: BindingProposal & { confidence: number }) => ({
+        ...proposal,
+        bindings: proposal.bindings.map((binding) =>
+          binding.slot_id === 'profit' ? { ...binding, field: 'amount' } : binding,
+        ),
+        top_n: 5,
+      }),
+    },
+  ])('blocks a contract correction that changes $label before Desktop work', async ({ mutate }) => {
+    const ask = 'P&L waterfall';
+    const rejectedProposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'Revenue' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      confidence: 0.9,
+    };
+    const changedProposal = mutate(rejectedProposal);
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(waterfallProposeResult)
+      .mockResolvedValueOnce(boundWaterfallResult);
+
+    const session = `contract-change-${changedProposal.top_n ?? 'binding'}`;
+    await getToolResult({ session, ask, getExecutor });
+    await getToolResult({
+      session,
+      ask,
+      proposal: rejectedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    const blocked = await getToolResult({
+      session,
+      ask,
+      proposal: changedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(blocked.isError).toBe(true);
+    invariant(blocked.content[0].type === 'text');
+    expect(JSON.parse(blocked.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'proposal_contract_mismatch',
+      rejected_proposal: changedProposal,
+    });
+    expect(getExecutor).toHaveBeenCalledTimes(1);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('keeps requiring the corrected proposal when target_worksheet is added after a real contract mismatch', async () => {
+    const ask = 'P&L waterfall';
+    const rejectedProposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'Revenue' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      confidence: 0.9,
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(waterfallProposeResult)
+      .mockResolvedValueOnce(boundWaterfallResult);
+
+    await getToolResult({ session: 'target-correction-bypass', ask, getExecutor });
+    await getToolResult({
+      session: 'target-correction-bypass',
+      ask,
+      proposal: rejectedProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    const blocked = await getToolResult({
+      session: 'target-correction-bypass',
+      ask,
+      target_worksheet: 'P&L Waterfall',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(blocked.isError).toBe(true);
+    invariant(blocked.content[0].type === 'text');
+    expect(JSON.parse(blocked.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'awaiting_proposal',
+    });
+    expect(getExecutor).toHaveBeenCalledTimes(1);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('caps contract mismatches from caller-controlled bindings at five', async () => {
+    const ask = 'P&L waterfall';
+    const proposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: Array.from({ length: 7 }, (_, index) => ({
+        slot_id: `fabricated_${index}`,
+        field: 'amount',
+      })),
+      confidence: 0.9,
+    };
+    const getExecutor = vi.fn().mockResolvedValue({});
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(P_AND_L_WORKBOOK_XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(waterfallProposeResult);
+
+    await getToolResult({ session: 'bounded-mismatches', ask, getExecutor });
+    const rejected = await getToolResult({
+      session: 'bounded-mismatches',
+      ask,
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(rejected.content[0].type === 'text');
+    const body = JSON.parse(rejected.content[0].text);
+    expect(body.reason).toBe('proposal_contract_mismatch');
+    expect(body.mismatches).toHaveLength(5);
+    expect(body.mismatches.map((mismatch: { slot_id: string }) => mismatch.slot_id)).toEqual([
+      'fabricated_0',
+      'fabricated_1',
+      'fabricated_2',
+      'fabricated_3',
+      'fabricated_4',
+    ]);
+    expect(getExecutor).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('exhausts the one preflight correction on a second invalid proposal without sending filters to artifact fallback', async () => {
+    const ask = 'P&L waterfall with a Region filter';
+    const firstInvalid: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'Revenue' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      confidence: 0.9,
+      filters: [{ field: 'Region', context: true }],
+    };
+    const secondInvalid: BindingProposal & { confidence: number } = {
+      ...firstInvalid,
+      bindings: firstInvalid.bindings.map((binding) =>
+        binding.slot_id === 'profit' ? { ...binding, field: 'Profit' } : binding,
+      ),
+    };
+    const getExecutor = vi.fn().mockResolvedValue({});
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(P_AND_L_WORKBOOK_XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(waterfallProposeResult);
+
+    await getToolResult({ session: 'contract-exhausted', ask, getExecutor });
+    await getToolResult({
+      session: 'contract-exhausted',
+      ask,
+      proposal: firstInvalid,
+      auto_apply: true,
+      getExecutor,
+    });
+    const exhausted = await getToolResult({
+      session: 'contract-exhausted',
+      ask,
+      proposal: secondInvalid,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(exhausted.isError).toBe(true);
+    invariant(exhausted.content[0].type === 'text');
+    const body = JSON.parse(exhausted.content[0].text);
+    expect(body).toMatchObject({
+      status: 'blocked',
+      reason: 'proposal_contract_mismatch',
+      rejected_proposal: secondInvalid,
+    });
+    expect(body.guidance).toContain('ask-user');
+    expect(body.guidance).toContain('artifact fallback cannot preserve proposal.filters');
+    expect(body.guidance).toContain('Do not guess with raw XML');
+    expect(exhausted.structuredContent?.nextAction).toEqual({
+      label: 'Ask user to resolve proposal',
+      kind: 'prefill',
+    });
+    expect(getExecutor).toHaveBeenCalledTimes(1);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps every runtime bindable slot kind reachable in the Call-2 contract', async () => {
     const manifests = [...runtimeDescriptors().values()];
     const llmInput = {
@@ -1290,9 +1923,13 @@ describe('bindTemplateTool', () => {
       expect(call2.isError).toBe(true);
       invariant(call2.content[0].type === 'text');
       const call2Body = JSON.parse(call2.content[0].text);
-      expect(call2Body).toMatchObject({ status: 'blocked', reason: 'fallback_required' });
-      expect(call2Body).not.toHaveProperty('call_2_contract');
-      expect(call2Body.guidance).toContain('Stop calling bind-template');
+      expect(call2Body).toMatchObject({
+        status: 'blocked',
+        reason: 'proposal_contract_mismatch',
+        call_2_contract: call1Body.call_2_contract,
+        rejected_proposal: proposal,
+      });
+      expect(call2Body.guidance).toContain('Change only the invalid bindings');
     },
   );
 
@@ -3417,6 +4054,42 @@ describe('bindTemplateTool auto_apply gate', () => {
     );
     // top-N unaffected.
     expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
+  });
+
+  it('preserves two proposal filters, both slices and shown dropdown cards without losing the grouping shelf', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundM7TwoFilterResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: 'two-filter-live-shape',
+      ask: 'top 10 products by sales with Region and Segment filters',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [
+          { field: 'Region', context: true },
+          { field: 'Segment', values: ['Consumer'] },
+        ],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+    expect(xml).toContain(
+      "<filter class='categorical' column='[M7].[none:region:nk]' context='true'>",
+    );
+    expect(xml).toContain("<filter class='categorical' column='[M7].[none:segment:nk]'>");
+    expect(xml).toContain("member='Consumer'");
+    expect(xml).toContain('<column>[M7].[none:region:nk]</column>');
+    expect(xml).toContain('<column>[M7].[none:segment:nk]</column>');
+    expect(xml).toContain("<card mode='dropdown' param='[M7].[none:region:nk]' type='filter' />");
+    expect(xml).toContain("<card mode='dropdown' param='[M7].[none:segment:nk]' type='filter' />");
+    expect(xml).toContain('<rows>[M7].[none:product:nk]</rows>');
   });
 
   it('bad sort.by escalation never reaches auto-apply', async () => {

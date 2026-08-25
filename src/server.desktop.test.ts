@@ -273,10 +273,14 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-22: author-set gains a condition (rule-based) set mode — the
 // 'condition' mode enum value plus the conditionExpression param add +52 bytes; dynamic authoring
 // 47_525 -> 47_577 (18-byte ratchet slack kept, well under the temporary 48k product ceiling).
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_577;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_595;
-const DYNAMIC_AUTHORING_PRODUCT_CEILING = 48_000;
-const FULL_TOOL_SURFACE_BUDGET = 61_590;
+// Re-pinned 2026-08-25: refine-worksheet adds bounded mark-type changes and intent/filter
+// recovery adds route guidance. Dynamic authoring moves 47_577 -> 48_192 with 18-byte ratchet
+// slack; the full schema-only surface is 61_806 with the same slack. Tool search removes the
+// temporary 48k Summit constraint, so the product ceiling is 50k.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 48_192;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 48_210;
+const DYNAMIC_AUTHORING_PRODUCT_CEILING = 50_000;
+const FULL_TOOL_SURFACE_BUDGET = 61_824;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -301,7 +305,7 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
     // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_265);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_661);
     expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
@@ -372,7 +376,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['apply-worksheet', 1579], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
-    ['refine-worksheet', 1465], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
+    ['refine-worksheet', 1684], // raised 2026-08-25: bounded mark-type changes keep a discoverable target enum and useful defaults/examples; earlier raise with sign-off (2026-08-05) for the UI title and omitted-targetField axis detection
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
   ]);

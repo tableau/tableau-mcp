@@ -102,6 +102,21 @@ export interface BindRecoveryProposalContext {
   };
 }
 
+export type BindRecoveryCorrectionChange =
+  | { kind: 'template'; choices: string[] }
+  | {
+      kind: 'binding-field' | 'binding-slot' | 'filter-field';
+      index: number;
+      choices: string[];
+    };
+
+/** Private, bounded proof of what one rejected Call-2 correction may change. */
+export interface BindRecoveryCorrectionInvariant {
+  source: 'contract' | 'filter';
+  proposalFingerprint: string;
+  allowedChanges: BindRecoveryCorrectionChange[];
+}
+
 export interface BindAttempt {
   /** ISO timestamp the bind recovery observation was recorded. */
   ts: string;
@@ -120,6 +135,7 @@ export interface BindRecoveryRecord {
   attempts: BindAttempt[];
   lastProposalSignature?: string;
   proposalContext?: BindRecoveryProposalContext;
+  correctionInvariant?: BindRecoveryCorrectionInvariant;
   consecutiveBareResubmitCount?: number;
   /** One-shot retry for an apply failure proven to have occurred before mutation dispatch. */
   preDispatchRetryAllowance?: {
@@ -134,6 +150,7 @@ export interface BindRecoveryAttemptInput {
   outcome: BindOutcome;
   proposalSignature?: string;
   proposalContext?: BindRecoveryProposalContext;
+  correctionInvariant?: BindRecoveryCorrectionInvariant;
   reservationId?: number;
   /** Explicit terminal-done marker; callers use this only after final bind processing concludes. */
   terminal?: boolean;
@@ -548,6 +565,16 @@ export class SessionRouteStateStore {
       : {};
   }
 
+  private withCorrectionInvariant(
+    previous: BindRecoveryRecord | undefined,
+    correctionInvariant: BindRecoveryCorrectionInvariant | undefined,
+  ): Pick<BindRecoveryRecord, 'correctionInvariant'> {
+    if (correctionInvariant !== undefined) return { correctionInvariant };
+    return previous?.correctionInvariant !== undefined
+      ? { correctionInvariant: previous.correctionInvariant }
+      : {};
+  }
+
   private withConsecutiveBareResubmitCount(
     count: number | undefined,
   ): Pick<BindRecoveryRecord, 'consecutiveBareResubmitCount'> {
@@ -649,6 +676,7 @@ export class SessionRouteStateStore {
       attempts: [...(previous?.attempts ?? []), { ...bindAttempt, reservationId }],
       ...this.withLastProposalSignature(previous, admission.proposalSignature),
       ...this.withProposalContext(previous, undefined),
+      ...this.withCorrectionInvariant(previous, undefined),
       ...this.withConsecutiveBareResubmitCount(
         admission.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
       ),
@@ -714,6 +742,7 @@ export class SessionRouteStateStore {
         attempt.reservationId === undefined ? attempt.proposalSignature : undefined,
       ),
       ...this.withProposalContext(previous, attempt.proposalContext),
+      ...this.withCorrectionInvariant(previous, attempt.correctionInvariant),
       ...this.withConsecutiveBareResubmitCount(
         attempt.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
       ),
@@ -769,6 +798,7 @@ export class SessionRouteStateStore {
         attempt.reservationId === undefined ? attempt.proposalSignature : undefined,
       ),
       ...this.withProposalContext(previous, attempt.proposalContext),
+      ...this.withCorrectionInvariant(previous, attempt.correctionInvariant),
       ...this.withConsecutiveBareResubmitCount(
         attempt.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
       ),

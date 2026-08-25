@@ -37,6 +37,36 @@ import { escapeXml } from '../binder/escape.js';
 
 export type TopNEnd = 'top' | 'bottom';
 export type SortDirection = 'ASC' | 'DESC';
+export const TABLEAU_MARK_TYPES = [
+  'automatic',
+  'bar',
+  'line',
+  'area',
+  'square',
+  'circle',
+  'shape',
+  'text',
+  'pie',
+  'gantt_bar',
+  'polygon',
+] as const;
+export type TableauMarkType = (typeof TABLEAU_MARK_TYPES)[number];
+
+const MARK_CLASS_BY_TYPE = {
+  automatic: 'Automatic',
+  bar: 'Bar',
+  line: 'Line',
+  area: 'Area',
+  square: 'Square',
+  circle: 'Circle',
+  shape: 'Shape',
+  text: 'Text',
+  pie: 'Pie',
+  gantt_bar: 'GanttBar',
+  polygon: 'Polygon',
+} as const satisfies Record<TableauMarkType, string>;
+
+export type TableauMarkClass = (typeof MARK_CLASS_BY_TYPE)[TableauMarkType];
 
 export interface TopNPlan {
   ok: true;
@@ -54,6 +84,11 @@ export interface SortPlan {
 export interface SortByFieldPlan extends SortPlan {
   /** The computed-sort `using` field — the readback confirmation target. */
   using: string;
+}
+export interface MarkTypePlan {
+  ok: true;
+  xml: string;
+  markClass: TableauMarkClass;
 }
 export interface RefineRefusal {
   ok: false;
@@ -95,6 +130,35 @@ interface ComputedSortTarget {
 }
 
 const refuse = (reason: string): RefineRefusal => ({ ok: false, reason });
+
+export function planMarkType(
+  xml: string,
+  opts: { markType: TableauMarkType },
+): MarkTypePlan | RefineRefusal {
+  const markClass = (MARK_CLASS_BY_TYPE as Record<string, TableauMarkClass | undefined>)[
+    opts.markType
+  ];
+  if (!markClass) {
+    return refuse(`unsupported mark type ${JSON.stringify(opts.markType)}.`);
+  }
+
+  const panes = [...xml.matchAll(/<pane(?=[\s/>])/g)];
+  if (panes.length !== 1) {
+    return refuse(`mark_type requires exactly one pane (found ${panes.length}).`);
+  }
+
+  const marks = [...xml.matchAll(/<mark(?=[\s/>])[^>]*>/g)];
+  if (marks.length !== 1) {
+    return refuse(`mark_type requires exactly one mark (found ${marks.length}).`);
+  }
+  const markTag = marks[0][0];
+  if (!/\sclass=(?:'[^']*'|"[^"]*")/.test(markTag)) {
+    return refuse('the worksheet mark has no class attribute to change safely.');
+  }
+
+  const patchedMark = markTag.replace(/(\s)class=(?:'[^']*'|"[^"]*")/, `$1class='${markClass}'`);
+  return { ok: true, xml: xml.replace(markTag, patchedMark), markClass };
+}
 
 /**
  * Error-suppressing DOM parse. Malformed XML is surfaced by the apply path's preflight
@@ -715,6 +779,14 @@ export function confirmTopNApplied(readbackXml: string, filterColumn: string): b
     (f) =>
       (xpath.select("count(.//groupfilter[@function='end'])", f as unknown as Node) as number) > 0,
   );
+}
+
+export function confirmMarkTypeApplied(readbackXml: string, markClass: TableauMarkClass): boolean {
+  const doc = parseXml(readbackXml);
+  if (!doc) return false;
+  const panes = xpath.select('//pane', doc as unknown as Node) as Element[];
+  const marks = xpath.select('//mark', doc as unknown as Node) as Element[];
+  return panes.length === 1 && marks.length === 1 && marks[0].getAttribute('class') === markClass;
 }
 
 /**
