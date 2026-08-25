@@ -310,6 +310,31 @@ describe('format-worksheets tool', () => {
     expect(applyWorksheetDocument).not.toHaveBeenCalled();
   });
 
+  it('rejects an ambiguous shelf field before applying and lists each canonical candidate', async () => {
+    const salesSum = '[Sample - Superstore].[sum:Sales:qk]';
+    const salesAvg = '[Sample - Superstore].[avg:Sales:qk]';
+    const { result, applyWorksheetDocument } = await callTool(
+      {
+        worksheets: [
+          {
+            name: 'Sales by Category',
+            numberFormats: [{ field: 'Sales', kind: 'number', decimals: 0 }],
+          },
+        ],
+      },
+      {
+        sourceTransform: (xml) =>
+          xml.replace(`<cols>${salesSum}</cols>`, `<cols>${salesSum} / ${salesAvg}</cols>`),
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(salesSum);
+    expect(result.content[0].text).toContain(salesAvg);
+    expect(applyWorksheetDocument).not.toHaveBeenCalled();
+  });
+
   it('skips apply when Tableau already has the requested formatting', async () => {
     const { result, applyWorksheetDocument } = await callTool(
       {
