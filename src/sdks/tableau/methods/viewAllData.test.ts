@@ -125,3 +125,33 @@ describe('ViewsMethods.getViewAllData', () => {
     });
   });
 });
+
+describe('ViewsMethods.queryViewData', () => {
+  it('requests CSV as text without Axios JSON parsing', async () => {
+    const viewsMethods = new ViewsMethods(
+      'https://tableau.example/api/3.0',
+      {
+        type: 'Bearer',
+        token: 'token',
+      },
+      {},
+    );
+    const queryViewData = vi.fn().mockResolvedValue('Region,Sales\nWest,100');
+    // @ts-expect-error - Replacing the Zodios method for transport configuration coverage.
+    viewsMethods._apiClient.queryViewData = queryViewData;
+
+    await expect(
+      viewsMethods.queryViewData({
+        siteId: 'site-1',
+        viewId: 'view-1',
+        viewFilters: { Region: 'West', vf_Category: 'Furniture' },
+      }),
+    ).resolves.toBe('Region,Sales\nWest,100');
+    expect(queryViewData).toHaveBeenCalledWith({
+      params: { siteId: 'site-1', viewId: 'view-1' },
+      queries: { vf_Region: 'West', vf_Category: 'Furniture' },
+      headers: { Authorization: 'Bearer token' },
+      responseType: 'text',
+    });
+  });
+});

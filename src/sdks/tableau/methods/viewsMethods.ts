@@ -238,6 +238,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       params: { siteId, viewId },
       queries,
       ...this.authHeader,
+      responseType: 'text',
     });
   };
 
