@@ -1,14 +1,15 @@
 import { z } from 'zod';
 
+import { LineageContent } from '../types/lineageContent.js';
 import { View } from '../types/view.js';
 import { Workbook } from '../types/workbook.js';
 
-export type LineageContent = {
-  luid: string;
-  name: string;
-};
+export type { LineageContent };
 
-const lineageContentSchema = z.object({
+// Lenient wire-parse schema for Metadata-API GraphQL responses: luid is absent for embedded
+// datasources and name can be null, so both are optional here. normalizeLineageContents drops
+// entries without a luid before producing the strict LineageContent output shape.
+const metadataLineageContentSchema = z.object({
   luid: z.string().optional(),
   name: z.string().nullable().optional(),
 });
@@ -19,7 +20,7 @@ const workbookLineageResponseSchema = z.object({
       nodes: z.array(
         z.object({
           luid: z.string(),
-          upstreamDatasources: z.array(lineageContentSchema).nullish(),
+          upstreamDatasources: z.array(metadataLineageContentSchema).nullish(),
         }),
       ),
     }),
@@ -28,7 +29,7 @@ const workbookLineageResponseSchema = z.object({
 
 const viewLineageNodeSchema = z.object({
   luid: z.string(),
-  upstreamDatasources: z.array(lineageContentSchema).nullish(),
+  upstreamDatasources: z.array(metadataLineageContentSchema).nullish(),
   workbook: z
     .object({
       luid: z.string(),
@@ -331,14 +332,14 @@ function toGraphqlStringArray(values: Array<string>): string {
 }
 
 function normalizeLineageContents(
-  contents: Array<z.infer<typeof lineageContentSchema>> | null | undefined,
+  contents: Array<z.infer<typeof metadataLineageContentSchema>> | null | undefined,
 ): Array<LineageContent> {
   return (contents ?? [])
     .filter((content): content is { luid: string; name?: string | null } => !!content.luid)
     .map((content) => ({ luid: content.luid, name: content.name ?? content.luid }));
 }
 
-function filterLineageContentsByAllowedIds(
+export function filterLineageContentsByAllowedIds(
   contents: Array<LineageContent> | undefined,
   allowedIds?: Set<string> | null,
 ): Array<LineageContent> {
