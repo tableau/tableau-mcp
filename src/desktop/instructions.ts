@@ -69,7 +69,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'dense-scatter-bubble',
-    text: 'Many/diverse scatter/bubble + categorical color overrides bind-template “Done—no further tool calls needed”: get-worksheet-xml(mode:inline) → add-field → apply-worksheet. Detail: bounded, semantic, discrete, finer than Color; absent/equal/no-finer Detail is missing—replace/supplement. Claim neither until apply receipt proves both. Skip one-mark-per-category, continuous color, no semantic lower grain.',
+    text: 'Dense scatter/bubble + categorical color overrides terminal bind: get-worksheet-xml(mode:inline) → list-available-fields → add-field → apply-worksheet. Replace/supplement with bounded semantic discrete Detail finer than Color; use exact column_ref. None: report/ask-user; never invent. Skip one-mark-per-category or continuous color. Readback: claim only Detail/Color persisted; mark density unverified.',
   },
   {
     kind: 'route',

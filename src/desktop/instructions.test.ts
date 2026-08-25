@@ -53,22 +53,25 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(plainChart?.action).toContain('guarded artifact');
   });
 
-  it('adds bounded lower-grain Detail and categorical Color only for dense scatter intent', () => {
+  it('resolves a real lower-grain Detail before repairing dense scatter encodings', () => {
     const plainChartIndex = DESKTOP_ROUTE_TABLE.findIndex((entry) => entry.id === 'plain-chart');
     const guidance = DESKTOP_ROUTE_TABLE[plainChartIndex + 1];
 
     expect(guidance).toMatchObject({ kind: 'prose', id: 'dense-scatter-bubble' });
     const rendered = renderInstructionEntry(guidance!);
-    expect(rendered).toContain('Many/diverse scatter/bubble + categorical color');
-    expect(rendered).toContain('overrides bind-template “Done—no further tool calls needed”');
-    expect(rendered).toContain('get-worksheet-xml(mode:inline) → add-field → apply-worksheet');
-    expect(rendered).toContain('Detail: bounded, semantic, discrete, finer than Color');
-    expect(rendered).toContain('absent/equal/no-finer Detail is missing');
-    expect(rendered).toContain('replace/supplement');
-    expect(rendered).toContain('Claim neither until apply receipt proves both');
+    expect(rendered).toContain('Dense scatter/bubble + categorical color');
+    expect(rendered).toContain('overrides terminal bind');
+    expect(rendered).toContain(
+      'get-worksheet-xml(mode:inline) → list-available-fields → add-field → apply-worksheet',
+    );
+    expect(rendered).toContain('Replace/supplement with bounded semantic discrete Detail');
+    expect(rendered).toContain('finer than Color');
+    expect(rendered).toContain('use exact column_ref');
+    expect(rendered).toContain('None: report/ask-user; never invent');
     expect(rendered).toContain('one-mark-per-category');
     expect(rendered).toContain('continuous color');
-    expect(rendered).toContain('no semantic lower grain');
+    expect(rendered).toContain('claim only Detail/Color persisted');
+    expect(rendered).toContain('mark density unverified');
   });
 
   // Live incident (v11 bundle): asked to move "warmer" onto color, the agent had no route
