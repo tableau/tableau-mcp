@@ -47,6 +47,9 @@ describe('runDashboardBatchTool', () => {
     expect(
       schema.safeParse({ session: '12345', artifactIds: ['a1', 'a2'], ...BATCH }).success,
     ).toBe(true);
+    expect(schema.safeParse({ session: '12345', ...BATCH, replaceExisting: true }).success).toBe(
+      true,
+    );
     expect(
       schema.safeParse({
         session: '12345',
@@ -72,6 +75,11 @@ describe('runDashboardBatchTool', () => {
     const entry = await getDesktopToolListEntry(tool);
     expect(entry.inputSchema).toMatchObject({
       properties: {
+        session: {
+          type: 'string',
+          maxLength: 64,
+          description: 'Session ID; optional if pinned or unique.',
+        },
         artifactIds: { type: 'array', items: { type: 'string' } },
         dashboardName: { type: 'string' },
         existingWorksheetNames: { type: 'array', items: { type: 'string' } },
@@ -81,12 +89,14 @@ describe('runDashboardBatchTool', () => {
         kpiWorksheetNames: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Ordered KPIs.',
+          description: 'Ordered KPIs',
         },
+        replaceExisting: { type: 'boolean' },
       },
       required: expect.arrayContaining(['dashboardName']),
     });
     expect(entry.inputSchema.required).not.toContain('existingWorksheetNames');
+    expect(entry.inputSchema.required).not.toContain('replaceExisting');
     expect(entry.inputSchema.properties).not.toHaveProperty('tasks');
     expect(JSON.stringify(entry).length).toBeLessThanOrEqual(1_020);
   });
@@ -477,6 +487,7 @@ async function callBatch(
       gridColumns: options.gridColumns,
       layoutType: options.layoutType ?? BATCH.layoutType,
       kpiWorksheetNames: options.kpiWorksheetNames,
+      replaceExisting: false,
       ...(options.existingWorksheetNames !== undefined
         ? { existingWorksheetNames: options.existingWorksheetNames }
         : {}),

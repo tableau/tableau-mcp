@@ -427,6 +427,8 @@ export const problemResponseSchema = z
     instance: z.string().optional(),
     detail: z.string().optional(),
     code: z.string().optional(),
+    // RFC-9457 extension member carrying the underlying Tableau error code, distinct from `code`.
+    tableauErrorCode: z.string().optional(),
   })
   .passthrough();
 export type ProblemResponse = z.infer<typeof problemResponseSchema>;
@@ -733,7 +735,14 @@ export type AppInfo = z.infer<typeof appInfoSchema>;
  */
 export type ExternalApiError =
   | { type: 'unauthorized'; status: number }
-  | { type: 'problem'; status: number; code?: string; title?: string; detail?: string }
+  | {
+      type: 'problem';
+      status: number;
+      code?: string;
+      title?: string;
+      detail?: string;
+      tableauErrorCode?: string;
+    }
   | { type: 'invalid-response'; error: unknown }
   | { type: 'network'; error: unknown; aborted?: boolean }
   // 503: retry the whole request (there is no operation to poll).
@@ -741,4 +750,5 @@ export type ExternalApiError =
   // Blocked on a human; a poll can never clear it.
   | { type: 'awaiting-user'; operationId?: string; blockingWindows?: Array<WindowInfo> }
   | { type: 'operation-expired'; operationId?: string }
-  | { type: 'poll-timeout'; operationId?: string };
+  // Diagnostic only: unlike blockingWindows, progressWindows never fails fast on its own.
+  | { type: 'poll-timeout'; operationId?: string; progressWindows?: Array<WindowInfo> };
