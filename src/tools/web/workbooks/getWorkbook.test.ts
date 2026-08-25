@@ -25,6 +25,8 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 const mocks = vi.hoisted(() => ({
   mockGetWorkbook: vi.fn(),
   mockQueryViewsForWorkbook: vi.fn(),
+  mockQueryWorkbookConnections: vi.fn(),
+  mockGraphql: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -32,14 +34,20 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       workbooksMethods: {
         getWorkbook: mocks.mockGetWorkbook,
+        queryWorkbookConnections: mocks.mockQueryWorkbookConnections,
       },
       viewsMethods: {
         queryViewsForWorkbook: mocks.mockQueryViewsForWorkbook,
+      },
+      metadataMethods: {
+        graphql: mocks.mockGraphql,
       },
       siteId: 'test-site-id',
     }),
   ),
 }));
+
+const emptyWorkbookLineage = { data: { workbooksConnection: { nodes: [] } } };
 
 describe('getWorkbookTool', () => {
   beforeEach(() => {
@@ -47,6 +55,9 @@ describe('getWorkbookTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
+    // Safe defaults: no connections, empty published lineage.
+    mocks.mockQueryWorkbookConnections.mockResolvedValue([]);
+    mocks.mockGraphql.mockResolvedValue(emptyWorkbookLineage);
   });
 
   afterEach(() => {
@@ -118,6 +129,93 @@ describe('getWorkbookTool', () => {
 
     expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
     expect(mocks.mockQueryViewsForWorkbook).not.toHaveBeenCalled();
+  });
+
+  describe('upstream datasource enrichment', () => {
+    const workbookId = '96a43833-27db-40b6-aa80-751efc776b9a';
+
+    beforeEach(() => {
+      mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
+      mocks.mockQueryViewsForWorkbook.mockResolvedValue([mockView]);
+    });
+
+    it('enriches with embedded datasources from a single /connections call', async () => {
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(mocks.mockQueryWorkbookConnections).toHaveBeenCalledTimes(1);
+      expect(mocks.mockQueryWorkbookConnections).toHaveBeenCalledWith({
+        workbookId,
+        siteId: 'test-site-id',
+      });
+      expect(response.data.upstreamDatasources).toEqual([
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
+    });
+
+    it('combines published (metadata) and embedded entries, tagging each type', async () => {
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                upstreamDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+              },
+            ],
+          },
+        },
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        { luid: 'pub-luid-1', name: 'Published DS', datasourceType: 'published' },
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
+    });
+
+    it('falls back to the luid when a connection datasource has no name', async () => {
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'conn-1', datasource: { id: 'emb-luid-1' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        { luid: 'emb-luid-1', name: 'emb-luid-1', datasourceType: 'embedded' },
+      ]);
+    });
+
+    it('surfaces embedded datasources without calling the Metadata API when it is disabled', async () => {
+      vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(mocks.mockGraphql).not.toHaveBeenCalled();
+      expect(mocks.mockQueryWorkbookConnections).toHaveBeenCalledTimes(1);
+      expect(response.data.upstreamDatasources).toEqual([
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
+    });
+
+    it('swallows a failed /connections call and still returns the workbook', async () => {
+      mocks.mockQueryWorkbookConnections.mockRejectedValue(new Error('connections boom'));
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.id).toBe(workbookId);
+      expect(response.data.upstreamDatasources).toBeUndefined();
+    });
   });
 
   describe('getDefaultViewWebUrl', () => {
@@ -309,4 +407,11 @@ async function getToolResult(params: { workbookId: string }): Promise<CallToolRe
   const getWorkbookTool = getGetWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(getWorkbookTool.callback);
   return await callback(params, getMockRequestHandlerExtra());
+}
+
+async function getResponseData(params: { workbookId: string }): Promise<any> {
+  const result = await getToolResult(params);
+  expect(result.isError).toBe(false);
+  invariant(result.content[0].type === 'text');
+  return JSON.parse(result.content[0].text);
 }

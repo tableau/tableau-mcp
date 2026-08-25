@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { LineageContent } from '../types/lineageContent.js';
 import { View } from '../types/view.js';
-import { Workbook } from '../types/workbook.js';
+import { Workbook, WorkbookConnection } from '../types/workbook.js';
 
 export type { LineageContent };
 
@@ -329,6 +329,21 @@ function normalizeDownstreamContents(
 
 function toGraphqlStringArray(values: Array<string>): string {
   return `[${values.map((value) => JSON.stringify(value)).join(', ')}]`;
+}
+
+// A workbook connection's datasource.id is the VDS-queryable embedded datasource LUID.
+// name is optional on the REST response, so fall back to the luid (the shared shape requires it).
+export function toEmbeddedLineageContents(
+  connections: Array<WorkbookConnection>,
+): Array<LineageContent> {
+  return connections
+    .map((connection) => connection.datasource)
+    .filter((datasource): datasource is NonNullable<typeof datasource> => !!datasource)
+    .map((datasource) => ({
+      luid: datasource.id,
+      name: datasource.name ?? datasource.id,
+      datasourceType: 'embedded' as const,
+    }));
 }
 
 function normalizeLineageContents(
