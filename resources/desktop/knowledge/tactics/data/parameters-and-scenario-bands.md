@@ -44,7 +44,7 @@ The tell: an input the user should be able to *change* (a target, a rate, a thre
 
 ## Implementation
 
-All snippets below are grounded in `data/twb_2026.1.0.xsd` and named corpus workbooks; `[federated.XXXX]` is the datasource-id placeholder (as in `data/examples/reference-line.json`). Fuller JSON exemplars: `data/examples/parameter.json` and `data/examples/reference-band.json`.
+All snippets below are grounded in `data/twb_2026.2.0.xsd` and named corpus workbooks; `[federated.XXXX]` is the datasource-id placeholder (as in `data/examples/reference-line.json`). Fuller JSON exemplars: `data/examples/parameter.json` and `data/examples/reference-band.json`.
 
 **1. Create the parameter** (a `<column>` in the `Parameters` datasource; confirmed shape from `data/examples/parameter.json` and the twb example index):
 
@@ -132,7 +132,7 @@ The `Forecast Indicator` field is a calc that returns `"Actual"` for observed ro
 ## Source and Confidence
 
 - Source/evidence type: schema + corpus verification
-- Source: `data/twb_2026.1.0.xsd` (`reference-line` element / `ReferenceLine-G`, `ReferenceLineFormulaType-ST`, `refband` style-target enum) cross-checked against corpus workbooks `ww-ou-diff.xml`, `ww-ou-arrow.xml`, `control-chart-xmr.xml`, `pareto-chart.xml`, and the parameter shapes in `data/examples/parameter.json` + the twb example index (Forecast Indicator Actual/Estimate). No `<reference-band>` element exists in the schema; `reference-parameter` is schema-defined but absent from every corpus workbook, so the confirmed param-driven form is `value-column='[Parameters].[…]'`.
+- Source: `data/twb_2026.2.0.xsd` (`reference-line` element / `ReferenceLine-G`, `ReferenceLineFormulaType-ST`, `refband` style-target enum) cross-checked against corpus workbooks `ww-ou-diff.xml`, `ww-ou-arrow.xml`, `control-chart-xmr.xml`, `pareto-chart.xml`, and the parameter shapes in `data/examples/parameter.json` + the twb example index (Forecast Indicator Actual/Estimate). No `<reference-band>` element exists in the schema; `reference-parameter` is schema-defined but absent from every corpus workbook, so the confirmed param-driven form is `value-column='[Parameters].[…]'`.
 - Customer-identifying details removed: yes
 - Confidence: draft
 - Last reviewed: 2026-07-06
