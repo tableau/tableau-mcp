@@ -39,7 +39,9 @@ const LIVE_WORKBOOK = `<?xml version='1.0'?><workbook>
 const SUPERSTORE_WORKBOOK = `<?xml version='1.0'?><workbook>
   <datasources><datasource name='Sample - Superstore'>
     <column name='[Sales]' datatype='real' role='measure' type='quantitative'/>
+    <column name='[Profit]' datatype='real' role='measure' type='quantitative'/>
     <column name='[Category]' datatype='string' role='dimension' type='nominal'/>
+    <column name='[Product Name]' datatype='string' role='dimension' type='nominal'/>
     <column name='[Region]' datatype='string' role='dimension' type='nominal'/>
     <column name='[Order ID]' datatype='string' role='dimension' type='nominal'/>
     <column name='[Order Date]' datatype='date' role='dimension' type='ordinal'/>
@@ -50,7 +52,9 @@ const SUPERSTORE_WORKBOOK = `<?xml version='1.0'?><workbook>
 </workbook>`;
 
 const SHIPPED_TEMPLATE_NAMES = [
+  'kpi-text',
   'insights__bar_chart',
+  'ranking-ordered-bar',
   'part-to-whole__donut__show-parts-with-center-space-for-total',
   'part-to-whole-pie-chart',
   'gantt-task-rollup-chart',
@@ -103,8 +107,12 @@ describe('build-worksheets-from-templates', () => {
       title: expect.any(Object),
       datasource: expect.any(Object),
       fieldMapping: expect.any(Object),
+      topN: expect.any(Object),
     });
     expect(schema.fieldMapping.description).toBe('Map slot ID to exact returned column_ref.');
+    expect(schema.topN.description).toBe(
+      'Limit a simple ranked worksheet to its first N members before storing the artifact.',
+    );
     expect(schema).not.toHaveProperty('templates');
     expect(schema).not.toHaveProperty('workbookFile');
     expect(schema).not.toHaveProperty('confirmation');
@@ -159,6 +167,49 @@ describe('build-worksheets-from-templates', () => {
     );
     expect(reserved.artifact.windowXml).toContain('Revenue by Segment');
     expect(reserved.artifact.instanceId).toBe('inst-build');
+  });
+
+  it('rejects a kpi artifact with a competing fieldMapping key before storing it', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: SUPERSTORE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-kpi-competing',
+    });
+
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'kpi-text',
+        title: 'Total Sales',
+        datasource: 'Sample - Superstore',
+        fieldMapping: {
+          field_base_1: '[Sample - Superstore].[sum:Sales:qk]',
+          competing_metric: '[Sample - Superstore].[sum:Profit:qk]',
+        },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('exactly one field');
+    expect(result.content[0].text).toContain('received 2');
+    expect(store.reserve('artifact-kpi-competing', '12345')).toEqual({
+      ok: false,
+      reason: 'unknown',
+    });
   });
 
   it('builds and applies the shipped insights bar without leaving a direction token', async () => {
@@ -225,6 +276,51 @@ describe('build-worksheets-from-templates', () => {
     expect(posts).toHaveLength(1);
     expect(posts[0]).toContain('direction="DESC"');
     expect(posts[0]).not.toContain('{{');
+  });
+
+  it('stores a bounded ranked artifact while preserving its computed descending sort', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: SUPERSTORE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-top-products',
+    });
+
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'ranking-ordered-bar',
+        title: 'Top Products',
+        datasource: 'Sample - Superstore',
+        fieldMapping: {
+          field_base_1: '[Sample - Superstore].[none:Product Name:nk]',
+          field_base_2: '[Sample - Superstore].[sum:Sales:qk]',
+        },
+        topN: 10,
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(bodyOf(result)).toMatchObject({ topN: 10 });
+    const reserved = store.reserve('artifact-top-products', '12345');
+    expect(reserved.ok).toBe(true);
+    if (!reserved.ok) return;
+    expect(reserved.artifact.worksheetXml).toMatch(
+      /<groupfilter\b[^>]*function=(['"])end\1[^>]*count=(['"])10\2/,
+    );
+    expect(reserved.artifact.worksheetXml).toMatch(/<computed-sort\b[^>]*direction=(['"])DESC\1/);
   });
 
   it('keeps placeholder-shaped text in a user title while rejecting authored residue', async () => {
@@ -679,14 +775,18 @@ async function callTool(
     title: string;
     datasource: string;
     fieldMapping: Record<string, string>;
+    topN?: number;
   },
   executor: ExternalApiToolExecutor,
 ): Promise<CallToolResult> {
   const callback = await Provider.from(tool.callback);
-  return await callback(args, {
-    ...getMockRequestHandlerExtra(),
-    getExecutor: vi.fn().mockResolvedValue(executor),
-  });
+  return await callback(
+    { ...args, topN: args.topN },
+    {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue(executor),
+    },
+  );
 }
 
 function bodyOf(result: CallToolResult): any {

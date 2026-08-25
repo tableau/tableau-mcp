@@ -273,10 +273,14 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-22: author-set gains a condition (rule-based) set mode — the
 // 'condition' mode enum value plus the conditionExpression param add +52 bytes; dynamic authoring
 // 47_525 -> 47_577 (18-byte ratchet slack kept, well under the temporary 48k product ceiling).
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 47_577;
-const DYNAMIC_AUTHORING_SURFACE_BUDGET = 47_595;
-const DYNAMIC_AUTHORING_PRODUCT_CEILING = 48_000;
-const FULL_TOOL_SURFACE_BUDGET = 61_590;
+// Re-pinned 2026-08-24: the executive dashboard route carries live-sheet apply, KPI order/naming,
+// deterministic layout, recovery, computed-sort, and pre-composition Top-N rules; the artifact
+// fallback accepts the same Top-N bound, and run-dashboard-batch describes its chart/KPI roles.
+// Dynamic is 49_136 and full is 61_997; keep 18 bytes of slack under the tool-search-era 50k ceiling.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 49_136;
+const DYNAMIC_AUTHORING_SURFACE_BUDGET = 49_154;
+const DYNAMIC_AUTHORING_PRODUCT_CEILING = 50_000;
+const FULL_TOOL_SURFACE_BUDGET = 62_015;
 
 describe('desktop tools/list serialized surface', () => {
   it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
@@ -301,7 +305,7 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
     // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_265);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(5_414);
     expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);
@@ -373,6 +377,8 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['apply-worksheet', 1579], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1465], // raised with sign-off (2026-08-05): agreed UI-label title 'Refining worksheet'; earlier raise for omitted-targetField axis detection, funded by a ~500-byte same-tool describe trim
+    ['build-worksheets-from-templates', 1150], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
+    ['run-dashboard-batch', 1278], // raised 2026-08-24: tool and schema state staged apply, live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
   ]);

@@ -67,18 +67,25 @@ import {
 
 const paramsSchema = {
   session: sessionParam({ max: 64 }),
-  artifactIds: z.array(z.string().trim().min(1).max(255)).max(6).optional(),
+  artifactIds: z.array(z.string().trim().min(1).max(255)).max(7).optional(),
   dashboardName: z.string().trim().min(1).max(255),
-  existingWorksheetNames: z.array(z.string().trim().min(1).max(255)).max(6).optional(),
+  existingWorksheetNames: z
+    .array(z.string().trim().min(1).max(255))
+    .max(7)
+    .optional()
+    .describe('Live non-KPI chart worksheet names in dashboard order.'),
   title: z.string().trim().min(1).max(255).optional(),
-  layoutType: z.enum(['auto-grid', 'rows', 'columns', 'executive-summary']).optional(),
+  layoutType: z
+    .enum(['auto-grid', 'rows', 'columns', 'executive-summary'])
+    .optional()
+    .describe('Dashboard layout; executive-summary uses KPI and chart roles.'),
   gridColumns: z.number().int().min(1).max(6).optional(),
   kpiWorksheetNames: z
     .array(z.string().trim().min(1).max(255))
     .min(1)
     .max(5)
     .optional()
-    .describe('Ordered KPIs.'),
+    .describe('Live KPI worksheet names in display order from left to right.'),
 };
 
 type AppliedState = true | false | 'unknown';
@@ -158,6 +165,7 @@ type BatchReadbackVerification = {
 
 const title = 'Dashboard';
 const MAX_DYNAMIC_TEXT_LENGTH = 384;
+const MAX_BATCH_WORKSHEETS = 7;
 
 export const getRunDashboardBatchTool = (
   server: DesktopMcpServer,
@@ -168,7 +176,7 @@ export const getRunDashboardBatchTool = (
     server,
     name: 'run-dashboard-batch',
     title,
-    description: 'Apply; compose.',
+    description: 'Apply staged worksheets and compose live KPI/chart sheets into one dashboard.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -251,25 +259,30 @@ export const getRunDashboardBatchTool = (
               reservations.push(reservation);
             }
 
-            const plannedNames = [
+            const explicitlyPlannedNames = [
               ...requestedExistingNames,
               ...reservations.map((reservation) => reservation.artifact.title),
             ];
-            if (plannedNames.length < 1 || plannedNames.length > 6) {
-              return preflightInputFailure(
-                steps,
-                orderedArtifactIds,
-                dashboardName,
-                'A dashboard batch requires 1-6 combined worksheets.',
-              );
-            }
-            const duplicateName = firstCanonicalDuplicate(plannedNames);
+            const duplicateName = firstCanonicalDuplicate(explicitlyPlannedNames);
             if (duplicateName) {
               return preflightInputFailure(
                 steps,
                 orderedArtifactIds,
                 dashboardName,
                 `Duplicate worksheet name: "${duplicateName}".`,
+              );
+            }
+            const implicitKpiRoleNames =
+              layoutType === 'executive-summary'
+                ? canonicalDifference(kpiWorksheetNames ?? [], explicitlyPlannedNames)
+                : [];
+            const plannedNames = [...explicitlyPlannedNames, ...implicitKpiRoleNames];
+            if (plannedNames.length < 1 || plannedNames.length > MAX_BATCH_WORKSHEETS) {
+              return preflightInputFailure(
+                steps,
+                orderedArtifactIds,
+                dashboardName,
+                'A dashboard batch requires 1-7 combined worksheets, including KPI roles.',
               );
             }
 
@@ -378,14 +391,51 @@ export const getRunDashboardBatchTool = (
                 'existingWorksheet',
               );
             }
-            const worksheetNames = [
+            const explicitlyResolvedNames = [
               ...(resolvedExistingNames as string[]),
               ...canonicalArtifactNames,
             ];
+            const unresolvedKpiRoleNames =
+              layoutType === 'executive-summary'
+                ? canonicalDifference(kpiWorksheetNames ?? [], explicitlyResolvedNames)
+                : [];
+            const resolvedImplicitKpiNames = resolveRenderedWorksheetNames(
+              workbookXml,
+              unresolvedKpiRoleNames,
+            );
+            const missingKpiNames = unresolvedKpiRoleNames.filter(
+              (_, index) => !resolvedImplicitKpiNames[index],
+            );
+            if (missingKpiNames.length > 0) {
+              return preflightInputFailure(
+                steps,
+                orderedArtifactIds,
+                dashboardName,
+                `Missing live rendered KPI worksheet name(s): ${missingKpiNames
+                  .map((name) => `"${name}"`)
+                  .join(
+                    ', ',
+                  )}. Create or render each KPI worksheet, or correct kpiWorksheetNames; then retry with the same executive-summary layout.`,
+                'kpiWorksheet',
+              );
+            }
+            const worksheetNames = [
+              ...explicitlyResolvedNames,
+              ...(resolvedImplicitKpiNames as string[]),
+            ];
+            const canonicalKpiWorksheetNames =
+              layoutType === 'executive-summary' && kpiWorksheetNames
+                ? kpiWorksheetNames.flatMap((requestedName) => {
+                    const canonicalName = worksheetNames.find((worksheetName) =>
+                      xmlNamesEqual(worksheetName, requestedName),
+                    );
+                    return canonicalName ? [canonicalName] : [];
+                  })
+                : kpiWorksheetNames;
             const layoutError = validateComposeDashboardInput(worksheetNames, {
               layoutType,
               gridColumns,
-              kpiWorksheetNames,
+              kpiWorksheetNames: canonicalKpiWorksheetNames,
             });
             if (layoutError) {
               return preflightInputFailure(
@@ -433,7 +483,9 @@ export const getRunDashboardBatchTool = (
                 layout: {
                   layoutType: layoutType ?? 'auto-grid',
                   ...(gridColumns ? { gridColumns } : {}),
-                  ...(kpiWorksheetNames ? { kpiWorksheetNames } : {}),
+                  ...(canonicalKpiWorksheetNames
+                    ? { kpiWorksheetNames: canonicalKpiWorksheetNames }
+                    : {}),
                 },
               });
             } catch (error) {
@@ -784,6 +836,20 @@ function firstCanonicalDuplicate(values: readonly string[]): string | undefined 
   return values.find(
     (value, index) => values.findIndex((candidate) => xmlNamesEqual(candidate, value)) !== index,
   );
+}
+
+function canonicalDifference(values: readonly string[], represented: readonly string[]): string[] {
+  const difference: string[] = [];
+  for (const value of values) {
+    if (
+      represented.some((candidate) => xmlNamesEqual(candidate, value)) ||
+      difference.some((candidate) => xmlNamesEqual(candidate, value))
+    ) {
+      continue;
+    }
+    difference.push(value);
+  }
+  return difference;
 }
 
 function preflightInputFailure(

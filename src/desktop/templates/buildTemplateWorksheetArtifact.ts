@@ -11,6 +11,7 @@ import { summarizeSchema } from '../binder/schema-summary.js';
 import { resolveUniqueDatasourceName } from '../metadata/field-resolver.js';
 import { extractSheetXml, extractWorksheetWindowXml } from '../metadata/sheets.js';
 import { captureTargetWorksheetState } from '../metadata/targetWorksheetState.js';
+import { planTopN } from '../refine/refineWorksheet.js';
 import { buildInjectedWorkbookXml } from './injectTemplateCore.js';
 import type { TemplateWorksheetArtifact } from './templateArtifactStore.js';
 import { getTemplateCatalogEntry, readBookmarkFromCatalogEntry } from './templatePath.js';
@@ -47,6 +48,7 @@ export interface WorksheetTemplatePlan {
   title: string;
   datasource: string;
   fieldMapping: Record<string, string>;
+  topN?: number;
 }
 
 export interface BuiltTemplateWorksheetArtifact {
@@ -142,12 +144,21 @@ export function buildTemplateWorksheetArtifact({
     });
     if (!injected.ok) return new XmlValidationError(injected.issues).toErr();
 
-    const worksheetXml = extractSheetXml(injected.xml, plan.title);
+    let worksheetXml = extractSheetXml(injected.xml, plan.title);
     const windowXml = extractWorksheetWindowXml(injected.xml, plan.title);
     if (!worksheetXml || !windowXml) {
       return new ArgsValidationError(
         `Template "${plan.templateName}" did not produce a complete worksheet artifact.`,
       ).toErr();
+    }
+    if (plan.topN !== undefined) {
+      const bounded = planTopN(worksheetXml, { n: plan.topN });
+      if (!bounded.ok) {
+        return new ArgsValidationError(
+          `topN could not be applied to template "${plan.templateName}": ${bounded.reason}`,
+        ).toErr();
+      }
+      worksheetXml = bounded.xml;
     }
 
     return Ok({

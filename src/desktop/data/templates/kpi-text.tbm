@@ -58,6 +58,10 @@
           </formatted-text>
         </customized-label>
         <style>
+          <style-rule element='cell'>
+            <format attr='text-align' value='center' />
+            <format attr='vertical-align' value='center' />
+          </style-rule>
           <style-rule element='mark'>
             <format attr='mark-labels-show' value='true' />
             <format attr='mark-labels-cull' value='true' />
