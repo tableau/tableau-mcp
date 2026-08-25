@@ -30,29 +30,17 @@ const paramsSchema = {
     ),
 };
 
-export const viewDataSheetResultSchema = z.object({
-  sheetName: z.string(),
-  totalSheetsInView: z.number().int().positive(),
-  columns: z.array(z.string()),
-  rows: z.array(z.array(z.string())),
-  sheetStatus: z.enum(['OK', 'ERROR']),
-  errorDetail: z.string().optional(),
-});
-
-export const viewDataResultSchema = z.union([
-  viewDataSheetResultSchema,
-  z.object({
-    requiresSheetSelection: z.literal(true),
-    sheets: z.array(
-      z.object({
-        sheetName: z.string(),
-        sheetIndex: z.number().int().nonnegative(),
-      }),
-    ),
-  }),
-]);
-
-type ViewDataResult = DataToolResult | z.infer<typeof viewDataResultSchema>;
+type ViewDataResult =
+  | DataToolResult
+  | { requiresSheetSelection: true; sheets: Array<{ sheetName: string; sheetIndex: number }> }
+  | {
+      sheetName: string;
+      totalSheetsInView: number;
+      columns: string[];
+      rows: string[][];
+      sheetStatus: 'OK' | 'ERROR';
+      errorDetail?: string;
+    };
 
 export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getViewDataTool = new WebTool({

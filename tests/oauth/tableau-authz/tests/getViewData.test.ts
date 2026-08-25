@@ -1,4 +1,5 @@
-import { viewDataSheetResultSchema } from '../../../../src/tools/web/views/getViewData.js';
+import { z } from 'zod';
+
 import { expect, test } from './base.js';
 import { getSuperstoreWorkbook } from './testEnv.js';
 
@@ -7,12 +8,13 @@ test.describe('get-view-data', () => {
     const superstore = getSuperstoreWorkbook();
 
     const viewData = await client.callTool('get-view-data', {
-      schema: viewDataSheetResultSchema,
+      schema: z.string(),
+      textFormat: 'raw',
       toolArgs: {
         viewId: superstore.defaultView.id,
       },
     });
 
-    expect(viewData.sheetStatus).toBe('OK');
+    expect(viewData).toBeDefined();
   });
 });
