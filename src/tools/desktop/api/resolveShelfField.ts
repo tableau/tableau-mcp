@@ -13,7 +13,10 @@ import { listFields } from '../../../desktop/metadata/index.js';
 export function resolveShelfField(
   worksheetXml: string,
   requested: string,
-): { ok: true; column: string } | { ok: false; onShelf: Array<string> } {
+):
+  | { ok: true; column: string }
+  | { ok: false; reason: 'not_found'; onShelf: Array<string> }
+  | { ok: false; reason: 'ambiguous'; candidates: Array<string> } {
   const shelfColumns = listFields(worksheetXml).map((field) => field.column);
   const onShelf = dedupe(shelfColumns);
 
@@ -23,15 +26,18 @@ export function resolveShelfField(
   }
 
   const wanted = stripBrackets(trimmed).toLowerCase();
-  for (const column of onShelf) {
-    const parsed = parseCanonicalColumnRef(column);
-    const localName = parsed?.localFieldName;
-    if (localName !== undefined && localName.toLowerCase() === wanted) {
-      return { ok: true, column };
-    }
+  const candidates = onShelf.filter((column) => {
+    const localName = parseCanonicalColumnRef(column)?.localFieldName;
+    return localName !== undefined && localName.toLowerCase() === wanted;
+  });
+  if (candidates.length === 1) {
+    return { ok: true, column: candidates[0] };
+  }
+  if (candidates.length > 1) {
+    return { ok: false, reason: 'ambiguous', candidates };
   }
 
-  return { ok: false, onShelf };
+  return { ok: false, reason: 'not_found', onShelf };
 }
 
 function dedupe(values: Array<string>): Array<string> {

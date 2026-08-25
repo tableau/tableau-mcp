@@ -94,6 +94,12 @@ export const getSortWorksheetTool = (
 
               const shelfField = resolveShelfField(document.value.xml, fieldName);
               if (!shelfField.ok) {
+                if (shelfField.reason === 'ambiguous') {
+                  return new ArgsValidationError(
+                    `Field "${fieldName}" matches more than one field on worksheet "${resolved.value.name}". ` +
+                      `Use one exact canonical field reference: ${shelfField.candidates.join(', ')}.`,
+                  ).toErr();
+                }
                 return new ArgsValidationError(
                   `Field "${fieldName}" is not on worksheet "${resolved.value.name}"'s shelves, so it cannot be sorted. ` +
                     (shelfField.onShelf.length > 0

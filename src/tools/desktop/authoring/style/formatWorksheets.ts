@@ -232,6 +232,12 @@ export function formatWorksheetDocument(
   for (const format of request.numberFormats ?? []) {
     const resolved = resolveShelfField(xml, format.field);
     if (!resolved.ok) {
+      if (resolved.reason === 'ambiguous') {
+        return {
+          ok: false,
+          message: `Field "${format.field}" matches more than one field used by this worksheet. Use one exact canonical field reference: ${resolved.candidates.join(', ')}.`,
+        };
+      }
       const available = resolved.onShelf
         .map((field) => parseCanonicalColumnRef(field)?.localFieldName ?? field)
         .filter((field, index, fields) => fields.indexOf(field) === index);

@@ -124,6 +124,35 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     }
   });
 
+  it('sort-worksheet rejects an ambiguous shelf field and lists each canonical candidate', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    const salesSum = '[Sample - Superstore].[sum:Sales:qk]';
+    const salesAvg = '[Sample - Superstore].[avg:Sales:qk]';
+    harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
+      status: 200,
+      contentType: 'application/xml',
+      body:
+        '<?xml version="1.0"?>' +
+        '<worksheet name="Sales by Region"><table>' +
+        '<rows>[Sample - Superstore].[none:Region:nk]</rows>' +
+        `<cols>${salesSum} / ${salesAvg}</cols>` +
+        '</table><simple-id uuid="sheet-sales" /></worksheet>',
+    });
+    try {
+      const { result } = await run(harness, { worksheet: WORKSHEET_NAME, fieldName: 'Sales' });
+      expect(result.isError).toBeTruthy();
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(salesSum);
+      expect(result.content[0].text).toContain(salesAvg);
+      const posted = harness.server.requests.filter(
+        (r) => r.method === 'POST' && r.path === `/v0/workbook/worksheets/${WORKSHEET_ID}:sort`,
+      );
+      expect(posted).toHaveLength(0);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('list-worksheet-logical-tables GETs the logicalTables route and returns the tables', async () => {
     const harness = await startHarness(getListWorksheetLogicalTablesTool);
     try {
