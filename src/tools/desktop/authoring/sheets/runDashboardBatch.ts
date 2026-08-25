@@ -723,17 +723,38 @@ function verifyBatchReadback(
       verification: { ok: true, status: 'passed' },
     };
   });
-  const dashboardIssues = dashboardCandidateReadbackIssues(
-    workbookXml,
-    candidateXml,
-    dashboardName,
-    worksheetNames,
-  );
+  const dashboardIssues = [
+    ...composedWorksheetReadbackIssues(workbookXml, candidateXml, worksheetNames),
+    ...dashboardCandidateReadbackIssues(workbookXml, candidateXml, dashboardName, worksheetNames),
+  ];
   return {
     ok: worksheets.every(({ verification }) => verification.ok) && dashboardIssues.length === 0,
     worksheets,
     dashboardIssues,
   };
+}
+
+function composedWorksheetReadbackIssues(
+  workbookXml: string,
+  candidateXml: string,
+  worksheetNames: string[],
+): string[] {
+  return worksheetNames.flatMap((worksheetName) => {
+    const intended = extractSheetXml(candidateXml, worksheetName);
+    const readback = extractSheetXml(workbookXml, worksheetName);
+    if (intended === null) {
+      return [`Worksheet "${worksheetName}" was absent from the dashboard candidate.`];
+    }
+    if (readback === null) {
+      return [`Worksheet "${worksheetName}" was absent from workbook readback.`];
+    }
+    const errors = verifyWorksheetReadback(intended, readback).filter(
+      (finding) => finding.severity === 'error',
+    );
+    return errors.length > 0
+      ? [`Worksheet "${worksheetName}": ${boundedText(formatReadbackVerificationError(errors))}`]
+      : [];
+  });
 }
 
 function unknownBatch({

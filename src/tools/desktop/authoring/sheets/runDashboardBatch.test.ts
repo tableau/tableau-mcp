@@ -539,6 +539,35 @@ describe('runDashboardBatchTool', () => {
     expect(harness.posts).toHaveLength(0);
   });
 
+  it('returns unknown when Tableau changes Top-N semantics on a composed live worksheet', async () => {
+    vi.useFakeTimers();
+    const harness = statefulExecutor({
+      initialXml: rankedWorkbook(),
+      readbackTransform: (xml) =>
+        xml.replace('function="end" count="10"', 'function="end" count="50"'),
+    });
+
+    const resultPromise = callBatch([], {
+      existingWorksheetNames: ['Top Products'],
+      executor: harness.executor,
+    });
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(bodyOf(result)).toMatchObject({
+      applied: 'unknown',
+      retrySafe: false,
+      steps: [
+        expect.objectContaining({
+          operation: 'dashboard',
+          stage: 'readbackVerification',
+          error: expect.stringContaining('Top Products'),
+        }),
+      ],
+    });
+    expect(JSON.stringify(bodyOf(result))).toContain('filter');
+  });
+
   it('keeps seven-artifact warning and failure receipts below the SDK truncation limit', async () => {
     const ids = Array.from({ length: 7 }, (_, index) => `${index}-${'i'.repeat(250)}`);
     const titles = Object.fromEntries(ids.map((id, index) => [id, `${index}-${'t'.repeat(250)}`]));
@@ -709,6 +738,30 @@ function renderedWorkbook(names: string[]): string {
     .join('')}</worksheets><windows>${names
     .map((name) => `<window class="worksheet" name="${name}"/>`)
     .join('')}</windows></workbook>`;
+}
+
+function rankedWorkbook(): string {
+  const column = '[Sample - Superstore].[none:Product Name:nk]';
+  const level = '[none:Product Name:nk]';
+  const sales = '[Sample - Superstore].[sum:Sales:qk]';
+  return `<?xml version="1.0"?><workbook><worksheets>
+    <worksheet name="Top Products"><table><view>
+      <datasource-dependencies datasource="Sample - Superstore">
+        <column-instance column="[Product Name]" derivation="None" name="${level}" pivot="key" type="nominal"/>
+        <column-instance column="[Sales]" derivation="Sum" name="[sum:Sales:qk]" pivot="key" type="quantitative"/>
+      </datasource-dependencies>
+      <filter class="categorical" column="${column}">
+        <groupfilter function="end" count="10" end="top" units="records">
+          <groupfilter function="order" direction="DESC" expression="SUM([Sales])">
+            <groupfilter function="level-members" level="${level}"/>
+          </groupfilter>
+        </groupfilter>
+      </filter>
+      <computed-sort column="${column}" direction="DESC" using="${sales}"/>
+      <slices><column>${column}</column></slices>
+    </view><panes><pane><mark class="Bar"/></pane></panes>
+    <rows>${column}</rows><cols>${sales}</cols></table></worksheet>
+  </worksheets><windows><window class="worksheet" name="Top Products"/></windows></workbook>`;
 }
 
 function bodyOf(result: CallToolResult): Record<string, any> {

@@ -276,8 +276,8 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Re-pinned 2026-08-24: the executive dashboard route carries live-sheet apply, KPI order/naming,
 // deterministic layout, recovery, computed-sort, and pre-composition Top-N rules; the artifact
 // fallback accepts the same Top-N bound, and run-dashboard-batch describes its chart/KPI roles.
-// Dynamic is 49_136 and full is 61_997; keep 18 bytes of slack under the tool-search-era 50k ceiling.
-const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 49_136;
+// Dynamic is 49_127 and full is 61_997; keep 27 bytes of slack under the tool-search-era 50k ceiling.
+const DYNAMIC_AUTHORING_SURFACE_EXPECTED = 49_127;
 const DYNAMIC_AUTHORING_SURFACE_BUDGET = 49_154;
 const DYNAMIC_AUTHORING_PRODUCT_CEILING = 50_000;
 const FULL_TOOL_SURFACE_BUDGET = 62_015;
@@ -305,7 +305,7 @@ describe('desktop tools/list serialized surface', () => {
     // pinned separately so intentional route prose does not fund schema growth.
     // Re-pinned 2026-08-10: explicit single-view writes use apply-worksheet.templatePlan;
     // preview/no-change requests retain the read-only artifact path.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(5_414);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(5_405);
     expect(dynamicAuthoringTotal).toBe(DYNAMIC_AUTHORING_SURFACE_EXPECTED);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_SURFACE_BUDGET);
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(DYNAMIC_AUTHORING_PRODUCT_CEILING);

@@ -234,7 +234,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(dashboard).toMatchObject({
       trigger: 'a dashboard ask',
       action:
-        'For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise Sales, Profit, then Quantity/Orders. Give every KPI worksheet and display title a metric name such as Total Sales; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
+        'For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
       toolSequence: ['bind-template', 'run-dashboard-batch'],
       forbiddenTools: ['sort-worksheet'],
       stopConditions: [
@@ -253,12 +253,15 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(dashboard?.action).toContain('auto_apply:true');
     expect(dashboard?.action).toContain('only live non-KPI chart names');
     expect(dashboard?.action).toContain('ordered live KPI names');
-    expect(dashboard?.action).toContain('KPI worksheet and display title');
+    expect(dashboard?.action).toContain('KPI worksheet and title');
     expect(dashboard?.action).toContain('never pass a generic starter name');
     expect(dashboard?.action).toContain('separate guarded artifact fallback');
     expect(dashboard?.action).toContain('Top 10 before composition');
     expect(dashboard?.action).toContain('topN:10');
     expect(dashboard?.action).toContain('never add a native sort call');
+    expect(dashboard?.action).toContain('clear measures from the data');
+    expect(dashboard?.action).toContain('omit KPIs and ask');
+    expect(dashboard?.action).not.toContain('otherwise Sales, Profit');
     expect(dashboard?.action).not.toContain('zero worksheet apply tasks');
     expect(dashboard?.action).not.toContain('dashboard-auto-apply');
   });
