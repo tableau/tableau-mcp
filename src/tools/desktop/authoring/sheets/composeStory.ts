@@ -79,6 +79,7 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
           if (dashboards.isErr()) return new DesktopCommandExecutionError(dashboards.error).toErr();
 
           const resolvedPoints: StoryPoint[] = [];
+          const preflightDashboards: Array<{ id: string; name: string; sourceHash: string }> = [];
           const sizes: StorySize[] = [];
           for (const point of points) {
             const resolved = resolveItemByNameOrId(
@@ -100,6 +101,11 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
             resolvedPoints.push({
               dashboard: resolved.value.name,
               caption: point.caption ?? resolved.value.name,
+            });
+            preflightDashboards.push({
+              id: resolved.value.id,
+              name: resolved.value.name,
+              sourceHash: sourceSha256(document.value.xml),
             });
             sizes.push(size);
           }
@@ -128,6 +134,15 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
               `Story "${resolvedStory.value.name}" already contains story points. Set replaceExisting only after an explicit rebuild/replace request.`,
             ).toErr();
           }
+          if (
+            !alreadyMatches &&
+            hasPopulatedStoryPoints(source.value.xml) &&
+            hasStoryZoneMappings(source.value.xml)
+          ) {
+            return new ArgsValidationError(
+              `Story "${resolvedStory.value.name}" uses zone mappings tied to existing story points that compose-story cannot safely replace. Rebuild the story in Tableau instead.`,
+            ).toErr();
+          }
 
           const introduced = introducedBlockingValidationIssues(
             runValidation(source.value.xml, 'dashboard').issues,
@@ -142,6 +157,45 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
           if (!alreadyMatches) {
             const sourceHash = sourceSha256(source.value.xml);
             const applied = await withApplyLock(async () => {
+              const currentDashboards = await executor.listDashboards(extra.signal);
+              if (currentDashboards.isErr()) {
+                return { kind: 'error' as const, error: currentDashboards.error };
+              }
+              for (const dashboard of preflightDashboards) {
+                const current = (currentDashboards.value.dashboards ?? []).find(
+                  ({ id }) => id === dashboard.id,
+                );
+                if (!current || current.name !== dashboard.name) {
+                  return {
+                    kind: 'dashboardDrift' as const,
+                    dashboardName: dashboard.name,
+                  };
+                }
+              }
+
+              const latestDashboards = [];
+              for (const dashboard of preflightDashboards) {
+                latestDashboards.push({
+                  dashboard,
+                  document: await executor.getDashboardDocument(dashboard.id, extra.signal),
+                });
+              }
+              for (const { dashboard, document } of latestDashboards) {
+                if (document.isErr()) {
+                  return {
+                    kind: 'dashboardError' as const,
+                    dashboardName: dashboard.name,
+                    error: document.error,
+                  };
+                }
+                if (sourceSha256(document.value.xml) !== dashboard.sourceHash) {
+                  return {
+                    kind: 'dashboardDrift' as const,
+                    dashboardName: dashboard.name,
+                  };
+                }
+              }
+
               const latest = await executor.getStoryboardDocument(
                 resolvedStory.value.id,
                 extra.signal,
@@ -161,6 +215,17 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
             });
             if (applied.kind === 'error') {
               return new DesktopCommandExecutionError(applied.error).toErr();
+            }
+            if (applied.kind === 'dashboardError') {
+              return new DesktopCommandExecutionError(
+                applied.error,
+                `Dashboard "${applied.dashboardName}" could not be re-read during story composition.`,
+              ).toErr();
+            }
+            if (applied.kind === 'dashboardDrift') {
+              return new XmlModificationError(
+                `Dashboard "${applied.dashboardName}" changed during composition. Re-read and retry.`,
+              ).toErr();
             }
             if (applied.kind === 'drift') {
               return new XmlModificationError(
@@ -277,6 +342,10 @@ function hasPopulatedStoryPoints(xml: string): boolean {
     const caption = readAttribute(match[0], 'caption');
     return dashboard === undefined || dashboard.trim() !== '' || (caption?.trim() ?? '') !== '';
   });
+}
+
+function hasStoryZoneMappings(xml: string): boolean {
+  return /<zone\b[^>]*\b(?:story-point-id|flipboard-zone-id)\s*=/i.test(xml);
 }
 
 function storyMatches(actualXml: string, intendedXml: string): boolean {

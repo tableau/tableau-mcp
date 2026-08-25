@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
@@ -19,6 +19,19 @@ const POPULATED_STORY_XML = STORY_XML.replace(
   "<story-point captured-sheet='' id='1' />",
   "<story-point captured-sheet='Sales Overview' caption='Existing point' id='1' />",
 );
+
+const DECORATED_MATCHING_STORY_XML = POPULATED_STORY_XML.replace(
+  "caption='Existing point'",
+  "caption='Overview'",
+)
+  .replace("maxheight='964'", "maxheight='1000'")
+  .replace("maxwidth='1016'", "maxwidth='1400'")
+  .replace("minheight='964'", "minheight='1000'")
+  .replace("minwidth='1016'", "minwidth='1400'")
+  .replace(
+    '</flipboard></zone></zones>',
+    "</flipboard></zone><zone story-point-id='1' /><zone flipboard-zone-id='7' /></zones>",
+  );
 
 const AUTOMATIC_MATCHING_STORY_XML = `<dashboard name='Executive Story' type='storyboard'>
   <size sizing-mode='automatic' />
@@ -118,12 +131,13 @@ describe('compose-story tool', () => {
   });
 
   it('preflights matching fixed dashboard sizes, applies once, and verifies readback', async () => {
-    const { result, applyStoryboardDocument } = await callTool({
-      points: [
-        { dashboard: 'Sales Overview', caption: 'Overview' },
-        { dashboard: 'Regional Performance', caption: 'Regions' },
-      ],
-    });
+    const { result, applyStoryboardDocument, getDashboardDocument, listDashboards } =
+      await callTool({
+        points: [
+          { dashboard: 'Sales Overview', caption: 'Overview' },
+          { dashboard: 'Regional Performance', caption: 'Regions' },
+        ],
+      });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -137,6 +151,13 @@ describe('compose-story tool', () => {
       verified: true,
     });
     expect(applyStoryboardDocument).toHaveBeenCalledTimes(1);
+    expect(getDashboardDocument.mock.calls.map(([id]) => id)).toEqual([
+      'dashboard-1',
+      'dashboard-2',
+      'dashboard-1',
+      'dashboard-2',
+    ]);
+    expect(listDashboards).toHaveBeenCalledTimes(2);
   });
 
   it('refuses a populated story by default before applying', async () => {
@@ -162,6 +183,31 @@ describe('compose-story tool', () => {
 
     expect(result.isError).toBe(false);
     expect(applyStoryboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to rewrite populated story zone mappings even with replacement permission', async () => {
+    const { result, applyStoryboardDocument } = await callTool(
+      {
+        points: [{ dashboard: 'Regional Performance', caption: 'Regions' }],
+        replaceExisting: true,
+      },
+      { storyboardXml: DECORATED_MATCHING_STORY_XML },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('zone mappings tied to existing story points');
+    expect(applyStoryboardDocument).not.toHaveBeenCalled();
+  });
+
+  it('accepts an exact decorated story replay without applying', async () => {
+    const { result, applyStoryboardDocument } = await callTool(
+      { points: [{ dashboard: 'Sales Overview', caption: 'Overview' }] },
+      { storyboardXml: DECORATED_MATCHING_STORY_XML },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(applyStoryboardDocument).not.toHaveBeenCalled();
   });
 
   it('accepts an empty Tableau placeholder without replacement permission', async () => {
@@ -275,6 +321,69 @@ describe('compose-story tool', () => {
     expect(result.isError).toBe(true);
     expect(applyStoryboardDocument).not.toHaveBeenCalled();
   });
+
+  it('refuses to apply when a selected dashboard changes after preflight', async () => {
+    const { result, applyStoryboardDocument, getDashboardDocument } = await callTool(
+      {
+        points: [{ dashboard: 'Sales Overview' }, { dashboard: 'Regional Performance' }],
+      },
+      { secondDashboardRead: 'drift' },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Regional Performance');
+    expect(result.content[0].text).toContain('changed during composition');
+    expect(getDashboardDocument.mock.calls.map(([id]) => id)).toEqual([
+      'dashboard-1',
+      'dashboard-2',
+      'dashboard-1',
+      'dashboard-2',
+    ]);
+    expect(applyStoryboardDocument).not.toHaveBeenCalled();
+  });
+
+  it('refuses to apply when a selected dashboard is renamed after preflight', async () => {
+    const { result, applyStoryboardDocument, getDashboardDocument, listDashboards } =
+      await callTool(
+        {
+          points: [{ dashboard: 'Sales Overview' }, { dashboard: 'Regional Performance' }],
+        },
+        { secondDashboardList: 'renamed' },
+      );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Regional Performance');
+    expect(result.content[0].text).toContain('changed during composition');
+    expect(listDashboards).toHaveBeenCalledTimes(2);
+    expect(getDashboardDocument.mock.calls.map(([id]) => id)).toEqual([
+      'dashboard-1',
+      'dashboard-2',
+    ]);
+    expect(applyStoryboardDocument).not.toHaveBeenCalled();
+  });
+
+  it('reports the selected dashboard when its locked reread fails', async () => {
+    const { result, applyStoryboardDocument, getDashboardDocument } = await callTool(
+      {
+        points: [{ dashboard: 'Sales Overview' }, { dashboard: 'Regional Performance' }],
+      },
+      { secondDashboardRead: 'deleted' },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Regional Performance');
+    expect(result.content[0].text).toContain('404');
+    expect(getDashboardDocument.mock.calls.map(([id]) => id)).toEqual([
+      'dashboard-1',
+      'dashboard-2',
+      'dashboard-1',
+      'dashboard-2',
+    ]);
+    expect(applyStoryboardDocument).not.toHaveBeenCalled();
+  });
 });
 
 type Args = {
@@ -290,10 +399,14 @@ async function callTool(
     sizingMode?: string;
     omitSizingMode?: boolean;
     persistAutomaticSizingMode?: boolean;
+    secondDashboardRead?: 'drift' | 'deleted';
+    secondDashboardList?: 'renamed';
   } = {},
 ): Promise<{
   result: CallToolResult;
   applyStoryboardDocument: ReturnType<typeof vi.fn>;
+  getDashboardDocument: ReturnType<typeof vi.fn>;
+  listDashboards: ReturnType<typeof vi.fn>;
 }> {
   const dashboards = [
     { id: 'dashboard-1', name: 'Sales Overview' },
@@ -310,28 +423,60 @@ async function callTool(
     }
     return new Ok({ command_id: 'apply-story', status: 'completed', result: null });
   });
+  const dashboardReadCounts = new Map<string, number>();
+  const getDashboardDocument = vi.fn(async (id: string) => {
+    const readCount = (dashboardReadCounts.get(id) ?? 0) + 1;
+    dashboardReadCounts.set(id, readCount);
+    const dashboard = dashboards.find((candidate) => candidate.id === id)!;
+    if (id === 'dashboard-2' && readCount === 2 && options.secondDashboardRead === 'deleted') {
+      return new Err({
+        type: 'command-failed' as const,
+        error: {
+          code: 'not-found',
+          message: 'Dashboard no longer exists (404)',
+          recoverable: false,
+        },
+      });
+    }
+    const size =
+      id === 'dashboard-2' && options.secondSize
+        ? options.secondSize
+        : { width: 1400, height: 1000 };
+    const width =
+      id === 'dashboard-2' && readCount === 2 && options.secondDashboardRead === 'drift'
+        ? size.width + 1
+        : size.width;
+    return new Ok({
+      xml: dashboardXml(
+        dashboard.name,
+        width,
+        size.height,
+        options.omitSizingMode ? undefined : (options.sizingMode ?? 'fixed'),
+      ),
+    });
+  });
+  let dashboardListReads = 0;
+  const listDashboards = vi.fn(async () => {
+    dashboardListReads += 1;
+    if (dashboardListReads === 2 && options.secondDashboardList === 'renamed') {
+      return new Ok({
+        dashboards: dashboards.map((dashboard) =>
+          dashboard.id === 'dashboard-2'
+            ? { ...dashboard, name: 'Regional Performance Renamed' }
+            : dashboard,
+        ),
+      });
+    }
+    return new Ok({ dashboards });
+  });
   const executor = {
     instanceId: 'desktop-instance',
     listStoryboards: vi
       .fn()
       .mockResolvedValue(new Ok({ storyboards: [{ id: 'story-1', name: 'Executive Story' }] })),
     getStoryboardDocument: vi.fn(async () => new Ok({ xml: storyboardDocument })),
-    listDashboards: vi.fn().mockResolvedValue(new Ok({ dashboards })),
-    getDashboardDocument: vi.fn(async (id: string) => {
-      const dashboard = dashboards.find((candidate) => candidate.id === id)!;
-      const size =
-        id === 'dashboard-2' && options.secondSize
-          ? options.secondSize
-          : { width: 1400, height: 1000 };
-      return new Ok({
-        xml: dashboardXml(
-          dashboard.name,
-          size.width,
-          size.height,
-          options.omitSizingMode ? undefined : (options.sizingMode ?? 'fixed'),
-        ),
-      });
-    }),
+    listDashboards,
+    getDashboardDocument,
     applyStoryboardDocument,
   };
   const extra = {
@@ -348,5 +493,5 @@ async function callTool(
     },
     extra,
   );
-  return { result, applyStoryboardDocument };
+  return { result, applyStoryboardDocument, getDashboardDocument, listDashboards };
 }
