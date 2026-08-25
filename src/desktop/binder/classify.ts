@@ -1133,11 +1133,7 @@ function recommendedRankingDefault(
   const requiredSlots = candidate.slots.filter((slot) => slot.bindable && slot.required);
   const categorySlots = requiredSlots.filter((slot) => slot.kind === 'categorical');
   const measureSlots = requiredSlots.filter((slot) => slot.kind === 'quantitative');
-  if (
-    requiredSlots.length !== 2 ||
-    categorySlots.length !== 1 ||
-    measureSlots.length !== 1
-  ) {
+  if (requiredSlots.length !== 2 || categorySlots.length !== 1 || measureSlots.length !== 1) {
     return undefined;
   }
 
@@ -1150,12 +1146,13 @@ function recommendedRankingDefault(
         field.type === 'quantitative',
     )
     .map((field, index) => {
-      const priority =
-        PROFIT_CAPTION_PATTERNS.some((pattern) => fieldMatchesCaptionPattern(field, pattern))
-          ? 0
-          : MARGIN_CAPTION_PATTERNS.some((pattern) => fieldMatchesCaptionPattern(field, pattern))
-            ? 1
-            : 2;
+      const priority = PROFIT_CAPTION_PATTERNS.some((pattern) =>
+        fieldMatchesCaptionPattern(field, pattern),
+      )
+        ? 0
+        : MARGIN_CAPTION_PATTERNS.some((pattern) => fieldMatchesCaptionPattern(field, pattern))
+          ? 1
+          : 2;
       return { field, index, priority };
     })
     .sort((a, b) => a.priority - b.priority || a.index - b.index)
@@ -1524,8 +1521,7 @@ function dimensionHeadMatchesInAsk(
   return dimensionHeadCandidatesInAsk(ask, s, literalHits)
     .filter(
       (match): match is typeof match & { candidates: [SchemaField] } =>
-        match.candidates.length === 1 &&
-        hasIdentityLikeDimensionHeadSuffix(match.candidates[0]),
+        match.candidates.length === 1 && hasIdentityLikeDimensionHeadSuffix(match.candidates[0]),
     )
     .map(({ noun, index, candidates }) => ({ noun, index, field: candidates[0] }));
 }
@@ -1590,9 +1586,7 @@ function grainMeasureMatchesInAsk(
       ...literalHits,
       ...businessSynonymMatchesInAsk(ask, s, literalHits),
       ...dimensionHeadMatchesInAsk(ask, s, literalHits),
-    ].flatMap(({ field }) =>
-      field.role === 'dimension' && field.table ? [field.table] : [],
-    ),
+    ].flatMap(({ field }) => (field.role === 'dimension' && field.table ? [field.table] : [])),
   );
   const exactNames = fieldExactNames(s.fields);
   const groups: GrainMeasureMatch[] = [];
@@ -1713,9 +1707,7 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
     const match = fieldNameMatchInAskSpan(masked, noun, exactNames);
     if (!match) continue;
     masked =
-      masked.slice(0, match.start) +
-      ' '.repeat(match.end - match.start) +
-      masked.slice(match.end);
+      masked.slice(0, match.start) + ' '.repeat(match.end - match.start) + masked.slice(match.end);
   }
   return masked;
 }
@@ -1863,15 +1855,16 @@ function narrowFields(
     if (reserved.size >= keepCount) break;
     reserved.add(candidate);
   }
-  const kept = ranked.filter((candidate) => reserved.has(candidate)).map((candidate) => candidate.f);
+  const kept = ranked
+    .filter((candidate) => reserved.has(candidate))
+    .map((candidate) => candidate.f);
   return { fields: kept, withheld: fields.length - kept.length };
 }
 
 function isTemporal(f: SchemaField): boolean {
   return f.role === 'dimension' && TEMPORAL_DATATYPES.has(f.datatype);
 }
-const WATERFALL_PERIOD_FIELD_RE =
-  /period|quarter|month|year|fiscal|fy|fq|date|week|day/i;
+const WATERFALL_PERIOD_FIELD_RE = /period|quarter|month|year|fiscal|fy|fq|date|week|day/i;
 function isWaterfallPeriodField(f: SchemaField): boolean {
   return isTemporal(f) || WATERFALL_PERIOD_FIELD_RE.test(f.name);
 }
@@ -1970,9 +1963,7 @@ function geoConceptFromSlotId(slotId: string): GeoConcept | null {
 }
 
 function geoConceptFromSlot(slot: TemplateManifest['slots'][number]): GeoConcept | null {
-  return (
-    geoConceptFromSemanticRole(slot.semantic_role) ?? geoConceptFromSlotId(slot.slot_id)
-  );
+  return geoConceptFromSemanticRole(slot.semantic_role) ?? geoConceptFromSlotId(slot.slot_id);
 }
 
 function geoConceptsNamedInAsk(maskedAsk: string): GeoConcept[] {
@@ -2048,10 +2039,7 @@ function pickUniqueMaxAffinity(pool: SchemaField[], aff: Set<string>): GeoPick {
  * any field whose semantic role names a DIFFERENT geo concept — a "Region" tagged
  * [City].[Name] must not win the state slot on its name.
  */
-function pickGeoField(
-  pool: SchemaField[],
-  slot: TemplateManifest['slots'][number],
-): GeoPick {
+function pickGeoField(pool: SchemaField[], slot: TemplateManifest['slots'][number]): GeoPick {
   const concept = geoConceptFromSlot(slot);
   if (concept) {
     const semanticMatches = pool.filter(
@@ -2401,13 +2389,8 @@ function roleGreedyBind(
     return fallback;
   };
 
-  const isOptionalCategoricalDetail = (
-    slot: TemplateManifest['slots'][number],
-  ): boolean =>
-    slot.bindable &&
-    !slot.required &&
-    slot.kind === 'categorical' &&
-    slot.role.includes('detail');
+  const isOptionalCategoricalDetail = (slot: TemplateManifest['slots'][number]): boolean =>
+    slot.bindable && !slot.required && slot.kind === 'categorical' && slot.role.includes('detail');
   const isActive = (slot: TemplateManifest['slots'][number]): boolean =>
     slot.bindable &&
     (slot.required ||
@@ -2618,8 +2601,7 @@ function selectWithinFamily(
       // `quota` has one eligible carrier, but stopped being family-native when
       // deviation gained a second eligible template. Keep this exact domain cue
       // decisive without misclassifying it as a chart noun in ask-router parity.
-      (m.template === 'quota-attainment-bullet' &&
-        won.some((kw) => kw.toLowerCase() === 'quota'));
+      (m.template === 'quota-attainment-bullet' && won.some((kw) => kw.toLowerCase() === 'quota'));
     return decisive ? m : null;
   }
 
@@ -2771,9 +2753,7 @@ function colorSeriesBinding(
   );
   if (!colorSlot) return null;
   const boundFields = new Set(bound.map((binding) => binding.field));
-  const spares = candidates.filter(
-    (field) => isCategorical(field) && !boundFields.has(field.name),
-  );
+  const spares = candidates.filter((field) => isCategorical(field) && !boundFields.has(field.name));
   if (spares.length !== 1) return null;
   return { slot_id: colorSlot.slot_id, field: spares[0].name };
 }
@@ -2912,9 +2892,7 @@ function fieldDirectedToSymbolMapEncoding(
 
   for (const match of ask.matchAll(cue)) {
     const beforeCue = ask.slice(0, match.index);
-    const boundaries = [
-      ...beforeCue.matchAll(/(?:^|[.;]|\b(?:put|place|use|using)\b)/gi),
-    ];
+    const boundaries = [...beforeCue.matchAll(/(?:^|[.;]|\b(?:put|place|use|using)\b)/gi)];
     const boundary = boundaries.at(-1);
     const clauseStart = boundary ? (boundary.index ?? 0) + boundary[0].length : 0;
     const candidates = matchFieldsInAsk(beforeCue.slice(clauseStart), summary).filter((field) =>
@@ -3050,9 +3028,7 @@ function symbolMapEncodingBindings(
   const detailFields = new Set(
     bound
       .filter((binding) =>
-        manifest.slots
-          .find((slot) => slot.slot_id === binding.slot_id)
-          ?.role.includes('lod'),
+        manifest.slots.find((slot) => slot.slot_id === binding.slot_id)?.role.includes('lod'),
       )
       .map((binding) => binding.field),
   );
@@ -3154,10 +3130,7 @@ function resolveMeasureByDimensionBar(
   aggOverride: Derivation | null,
   schemaDims: SchemaField[],
 ): Array<{ slot_id: string; field: string; derivation?: Derivation }> | null {
-  if (
-    manifest.template !== MEASURE_BY_DIMENSION_TEMPLATE ||
-    manifest.family !== 'magnitude'
-  ) {
+  if (manifest.template !== MEASURE_BY_DIMENSION_TEMPLATE || manifest.family !== 'magnitude') {
     return null;
   }
   const residual = nameTokens(maskedAsk);
@@ -3385,7 +3358,9 @@ function resolveExplicitGantt(
     return null;
   }
   const tasks = matched.filter(isCategorical);
-  const dates = matched.filter((field) => field.datatype === 'date' || field.datatype === 'datetime');
+  const dates = matched.filter(
+    (field) => field.datatype === 'date' || field.datatype === 'datetime',
+  );
   if (tasks.length !== 1 || dates.length !== 2 || matched.length !== 3) return null;
   const range = /\bfrom\s+(.+?)\s+to\s+(.+?)\s*$/i.exec(ask);
   if (!range) return null;
@@ -3509,51 +3484,276 @@ function topNFromAsk(ask: string): number | undefined {
 
 /**
  * Dimensions explicitly paired with a filter cue. A field may follow the cue
- * ("filter down to one Region", "filter by Region") or immediately precede it
- * ("with a Region filter"). Returning every candidate lets the caller fail closed
- * when an either/or phrase names more than one dimension.
+ * ("filter down to one Region", "filter by Region") or precede it in a scoped
+ * clause ("with interactive Region and Segment filters"). Multi-field clauses
+ * accept only comma/and lists; an explicit or-choice fails closed.
  */
-function filterDimensionsFromAsk(ask: string, summary: SchemaSummary): SchemaField[] {
+const FILTER_CUE_RE = /\bfilter(?:s|ed|ing)?\b/i;
+
+function filterDimensionsFromAsk(ask: string, summary: SchemaSummary): SchemaField[] | null {
   const dimensions = summary.fields.filter((field) => field.role === 'dimension');
   if (dimensions.length === 0) return [];
   const dimensionSummary: SchemaSummary = { datasource: summary.datasource, fields: dimensions };
-  const exactNames = fieldExactNames(dimensions);
   const found = new Set<SchemaField>();
-  const filterCue = /\bfilter(?:s|ed|ing)?\b/gi;
+  const laterModifier =
+    /(?:,\s*|\band\s+)(?:label(?:ed)?|colou?r(?:ed)?|size(?:d)?|detail(?:ed)?|tooltip(?:ped)?|sort(?:ed)?|order(?:ed)?|rank(?:ed)?|facet(?:ed)?|split|group(?:ed)?)\s+(?:by|on|with)\b/i;
 
-  for (const cue of ask.matchAll(filterCue)) {
+  const parseClause = (clause: string): SchemaField[] | null => {
+    const fields = matchFieldsInAsk(clause, dimensionSummary);
+    if (fields.length === 0) return [];
+    if (/\bor\b/i.test(clause)) return null;
+    if (fields.length === 1) return fields;
+
+    const fieldSet = new Set(fields);
+    const hits = literalFieldMatchesInAsk(clause, dimensionSummary).filter(
+      (hit) => fieldSet.has(hit.field) && hit.start !== undefined && hit.end !== undefined,
+    );
+    if (new Set(hits.map((hit) => hit.field)).size !== fields.length) return null;
+    for (let index = 1; index < hits.length; index += 1) {
+      const previousEnd = hits[index - 1].end;
+      const currentStart = hits[index].start;
+      if (previousEnd === undefined || currentStart === undefined) return null;
+      const connector = clause.slice(previousEnd, currentStart);
+      if (!/^\s*(?:,|and|,\s*and)\s*$/i.test(connector)) return null;
+    }
+    return fields;
+  };
+
+  const scopedAfter = (text: string): string => {
+    const ends = [text.search(/[.;]/), text.search(laterModifier)].filter((index) => index >= 0);
+    return text.slice(0, ends.length > 0 ? Math.min(...ends) : text.length);
+  };
+
+  for (const cue of ask.matchAll(new RegExp(FILTER_CUE_RE.source, 'gi'))) {
     const cueIndex = cue.index;
     const afterStart = cueIndex + cue[0].length;
-    const sentenceEndOffset = ask.slice(afterStart).search(/[.;]/);
-    const afterEnd =
-      sentenceEndOffset >= 0 ? afterStart + sentenceEndOffset : ask.length;
-    for (const field of matchFieldsInAsk(ask.slice(afterStart, afterEnd), dimensionSummary)) {
-      found.add(field);
+    let fields = parseClause(scopedAfter(ask.slice(afterStart)));
+    if (fields === null) return null;
+
+    if (fields.length === 0) {
+      const before = ask.slice(0, cueIndex);
+      const withMatches = [...before.matchAll(/\bwith\b/gi)];
+      const lastWith = withMatches.at(-1);
+      const sentenceStart = Math.max(before.lastIndexOf('.'), before.lastIndexOf(';')) + 1;
+      const beforeStart =
+        lastWith && lastWith.index >= sentenceStart
+          ? lastWith.index + lastWith[0].length
+          : sentenceStart;
+      fields = parseClause(before.slice(beforeStart));
+      if (fields === null) return null;
     }
 
-    const before = ask.slice(0, cueIndex);
-    for (const field of dimensions) {
-      const names = [bareName(field.columnName), field.caption, field.name].filter(
-        (name): name is string => !!name && name.length > 0,
-      );
-      if (
-        names.some((name) => {
-          const lower = name.toLowerCase();
-          const pluralSuffix =
-            !lower.endsWith('s') && !exactNames.has(`${lower}s`) ? 's?' : '';
-          const body = escapeRegex(lower).replace(/-/g, '[\\s-]+');
-          return new RegExp(
-            `(?:^|[^a-z0-9])(?:a|an|the|one)?\\s*${body}${pluralSuffix}\\s*$`,
-            'i',
-          ).test(before);
-        })
-      ) {
-        found.add(field);
+    for (const field of fields) found.add(field);
+  }
+
+  return [...found];
+}
+
+const MAX_EXACT_FILTER_FIELDS = 5;
+const MAX_EXACT_FILTER_VALUE_LENGTH = 80;
+
+export interface ExactFilterValueConstraint {
+  field: string;
+  values: string[];
+}
+
+export type ExactFilterIntent =
+  | { kind: 'none' }
+  | {
+      kind: 'exact';
+      fieldNames: string[];
+      valueConstraints: ExactFilterValueConstraint[];
+    }
+  | { kind: 'ambiguous'; candidateFieldRefs: string[] };
+
+type MemberConstraintParse =
+  | { kind: 'none' }
+  | { kind: 'exact'; constraints: ExactFilterValueConstraint[] }
+  | { kind: 'ambiguous' };
+
+function parseBoundedFilterMember(source: string): string | null {
+  const text = source.trimStart();
+  if (text.length === 0) return null;
+  const quote = text[0];
+  if (quote === '"' || quote === "'") {
+    const close = text.indexOf(quote, 1);
+    if (close < 0) return null;
+    const value = text.slice(1, close);
+    const remainder = text.slice(close + 1);
+    return value.length > 0 &&
+      value.length <= MAX_EXACT_FILTER_VALUE_LENGTH &&
+      value.trim() === value &&
+      ![...value].some((character) => {
+        const code = character.charCodeAt(0);
+        return character === '\\' || code <= 0x1f || code === 0x7f;
+      }) &&
+      /^\s*(?:[.;,]|$)/.test(remainder)
+      ? value
+      : null;
+  }
+  const match = text.match(
+    /^([\p{L}\p{N}](?:[\p{L}\p{N}_-]{0,78}[\p{L}\p{N}])?)(?=\s*(?:[.;,]|$))/u,
+  );
+  return match?.[1] ?? null;
+}
+
+function exactPositionedDimensionHits(ask: string, summary: SchemaSummary): FieldMatch[] {
+  const dimensions = summary.fields.filter((field) => field.role === 'dimension');
+  return literalFieldMatchesInAsk(ask, {
+    datasource: summary.datasource,
+    fields: dimensions,
+  }).filter((hit) => hit.start !== undefined && hit.end !== undefined);
+}
+
+function uniqueHitAtStart(hits: FieldMatch[], start: number): FieldMatch | null {
+  const matches = hits.filter((hit) => hit.start === start);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function parseExactFilterMemberConstraints(
+  ask: string,
+  summary: SchemaSummary,
+): MemberConstraintParse {
+  const hits = exactPositionedDimensionHits(ask, summary);
+  const constraints: ExactFilterValueConstraint[] = [];
+  let sawMemberSyntax = false;
+
+  const retain = (hit: FieldMatch | null, source: string): boolean => {
+    sawMemberSyntax = true;
+    if (!hit) return false;
+    const value = parseBoundedFilterMember(source);
+    if (value === null) return false;
+    const existing = constraints.find((constraint) => constraint.field === hit.field.name);
+    if (existing) return existing.values.length === 1 && existing.values[0] === value;
+    constraints.push({ field: hit.field.name, values: [value] });
+    return constraints.length <= MAX_EXACT_FILTER_FIELDS;
+  };
+
+  for (const hit of hits) {
+    const end = hit.end!;
+    const equality = ask.slice(end).match(/^\s*=\s*/);
+    if (!equality) continue;
+    const sameSpan = hits.filter(
+      (candidate) => candidate.start === hit.start && candidate.end === hit.end,
+    );
+    if (sameSpan.length !== 1 || !retain(hit, ask.slice(end + equality[0].length))) {
+      return { kind: 'ambiguous' };
+    }
+  }
+
+  for (const cue of ask.matchAll(new RegExp(FILTER_CUE_RE.source, 'gi'))) {
+    const cueStart = cue.index;
+    const cueEnd = cueStart + cue[0].length;
+    const afterCue = ask.slice(cueEnd);
+    const leadingTo = afterCue.match(/^\s+to\s+/i);
+    if (leadingTo) {
+      const fieldStart = cueEnd + leadingTo[0].length;
+      const hit = uniqueHitAtStart(hits, fieldStart);
+      if (!retain(hit, hit?.end === undefined ? '' : ask.slice(hit.end))) {
+        return { kind: 'ambiguous' };
+      }
+      continue;
+    }
+
+    const firstNonWhitespace = afterCue.search(/\S/);
+    if (firstNonWhitespace >= 0) {
+      const fieldStart = cueEnd + firstNonWhitespace;
+      const hit = uniqueHitAtStart(hits, fieldStart);
+      if (hit?.end !== undefined) {
+        const fieldThenTo = ask.slice(hit.end).match(/^\s+to\s+/i);
+        if (fieldThenTo && !retain(hit, ask.slice(hit.end + fieldThenTo[0].length))) {
+          return { kind: 'ambiguous' };
+        }
+        if (fieldThenTo) continue;
       }
     }
   }
 
-  return [...found];
+  if (!sawMemberSyntax) return { kind: 'none' };
+  return constraints.length > 0 ? { kind: 'exact', constraints } : { kind: 'ambiguous' };
+}
+
+function boundedAmbiguousFilterCandidateRefs(ask: string, summary: SchemaSummary): string[] {
+  const dimensions = summary.fields.filter((field) => field.role === 'dimension');
+  const dimensionSummary: SchemaSummary = { datasource: summary.datasource, fields: dimensions };
+  return [
+    ...new Set(
+      literalFieldMatchesInAsk(ask, dimensionSummary).map(({ field }) => field.column_ref),
+    ),
+  ].slice(0, MAX_EXACT_FILTER_FIELDS);
+}
+
+/** Canonical explicit-filter parse with bounded qualified candidates on ambiguity. */
+export function parseExactFilterIntent(ask: string, summary: SchemaSummary): ExactFilterIntent {
+  const hasFilterCue = FILTER_CUE_RE.test(ask);
+  if (!hasFilterCue && !ask.includes('=')) return { kind: 'none' };
+  if (summary.fields.length > MAX_CLASSIFIABLE_FIELDS) {
+    return { kind: 'ambiguous', candidateFieldRefs: [] };
+  }
+  const valueParse = parseExactFilterMemberConstraints(ask, summary);
+  if (!hasFilterCue && valueParse.kind === 'none') return { kind: 'none' };
+  if (valueParse.kind === 'ambiguous') {
+    return {
+      kind: 'ambiguous',
+      candidateFieldRefs: boundedAmbiguousFilterCandidateRefs(ask, summary),
+    };
+  }
+  const fields = hasFilterCue ? filterDimensionsFromAsk(ask, summary) : [];
+  if (fields === null || fields.length === 0 || fields.length > MAX_EXACT_FILTER_FIELDS) {
+    const constrainedFields =
+      valueParse.kind === 'exact'
+        ? summary.fields.filter((field) =>
+            valueParse.constraints.some((constraint) => constraint.field === field.name),
+          )
+        : [];
+    if (
+      fields !== null &&
+      fields.length === 0 &&
+      constrainedFields.length > 0 &&
+      constrainedFields.length <= MAX_EXACT_FILTER_FIELDS
+    ) {
+      return {
+        kind: 'exact',
+        fieldNames: constrainedFields.map((field) => field.name),
+        valueConstraints: valueParse.kind === 'exact' ? valueParse.constraints : [],
+      };
+    }
+    return {
+      kind: 'ambiguous',
+      candidateFieldRefs:
+        fields && fields.length > 0
+          ? fields.map((field) => field.column_ref).slice(0, MAX_EXACT_FILTER_FIELDS)
+          : boundedAmbiguousFilterCandidateRefs(ask, summary),
+    };
+  }
+  const fieldNames = fields.map((field) => field.name);
+  if (
+    valueParse.kind === 'exact' &&
+    valueParse.constraints.some((constraint) => !fieldNames.includes(constraint.field))
+  ) {
+    return {
+      kind: 'ambiguous',
+      candidateFieldRefs: boundedAmbiguousFilterCandidateRefs(ask, summary),
+    };
+  }
+  return {
+    kind: 'exact',
+    fieldNames,
+    valueConstraints: valueParse.kind === 'exact' ? valueParse.constraints : [],
+  };
+}
+
+/** Exact ask-named filter fields, or null when the explicit intent cannot be retained safely. */
+export function extractExactFilterFieldNames(
+  ask: string,
+  summary: SchemaSummary,
+): string[] | null | undefined {
+  const parsed = parseExactFilterIntent(ask, summary);
+  return parsed.kind === 'none'
+    ? undefined
+    : parsed.kind === 'ambiguous'
+      ? null
+      : parsed.fieldNames;
 }
 
 /** Add ask modifiers only after template selection and required-slot binding succeeded. */
@@ -3563,25 +3763,15 @@ function attachAskModifiers(
   filterCandidates: SchemaField[],
 ): NoLlmClassification {
   const topN = topNFromAsk(ask);
-  const boundFields = new Set(classification.bindings.map((binding) => binding.field));
-  const filter =
-    filterCandidates.length === 1 && !boundFields.has(filterCandidates[0].name)
-      ? filterCandidates[0]
-      : undefined;
+  const filters = filterCandidates.map((candidate) => ({
+    field: candidate.name,
+    ...(topN !== undefined ? { context: true } : {}),
+  }));
 
   return {
     ...classification,
     ...(topN !== undefined ? { top_n: topN } : {}),
-    ...(filter
-      ? {
-          filters: [
-            {
-              field: filter.name,
-              ...(topN !== undefined ? { context: true } : {}),
-            },
-          ],
-        }
-      : {}),
+    ...(filters.length > 0 ? { filters } : {}),
   };
 }
 
@@ -3630,8 +3820,10 @@ export function classifyNoLlm(
   // read as an aggregation word; field↔slot matching still uses the raw ask.
   const maskedAsk = maskFieldNames(ask, summary);
   const aggOverride = detectAggregationOverride(maskedAsk);
-  const matched = matchFieldsInAsk(ask, summary);
   const filterCandidates = filterDimensionsFromAsk(ask, summary);
+  if (filterCandidates === null) return null;
+  const filterFields = new Set(filterCandidates);
+  const matched = matchFieldsInAsk(ask, summary).filter((field) => !filterFields.has(field));
   // The full dimension pool a required geo slot widens into when the ask names no
   // affine candidate for it (W60 geo-slot completion).
   const schemaDims = summary.fields.filter((f) => f.role === 'dimension');
@@ -3672,13 +3864,7 @@ export function classifyNoLlm(
   const bubble = manifests.get(CORRELATION_BUBBLE_TEMPLATE);
   const boxPlot = manifests.get(BOX_PLOT_TEMPLATE);
   if (boxPlot?.fast_path_eligible) {
-    const bindings = resolveExplicitBoxPlot(
-      boxPlot,
-      ask,
-      matched,
-      summary,
-      aggOverride,
-    );
+    const bindings = resolveExplicitBoxPlot(boxPlot, ask, matched, summary, aggOverride);
     if (bindings) {
       return attachAskModifiers(ask, { template: boxPlot.template, bindings }, filterCandidates);
     }
@@ -3696,11 +3882,7 @@ export function classifyNoLlm(
   if (histogram?.fast_path_eligible) {
     const bindings = resolveSingleMeasureHistogram(histogram, maskedAsk, matched);
     if (bindings) {
-      return attachAskModifiers(
-        ask,
-        { template: histogram.template, bindings },
-        filterCandidates,
-      );
+      return attachAskModifiers(ask, { template: histogram.template, bindings }, filterCandidates);
     }
   }
 
@@ -3811,9 +3993,7 @@ export function classifyNoLlm(
   // silently (the retrieval-without-adherence failure). Field names are masked
   // so a field literally named after a caution term can't force the demotion.
   const avoidMatches = matchAvoidWhen(maskedAsk, chosen.avoid_when, chosen.intent_keywords);
-  const sequenceField = summary.fields.find((field) =>
-    WATERFALL_ORDER_FIELD_RE.test(field.name),
-  );
+  const sequenceField = summary.fields.find((field) => WATERFALL_ORDER_FIELD_RE.test(field.name));
   const hasSequenceField = sequenceField !== undefined;
   const waterfallCanOrderDeterministically =
     chosen.template === WATERFALL_TEMPLATE_NAME && hasSequenceField;
@@ -3837,12 +4017,7 @@ export function classifyNoLlm(
   // the masked ask + full schema so a lone required date slot the ask did not name
   // can complete with the schema's single date field). selectWithinFamily's earlier
   // slot-fit probes deliberately omit this context (no completion during tie-break).
-  const augmentedGeoMatches = augmentGeoConceptMatches(
-    maskedAsk,
-    chosen,
-    matched,
-    schemaDims,
-  );
+  const augmentedGeoMatches = augmentGeoConceptMatches(maskedAsk, chosen, matched, schemaDims);
   if (!augmentedGeoMatches) return null;
   let matchedForBinding = augmentedGeoMatches;
   if (waterfallCanOrderDeterministically) {

@@ -53,6 +53,25 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(plainChart?.action).toContain('guarded artifact');
   });
 
+  it('preserves named measures, breakdowns, and filters in the second bind call', () => {
+    const plainChart = routes.find((route) => route.id === 'plain-chart');
+
+    expect(plainChart?.action).toContain(
+      'Call 2 must preserve every named measure, breakdown, and filter from the exact ask; if the contract cannot resolve one, call ask-user instead of substituting a measure or dropping a filter.',
+    );
+  });
+
+  it('keeps filter-bearing blocked proposals instead of sending them to artifact fallback', () => {
+    const plainChart = routes.find((route) => route.id === 'plain-chart');
+
+    expect(plainChart?.action).toContain(
+      'On a blocked Call 2 with retained filters, call ask-user and keep the proposal.',
+    );
+    expect(plainChart?.action).toContain(
+      'Use the guarded artifact fallback only for a block without retained filters',
+    );
+  });
+
   it('resolves a real lower-grain Detail before repairing dense scatter encodings', () => {
     const plainChartIndex = DESKTOP_ROUTE_TABLE.findIndex((entry) => entry.id === 'plain-chart');
     const guidance = DESKTOP_ROUTE_TABLE[plainChartIndex + 1];
@@ -75,14 +94,16 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   });
 
   // Live incident (v11 bundle): asked to move "warmer" onto color, the agent had no route
-  // for an encoding edit. refine-worksheet does top-N and sort only, so the edit-in-place
-  // route has to name the tool pair that can re-encode a sheet.
+  // for an encoding edit. refine-worksheet handles bounded structural refinements, while
+  // the edit-in-place route still has to name the tool pair that can re-encode a sheet.
   it('names add-field then apply-worksheet as the encoding edit path', () => {
     const editInPlace = routes.find((route) => route.id === 'edit-in-place');
 
     expect(editInPlace?.action).toContain('add-field');
     expect(editInPlace?.action).toContain('apply-worksheet');
     expect(editInPlace?.action).toContain('color');
+    expect(editInPlace?.action).toContain('explicit mark-type changes');
+    expect(editInPlace?.action).toContain('Never use shell commands or raw whole-workbook XML');
     expect(editInPlace?.toolSequence).toEqual([
       'list-worksheets',
       'list-dashboards',
@@ -95,10 +116,10 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(editInPlace?.action).not.toContain('requested new chart');
   });
 
-  it('census scopes refine-worksheet to top-N/sort and names the encoding pair', () => {
+  it('census routes mark-type changes through refine-worksheet and names the encoding pair', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
 
-    expect(rendered).toContain('refine-worksheet edits top-N/sort');
+    expect(rendered).toContain('refine-worksheet edits top-N/sort/mark type');
     expect(rendered).toContain('add-field + apply-worksheet change encodings.');
   });
 
@@ -170,7 +191,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     );
     expect(plainChart?.action).toContain('Never rephrase or resubmit the bare ask');
     expect(plainChart?.action).toContain(
-      'If that second call still proposes, or any result escalates or blocks',
+      'Use the guarded artifact fallback only for a block without retained filters, or when Call 2 still proposes or escalates',
     );
     expect(plainChart?.action).toContain('templatePlan');
     expect(plainChart?.action).toContain('Open intent builds several distinct worksheets.');
@@ -206,6 +227,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(plainChart?.action).toContain('semantic ask may return one bounded proposal');
     expect(plainChart?.toolSequence).toEqual([
       'bind-template',
+      'ask-user',
       'list-templates',
       'list-available-fields',
       'build-worksheets-from-templates',

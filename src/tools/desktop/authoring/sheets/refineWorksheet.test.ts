@@ -169,7 +169,7 @@ describe('refineWorksheetTool — instance', () => {
     const tool = getRefineWorksheetTool(new DesktopMcpServer());
     const paramsSchema = await Provider.from(tool.paramsSchema);
     expect(tool.name).toBe('refine-worksheet');
-    expect(tool.description).toContain('by-field');
+    expect(tool.description).toContain('mark type');
     expect(paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
@@ -179,6 +179,7 @@ describe('refineWorksheetTool — instance', () => {
       targetField: expect.any(Object),
       sortByField: expect.any(Object),
       direction: expect.any(Object),
+      markType: expect.any(Object),
     });
     expect(paramsSchema.sortDirection.description).toContain('numeric DESC=largest first');
     expect(paramsSchema.direction.description).toContain('numeric desc=largest first');
@@ -186,6 +187,50 @@ describe('refineWorksheetTool — instance', () => {
       readOnlyHint: false,
       destructiveHint: true,
     });
+  });
+});
+
+describe('refineWorksheetTool — mark_type', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('fetches once, applies the requested mark type once, and confirms it on readback', async () => {
+    const { applied } = setupMocks();
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed).toMatchObject({ refined: true, operation: 'mark_type' });
+    expect(applied()!).toContain("<mark class='Area' />");
+    expect(getMock()).toHaveBeenCalledTimes(2);
+    expect(loadMock()).toHaveBeenCalledTimes(1);
+    expect(loadMock()).toHaveBeenCalledWith(
+      expect.objectContaining({ requireExistingSheet: true }),
+    );
+  });
+
+  it('refuses a multi-pane worksheet without applying', async () => {
+    const source = SOURCE.replace(
+      '</panes>',
+      "  <pane><view><breakdown value='auto' /></view><mark class='Line' /></pane>\n    </panes>",
+    );
+    setupMocks({ source });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.reason).toMatch(/exactly one pane/i);
+    expect(loadMock()).not.toHaveBeenCalled();
   });
 });
 
@@ -704,6 +749,21 @@ describe('refineWorksheetTool — refusals and errors', () => {
     expect(loadMock()).not.toHaveBeenCalled();
   });
 
+  it('errors when operation=mark_type is missing markType, before touching Tableau', async () => {
+    setupMocks();
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      new ArgsValidationError('markType is required when operation=mark_type.').message,
+    );
+    expect(getMock()).not.toHaveBeenCalled();
+    expect(loadMock()).not.toHaveBeenCalled();
+  });
+
   it('refuses an unknown sort_by_field caption and never applies', async () => {
     setupMocks({ source: SORT_BY_FIELD_SOURCE });
     const result = await getToolResult({
@@ -724,14 +784,14 @@ describe('refineWorksheetTool — refusals and errors', () => {
 
 const successSchema = z.object({
   refined: z.literal(true),
-  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field']),
+  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type']),
   worksheetName: z.string(),
   message: z.string(),
 });
 
 const refusalSchema = z.object({
   refined: z.literal(false),
-  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field']),
+  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type']),
   worksheetName: z.string(),
   reason: z.string(),
 });
@@ -744,15 +804,28 @@ async function getToolResult({
   targetField,
   sortByField,
   direction,
+  markType,
   session = '12345',
 }: {
   worksheetName: string;
-  operation: 'top_n' | 'sort_direction' | 'sort_by_field';
+  operation: 'top_n' | 'sort_direction' | 'sort_by_field' | 'mark_type';
   topN?: { n: number; end?: 'top' | 'bottom' };
   sortDirection?: { direction: 'ASC' | 'DESC' };
   targetField?: string;
   sortByField?: string;
   direction?: 'asc' | 'desc';
+  markType?:
+    | 'automatic'
+    | 'bar'
+    | 'line'
+    | 'area'
+    | 'square'
+    | 'circle'
+    | 'shape'
+    | 'text'
+    | 'pie'
+    | 'gantt_bar'
+    | 'polygon';
   session?: string;
 }): Promise<CallToolResult> {
   const tool = getRefineWorksheetTool(new DesktopMcpServer());
@@ -764,7 +837,17 @@ async function getToolResult({
   };
 
   return await callback(
-    { session, worksheetName, operation, topN, sortDirection, targetField, sortByField, direction },
+    {
+      session,
+      worksheetName,
+      operation,
+      topN,
+      sortDirection,
+      targetField,
+      sortByField,
+      direction,
+      markType,
+    },
     extra,
   );
 }

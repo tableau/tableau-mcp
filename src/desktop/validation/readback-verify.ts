@@ -58,6 +58,8 @@ interface TopNFilterSignature {
 interface FilterSignature {
   klass: string;
   column: string;
+  context: boolean;
+  groupfilters: string;
   topN: TopNFilterSignature | null;
 }
 
@@ -158,6 +160,28 @@ function collectMarks(worksheet: XmlRecord): MarkSignature[] {
   });
 }
 
+function canonicalGroupfilter(groupfilter: XmlRecord): string {
+  const attributes: Array<[string, string]> = [];
+  for (const [rawName, value] of Object.entries(groupfilter)) {
+    if (!rawName.startsWith('@_')) continue;
+    const name = rawName.slice(2);
+    if (name.startsWith('user:') && name !== 'user:ui-enumeration') continue;
+    attributes.push([name, textValue(value)]);
+  }
+  attributes.sort(([leftName, leftValue], [rightName, rightValue]) => {
+    return leftName.localeCompare(rightName) || leftValue.localeCompare(rightValue);
+  });
+
+  const children = directChildren(groupfilter, 'groupfilter').map(canonicalGroupfilter);
+  if (attr(groupfilter, 'function').toLowerCase() === 'union') children.sort();
+
+  return JSON.stringify({ attributes, children });
+}
+
+function nestedGroupfilterSignature(filter: XmlRecord): string {
+  return JSON.stringify(directChildren(filter, 'groupfilter').map(canonicalGroupfilter));
+}
+
 function directGroupfilter(parent: XmlRecord, functionName: string): XmlRecord | null {
   return (
     directChildren(parent, 'groupfilter').find(
@@ -194,6 +218,8 @@ function collectFilters(worksheet: XmlRecord): FilterSignature[] {
     filters.push({
       klass: attr(element, 'class'),
       column: attr(element, 'column'),
+      context: attr(element, 'context').toLowerCase() === 'true',
+      groupfilters: nestedGroupfilterSignature(element),
       topN: topNFilterSignature(element),
     });
   });
@@ -305,7 +331,8 @@ function sameFilter(a: FilterSignature, b: FilterSignature): boolean {
   return (
     a.klass === b.klass &&
     a.column === b.column &&
-    (!a.topN || (!!b.topN && sameTopNFilter(a.topN, b.topN)))
+    a.context === b.context &&
+    (a.topN ? !!b.topN && sameTopNFilter(a.topN, b.topN) : a.groupfilters === b.groupfilters)
   );
 }
 
@@ -405,14 +432,29 @@ export function verifyWorksheetReadback(
       !!filter.topN &&
       intended.slices.includes(filter.column) &&
       !readback.slices.includes(filter.column);
-    if (matchingFilter && !missingTopNSlice) continue;
-    const related = readback.filters.some((candidate) => candidate.klass === filter.klass);
+    if (!matchingFilter || missingTopNSlice) {
+      const related = readback.filters.some((candidate) => candidate.klass === filter.klass);
+      findings.push({
+        kind: 'filter',
+        node: 'filter',
+        column: filter.column || undefined,
+        intended: filterIntended(filter),
+        readback: matchingFilter || related ? 'changed' : 'missing',
+        severity: 'error',
+      });
+      continue;
+    }
+
+    // A surviving filter is inert when Tableau drops its intended column-instance declaration.
+    const instanceName = instanceNameFromColumnRef(filter.column);
+    if (!instanceName || !intended.declaredInstances.has(instanceName)) continue;
+    if (readback.declaredInstances.has(instanceName)) continue;
     findings.push({
       kind: 'filter',
-      node: 'filter',
-      column: filter.column || undefined,
-      intended: filterIntended(filter),
-      readback: matchingFilter || related ? 'changed' : 'missing',
+      node: 'column-instance',
+      column: instanceName,
+      intended: `<column-instance name="${instanceName}">`,
+      readback: 'missing',
       severity: 'error',
     });
   }

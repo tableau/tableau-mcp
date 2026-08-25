@@ -17,13 +17,17 @@ import { z } from 'zod';
 import { worksheetFragmentSimpleId } from '../../../../desktop/metadata/sheets.js';
 import {
   appliedSortByFieldDirection,
+  confirmMarkTypeApplied,
   confirmSortByFieldApplied,
   confirmSortDirectionApplied,
   confirmTopNApplied,
+  planMarkType,
   planSortByField,
   planSortDirection,
   planTopN,
   type SortDirection,
+  TABLEAU_MARK_TYPES,
+  type TableauMarkType,
   type TopNEnd,
 } from '../../../../desktop/refine/refineWorksheet.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
@@ -50,7 +54,7 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
 
-type RefineOperation = 'top_n' | 'sort_direction' | 'sort_by_field';
+type RefineOperation = 'top_n' | 'sort_direction' | 'sort_by_field' | 'mark_type';
 
 type RefineWorksheetToolResult =
   | { refined: true; operation: RefineOperation; worksheetName: string; message: string }
@@ -76,7 +80,9 @@ function formatValidationErrors(issues: ValidationIssue[]): string {
 const paramsSchema = {
   session: z.string().optional().describe('Desktop session; omit if one.'),
   worksheetName: z.string().min(1).describe('Worksheet display name.'),
-  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field']).describe('Refinement type.'),
+  operation: z
+    .enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type'])
+    .describe('Refinement type.'),
   topN: z
     .object({
       n: z.number().int().min(1).max(50).describe('Members to keep (1-50).'),
@@ -96,11 +102,15 @@ const paramsSchema = {
     .enum(['asc', 'desc'])
     .optional()
     .describe('sort_by_field; asc default; numeric desc=largest first.'),
+  markType: z
+    .enum(TABLEAU_MARK_TYPES)
+    .optional()
+    .describe('mark_type target, such as area, line, bar, or circle.'),
 };
 
 const title = 'Refining worksheet';
 
-export const REFINE_WORKSHEET_DESCRIPTION = 'Refine sheet: top-N/sort/by-field.';
+export const REFINE_WORKSHEET_DESCRIPTION = 'Refine sheet: top-N, sort, or mark type.';
 
 export const getRefineWorksheetTool = (
   server: DesktopMcpServer,
@@ -127,6 +137,7 @@ export const getRefineWorksheetTool = (
         targetField,
         sortByField,
         direction,
+        markType,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -141,6 +152,7 @@ export const getRefineWorksheetTool = (
           targetField,
           sortByField,
           direction,
+          markType,
         },
         callback: async () => {
           if (!worksheetName || !worksheetName.trim()) {
@@ -162,7 +174,11 @@ export const getRefineWorksheetTool = (
               'sortByField is required when operation=sort_by_field.',
             ).toErr();
           }
-
+          if (operation === 'mark_type' && markType === undefined) {
+            return new ArgsValidationError(
+              'markType is required when operation=mark_type.',
+            ).toErr();
+          }
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
@@ -229,6 +245,17 @@ export const getRefineWorksheetTool = (
             const dir = plan.direction;
             confirm = (rb) => confirmSortDirectionApplied(rb, col, dir);
             nodeLabel = `<computed-sort direction="${dir}">${col ? ` on ${col}` : ''}`;
+          } else if (operation === 'mark_type') {
+            const plan = planMarkType(sourceXml, {
+              markType: markType as TableauMarkType,
+            });
+            if (!plan.ok) {
+              return refusal(operation, canonicalWorksheetName, plan.reason);
+            }
+            patched = plan.xml;
+            const markClass = plan.markClass;
+            confirm = (rb) => confirmMarkTypeApplied(rb, markClass);
+            nodeLabel = `<mark class="${markClass}">`;
           } else {
             // Accept the model's natural nested shape sortDirection.direction ('ASC'/'DESC')
             // as an alias for the flat lowercase `direction` on sort_by_field. Without this,

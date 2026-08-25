@@ -50,9 +50,10 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a single-view visualization request with enough analytic intent or field cues to recognize, including explicit chart names and common semantic asks',
     action:
-      "route precedence: Preview/no-change or open multi-chart asks skip bind-template and use the artifact flow. An explicitly named existing blank worksheet is a chart-creation target, not an edit: call bind-template with target_worksheet set to that sheet. Existing-sheet edits on populated worksheets stay on the edit-in-place route. Unnamed derived metrics stay on the derived-metric route. Otherwise call bind-template with the user's exact ask and auto_apply:true first; an explicit chart name may bind immediately, while a semantic ask may return one bounded proposal. If call 1 proposes, make one second bind-template call with one exact call_2_contract proposal. Terminal only with applied:true plus clean host verification, or a verified fallback apply receipt (passed or warnings); Never rephrase or resubmit the bare ask. If that second call still proposes, or any result escalates or blocks, use the guarded artifact fallback: list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet. Put named channels in requiredChannels. Preview artifacts stop before apply-worksheet; artifacts coexist. Open intent builds several distinct worksheets. Apply exact templatePlan sequentially; never replay uncertain apply.",
+      "route precedence: Preview/no-change or open multi-chart asks skip bind-template and use the artifact flow. An explicitly named existing blank worksheet is a chart-creation target, not an edit: call bind-template with target_worksheet set to that sheet. Existing-sheet edits on populated worksheets stay on the edit-in-place route. Unnamed derived metrics stay on the derived-metric route. Otherwise call bind-template with the user's exact ask and auto_apply:true first; an explicit chart name may bind immediately, while a semantic ask may return one bounded proposal. If call 1 proposes, make one second bind-template call with one exact call_2_contract proposal. Call 2 must preserve every named measure, breakdown, and filter from the exact ask; if the contract cannot resolve one, call ask-user instead of substituting a measure or dropping a filter. On a blocked Call 2 with retained filters, call ask-user and keep the proposal. Use the guarded artifact fallback only for a block without retained filters, or when Call 2 still proposes or escalates: list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet. Terminal only with applied:true plus clean host verification, or a verified fallback apply receipt (passed or warnings); Never rephrase or resubmit the bare ask. Put named channels in requiredChannels. Preview artifacts stop before apply-worksheet; artifacts coexist. Open intent builds several distinct worksheets. Apply exact templatePlan sequentially; never replay uncertain apply.",
     toolSequence: [
       'bind-template',
+      'ask-user',
       'list-templates',
       'list-available-fields',
       'build-worksheets-from-templates',
@@ -210,7 +211,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'an edit to a populated current/existing sheet/chart/view',
     action:
-      'use existing-sheet tools only: resolve target with list-worksheets -> list-dashboards -> ask-user when ambiguous, then use refine-worksheet or add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never create new sheets unless asked.',
+      'use existing-sheet tools only: list-worksheets -> list-dashboards -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, or explicit mark-type changes; add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
     toolSequence: [
       'list-worksheets',
       'list-dashboards',
@@ -225,7 +226,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
   },
   {
     kind: 'prose',
