@@ -953,7 +953,7 @@ function supportsOperationResult(apiVersion: string | undefined): boolean {
   return apiVersionAtLeast(apiVersion, '0.1.1');
 }
 
-function describeBlockingWindows(windows: Array<WindowInfo> | undefined): string {
+function describeWindows(windows: Array<WindowInfo> | undefined): string {
   if (windows === undefined || windows.length === 0) {
     return '';
   }
@@ -976,16 +976,21 @@ function mapClientError(
         type: 'unknown',
         error: `External Client API instance changed from ${error.expected} to ${error.actual}. Build a fresh artifact for the current Desktop instance.`,
       };
-    case 'problem':
+    case 'problem': {
+      // A client-rejected document apply reports the generic `operation-failed` in `code`
+      // and the real Tableau code in the RFC-9457 `tableauErrorCode` extension. Surface that
+      // extension when present so the agent sees the specific code, not `operation-failed`.
+      const tableauErrorCode = error.tableauErrorCode ?? error.code;
       return {
         type: 'command-failed',
         error: {
           code: error.code ?? String(error.status),
           message: error.detail ?? error.title ?? `External Client API problem (${error.status})`,
           recoverable: false,
-          ...(error.code ? { 'tableau-error-code': error.code } : {}),
+          ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
         },
       };
+    }
     case 'unauthorized':
       return {
         type: 'unknown',
@@ -1012,7 +1017,7 @@ function mapClientError(
           code: 'awaiting-user',
           message:
             'The operation is blocked on a Tableau Desktop dialog and cannot complete over the API ' +
-            `until a person dismisses it.${describeBlockingWindows(error.blockingWindows)}`,
+            `until a person dismisses it.${describeWindows(error.blockingWindows)}`,
           recoverable: false,
         },
       };
@@ -1021,11 +1026,23 @@ function mapClientError(
         type: 'command-timed-out',
         error: `The async operation expired before it completed (polled past the Desktop retention window). ${BLOCKING_DIALOG_GUIDANCE}`,
       };
-    case 'poll-timeout':
+    case 'poll-timeout': {
+      const progressWindows = error.progressWindows;
+      if (progressWindows !== undefined && progressWindows.length > 0) {
+        return {
+          type: 'command-timed-out',
+          error:
+            'The async operation did not reach a terminal state within the poll deadline. It may ' +
+            'still be running on Desktop — the poll gave up locally but did not cancel it, so only ' +
+            'retry if the command is safe to run twice. Desktop was last seen showing a self-clearing ' +
+            `progress dialog, so this is likely just slow; if it recurs, call list-instances to confirm the session is still reachable.${describeWindows(progressWindows)}`,
+        };
+      }
       return {
         type: 'command-timed-out',
         error: `The async operation did not reach a terminal state within the poll deadline. ${BLOCKING_DIALOG_GUIDANCE}`,
       };
+    }
     case 'no-instance':
       return {
         type: 'unknown',
