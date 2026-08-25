@@ -202,7 +202,8 @@ describe('desktop tools/list serialized surface', () => {
       DYNAMIC_AUTHORING_TOOL_PROFILE,
     );
 
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(4_705);
+    // Dense scatter/bubble repair guidance adds the exact field-selection and readback contract.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(5_110);
   });
 });
 

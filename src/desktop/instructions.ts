@@ -67,6 +67,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     requiredEvidence: ['each applied worksheet returns a success receipt'],
   },
   {
+    kind: 'prose',
+    id: 'dense-scatter-bubble',
+    text: 'Dense scatter/bubble + categorical color overrides terminal bind: get-worksheet-xml(mode:inline) → list-available-fields → add-field → apply-worksheet. Replace/supplement with bounded semantic discrete Detail finer than Color; use exact column_ref. None: report/ask-user; never invent. Skip one-mark-per-category or continuous color. Readback: claim only Detail/Color persisted; mark density unverified.',
+  },
+  {
     kind: 'route',
     id: 'derived-metric',
     trigger:
