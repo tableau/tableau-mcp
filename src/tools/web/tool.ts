@@ -4,6 +4,7 @@ import { ZodRawShape } from 'zod';
 
 import { ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
+import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
 import { getAuthTypeForTelemetry } from '../../telemetry/authType.js';
@@ -63,11 +64,11 @@ export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = To
   Args
 > & {
   /**
-   * Site roles allowed to see this tool at registration time. Empty/omitted →
-   * everyone. When non-empty, the caller's site role must be in this list or
-   * the tool is not registered for that caller.
+   * Lowest site role allowed to see this tool at registration time. Omitted means everyone. When
+   * set, the caller's site role must rank at or above it in {@link SITE_ROLE_HIERARCHY} (see
+   * {@link siteRoleMeetsMinimum}) or the tool is not registered for that caller.
    */
-  requiredRoles?: ReadonlyArray<string>;
+  minRequiredRole?: SiteRole;
 } & (
     | {
         app?: AppDetails;
@@ -116,7 +117,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
   Args
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
-  requiredRoles: ReadonlyArray<string>;
+  minRequiredRole?: SiteRole;
   app?: AppDetails;
   meta?: ToolMeta;
 
@@ -128,14 +129,14 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     annotations,
     callback,
     disabled,
-    requiredRoles,
+    minRequiredRole,
     app,
     meta,
   }: WebToolParams<Args>) {
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
-    this.requiredRoles = requiredRoles ?? [];
+    this.minRequiredRole = minRequiredRole;
     this.app = app;
     this.meta = meta;
   }

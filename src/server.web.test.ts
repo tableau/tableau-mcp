@@ -81,7 +81,7 @@ describe('server', () => {
       callback: vi.fn(),
       disabled: false,
       requiredApiScopes: [],
-      requiredRoles: [],
+      minRequiredRole: undefined,
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
       app: {
@@ -387,14 +387,14 @@ describe('server', () => {
       },
       callback: vi.fn(),
       disabled: false,
-      requiredRoles: ['SiteAdministratorCreator', 'SiteAdministratorExplorer'],
+      minRequiredRole: 'SiteAdministratorExplorer',
       requiredApiScopes: [],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
     } as unknown as WebTool<any>;
   }
 
-  it('does not register a tool when the caller lacks a requiredRoles role', async () => {
+  it('does not register a tool when the caller ranks below minRequiredRole', async () => {
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
 
     const server = getServer();
@@ -410,7 +410,7 @@ describe('server', () => {
     );
   });
 
-  it('registers a tool when the caller has a role listed in requiredRoles', async () => {
+  it('registers a tool when the caller ranks at or above minRequiredRole', async () => {
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
 
     const server = getServer();

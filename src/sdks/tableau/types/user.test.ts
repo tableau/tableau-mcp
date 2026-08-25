@@ -1,0 +1,48 @@
+import { MIN_ADMIN_SITE_ROLE, siteRoleMeetsMinimum } from './user.js';
+
+describe('siteRoleMeetsMinimum', () => {
+  it('returns true when the role outranks the minimum', () => {
+    expect(siteRoleMeetsMinimum('ServerAdministrator', 'SiteAdministratorExplorer')).toBe(true);
+  });
+
+  it('returns true when the role exactly matches the minimum', () => {
+    expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', 'SiteAdministratorExplorer')).toBe(
+      true,
+    );
+  });
+
+  it('returns false when the role ranks below the minimum', () => {
+    expect(siteRoleMeetsMinimum('Creator', 'SiteAdministratorExplorer')).toBe(false);
+    expect(siteRoleMeetsMinimum('Viewer', 'SiteAdministratorExplorer')).toBe(false);
+  });
+
+  it('orders admin roles above non-admin roles', () => {
+    expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', 'Creator')).toBe(true);
+  });
+
+  it('orders the non-admin content roles by publishing capability', () => {
+    expect(siteRoleMeetsMinimum('Creator', 'Viewer')).toBe(true);
+    expect(siteRoleMeetsMinimum('ExplorerCanPublish', 'Explorer')).toBe(true);
+    expect(siteRoleMeetsMinimum('Viewer', 'Explorer')).toBe(false);
+  });
+
+  it('fails closed for an undefined role', () => {
+    expect(siteRoleMeetsMinimum(undefined, 'SiteAdministratorExplorer')).toBe(false);
+  });
+
+  it('fails closed for an empty role', () => {
+    expect(siteRoleMeetsMinimum('', 'SiteAdministratorExplorer')).toBe(false);
+  });
+
+  it('fails closed for an unrecognized role', () => {
+    expect(siteRoleMeetsMinimum('SupportUser', 'Viewer')).toBe(false);
+  });
+
+  it('uses the lowest admin role as the admin threshold', () => {
+    expect(MIN_ADMIN_SITE_ROLE).toBe('SiteAdministratorExplorer');
+    expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', MIN_ADMIN_SITE_ROLE)).toBe(true);
+    expect(siteRoleMeetsMinimum('SiteAdministratorCreator', MIN_ADMIN_SITE_ROLE)).toBe(true);
+    expect(siteRoleMeetsMinimum('ServerAdministrator', MIN_ADMIN_SITE_ROLE)).toBe(true);
+    expect(siteRoleMeetsMinimum('Creator', MIN_ADMIN_SITE_ROLE)).toBe(false);
+  });
+});

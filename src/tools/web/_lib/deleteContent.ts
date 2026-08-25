@@ -20,7 +20,7 @@ import {
   getDatasourceDownstreamQuery,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
-import { ADMIN_SITE_ROLES } from '../../../sdks/tableau/types/user.js';
+import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
@@ -142,7 +142,7 @@ export const getDeleteContentTool = async (
     server,
     name: 'delete-content',
     disabled: !config.adminToolsEnabled,
-    requiredRoles: ADMIN_SITE_ROLES,
+    minRequiredRole: MIN_ADMIN_SITE_ROLE,
     ...(mcpAppsEnabled ? { app: getAppConfig('delete-content', 'hitl-confirm') } : {}),
     description: `
 Permanently deletes a workbook, published data source, or extract refresh task. Restricted to
