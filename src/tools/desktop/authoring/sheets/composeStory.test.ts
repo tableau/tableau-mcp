@@ -41,6 +41,16 @@ const AUTOMATIC_MATCHING_STORY_XML = `<dashboard name='Executive Story' type='st
   <simple-id uuid='{story-1}' />
 </dashboard>`;
 
+const SECOND_POINT_ACTIVE_STORY_XML = STORY_XML.replace("active-id='1'", "active-id='2'")
+  .replace("maxheight='964'", "maxheight='1000'")
+  .replace("maxwidth='1016'", "maxwidth='1400'")
+  .replace("minheight='964'", "minheight='1000'")
+  .replace("minwidth='1016'", "minwidth='1400'")
+  .replace(
+    "<story-point captured-sheet='' id='1' />",
+    "<story-point captured-sheet='Sales Overview' caption='Overview' id='1' /><story-point captured-sheet='Regional Performance' caption='Regions' id='2' />",
+  );
+
 const dashboardXml = (
   name: string,
   width = 1400,
@@ -94,6 +104,39 @@ describe('composeStoryDocument', () => {
     if (!result.ok) return;
     expect(result.xml).toContain("captured-sheet='Sales $$ Overview'");
     expect(result.xml).toContain("caption='Revenue $&amp; O&apos;Brien'");
+  });
+
+  it('preserves an active story point that remains in the composed story', () => {
+    const result = composeStoryDocument(SECOND_POINT_ACTIVE_STORY_XML, {
+      width: 1400,
+      height: 1000,
+      points: [
+        { dashboard: 'Sales Overview', caption: 'Overview' },
+        { dashboard: 'Regional Performance', caption: 'Regions' },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain("active-id='2'");
+  });
+
+  it.each([
+    ['missing', STORY_XML.replace(" active-id='1'", '')],
+    ['outside the new point ids', STORY_XML.replace("active-id='1'", "active-id='7'")],
+  ])('falls back to the first story point when the prior active id is %s', (_case, xml) => {
+    const result = composeStoryDocument(xml, {
+      width: 1400,
+      height: 1000,
+      points: [
+        { dashboard: 'Sales Overview', caption: 'Overview' },
+        { dashboard: 'Regional Performance', caption: 'Regions' },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain("active-id='1'");
   });
 
   it('fails closed when the story has no Tableau-authored story-points container', () => {
@@ -234,6 +277,21 @@ describe('compose-story tool', () => {
     expect(applyStoryboardDocument).not.toHaveBeenCalled();
   });
 
+  it('preserves a valid active point during idempotent replay', async () => {
+    const { result, applyStoryboardDocument } = await callTool(
+      {
+        points: [
+          { dashboard: 'Sales Overview', caption: 'Overview' },
+          { dashboard: 'Regional Performance', caption: 'Regions' },
+        ],
+      },
+      { storyboardXml: SECOND_POINT_ACTIVE_STORY_XML },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(applyStoryboardDocument).not.toHaveBeenCalled();
+  });
+
   it('recomposes a matching automatic story as fixed before reporting verified', async () => {
     const { result, applyStoryboardDocument } = await callTool(
       {
@@ -322,6 +380,18 @@ describe('compose-story tool', () => {
     expect(applyStoryboardDocument).not.toHaveBeenCalled();
   });
 
+  it('rejects an implicit caption over 80 characters before applying', async () => {
+    const { result, applyStoryboardDocument } = await callTool(
+      { points: [{ dashboard: 'dashboard-1' }] },
+      { firstDashboardName: 'D'.repeat(81) },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('shorter explicit caption');
+    expect(applyStoryboardDocument).not.toHaveBeenCalled();
+  });
+
   it('refuses to apply when a selected dashboard changes after preflight', async () => {
     const { result, applyStoryboardDocument, getDashboardDocument } = await callTool(
       {
@@ -401,6 +471,7 @@ async function callTool(
     persistAutomaticSizingMode?: boolean;
     secondDashboardRead?: 'drift' | 'deleted';
     secondDashboardList?: 'renamed';
+    firstDashboardName?: string;
   } = {},
 ): Promise<{
   result: CallToolResult;
@@ -409,7 +480,7 @@ async function callTool(
   listDashboards: ReturnType<typeof vi.fn>;
 }> {
   const dashboards = [
-    { id: 'dashboard-1', name: 'Sales Overview' },
+    { id: 'dashboard-1', name: options.firstDashboardName ?? 'Sales Overview' },
     { id: 'dashboard-2', name: 'Regional Performance' },
   ];
   let storyboardDocument = options.storyboardXml ?? STORY_XML;

@@ -88,6 +88,12 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
               dashboards.value.dashboards ?? [],
             );
             if (resolved.isErr()) return resolved.error.toErr();
+            const caption = point.caption ?? resolved.value.name;
+            if (caption.length > 80) {
+              return new ArgsValidationError(
+                `Dashboard "${resolved.value.name}" cannot use its full name as a story point caption. Pass a shorter explicit caption, then retry.`,
+              ).toErr();
+            }
             const document = await executor.getDashboardDocument(resolved.value.id, extra.signal);
             if (document.isErr()) {
               return new DesktopCommandExecutionError(document.error).toErr();
@@ -100,7 +106,7 @@ export const getComposeStoryTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
             resolvedPoints.push({
               dashboard: resolved.value.name,
-              caption: point.caption ?? resolved.value.name,
+              caption,
             });
             preflightDashboards.push({
               id: resolved.value.id,
@@ -287,9 +293,12 @@ export function composeStoryDocument(
     nextSize = upsertAttribute(nextSize, name, String(value));
   }
 
+  const existingActiveId = readAttribute(flipboard[0], 'active-id');
+  const pointIds = new Set(request.points.map((_, index) => String(index + 1)));
+  const activeId = existingActiveId && pointIds.has(existingActiveId) ? existingActiveId : '1';
   let nextFlipboard = flipboard[0];
   for (const [name, value] of [
-    ['active-id', '1'],
+    ['active-id', activeId],
     ['nav-type', 'caption'],
     ['show-nav-arrows', 'true'],
   ] as const) {
