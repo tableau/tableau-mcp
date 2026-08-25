@@ -28,12 +28,52 @@ const WORKSHEET_NAME = 'Sales by Region';
 const DASHBOARD_NAME = 'Executive Dashboard';
 const DASHBOARD_ID = 'dash-exec';
 const LOGICAL_TABLE_ID = 'lt-orders';
+const WORKSHEET_DOCUMENT_XML = `<?xml version="1.0"?>
+<worksheet name="Sales by Region">
+  <table>
+    <view>
+      <datasources><datasource name="Sample - Superstore" /></datasources>
+      <datasource-dependencies datasource="Sample - Superstore">
+        <column-instance column="[Region]" derivation="None" name="[none:Region:nk]" pivot="key" type="nominal" />
+        <column-instance column="[Sales]" derivation="Sum" name="[sum:Sales:qk]" pivot="key" type="quantitative" />
+      </datasource-dependencies>
+    </view>
+    <rows>[Sample - Superstore].[none:Region:nk]</rows>
+    <cols>[Sample - Superstore].[sum:Sales:qk]</cols>
+  </table>
+  <simple-id uuid="sheet-sales" />
+</worksheet>`;
+
+const TWO_DATE_LEVELS_WORKSHEET_XML = `<?xml version="1.0"?>
+<worksheet name="Sales by Region">
+  <table>
+    <view>
+      <datasources><datasource name="Sample - Superstore" /></datasources>
+      <datasource-dependencies datasource="Sample - Superstore">
+        <column caption="Order Date" datatype="date" name="[Order Date]" role="dimension" type="ordinal" />
+        <column-instance column="[Order Date]" derivation="Year" name="[yr:Order Date:ok]" pivot="key" type="ordinal" />
+        <column-instance column="[Order Date]" derivation="Quarter" name="[qr:Order Date:ok]" pivot="key" type="ordinal" />
+      </datasource-dependencies>
+    </view>
+    <rows>[Sample - Superstore].[yr:Order Date:ok]</rows>
+    <cols>[Sample - Superstore].[qr:Order Date:ok]</cols>
+  </table>
+  <simple-id uuid="sheet-sales" />
+</worksheet>`;
 
 describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tools', () => {
-  it('defines descending numeric sort in plain language', async () => {
+  it('describes discrete member ordering separately from measure ranking', async () => {
     const tool = getSortWorksheetTool(new DesktopMcpServer());
     const paramsSchema = await Provider.from(tool.paramsSchema);
-    expect(paramsSchema.direction.description).toContain('Numeric desc: largest first');
+    expect(tool.description).toBe(
+      'Order members of a discrete field. For measure ranking, use refine-worksheet with operation sort_by_field.',
+    );
+    expect(paramsSchema.fieldName.description).toBe(
+      'On-shelf discrete field to order (for example, "Region").',
+    );
+    expect(paramsSchema.direction.description).toBe('Member order direction; default asc.');
+    expect(tool.description).not.toContain('Sales');
+    expect(paramsSchema.direction.description).not.toContain('Numeric desc');
   });
 
   beforeEach(() => {
@@ -101,6 +141,14 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     );
   });
 
+  it('sort-worksheet waits for an in-flight apply before reading and POSTing its mutation', async () => {
+    await expectMutationWaitsForApplyLock(
+      getSortWorksheetTool,
+      { worksheet: WORKSHEET_NAME, fieldName: 'Region' },
+      `/v0/workbook/worksheets/${WORKSHEET_ID}:sort`,
+    );
+  });
+
   it('serializes worksheet resolution with deletion so concurrent deletes keep one worksheet', async () => {
     let worksheets = [
       { id: 'sheet-a', name: 'Worksheet A' },
@@ -159,25 +207,268 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     expect(worksheets).toEqual([{ id: 'sheet-b', name: 'Worksheet B' }]);
   });
 
-  it('sort-worksheet resolves a plain field name to its on-shelf token and POSTs :sort', async () => {
+  it('sort-worksheet rejects a measure field and directs measure ranking without POSTing', async () => {
     const harness = await startHarness(getSortWorksheetTool);
     try {
       const { result } = await run(harness, {
         worksheet: WORKSHEET_NAME,
         fieldName: 'Sales',
         direction: 'desc',
-        sortType: 'alpha',
       });
-      expect(result.isError).toBeFalsy();
-      const posted = harness.server.requests.filter(
-        (r) => r.method === 'POST' && r.path === `/v0/workbook/worksheets/${WORKSHEET_ID}:sort`,
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe(
+        'Field "Sales" resolves to a quantitative/continuous shelf field, but sort-worksheet only orders members of a discrete shelf field. To rank a dimension by a measure, use refine-worksheet with operation sort_by_field.',
       );
-      expect(posted).toHaveLength(1);
-      expect(JSON.parse(posted[0].body)).toEqual({
-        fieldName: '[Sample - Superstore].[sum:Sales:qk]',
+      expect(harness.server.requests.filter((request) => request.method === 'POST')).toHaveLength(
+        0,
+      );
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('sort-worksheet resolves a discrete shelf field and POSTs its member order', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    try {
+      const { result } = await run(harness, {
+        worksheet: WORKSHEET_NAME,
+        fieldName: 'Region',
         direction: 'desc',
         sortType: 'alpha',
       });
+      expect(result.isError).toBe(false);
+      const posted = harness.server.requests.filter((request) => request.method === 'POST');
+      expect(posted).toHaveLength(1);
+      expect(posted[0].path).toBe(`/v0/workbook/worksheets/${WORKSHEET_ID}:sort`);
+      expect(JSON.parse(posted[0].body)).toEqual({
+        fieldName: '[Sample - Superstore].[none:Region:nk]',
+        direction: 'desc',
+        sortType: 'alpha',
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('sort-worksheet rejects an ambiguous base field and lists its canonical shelf tokens without POSTing', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
+      status: 200,
+      contentType: 'application/xml',
+      body: TWO_DATE_LEVELS_WORKSHEET_XML,
+    });
+    try {
+      const { result } = await run(harness, {
+        worksheet: WORKSHEET_NAME,
+        fieldName: 'Order Date',
+        direction: 'desc',
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe(
+        'Field "Order Date" is ambiguous on worksheet "Sales by Region"\'s shelves. Matching canonical fields: [Sample - Superstore].[yr:Order Date:ok], [Sample - Superstore].[qr:Order Date:ok]. Use one of those exact tokens. sort-worksheet did not send a request.',
+      );
+      expect(
+        harness.server.requests.filter(
+          (request) =>
+            request.method === 'POST' &&
+            request.path === `/v0/workbook/worksheets/${WORKSHEET_ID}:sort`,
+        ),
+      ).toHaveLength(0);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('sort-worksheet accepts an exact canonical date-level token when its base field is ambiguous', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
+      status: 200,
+      contentType: 'application/xml',
+      body: TWO_DATE_LEVELS_WORKSHEET_XML,
+    });
+    try {
+      const { result } = await run(harness, {
+        worksheet: WORKSHEET_NAME,
+        fieldName: '[Sample - Superstore].[qr:Order Date:ok]',
+        direction: 'desc',
+      });
+
+      expect(result.isError).toBe(false);
+      const posted = harness.server.requests.filter(
+        (request) =>
+          request.method === 'POST' &&
+          request.path === `/v0/workbook/worksheets/${WORKSHEET_ID}:sort`,
+      );
+      expect(posted).toHaveLength(1);
+      expect(JSON.parse(posted[0].body)).toEqual({
+        fieldName: '[Sample - Superstore].[qr:Order Date:ok]',
+        direction: 'desc',
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it.each([
+    {
+      label: 'sort',
+      args: { direction: 'desc' },
+      accepted: 'Desktop accepted the request to sort worksheet',
+    },
+    {
+      label: 'clear',
+      args: { clearSort: true },
+      accepted: 'Desktop accepted the request to clear the sort',
+    },
+  ])(
+    'reports a terminal SUCCEEDED discrete $label request as accepted but unverified',
+    async ({ args, accepted }) => {
+      const harness = await startHarness(getSortWorksheetTool);
+      try {
+        const { result } = await run(harness, {
+          worksheet: WORKSHEET_NAME,
+          fieldName: 'Region',
+          ...args,
+        });
+
+        expect(result.isError).toBe(false);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain(accepted);
+        expect(result.content[0].text).toContain('The result was not independently verified.');
+        expect(result.content[0].text).not.toContain('Sorted worksheet');
+        expect(result.content[0].text).not.toContain('Cleared the sort');
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
+  it('sort-worksheet resolves a calculated shelf field by caption and POSTs its member order', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
+      status: 200,
+      contentType: 'application/xml',
+      body: WORKSHEET_DOCUMENT_XML.replace(
+        '<rows>[Sample - Superstore].[none:Region:nk]</rows>',
+        '<rows>[Sample - Superstore].[usr:Calc_ProfitTier:nk]</rows>',
+      ).replace(
+        '</datasource-dependencies>',
+        '<column caption="Profit Tier" datatype="string" name="[Calc_ProfitTier]" role="dimension" type="nominal" />\n        <column-instance column="[Calc_ProfitTier]" derivation="User" name="[usr:Calc_ProfitTier:nk]" pivot="key" type="nominal" />\n      </datasource-dependencies>',
+      ),
+    });
+    try {
+      const { result } = await run(harness, {
+        worksheet: WORKSHEET_NAME,
+        fieldName: 'Profit Tier',
+        direction: 'asc',
+      });
+      expect(result.isError).toBe(false);
+      const posted = harness.server.requests.filter((request) => request.method === 'POST');
+      expect(posted).toHaveLength(1);
+      expect(JSON.parse(posted[0].body)).toEqual({
+        fieldName: '[Sample - Superstore].[usr:Calc_ProfitTier:nk]',
+        direction: 'asc',
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('sort-worksheet rejects clearSort on a quantitative shelf field without POSTing', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    try {
+      const { result } = await run(harness, {
+        worksheet: WORKSHEET_NAME,
+        fieldName: 'Sales',
+        clearSort: true,
+      });
+      expect(result.isError).toBe(true);
+      expect(harness.server.requests.filter((request) => request.method === 'POST')).toHaveLength(
+        0,
+      );
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('sort-worksheet clears a discrete member sort with exactly one POST', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    try {
+      const { result } = await run(harness, {
+        worksheet: WORKSHEET_NAME,
+        fieldName: 'Region',
+        clearSort: true,
+      });
+      expect(result.isError).toBe(false);
+      const posted = harness.server.requests.filter((request) => request.method === 'POST');
+      expect(posted).toHaveLength(1);
+      expect(JSON.parse(posted[0].body)).toEqual({
+        fieldName: '[Sample - Superstore].[none:Region:nk]',
+        clearSort: true,
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('sort-worksheet accepts a declared ordinal shelf calculation whose token has an extra colon', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
+      status: 200,
+      contentType: 'application/xml',
+      body: WORKSHEET_DOCUMENT_XML.replace(
+        '<rows>[Sample - Superstore].[none:Region:nk]</rows>',
+        '<rows>[Sample - Superstore].[usr:Calc:ok:20]</rows>',
+      ).replace(
+        '</datasource-dependencies>',
+        '<column-instance column="[Calc]" derivation="User" name="[usr:Calc:ok:20]" pivot="key" type="ordinal" />\n      </datasource-dependencies>',
+      ),
+    });
+    try {
+      const { result } = await run(harness, {
+        worksheet: WORKSHEET_NAME,
+        fieldName: 'Calc',
+        direction: 'asc',
+      });
+      expect(result.isError).toBe(false);
+      const posted = harness.server.requests.filter((request) => request.method === 'POST');
+      expect(posted).toHaveLength(1);
+      expect(posted[0].path).toBe(`/v0/workbook/worksheets/${WORKSHEET_ID}:sort`);
+      expect(JSON.parse(posted[0].body)).toEqual({
+        fieldName: '[Sample - Superstore].[usr:Calc:ok:20]',
+        direction: 'asc',
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('sort-worksheet fails closed when an on-shelf field has no matching type declaration', async () => {
+    const harness = await startHarness(getSortWorksheetTool);
+    harness.server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
+      status: 200,
+      contentType: 'application/xml',
+      body: WORKSHEET_DOCUMENT_XML.replace(
+        /<datasource-dependencies[\s\S]*?<\/datasource-dependencies>/,
+        '',
+      ),
+    });
+    try {
+      const { result } = await run(harness, {
+        worksheet: WORKSHEET_NAME,
+        fieldName: 'Region',
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe(
+        'Field "Region" is on the worksheet shelf, but its field type could not be verified. sort-worksheet did not send a request.',
+      );
+      expect(harness.server.requests.filter((request) => request.method === 'POST')).toHaveLength(
+        0,
+      );
     } finally {
       await harness.close();
     }
@@ -361,6 +652,11 @@ async function startHarness(
   makeTool: (server: DesktopMcpServer) => DesktopTool<any>,
 ): Promise<Harness> {
   const server = await startMockExternalApiServer();
+  server.setOverride(`GET /v0/workbook/worksheets/${WORKSHEET_ID}/document`, {
+    status: 200,
+    contentType: 'application/xml',
+    body: WORKSHEET_DOCUMENT_XML,
+  });
   const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
   await executor.start();
   const tool = makeTool(new DesktopMcpServer());
