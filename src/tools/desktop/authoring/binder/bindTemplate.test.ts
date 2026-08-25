@@ -320,6 +320,30 @@ const MULTI_DATASOURCE_CALC_READBACK_XML = MULTI_DATASOURCE_CALC_BASE_XML.replac
   '</datasource></datasources>',
   `${INVENTORY_CALC_COLUMN_XML}</datasource></datasources>`,
 );
+const CAPTIONED_MULTI_DATASOURCE_CALC_BASE_XML = [
+  "<?xml version='1.0' encoding='utf-8'?>",
+  "<workbook version='18.1'><datasources>",
+  "<datasource caption='Orders' inline='true' name='federated.orders'>",
+  "<connection class='federated'><named-connections>",
+  "<named-connection caption='Orders' name='textscan.orders' />",
+  '</named-connections></connection>',
+  "<column caption='Sales' datatype='real' name='[sales]' role='measure' type='quantitative' />",
+  '</datasource>',
+  "<datasource caption='Inventory' inline='true' name='federated.inventory'>",
+  "<connection class='federated'><named-connections>",
+  "<named-connection caption='Inventory' name='textscan.inventory' />",
+  '</named-connections></connection>',
+  "<column caption='Quantity' datatype='integer' name='[quantity]' role='measure' type='quantitative' />",
+  '</datasource></datasources>',
+  "<worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
+].join('');
+const CAPTIONED_CALC_COLUMN_XML =
+  "<column caption='Double Quantity' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[quantity] * 2' /></column>";
+const CAPTIONED_MULTI_DATASOURCE_CALC_READBACK_XML =
+  CAPTIONED_MULTI_DATASOURCE_CALC_BASE_XML.replace(
+    '</datasource></datasources>',
+    `${CAPTIONED_CALC_COLUMN_XML}</datasource></datasources>`,
+  );
 
 const boundResult: BinderResult = {
   status: 'bound',
@@ -782,8 +806,10 @@ describe('bindTemplateTool', () => {
     });
     expect(paramsSchema['session']!.description).toBe('Desktop PID; omit if pinned or sole.');
     expect(paramsSchema['target_worksheet']!.description).toBe('Sheet id/name; omit to add.');
-    expect(paramsSchema['auto_apply']!.description).toBe('Apply now.');
-    expect(paramsSchema['datasource']!.description).toBe('Calc source id/name.');
+    expect(paramsSchema['auto_apply']!.description).toBe('Apply now');
+    expect(paramsSchema['datasource']!.description).toBe(
+      'Internal datasource name or unique caption',
+    );
     expect(paramsSchema['calcs']!.description).toBe('Author fields.');
     expect(
       paramsSchema['calcs']!.safeParse([
@@ -3339,6 +3365,20 @@ async function getToolResult({
   );
 }
 
+function datasourceBlock(xml: string, datasourceName: string): string {
+  let cursor = xml.indexOf('<datasource');
+  while (cursor !== -1) {
+    const openEnd = xml.indexOf('>', cursor) + 1;
+    const openTag = xml.slice(cursor, openEnd);
+    if (openTag.includes(`name='${datasourceName}'`)) {
+      const closeEnd = xml.indexOf('</datasource>', openEnd) + '</datasource>'.length;
+      return xml.slice(cursor, closeEnd);
+    }
+    cursor = xml.indexOf('<datasource', openEnd);
+  }
+  throw new Error(`missing datasource ${datasourceName}`);
+}
+
 /**
  * Wire the auto-apply seams for one bind-template call. Returns the executor's
  * command/document spies and the `getExecutor` factory to hand
@@ -4884,6 +4924,36 @@ describe('bindTemplateTool auto_apply gate', () => {
     );
     expect(binderModule.bindTemplate).toHaveBeenCalledWith(
       expect.objectContaining({ workbookXml: MULTI_DATASOURCE_CALC_READBACK_XML }),
+    );
+  });
+
+  it('resolves a unique datasource caption before authoring an inline calc', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [
+        CAPTIONED_MULTI_DATASOURCE_CALC_BASE_XML,
+        CAPTIONED_MULTI_DATASOURCE_CALC_READBACK_XML,
+      ],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Double Quantity by Region',
+      datasource: 'Inventory',
+      calcs: [{ caption: 'Double Quantity', formula: '[Quantity] * 2' }],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).authored_calcs).toEqual(['Double Quantity']);
+    const calcApply = applyWorkbookDocument.mock.calls[0]?.[0] as string;
+    expect(datasourceBlock(calcApply, 'federated.inventory')).toContain(CAPTIONED_CALC_COLUMN_XML);
+    expect(datasourceBlock(calcApply, 'federated.orders')).not.toContain(CAPTIONED_CALC_COLUMN_XML);
+    expect(calcApply).toContain("name='textscan.inventory'");
+    expect(binderModule.bindTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ workbookXml: CAPTIONED_MULTI_DATASOURCE_CALC_READBACK_XML }),
     );
   });
 

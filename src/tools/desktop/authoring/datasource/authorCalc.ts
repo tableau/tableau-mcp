@@ -24,7 +24,7 @@ const paramsSchema = {
   formula: z.string(),
   role: roleSchema.default('measure'),
   datatype: datatypeSchema.default('real'),
-  datasource: z.string().optional(),
+  datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
 };
 
 type AuthorCalcResult = {
