@@ -143,7 +143,83 @@ const SCATTER = {
 } satisfies RuntimeTemplateDescriptor;
 const SCATTER_MANIFESTS = manifests(SCATTER);
 
+const KPI = {
+  template: 'kpi-text',
+  family: 'magnitude',
+  fast_path_eligible: true,
+  fast_path_blockers: [],
+  intent_keywords: ['kpi'],
+  description: 'single KPI value',
+  slots: [
+    {
+      slot_id: 'field_base_1',
+      template_field: '{{field_base_1}}',
+      derivation: 'sum',
+      role: ['text'],
+      kind: 'quantitative',
+      bindable: true,
+      required: true,
+    },
+  ],
+  calcs: [],
+} satisfies RuntimeTemplateDescriptor;
+
 describe('bindExplicitTemplate', () => {
+  it.each([
+    ['no fields', []],
+    ['more than one field', ['[Superstore].[sum:Sales:qk]', '[Superstore].[sum:Longitude:qk]']],
+  ])('requires exactly one ordered field for kpi-text when given %s', (_, fields) => {
+    const result = bindExplicitTemplate(KPI.template, fields, SUMMARY, {
+      manifests: manifests(KPI),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.blockers).toContainEqual(
+        expect.objectContaining({
+          code: 'kind-mismatch',
+          detail: expect.stringContaining('exactly one field'),
+        }),
+      );
+    }
+  });
+
+  it('keeps a single ordered field valid for kpi-text', () => {
+    const result = bindExplicitTemplate(KPI.template, ['[Superstore].[sum:Sales:qk]'], SUMMARY, {
+      manifests: manifests(KPI),
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.fieldMapping).toEqual({
+        '{{field_base_1}}': '[Superstore].[sum:Sales:qk]',
+      });
+    }
+  });
+
+  it('rejects a kpi-text field mapping with a competing extra key', () => {
+    const result = bindExplicitTemplate(
+      KPI.template,
+      {
+        field_base_1: '[Superstore].[sum:Sales:qk]',
+        competing_metric: '[Superstore].[sum:Longitude:qk]',
+      },
+      SUMMARY,
+      { manifests: manifests(KPI) },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.blockers).toEqual([
+        expect.objectContaining({
+          code: 'kind-mismatch',
+          detail: expect.stringContaining('exactly one field'),
+        }),
+      ]);
+      expect(result.blockers[0]?.detail).toContain('received 2');
+    }
+  });
+
   it('preserves an exact qualified ref when the same field name exists in two datasources', () => {
     const contract: TemplateBindingContract = {
       template: 'duplicate-region',
@@ -354,6 +430,31 @@ describe('bindExplicitTemplate', () => {
           expect.objectContaining({ slot_id: 'measure' }),
         ]),
       );
+    }
+  });
+
+  it('ignores an extra unknown fieldMapping key for an ordinary template', () => {
+    const result = bindExplicitTemplate(
+      'x-latlon',
+      {
+        longitude: '[Superstore].[sum:Longitude:qk]',
+        latitude: '[Superstore].[sum:Latitude:qk]',
+        detail: '[Superstore].[none:City:nk]',
+        measure: '[Superstore].[sum:Sales:qk]',
+        ignored: '[Superstore].[none:Segment:nk]',
+      },
+      SUMMARY,
+      { manifests: manifests(LATLON) },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.fieldMapping).toEqual({
+        Longitude: '[Superstore].[avg:Longitude:qk]',
+        Latitude: '[Superstore].[avg:Latitude:qk]',
+        Detail: '[Superstore].[none:City:nk]',
+        Measure: '[Superstore].[sum:Sales:qk]',
+      });
     }
   });
 

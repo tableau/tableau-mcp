@@ -104,6 +104,15 @@ export const getPlanDashboardCreationTool = (
         extra,
         args: { session, dashboardName, title, layout, worksheets },
         callback: async () => {
+          const invalidKpi = worksheets.find(
+            (worksheet) => worksheet.type === 'kpi' && worksheet.fields.length !== 1,
+          );
+          if (invalidKpi) {
+            return new ArgsValidationError(
+              `KPI worksheet "${invalidKpi.name}" requires exactly one field; received ${invalidKpi.fields.length}. Create one KPI worksheet per measure.`,
+            ).toErr();
+          }
+
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();

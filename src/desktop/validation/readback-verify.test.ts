@@ -5,6 +5,9 @@ import { verifyWorksheetReadback } from './readback-verify.js';
 const GEO_FIELD = '[DS].[none:State:nk]';
 const PROFIT_FIELD = '[DS].[sum:Profit:qk]';
 const SALES_FIELD = '[DS].[sum:Sales:qk]';
+const TOP_N_COLUMN = '[Sample - Superstore].[none:Product Name:nk]';
+const TOP_N_LEVEL = '[none:Product Name:nk]';
+const TOP_N_MEASURE = '[Sample - Superstore].[sum:Sales:qk]';
 
 function worksheet(inner: string): string {
   return `<worksheet name="Blank Map"><table>${inner}</table></worksheet>`;
@@ -27,6 +30,33 @@ function encodedWorksheet(extra = ''): string {
     <cols>${PROFIT_FIELD}</cols>
     ${extra}
   `);
+}
+
+function topNGroupfilter(count: string, userAttributes: string): string {
+  return `<groupfilter function="end" count="${count}" end="top" units="records" ${userAttributes}>
+    <groupfilter function="order" direction="DESC" expression="SUM([Sales])" ${userAttributes}>
+      <groupfilter function="level-members" level="${TOP_N_LEVEL}" ${userAttributes}/>
+    </groupfilter>
+  </groupfilter>`;
+}
+
+function topNWorksheet(groupfilter: string): string {
+  return `<worksheet name="Top Products" xmlns:user="http://www.tableausoftware.com/xml/user">
+    <table>
+      <view>
+        <datasource-dependencies datasource="Sample - Superstore">
+          <column-instance column="[Product Name]" derivation="None" name="${TOP_N_LEVEL}" pivot="key" type="nominal"/>
+          <column-instance column="[Sales]" derivation="Sum" name="[sum:Sales:qk]" pivot="key" type="quantitative"/>
+        </datasource-dependencies>
+        <filter class="categorical" column="${TOP_N_COLUMN}">${groupfilter}</filter>
+        <computed-sort column="${TOP_N_COLUMN}" direction="DESC" using="${TOP_N_MEASURE}"/>
+        <slices><column>${TOP_N_COLUMN}</column></slices>
+      </view>
+      <panes><pane><mark class="Bar"/></pane></panes>
+      <rows>${TOP_N_COLUMN}</rows>
+      <cols>[Sample - Superstore].[sum:Sales:qk]</cols>
+    </table>
+  </worksheet>`;
 }
 
 describe('verifyWorksheetReadback', () => {
@@ -154,6 +184,100 @@ describe('verifyWorksheetReadback', () => {
     `);
 
     expect(verifyWorksheetReadback(encodedWorksheet(), readback)).toEqual([]);
+  });
+});
+
+describe('verifyWorksheetReadback — nested Top-N filter semantics', () => {
+  const intended = topNWorksheet(
+    topNGroupfilter('10', 'user:ui-marker="intended" user:ui-top-by-field="true"'),
+  );
+
+  it('passes when the nested Top-N semantics match despite readback-only user attributes', () => {
+    const readback = topNWorksheet(
+      topNGroupfilter('10', 'user:ui-domain="database" user:ui-marker="readback"'),
+    );
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
+  it('fails when Tableau drops the nested Top-N groupfilter', () => {
+    const findings = verifyWorksheetReadback(intended, topNWorksheet(''));
+
+    expect(findings).toContainEqual({
+      kind: 'filter',
+      node: 'filter',
+      column: TOP_N_COLUMN,
+      intended: `<filter class="categorical" column="${TOP_N_COLUMN}">`,
+      readback: 'changed',
+      severity: 'error',
+    });
+  });
+
+  it('fails when Tableau changes the intended Top-N count from 10 to 50', () => {
+    const readback = topNWorksheet(
+      topNGroupfilter('50', 'user:ui-domain="database" user:ui-marker="readback"'),
+    );
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual({
+      kind: 'filter',
+      node: 'filter',
+      column: TOP_N_COLUMN,
+      intended: `<filter class="categorical" column="${TOP_N_COLUMN}">`,
+      readback: 'changed',
+      severity: 'error',
+    });
+  });
+
+  it('fails when Tableau keeps the Top-N filter but drops its required slice', () => {
+    const readback = intended.replace(
+      `<slices><column>${TOP_N_COLUMN}</column></slices>`,
+      '<slices/>',
+    );
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual({
+      kind: 'filter',
+      node: 'filter',
+      column: TOP_N_COLUMN,
+      intended: `<filter class="categorical" column="${TOP_N_COLUMN}">`,
+      readback: 'changed',
+      severity: 'error',
+    });
+  });
+
+  it.each([
+    ['drops', '', 'missing'],
+    [
+      'changes',
+      `<computed-sort column="${TOP_N_COLUMN}" direction="ASC" using="${TOP_N_MEASURE}"/>`,
+      'changed',
+    ],
+  ] as const)('fails when Tableau %s the Top-N computed sort', (_, replacement, readbackState) => {
+    const readback = intended.replace(
+      `<computed-sort column="${TOP_N_COLUMN}" direction="DESC" using="${TOP_N_MEASURE}"/>`,
+      replacement,
+    );
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual({
+      kind: 'sort',
+      node: 'computed-sort',
+      column: TOP_N_COLUMN,
+      intended: `<computed-sort column="${TOP_N_COLUMN}" direction="DESC" using="${TOP_N_MEASURE}">`,
+      readback: readbackState,
+      severity: 'error',
+    });
+  });
+
+  it('does not require a surviving slice for an ordinary categorical filter', () => {
+    const intendedOrdinaryFilter = encodedWorksheet().replace(
+      '</view>',
+      `<slices><column>${GEO_FIELD}</column></slices></view>`,
+    );
+    const readback = intendedOrdinaryFilter.replace(
+      `<slices><column>${GEO_FIELD}</column></slices>`,
+      '<slices/>',
+    );
+
+    expect(verifyWorksheetReadback(intendedOrdinaryFilter, readback)).toEqual([]);
   });
 });
 

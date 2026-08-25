@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
+import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
@@ -33,7 +34,11 @@ export const getRedoWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
             session,
             extra,
             callback: async (_executor, _signal, read) =>
-              await read('redo', async (executor, signal) => await executor.redo(signal)),
+              await read(
+                'redo',
+                async (executor, signal) =>
+                  await withApplyLock(async () => await executor.redo(signal)),
+              ),
           });
           if (result.isErr()) {
             return result;

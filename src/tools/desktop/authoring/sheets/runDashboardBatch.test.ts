@@ -40,13 +40,16 @@ describe('runDashboardBatchTool', () => {
     vi.useRealTimers();
   });
 
-  it('publishes a typed flat queue contract under the per-tool byte cap', async () => {
+  it('publishes a typed flat queue contract with explicit chart and KPI order', async () => {
     const tool = getRunDashboardBatchTool(new DesktopMcpServer());
     const schema = z.object(await Provider.from(tool.paramsSchema));
 
     expect(
       schema.safeParse({ session: '12345', artifactIds: ['a1', 'a2'], ...BATCH }).success,
     ).toBe(true);
+    expect(schema.safeParse({ session: '12345', ...BATCH, replaceExisting: true }).success).toBe(
+      true,
+    );
     expect(
       schema.safeParse({
         session: '12345',
@@ -59,6 +62,17 @@ describe('runDashboardBatchTool', () => {
     expect(schema.safeParse({ session: '12345', ...BATCH }).success).toBe(true);
     expect(
       schema.safeParse({ session: '12345', artifactIds: Array(7).fill('a'), ...BATCH }).success,
+    ).toBe(true);
+    expect(
+      schema.safeParse({ session: '12345', artifactIds: Array(8).fill('a'), ...BATCH }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({ session: '12345', ...BATCH, existingWorksheetNames: Array(7).fill('a') })
+        .success,
+    ).toBe(true);
+    expect(
+      schema.safeParse({ session: '12345', ...BATCH, existingWorksheetNames: Array(8).fill('a') })
+        .success,
     ).toBe(false);
     expect(
       schema.safeParse({ session: '12345', ...BATCH, existingWorksheetNames: [] }).success,
@@ -70,25 +84,43 @@ describe('runDashboardBatchTool', () => {
     expect(schema.safeParse({ ...BATCH, title: tooLong }).success).toBe(false);
 
     const entry = await getDesktopToolListEntry(tool);
+    expect(entry.title).toBe('Dashboard');
+    expect(entry.description).toBe(
+      'Apply staged worksheets and compose live KPI/chart sheets into one dashboard.',
+    );
     expect(entry.inputSchema).toMatchObject({
       properties: {
+        session: {
+          type: 'string',
+          maxLength: 64,
+          description: 'Session ID; optional if pinned or unique.',
+        },
         artifactIds: { type: 'array', items: { type: 'string' } },
         dashboardName: { type: 'string' },
-        existingWorksheetNames: { type: 'array', items: { type: 'string' } },
+        existingWorksheetNames: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Live non-KPI chart worksheet names in dashboard order.',
+        },
         title: { type: 'string' },
-        layoutType: { type: 'string' },
+        layoutType: {
+          type: 'string',
+          description: 'Dashboard layout; executive-summary uses KPI and chart roles.',
+        },
         gridColumns: { type: 'integer' },
         kpiWorksheetNames: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Ordered KPIs.',
+          description: 'Live KPI worksheet names in display order from left to right.',
         },
+        replaceExisting: { type: 'boolean' },
       },
       required: expect.arrayContaining(['dashboardName']),
     });
     expect(entry.inputSchema.required).not.toContain('existingWorksheetNames');
+    expect(entry.inputSchema.required).not.toContain('replaceExisting');
     expect(entry.inputSchema.properties).not.toHaveProperty('tasks');
-    expect(JSON.stringify(entry).length).toBeLessThanOrEqual(1_020);
+    expect(JSON.stringify(entry).length).toBe(1_315);
   });
 
   it('records bounded success telemetry without workbook identifiers', async () => {
@@ -272,7 +304,7 @@ describe('runDashboardBatchTool', () => {
     expect(harness.posts).toHaveLength(0);
   });
 
-  it('rejects canonical worksheet collisions, dashboard collisions, and more than six sheets', async () => {
+  it('rejects canonical worksheet collisions, dashboard collisions, and more than seven sheets', async () => {
     const canonical = await callBatch(['a1'], {
       store: artifactStore(['a1'], { titles: { a1: 'Existi&#110;g' } }),
     });
@@ -280,9 +312,9 @@ describe('runDashboardBatchTool', () => {
       store: artifactStore(['a1'], { titles: { a1: 'Executive Overview' } }),
     });
     const tooMany = await callBatch(['a1'], {
-      existingWorksheetNames: ['E1', 'E2', 'E3', 'E4', 'E5', 'E6'],
+      existingWorksheetNames: ['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7'],
       executor: statefulExecutor({
-        initialXml: renderedWorkbook(['E1', 'E2', 'E3', 'E4', 'E5', 'E6']),
+        initialXml: renderedWorkbook(['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7']),
       }).executor,
     });
 
@@ -326,11 +358,77 @@ describe('runDashboardBatchTool', () => {
     expect(result.isError).toBe(false);
     expect(harness.posts).toHaveLength(1);
     expect(harness.posts[0]).toContain(
-      'h="20000" id="11" name="Existing A" w="100000" x="0" y="8000"',
+      'h="12000" id="11" name="Existing A" w="100000" x="0" y="6000"',
     );
     expect(harness.posts[0]).toContain(
-      'h="72000" id="12" name="Existing B" w="100000" x="0" y="28000"',
+      'h="82000" id="12" name="Existing B" w="100000" x="0" y="18000"',
     );
+  });
+
+  it('resolves live KPI role references without duplicating them in existingWorksheetNames', async () => {
+    const chartNames = ['Trend', 'Top Products', 'Regional Sales', 'Customer Mix'];
+    const kpiNames = ['Total Sales', 'Total Profit', 'Total Quantity'];
+    const harness = statefulExecutor({
+      initialXml: renderedWorkbook([
+        'Customer Mix',
+        'Total Quantity',
+        'Regional Sales',
+        'Total Sales',
+        'Top Products',
+        'Total Profit',
+        'Trend',
+      ]),
+    });
+
+    const result = await callBatch([], {
+      existingWorksheetNames: chartNames,
+      layoutType: 'executive-summary',
+      kpiWorksheetNames: kpiNames,
+      executor: harness.executor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(harness.posts).toHaveLength(1);
+    expect(bodyOf(result)).toMatchObject({
+      applied: true,
+      steps: [
+        expect.objectContaining({
+          operation: 'dashboard',
+          worksheets: [...chartNames, ...kpiNames],
+        }),
+      ],
+    });
+    const posted = harness.posts[0]!.slice(harness.posts[0]!.indexOf('<dashboards>'));
+    expect(posted.indexOf('name="Total Sales"')).toBeLessThan(
+      posted.indexOf('name="Total Profit"'),
+    );
+    expect(posted.indexOf('name="Total Profit"')).toBeLessThan(
+      posted.indexOf('name="Total Quantity"'),
+    );
+    expect(posted.indexOf('name="Trend"')).toBeLessThan(posted.indexOf('name="Top Products"'));
+    expect(posted.indexOf('name="Top Products"')).toBeLessThan(
+      posted.indexOf('name="Regional Sales"'),
+    );
+    expect(posted.indexOf('name="Regional Sales"')).toBeLessThan(
+      posted.indexOf('name="Customer Mix"'),
+    );
+  });
+
+  it('unions a KPI role represented in both inputs only once', async () => {
+    const harness = statefulExecutor();
+
+    const result = await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      layoutType: 'executive-summary',
+      kpiWorksheetNames: ['Existing A'],
+      executor: harness.executor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(bodyOf(result)).toMatchObject({
+      applied: true,
+      steps: [expect.objectContaining({ worksheets: ['Existing A', 'Existing B'] })],
+    });
   });
 
   it('resolves KPI roles against artifact worksheet titles before the single write', async () => {
@@ -345,8 +443,8 @@ describe('runDashboardBatchTool', () => {
 
     expect(result.isError).toBe(false);
     expect(harness.posts).toHaveLength(1);
-    expect(harness.posts[0]).toContain('h="20000" id="11" name="New A" w="100000" x="0" y="8000"');
-    expect(harness.posts[0]).toContain('h="72000" id="12" name="New B" w="100000" x="0" y="28000"');
+    expect(harness.posts[0]).toContain('h="12000" id="11" name="New A" w="100000" x="0" y="6000"');
+    expect(harness.posts[0]).toContain('h="82000" id="12" name="New B" w="100000" x="0" y="18000"');
   });
 
   it('rejects unknown KPI names and conflicting free-form layout controls before writing', async () => {
@@ -366,10 +464,53 @@ describe('runDashboardBatchTool', () => {
       executor: conflictHarness.executor,
     });
 
-    expect(bodyOf(missing)).toMatchObject({ applied: false, retrySafe: true });
+    expect(bodyOf(missing)).toMatchObject({
+      applied: false,
+      retrySafe: true,
+      steps: [
+        expect.objectContaining({
+          stage: 'kpiWorksheet',
+          error:
+            'Missing live rendered KPI worksheet name(s): "Missing KPI". Create or render each KPI worksheet, or correct kpiWorksheetNames; then retry with the same executive-summary layout.',
+        }),
+      ],
+    });
     expect(bodyOf(conflict)).toMatchObject({ applied: false, retrySafe: true });
     expect(missingHarness.posts).toHaveLength(0);
     expect(conflictHarness.posts).toHaveLength(0);
+  });
+
+  it('counts implicit KPI role references toward the seven-worksheet batch limit', async () => {
+    const names = [
+      'Chart 1',
+      'Chart 2',
+      'Chart 3',
+      'Chart 4',
+      'Chart 5',
+      'KPI 1',
+      'KPI 2',
+      'KPI 3',
+    ];
+    const harness = statefulExecutor({ initialXml: renderedWorkbook(names) });
+
+    const result = await callBatch([], {
+      existingWorksheetNames: names.slice(0, 5),
+      layoutType: 'executive-summary',
+      kpiWorksheetNames: names.slice(5),
+      executor: harness.executor,
+    });
+
+    expect(bodyOf(result)).toMatchObject({
+      applied: false,
+      retrySafe: true,
+      steps: [
+        expect.objectContaining({
+          stage: 'inputValidation',
+          error: 'A dashboard batch requires 1-7 combined worksheets, including KPI roles.',
+        }),
+      ],
+    });
+    expect(harness.posts).toHaveLength(0);
   });
 
   it.each([
@@ -409,8 +550,37 @@ describe('runDashboardBatchTool', () => {
     expect(harness.posts).toHaveLength(0);
   });
 
-  it('keeps six-artifact warning and failure receipts below the SDK truncation limit', async () => {
-    const ids = Array.from({ length: 6 }, (_, index) => `${index}-${'i'.repeat(250)}`);
+  it('returns unknown when Tableau changes Top-N semantics on a composed live worksheet', async () => {
+    vi.useFakeTimers();
+    const harness = statefulExecutor({
+      initialXml: rankedWorkbook(),
+      readbackTransform: (xml) =>
+        xml.replace('function="end" count="10"', 'function="end" count="50"'),
+    });
+
+    const resultPromise = callBatch([], {
+      existingWorksheetNames: ['Top Products'],
+      executor: harness.executor,
+    });
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(bodyOf(result)).toMatchObject({
+      applied: 'unknown',
+      retrySafe: false,
+      steps: [
+        expect.objectContaining({
+          operation: 'dashboard',
+          stage: 'readbackVerification',
+          error: expect.stringContaining('Top Products'),
+        }),
+      ],
+    });
+    expect(JSON.stringify(bodyOf(result))).toContain('filter');
+  });
+
+  it('keeps seven-artifact warning and failure receipts below the SDK truncation limit', async () => {
+    const ids = Array.from({ length: 7 }, (_, index) => `${index}-${'i'.repeat(250)}`);
     const titles = Object.fromEntries(ids.map((id, index) => [id, `${index}-${'t'.repeat(250)}`]));
     const warningXmls = Object.fromEntries(
       ids.map((id) => [
@@ -477,6 +647,7 @@ async function callBatch(
       gridColumns: options.gridColumns,
       layoutType: options.layoutType ?? BATCH.layoutType,
       kpiWorksheetNames: options.kpiWorksheetNames,
+      replaceExisting: false,
       ...(options.existingWorksheetNames !== undefined
         ? { existingWorksheetNames: options.existingWorksheetNames }
         : {}),
@@ -579,6 +750,30 @@ function renderedWorkbook(names: string[]): string {
     .join('')}</worksheets><windows>${names
     .map((name) => `<window class="worksheet" name="${name}"/>`)
     .join('')}</windows></workbook>`;
+}
+
+function rankedWorkbook(): string {
+  const column = '[Sample - Superstore].[none:Product Name:nk]';
+  const level = '[none:Product Name:nk]';
+  const sales = '[Sample - Superstore].[sum:Sales:qk]';
+  return `<?xml version="1.0"?><workbook><worksheets>
+    <worksheet name="Top Products"><table><view>
+      <datasource-dependencies datasource="Sample - Superstore">
+        <column-instance column="[Product Name]" derivation="None" name="${level}" pivot="key" type="nominal"/>
+        <column-instance column="[Sales]" derivation="Sum" name="[sum:Sales:qk]" pivot="key" type="quantitative"/>
+      </datasource-dependencies>
+      <filter class="categorical" column="${column}">
+        <groupfilter function="end" count="10" end="top" units="records">
+          <groupfilter function="order" direction="DESC" expression="SUM([Sales])">
+            <groupfilter function="level-members" level="${level}"/>
+          </groupfilter>
+        </groupfilter>
+      </filter>
+      <computed-sort column="${column}" direction="DESC" using="${sales}"/>
+      <slices><column>${column}</column></slices>
+    </view><panes><pane><mark class="Bar"/></pane></panes>
+    <rows>${column}</rows><cols>${sales}</cols></table></worksheet>
+  </worksheets><windows><window class="worksheet" name="Top Products"/></windows></workbook>`;
 }
 
 function bodyOf(result: CallToolResult): Record<string, any> {

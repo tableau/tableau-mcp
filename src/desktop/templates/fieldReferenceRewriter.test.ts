@@ -374,6 +374,15 @@ describe('rewriteFieldReferences — ref-class coverage: kpi-text (aggregated me
     expect(r).toContain('<![CDATA[<[Sales Data].[sum:Revenue:qk]>]]>');
     expect(r).not.toContain('{{field_base_1}}');
   });
+
+  it('keeps the KPI value centered after field injection without fixing a font or color', () => {
+    const r = run();
+    expect(r).toContain('<style-rule element="cell">');
+    expect(r).toContain('<format attr="text-align" value="center"/>');
+    expect(r).toContain('<format attr="vertical-align" value="center"/>');
+    expect(r).not.toContain('attr="font-family"');
+    expect(r).not.toContain('attr="color"');
+  });
 });
 
 describe('rewriteFieldReferences — ref-class coverage: ranking-ordered-bar (dimension + measure + computed-sort)', () => {
