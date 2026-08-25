@@ -55,6 +55,7 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { templateArtifactUnavailableError } from '../../api/applyWorksheetArtifact.js';
+import { sessionParam } from '../../params.js';
 import { jsonToolResult, type StructuredResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import {
@@ -65,7 +66,7 @@ import {
 } from './composeDashboardCore.js';
 
 const paramsSchema = {
-  session: z.string().max(64).optional(),
+  session: sessionParam({ max: 64 }),
   artifactIds: z.array(z.string().trim().min(1).max(255)).max(6).optional(),
   dashboardName: z.string().trim().min(1).max(255),
   existingWorksheetNames: z.array(z.string().trim().min(1).max(255)).max(6).optional(),
@@ -77,7 +78,7 @@ const paramsSchema = {
     .min(1)
     .max(5)
     .optional()
-    .describe('Ordered KPIs.'),
+    .describe('Ordered KPIs'),
   replaceExisting: z.boolean().optional(),
 };
 
@@ -156,7 +157,6 @@ type BatchReadbackVerification = {
   dashboardIssues: string[];
 };
 
-const title = 'Dashboard';
 const MAX_DYNAMIC_TEXT_LENGTH = 384;
 
 export const getRunDashboardBatchTool = (
@@ -167,8 +167,7 @@ export const getRunDashboardBatchTool = (
   const tool = new DesktopTool({
     server,
     name: 'run-dashboard-batch',
-    title,
-    description: 'Create.',
+    description: '',
     paramsSchema,
     annotations: {
       readOnlyHint: false,

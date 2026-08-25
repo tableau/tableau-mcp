@@ -3,7 +3,12 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
 import { escapeXml } from '../binder/escape.js';
-import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
+import {
+  ExecuteCommandError,
+  ExecuteCommandResult,
+  ExecuteCommandWarning,
+  WithExecutorAndAbortSignal,
+} from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
 import { introducedBlockingValidationIssues, runValidation } from '../validation/registry.js';
@@ -23,7 +28,14 @@ export type PerSheetKind = 'worksheet' | 'dashboard' | 'storyboard';
  * whole-workbook upsert resolves by first-match).
  */
 export type PerSheetApplyOutcome =
-  | { status: 'applied'; id: string; name: string; fragmentXml: string }
+  | {
+      status: 'applied';
+      id: string;
+      name: string;
+      fragmentXml: string;
+      // Empty on a clean apply; every entry is a node Tableau dropped, never a benign notice.
+      documentWarnings: ExecuteCommandWarning[];
+    }
   | { type: 'dashboard-member-blank-transition'; dashboards: string[] }
   | 'sheet-absent'
   | 'route-missing'
@@ -162,6 +174,7 @@ export async function tryApplyViaPerSheetRoute({
     id: resolved.value.id,
     name: resolved.value.name,
     fragmentXml: retitledFragment.value,
+    documentWarnings: applyResult.value.warnings ?? [],
   });
 }
 
@@ -304,7 +317,7 @@ async function applyDocumentForKind(
   documentXml: string,
   client: ExternalApiToolExecutor,
   signal: AbortSignal,
-): Promise<Result<unknown, ExecuteCommandError>> {
+): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
   switch (kind) {
     case 'worksheet':
       return client.applyWorksheetDocument(id, documentXml, signal);

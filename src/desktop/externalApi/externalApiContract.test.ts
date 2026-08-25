@@ -287,7 +287,7 @@ describe('external client API contract (captured openapi fixture)', () => {
   describe('Problem ↔ problemResponseSchema', () => {
     const problem = specSchema('Problem');
 
-    it('declares every spec property (extras `type`/`detail` are RFC-9457 members additionalProperties admits)', () => {
+    it('declares every spec property (extras `type`/`detail` are standard RFC-9457 members, `tableauErrorCode` Tableau’s extension member)', () => {
       const missing = Object.keys(problem.properties ?? {}).filter(
         (key) => !declaredKeys(problemResponseSchema).includes(key),
       );
@@ -295,7 +295,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       const extras = declaredKeys(problemResponseSchema).filter(
         (key) => !(key in (problem.properties ?? {})),
       );
-      expect(extras.sort()).toEqual(['detail', 'type']);
+      expect(extras.sort()).toEqual(['detail', 'tableauErrorCode', 'type']);
     });
 
     it('PROBLEM_CODES equals the spec x-extensible-enum exactly', () => {
