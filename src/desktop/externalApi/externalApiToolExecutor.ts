@@ -976,16 +976,21 @@ function mapClientError(
         type: 'unknown',
         error: `External Client API instance changed from ${error.expected} to ${error.actual}. Build a fresh artifact for the current Desktop instance.`,
       };
-    case 'problem':
+    case 'problem': {
+      // A client-rejected document apply reports the generic `operation-failed` in `code`
+      // and the real Tableau code in the RFC-9457 `tableauErrorCode` extension. Surface that
+      // extension when present so the agent sees the specific code, not `operation-failed`.
+      const tableauErrorCode = error.tableauErrorCode ?? error.code;
       return {
         type: 'command-failed',
         error: {
           code: error.code ?? String(error.status),
           message: error.detail ?? error.title ?? `External Client API problem (${error.status})`,
           recoverable: false,
-          ...(error.code ? { 'tableau-error-code': error.code } : {}),
+          ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
         },
       };
+    }
     case 'unauthorized':
       return {
         type: 'unknown',
