@@ -8,7 +8,7 @@ test.describe('get-view-data', () => {
     const superstore = getSuperstoreWorkbook();
 
     const viewData = await client.callTool('get-view-data', {
-      schema: z.string(),
+      schema: z.unknown(),
       toolArgs: {
         viewId: superstore.defaultView.id,
       },
