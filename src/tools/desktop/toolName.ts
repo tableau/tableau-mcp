@@ -86,6 +86,7 @@ export const desktopToolNames = [
   'add-worksheet',
   'add-dashboard',
   'add-storyboard',
+  'compose-story',
   'publish-workbook',
   'refresh-datasource-data',
   'refresh-datasource-extract',

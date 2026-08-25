@@ -8,6 +8,7 @@ import {
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
 import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
+import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -69,6 +70,14 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     }
   });
 
+  it('delete-sheet waits for an in-flight apply before POSTing its mutation', async () => {
+    await expectMutationWaitsForApplyLock(
+      getDeleteSheetTool,
+      { sheet: WORKSHEET_NAME },
+      `/v0/workbook/worksheets/${WORKSHEET_ID}:delete`,
+    );
+  });
+
   it('rename-sheet POSTs the worksheet :rename route with the new name', async () => {
     const harness = await startHarness(getRenameSheetTool);
     try {
@@ -82,6 +91,72 @@ describe('delete-sheet / rename-sheet / sort-worksheet + logical-table read tool
     } finally {
       await harness.close();
     }
+  });
+
+  it('rename-sheet waits for an in-flight apply before POSTing its mutation', async () => {
+    await expectMutationWaitsForApplyLock(
+      getRenameSheetTool,
+      { sheet: WORKSHEET_NAME, name: 'Regional Sales' },
+      `/v0/workbook/worksheets/${WORKSHEET_ID}:rename`,
+    );
+  });
+
+  it('serializes worksheet resolution with deletion so concurrent deletes keep one worksheet', async () => {
+    let worksheets = [
+      { id: 'sheet-a', name: 'Worksheet A' },
+      { id: 'sheet-b', name: 'Worksheet B' },
+    ];
+    const listWorksheets = vi.fn(async () => new Ok({ worksheets: [...worksheets] }));
+    let markFirstDeleteStarted!: () => void;
+    const firstDeleteStarted = new Promise<void>((resolve) => {
+      markFirstDeleteStarted = resolve;
+    });
+    let releaseFirstDelete!: () => void;
+    const firstDeleteReleased = new Promise<void>((resolve) => {
+      releaseFirstDelete = resolve;
+    });
+    const deleteSheet = vi.fn(async (ref: { id: string }) => {
+      if (ref.id === 'sheet-a') {
+        markFirstDeleteStarted();
+        await firstDeleteReleased;
+      }
+      worksheets = worksheets.filter(({ id }) => id !== ref.id);
+      return new Ok({ command_id: 'delete-sheet', status: 'completed' as const, result: null });
+    });
+    const executor = {
+      listWorksheets,
+      listDashboards: vi.fn().mockResolvedValue(new Ok({ dashboards: [] })),
+      listStoryboards: vi.fn().mockResolvedValue(new Ok({ storyboards: [] })),
+      deleteSheet,
+    };
+    const callback = (await Provider.from(getDeleteSheetTool(new DesktopMcpServer()).callback)) as (
+      args: Record<string, unknown>,
+      extra: ReturnType<typeof getMockRequestHandlerExtra>,
+    ) => Promise<CallToolResult>;
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue(executor),
+    };
+
+    const first = callback({ sheet: 'Worksheet A' }, extra);
+    await firstDeleteStarted;
+    const second = callback({ sheet: 'Worksheet B' }, extra);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const listReadsWhileFirstDeleteWasBlocked = listWorksheets.mock.calls.length;
+    releaseFirstDelete();
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(firstResult.isError).toBeFalsy();
+    expect(secondResult.isError).toBeFalsy();
+    invariant(secondResult.content[0].type === 'text');
+    expect(secondResult.content[0].text).toContain('"deleted":false');
+    expect(deleteSheet).toHaveBeenCalledTimes(1);
+    expect(deleteSheet).toHaveBeenCalledWith(
+      { id: 'sheet-a', kind: 'worksheet' },
+      expect.any(AbortSignal),
+    );
+    expect(listReadsWhileFirstDeleteWasBlocked).toBe(1);
+    expect(worksheets).toEqual([{ id: 'sheet-b', name: 'Worksheet B' }]);
   });
 
   it('sort-worksheet resolves a plain field name to its on-shelf token and POSTs :sort', async () => {
@@ -306,6 +381,63 @@ async function startHarness(
       await server.close();
     },
   };
+}
+
+async function expectMutationWaitsForApplyLock(
+  makeTool: (server: DesktopMcpServer) => DesktopTool<any>,
+  args: Record<string, unknown>,
+  mutationPath: string,
+): Promise<void> {
+  let markLockHeld!: () => void;
+  const lockHeld = new Promise<void>((resolve) => {
+    markLockHeld = resolve;
+  });
+  let releaseLock!: () => void;
+  const lockReleased = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
+  const blocker = withApplyLock(async () => {
+    markLockHeld();
+    await lockReleased;
+  });
+  await lockHeld;
+
+  let harness: Harness | undefined;
+  let pending: ReturnType<typeof run> | undefined;
+  try {
+    harness = await startHarness(makeTool);
+    const activeHarness = harness;
+    pending = run(activeHarness, args);
+    await vi.waitFor(() => expect(sessionResolution.resolveSession).toHaveBeenCalled());
+    await vi
+      .waitFor(() => expect(activeHarness.server.requests.length).toBeGreaterThan(0), {
+        timeout: 100,
+        interval: 5,
+      })
+      .catch(() => undefined);
+    expect(activeHarness.server.requests).toHaveLength(0);
+    expect(
+      activeHarness.server.requests.filter(
+        ({ method, path }) => method === 'POST' && path === mutationPath,
+      ),
+    ).toHaveLength(0);
+
+    releaseLock();
+    await blocker;
+
+    const { result } = await pending;
+    expect(result.isError).toBeFalsy();
+    expect(
+      activeHarness.server.requests.filter(
+        ({ method, path }) => method === 'POST' && path === mutationPath,
+      ),
+    ).toHaveLength(1);
+  } finally {
+    releaseLock();
+    await blocker;
+    await pending?.catch(() => undefined);
+    await harness?.close();
+  }
 }
 
 function instanceFor(server: MockExternalApiServer): ExternalApiInstance {

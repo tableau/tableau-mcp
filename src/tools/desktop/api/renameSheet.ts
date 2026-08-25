@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
+import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
@@ -40,28 +41,30 @@ export const getRenameSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
             return sessionResult.error.toErr();
           }
 
-          const refResult = await resolveSheetRef({ session, sheet, extra });
-          if (refResult.isErr()) {
-            return refResult.error.toErr();
-          }
-          const { ref, previousName } = refResult.value;
-
-          const executor = await extra.getExecutor(sessionResult.value);
-          const result = await executor.renameSheet(ref, name, extra.signal);
-          if (result.isErr()) {
-            if (isRouteMissing(result.error)) {
-              return endpointNotInThisBuild('rename-sheet').toErr();
+          return await withApplyLock(async () => {
+            const refResult = await resolveSheetRef({ session, sheet, extra });
+            if (refResult.isErr()) {
+              return refResult.error.toErr();
             }
-            return new DesktopCommandExecutionError(result.error).toErr();
-          }
+            const { ref, previousName } = refResult.value;
 
-          return new Ok({
-            sheet: { id: ref.id, kind: ref.kind, name },
-            previousName,
-            message:
-              result.value.status === 'completed'
-                ? `Renamed ${ref.kind} "${previousName}" to "${name}".`
-                : `Requested rename to "${name}"; Desktop is still applying it.`,
+            const executor = await extra.getExecutor(sessionResult.value);
+            const result = await executor.renameSheet(ref, name, extra.signal);
+            if (result.isErr()) {
+              if (isRouteMissing(result.error)) {
+                return endpointNotInThisBuild('rename-sheet').toErr();
+              }
+              return new DesktopCommandExecutionError(result.error).toErr();
+            }
+
+            return new Ok({
+              sheet: { id: ref.id, kind: ref.kind, name },
+              previousName,
+              message:
+                result.value.status === 'completed'
+                  ? `Renamed ${ref.kind} "${previousName}" to "${name}".`
+                  : `Requested rename to "${name}"; Desktop is still applying it.`,
+            });
           });
         },
       });

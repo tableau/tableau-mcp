@@ -7,6 +7,7 @@ import type { DatasourceItem } from '../../../desktop/externalApi/types.js';
 import { guardCommand } from '../../../desktop/guards/commandGuard.js';
 import { knownLiveFailureFixFor } from '../../../desktop/guards/commandPolicy.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
+import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -71,61 +72,63 @@ export const getExecuteTableauCommandTool = (
           }
           const { dispatchArgs, warnings: commandGuardWarnings } = commandGuard;
 
-          const executor = await extra.getExecutor(resolvedSession);
-          const verifyRootFileConnection = shouldVerifyRootFileConnection(command, dispatchArgs);
-          let datasourcesBefore: DatasourceItem[] = [];
-          if (verifyRootFileConnection) {
-            const beforeResult = await executor.listWorkbookDatasources(extra.signal);
-            if (beforeResult.isErr()) {
-              return commandPostconditionError(
-                'Cannot verify a new workbook datasource because the current datasource inventory could not be read. The command was not sent.',
+          return await withApplyLock(async () => {
+            const executor = await extra.getExecutor(resolvedSession);
+            const verifyRootFileConnection = shouldVerifyRootFileConnection(command, dispatchArgs);
+            let datasourcesBefore: DatasourceItem[] = [];
+            if (verifyRootFileConnection) {
+              const beforeResult = await executor.listWorkbookDatasources(extra.signal);
+              if (beforeResult.isErr()) {
+                return commandPostconditionError(
+                  'Cannot verify a new workbook datasource because the current datasource inventory could not be read. The command was not sent.',
+                ).toErr();
+              }
+              datasourcesBefore = beforeResult.value.datasources ?? [];
+            }
+
+            const result = await executor.executeCommand({
+              namespace,
+              command: cmd,
+              args: dispatchArgs,
+              signal: extra.signal,
+            });
+
+            if (result.isErr()) {
+              return new DesktopCommandExecutionError(
+                result.error,
+                knownLiveFailureFixFor(command),
               ).toErr();
             }
-            datasourcesBefore = beforeResult.value.datasources ?? [];
-          }
 
-          const result = await executor.executeCommand({
-            namespace,
-            command: cmd,
-            args: dispatchArgs,
-            signal: extra.signal,
+            let verification: DatasourceVerification | undefined;
+            if (verifyRootFileConnection) {
+              const afterResult = await executor.listWorkbookDatasources(extra.signal);
+              if (afterResult.isErr()) {
+                return commandPostconditionError(
+                  'Desktop accepted the connection command, but datasource readback failed; state may have changed. Inspect workbook datasources and do not retry automatically.',
+                ).toErr();
+              }
+              const addedDatasources = findAddedDatasources(
+                datasourcesBefore,
+                afterResult.value.datasources ?? [],
+              );
+              if (addedDatasources.length === 0) {
+                return commandPostconditionError(
+                  'Desktop reported success, but no new workbook datasource appeared. The command may have had no effect; inspect workbook datasources before retrying.',
+                ).toErr();
+              }
+              verification = { status: 'passed', addedDatasources };
+            }
+
+            const payload = shapeCommandResult({
+              result: result.value.result,
+              envelopeWarnings: result.value.warnings ?? [],
+              guardWarnings: commandGuardWarnings,
+              verification,
+            });
+
+            return new Ok(payload);
           });
-
-          if (result.isErr()) {
-            return new DesktopCommandExecutionError(
-              result.error,
-              knownLiveFailureFixFor(command),
-            ).toErr();
-          }
-
-          let verification: DatasourceVerification | undefined;
-          if (verifyRootFileConnection) {
-            const afterResult = await executor.listWorkbookDatasources(extra.signal);
-            if (afterResult.isErr()) {
-              return commandPostconditionError(
-                'Desktop accepted the connection command, but datasource readback failed; state may have changed. Inspect workbook datasources and do not retry automatically.',
-              ).toErr();
-            }
-            const addedDatasources = findAddedDatasources(
-              datasourcesBefore,
-              afterResult.value.datasources ?? [],
-            );
-            if (addedDatasources.length === 0) {
-              return commandPostconditionError(
-                'Desktop reported success, but no new workbook datasource appeared. The command may have had no effect; inspect workbook datasources before retrying.',
-              ).toErr();
-            }
-            verification = { status: 'passed', addedDatasources };
-          }
-
-          const payload = shapeCommandResult({
-            result: result.value.result,
-            envelopeWarnings: result.value.warnings ?? [],
-            guardWarnings: commandGuardWarnings,
-            verification,
-          });
-
-          return new Ok(payload);
         },
         getSuccessResult: (payload): CallToolResult => ({
           isError: hasOutputSerializationFailed(payload),

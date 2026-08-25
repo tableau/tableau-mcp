@@ -160,6 +160,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'add-worksheet',
     'add-dashboard',
     'add-storyboard',
+    'compose-story',
     'open-file',
     'save-workbook',
     'workbook-export-as',
