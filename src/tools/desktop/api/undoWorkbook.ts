@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
+import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
@@ -33,7 +34,11 @@ export const getUndoWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
             session,
             extra,
             callback: async (_executor, _signal, read) =>
-              await read('undo', async (executor, signal) => await executor.undo(signal)),
+              await read(
+                'undo',
+                async (executor, signal) =>
+                  await withApplyLock(async () => await executor.undo(signal)),
+              ),
           });
           if (result.isErr()) {
             return result;

@@ -100,7 +100,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard',
     trigger: 'a dashboard ask',
     action:
-      'build focused worksheet artifacts first, then pass artifactIds to run-dashboard-batch to place them and compose once. Put only existing worksheets in existingWorksheetNames; omit artifactIds for compose-only. Never replay a partial or unknown batch; inspect live workbook state first.',
+      'run-dashboard-batch is for new dashboards: build focused worksheet artifacts first; place them and compose once with artifactIds. Use existing worksheets in existingWorksheetNames; omit artifactIds for compose-only. Never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. Never replay a partial or unknown batch; inspect live workbook state first.',
     toolSequence: ['run-dashboard-batch'],
     stopConditions: [
       'place them and compose once',
@@ -114,18 +114,34 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard-edit-fallback',
     trigger: 'an existing dashboard edit the bounded batch cannot express',
     action:
-      'use get-dashboard-xml -> read-cached-xml -> write-cached-xml -> apply-dashboard; stay on the scoped dashboard path.',
-    toolSequence: ['get-dashboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-dashboard'],
-    stopConditions: ['stay on the scoped dashboard path'],
-    requiredEvidence: ['dashboard apply receipt'],
+      'use list-dashboards -> format-worksheets for constituent worksheet properties; reserve cached dashboard editing for dashboard-level properties: get-dashboard-xml -> read-cached-xml -> write-cached-xml -> apply-dashboard; stay on the scoped dashboard path.',
+    toolSequence: [
+      'list-dashboards',
+      'format-worksheets',
+      'get-dashboard-xml',
+      'read-cached-xml',
+      'write-cached-xml',
+      'apply-dashboard',
+    ],
+    stopConditions: [
+      'reserve cached dashboard editing for dashboard-level properties',
+      'stay on the scoped dashboard path',
+    ],
+    requiredEvidence: ['format-worksheets readback receipt or dashboard apply receipt'],
   },
   {
     kind: 'route',
     id: 'story-edit-fallback',
     trigger: 'an existing story edit',
     action:
-      'use get-storyboard-xml -> read-cached-xml -> write-cached-xml -> apply-storyboard; stay on the scoped story path.',
-    toolSequence: ['get-storyboard-xml', 'read-cached-xml', 'write-cached-xml', 'apply-storyboard'],
+      'use compose-story for ordered dashboard points and matching size. Set replaceExisting only after an explicit rebuild/replace request; otherwise use get-storyboard-xml -> read-cached-xml -> write-cached-xml -> apply-storyboard; stay on the scoped story path.',
+    toolSequence: [
+      'compose-story',
+      'get-storyboard-xml',
+      'read-cached-xml',
+      'write-cached-xml',
+      'apply-storyboard',
+    ],
     stopConditions: ['stay on the scoped story path'],
     requiredEvidence: ['story apply receipt'],
   },
@@ -157,13 +173,13 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total and LOD)',
     action:
-      'use author-parameter first, then author-set, author-calc, author-action, and format-labels as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+      'use author-parameter first, then author-set, author-calc, author-action, and format-worksheets as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
     toolSequence: [
       'author-parameter',
       'author-set',
       'author-calc',
       'author-action',
-      'format-labels',
+      'format-worksheets',
       'list-templates',
       'list-available-fields',
       'build-worksheets-from-templates',
