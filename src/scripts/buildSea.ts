@@ -161,7 +161,7 @@ async function downloadNodeDist(platform: SeaPlatform, downloadDir: string): Pro
   return nodeBinary;
 }
 
-async function generateBlob(variant: SeaVariant): Promise<string> {
+async function generateBlob(variant: SeaVariant, downloadDir: string): Promise<string> {
   if (!existsSync(join(repoRoot, variant.entry))) {
     throw new Error(
       `Entry point missing: ${variant.entry}. Run the build first (omit --skip-build).`,
@@ -179,8 +179,12 @@ async function generateBlob(variant: SeaVariant): Promise<string> {
     config.assets = assets;
   }
   await writeFile(configPath, JSON.stringify(config, null, 2));
+  // Some provisioned Node builds ship with SEA disabled ("Single executable
+  // application is disabled."), so generate the blob with a downloaded official
+  // Node dist rather than the runner's `node`.
+  const hostNode = await downloadNodeDist(platforms[hostPlatformKey()], downloadDir);
   try {
-    run('node', ['--experimental-sea-config', configPath]);
+    run(hostNode, ['--experimental-sea-config', configPath]);
   } finally {
     await rm(configPath, { force: true });
     if (manifestPath) {
@@ -265,7 +269,7 @@ async function buildBinary(
 
   for (const variantKey of variantKeys) {
     console.log(`\n🧬 Generating SEA blob for ${variantKey}...`);
-    const blobPath = await generateBlob(seaVariants[variantKey]);
+    const blobPath = await generateBlob(seaVariants[variantKey], downloadDir);
     blobs.push(blobPath);
     for (const platformKey of platformKeys) {
       console.log(`🚀 Building SEA binary for ${variantKey}/${platformKey}...`);
