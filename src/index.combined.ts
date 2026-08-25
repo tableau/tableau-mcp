@@ -12,7 +12,7 @@ import { log } from './logging/logger';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { DesktopMcpServer } from './server.desktop.js';
-import { WebMcpServer } from './server.web.js';
+import { buildWebInstructions, WebMcpServer } from './server.web.js';
 
 const serverName = 'tableau-combined-mcp';
 const serverVersion = pkg.version;
@@ -51,6 +51,12 @@ async function startServer(): Promise<void> {
 
   await serverInfoReady;
 
+  // The combined bundle supplies its own McpServer to both WebMcpServer and DesktopMcpServer so the
+  // web and desktop tools register onto a single server. Because the SDK reads `instructions` ONLY
+  // from the McpServer constructor options (never settable afterward), we MUST build it here with the
+  // web instructions — otherwise WebMcpServer's composed guidance would be silently discarded on the
+  // provided-mcpServer path. Kept in lockstep with the default path via buildWebInstructions(); the
+  // base Server constructor asserts the two match.
   const mcpServer = new McpServer(
     {
       name: serverName,
@@ -61,6 +67,7 @@ async function startServer(): Promise<void> {
         logging: {},
         tools: {},
       },
+      instructions: buildWebInstructions(),
     },
   );
 
