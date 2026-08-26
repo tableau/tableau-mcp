@@ -123,6 +123,26 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('add-field + apply-worksheet change encodings.');
   });
 
+  it('routes dashboard rounded-corner asks through a typed scoped tool', () => {
+    const roundedCorners = routes.find((route) => route.id === 'rounded-corners');
+
+    expect(roundedCorners?.trigger).toContain('rounded corners');
+    expect(roundedCorners?.action).toContain('If the tool refuses, report the reason and stop');
+    expect(roundedCorners?.action).toContain(
+      'dashboard or container corners, call list-dashboards, then call format-dashboard-zones',
+    );
+    expect(roundedCorners?.action).toContain(
+      'Never claim dashboard or container rounded corners are impossible before the typed tool refuses',
+    );
+    expect(roundedCorners?.action).toContain(
+      'Never use shell commands, raw whole-workbook XML, or cached XML for this ask',
+    );
+    expect(roundedCorners?.toolSequence).toEqual(['list-dashboards', 'format-dashboard-zones']);
+    expect(roundedCorners?.requiredEvidence).toEqual([
+      'dashboard-zone readback receipt when dashboard corners were requested',
+    ]);
+  });
+
   it('routes unnamed derived metrics through semantic authoring before the modern flow', () => {
     const dynamicAuthoring = routes.find((route) => route.id === 'dynamic-authoring');
 

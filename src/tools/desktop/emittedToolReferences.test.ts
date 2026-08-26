@@ -55,6 +55,7 @@ const NON_TOOL_VOCABULARY = [
   'command-failed',
   'command-postcondition',
   'computed-sort',
+  'corner-radius',
   'cross-datasource-binding',
   'custom-theme',
   'dashboard-image',
@@ -107,6 +108,7 @@ const NON_TOOL_VOCABULARY = [
   'kind-mismatch',
   'kpi-text',
   'layout-basic',
+  'layout-flow',
   'level-members',
   // load-* entries are External Client API operation names (and their error codes), the
   // machine the apply-* tools drive — not MCP tool names.
@@ -171,6 +173,7 @@ const NON_TOOL_VOCABULARY = [
   'safe-by-construction',
   'screenshot-diff',
   'selection-clear-set-option',
+  'self-closing',
   'session-mismatch',
   'sheet-not-found',
   'should-clear',
