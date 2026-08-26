@@ -415,9 +415,14 @@ function printSummary(result: BirdGradeResult, resultPath: string): void {
   console.log(`Result:         ${resultPath}`);
 }
 
-async function main(): Promise<void> {
+/**
+ * Grade a single run directory and write its bird-result.json.
+ * Exported so grade-suite.ts can call this in-process instead of shelling
+ * out to `npx tsx grade-bird.ts <run-dir>` per case.
+ */
+export async function gradeBirdCase(runDir: string): Promise<BirdGradeResult> {
   const { runMeta, birdCase, runId, evalRunId, projectName, difficulty, questionId } =
-    loadGradingContext(absRunDir);
+    loadGradingContext(runDir);
 
   const baseResult: BirdGradeResult = {
     run_id: runId,
@@ -487,7 +492,7 @@ async function main(): Promise<void> {
     console.error(`\nGrade: Q${questionId} — GRADING_ERROR (no trace)`);
     console.error(baseResult.details.trace_error);
     console.error(`Result: ${p}`);
-    return;
+    return baseResult;
   }
 
   // ── Metrics from trace ────────────────────────────────────────────────────
@@ -525,6 +530,12 @@ async function main(): Promise<void> {
   const resultPath = writeResult(baseResult);
 
   printSummary(baseResult, resultPath);
+
+  return baseResult;
+}
+
+async function main(): Promise<void> {
+  await gradeBirdCase(absRunDir);
 }
 
 main().catch((error: unknown) => {

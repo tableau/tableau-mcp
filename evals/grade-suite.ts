@@ -16,13 +16,12 @@
 
 /* eslint-disable no-console */
 
-import { execFileSync } from 'child_process';
 import dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { gradeBirdCase } from './grade-bird.js';
 import { BirdGradeResult } from './lib/birdResult.js';
-import { captureExecError } from './lib/execError.js';
 import { mean, round, sum } from './lib/stats.js';
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -31,7 +30,6 @@ dotenv.config({ path: path.join(REPO_ROOT, '.env') });
 const EVALS_DIR = path.join(REPO_ROOT, 'evals');
 const SUITE_RUNS_DIR = path.join(EVALS_DIR, 'suite-runs');
 const GRADES_DIR = path.join(EVALS_DIR, 'grades');
-const GRADE_BIRD_SCRIPT = path.join(EVALS_DIR, 'grade-bird.ts');
 
 function dateSlug(): string {
   const d = new Date();
@@ -154,19 +152,9 @@ async function main(): Promise<void> {
     let gradingError: string | null = null;
 
     try {
-      execFileSync('npx', ['tsx', GRADE_BIRD_SCRIPT, c.run_dir], {
-        env: process.env,
-        cwd: REPO_ROOT,
-        stdio: 'pipe',
-      });
-      if (fs.existsSync(gradeFile)) {
-        gradeResult = JSON.parse(fs.readFileSync(gradeFile, 'utf-8')) as BirdGradeResult;
-      } else {
-        gradingError = 'bird-result.json not found after grading';
-      }
+      gradeResult = await gradeBirdCase(c.run_dir);
     } catch (err: unknown) {
-      const e = captureExecError(err);
-      gradingError = e.stderr?.trim() || e.message || 'unknown grading error';
+      gradingError = err instanceof Error ? err.message : 'unknown grading error';
     }
 
     const verdict = gradeResult?.verdict ?? 'grading_error';
