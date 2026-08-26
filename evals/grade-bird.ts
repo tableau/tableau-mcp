@@ -260,34 +260,32 @@ type GradingContext = {
 
 /**
  * Read run.json + the referenced suite file and resolve the BIRD case being graded.
- * Exits the process (as the CLI grader has always done) on any missing/invalid input.
+ * Throws (rather than exiting the process) on any missing/invalid input, so that
+ * gradeBirdCase() callers running in-process (e.g. grade-suite.ts's batch loop) can
+ * catch the failure for just this one case instead of the whole process dying.
  */
 function loadGradingContext(runDir: string): GradingContext {
   const runMeta = readOptionalJson<RunMeta>(path.join(runDir, 'run.json'));
   if (!runMeta) {
-    console.error(`run.json not found in ${runDir}`);
-    process.exit(1);
+    throw new Error(`run.json not found in ${runDir}`);
   }
 
   const questionId = runMeta.metadata?.question_id;
   const suiteFilePath = runMeta.metadata?.suite_file;
   if (!questionId || !suiteFilePath) {
-    console.error(
+    throw new Error(
       'run.json is missing metadata.question_id or metadata.suite_file.\n' +
         'This grader only works on runs produced by run-suite.ts.',
     );
-    process.exit(1);
   }
   if (!fs.existsSync(suiteFilePath)) {
-    console.error(`Suite file not found: ${suiteFilePath}`);
-    process.exit(1);
+    throw new Error(`Suite file not found: ${suiteFilePath}`);
   }
 
   const suite = JSON.parse(fs.readFileSync(suiteFilePath, 'utf-8')) as Array<BirdCase>;
   const birdCase = suite.find((c) => c.question_id === questionId);
   if (!birdCase) {
-    console.error(`Question ID ${questionId} not found in suite file.`);
-    process.exit(1);
+    throw new Error(`Question ID ${questionId} not found in suite file.`);
   }
 
   const runId = runMeta.run_id ?? path.basename(runDir);
