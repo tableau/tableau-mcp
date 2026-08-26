@@ -1,6 +1,9 @@
 /**
  * Batch grader for a completed BIRD suite run.
  *
+ * BIRD-specific, not a generic suite grader — the admin/JTBD eval cases (evals/cases/admin/)
+ * don't have a batch-grading path yet and are graded one-at-a-time via grade.ts instead.
+ *
  * Grades every case in a suite run and writes a single suite-grade.json
  * to evals/grades/YYYY-MM-DD/<suite-run-id>/.
  *

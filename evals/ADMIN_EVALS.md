@@ -159,7 +159,8 @@ metadata.
 
 These are **tool-coverage** cases (no gold numeric answer), so they run one-per-file via
 `eval:run` and grade via `eval:grade` — **not** through the BIRD suite runner
-(`eval:suite`, which is hardcoded to the `question_id` BIRD schema).
+(`eval:suite`/`grade-suite.ts`, which is BIRD-specific and hardcoded to the `question_id`
+BIRD schema; it has no batch-grading path for admin/JTBD cases).
 
 ```bash
 npm run build     # always rebuild after any src change
