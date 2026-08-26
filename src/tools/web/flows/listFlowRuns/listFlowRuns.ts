@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
+import { getFeatureGate } from '../../../../features/init.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
@@ -13,6 +14,7 @@ import {
   LIST_FLOW_RUNS_PRIMARY_API_SCOPES,
 } from '../../../../server/oauth/scopes.js';
 import { getHttpStatus } from '../../../../utils/getHttpStatus.js';
+import { Provider } from '../../../../utils/provider.js';
 import { genericFilterDescription } from '../../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../../tool.js';
 import { TableauWebRequestHandlerExtra } from '../../toolContext.js';
@@ -108,7 +110,10 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
   const listFlowRunsTool = new WebTool({
     server,
     name: 'list-flow-runs',
-    disabled: !config.flowToolsEnabled,
+    disabled: new Provider(
+      async () =>
+        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+    ),
     description: `
   Retrieves the run history (executions) of Tableau Prep flows on a site. Each flow run records one execution attempt with its \`status\` (Pending, InProgress, Success, Failed, Cancelled), \`startedAt\`/\`completedAt\` timestamps, \`progress\`, the \`flowId\` it belongs to, and the \`backgroundJobId\`. Use this tool to answer questions about flow execution outcomes — e.g. "which flows failed recently", "show the run history for flow X", "what's still running".
 

@@ -8,6 +8,7 @@ import { McpClient } from './mcpClient.js';
 
 const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
+const flowToolsEnabled = Boolean(features['flow-tools']);
 
 describe('server', () => {
   beforeAll(setEnv);
@@ -54,7 +55,7 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
+      // flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag
       const flowTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
@@ -81,8 +82,8 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
 
-      // Filter out flow tools if they are not enabled
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
+      // Filter out flow tools unless both the env switch and the feature flag are on
+      if (process.env.FLOW_TOOLS_ENABLED !== 'true' || !flowToolsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
       }
 
@@ -206,8 +207,8 @@ describe('server', () => {
         );
       }
 
-      // Filter out flow tools if they are not enabled
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
+      // Filter out flow tools unless both the env switch and the feature flag are on
+      if (process.env.FLOW_TOOLS_ENABLED !== 'true' || !flowToolsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
       }
 

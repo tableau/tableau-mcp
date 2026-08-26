@@ -391,6 +391,8 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
   const authoringToolsEnabled = await featureGate.isFeatureEnabled('authoring-tools');
+  const flowToolsEnabled =
+    config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -415,10 +417,10 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
     enabledTools.delete('confirm-delete-content');
   }
 
-  // Flow tools are gated off by default (FLOW_TOOLS_ENABLED). When disabled they are not registered,
-  // so their scopes must not be advertised or enforced either — otherwise a client could be asked to
-  // hold scopes for tools that don't exist. Mirrors the adminToolsEnabled gating above.
-  if (!config.flowToolsEnabled) {
+  // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag. When disabled they
+  // are not registered, so their scopes must not be advertised or enforced either — otherwise a
+  // client could be asked to hold scopes for tools that don't exist.
+  if (!flowToolsEnabled) {
     enabledTools.delete('list-flows');
     enabledTools.delete('get-flow');
     enabledTools.delete('list-flow-runs');

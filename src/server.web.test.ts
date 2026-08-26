@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   mockRegisterAppTool: vi.fn(),
   mockRegisterAppResource: vi.fn(),
   mockFeatureGate: {
-    isFeatureEnabled: vi.fn(() => false),
+    isFeatureEnabled: vi.fn((_featureName: string) => false),
   },
   mockReadFile: vi.fn(),
 }));
@@ -146,7 +146,28 @@ describe('server', () => {
     expect(registeredToolNames).toContain('list-datasources');
   });
 
-  it('should register flow tools when FLOW_TOOLS_ENABLED is "true"', async () => {
+  it('should register flow tools when FLOW_TOOLS_ENABLED is "true" and the flow-tools flag is ON', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'flow-tools',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    // Both switches on turns on every flow tool...
+    expect(registeredToolNames).toContain('list-flows');
+    expect(registeredToolNames).toContain('get-flow');
+    expect(registeredToolNames).toContain('list-flow-runs');
+    expect(registeredToolNames).toContain('list-flow-tasks');
+    // ...alongside the unrelated tools.
+    expect(registeredToolNames).toContain('list-datasources');
+  });
+
+  it('should not register flow tools when FLOW_TOOLS_ENABLED is "true" but the flow-tools flag is OFF', async () => {
     vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
     const server = getServer();
     await server.registerTools();
@@ -155,12 +176,11 @@ describe('server', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
 
-    // The single switch turns on every flow tool...
-    expect(registeredToolNames).toContain('list-flows');
-    expect(registeredToolNames).toContain('get-flow');
-    expect(registeredToolNames).toContain('list-flow-runs');
-    expect(registeredToolNames).toContain('list-flow-tasks');
-    // ...alongside the unrelated tools.
+    // The feature flag is the per-environment rollout control, so it can veto the env switch.
+    expect(registeredToolNames).not.toContain('list-flows');
+    expect(registeredToolNames).not.toContain('get-flow');
+    expect(registeredToolNames).not.toContain('list-flow-runs');
+    expect(registeredToolNames).not.toContain('list-flow-tasks');
     expect(registeredToolNames).toContain('list-datasources');
   });
 

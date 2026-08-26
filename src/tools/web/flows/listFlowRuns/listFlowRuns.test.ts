@@ -15,6 +15,11 @@ const mocks = vi.hoisted(() => ({
   mockQueryFlow: vi.fn(),
   mockVersionIsAtLeast: vi.fn((_version: `${number}.${number}`): boolean => true),
   rejectFlowsRead: false,
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../../sdks/tableau/restApi.js', async () => {
@@ -82,6 +87,7 @@ const FLOW_WEBPAGE_URL = 'https://my.tableau.example.com/#/site/mysite/flows/961
 describe('listFlowRunsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
     mocks.mockVersionIsAtLeast.mockReturnValue(true);
     mocks.rejectFlowsRead = false;
     // Default: the failure-insight resolver finds a flow with a webpageUrl.
@@ -110,6 +116,13 @@ describe('listFlowRunsTool', () => {
     } as ReturnType<typeof getConfig>);
     const tool = getListFlowRunsTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
+  it('should be disabled when the flow-tools feature flag is OFF', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    const tool = getListFlowRunsTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(true);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('flow-tools');
   });
 
   it('lists flow runs with the default completedAt:desc sort and the server filter', async () => {

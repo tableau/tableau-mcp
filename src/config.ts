@@ -314,8 +314,9 @@ export class Config extends BaseConfig {
 
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
     this.adminToolsEnabled = adminToolsEnabled === 'true';
-    // Flow tools are gated off by default while flow rollouts are staged into
-    // production; set FLOW_TOOLS_ENABLED=true to register them.
+    // Flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks) are gated off by default
+    // while flow rollouts are staged into production. Registering them requires both
+    // FLOW_TOOLS_ENABLED=true and the flow-tools feature flag; either one off keeps them off.
     this.flowToolsEnabled = flowToolsEnabled === 'true';
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
