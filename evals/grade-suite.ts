@@ -23,6 +23,7 @@ import * as path from 'path';
 
 import { BirdGradeResult } from './lib/birdResult.js';
 import { captureExecError } from './lib/execError.js';
+import { mean, round, sum } from './lib/stats.js';
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 dotenv.config({ path: path.join(REPO_ROOT, '.env') });
@@ -223,10 +224,6 @@ async function main(): Promise<void> {
   const total = caseGrades.length;
   const passRate = total > 0 ? counts.pass / total : 0;
 
-  const mean = (values: Array<number>): number | null =>
-    values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null;
-  const sum = (values: Array<number>): number => values.reduce((a, b) => a + b, 0);
-
   const accuracyValues = caseGrades.map((g) => g.accuracy).filter((v): v is number => v != null);
   const wallValues = caseGrades.map((g) => g.wall_s).filter((v): v is number => v != null);
   const ttftValues = caseGrades.map((g) => g.ttft_s).filter((v): v is number => v != null);
@@ -250,19 +247,15 @@ async function main(): Promise<void> {
       error: counts.error,
       skip: counts.skip,
       grading_error: counts.grading_error,
-      pass_rate: Math.round(passRate * 1000) / 1000,
+      pass_rate: round(passRate, 3),
     },
     metrics: {
-      mean_accuracy: accuracyValues.length
-        ? Math.round((mean(accuracyValues) ?? 0) * 1000) / 1000
-        : null,
-      mean_wall_s: wallValues.length ? Math.round((mean(wallValues) ?? 0) * 10) / 10 : null,
-      mean_ttft_s: ttftValues.length ? Math.round((mean(ttftValues) ?? 0) * 10) / 10 : null,
-      total_cost_usd: costValues.length ? Math.round(sum(costValues) * 1e4) / 1e4 : null,
-      mean_cost_usd: costValues.length ? Math.round((mean(costValues) ?? 0) * 1e6) / 1e6 : null,
-      mean_tool_calls: toolCallValues.length
-        ? Math.round((mean(toolCallValues) ?? 0) * 10) / 10
-        : null,
+      mean_accuracy: round(mean(accuracyValues), 3),
+      mean_wall_s: round(mean(wallValues), 1),
+      mean_ttft_s: round(mean(ttftValues), 1),
+      total_cost_usd: costValues.length ? round(sum(costValues), 4) : null,
+      mean_cost_usd: round(mean(costValues), 6),
+      mean_tool_calls: round(mean(toolCallValues), 1),
       total_errors: errorValues.length ? sum(errorValues) : null,
     },
     cases: caseGrades,

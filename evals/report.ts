@@ -21,6 +21,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { BirdGradeResult } from './lib/birdResult.js';
+import { mean, rate, round, sum } from './lib/stats.js';
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const EVALS_DIR = path.join(REPO_ROOT, 'evals');
@@ -86,22 +87,6 @@ function walkBirdResults(dir: string): Array<BirdGradeResult> {
     }
   }
   return out;
-}
-
-function mean(values: Array<number>): number | null {
-  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
-}
-function sum(values: Array<number>): number {
-  return values.reduce((a, b) => a + b, 0);
-}
-function round(value: number | null, places: number): number | null {
-  if (value == null) return null;
-  const f = 10 ** places;
-  return Math.round(value * f) / f;
-}
-function rate(values: Array<boolean | null>): number | null {
-  const defined = values.filter((v): v is boolean => v != null);
-  return defined.length ? defined.filter(Boolean).length / defined.length : null;
 }
 
 function computeCohort(cohortKey: string, results: Array<BirdGradeResult>): CohortStats {
