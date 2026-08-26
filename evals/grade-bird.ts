@@ -41,12 +41,6 @@ function dateSlug(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-const runDirArg = process.argv[2];
-if (!runDirArg) {
-  console.error('Usage: npx tsx evals/grade-bird.ts <run-dir>');
-  process.exit(1);
-}
-const absRunDir = path.resolve(runDirArg);
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -151,6 +145,7 @@ function checkNumericMatch(
 // ─── LLM Judge (via GRADER_HARNESS) ────────────────────────────────────────────
 
 function runJudge(
+  runDir: string,
   birdCase: BirdCase,
   finalMessage: string,
 ): {
@@ -189,11 +184,11 @@ function runJudge(
     '{"correct": true|false, "score": 0.0-1.0, "reason": "one sentence"}',
   ].join('\n');
 
-  const judgeDir = path.join(absRunDir, 'judge');
+  const judgeDir = path.join(runDir, 'judge');
   fs.mkdirSync(judgeDir, { recursive: true });
 
   const ctx: HeadlessContext = {
-    runId: `${path.basename(absRunDir)}-judge`,
+    runId: `${path.basename(runDir)}-judge`,
     runDir: judgeDir,
     prompt,
     model: graderModel,
@@ -304,6 +299,7 @@ function loadGradingContext(runDir: string): GradingContext {
  * fields written to bird-result.json is unchanged.
  */
 function computeSignals(
+  runDir: string,
   result: BirdGradeResult,
   birdCase: BirdCase,
   summary: TraceSummary,
@@ -345,7 +341,7 @@ function computeSignals(
   if (!finalMessage) {
     result.details.llm_judge_error = 'No final message found in trace outputs.';
   } else {
-    const judge = runJudge(birdCase, finalMessage);
+    const judge = runJudge(runDir, birdCase, finalMessage);
     result.grader_harness = judge.harness;
     result.grader_model = judge.model;
     result.details.llm_judge = judge.result;
@@ -516,7 +512,7 @@ export async function gradeBirdCase(runDir: string): Promise<BirdGradeResult> {
   const finalMessage = summary.finalText;
   baseResult.details.final_message_preview = finalMessage.slice(0, 500);
 
-  computeSignals(baseResult, birdCase, summary, finalMessage);
+  computeSignals(runDir, baseResult, birdCase, summary, finalMessage);
 
   const { verdict, accuracy } = deriveVerdict(baseResult.signals, {
     agentExitCode: runMeta.agent_exit_code,
@@ -533,10 +529,18 @@ export async function gradeBirdCase(runDir: string): Promise<BirdGradeResult> {
 }
 
 async function main(): Promise<void> {
-  await gradeBirdCase(absRunDir);
+  const runDirArg = process.argv[2];
+  if (!runDirArg) {
+    console.error('Usage: npx tsx evals/grade-bird.ts <run-dir>');
+    process.exit(1);
+  }
+  await gradeBirdCase(path.resolve(runDirArg));
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+const isMainModule = path.resolve(process.argv[1] ?? '') === path.resolve(new URL(import.meta.url).pathname);
+if (isMainModule) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
+}
