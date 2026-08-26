@@ -23,6 +23,7 @@ import {
   AgentAdapter,
   AgentInvocation,
   buildEvalMetadata,
+  buildStandardMcpConfig,
   HeadlessContext,
   RunContext,
 } from './types.js';
@@ -61,20 +62,7 @@ export const cursorAdapter: AgentAdapter = {
     const logsDir = path.join(ctx.runDir, 'logs');
     fs.mkdirSync(cursorDir, { recursive: true });
     fs.mkdirSync(logsDir, { recursive: true });
-    const mcpConfig = {
-      mcpServers: {
-        tableau: {
-          command: 'node',
-          args: [ctx.mcpServerEntry],
-          env: {
-            ...ctx.mcpServerEnv,
-            TRANSPORT: 'stdio',
-            FILE_LOGGER_DIRECTORY: logsDir,
-            ENABLED_LOGGERS: 'fileLogger',
-          },
-        },
-      },
-    };
+    const mcpConfig = buildStandardMcpConfig(ctx);
     fs.writeFileSync(path.join(cursorDir, 'mcp.json'), JSON.stringify(mcpConfig, null, 2));
   },
 

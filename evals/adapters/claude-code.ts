@@ -18,6 +18,7 @@ import {
   AgentAdapter,
   AgentInvocation,
   buildEvalMetadata,
+  buildStandardMcpConfig,
   HeadlessContext,
   RunContext,
 } from './types.js';
@@ -51,20 +52,7 @@ export const claudeCodeAdapter: AgentAdapter = {
   writeConfig(ctx: RunContext) {
     const logsDir = path.join(ctx.runDir, 'logs');
     fs.mkdirSync(logsDir, { recursive: true });
-    const mcpConfig = {
-      mcpServers: {
-        tableau: {
-          command: 'node',
-          args: [ctx.mcpServerEntry],
-          env: {
-            ...ctx.mcpServerEnv,
-            TRANSPORT: 'stdio',
-            FILE_LOGGER_DIRECTORY: logsDir,
-            ENABLED_LOGGERS: 'fileLogger',
-          },
-        },
-      },
-    };
+    const mcpConfig = buildStandardMcpConfig(ctx);
     fs.writeFileSync(mcpConfigPath(ctx.runDir), JSON.stringify(mcpConfig, null, 2));
   },
 
