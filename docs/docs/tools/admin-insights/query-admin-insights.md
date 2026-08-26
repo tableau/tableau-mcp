@@ -231,6 +231,7 @@ Example result:
   "rows": [
     {
       "itemId": "1412202",
+      "itemLuid": "9c8f1e2a-4b3d-4c5e-8f6a-1b2c3d4e5f6a",
       "itemType": "Workbook",
       "itemName": "World Indicators",
       "project": "Samples",

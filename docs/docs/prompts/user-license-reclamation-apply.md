@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 ---
 
 # User License Reclamation — Apply
@@ -9,7 +9,7 @@ sidebar_position: 5
 A guided, **destructive** Tableau Cloud admin workflow that identifies inactive licensed users, surfaces their owned-content counts for review, and — only after explicit human approval — downgrades approved users to **Unlicensed** via `update-user`.
 
 :::warning[Admin Only · Destructive]
-This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` feature flag. It drives the destructive [`update-user`](../tools/users/update-user.md) tool. The user inventory, activity analysis, and ownership inventory steps are **read-only**: no user is downgraded until the admin approves a specific user set at the required human-in-the-loop confirmation break.
+This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable. It drives the destructive [`update-user`](../tools/users/update-user.md) tool. The user inventory, activity analysis, and ownership inventory steps are **read-only**: no user is downgraded until the admin approves a specific user set at the required human-in-the-loop confirmation break.
 :::
 
 ## Workflow
