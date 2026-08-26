@@ -22,6 +22,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { BirdGradeResult } from './lib/birdResult.js';
+import { captureExecError } from './lib/execError.js';
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 dotenv.config({ path: path.join(REPO_ROOT, '.env') });
@@ -163,8 +164,8 @@ async function main(): Promise<void> {
         gradingError = 'bird-result.json not found after grading';
       }
     } catch (err: unknown) {
-      const e = err as { message?: string; stderr?: Buffer };
-      gradingError = e.stderr?.toString().trim() || e.message || 'unknown grading error';
+      const e = captureExecError(err);
+      gradingError = e.stderr?.trim() || e.message || 'unknown grading error';
     }
 
     const verdict = gradeResult?.verdict ?? 'grading_error';

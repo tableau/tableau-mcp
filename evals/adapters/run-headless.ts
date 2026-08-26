@@ -5,6 +5,7 @@
 
 import { execFileSync } from 'child_process';
 
+import { captureExecError } from '../lib/execError.js';
 import { AgentAdapter, HeadlessContext } from './types.js';
 
 export type HeadlessRunResult = {
@@ -27,10 +28,10 @@ export function runHeadless(adapter: AgentAdapter, ctx: HeadlessContext): Headle
       maxBuffer: 25 * 1024 * 1024,
     }).toString();
   } catch (error: unknown) {
-    const e = error as { status?: number; stdout?: Buffer; stderr?: Buffer; message?: string };
-    exitCode = e.status ?? 1;
-    stdout = e.stdout?.toString() ?? '';
-    stderr = [e.message, e.stderr?.toString()].filter(Boolean).join('\n');
+    const e = captureExecError(error);
+    exitCode = e.exitCode ?? 1;
+    stdout = e.stdout ?? '';
+    stderr = [e.message, e.stderr].filter(Boolean).join('\n');
   }
   return { text: adapter.extractFinalText(stdout), exitCode, stdout, stderr };
 }
