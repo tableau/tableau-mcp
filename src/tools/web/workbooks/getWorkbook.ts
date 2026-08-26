@@ -122,18 +122,11 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                 }
               }
 
-              // Dedupe by luid. Published and embedded LUIDs are distinct; this mainly guards
-              // against the same embedded datasource appearing on multiple connections.
-              const upstreamByLuid = new Map<string, LineageContent>();
-              for (const ds of [...published, ...embedded]) {
-                if (!upstreamByLuid.has(ds.luid)) {
-                  upstreamByLuid.set(ds.luid, ds);
-                }
-              }
-
+              // Published and embedded LUIDs are distinct (globally-unique GUIDs), so no
+              // cross-list dedup is needed; toEmbeddedLineageContents already dedupes embedded.
               return mergeWorkbookLineage(
                 [workbook],
-                new Map([[workbook.id, [...upstreamByLuid.values()]]]),
+                new Map([[workbook.id, [...published, ...embedded]]]),
                 configWithOverrides.boundedContext.datasourceIds,
               )[0];
             },

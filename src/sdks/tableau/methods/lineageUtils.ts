@@ -331,19 +331,22 @@ function toGraphqlStringArray(values: Array<string>): string {
   return `[${values.map((value) => JSON.stringify(value)).join(', ')}]`;
 }
 
-// A workbook connection's datasource.id is the VDS-queryable embedded datasource LUID.
-// name is optional on the REST response, so fall back to the luid (the shared shape requires it).
+// datasource.id is the VDS-queryable embedded LUID. Multi-connection datasources repeat it
+// across rows, so dedupe by luid. name is optional on the wire; fall back to the luid.
 export function toEmbeddedLineageContents(
   connections: Array<WorkbookConnection>,
 ): Array<LineageContent> {
-  return connections
-    .map((connection) => connection.datasource)
-    .filter((datasource): datasource is NonNullable<typeof datasource> => !!datasource)
-    .map((datasource) => ({
-      luid: datasource.id,
-      name: datasource.name ?? datasource.id,
-      datasourceType: 'embedded' as const,
-    }));
+  const byLuid = new Map<string, LineageContent>();
+  for (const { datasource } of connections) {
+    if (datasource && !byLuid.has(datasource.id)) {
+      byLuid.set(datasource.id, {
+        luid: datasource.id,
+        name: datasource.name ?? datasource.id,
+        datasourceType: 'embedded',
+      });
+    }
+  }
+  return [...byLuid.values()];
 }
 
 function normalizeLineageContents(
