@@ -20,6 +20,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { BirdGradeResult } from './lib/birdResult.js';
+
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const EVALS_DIR = path.join(REPO_ROOT, 'evals');
 const GRADES_DIR = path.join(EVALS_DIR, 'grades');
@@ -33,36 +35,6 @@ function getArgValue(flag: string): string | undefined {
 const sinceFilter = getArgValue('--since');
 const harnessFilter = getArgValue('--harness');
 const modelFilter = getArgValue('--model');
-
-type BirdResult = {
-  run_id: string;
-  eval_run_id?: string;
-  question_id: number;
-  difficulty: string;
-  graded_at: string;
-  harness: string | null;
-  model: string | null;
-  model_normalized: string | null;
-  wall_s: number | null;
-  ttft_s: number | null;
-  cost_usd: number | null;
-  tokens: {
-    input_tokens: number | null;
-    output_tokens: number | null;
-    total_tokens: number | null;
-  };
-  tool_calls: number;
-  llm_calls?: number;
-  error_count?: number;
-  signals: {
-    numeric_match: boolean | null;
-    semantic_match: number | null;
-    columns_match: boolean | null;
-    filters_match: boolean | null;
-  };
-  accuracy: number | null;
-  verdict: string;
-};
 
 type CohortStats = {
   cohort: string;
@@ -94,8 +66,8 @@ type CohortStats = {
 
 // ─── Collection ─────────────────────────────────────────────────────────────
 
-function walkBirdResults(dir: string): Array<BirdResult> {
-  const out: Array<BirdResult> = [];
+function walkBirdResults(dir: string): Array<BirdGradeResult> {
+  const out: Array<BirdGradeResult> = [];
   if (!fs.existsSync(dir)) return out;
   const stack = [dir];
   while (stack.length) {
@@ -106,7 +78,7 @@ function walkBirdResults(dir: string): Array<BirdResult> {
         stack.push(full);
       } else if (entry.name === 'bird-result.json') {
         try {
-          out.push(JSON.parse(fs.readFileSync(full, 'utf-8')) as BirdResult);
+          out.push(JSON.parse(fs.readFileSync(full, 'utf-8')) as BirdGradeResult);
         } catch {
           // Skip malformed files.
         }
@@ -132,7 +104,7 @@ function rate(values: Array<boolean | null>): number | null {
   return defined.length ? defined.filter(Boolean).length / defined.length : null;
 }
 
-function computeCohort(cohortKey: string, results: Array<BirdResult>): CohortStats {
+function computeCohort(cohortKey: string, results: Array<BirdGradeResult>): CohortStats {
   const [harness, model] = cohortKey.split('||');
   const verdicts = results.map((r) => r.verdict);
   const countVerdict = (v: string): number => verdicts.filter((x) => x === v).length;
@@ -268,7 +240,7 @@ function main(): void {
     process.exit(1);
   }
 
-  const cohortMap = new Map<string, Array<BirdResult>>();
+  const cohortMap = new Map<string, Array<BirdGradeResult>>();
   for (const r of results) {
     const key = `${r.harness ?? 'unknown'}||${r.model_normalized ?? r.model ?? 'unknown'}`;
     const bucket = cohortMap.get(key) ?? [];

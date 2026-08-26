@@ -21,6 +21,8 @@ import dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { BirdGradeResult } from './lib/birdResult.js';
+
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 dotenv.config({ path: path.join(REPO_ROOT, '.env') });
 
@@ -56,44 +58,11 @@ type SuiteSummary = {
   }>;
 };
 
-type BirdResult = {
-  run_id: string;
-  eval_run_id: string;
-  question_id: number;
-  difficulty: string;
-  graded_at: string;
-  harness: string | null;
-  model: string | null;
-  model_normalized: string | null;
-  wall_s: number | null;
-  ttft_s: number | null;
-  cost_usd: number | null;
-  tokens: {
-    input_tokens: number | null;
-    output_tokens: number | null;
-    cache_creation_tokens: number | null;
-    cache_read_tokens: number | null;
-    total_tokens: number | null;
-  };
-  tool_calls: number;
-  tools_used: Array<string>;
-  llm_calls: number;
-  error_count: number;
-  signals: {
-    numeric_match: boolean | null;
-    semantic_match: number | null;
-    columns_match: boolean | null;
-    filters_match: boolean | null;
-  };
-  accuracy: number | null;
-  verdict: 'pass' | 'partial' | 'fail' | 'error' | 'skip' | 'grading_error';
-};
-
 type CaseGrade = {
   question_id: number;
   difficulty: string;
   run_id: string;
-  verdict: BirdResult['verdict'];
+  verdict: BirdGradeResult['verdict'];
   numeric_match: boolean | null;
   semantic_match: number | null;
   columns_match: boolean | null;
@@ -109,7 +78,7 @@ type CaseGrade = {
   tools_used: Array<string>;
   llm_calls: number | null;
   error_count: number | null;
-  tokens: BirdResult['tokens'] | null;
+  tokens: BirdGradeResult['tokens'] | null;
   grade_file: string | null;
   grading_error: string | null;
 };
@@ -179,7 +148,7 @@ async function main(): Promise<void> {
     // Derive where grade-bird.ts will write its output
     const gradeFile = path.join(GRADES_DIR, today, c.run_id, 'bird-result.json');
 
-    let gradeResult: BirdResult | null = null;
+    let gradeResult: BirdGradeResult | null = null;
     let gradingError: string | null = null;
 
     try {
@@ -189,7 +158,7 @@ async function main(): Promise<void> {
         stdio: 'pipe',
       });
       if (fs.existsSync(gradeFile)) {
-        gradeResult = JSON.parse(fs.readFileSync(gradeFile, 'utf-8')) as BirdResult;
+        gradeResult = JSON.parse(fs.readFileSync(gradeFile, 'utf-8')) as BirdGradeResult;
       } else {
         gradingError = 'bird-result.json not found after grading';
       }
