@@ -7,7 +7,7 @@ sidebar_position: 1
 Retrieves a list of background jobs for the Tableau site. Each job represents a background task such as an extract refresh, subscription delivery, flow run, or other asynchronous operations.
 
 :::warning[Admin Only]
-This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environmnet variable to be enabled.
+This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
 :::
 
 ## APIs called
@@ -25,7 +25,9 @@ Use this tool when you need to:
 
 ## Required permissions
 
-- **Tableau Cloud**: Requires `tableau:jobs:read` OAuth scope (API 3.27+)
+- **Tableau Cloud**: Requires the `tableau:jobs:read` OAuth scope (API 3.27+) for the job query, plus
+  `tableau:users:read`, which the tool also requests because it calls the site-role admin check
+  (`assertAdmin`) before querying jobs — not for the job data itself.
 - **Site Role**: Must be one of:
   - SiteAdministratorCreator
   - SiteAdministratorExplorer

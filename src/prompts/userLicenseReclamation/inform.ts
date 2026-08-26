@@ -54,7 +54,8 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
     'downgrade to Unlicensed. Paginates the `list-users` tool with role/lastLogin filters, ' +
     'cross-references activity via `query-admin-insights` (kinds "ts-events" for content-access ' +
     'events and "ts-users" for Tableau Desktop/Prep last-access dates), and renders a candidate ' +
-    'list. Read-only — no user modifications are performed.',
+    'list. Read-only — no user modifications are performed. ' +
+    'Consider for general admin/site-health and cost/license questions.',
   argsSchema,
   disabled: (config) => !config.adminToolsEnabled,
   callback: (args) => {

@@ -119,6 +119,8 @@ Dispatches on \`kind\`:
   \`itemTypes\`; do NOT pass \`query\` or \`limit\`.
 
 Datasource LUIDs are resolved automatically; callers do not pass \`datasourceLuid\`.
+
+Consider this for general admin/site-health, governance, cleanup, and cost/license questions.
 `.trim(),
     paramsSchema,
     annotations: {

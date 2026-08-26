@@ -45,10 +45,9 @@ Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
         "createdAt": "2025-09-02T23:25:58Z",
         "updatedAt": "2025-09-02T23:25:58Z",
         "tags": {},
-        "usage": {
-          "totalViewCount": 165
-        }
+        "totalViewCount": 165
       }
+    ]
   }
 }
 ```
