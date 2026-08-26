@@ -8,7 +8,8 @@ import {
   joinS3Prefix,
 } from '../s3Client.js';
 
-export const MAX_STAGED_WORKBOOK_BYTES = 100 * 1024 * 1024;
+// Intentionally decimal GB (not GiB) to leave headroom under S3's 5,368,709,120-byte single-PUT ceiling.
+export const MAX_STAGED_WORKBOOK_BYTES = 5 * 1000 * 1000 * 1000;
 export const WORKBOOK_UPLOAD_PREFIX_SEGMENT = 'workbook-uploads';
 
 export type WorkbookFileType = 'twb' | 'twbx';
