@@ -194,7 +194,7 @@ When the question could be answered by multiple chart types, prefer in this orde
 ## Source and Confidence
 
 - Source/evidence type: internal-doc
-- Source: prior Tableau authoring knowledge base (mbradbourne), with workbook-audit and logarithmic-axis guidance from Will Perkins in [tableau/agent-to-tableau-desktop#93](https://github.com/tableau/agent-to-tableau-desktop/pull/93), commit [9eb2696](https://github.com/tableau/agent-to-tableau-desktop/commit/9eb2696948dcc376922c78388baec537e3880f9a)
+- Source: prior Tableau authoring knowledge base (mbradbourne), with workbook-audit and logarithmic-axis guidance from Will Perkins
 - Customer-identifying details removed: yes
 - Confidence: draft
 - Last reviewed: 2026-08-27
