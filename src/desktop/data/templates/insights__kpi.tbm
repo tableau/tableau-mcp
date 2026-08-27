@@ -1,0 +1,109 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!-- Generic Insights POPC KPI, visually matched to KPI_Public.tbm. The donor's
+     hospital datasource, extract, local paths, patient fields, and month parameter
+     are intentionally absent. Values bind to Tableau-authored period calculations. -->
+<bookmark version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user' source-platform='mac'>
+  <window class='worksheet' name='insights__kpi'>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'><card type='columns' /></strip>
+        <strip size='2147483647'><card type='rows' /></strip>
+        <strip size='31'><card type='title' /></strip>
+      </edge>
+    </cards>
+    <simple-id uuid='{00000000-0000-0000-0000-000000000002}' />
+  </window>
+  <table>
+    <view>
+      <datasources><datasource caption='Sample - Superstore' name='Sample - Superstore' /></datasources>
+      <datasource-dependencies datasource='Sample - Superstore'>
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column datatype='integer' name='[Quantity]' role='measure' type='quantitative' />
+        <column datatype='real' name='[Discount]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Region]' role='dimension' type='nominal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Quantity]' derivation='Sum' name='[sum:Quantity:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Discount]' derivation='Sum' name='[sum:Discount:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+        <format attr='display-field-labels' scope='cols' value='false' />
+        <format attr='text-format' field='[Sample - Superstore].[sum:Profit:qk]' value='{{VALUE_FORMAT}}' />
+        <format attr='text-format' field='[Sample - Superstore].[sum:Sales:qk]' value='n#,##0.##;-#,##0.##' />
+        <format attr='text-format' field='[Sample - Superstore].[sum:Quantity:qk]' value='n+#,##0.##;-#,##0.##;0' />
+        <format attr='text-format' field='[Sample - Superstore].[sum:Discount:qk]' value='p+0.0%;-0.0%;0.0%' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='display' field='[Sample - Superstore].[none:Region:nk]' value='false' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view><breakdown value='auto' /></view>
+        <mark class='Text' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <text column='[Sample - Superstore].[sum:Profit:qk]' />
+          <text column='[Sample - Superstore].[sum:Sales:qk]' />
+          <text column='[Sample - Superstore].[sum:Quantity:qk]' />
+          <text column='[Sample - Superstore].[sum:Discount:qk]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run bold='true' fontcolor='#208591' fontname='Tableau Bold' fontsize='12'>{{TARGET_PERIOD_CONTEXT}}</run>
+            <run>Æ&#10;&#10;</run>
+            <run fontcolor='#898989'>{{METRIC_NAME}} | </run>
+            <run bold='true' fontcolor='#000000'>&lt;[Sample - Superstore].[sum:Profit:qk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontcolor='#898989'>CHANGE FROM PREVIOUS PERIOD | </run>
+            <run bold='true' fontcolor='{{CHANGE_COLOR}}'>{{DIRECTION_SYMBOL}} </run>
+            <run bold='true' fontcolor='#000000'>&lt;[Sample - Superstore].[sum:Discount:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <customized-label>
+          <formatted-text>
+            <run fontcolor='#898989' fontsize='12'>{{METRIC_NAME}}</run>
+            <run>Æ&#10;</run>
+            <run bold='true' fontname='Tableau Medium' fontsize='24'>&lt;[Sample - Superstore].[sum:Profit:qk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontcolor='{{CHANGE_COLOR}}'>{{DIRECTION_SYMBOL}}</run>
+            <run>Æ </run>
+            <run bold='true'>&lt;[Sample - Superstore].[sum:Discount:qk]&gt;</run>
+            <run>Æ&#10;</run>
+          </formatted-text>
+        </customized-label>
+        <style>
+          <style-rule element='cell'>
+            <format attr='text-align' value='left' />
+            <format attr='vertical-align' value='center' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-labels-cull' value='true' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows />
+    <cols>[Sample - Superstore].[none:Region:nk]</cols>
+  </table>
+</bookmark>

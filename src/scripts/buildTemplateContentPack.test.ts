@@ -362,8 +362,8 @@ describe('buildTemplateContentPack', () => {
         }
       }
 
-      // 134 base + the 2 insight templates (insights_bar_chart, insights_line_chart).
-      expect(templates).toHaveLength(136);
+      // 134 base + 3 active private insight templates + 1 retained obsolete KPI.
+      expect(templates).toHaveLength(138);
       expect(/\bapi-key\s*=\s*(['"])[^'"]+\1/i.test(corpus)).toBe(false);
       expect(absolutePathAttributes).toBe(0);
       expect(credentialAttributes).toBe(0);

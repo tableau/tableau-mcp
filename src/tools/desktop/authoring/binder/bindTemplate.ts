@@ -104,6 +104,7 @@ import {
   type AuthorCalcInput,
   authorCalculationsInWorkbook,
   datatypeSchema,
+  prepareCalculationsInWorkbook,
   roleSchema,
 } from '../datasource/authorCalcCore.js';
 // The nested `proposal` mirrors the binder library's public data contract
@@ -2038,6 +2039,8 @@ async function performAutoApply({
   templateSnapshot,
   appliedDefault,
   skipValidation,
+  hostBaselineWorkbookXml,
+  atomicCalcCaptions,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -2052,6 +2055,8 @@ async function performAutoApply({
   templateSnapshot: TemplateRuntimeSnapshot;
   appliedDefault?: AppliedDefault;
   skipValidation?: boolean;
+  hostBaselineWorkbookXml?: string;
+  atomicCalcCaptions?: string[];
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
@@ -2149,10 +2154,11 @@ async function performAutoApply({
 
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
   const applyStart = Date.now();
+  const applyBaselineXml = hostBaselineWorkbookXml ?? workbookXml;
   const applyResult = await loadWorkbookXml({
     xml: appliedWorkbookXml,
-    baselineXml: workbookXml,
-    expectedWorkbookXml: workbookXml,
+    baselineXml: applyBaselineXml,
+    expectedWorkbookXml: applyBaselineXml,
     focus: { navigate: 'artifact', sheetName: literalTitle },
     executor,
     signal,
@@ -2216,7 +2222,11 @@ async function performAutoApply({
   // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
-  const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
+  const successfulCalcCaptions = [...(base.authored_calcs ?? []), ...(atomicCalcCaptions ?? [])];
+  const calcPrefix = renderAuthoredCalcPrefix(
+    successfulCalcCaptions.length > 0 ? successfulCalcCaptions : undefined,
+    res.status,
+  );
   const receiptText = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
   // Blake's spiral fix: the applied:true receipt is TERMINAL unless a genuine, named re-bind
   // slot is still unfilled (the m1 waterfall case). On INCOMPLETE we keep today's steer and
@@ -2280,7 +2290,7 @@ async function performAutoApply({
   }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
-    ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
+    ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
     guidance,
     ...(appliedDefault ? { applied_default: appliedDefault } : {}),
@@ -2309,8 +2319,8 @@ async function performAutoApply({
               did: [
                 `applied template "${args.template_name}" as sheet "${literalTitle}"; Desktop accepted the document`,
                 `phases: bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms`,
-                ...(base.authored_calcs && base.authored_calcs.length > 0
-                  ? [`authored calcs: ${base.authored_calcs.join(', ')}`]
+                ...(successfulCalcCaptions.length > 0
+                  ? [`authored calcs: ${successfulCalcCaptions.join(', ')}`]
                   : []),
                 ...(encodingAnalysisComplete
                   ? ['bound every encoding named in the binder encoding report']
@@ -2576,6 +2586,13 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+          const atomicCalcApply =
+            extra.config.allowSkipValidation === true &&
+            skip_validation === true &&
+            auto_apply === true &&
+            proposal?.template === 'insights__kpi' &&
+            calcs !== undefined &&
+            calcs.length > 0;
           const askKey = normalizeAskForMatch(ask);
           const currentProposalSignature =
             proposal !== undefined ? proposalSignature(proposal as BindingProposal) : undefined;
@@ -2686,6 +2703,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new DesktopCommandExecutionError(xmlResult.error).toErr();
           }
           let workbookXml = xmlResult.value;
+          const hostBaselineWorkbookXml = workbookXml;
           let baselineSchemaSummary: SchemaSummary | undefined;
           let baselineFilterIntent: ExactFilterIntent | undefined;
           if (priorRecovery === undefined) {
@@ -2712,6 +2730,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
           }
           let authoredCalcCaptions: string[] = [];
+          let atomicCalcCaptions: string[] = [];
           if (calcs && calcs.length > 0) {
             const percentAsk = asksForPercent(ask);
             const authoredCalcInputs = (calcs as AuthorCalcInput[]).map((calc) =>
@@ -2719,19 +2738,33 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 ? { ...calc, defaultFormat: 'p0%' as const }
                 : calc,
             );
-            const authored = await authorCalculationsInWorkbook({
-              workbookXml,
-              calcs: authoredCalcInputs,
-              datasource,
-              executor,
-              signal: extra.signal,
-              resolveLooseReferences: true,
-            });
-            if (authored.isErr()) {
-              return authored.error.toErr();
+            if (atomicCalcApply) {
+              const prepared = prepareCalculationsInWorkbook({
+                workbookXml,
+                calcs: authoredCalcInputs,
+                datasource,
+                resolveLooseReferences: true,
+              });
+              if (prepared.isErr()) {
+                return prepared.error.toErr();
+              }
+              workbookXml = prepared.value.workbookXml;
+              atomicCalcCaptions = prepared.value.authoredCalcs.map((calc) => calc.caption);
+            } else {
+              const authored = await authorCalculationsInWorkbook({
+                workbookXml,
+                calcs: authoredCalcInputs,
+                datasource,
+                executor,
+                signal: extra.signal,
+                resolveLooseReferences: true,
+              });
+              if (authored.isErr()) {
+                return authored.error.toErr();
+              }
+              workbookXml = authored.value.workbookXml;
+              authoredCalcCaptions = authored.value.authoredCalcs.map((calc) => calc.caption);
             }
-            workbookXml = authored.value.workbookXml;
-            authoredCalcCaptions = authored.value.authoredCalcs.map((calc) => calc.caption);
           }
 
           const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots({
@@ -2994,6 +3027,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new Ok(base);
           }
 
+          if (atomicCalcApply && res.args.template_name !== 'insights__kpi') {
+            return new ArgsValidationError(
+              'trusted Insights KPI bind resolved to a different template',
+            ).toErr();
+          }
+
           if (!canAutoApply || selectedTemplate === undefined) {
             if (isStructuredCorrectionCall) {
               recordBindRecoveryAttemptFailOpen({
@@ -3025,7 +3064,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           // target_worksheet is an explicit instruction to rewrite that sheet (a reset of
           // hand edits is legitimate) and always applies.
           const sheetSignature = appliedSheetSignature(res.args);
-          if (target_worksheet === undefined) {
+          if (target_worksheet === undefined && atomicCalcCaptions.length === 0) {
             const remembered = rememberedSheetStillPresent({
               session: resolvedSession,
               signature: sheetSignature,
@@ -3049,6 +3088,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             schemaSummary,
             templateSnapshot: selectedTemplate.snapshot,
             appliedDefault,
+            hostBaselineWorkbookXml: atomicCalcApply ? hostBaselineWorkbookXml : undefined,
+            atomicCalcCaptions,
             // Honor skip_validation only for a server-trusted caller (config gate set by the
             // deterministic spawner). An untrusted LLM turn that passes the flag gets full
             // validation, not a bypass — the param alone cannot skip the preflight.

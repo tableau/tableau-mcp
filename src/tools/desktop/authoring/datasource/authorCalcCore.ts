@@ -73,7 +73,7 @@ export async function authorCalculationsInWorkbook({
   labelErrors?: boolean;
   resolveLooseReferences?: boolean;
 } & WithExecutorAndAbortSignal): Promise<Result<AuthorCalculationsResult, AuthorCalcError>> {
-  const prepared = prepareCalculationBatch({
+  const prepared = prepareCalculationsInWorkbook({
     workbookXml,
     calcs,
     datasource,
@@ -87,7 +87,7 @@ export async function authorCalculationsInWorkbook({
   // A calc is not something the user looks at, and this helper also runs as an early leg of
   // bind-template, where the apply that follows names the chart it built.
   const outcome = await applyAndVerify({
-    xml: prepared.value.editedXml,
+    xml: prepared.value.workbookXml,
     baselineXml: workbookXml,
     settled: (xml) =>
       prepared.value.authoredCalcs.every((calc) =>
@@ -106,6 +106,41 @@ export async function authorCalculationsInWorkbook({
   }
 
   return new Ok({ workbookXml: outcome.workbookXml, authoredCalcs: prepared.value.authoredCalcs });
+}
+
+/**
+ * Pure calculation-authoring seam for a trusted caller that composes datasource
+ * calculations and a worksheet into one workbook mutation. The ordinary
+ * author-calc path still uses {@link authorCalculationsInWorkbook}, which applies
+ * and verifies immediately.
+ */
+export function prepareCalculationsInWorkbook({
+  workbookXml,
+  calcs,
+  datasource,
+  labelErrors = true,
+  resolveLooseReferences = false,
+}: {
+  workbookXml: string;
+  calcs: AuthorCalcInput[];
+  datasource?: string;
+  labelErrors?: boolean;
+  resolveLooseReferences?: boolean;
+}): Result<AuthorCalculationsResult, ArgsValidationError> {
+  const prepared = prepareCalculationBatch({
+    workbookXml,
+    calcs,
+    datasource,
+    labelErrors,
+    resolveLooseReferences,
+  });
+  if (prepared.isErr()) {
+    return prepared;
+  }
+  return new Ok({
+    workbookXml: prepared.value.editedXml,
+    authoredCalcs: prepared.value.authoredCalcs,
+  });
 }
 
 function prepareCalculationBatch({

@@ -3292,6 +3292,8 @@ async function getToolResult({
   target_worksheet,
   datasource,
   calcs,
+  skip_validation,
+  allowSkipValidation,
   customSignal,
   getExecutor,
 }: {
@@ -3310,6 +3312,8 @@ async function getToolResult({
     datatype?: string;
     role?: string;
   }>;
+  skip_validation?: boolean;
+  allowSkipValidation?: boolean;
   customSignal?: AbortSignal;
   getExecutor?: TableauDesktopToolContext['getExecutor'];
 }): Promise<CallToolResult> {
@@ -3318,8 +3322,13 @@ async function getToolResult({
 
   const mockExecutor: TableauDesktopToolContext['getExecutor'] =
     getExecutor ?? vi.fn().mockResolvedValue({});
+  const requestExtra = getMockRequestHandlerExtra();
   const extra = {
-    ...getMockRequestHandlerExtra(),
+    ...requestExtra,
+    config: {
+      ...requestExtra.config,
+      ...(allowSkipValidation !== undefined ? { allowSkipValidation } : {}),
+    },
     getExecutor: mockExecutor,
     ...(customSignal && { signal: customSignal }),
   };
@@ -3334,6 +3343,7 @@ async function getToolResult({
       target_worksheet,
       datasource,
       calcs,
+      skip_validation,
     } as any,
     extra,
   );
@@ -4860,6 +4870,97 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
       expect.objectContaining({ workbookXml: CALC_READBACK_XML }),
     );
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it('prepares Insights KPI calcs and auto-applies the workbook once', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const insightBoundResult: BinderResult = {
+      ...boundResult,
+      args: {
+        ...boundResult.args,
+        template_name: 'insights__kpi',
+        title: 'Period change — Sales',
+      },
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: insightBoundResult,
+      workbookReads: [CALC_BASE_XML],
+    });
+    vi.mocked(buildInjectedWorkbookXml).mockImplementation(({ workbookXml }) => ({
+      ok: true,
+      xml: workbookXml.replace(
+        '</worksheets>',
+        "<worksheet name='Period change — Sales' /></worksheets>",
+      ),
+    }));
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Period change — Sales',
+      proposal: {
+        ...sampleProposal,
+        template: 'insights__kpi',
+        title: 'Period change — Sales',
+      },
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+      auto_apply: true,
+      skip_validation: true,
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.authored_calcs).toEqual(['Margin']);
+    expect(body.guidance).toContain('Calcs authored: Margin');
+    expect(binderModule.bindTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ workbookXml: expect.stringContaining("caption='Margin'") }),
+    );
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
+      expect.objectContaining({ workbookXml: expect.stringContaining("caption='Margin'") }),
+    );
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).toHaveBeenCalledWith(
+      expect.stringMatching(/caption='Margin'[\s\S]*worksheet name='Period change — Sales'/),
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('keeps untrusted Insights KPI calc application on the ordinary two-apply path', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const insightBoundResult: BinderResult = {
+      ...boundResult,
+      args: {
+        ...boundResult.args,
+        template_name: 'insights__kpi',
+        title: 'Period change — Sales',
+      },
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: insightBoundResult,
+      workbookReads: [CALC_BASE_XML, CALC_READBACK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Period change — Sales',
+      proposal: {
+        ...sampleProposal,
+        template: 'insights__kpi',
+        title: 'Period change — Sales',
+      },
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+      auto_apply: true,
+      skip_validation: true,
+      allowSkipValidation: false,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
   });
 

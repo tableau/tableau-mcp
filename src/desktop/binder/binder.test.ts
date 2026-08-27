@@ -154,20 +154,22 @@ function scatterProposal(): BindingProposal {
   };
 }
 
-it('binds explicit Insights bar and line proposals through the non-discovery catalog', async () => {
+it('binds explicit Insights bar, line, and KPI proposals through the non-discovery catalog', async () => {
   expect(allDescriptors.has('insights__bar_chart')).toBe(false);
   expect(allDescriptors.has('insights__line_chart')).toBe(false);
+  expect(allDescriptors.has('insights__kpi')).toBe(false);
   const insightsProjection = createPuppetCompatibilityProjection(
     loadRuntimeTemplateCatalogSnapshots({
       automaticOnly: true,
       includeExternal: false,
-      additionalTemplates: ['insights__bar_chart', 'insights__line_chart'],
+      additionalTemplates: ['insights__bar_chart', 'insights__line_chart', 'insights__kpi'],
     }),
   );
   const cases: Array<{
     ask: string;
     proposal: BindingProposal;
     expectedMapping: Record<string, string>;
+    expectedParameters?: Record<string, string>;
   }> = [
     {
       ask: 'bar chart of ARR by Product filtered by Close Date',
@@ -205,9 +207,48 @@ it('binds explicit Insights bar and line proposals through the non-discovery cat
         '{{field_base_2}}@none': '[Metrics].[none:Close Date:qk]',
       },
     },
+    {
+      ask: 'show ARR for the current period as a KPI',
+      proposal: {
+        template: 'insights__kpi',
+        title: 'Period change — ARR',
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Product' },
+          { slot_id: 'field_base_2', field: 'ARR' },
+          { slot_id: 'field_base_3', field: 'ARR' },
+          { slot_id: 'field_base_4', field: 'ARR' },
+          { slot_id: 'field_base_5', field: 'ARR' },
+        ],
+        confidence: 1,
+        template_parameters: {
+          METRIC_NAME: 'ARR',
+          TARGET_PERIOD_CONTEXT: 'Aug 2026 · Aug 1 – 31, 2026',
+          COMPARISON_PERIOD_CONTEXT: 'Jul 2026 · Jul 1 – 31, 2026',
+          DIRECTION_SYMBOL: '▲',
+          CHANGE_COLOR: '#2E844A',
+          VALUE_FORMAT: 'n#,##0,.0K;-#,##0,.0K',
+        },
+      },
+      expectedMapping: {
+        '{{field_base_1}}': '[Metrics].[none:Product:nk]',
+        '{{field_base_2}}': '[Metrics].[sum:ARR:qk]',
+        '{{field_base_3}}': '[Metrics].[sum:ARR:qk]',
+        '{{field_base_4}}': '[Metrics].[sum:ARR:qk]',
+        '{{field_base_5}}': '[Metrics].[sum:ARR:qk]',
+      },
+      expectedParameters: {
+        DATASOURCE: 'Metrics',
+        METRIC_NAME: 'ARR',
+        TARGET_PERIOD_CONTEXT: 'Aug 2026 · Aug 1 – 31, 2026',
+        COMPARISON_PERIOD_CONTEXT: 'Jul 2026 · Jul 1 – 31, 2026',
+        DIRECTION_SYMBOL: '▲',
+        CHANGE_COLOR: '#2E844A',
+        VALUE_FORMAT: 'n#,##0,.0K;-#,##0,.0K',
+      },
+    },
   ];
 
-  for (const { ask, proposal, expectedMapping } of cases) {
+  for (const { ask, proposal, expectedMapping, expectedParameters } of cases) {
     expect(insightsProjection.descriptors.has(proposal.template)).toBe(false);
     expect(insightsProjection.allDescriptors.has(proposal.template)).toBe(true);
     const result = await bindTemplate({
@@ -221,6 +262,9 @@ it('binds explicit Insights bar and line proposals through the non-discovery cat
     if (result.status !== 'bound') continue;
     expect(result.args.template_name).toBe(proposal.template);
     expect(result.args.field_mapping).toEqual(expectedMapping);
+    if (expectedParameters !== undefined) {
+      expect(result.args.template_parameters).toEqual(expectedParameters);
+    }
   }
 });
 
