@@ -5,9 +5,24 @@ import {
   getWorkbookLineageByLuid,
   mergeViewLineage,
   mergeWorkbookLineage,
+  toEmbeddedLineageContents,
 } from './lineageUtils.js';
 
 describe('lineageUtils', () => {
+  it('maps workbook connections to embedded lineage, deduping multi-connection datasources', () => {
+    const result = toEmbeddedLineageContents([
+      { id: 'conn-1', datasource: { id: 'emb-1', name: 'Embedded DS' } },
+      { id: 'conn-2', datasource: { id: 'emb-1', name: 'Embedded DS' } }, // same ds, second connection
+      { id: 'conn-3', datasource: { id: 'emb-2' } }, // missing name -> luid fallback
+      { id: 'conn-4' }, // no datasource -> skipped
+    ]);
+
+    expect(result).toEqual([
+      { luid: 'emb-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      { luid: 'emb-2', name: 'emb-2', datasourceType: 'embedded' },
+    ]);
+  });
+
   it('parses and merges upstream workbook lineage', () => {
     const lineageByLuid = getWorkbookLineageByLuid({
       data: {
