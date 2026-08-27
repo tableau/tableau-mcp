@@ -180,6 +180,12 @@ export class WebMcpServer extends Server {
       webToolFactories.map((toolFactory) => toolFactory(this, tableauServerInfo.productVersion)),
     );
 
+    // The registration-time role check is gated behind `enforce-role-requirements`. When it's off
+    // (the default), tools register regardless of the caller's site role and no /users call is made.
+    const enforceRoleRequirements = await getFeatureGate().isFeatureEnabled(
+      'enforce-role-requirements',
+    );
+
     // Fetched lazily so we only issue the /users/{userId} call when at least one candidate tool
     // declares a `minRequiredRole`. Fail-closed: `getCurrentUserSiteRole` returns `undefined` on
     // any error, and `siteRoleMeetsMinimum(undefined, ...)` is false, so the tool stays hidden.
@@ -201,6 +207,7 @@ export class WebMcpServer extends Server {
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
       if (
+        enforceRoleRequirements &&
         tool.minRequiredRole &&
         !siteRoleMeetsMinimum(await resolveSiteRole(), tool.minRequiredRole)
       )

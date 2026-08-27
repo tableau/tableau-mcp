@@ -17,7 +17,8 @@ const mocks = vi.hoisted(() => ({
   mockRegisterAppTool: vi.fn(),
   mockRegisterAppResource: vi.fn(),
   mockFeatureGate: {
-    isFeatureEnabled: vi.fn(() => false),
+    // Typed to accept the feature name so tests can enable a specific flag via mockImplementation.
+    isFeatureEnabled: vi.fn((_featureName: string) => false),
   },
   mockReadFile: vi.fn(),
   mockGetCurrentUserSiteRole: vi.fn(),
@@ -434,7 +435,12 @@ describe('server', () => {
     } as unknown as WebTool<any>;
   }
 
+  // The registration-time role check is gated behind the `enforce-role-requirements` flag. With the
+  // flag ON the tool's minRequiredRole is enforced; with it OFF the check is skipped entirely.
+  const enforceRoleRequirements = (name: string): boolean => name === 'enforce-role-requirements';
+
   it('does not register a tool when the caller ranks below minRequiredRole', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
 
     const server = getServer();
@@ -451,6 +457,7 @@ describe('server', () => {
   });
 
   it('registers a tool when the caller ranks at or above minRequiredRole', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
 
     const server = getServer();
@@ -467,6 +474,7 @@ describe('server', () => {
   });
 
   it('does not register a tool when the caller has no site role (fetch failed)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
 
     const server = getServer();
@@ -480,6 +488,25 @@ describe('server', () => {
       expect.anything(),
       expect.anything(),
     );
+  });
+
+  it('registers a below-rank tool when enforce-role-requirements is off and never fetches the site role', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+    // The gate short-circuits before the role fetch, so no /users call is issued.
+    expect(mocks.mockGetCurrentUserSiteRole).not.toHaveBeenCalled();
   });
 
   it('should register as standard tool when mcp-apps feature flag is disabled', async () => {
