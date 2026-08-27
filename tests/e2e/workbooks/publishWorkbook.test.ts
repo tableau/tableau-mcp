@@ -30,6 +30,8 @@ const publishWorkbookResultSchema = z.discriminatedUnion('status', [
 
 const defaultWorkbookFilePath = resolve('tests/e2e/fixtures/workbooks/superstore-datasource.twb');
 const twbxWorkbookFilePath = resolve('tests/e2e/fixtures/workbooks/forecast.twbx');
+const malformedWorkbookFilePath = resolve('tests/e2e/fixtures/workbooks/malformed-datasource.twb');
+const malformedTwbxWorkbookFilePath = resolve('tests/e2e/fixtures/workbooks/badtwbx.twbx');
 const defaultProjectId = 'd87d843b-4326-4ce3-bc50-a68c1e6c9ca5';
 
 type PublishWorkbookSmokeConfig = {
@@ -98,6 +100,48 @@ describe('publish-workbook local file', () => {
       expect(publishResult.data.name).toBe(workbookName);
       expect(publishResult.url).toEqual(expect.any(String));
     }
+  });
+
+  it('returns validation errors and does not publish a malformed .twb workbook', async () => {
+    const smokeConfig = getPublishWorkbookSmokeConfig();
+
+    const publishResult = await client!.callTool('publish-workbook', {
+      schema: publishWorkbookResultSchema,
+      toolArgs: {
+        workbookFilePath: malformedWorkbookFilePath,
+        name: `${smokeConfig.workbookName} Malformed TWB`,
+        projectId: smokeConfig.projectId,
+        overwrite: true,
+      },
+    });
+
+    expect(publishResult.status).toBe('invalid');
+    if (publishResult.status === 'invalid') {
+      expect(publishResult.errors.length).toBeGreaterThan(0);
+      expect(publishResult.errors[0]).toMatchObject({
+        severity: 'ERROR',
+        message: expect.any(String),
+        line: expect.any(Number),
+        column: expect.any(Number),
+        elementName: expect.any(String),
+      });
+    }
+  });
+
+  it('returns a publish error and does not publish a .twbx containing a malformed .twb', async () => {
+    const smokeConfig = getPublishWorkbookSmokeConfig();
+
+    await expect(
+      client!.callTool('publish-workbook', {
+        schema: publishWorkbookResultSchema,
+        toolArgs: {
+          workbookFilePath: malformedTwbxWorkbookFilePath,
+          name: `${smokeConfig.workbookName} Bad TWBX`,
+          projectId: smokeConfig.projectId,
+          overwrite: true,
+        },
+      }),
+    ).rejects.toThrow(/status code 400|bad workbook|publish/i);
   });
 });
 
