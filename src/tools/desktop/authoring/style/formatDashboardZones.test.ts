@@ -107,6 +107,76 @@ const LIVE_ROUNDED_DASHBOARD_READBACK_XML = `<dashboard enable-sort-zone-taborde
   <simple-id uuid='{4706F991-82FE-4308-8293-0A4250ABD2C9}' />
 </dashboard>`;
 
+const HIGH_CONTRAST_DASHBOARD_XML = `<dashboard name='Rounded Corners VIP Final'>
+  <zones>
+    <zone id='9' type-v2='layout-basic'>
+      <zone id='10' type-v2='text'>
+        <formatted-text><run fontcolor='#18233A'>Native rounded dashboard zones</run></formatted-text>
+        <zone-style>
+          <format attr='border-color' value='#6C5CE7' />
+          <format attr='border-style' value='solid' />
+          <format attr='border-width' value='4' />
+          <format attr='margin' value='20' />
+          <format attr='background-color' value='#FFFFFF' />
+        </zone-style>
+      </zone>
+      <zone id='11' name='Sales by Category' type-v2='worksheet'>
+        <zone-style>
+          <format attr='border-color' value='#6C5CE7' />
+          <format attr='border-style' value='solid' />
+          <format attr='border-width' value='4' />
+          <format attr='margin' value='20' />
+          <format attr='background-color' value='#FFFFFF' />
+        </zone-style>
+      </zone>
+      <zone-style>
+        <format attr='border-color' value='#444444' />
+        <format attr='border-style' value='none' />
+        <format attr='border-width' value='0' />
+        <format attr='corner-radius' value='18' />
+        <format attr='background-color' value='#18233A' />
+        <format attr='margin' value='0' />
+      </zone-style>
+    </zone>
+  </zones>
+</dashboard>`;
+
+const HIGH_CONTRAST_DASHBOARD_READBACK_XML = `<dashboard name='Rounded Corners VIP Final'>
+  <zones>
+    <zone id='9' type-v2='layout-basic'>
+      <zone id='10' type-v2='text'>
+        <formatted-text><run fontcolor='#18233a'>Native rounded dashboard zones</run></formatted-text>
+        <zone-style>
+          <format attr='border-color' value='#6c5ce7' />
+          <format attr='border-style' value='solid' />
+          <format attr='border-width' value='4' />
+          <format attr='corner-radius' value='36' />
+          <format attr='margin' value='20' />
+          <format attr='background-color' value='#ffffff' />
+        </zone-style>
+      </zone>
+      <zone id='11' name='Sales by Category' type-v2='worksheet'>
+        <zone-style>
+          <format attr='border-color' value='#6c5ce7' />
+          <format attr='border-style' value='solid' />
+          <format attr='border-width' value='4' />
+          <format attr='corner-radius' value='36' />
+          <format attr='margin' value='20' />
+          <format attr='background-color' value='#ffffff' />
+        </zone-style>
+      </zone>
+      <zone-style>
+        <format attr='border-color' value='#444444' />
+        <format attr='border-style' value='none' />
+        <format attr='border-width' value='0' />
+        <format attr='corner-radius' value='36' />
+        <format attr='margin' value='0' />
+        <format attr='background-color' value='#18233a' />
+      </zone-style>
+    </zone>
+  </zones>
+</dashboard>`;
+
 describe('formatDashboardZonesDocument', () => {
   it('updates only containers, including nested container-owned bytes', () => {
     const result = formatDashboardZonesDocument(DASHBOARD_XML, {
@@ -353,6 +423,70 @@ describe('format-dashboard-zones tool', () => {
     expect(applyDashboardDocument).toHaveBeenCalledTimes(1);
   });
 
+  it('accepts supported Desktop versions for native dashboard corner radius', async () => {
+    const { result, applyDashboardDocument } = await callTool(
+      {
+        dashboardName: 'Executive Overview',
+        cornerRadius: 14,
+        scope: 'containers',
+      },
+      { applicationVersion: '2026.1' },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(applyDashboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects released Desktop versions before native dashboard corner radius', async () => {
+    const { result, applyDashboardDocument } = await callTool(
+      {
+        dashboardName: 'Executive Overview',
+        cornerRadius: 14,
+        scope: 'containers',
+      },
+      { applicationVersion: '2025.3' },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('requires Tableau Desktop 2026.1 or newer');
+    expect(applyDashboardDocument).not.toHaveBeenCalled();
+  });
+
+  it('rechecks the Desktop version under the apply lock before mutation', async () => {
+    const { result, applyDashboardDocument } = await callTool(
+      {
+        dashboardName: 'Executive Overview',
+        cornerRadius: 14,
+        scope: 'containers',
+      },
+      { applicationVersion: undefined, latestApplicationVersion: '2025.3.1' },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('requires Tableau Desktop 2026.1 or newer');
+    expect(result.content[0].text).toContain('2025.3.1');
+    expect(applyDashboardDocument).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, '', '0.0.0 (0000.26.0818.0746)', 'main', 'development-build'])(
+    'allows missing or non-release Desktop version %s for compatibility',
+    async (applicationVersion) => {
+      const { result, applyDashboardDocument } = await callTool(
+        {
+          dashboardName: 'Executive Overview',
+          cornerRadius: 14,
+          scope: 'containers',
+        },
+        { applicationVersion },
+      );
+
+      expect(result.isError).toBe(false);
+      expect(applyDashboardDocument).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('rejects duplicate zone ids and invalid scope combinations before any read', async () => {
     const duplicate = await callTool({
       dashboardName: 'Executive Overview',
@@ -588,6 +722,95 @@ describe('format-dashboard-zones tool', () => {
     expect(applyDashboardDocument).toHaveBeenCalledTimes(1);
   });
 
+  it('accepts the live high-contrast scope-all format reordering and hex color casing', async () => {
+    const { result, applyDashboardDocument } = await callTool(
+      {
+        dashboardName: 'dashboard-1',
+        cornerRadius: 36,
+        scope: 'all',
+      },
+      {
+        source: HIGH_CONTRAST_DASHBOARD_XML,
+        readbackXml: HIGH_CONTRAST_DASHBOARD_READBACK_XML,
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(applyDashboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
+      'format loss',
+      HIGH_CONTRAST_DASHBOARD_READBACK_XML.replace(
+        "          <format attr='background-color' value='#ffffff' />\n",
+        '',
+      ),
+    ],
+    [
+      'format value drift',
+      HIGH_CONTRAST_DASHBOARD_READBACK_XML.replace(
+        "<format attr='border-width' value='4' />",
+        "<format attr='border-width' value='5' />",
+      ),
+    ],
+    ['hex color value drift', HIGH_CONTRAST_DASHBOARD_READBACK_XML.replace('#6c5ce7', '#6c5ce8')],
+    [
+      'content loss',
+      HIGH_CONTRAST_DASHBOARD_READBACK_XML.replace('Native rounded dashboard zones', ''),
+    ],
+    [
+      'duplicate normalized format',
+      HIGH_CONTRAST_DASHBOARD_READBACK_XML.replace(
+        "          <format attr='margin' value='20' />",
+        "          <format attr='margin' value='20' />\n          <format attr='margin' value='20' />",
+      ),
+    ],
+    [
+      'extra format attribute',
+      HIGH_CONTRAST_DASHBOARD_READBACK_XML.replace(
+        "<format attr='margin' value='20' />",
+        "<format attr='margin' value='20' vendor='unexpected' />",
+      ),
+    ],
+    [
+      'zone-style text',
+      HIGH_CONTRAST_DASHBOARD_READBACK_XML.replace(
+        "        <zone-style>\n          <format attr='border-color'",
+        "        <zone-style>unexpected\n          <format attr='border-color'",
+      ),
+    ],
+    [
+      'extra zone-style child',
+      HIGH_CONTRAST_DASHBOARD_READBACK_XML.replace(
+        "          <format attr='background-color' value='#ffffff' />\n        </zone-style>",
+        "          <format attr='background-color' value='#ffffff' />\n          <unexpected />\n        </zone-style>",
+      ),
+    ],
+    [
+      'unrelated format reordering',
+      HIGH_CONTRAST_DASHBOARD_READBACK_XML.replace(
+        "          <format attr='border-style' value='solid' />\n          <format attr='border-width' value='4' />",
+        "          <format attr='border-width' value='4' />\n          <format attr='border-style' value='solid' />",
+      ),
+    ],
+  ])('rejects %s during high-contrast Desktop normalization', async (_case, readbackXml) => {
+    vi.useFakeTimers();
+    const resultPromise = callTool(
+      {
+        dashboardName: 'dashboard-1',
+        cornerRadius: 36,
+        scope: 'all',
+      },
+      { source: HIGH_CONTRAST_DASHBOARD_XML, readbackXml },
+    );
+    await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS * READBACK_POLL_MAX_ATTEMPTS);
+    const { result, applyDashboardDocument } = await resultPromise;
+
+    expect(result.isError).toBe(true);
+    expect(applyDashboardDocument).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects sibling content loss alongside the live container-style normalization', async () => {
     vi.useFakeTimers();
     const resultPromise = callTool(
@@ -630,6 +853,8 @@ async function callTool(
     dropNestedZoneOnReadback?: boolean;
     dropSiblingStyleOnReadback?: boolean;
     benignReserializationOnReadback?: boolean;
+    applicationVersion?: string;
+    latestApplicationVersion?: string;
     executorFunctions?: {
       getDashboardDocument: ReturnType<typeof vi.fn>;
       applyDashboardDocument: ReturnType<typeof vi.fn>;
@@ -653,7 +878,13 @@ async function callTool(
       if (options.driftBeforeApply && reads === 2) {
         document = document.replace("value='#FFFFFF'", "value='#EEEEEE'");
       }
-      return new Ok({ xml: document });
+      return new Ok({
+        xml: document,
+        applicationVersion:
+          reads >= 2
+            ? (options.latestApplicationVersion ?? options.applicationVersion)
+            : options.applicationVersion,
+      });
     });
   const applyDashboardDocument =
     options.executorFunctions?.applyDashboardDocument ??

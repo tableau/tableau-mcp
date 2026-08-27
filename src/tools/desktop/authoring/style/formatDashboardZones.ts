@@ -86,6 +86,12 @@ export const getFormatDashboardZonesTool = (
 
           const document = await executor.getDashboardDocument(resolved.value.id, extra.signal);
           if (document.isErr()) return new DesktopCommandExecutionError(document.error).toErr();
+          const versionError = unsupportedCornerRadiusVersionMessage(
+            document.value.applicationVersion,
+          );
+          if (versionError !== undefined) {
+            return new XmlModificationError(versionError).toErr();
+          }
           const formatted = formatDashboardZonesDocument(document.value.xml, {
             cornerRadius,
             scope,
@@ -98,6 +104,12 @@ export const getFormatDashboardZonesTool = (
             const applied = await withApplyLock(async () => {
               const latest = await executor.getDashboardDocument(resolved.value.id, extra.signal);
               if (latest.isErr()) return { kind: 'error' as const, error: latest.error };
+              const latestVersionError = unsupportedCornerRadiusVersionMessage(
+                latest.value.applicationVersion,
+              );
+              if (latestVersionError !== undefined) {
+                return { kind: 'unsupported-version' as const, message: latestVersionError };
+              }
               if (sourceSha256(latest.value.xml) !== sourceHash) {
                 return { kind: 'drift' as const };
               }
@@ -131,6 +143,9 @@ export const getFormatDashboardZonesTool = (
               return new XmlModificationError(
                 `Dashboard "${resolved.value.name}" changed while rounded corners were being applied. Re-read and retry.`,
               ).toErr();
+            }
+            if (applied.kind === 'unsupported-version') {
+              return new XmlModificationError(applied.message).toErr();
             }
             if (applied.kind === 'warnings') {
               return new XmlModificationError(
@@ -483,20 +498,21 @@ function hasSameDashboardContent(
   const intended = parseDashboardElement(intendedXml);
   if (readback === undefined || intended === undefined) return false;
 
-  const normalizedZoneStyleIds = new Set(
+  const targetZoneStyleIds = new Set(targetZoneIds);
+  const radiusOnlyZoneStyleIds = new Set(
     targetZoneIds.filter((id) => {
       const style = directZoneStyle(findZoneElement(intended, id));
       return style !== undefined && isRadiusOnlyStyle(style);
     }),
   );
-  for (const id of normalizedZoneStyleIds) {
+  for (const id of radiusOnlyZoneStyleIds) {
     const style = directZoneStyle(findZoneElement(readback, id));
     if (style === undefined || !isAllowedDesktopNormalizedRadiusStyle(style)) return false;
   }
 
   return (
-    JSON.stringify(canonicalElement(readback, normalizedZoneStyleIds)) ===
-    JSON.stringify(canonicalElement(intended, normalizedZoneStyleIds))
+    JSON.stringify(canonicalElement(readback, targetZoneStyleIds, radiusOnlyZoneStyleIds)) ===
+    JSON.stringify(canonicalElement(intended, targetZoneStyleIds, radiusOnlyZoneStyleIds))
   );
 }
 
@@ -512,25 +528,41 @@ function parseDashboardElement(xml: string): XmlElement | undefined {
   return root;
 }
 
-function canonicalElement(element: XmlElement, normalizedZoneStyleIds: Set<string>): unknown {
+function canonicalElement(
+  element: XmlElement,
+  targetZoneStyleIds: Set<string>,
+  radiusOnlyZoneStyleIds: Set<string>,
+): unknown {
   const attributes: [string, string][] = [];
   for (let index = 0; index < element.attributes.length; index += 1) {
     const attribute = element.attributes.item(index);
-    if (attribute !== null) attributes.push([attribute.name, attribute.value]);
+    if (attribute !== null) {
+      attributes.push([
+        attribute.name,
+        canonicalAttributeValue(element, attribute.name, attribute.value),
+      ]);
+    }
   }
   attributes.sort(([left], [right]) => left.localeCompare(right));
 
   const children: unknown[] = [];
   let directStyle: unknown;
-  const normalizeDirectStyle =
-    element.tagName === 'zone' && normalizedZoneStyleIds.has(element.getAttribute('id') ?? '');
+  const zoneId = element.tagName === 'zone' ? (element.getAttribute('id') ?? '') : '';
   for (let child: XmlNode | null = element.firstChild; child !== null; child = child.nextSibling) {
     if (child.nodeType === 1) {
       const childElement = child as XmlElement;
-      if (normalizeDirectStyle && childElement.tagName === 'zone-style') {
-        directStyle = canonicalRadiusOnlyStyle(childElement, normalizedZoneStyleIds);
+      if (radiusOnlyZoneStyleIds.has(zoneId) && childElement.tagName === 'zone-style') {
+        directStyle = canonicalRadiusOnlyStyle(
+          childElement,
+          targetZoneStyleIds,
+          radiusOnlyZoneStyleIds,
+        );
+      } else if (targetZoneStyleIds.has(zoneId) && childElement.tagName === 'zone-style') {
+        children.push(
+          canonicalTargetZoneStyle(childElement, targetZoneStyleIds, radiusOnlyZoneStyleIds),
+        );
       } else {
-        children.push(canonicalElement(childElement, normalizedZoneStyleIds));
+        children.push(canonicalElement(childElement, targetZoneStyleIds, radiusOnlyZoneStyleIds));
       }
     } else if ((child.nodeType === 3 || child.nodeType === 4) && child.nodeValue?.trim()) {
       children.push({ text: child.nodeValue });
@@ -544,14 +576,77 @@ function canonicalElement(element: XmlElement, normalizedZoneStyleIds: Set<strin
   };
 }
 
-function canonicalRadiusOnlyStyle(style: XmlElement, normalizedZoneStyleIds: Set<string>): unknown {
+function canonicalRadiusOnlyStyle(
+  style: XmlElement,
+  targetZoneStyleIds: Set<string>,
+  radiusOnlyZoneStyleIds: Set<string>,
+): unknown {
   const cornerFormat = directElementChildren(style).at(-1);
   return {
     name: style.tagName,
     attributes: [] as [string, string][],
     children:
-      cornerFormat === undefined ? [] : [canonicalElement(cornerFormat, normalizedZoneStyleIds)],
+      cornerFormat === undefined
+        ? []
+        : [canonicalElement(cornerFormat, targetZoneStyleIds, radiusOnlyZoneStyleIds)],
   };
+}
+
+function canonicalTargetZoneStyle(
+  style: XmlElement,
+  targetZoneStyleIds: Set<string>,
+  radiusOnlyZoneStyleIds: Set<string>,
+): unknown {
+  const children = directElementChildren(style);
+  const reorderable = ['corner-radius', 'margin', 'background-color'];
+  const indexes = reorderable.map((attr) =>
+    children.findIndex((child) => isExactFormat(child, attr)),
+  );
+  const canNormalizeOrder =
+    style.attributes.length === 0 &&
+    !hasSignificantText(style) &&
+    indexes.every((index) => index >= 0) &&
+    new Set(indexes).size === reorderable.length &&
+    Math.max(...indexes) - Math.min(...indexes) === reorderable.length - 1 &&
+    reorderable.every(
+      (attr) => children.filter((child) => isExactFormat(child, attr)).length === 1,
+    );
+  if (!canNormalizeOrder) {
+    return canonicalElement(style, targetZoneStyleIds, radiusOnlyZoneStyleIds);
+  }
+  const normalizedChildren = [
+    ...children.slice(0, Math.min(...indexes)),
+    ...reorderable.map((attr) => children.find((child) => isExactFormat(child, attr))!),
+    ...children.slice(Math.max(...indexes) + 1),
+  ];
+  return {
+    name: style.tagName,
+    attributes: [] as [string, string][],
+    children: normalizedChildren.map((child) =>
+      canonicalElement(child, targetZoneStyleIds, radiusOnlyZoneStyleIds),
+    ),
+  };
+}
+
+function canonicalAttributeValue(element: XmlElement, name: string, value: string): string {
+  const isRunFontColor = element.tagName === 'run' && name === 'fontcolor';
+  const formatAttr = element.tagName === 'format' ? element.getAttribute('attr') : null;
+  const isZoneFormatColor =
+    name === 'value' && (formatAttr === 'border-color' || formatAttr === 'background-color');
+  return (isRunFontColor || isZoneFormatColor) && /^#[0-9A-Fa-f]{6}$/.test(value)
+    ? value.toLowerCase()
+    : value;
+}
+
+function unsupportedCornerRadiusVersionMessage(
+  applicationVersion: string | undefined,
+): string | undefined {
+  const match = /^\s*(20\d{2})\.(\d+)(?:\.\d+)?\s*$/.exec(applicationVersion ?? '');
+  if (match === null) return undefined;
+  const year = Number(match[1]);
+  const release = Number(match[2]);
+  if (year > 2026 || (year === 2026 && release >= 1)) return undefined;
+  return `Setting rounded dashboard zones requires Tableau Desktop 2026.1 or newer; this session reports ${applicationVersion}. Upgrade Desktop and retry.`;
 }
 
 function findZoneElement(dashboard: XmlElement, id: string): XmlElement | undefined {
