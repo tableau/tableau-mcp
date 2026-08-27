@@ -1,13 +1,9 @@
 import { z } from 'zod';
 
+import { lineageContentSchema } from './lineageContent.js';
 import { projectSchema } from './project.js';
 import { tagsSchema } from './tags.js';
 import { viewSchema } from './view.js';
-
-export const lineageContentSchema = z.object({
-  luid: z.string(),
-  name: z.string(),
-});
 
 export const workbookSchema = z.object({
   id: z.string(),

@@ -19,6 +19,10 @@ Generates an insight bundle for the current aggregated value for a Pulse metric.
 
 The request to generate a bundle for.
 
+The `datasource` object under `metric.definition` requires an `id` (datasource LUID) and accepts an optional `id_type`:
+- Omit `id_type` for standard published datasources (default behavior).
+- Use `"DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE"` when the metric is based on an embedded workbook datasource rather than a published datasource.
+
 Example:
 
 ```json

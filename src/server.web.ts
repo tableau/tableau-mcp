@@ -39,9 +39,51 @@ export const serverName = 'tableau-mcp';
 const serverVersion = pkg.version;
 const __dirname = getDirname();
 
+const BASE_INSTRUCTIONS =
+  'Tableau MCP exposes tools for exploring and querying Tableau Cloud/Server content: ' +
+  'datasources, workbooks, views, Pulse metrics, and content search.';
+
+// Admin/site-health guidance. Advertised only when ADMIN_TOOLS_ENABLED is set (config.adminToolsEnabled).
+// This is safe with no role lookup: the per-call assertAdmin gate still rejects any non-admin at execution,
+// so listing the capability menu leaks nothing. Tied to GENERIC admin-health intent so a generic prompt
+// (e.g. "what should I watch as an admin?") elicits these instead of only by-name requests.
+const ADMIN_INSTRUCTIONS =
+  'This server also has site-administration capabilities. For general admin/site-health, governance, ' +
+  'cleanup, or cost/license questions, proactively consider the admin prompts (stale-content cleanup, ' +
+  'job/extract optimization, user-license reclamation) and the query-admin-insights tool ' +
+  '(e.g. stale-content, job-performance, ts-users) for supporting data — even when the user asks broadly ' +
+  'rather than naming a specific tool.';
+
+/**
+ * Single source of truth for the web server's `initialize` instructions string. Returns the base
+ * guidance, with the admin/site-health guidance appended only when ADMIN_TOOLS_ENABLED is set.
+ *
+ * ADMIN_TOOLS_ENABLED is read straight from env (matching Config's exact semantics in config.ts:
+ * `ADMIN_TOOLS_ENABLED === 'true'`) rather than via getConfig(). The instructions string depends
+ * ONLY on this flag, and it is composed at handshake/registration-independent construction time —
+ * eagerly building the full Config here would newly require SERVER to be set and would consume test
+ * getConfig() mocks. Direct env read keeps composition side-effect-free.
+ *
+ * Both the default/web path (WebMcpServer constructs its own McpServer) and the combined path
+ * (index.combined.ts supplies a pre-built McpServer) MUST feed instructions through this function.
+ * The SDK reads `instructions` only from the McpServer constructor options (it is never settable
+ * post-construction), so a supplied McpServer that was not built with these instructions would
+ * silently drop them — see the guard in server.ts.
+ */
+export function buildWebInstructions(): string {
+  const adminToolsEnabled = process.env.ADMIN_TOOLS_ENABLED === 'true';
+  return adminToolsEnabled ? `${BASE_INSTRUCTIONS} ${ADMIN_INSTRUCTIONS}` : BASE_INSTRUCTIONS;
+}
+
 export class WebMcpServer extends Server {
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
-    super({ mcpServer, clientInfo, serverName, serverVersion });
+    super({
+      mcpServer,
+      clientInfo,
+      serverName,
+      serverVersion,
+      instructions: buildWebInstructions(),
+    });
   }
 
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {

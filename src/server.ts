@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import invariant from './utils/invariant.js';
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
@@ -29,11 +30,16 @@ export abstract class Server {
     clientInfo,
     serverName,
     serverVersion,
+    instructions,
   }: {
     mcpServer?: McpServer;
     clientInfo?: ClientInfo;
     serverName: string;
     serverVersion: string;
+    // Optional server-level instructions surfaced in the MCP `initialize` result. Composed by
+    // subclasses (e.g. WebMcpServer) so the shared base does not hardcode deployment-specific
+    // guidance. Emitted by the SDK only when set.
+    instructions?: string;
   }) {
     const description =
       'When opening local .twb/.twbx files, derive the full Tableau Desktop app path and choose the newest installed version when multiple are present.';
@@ -52,8 +58,26 @@ export abstract class Server {
             tools: {},
             prompts: {},
           },
+          ...(instructions ? { instructions } : {}),
         },
       );
+
+    // Guard against silently dropping instructions on the provided-mcpServer path. The SDK reads
+    // `instructions` ONLY from the McpServer constructor options and never exposes a setter, so when
+    // a caller supplies its own McpServer (e.g. index.combined.ts) it MUST have built that McpServer
+    // WITH the composed instructions (see buildWebInstructions()). We can't set them here after the
+    // fact, so we assert the supplied server already carries them rather than let the discoverability
+    // guidance no-op. `_instructions` is the SDK's internal field (underscore, not truly private).
+    if (mcpServer && instructions) {
+      const suppliedInstructions = (mcpServer.server as unknown as { _instructions?: string })
+        ._instructions;
+      invariant(
+        suppliedInstructions === instructions,
+        'The supplied McpServer was constructed without the expected server instructions. ' +
+          'Construct it with `{ instructions: buildWebInstructions() }` so the initialize handshake ' +
+          'advertises the same guidance as the default path.',
+      );
+    }
 
     this.name = serverName;
     this.version = serverVersion;

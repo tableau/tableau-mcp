@@ -1,3 +1,5 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
@@ -117,6 +119,44 @@ describe('server', () => {
 
   it('should use the web variant server name', () => {
     expect(new WebMcpServer().name).toBe(serverName);
+  });
+
+  // The server-level `instructions` string (surfaced by the SDK in the `initialize` result) is
+  // passed to the McpServer constructor's second options object. McpServer is globally mocked
+  // (see testSetup.ts), so assert on the constructor arguments the mock captured.
+  function getConstructedInstructions(): string | undefined {
+    const calls = vi.mocked(McpServer).mock.calls;
+    const lastCall = calls[calls.length - 1];
+    return (lastCall?.[1] as { instructions?: string } | undefined)?.instructions;
+  }
+
+  it('should include admin site-health guidance in instructions when ADMIN_TOOLS_ENABLED is "true"', () => {
+    vi.mocked(McpServer).mockClear();
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+    new WebMcpServer();
+    const instructions = getConstructedInstructions();
+
+    expect(instructions).toBeTruthy();
+    // Admin capability menu + generic-intent tie-in.
+    expect(instructions).toContain('site-administration capabilities');
+    expect(instructions).toContain('general admin/site-health');
+    expect(instructions).toContain('user-license reclamation');
+    expect(instructions).toContain('query-admin-insights');
+  });
+
+  it('should omit admin guidance from instructions when ADMIN_TOOLS_ENABLED is unset', () => {
+    vi.mocked(McpServer).mockClear();
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+    new WebMcpServer();
+    const instructions = getConstructedInstructions();
+
+    // Base guidance is still present...
+    expect(instructions).toBeTruthy();
+    expect(instructions).toContain('Tableau MCP exposes tools');
+    // ...but nothing about admin capabilities.
+    expect(instructions).not.toContain('site-administration capabilities');
+    expect(instructions).not.toContain('general admin/site-health');
+    expect(instructions).not.toContain('query-admin-insights');
   });
 
   it('should not register disabled tools', async () => {

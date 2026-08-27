@@ -51,6 +51,14 @@ export class McpClient {
   }
 
   /**
+   * Returns the server-level `instructions` string carried in the `initialize`
+   * handshake result, or undefined when the server advertised none.
+   */
+  async getInstructions(): Promise<string | undefined> {
+    return this.client.getInstructions();
+  }
+
+  /**
    * Lists the registered prompt names. Returns an empty array when the server
    * registers no prompts (the prompts capability is then not advertised).
    */
