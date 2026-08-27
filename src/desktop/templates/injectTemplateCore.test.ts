@@ -61,6 +61,41 @@ describe('stripDonorCurrencyOrLocaleFormats', () => {
   });
 });
 
+describe('buildInjectedWorkbookXml — caller-authored KPI formatting', () => {
+  it('preserves currency VALUE_FORMAT and escapes literal labels exactly once', () => {
+    const templateXml = readTemplate('insights__kpi')!;
+    const result = buildInjectedWorkbookXml({
+      workbookXml: "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>",
+      templateXml,
+      title: 'R&D KPI',
+      sheetType: 'worksheet',
+      templateParameters: {
+        DATASOURCE: 'Analytics',
+        METRIC_NAME: 'R&D Sales',
+        TARGET_PERIOD_CONTEXT: 'Q1 "actual"',
+        COMPARISON_PERIOD_CONTEXT: "Prior year's Q1",
+        DIRECTION_SYMBOL: '▲',
+        CHANGE_COLOR: '#208591',
+        VALUE_FORMAT: 'c"$"#,##0,.0K;-"$"#,##0,.0K',
+      },
+      fieldMapping: {
+        '{{field_base_1}}': '[Analytics].[none:KPI Tile:nk]',
+        '{{field_base_2}}': '[Analytics].[usr:Target:qk]',
+        '{{field_base_3}}': '[Analytics].[usr:Comparison:qk]',
+        '{{field_base_4}}': '[Analytics].[usr:Absolute Change:qk]',
+        '{{field_base_5}}': '[Analytics].[usr:Relative Change:qk]',
+      },
+      applyNonce: 'kpi-format',
+    });
+
+    if (!result.ok) throw new Error(result.issues.join('; '));
+    expect(result.xml).toContain('value="c&quot;$&quot;#,##0,.0K;-&quot;$&quot;#,##0,.0K"');
+    expect(result.xml).toContain('R&amp;D Sales');
+    expect(result.xml).not.toContain('R&amp;amp;D Sales');
+    expect(result.xml).toContain('Q1 &quot;actual&quot;');
+  });
+});
+
 describe('removeSameNamedWorksheet — quote-agnostic strip (adversary P0-3)', () => {
   it('strips a double-quoted worksheet + window (the serializer emits double quotes)', () => {
     const workbookXml = [

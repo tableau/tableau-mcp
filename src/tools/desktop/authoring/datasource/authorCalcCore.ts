@@ -185,13 +185,6 @@ function prepareCalculationBatch({
       return new ArgsValidationError(message).toErr();
     }
     const target = targetResult.value;
-    if (hasColumnCaption(target.xml, caption)) {
-      return new ArgsValidationError(
-        `${label}caption collision — pick a new caption or use the existing field`,
-      ).toErr();
-    }
-
-    const calcName = nextCalculationName(editedXml, Date.now());
     let formula = calc.formula;
     if (resolveLooseReferences) {
       const workbookSchema = summarizeSchema(editedXml);
@@ -207,6 +200,27 @@ function prepareCalculationBatch({
       formula = looseFormula.value;
     }
     const resolvedFormula = resolveCaptionReferences(formula, target.xml, editedXml);
+    const existingColumn = findColumnByCaption(target.xml, caption);
+    if (existingColumn !== undefined) {
+      const existingFormula = getAttr(existingColumn, 'formula');
+      const existingRole = unescapeXml(getAttr(existingColumn, 'role') ?? '');
+      const existingDatatype = unescapeXml(getAttr(existingColumn, 'datatype') ?? '');
+      if (
+        existingFormula !== undefined &&
+        normalizeFormula(unescapeXml(existingFormula)) === normalizeFormula(resolvedFormula) &&
+        existingRole === role &&
+        existingDatatype === datatype
+      ) {
+        // Idempotent retry: the live workbook already contains this exact
+        // deterministic calculation, so keep it and continue with dependent calcs.
+        continue;
+      }
+      return new ArgsValidationError(
+        `${label}caption collision — pick a new caption or use the existing field`,
+      ).toErr();
+    }
+
+    const calcName = nextCalculationName(editedXml, Date.now());
     const columnXml = renderCalculationColumn({
       caption,
       formula: resolvedFormula,
@@ -478,13 +492,17 @@ function findDatasourceClose(
   return findTokenOutsideOpaque(xml, '</datasource>', from, scanTo, opaqueRanges);
 }
 
-function hasColumnCaption(datasourceXml: string, caption: string): boolean {
-  return findColumnTags(datasourceXml).some(
+function normalizeFormula(formula: string): string {
+  return formula.replace(/\s+/g, ' ').trim();
+}
+
+function findColumnByCaption(datasourceXml: string, caption: string): string | undefined {
+  return findColumnTags(datasourceXml).find(
     (tag) => unescapeXml(getAttr(tag, 'caption') ?? '') === caption,
   );
 }
 
-function hasColumnNameAndCaption(xml: string, name: string, caption: string): boolean {
+export function hasColumnNameAndCaption(xml: string, name: string, caption: string): boolean {
   return findColumnTags(xml).some(
     (tag) =>
       unescapeXml(getAttr(tag, 'name') ?? '') === name &&

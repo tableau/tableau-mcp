@@ -380,16 +380,6 @@ export function buildInjectedWorkbookXml({
   );
   const rewriteWarnings: string[] = [];
 
-  if (templateParameters) {
-    for (const [key, value] of Object.entries(templateParameters)) {
-      // Field placeholders are resolved only through runtime slot-backed
-      // field_mapping. Generic parameter replacement would bypass derivation,
-      // metadata, optional-prune, and survivor guards.
-      if (key === 'DATASOURCE' || /^field_base_[1-9]\d*$/.test(key)) continue;
-      processed = processed.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), escapeXml(value));
-    }
-  }
-
   if (
     !templateParameters?.['DATASOURCE'] &&
     templateSlots?.some((slot) => slot.bindable !== false && slot.required)
@@ -424,6 +414,19 @@ export function buildInjectedWorkbookXml({
     processed = spliceBoundGroupDefinitions(processed, fieldMapping, workbookXml);
     processed = spliceBoundCalcDefinitions(processed, fieldMapping, workbookXml);
     processed = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
+  }
+
+  // Strip donor formats before caller-authored format parameters are substituted.
+  // Otherwise a legitimate currency VALUE_FORMAT looks like donor metadata and is
+  // removed from the generated worksheet.
+  if (templateParameters) {
+    for (const [key, value] of Object.entries(templateParameters)) {
+      // Field placeholders are resolved only through runtime slot-backed
+      // field_mapping. Generic parameter replacement would bypass derivation,
+      // metadata, optional-prune, and survivor guards.
+      if (key === 'DATASOURCE' || /^field_base_[1-9]\d*$/.test(key)) continue;
+      processed = processed.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), () => escapeXml(value));
+    }
   }
 
   const templateTokenIssues = unsubstitutedTemplateTokenRule.validate(processed);

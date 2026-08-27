@@ -9,7 +9,7 @@ import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getAuthorCalcTool } from './authorCalc.js';
-import { authorCalculationsInWorkbook } from './authorCalcCore.js';
+import { authorCalculationsInWorkbook, prepareCalculationsInWorkbook } from './authorCalcCore.js';
 
 const BASE_XML = [
   "<?xml version='1.0' encoding='utf-8'?>",
@@ -524,3 +524,33 @@ function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): st
   invariant(typeof xml === 'string');
   return xml;
 }
+
+describe('prepareCalculationsInWorkbook idempotency', () => {
+  const existingCalc =
+    "<column caption='Margin' datatype='real' name='[Calculation_900]' role='measure' type='quantitative'>" +
+    "<calculation class='tableau' formula='[Sales] * 0.2' /></column>";
+
+  it('reuses an identical caption/formula/type/role without editing the workbook', () => {
+    const workbookXml = withColumn(BASE_XML, existingCalc);
+    const result = prepareCalculationsInWorkbook({
+      workbookXml,
+      calcs: [{ caption: 'Margin', formula: '[Sales]  *  0.2' }],
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    expect(result.value.workbookXml).toBe(workbookXml);
+    expect(result.value.authoredCalcs).toEqual([]);
+  });
+
+  it('still rejects the same caption when its formula differs', () => {
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, existingCalc),
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.3' }],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+});

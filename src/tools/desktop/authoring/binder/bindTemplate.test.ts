@@ -4881,6 +4881,11 @@ describe('bindTemplateTool auto_apply gate', () => {
         ...boundResult.args,
         template_name: 'insights__kpi',
         title: 'Period change — Sales',
+        template_parameters: {
+          ...boundResult.args.template_parameters,
+          METRIC_NAME: 'R&amp;D Sales',
+          VALUE_FORMAT: 'c&quot;$&quot;#,##0.0;-&quot;$&quot;#,##0.0',
+        },
       },
     };
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
@@ -4920,7 +4925,13 @@ describe('bindTemplateTool auto_apply gate', () => {
       expect.objectContaining({ workbookXml: expect.stringContaining("caption='Margin'") }),
     );
     expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
-      expect.objectContaining({ workbookXml: expect.stringContaining("caption='Margin'") }),
+      expect.objectContaining({
+        workbookXml: expect.stringContaining("caption='Margin'"),
+        templateParameters: expect.objectContaining({
+          METRIC_NAME: 'R&D Sales',
+          VALUE_FORMAT: 'c"$"#,##0.0;-"$"#,##0.0',
+        }),
+      }),
     );
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     expect(applyWorkbookDocument).toHaveBeenCalledWith(

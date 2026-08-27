@@ -103,7 +103,9 @@ import type { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 import {
   type AuthorCalcInput,
   authorCalculationsInWorkbook,
+  type AuthoredCalc,
   datatypeSchema,
+  hasColumnNameAndCaption,
   prepareCalculationsInWorkbook,
   roleSchema,
 } from '../datasource/authorCalcCore.js';
@@ -161,6 +163,7 @@ type BindTemplateToolResultBase = PublicBinderResult & {
   sheet_name?: string;
   phase_ms?: { bind: number; inject: number; apply: number };
   apply_error?: string;
+  retry_safe?: boolean;
 };
 
 type AppliedDefault = Pick<
@@ -2006,6 +2009,7 @@ function applyFallback(
   base: BindTemplateToolResultBase,
   apply_error: string,
   guidance?: string,
+  retrySafe = false,
 ): BindTemplateToolResultBase {
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, base.status);
   return {
@@ -2015,6 +2019,7 @@ function applyFallback(
       `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). Before any correction, inspect live worksheet state with get-worksheet-xml; do not replay an uncertain apply. If correction is needed, use list-available-fields to reacquire RAW column_ref values, then list-templates, build-worksheets-from-templates, and apply-worksheet. Do not pass the returned XML-escaped field_mapping into templatePlan or call bind-template again.`,
     applied: false,
     apply_error,
+    retry_safe: retrySafe,
   };
 }
 
@@ -2040,7 +2045,7 @@ async function performAutoApply({
   appliedDefault,
   skipValidation,
   hostBaselineWorkbookXml,
-  atomicCalcCaptions,
+  atomicCalcs,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -2056,7 +2061,7 @@ async function performAutoApply({
   appliedDefault?: AppliedDefault;
   skipValidation?: boolean;
   hostBaselineWorkbookXml?: string;
-  atomicCalcCaptions?: string[];
+  atomicCalcs?: AuthoredCalc[];
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
@@ -2079,10 +2084,23 @@ async function performAutoApply({
     injected = buildInjectedWorkbookXml({
       workbookXml,
       templateXml,
-      title: args.title,
+      // Binder output is escaped for the manual artifact path. The shared core
+      // accepts raw values and owns the single escaping boundary, so decode the
+      // binder payload before using it in this in-process auto-apply path.
+      title: fullyDecodeXmlEntities(args.title),
       sheetType: args.sheet_type,
-      templateParameters: args.template_parameters,
-      fieldMapping: args.field_mapping,
+      templateParameters: Object.fromEntries(
+        Object.entries(args.template_parameters).map(([key, value]) => [
+          key,
+          fullyDecodeXmlEntities(value),
+        ]),
+      ),
+      fieldMapping: Object.fromEntries(
+        Object.entries(args.field_mapping).map(([key, value]) => [
+          key,
+          fullyDecodeXmlEntities(value),
+        ]),
+      ),
       templateSlots: templateSnapshot.descriptor.slots,
       applyNonce,
       optionalFieldPrunes: args.optional_field_prunes,
@@ -2091,13 +2109,13 @@ async function performAutoApply({
     });
   } catch (err) {
     return {
-      result: applyFallback(base, `inject failed: ${getExceptionMessage(err)}`),
+      result: applyFallback(base, `inject failed: ${getExceptionMessage(err)}`, undefined, true),
       failureDisposition: 'pre-dispatch',
     };
   }
   if (!injected.ok) {
     return {
-      result: applyFallback(base, `inject failed: ${injected.issues.join('; ')}`),
+      result: applyFallback(base, `inject failed: ${injected.issues.join('; ')}`, undefined, true),
       failureDisposition: 'pre-dispatch',
     };
   }
@@ -2111,7 +2129,7 @@ async function performAutoApply({
   const spliced = applyProposalSplices({ xml: injected.xml, args, schemaSummary, literalTitle });
   if (!spliced.ok) {
     return {
-      result: applyFallback(base, spliced.reason),
+      result: applyFallback(base, spliced.reason, undefined, true),
       failureDisposition: 'pre-dispatch',
     };
   }
@@ -2165,12 +2183,47 @@ async function performAutoApply({
     skipValidation,
   });
   if (applyResult.isErr()) {
+    const failureDisposition = applyFailureDisposition(applyResult.error);
     return {
-      result: applyFallback(base, `apply failed: ${describeApplyError(applyResult.error)}`),
-      failureDisposition: applyFailureDisposition(applyResult.error),
+      result: applyFallback(
+        base,
+        `apply failed: ${describeApplyError(applyResult.error)}`,
+        undefined,
+        failureDisposition === 'pre-dispatch',
+      ),
+      failureDisposition,
     };
   }
   const applyMs = Date.now() - applyStart;
+
+  // The optimized Insights path authors calculations and the worksheet in one
+  // workbook mutation. Match the ordinary author-calc safety contract by reading
+  // the combined document back and verifying every new calculation identity before
+  // claiming success or returning authored_calcs.
+  if (atomicCalcs && atomicCalcs.length > 0) {
+    const calcReadback = await getWorkbookXml({ executor, signal });
+    if (calcReadback.isErr()) {
+      return {
+        result: applyFallback(
+          base,
+          `calculation readback failed: ${getExceptionMessage(calcReadback.error)}`,
+        ),
+        failureDisposition: 'post-dispatch',
+      };
+    }
+    const missing = atomicCalcs.filter(
+      (calc) => !hasColumnNameAndCaption(calcReadback.value, calc.calcName, calc.caption),
+    );
+    if (missing.length > 0) {
+      return {
+        result: applyFallback(
+          base,
+          `calculation readback did not contain: ${missing.map((calc) => calc.caption).join(', ')}`,
+        ),
+        failureDisposition: 'post-dispatch',
+      };
+    }
+  }
 
   // ── Host verification receipt on the HOT path (W-23447506) ────────
   // apply-worksheet and build-and-apply-worksheet re-read the sheet they just wrote and
@@ -2222,7 +2275,10 @@ async function performAutoApply({
   // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
-  const successfulCalcCaptions = [...(base.authored_calcs ?? []), ...(atomicCalcCaptions ?? [])];
+  const successfulCalcCaptions = [
+    ...(base.authored_calcs ?? []),
+    ...(atomicCalcs ?? []).map((calc) => calc.caption),
+  ];
   const calcPrefix = renderAuthoredCalcPrefix(
     successfulCalcCaptions.length > 0 ? successfulCalcCaptions : undefined,
     res.status,
@@ -2730,7 +2786,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
           }
           let authoredCalcCaptions: string[] = [];
-          let atomicCalcCaptions: string[] = [];
+          let atomicCalcs: AuthoredCalc[] = [];
           if (calcs && calcs.length > 0) {
             const percentAsk = asksForPercent(ask);
             const authoredCalcInputs = (calcs as AuthorCalcInput[]).map((calc) =>
@@ -2749,7 +2805,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 return prepared.error.toErr();
               }
               workbookXml = prepared.value.workbookXml;
-              atomicCalcCaptions = prepared.value.authoredCalcs.map((calc) => calc.caption);
+              atomicCalcs = prepared.value.authoredCalcs;
             } else {
               const authored = await authorCalculationsInWorkbook({
                 workbookXml,
@@ -3064,7 +3120,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           // target_worksheet is an explicit instruction to rewrite that sheet (a reset of
           // hand edits is legitimate) and always applies.
           const sheetSignature = appliedSheetSignature(res.args);
-          if (target_worksheet === undefined && atomicCalcCaptions.length === 0) {
+          if (target_worksheet === undefined && atomicCalcs.length === 0) {
             const remembered = rememberedSheetStillPresent({
               session: resolvedSession,
               signature: sheetSignature,
@@ -3089,7 +3145,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             templateSnapshot: selectedTemplate.snapshot,
             appliedDefault,
             hostBaselineWorkbookXml: atomicCalcApply ? hostBaselineWorkbookXml : undefined,
-            atomicCalcCaptions,
+            atomicCalcs,
             // Honor skip_validation only for a server-trusted caller (config gate set by the
             // deterministic spawner). An untrusted LLM turn that passes the flag gets full
             // validation, not a bypass — the param alone cannot skip the preflight.
