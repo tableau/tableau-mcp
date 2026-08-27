@@ -14,6 +14,11 @@ const mocks = vi.hoisted(() => ({
   mockGetFlowRuns: vi.fn(),
   mockVersionIsAtLeast: vi.fn((_version: `${number}.${number}`): boolean => true),
   mockIsFlowAllowed: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../resourceAccessChecker.js', () => ({
@@ -60,6 +65,7 @@ vi.mock('../../../../config.js', () => ({
 describe('getFlowTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
     mocks.mockVersionIsAtLeast.mockReturnValue(true);
     // Default: no bounded context → the gate allows the flow and fetches no
     // content of its own (get-flow performs the Query Flow call).
@@ -85,6 +91,13 @@ describe('getFlowTool', () => {
     } as ReturnType<typeof getConfig>);
     const getFlowTool = getGetFlowTool(new WebMcpServer());
     expect(await Provider.from(getFlowTool.disabled)).toBe(true);
+  });
+
+  it('should be disabled when the flow-tools feature flag is OFF', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    const getFlowTool = getGetFlowTool(new WebMcpServer());
+    expect(await Provider.from(getFlowTool.disabled)).toBe(true);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('flow-tools');
   });
 
   it('should fetch flow with all sidecars by default', async () => {
