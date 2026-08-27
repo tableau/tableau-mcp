@@ -465,7 +465,7 @@ describe('authorActionTool', () => {
     expect(result.content[0].text).toContain('sourceWorksheet empty');
   });
 
-  it('emits a byte-faithful worksheet-sourced url action with the URL in link@expression', async () => {
+  it("emits a byte-faithful worksheet-sourced url action with the URL in the link's expression attribute", async () => {
     const expectedAction =
       "<action caption='Open Product Details' name='[Action1]'>" +
       "<activation type='on-select' />" +
@@ -650,7 +650,8 @@ describe('authorActionTool', () => {
   });
 
   it('fails url readback when the action landed as a <command> instead of a <link>', async () => {
-    // The exact type-0 failure mode: a hand-authored command action, not a link.
+    // The core failure mode: an action that persisted as a <command>, not a <link>, so
+    // Tableau does not treat it as a URL action.
     const commandAction =
       "<action caption='Open Product Details' name='[Action1]'>" +
       "<activation type='on-select' />" +
@@ -689,8 +690,9 @@ describe('authorActionTool', () => {
   });
 
   it('fails url readback when the link expression persisted double-escaped', async () => {
-    // Defense in depth: even if a field reference degraded to the double-escaped
-    // &amp;lt;[City]&amp;gt; signature, that literal must never count as a live URL action.
+    // A field reference that degraded to the double-escaped &amp;lt;[City]&amp;gt; form
+    // unescapes to something other than the caller's raw url, so readback must report it
+    // as not applied rather than a live URL action.
     const doubleEscaped =
       "<action caption='Search City' name='[Action1]'>" +
       "<activation type='on-select' />" +
@@ -950,8 +952,8 @@ describe('authorActionTool', () => {
   });
 
   it('rejects a dashboard name slotted into sourceWorksheet and steers to sourceDashboard', async () => {
-    // The 0x5CCCC2BD reproduction: a dashboard name in sourceWorksheet would emit
-    // <source worksheet='<dashboard>'>, which crashes when the action is later edited.
+    // The reproduction of the edit-time crash: a dashboard name in sourceWorksheet would
+    // emit <source worksheet='<dashboard>'>, which errors when the action is later edited.
     const withDashboard = BASE_XML.replace(
       '</workbook>',
       "<dashboards><dashboard name='Sales Dashboard' /></dashboards></workbook>",

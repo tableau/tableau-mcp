@@ -253,13 +253,12 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             ).toErr();
           }
           if (mode === 'url') {
-            // Sheet names share one namespace across worksheets/dashboards/stories, so a
-            // source name is unambiguously one kind. A dashboard name slotted into
-            // sourceWorksheet emits <source worksheet='<dashboard>'>, which Tableau resolves
-            // through GetWorksheet -> AsWorksheet() on a dashboard doc and throws 0x5CCCC2BD
-            // ("incorrectly expecting worksheet") when the action is later opened/edited.
-            // Reject the miscategorized source before it can persist, and steer the caller to
-            // the correct slot.
+            // Worksheet, dashboard, and story names share one namespace, so a source name
+            // is unambiguously one kind. Emitting <source worksheet='<dashboard>'> (a
+            // dashboard name in the worksheet slot) persists cleanly but makes Tableau raise
+            // an internal error when the action is later opened for editing, because it then
+            // resolves that name as a worksheet and finds a dashboard instead. Reject the
+            // miscategorized source up front and steer the caller to the correct slot.
             const worksheetNames = findSheetNames(liveXml, 'worksheets', 'worksheet');
             const dashboardNames = findSheetNames(liveXml, 'dashboards', 'dashboard');
             const trimmedWorksheet = sourceWorksheet.trim();
@@ -670,12 +669,14 @@ function renderSetAction({
   );
 }
 
-// A URL action is the legacy <action> tag whose payload is a <link> (NOT a
-// <command>): monolith GetActionType classifies it URL(3) iff IsLink() is true and
-// the expression is not tsl:-prefixed. The URL lives in link@expression; an
-// expression attr on <action> itself makes the parser drop the action. The single
-// <source> carries independently-optional worksheet/dashboard attrs (worksheet-only,
-// dashboard-only + <exclude-sheet> opt-outs, or a worksheet scoped within a dashboard).
+// A URL action is the legacy <action> tag whose payload is a <link> child (never a
+// <command>). Tableau treats the action as a URL action only when a <link> is present
+// and its expression is not tsl:-prefixed; a <command> payload is read as a different,
+// non-URL action type and does nothing. The URL lives in the <link> expression attribute
+// only — an expression attribute on <action> itself makes Tableau drop the action on
+// parse. The single <source> carries independently-optional worksheet/dashboard attrs
+// (worksheet-only, dashboard-only + <exclude-sheet> opt-outs, or a worksheet scoped
+// within a dashboard).
 function renderUrlAction({
   caption,
   actionName,
@@ -733,9 +734,9 @@ function renderUrlAction({
 }
 
 // Readback predicate for url mode: the caption-matched legacy <action> must carry a
-// <link> whose expression survived AND must have NO <command> child (a <command>
-// payload is exactly the type-0 shape the agent used to hand-author, which classifies
-// as Unknown(0) rather than URL(3)).
+// <link> whose expression survived AND must have NO <command> child. A <command> payload
+// is not recognized as a URL action, so an action that persisted with one is not a
+// working URL action.
 function hasUrlActionWithLink(xml: string, caption: string, expression: string): boolean {
   return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) => {
     const block = match[0];
@@ -754,13 +755,10 @@ function hasUrlActionWithLink(xml: string, caption: string, expression: string):
     if (linkExpression === undefined) {
       return false;
     }
-    // A double-escaped expression (e.g. &amp;lt;[City]&amp;gt;) means a field reference
-    // degraded into a literal string. It still round-trips through unescapeXml back to the
-    // caller's input, so the equality check below would falsely report success. Reject the
-    // double-escape signature here so a broken URL action surfaces as not-applied.
-    if (/&amp;(?:lt|gt|amp|quot|apos);/.test(linkExpression)) {
-      return false;
-    }
+    // unescapeXml reverses exactly one escaping pass, so it maps the stored expression
+    // back to the caller's raw url only when the action was written cleanly. A
+    // double-escaped or otherwise mangled expression unescapes to something that is not
+    // the caller's url, so this comparison reports it as not-applied.
     return unescapeXml(linkExpression) === expression;
   });
 }
