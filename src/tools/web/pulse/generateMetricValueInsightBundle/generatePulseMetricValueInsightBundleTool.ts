@@ -3,6 +3,7 @@ import z from 'zod';
 
 import { ArgsValidationError, DatasourceNotAllowedError } from '../../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../../restApiInstance.js';
+import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
@@ -32,9 +33,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
     - time_zone: 'UTC'
     - language: 'LANGUAGE_EN_US'
     - locale: 'LOCALE_EN_US'
-    - The \`datasource\` field under \`metric.definition\` requires an \`id\` (datasource LUID) and accepts an optional \`id_type\`:
-      - Omit \`id_type\` for standard published datasources (default behavior).
-      - Use \`'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE'\` when the metric is based on an embedded workbook datasource rather than a published datasource.
+    - The \`datasource\` field under \`metric.definition\` requires an \`id\` (datasource LUID). An optional \`id_type\` may also be set, but it does not need to be — this tool automatically detects embedded workbook datasources and sets \`id_type\` accordingly.
 - \`bundleType\` (optional): The type of bundle to generate.  The default is 'ban'.
   - 'ban' - Return a basic insight bundle with the current aggregated value for the Pulse Metric, period over period change, and the highest ranked insight for each filterable dimension of the metric.
   - 'springboard' - Return a springboard insight bundle with the current value, period over period change, and the highest ranked insight for the metric.
@@ -171,7 +170,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
             jwtScopes: generatePulseMetricValueInsightBundleTool.requiredApiScopes,
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
-                bundleRequest,
+                await resolveBundleRequestFieldNames(restApi, bundleRequest),
                 bundleType ?? 'ban',
               ),
           });
@@ -190,3 +189,109 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
 
   return generatePulseMetricValueInsightBundleTool;
 };
+
+// The Insight Service validates every `field` string against HBI metadata's
+// fieldName, not fieldCaption. Callers build bundleRequest from field captions
+// (that's all getDatasourceMetadata exposes), so a calculated field's caption
+// (e.g. "Amount_Billions") 400s while its underlying fieldName (e.g.
+// "Calculation_00...") succeeds. VDS readMetadata returns both, so resolve
+// caption -> fieldName here before forwarding to Pulse. Best-effort: if
+// metadata can't be read, forward the request unchanged rather than blocking
+// the call — this is a caption/fieldName workaround, not a hard dependency.
+//
+// Separately, Pulse must always call HBI directly (never a cached query
+// result) for embedded/workbook datasources, which requires
+// id_type: 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE' on the request. Callers
+// can't be relied on to set this themselves, so determine it here: a LUID
+// that queryDatasource (the published Datasources REST API) doesn't
+// recognize is an embedded workbook datasource.
+async function resolveBundleRequestFieldNames(
+  restApi: RestApi,
+  bundleRequest: z.infer<typeof pulseBundleRequestSchema>,
+): Promise<z.infer<typeof pulseBundleRequestSchema>> {
+  const datasource = bundleRequest.bundle_request.input.metric.definition.datasource;
+  const datasourceLuid = datasource.id;
+
+  const [metadataResult, idType] = await Promise.all([
+    restApi.vizqlDataServiceMethods.readMetadata({ datasource: { datasourceLuid } }),
+    resolveDatasourceIdType(restApi, datasourceLuid),
+  ]);
+
+  const fieldNameByCaption = new Map<string, string>();
+  if (metadataResult.isOk()) {
+    for (const field of metadataResult.value.data ?? []) {
+      if (typeof field.fieldCaption === 'string' && typeof field.fieldName === 'string') {
+        fieldNameByCaption.set(field.fieldCaption, field.fieldName);
+      }
+    }
+  }
+  const toFieldName = (caption: string): string => fieldNameByCaption.get(caption) ?? caption;
+
+  const metric = bundleRequest.bundle_request.input.metric;
+  const basicSpecification = metric.definition.basic_specification;
+
+  return {
+    ...bundleRequest,
+    bundle_request: {
+      ...bundleRequest.bundle_request,
+      input: {
+        ...bundleRequest.bundle_request.input,
+        metric: {
+          ...metric,
+          definition: {
+            ...metric.definition,
+            datasource: {
+              ...datasource,
+              ...(idType ? { id_type: idType } : {}),
+            },
+            basic_specification: {
+              ...basicSpecification,
+              measure: {
+                ...basicSpecification.measure,
+                field: toFieldName(basicSpecification.measure.field),
+              },
+              time_dimension: {
+                ...basicSpecification.time_dimension,
+                field: toFieldName(basicSpecification.time_dimension.field),
+              },
+              filters: basicSpecification.filters.map((filter) => ({
+                ...filter,
+                field: toFieldName(filter.field),
+              })),
+            },
+          },
+          metric_specification: {
+            ...metric.metric_specification,
+            filters: metric.metric_specification.filters?.map((filter) => ({
+              ...filter,
+              field: toFieldName(filter.field),
+            })),
+          },
+          extension_options: metric.extension_options
+            ? {
+                ...metric.extension_options,
+                allowed_dimensions: metric.extension_options.allowed_dimensions?.map(toFieldName),
+              }
+            : metric.extension_options,
+        },
+      },
+    },
+  };
+}
+
+// Published datasources resolve via the Datasources REST API; embedded
+// workbook datasources don't exist there, so a failed lookup identifies one.
+async function resolveDatasourceIdType(
+  restApi: RestApi,
+  datasourceLuid: string,
+): Promise<'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE' | undefined> {
+  try {
+    await restApi.datasourcesMethods.queryDatasource({
+      siteId: restApi.siteId,
+      datasourceId: datasourceLuid,
+    });
+    return undefined;
+  } catch {
+    return 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE';
+  }
+}
