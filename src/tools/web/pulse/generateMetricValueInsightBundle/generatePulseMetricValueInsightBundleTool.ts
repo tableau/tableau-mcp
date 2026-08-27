@@ -279,18 +279,23 @@ async function resolveBundleRequestFieldNames(
   };
 }
 
-// Published datasources resolve via the Datasources REST API; embedded
-// workbook datasources don't exist there, so a failed lookup identifies one.
+// The Datasources REST API returns an entry for embedded/workbook datasources
+// too (it doesn't 404), but marks them with a contentUrl of the form
+// '$embedded$_<workbookLuid>' instead of a normal published contentUrl. A
+// LUID the API doesn't recognize at all is treated the same way, since
+// Pulse's HBI-direct, uncached path is the safer default for an unknown ID.
 async function resolveDatasourceIdType(
   restApi: RestApi,
   datasourceLuid: string,
 ): Promise<'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE' | undefined> {
   try {
-    await restApi.datasourcesMethods.queryDatasource({
+    const datasource = await restApi.datasourcesMethods.queryDatasource({
       siteId: restApi.siteId,
       datasourceId: datasourceLuid,
     });
-    return undefined;
+    return datasource.contentUrl?.startsWith('$embedded$')
+      ? 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE'
+      : undefined;
   } catch {
     return 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE';
   }

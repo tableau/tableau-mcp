@@ -229,12 +229,16 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(result.isError).toBe(false);
   });
 
-  it('sets id_type to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE when the datasource is not a published datasource', async () => {
+  it('sets id_type to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE when queryDatasource returns an embedded contentUrl', async () => {
     // Pulse must always call HBI directly (never a cached query result) for
     // embedded workbook datasources. Callers can't be relied on to set
-    // id_type themselves, so the tool detects it: queryDatasource (the
-    // published Datasources REST API) doesn't recognize an embedded LUID.
-    mocks.mockQueryDatasource.mockRejectedValue(new Error('not found'));
+    // id_type themselves, so the tool detects it: the Datasources REST API
+    // resolves embedded/workbook datasource LUIDs too, but marks them with a
+    // contentUrl of the form '$embedded$_<workbookLuid>' instead of 404ing.
+    mocks.mockQueryDatasource.mockResolvedValue({
+      name: 'SalesCloud',
+      contentUrl: '$embedded$_857cae8f-aaee-4e7a-ad78-851b465b5121',
+    });
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
       new Ok(mockBundleRequestResponse),
     );
@@ -245,6 +249,22 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       siteId: 'site-id',
       datasourceId: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
     });
+    const [sentRequest] = mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0];
+    expect(sentRequest.bundle_request.input.metric.definition.datasource).toEqual({
+      id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
+      id_type: 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE',
+    });
+    expect(result.isError).toBe(false);
+  });
+
+  it('sets id_type to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE when queryDatasource does not recognize the LUID at all', async () => {
+    mocks.mockQueryDatasource.mockRejectedValue(new Error('not found'));
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+
+    const result = await getToolResult();
+
     const [sentRequest] = mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0];
     expect(sentRequest.bundle_request.input.metric.definition.datasource).toEqual({
       id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
