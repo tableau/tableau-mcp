@@ -8,8 +8,8 @@ Implementation reference for chart design decisions in Tableau — covering mark
 - Authoring outcome improved: create, refine
 - In-scope reason: Helps Claude apply chart design best practices and avoid common mistakes when authoring visualizations.
 - Out-of-scope risk: none
-- Tags: charts, best-practices, mark-class, shelf-placement, examples
-- Relevant user prompts/search terms: "which chart type should I use", "bar chart vs line chart", "how to sort a bar chart in Tableau", "dual axis chart example", "why does my chart look wrong", "scatter plot setup", "stacked bar chart configuration", "common chart mistakes", "when to remove gridlines", "mark class selection rules"
+- Tags: charts, best-practices, mark-class, shelf-placement, examples, chart-audit, logarithmic-axis
+- Relevant user prompts/search terms: "which chart type should I use", "bar chart vs line chart", "how to sort a bar chart in Tableau", "dual axis chart example", "why does my chart look wrong", "scatter plot setup", "stacked bar chart configuration", "common chart mistakes", "when to remove gridlines", "mark class selection rules", "audit this workbook for misleading charts", "misleading logarithmic chart scale", "bar chart on a log scale"
 
 ## When to Use
 
@@ -18,6 +18,7 @@ Use this guide when:
 - **Diagnosing a chart that looks wrong** — lines on categorical data, overlapping areas, misleading dual axes
 - **Building a specific chart** and need a concrete worked example with shelf placement
 - **Coaching a customer** on why their current chart choice is hurting their analysis
+- **Auditing an existing workbook** for misleading chart choices or axis scales
 
 ---
 
@@ -88,6 +89,11 @@ When the question could be answered by multiple chart types, prefer in this orde
 - **Problem**: Non-stacked area chart with 3+ series.
 - **Why it is wrong**: Later series occlude earlier ones. Impossible to read values for hidden series.
 - **Fix**: Use Line chart for comparison, or Stacked Area if part-to-whole is the goal.
+
+### 9. Bars on an Unlabeled Logarithmic Scale
+- **Problem**: A logarithmic axis is unlabeled, especially when used with Bar marks.
+- **Why it is wrong**: Readers assume a linear scale, while bar length only represents magnitude honestly on a linear scale.
+- **Fix**: Do not use Bar marks on logarithmic scales. For data spanning orders of magnitude, use Line or Circle marks and label the axis explicitly as logarithmic.
 
 ---
 
@@ -188,7 +194,7 @@ When the question could be answered by multiple chart types, prefer in this orde
 ## Source and Confidence
 
 - Source/evidence type: internal-doc
-- Source: imported from prior Tableau authoring knowledge base (mbradbourne)
+- Source: prior Tableau authoring knowledge base (mbradbourne), with workbook-audit and logarithmic-axis guidance from Will Perkins in PR #93 (`9eb2696`)
 - Customer-identifying details removed: yes
 - Confidence: draft
-- Last reviewed: 2026-05-22
+- Last reviewed: 2026-08-27
