@@ -141,7 +141,7 @@ describe('getViewDataTool', () => {
     });
   });
 
-  it('uses allData and returns complete parsed rows on REST API 3.30 or later', async () => {
+  it('uses allData and returns every parsed server response part on REST API 3.30 or later', async () => {
     RestApi.version = '3.30';
     RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
     mocks.mockGetViewAllData.mockResolvedValue({
@@ -160,25 +160,37 @@ describe('getViewDataTool', () => {
 
     const result = await getToolResult({ viewId: mockView.id, viewFilters: { Region: 'West' } });
 
-    expect(parseJsonContent(result)).toEqual({
-      sheetName: 'Sales',
-      totalSheetsInView: 1,
-      columns: ['Region', 'Sales'],
-      rows: [
-        ['West', '100'],
-        ['East', '200'],
-      ],
-      sheetStatus: 'OK',
-    });
+    expect(parseJsonContent(result)).toEqual([
+      {
+        sheetName: 'Sales',
+        columns: ['Region', 'Sales'],
+        rows: [
+          ['West', '100'],
+          ['East', '200'],
+        ],
+        sheetStatus: 'OK',
+      },
+    ]);
     expect(mocks.mockGetViewAllData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       viewId: mockView.id,
       viewFilters: { Region: 'West' },
     });
     expect(mocks.mockQueryViewData).not.toHaveBeenCalled();
+    expect(mocks.mockLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Parsed view all-data response',
+        data: expect.objectContaining({
+          viewId: mockView.id,
+          sheetCount: 1,
+          sheetNames: ['Sales'],
+        }),
+      }),
+      expect.any(Object),
+    );
   });
 
-  it('returns a manifest for an unselected multi-sheet view on REST API 3.30 or later', async () => {
+  it('returns every response part when no sheetName is provided on REST API 3.30 or later', async () => {
     RestApi.version = '3.30';
     RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
     mocks.mockGetViewAllData.mockResolvedValue({
@@ -189,16 +201,13 @@ describe('getViewDataTool', () => {
       contentType: multipartContentType,
     });
 
-    expect(parseJsonContent(await getToolResult({ viewId: mockView.id }))).toEqual({
-      requiresSheetSelection: true,
-      sheets: [
-        { sheetName: 'Sales', sheetIndex: 0 },
-        { sheetName: 'Profit', sheetIndex: 1 },
-      ],
-    });
+    expect(parseJsonContent(await getToolResult({ viewId: mockView.id }))).toEqual([
+      { sheetName: 'Sales', columns: ['Region'], rows: [['West']], sheetStatus: 'OK' },
+      { sheetName: 'Profit', columns: ['Region'], rows: [['East']], sheetStatus: 'OK' },
+    ]);
   });
 
-  it('returns the first matching selected sheet and isolates sheet errors on REST API 3.30 or later', async () => {
+  it('preserves server response order and sheet errors on REST API 3.30 or later', async () => {
     RestApi.version = '3.30';
     RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
     mocks.mockGetViewAllData.mockResolvedValue({
@@ -210,38 +219,17 @@ describe('getViewDataTool', () => {
       contentType: multipartContentType,
     });
 
-    expect(
-      parseJsonContent(await getToolResult({ viewId: mockView.id, sheetName: 'Sales' })),
-    ).toMatchObject({
-      rows: [['West']],
-      sheetStatus: 'OK',
-    });
-    expect(
-      parseJsonContent(await getToolResult({ viewId: mockView.id, sheetName: 'Broken' })),
-    ).toEqual({
-      sheetName: 'Broken',
-      totalSheetsInView: 3,
-      columns: [],
-      rows: [],
-      sheetStatus: 'ERROR',
-      errorDetail: 'Sheet could not be rendered',
-    });
-  });
-
-  it('returns an available-sheet error when the selected sheet does not exist on REST API 3.30 or later', async () => {
-    RestApi.version = '3.30';
-    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
-    mocks.mockGetViewAllData.mockResolvedValue({
-      body: buildMultipartBody([{ name: 'Sales', columns: ['Region'], rows: [['West']] }]),
-      contentType: multipartContentType,
-    });
-
-    const result = await getToolResult({ viewId: mockView.id, sheetName: 'Missing' });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Sheet "Missing" was not found');
-    expect(result.content[0].text).toContain('Sales');
+    expect(parseJsonContent(await getToolResult({ viewId: mockView.id }))).toEqual([
+      { sheetName: 'Sales', columns: ['Region'], rows: [['West']], sheetStatus: 'OK' },
+      { sheetName: 'Sales', columns: ['Region'], rows: [['East']], sheetStatus: 'OK' },
+      {
+        sheetName: 'Broken',
+        columns: [],
+        rows: [],
+        sheetStatus: 'ERROR',
+        errorDetail: 'Sheet could not be rendered',
+      },
+    ]);
   });
 
   it('should handle API errors gracefully', async () => {
@@ -395,15 +383,13 @@ describe('getViewDataTool', () => {
 async function getToolResult({
   viewId,
   viewFilters,
-  sheetName,
 }: {
   viewId: string;
   viewFilters?: Record<string, string>;
-  sheetName?: string;
 }): Promise<CallToolResult> {
   const getViewDataTool = getGetViewDataTool(new WebMcpServer());
   const callback = await Provider.from(getViewDataTool.callback);
-  return await callback({ viewId, viewFilters, sheetName }, getMockRequestHandlerExtra());
+  return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra());
 }
 
 function parseJsonContent(result: CallToolResult): any {

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { log } from '../../../logging/logger.js';
 import { parseViewAllData } from './viewAllData.js';
 import ViewsMethods from './viewsMethods.js';
+
+vi.mock('../../../logging/logger.js', () => ({ log: vi.fn() }));
 
 const boundary = 'all-data-boundary';
 
@@ -122,6 +125,16 @@ describe('ViewsMethods.getViewAllData', () => {
       headers: { Authorization: 'Bearer token' },
       params: { vf_Region: 'West', vf_Category: 'Furniture' },
       responseType: 'arraybuffer',
+    });
+    expect(log).toHaveBeenCalledWith({
+      message: 'Received view all-data response',
+      level: 'debug',
+      logger: 'rest-api',
+      data: {
+        status: undefined,
+        contentType: `multipart/form-data; boundary=${boundary}`,
+        bodyBytes: multipartBody.byteLength,
+      },
     });
   });
 });
