@@ -47,9 +47,10 @@ export const SITE_ROLE_HIERARCHY = {
   Explorer: 2,
   ExplorerCanPublish: 3,
   Creator: 4,
-  SiteAdministratorExplorer: 5,
-  SiteAdministratorCreator: 6,
-  ServerAdministrator: 7,
+  SupportUser: 5,
+  SiteAdministratorExplorer: 6,
+  SiteAdministratorCreator: 7,
+  ServerAdministrator: 8,
 } as const satisfies Record<string, number>;
 
 export type SiteRole = keyof typeof SITE_ROLE_HIERARCHY;

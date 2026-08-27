@@ -168,7 +168,7 @@ describe('getCurrentUserSiteRole', () => {
     expect(mocks.useRestApi).not.toHaveBeenCalled();
   });
 
-  it('populates the shared cache so a subsequent assertAdmin skips the REST call', async () => {
+  it('does not share state with assertAdmin — a subsequent assertAdmin still queries the REST API', async () => {
     const siteId = 'site-cache';
     const userId = 'user-cache';
     stubUseRestApiWithSiteRole('SiteAdministratorCreator');
@@ -179,7 +179,11 @@ describe('getCurrentUserSiteRole', () => {
     expect(siteRole).toBe('SiteAdministratorCreator');
     expect(mocks.useRestApi).toHaveBeenCalledTimes(1);
 
-    const queryUserOnSiteSpy = vi.fn();
+    const queryUserOnSiteSpy = vi.fn().mockResolvedValue({
+      id: userId,
+      name: 'name',
+      siteRole: 'SiteAdministratorCreator',
+    });
     const restApi = {
       siteId,
       usersMethods: { queryUserOnSite: queryUserOnSiteSpy },
@@ -188,6 +192,6 @@ describe('getCurrentUserSiteRole', () => {
 
     const result = await assertAdmin(restApi, extra);
     expect(result.isOk()).toBe(true);
-    expect(queryUserOnSiteSpy).not.toHaveBeenCalled();
+    expect(queryUserOnSiteSpy).toHaveBeenCalledTimes(1);
   });
 });

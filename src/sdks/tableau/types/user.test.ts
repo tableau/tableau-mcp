@@ -35,7 +35,13 @@ describe('siteRoleMeetsMinimum', () => {
   });
 
   it('fails closed for an unrecognized role', () => {
-    expect(siteRoleMeetsMinimum('SupportUser', 'Viewer')).toBe(false);
+    expect(siteRoleMeetsMinimum('GuestUser', 'Viewer')).toBe(false);
+  });
+
+  it('ranks SupportUser just below SiteAdministratorExplorer and above Creator', () => {
+    expect(siteRoleMeetsMinimum('SupportUser', 'Creator')).toBe(true);
+    expect(siteRoleMeetsMinimum('SupportUser', 'SiteAdministratorExplorer')).toBe(false);
+    expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', 'SupportUser')).toBe(true);
   });
 
   it('uses the lowest admin role as the admin threshold', () => {
