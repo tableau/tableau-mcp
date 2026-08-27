@@ -9,7 +9,7 @@ sidebar_position: 1
 A read-only Tableau Cloud admin workflow that identifies stale workbooks and published data sources and renders them as a report for review.
 
 :::warning[Admin Only]
-This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` site setting.
+This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable.
 :::
 
 ## Workflow
@@ -27,6 +27,10 @@ The prompt instructs the model to call [`query-admin-insights`](../tools/admin-i
 
 ```bash
 ADMIN_TOOLS_ENABLED=true
+
+# Optional overrides (env vars)
+STALE_CONTENT_MIN_AGE_DAYS=90   # 1-3650; default 90
+STALE_CONTENT_MAX_ROWS=100      # 1-10000; default 100
 ```
 
 See also: [Environment Variables](../configuration/mcp-config/env-vars.md)

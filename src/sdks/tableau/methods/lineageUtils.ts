@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { LineageContent } from '../types/lineageContent.js';
 import { View } from '../types/view.js';
-import { Workbook } from '../types/workbook.js';
+import { Workbook, WorkbookConnection } from '../types/workbook.js';
 
 export type { LineageContent };
 
@@ -329,6 +329,24 @@ function normalizeDownstreamContents(
 
 function toGraphqlStringArray(values: Array<string>): string {
   return `[${values.map((value) => JSON.stringify(value)).join(', ')}]`;
+}
+
+// datasource.id is the VDS-queryable embedded LUID. Multi-connection datasources repeat it
+// across rows, so dedupe by luid. name is optional on the wire; fall back to the luid.
+export function toEmbeddedLineageContents(
+  connections: Array<WorkbookConnection>,
+): Array<LineageContent> {
+  const byLuid = new Map<string, LineageContent>();
+  for (const { datasource } of connections) {
+    if (datasource && !byLuid.has(datasource.id)) {
+      byLuid.set(datasource.id, {
+        luid: datasource.id,
+        name: datasource.name ?? datasource.id,
+        datasourceType: 'embedded',
+      });
+    }
+  }
+  return [...byLuid.values()];
 }
 
 function normalizeLineageContents(
