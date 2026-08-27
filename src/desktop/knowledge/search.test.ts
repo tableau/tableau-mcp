@@ -351,8 +351,12 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
     }
   });
 
-  it('ranks chart scale audit guidance #1 for a misleading logarithmic scale query', () => {
-    const hits = searchKnowledge('audit this workbook for misleading logarithmic chart scales', 5);
+  it.each([
+    'audit this workbook for misleading logarithmic chart scales',
+    'bar chart on a log scale',
+    'audit this workbook for misleading charts',
+  ])('ranks chart scale audit guidance #1 for %s', (query) => {
+    const hits = searchKnowledge(query, 5);
 
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].slug).toBe('strategy/viz-design/chart-best-practices');

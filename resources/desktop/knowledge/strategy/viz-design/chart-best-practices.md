@@ -90,8 +90,8 @@ When the question could be answered by multiple chart types, prefer in this orde
 - **Why it is wrong**: Later series occlude earlier ones. Impossible to read values for hidden series.
 - **Fix**: Use Line chart for comparison, or Stacked Area if part-to-whole is the goal.
 
-### 9. Bars on an Unlabeled Logarithmic Scale
-- **Problem**: A logarithmic axis is unlabeled, especially when used with Bar marks.
+### 9. Bar Marks on a Logarithmic Scale
+- **Problem**: Using Bar marks on a logarithmic axis, or leaving any logarithmic axis unlabeled.
 - **Why it is wrong**: Readers assume a linear scale, while bar length only represents magnitude honestly on a linear scale.
 - **Fix**: Do not use Bar marks on logarithmic scales. For data spanning orders of magnitude, use Line or Circle marks and label the axis explicitly as logarithmic.
 
