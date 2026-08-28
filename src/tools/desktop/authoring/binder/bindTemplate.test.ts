@@ -5834,7 +5834,30 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
     expect(body.sheet_name).toBe('Sales by Region');
-    expect(vi.mocked(classifyWorksheetReplaceTarget)).not.toHaveBeenCalled();
+    expect(vi.mocked(classifyWorksheetReplaceTarget)).toHaveBeenCalledWith(XML, 'Sales by Region');
+  });
+
+  it('chooses a collision-free title when an omitted target already belongs to a dashboard', async () => {
+    const { getExecutor } = setupAutoApplyMocks();
+    vi.mocked(classifyWorksheetReplaceTarget).mockImplementation((_xml, name) =>
+      name === 'Sales by Region' ? 'in-dashboard' : 'not-found',
+    );
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.sheet_name).toBe('Sales by Region (2)');
+    expect(vi.mocked(buildInjectedWorkbookXml)).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Sales by Region (2)' }),
+    );
   });
 });
 

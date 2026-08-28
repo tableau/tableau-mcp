@@ -575,6 +575,41 @@ describe('prepareCalculationsInWorkbook idempotency', () => {
     expect(result.error.message).toContain('caption collision');
   });
 
+  it.each([
+    {
+      existing:
+        "<calculation class='tableau' formula='IF [Region] = &quot;A\\&quot;  B&quot; THEN &quot;match&quot; END' />",
+      requested: 'IF [Region] = "A\\" B" THEN "match" END',
+    },
+    {
+      existing:
+        '<calculation class="tableau" formula="IF [Region] = &apos;A\\&apos;  B&apos; THEN &apos;match&apos; END" />',
+      requested: "IF [Region] = 'A\\' B' THEN 'match' END",
+    },
+  ])(
+    'does not collapse literal whitespace after a backslash-escaped quote',
+    ({ existing, requested }) => {
+      const escapedQuoteCalc =
+        "<column caption='Bucket' datatype='string' name='[Calculation_902]' role='dimension' type='nominal'>" +
+        `${existing}</column>`;
+      const result = prepareCalculationsInWorkbook({
+        workbookXml: withColumn(BASE_XML, escapedQuoteCalc),
+        calcs: [
+          {
+            caption: 'Bucket',
+            formula: requested,
+            role: 'dimension',
+            datatype: 'string',
+          },
+        ],
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) return;
+      expect(result.error.message).toContain('caption collision');
+    },
+  );
+
   it('does not reuse a calculation when its default format differs', () => {
     const formattedCalc = existingCalc.replace(
       " type='quantitative'",

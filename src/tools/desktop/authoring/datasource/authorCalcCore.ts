@@ -529,7 +529,14 @@ function normalizeFormula(formula: string): string {
     } else if (state === 'quoted') {
       normalized += char;
       if (char === quote) {
-        if (next === quote) {
+        let backslashes = 0;
+        for (let cursor = index - 1; cursor >= 0 && formula[cursor] === '\\'; cursor -= 1) {
+          backslashes += 1;
+        }
+        if (backslashes % 2 === 1) {
+          // Backslash-escaped delimiters remain inside the literal. Tableau also
+          // accepts doubled delimiters, handled by the next branch.
+        } else if (next === quote) {
           normalized += next;
           index += 1;
         } else {

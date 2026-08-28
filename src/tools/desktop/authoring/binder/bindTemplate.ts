@@ -1573,6 +1573,20 @@ function applyFailureDisposition(
 
 type BoundResult = Extract<BinderResult, { status: 'bound' }>;
 
+function collisionFreeWorksheetTitle(workbookXml: string, requestedTitle: string): string {
+  if (classifyWorksheetReplaceTarget(workbookXml, requestedTitle) !== 'in-dashboard') {
+    return requestedTitle;
+  }
+  for (let copy = 2; copy <= 10_000; copy += 1) {
+    const suffix = ` (${copy})`;
+    const candidate = `${requestedTitle.slice(0, Math.max(1, 80 - suffix.length))}${suffix}`;
+    if (classifyWorksheetReplaceTarget(workbookXml, candidate) === 'not-found') {
+      return candidate;
+    }
+  }
+  throw new Error(`could not find an unused worksheet title for "${requestedTitle}"`);
+}
+
 function sortDirectionForApply(direction: 'asc' | 'desc'): SortDirection {
   return direction === 'desc' ? 'DESC' : 'ASC';
 }
@@ -2058,19 +2072,25 @@ async function performAutoApply({
   // ── Inject leg (shared core) ─────────────────────────────────────
   const injectStart = Date.now();
   let injected: ReturnType<typeof buildInjectedWorkbookXml>;
+  let literalTitle: string;
   try {
     // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
     const templateXml = templateSnapshot.xml;
     // Per-apply calc-namespacing identity: session + apply timestamp (randomUUID
     // guards same-millisecond applies), mirroring the inject-template tool's nonce.
     const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
+    const requestedTitle = decodeXmlEntities(args.title);
+    literalTitle =
+      args.sheet_type === 'worksheet'
+        ? collisionFreeWorksheetTitle(workbookXml, requestedTitle)
+        : requestedTitle;
     injected = buildInjectedWorkbookXml({
       workbookXml,
       templateXml,
       // Binder output is escaped for the manual artifact path. The shared core
       // accepts raw values and owns the single escaping boundary, so decode the
       // binder payload before using it in this in-process auto-apply path.
-      title: decodeXmlEntities(args.title),
+      title: literalTitle,
       sheetType: args.sheet_type,
       templateParameters: Object.fromEntries(
         Object.entries(args.template_parameters).map(([key, value]) => [
@@ -2104,7 +2124,6 @@ async function performAutoApply({
   }
   // Binder output carries one escaping layer; the shared core owns the next and only
   // serialization boundary. Remove exactly the binder layer so entity-like literal text survives.
-  const literalTitle = decodeXmlEntities(args.title);
   const spliced = applyProposalSplices({ xml: injected.xml, args, schemaSummary, literalTitle });
   if (!spliced.ok) {
     return {
