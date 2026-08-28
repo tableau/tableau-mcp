@@ -29,6 +29,16 @@ describe('authorActionTool', () => {
     vi.clearAllMocks();
   });
 
+  it('describes datasource selection as name or unique caption', async () => {
+    const tool = getAuthorActionTool(new DesktopMcpServer());
+    const paramsSchema = (await Provider.from(tool.paramsSchema)) as Record<
+      string,
+      { description?: string }
+    >;
+
+    expect(paramsSchema['datasource']?.description).toBe('Top-level name/unique caption.');
+  });
+
   it('creates the workbook-level <actions> block and splices an edit-parameter-action, verifying readback', async () => {
     const readbackXml = withActions(
       BASE_XML,
@@ -179,6 +189,58 @@ describe('authorActionTool', () => {
     expect(membershipAt).toBeLessThan(paramsAt);
   });
 
+  it('resolves a unique datasource caption to the internal set target', async () => {
+    const expectedAction =
+      "<edit-group-action caption='Expand Category' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<add-or-remove-marks value='assign' />" +
+      "<params><param name='selection-clear-set-option' value='do-nothing' />" +
+      "<param name='target-group' value='[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]' /></params>" +
+      '</edit-group-action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        targetSet: 'Category Set',
+        datasource: 'Sample - Superstore',
+      },
+      readbackXml: withActions(BASE_XML, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).targetSet).toBe(
+      '[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]',
+    );
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
+  });
+
+  it('rejects a duplicate datasource caption before applying a set action', async () => {
+    const duplicateCaptionXml = BASE_XML.replace(
+      '</datasources>',
+      "<datasource caption='Sample - Superstore' name='federated.duplicate'></datasource></datasources>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        targetSet: 'Category Set',
+        datasource: 'Sample - Superstore',
+      },
+      initialXml: duplicateCaptionXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('ambiguous');
+    expect(result.content[0].text).toContain('federated.1syzfv90anwuu119p4zra1ga299n');
+    expect(result.content[0].text).toContain('federated.duplicate');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('accepts set-action readback when Desktop backfills single-select', async () => {
     const normalizedAction =
       "<edit-group-action caption='Expand Category' name='[Action1]'>" +
@@ -291,7 +353,8 @@ describe('authorActionTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain("datasource 'phantom' matched no datasource");
+    expect(result.content[0].text).toContain('Datasource "phantom" was not found');
+    expect(result.content[0].text).not.toContain('Candidates: phantom');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
@@ -308,10 +371,8 @@ describe('authorActionTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain(
-      "datasource 'Missing Datasource' matched no datasource; sets found in:",
-    );
-    expect(result.content[0].text).toContain('Category Set');
+    expect(result.content[0].text).toContain('Datasource "Missing Datasource" was not found');
+    expect(result.content[0].text).toContain('federated.1syzfv90anwuu119p4zra1ga299n');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 

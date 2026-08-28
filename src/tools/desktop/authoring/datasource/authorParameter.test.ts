@@ -86,6 +86,23 @@ const XML_TWO_DATASOURCES = [
   '</workbook>',
 ].join('');
 
+const XML_TWO_CAPTIONED_DATASOURCES = [
+  "<?xml version='1.0' encoding='utf-8'?>",
+  "<workbook version='18.1'><datasources>",
+  "<datasource caption='Sales' inline='true' name='federated.sales'>",
+  "<connection class='federated'><named-connections>",
+  "<named-connection caption='Sales' name='textscan.sales' />",
+  '</named-connections></connection>',
+  '</datasource>',
+  "<datasource caption='Returns' inline='true' name='federated.returns'>",
+  "<connection class='federated'><named-connections>",
+  "<named-connection caption='Returns' name='textscan.returns' />",
+  '</named-connections></connection>',
+  '</datasource></datasources>',
+  '<worksheets><worksheet name="Sheet 1" /></worksheets>',
+  '</workbook>',
+].join('');
+
 let originalDesktopSessionId: string | undefined;
 
 beforeEach(() => {
@@ -257,6 +274,34 @@ describe('authorParameterTool', () => {
     expect(returnsOpen).toBeLessThan(depBlock);
   });
 
+  it('resolves a unique datasource caption and injects into the internal top-level datasource', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'p.Period',
+        datatype: 'string',
+        value: 'Month',
+        datasource: 'Returns',
+      },
+      initialXml: XML_TWO_CAPTIONED_DATASOURCES,
+      readbackXml: xmlWithParameterCaption('p.Period'),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      caption: 'p.Period',
+      applied: 'in-place',
+    });
+    const posted = applyWorkbookDocument.mock.calls[0][0] as string;
+    expect(datasourceBlock(posted, 'federated.returns')).toContain(
+      "<datasource-dependencies datasource='Parameters'>",
+    );
+    expect(datasourceBlock(posted, 'federated.sales')).not.toContain(
+      "<datasource-dependencies datasource='Parameters'>",
+    );
+    expect(posted).toContain("name='textscan.returns'");
+  });
+
   it('errors when the readback does not contain the new parameter (did not materialize)', async () => {
     process.env.TABLEAU_DESKTOP_SESSION_ID = '12345';
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
@@ -368,6 +413,20 @@ function xmlWithParameterCaption(caption: string): string {
     '</datasource>',
     `<column caption='${caption}' datatype='string' name='[Parameter 2]' param-domain-type='any' role='measure' type='nominal' value='&quot;Month&quot;'><calculation class='tableau' formula='&quot;Month&quot;' /></column></datasource>`,
   );
+}
+
+function datasourceBlock(xml: string, datasourceName: string): string {
+  let cursor = xml.indexOf('<datasource');
+  while (cursor !== -1) {
+    const openEnd = xml.indexOf('>', cursor) + 1;
+    const openTag = xml.slice(cursor, openEnd);
+    if (openTag.includes(`name='${datasourceName}'`)) {
+      const closeEnd = xml.indexOf('</datasource>', openEnd) + '</datasource>'.length;
+      return xml.slice(cursor, closeEnd);
+    }
+    cursor = xml.indexOf('<datasource', openEnd);
+  }
+  throw new Error(`missing datasource ${datasourceName}`);
 }
 
 function restoreEnv(name: string, value: string | undefined): void {

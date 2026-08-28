@@ -36,6 +36,54 @@ const PUBLISHED_BASE_XML = [
   "</datasource></datasources><worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
 ].join('');
 
+const LEGACY_NAMED_CONNECTION_XML = [
+  "<?xml version='1.0' encoding='utf-8'?>",
+  "<workbook version='18.1'><datasources>",
+  "<datasource inline='true' name='Sample - Superstore'>",
+  "<connection class='federated'><named-connections>",
+  "<named-connection caption='Sample - Superstore' name='excel-direct.0oz123' />",
+  '</named-connections></connection>',
+  "<column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+  '</datasource></datasources>',
+  "<worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
+].join('');
+
+const MODERN_CAPTIONED_DATASOURCE_XML = [
+  "<?xml version='1.0' encoding='utf-8'?>",
+  "<workbook version='18.1'><datasources>",
+  "<datasource caption='Orders' inline='true' name='federated.orders'>",
+  "<connection class='federated'><named-connections>",
+  "<named-connection caption='Orders' name='textscan.orders' />",
+  '</named-connections></connection>',
+  "<column caption='Sales' datatype='real' name='[sales]' role='measure' type='quantitative' />",
+  '</datasource>',
+  "<datasource caption='h6-gross-margin-calc' inline='true' name='federated.csv040059ff380b040059ff380b'>",
+  "<connection class='federated'><named-connections>",
+  "<named-connection caption='h6-gross-margin-calc' name='textscan.csv040059ff380b040059ff380b' />",
+  '</named-connections></connection>',
+  "<column caption='Quantity' datatype='integer' name='[quantity]' role='measure' type='quantitative' />",
+  '</datasource></datasources>',
+  "<worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
+].join('');
+
+const INTERNAL_NAME_CAPTION_COLLISION_XML = [
+  "<?xml version='1.0' encoding='utf-8'?>",
+  "<workbook version='18.1'><datasources>",
+  "<datasource caption='Primary Orders' inline='true' name='federated.primary'>",
+  "<connection class='federated'><named-connections>",
+  "<named-connection caption='Primary Orders' name='textscan.primary' />",
+  '</named-connections></connection>',
+  "<column caption='Primary Sales' datatype='real' name='[primary_sales]' role='measure' type='quantitative' />",
+  '</datasource>',
+  "<datasource caption='federated.primary' inline='true' name='federated.secondary'>",
+  "<connection class='federated'><named-connections>",
+  "<named-connection caption='Secondary Orders' name='textscan.secondary' />",
+  '</named-connections></connection>',
+  "<column caption='Secondary Sales' datatype='real' name='[secondary_sales]' role='measure' type='quantitative' />",
+  '</datasource></datasources>',
+  "<worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
+].join('');
+
 describe('authorCalcTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,6 +117,136 @@ describe('authorCalcTool', () => {
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(
       "<column caption='Profit &amp; &quot;Growth&quot;' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='IF [Sales] &lt; 10 AND [Region] = &apos;West&apos; THEN &quot;A &amp; B&quot; END' /></column>",
     );
+  });
+
+  it('keeps a legacy friendly top-level datasource name instead of its nested connection id', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const calcXml =
+      "<column caption='Double Sales' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Sales] * 2' /></column>";
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Double Sales',
+        formula: '[Sales] * 2',
+        datasource: 'Sample - Superstore',
+      },
+      initialXml: LEGACY_NAMED_CONNECTION_XML,
+      readbackXml: withColumnInDatasource(
+        LEGACY_NAMED_CONNECTION_XML,
+        'Sample - Superstore',
+        calcXml,
+      ),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).datasource).toBe('Sample - Superstore');
+    const appliedXml = appliedDocumentXml(applyWorkbookDocument);
+    expect(datasourceBlock(appliedXml, 'Sample - Superstore')).toContain(calcXml);
+    expect(JSON.parse(result.content[0].text).datasource).not.toBe('excel-direct.0oz123');
+  });
+
+  it('resolves a unique visible datasource caption to its top-level internal name', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const calcXml =
+      "<column caption='Double Quantity' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[quantity] * 2' /></column>";
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Double Quantity',
+        formula: '[Quantity] * 2',
+        datasource: 'h6-gross-margin-calc',
+      },
+      initialXml: MODERN_CAPTIONED_DATASOURCE_XML,
+      readbackXml: withColumnInDatasource(
+        MODERN_CAPTIONED_DATASOURCE_XML,
+        'federated.csv040059ff380b040059ff380b',
+        calcXml,
+      ),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).datasource).toBe(
+      'federated.csv040059ff380b040059ff380b',
+    );
+    const appliedXml = appliedDocumentXml(applyWorkbookDocument);
+    expect(datasourceBlock(appliedXml, 'federated.csv040059ff380b040059ff380b')).toContain(calcXml);
+    expect(datasourceBlock(appliedXml, 'federated.orders')).not.toContain(calcXml);
+    expect(JSON.parse(result.content[0].text).datasource).not.toBe(
+      'textscan.csv040059ff380b040059ff380b',
+    );
+  });
+
+  it('prefers an exact top-level internal name over a colliding datasource caption', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const calcXml =
+      "<column caption='Double Primary Sales' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[primary_sales] * 2' /></column>";
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Double Primary Sales',
+        formula: '[primary_sales] * 2',
+        datasource: 'federated.primary',
+      },
+      initialXml: INTERNAL_NAME_CAPTION_COLLISION_XML,
+      readbackXml: withColumnInDatasource(
+        INTERNAL_NAME_CAPTION_COLLISION_XML,
+        'federated.primary',
+        calcXml,
+      ),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).datasource).toBe('federated.primary');
+    const appliedXml = appliedDocumentXml(applyWorkbookDocument);
+    expect(datasourceBlock(appliedXml, 'federated.primary')).toContain(calcXml);
+    expect(datasourceBlock(appliedXml, 'federated.secondary')).not.toContain(calcXml);
+    expect(JSON.parse(result.content[0].text).datasource).not.toBe('textscan.primary');
+  });
+
+  it('rejects an ambiguous datasource caption before apply and lists internal choices', async () => {
+    const duplicateCaptionXml = MODERN_CAPTIONED_DATASOURCE_XML.replace(
+      "caption='Orders'",
+      "caption='h6-gross-margin-calc'",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Double Quantity',
+        formula: '[Quantity] * 2',
+        datasource: 'h6-gross-margin-calc',
+      },
+      initialXml: duplicateCaptionXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('ambiguous');
+    expect(result.content[0].text).toContain('federated.orders');
+    expect(result.content[0].text).toContain('federated.csv040059ff380b040059ff380b');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects calc readback from a different internal datasource', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const calcXml =
+      "<column caption='Double Quantity' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[quantity] * 2' /></column>";
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Double Quantity',
+        formula: '[Quantity] * 2',
+        datasource: 'federated.csv040059ff380b040059ff380b',
+      },
+      initialXml: MODERN_CAPTIONED_DATASOURCE_XML,
+      readbackXml: withColumnInDatasource(
+        MODERN_CAPTIONED_DATASOURCE_XML,
+        'federated.orders',
+        calcXml,
+      ),
+    });
+
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not apply');
   });
 
   it('rejects a caption collision before loading metadata', async () => {
@@ -517,6 +695,26 @@ async function getToolResult({
 
 function withColumn(xml: string, column: string): string {
   return xml.replace('</datasource>', `${column}</datasource>`);
+}
+
+function withColumnInDatasource(xml: string, datasourceName: string, column: string): string {
+  const block = datasourceBlock(xml, datasourceName);
+  return xml.replace(block, block.replace('</datasource>', `${column}</datasource>`));
+}
+
+function datasourceBlock(xml: string, datasourceName: string): string {
+  const openStart = xml.indexOf('<datasource');
+  let cursor = openStart;
+  while (cursor !== -1) {
+    const openEnd = xml.indexOf('>', cursor) + 1;
+    const openTag = xml.slice(cursor, openEnd);
+    if (openTag.includes(`name='${datasourceName}'`)) {
+      const closeEnd = xml.indexOf('</datasource>', openEnd) + '</datasource>'.length;
+      return xml.slice(cursor, closeEnd);
+    }
+    cursor = xml.indexOf('<datasource', openEnd);
+  }
+  throw new Error(`missing datasource ${datasourceName}`);
 }
 
 function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): string {

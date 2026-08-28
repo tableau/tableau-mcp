@@ -9,6 +9,7 @@ import {
 } from '../../../../desktop/binder/schema-summary.js';
 import { WithExecutorAndAbortSignal } from '../../../../desktop/externalApi/executorTypes.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
+import { resolveUniqueDatasourceName } from '../../../../desktop/metadata/field-resolver.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -21,6 +22,7 @@ export const datatypeSchema = z.enum(['real', 'integer', 'string', 'boolean', 'd
 
 export type DatasourceElement = {
   name: string;
+  caption?: string;
   openStart: number;
   openEnd: number;
   closeStart: number;
@@ -91,7 +93,7 @@ export async function authorCalculationsInWorkbook({
     baselineXml: workbookXml,
     settled: (xml) =>
       prepared.value.authoredCalcs.every((calc) =>
-        hasColumnNameAndCaption(xml, calc.calcName, calc.caption),
+        hasColumnNameAndCaptionInDatasource(xml, calc.datasource, calc.calcName, calc.caption),
       ),
     executor,
     signal,
@@ -123,6 +125,7 @@ function prepareCalculationBatch({
 }): Result<{ editedXml: string; authoredCalcs: AuthoredCalc[] }, ArgsValidationError> {
   let editedXml = workbookXml;
   const authoredCalcs: AuthoredCalc[] = [];
+  let resolvedDatasourceName: string | undefined;
 
   for (const [index, calc] of calcs.entries()) {
     const caption = calc.caption.trim();
@@ -142,7 +145,7 @@ function prepareCalculationBatch({
       return new ArgsValidationError(`${label}invalid datatype`).toErr();
     }
 
-    const targetResult = selectTargetDatasource(editedXml, datasource);
+    const targetResult = selectTargetDatasource(editedXml, resolvedDatasourceName ?? datasource);
     if (targetResult.isErr()) {
       const message = labelErrors
         ? `${label}${targetResult.error.message}`
@@ -150,6 +153,7 @@ function prepareCalculationBatch({
       return new ArgsValidationError(message).toErr();
     }
     const target = targetResult.value;
+    resolvedDatasourceName ??= target.name;
     if (hasColumnCaption(target.xml, caption)) {
       return new ArgsValidationError(
         `${label}caption collision — pick a new caption or use the existing field`,
@@ -303,12 +307,22 @@ export function selectTargetDatasource(
   const datasources = findDatasourceElements(xml);
   const candidates = datasources.filter((datasource) => datasource.name !== 'Parameters');
   if (requested !== undefined) {
-    const selected = candidates.find((datasource) => datasource.name === requested);
+    const resolvedName = resolveUniqueDatasourceName(xml, requested);
+    const selected = candidates.find((datasource) => datasource.name === resolvedName);
     if (selected) {
       return new Ok(selected);
     }
+    const normalizedRequested = requested.normalize('NFC');
+    const captionMatches = candidates.filter(
+      (datasource) => datasource.caption?.normalize('NFC') === normalizedRequested,
+    );
+    if (captionMatches.length > 1) {
+      return new ArgsValidationError(
+        `Datasource caption "${requested}" is ambiguous. Use an internal datasource name: ${formatDatasourceNames(captionMatches)}`,
+      ).toErr();
+    }
     return new ArgsValidationError(
-      `Datasource "${requested}" was not found. Candidates: ${candidates.map((d) => d.name).join(', ')}`,
+      `Datasource "${requested}" was not found. Candidates: ${formatDatasourceNames(candidates)}`,
     ).toErr();
   }
   if (candidates.length === 1) {
@@ -318,8 +332,13 @@ export function selectTargetDatasource(
     return new ArgsValidationError('No non-Parameters datasource found.').toErr();
   }
   return new ArgsValidationError(
-    `Multiple datasources found; specify datasource. Candidates: ${candidates.map((d) => d.name).join(', ')}`,
+    `Multiple datasources found; specify datasource. Candidates: ${formatDatasourceNames(candidates)}`,
   ).toErr();
+}
+
+function formatDatasourceNames(datasources: DatasourceElement[]): string {
+  const displayed = datasources.slice(0, 5).map((datasource) => datasource.name);
+  return `${displayed.join(', ')}${datasources.length > displayed.length ? ', …' : ''}`;
 }
 
 export function findDatasourceElements(xml: string): DatasourceElement[] {
@@ -340,7 +359,7 @@ export function findDatasourceElements(xml: string): DatasourceElement[] {
         );
   const scanFrom = blockStart === -1 ? 0 : blockStart;
   const scanTo = blockEnd === -1 ? xml.length : blockEnd;
-  const openTagRe = /<datasource\b[^>]*(?:\/>|>)/g;
+  const openTagRe = /<datasource(?=\s)[^>]*(?:\/>|>)/g;
   for (const match of xml.matchAll(openTagRe)) {
     if (
       match.index < scanFrom ||
@@ -356,10 +375,15 @@ export function findDatasourceElements(xml: string): DatasourceElement[] {
     if (name === undefined) {
       continue;
     }
+    const caption = getAttr(openTag, 'caption');
+    const datasourceIdentity = {
+      name: unescapeXml(name),
+      ...(caption === undefined ? {} : { caption: unescapeXml(caption) }),
+    };
     const selfClosing = /\/\s*>$/.test(openTag);
     if (selfClosing) {
       elements.push({
-        name: unescapeXml(name),
+        ...datasourceIdentity,
         openStart,
         openEnd,
         closeStart: openEnd,
@@ -375,7 +399,7 @@ export function findDatasourceElements(xml: string): DatasourceElement[] {
     }
     const closeEnd = closeStart + '</datasource>'.length;
     elements.push({
-      name: unescapeXml(name),
+      ...datasourceIdentity,
       openStart,
       openEnd,
       closeStart,
@@ -455,6 +479,18 @@ function hasColumnNameAndCaption(xml: string, name: string, caption: string): bo
       unescapeXml(getAttr(tag, 'name') ?? '') === name &&
       unescapeXml(getAttr(tag, 'caption') ?? '') === caption,
   );
+}
+
+function hasColumnNameAndCaptionInDatasource(
+  xml: string,
+  datasourceName: string,
+  name: string,
+  caption: string,
+): boolean {
+  const datasource = findDatasourceElements(xml).find(
+    (candidate) => candidate.name === datasourceName,
+  );
+  return datasource !== undefined && hasColumnNameAndCaption(datasource.xml, name, caption);
 }
 
 function findColumnTags(xml: string): string[] {

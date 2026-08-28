@@ -14,6 +14,7 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 import { applyAndVerify } from './applyAndVerify.js';
+import { findDatasourceElements, selectTargetDatasource } from './authorCalcCore.js';
 
 const activationSchema = z.enum(['on-select', 'on-hover', 'on-menu']);
 const modeSchema = z.enum(['parameter', 'set']);
@@ -33,7 +34,7 @@ const paramsSchema = {
   sourceField: z.string().optional().describe(''),
   targetParameter: z.string().optional().describe(''),
   targetSet: z.string().optional().describe(''),
-  datasource: z.string().optional().describe(''),
+  datasource: z.string().optional().describe('Top-level name/unique caption.'),
   setMembership: setMembershipSchema.default('assign').describe(''),
   clearSelection: clearSelectionSchema.default('do-nothing').describe(''),
   singleSelect: z.boolean().optional().describe(''),
@@ -59,12 +60,6 @@ type AuthorActionResult = AuthorActionResultBase &
       }
   );
 
-type DatasourceElement = {
-  name: string;
-  caption?: string;
-  xml: string;
-};
-
 type SetCandidate = {
   datasourceName: string;
   datasourceCaption?: string;
@@ -78,7 +73,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'author-action',
     title,
-    description: 'Author action.',
+    description: 'Add action.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -358,16 +353,11 @@ function resolveTargetSet(
       ];
     }),
   );
-  const matchedDatasourceElements =
-    datasource === undefined
-      ? datasourceElements
-      : datasourceElements.filter(
-          (element) => element.name === datasource || element.caption === datasource,
-        );
-  if (datasource !== undefined && matchedDatasourceElements.length === 0) {
-    return new ArgsValidationError(
-      `datasource '${datasource}' matched no datasource; sets found in: ${formatSetCandidates(allCandidates)}`,
-    ).toErr();
+  let matchedDatasourceElements = datasourceElements;
+  if (datasource !== undefined) {
+    const selectedDatasource = selectTargetDatasource(liveXml, datasource);
+    if (selectedDatasource.isErr()) return selectedDatasource;
+    matchedDatasourceElements = [selectedDatasource.value];
   }
   const matchedDatasourceNames = new Set(matchedDatasourceElements.map((element) => element.name));
   const candidates = allCandidates.filter((candidate) =>
@@ -400,35 +390,6 @@ function resolveTargetSet(
 
   const match = matches[0];
   return new Ok(`${bracketToken(match.datasourceName)}.${bracketToken(match.name)}`);
-}
-
-function findDatasourceElements(xml: string): DatasourceElement[] {
-  const elements: DatasourceElement[] = [];
-  const blockStart = xml.indexOf('<datasources>');
-  const blockEnd = xml.indexOf('</datasources>', blockStart);
-  const scanFrom = blockStart === -1 ? 0 : blockStart;
-  const scanTo = blockEnd === -1 ? xml.length : blockEnd;
-  for (const match of xml.matchAll(/<datasource(?=\s)[^>]*\bname=(?:'[^']*'|"[^"]*")[^>]*>/g)) {
-    if (match.index < scanFrom || match.index >= scanTo || /\/\s*>$/.test(match[0])) {
-      continue;
-    }
-    const name = getAttr(match[0], 'name');
-    if (name === undefined) {
-      continue;
-    }
-    const openEnd = match.index + match[0].length;
-    const closeStart = xml.indexOf('</datasource>', openEnd);
-    if (closeStart === -1 || closeStart > scanTo) {
-      continue;
-    }
-    const caption = getAttr(match[0], 'caption');
-    elements.push({
-      name: unescapeXml(name),
-      caption: caption === undefined ? undefined : unescapeXml(caption),
-      xml: xml.slice(match.index, closeStart + '</datasource>'.length),
-    });
-  }
-  return elements;
 }
 
 function findGroupTags(xml: string): string[] {

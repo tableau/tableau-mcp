@@ -31,6 +31,22 @@ const EMPTY_CATEGORY_SET_XML =
 const CONDITION_CITY_SET_XML =
   "<group caption='High Sales Cities' name='[High Sales Cities]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter expression='SUM([Sales]) &gt;= 60000' function='filter' user:ui-filter-by-field='true' user:ui-marker='filter-by'><groupfilter function='level-members' level='[City]' user:ui-enumeration='all' user:ui-marker='enumerate' /></groupfilter></group>";
 
+const CAPTIONED_DATASOURCES_XML = [
+  "<?xml version='1.0' encoding='utf-8'?>",
+  "<workbook version='18.1'><datasources>",
+  "<datasource caption='Orders' inline='true' name='federated.orders'>",
+  "<connection class='federated'><named-connections>",
+  "<named-connection caption='Orders' name='textscan.orders' />",
+  '</named-connections></connection>',
+  '</datasource>',
+  "<datasource caption='Returns' inline='true' name='federated.returns'>",
+  "<connection class='federated'><named-connections>",
+  "<named-connection caption='Returns' name='textscan.returns' />",
+  '</named-connections></connection>',
+  '</datasource></datasources>',
+  "<worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
+].join('');
+
 describe('authorSetTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -306,6 +322,33 @@ describe('authorSetTool', () => {
     );
   });
 
+  it('resolves a unique datasource caption and authors the set under its internal name', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'empty',
+        caption: 'Returned Orders',
+        dimension: 'Order ID',
+        datasource: 'Returns',
+      },
+      initialXml: CAPTIONED_DATASOURCES_XML,
+      readbackXml: withGroupInDatasource(
+        CAPTIONED_DATASOURCES_XML,
+        'federated.returns',
+        "<group caption='Returned Orders' name='[Returned Orders]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter function='empty-level' member='[Order ID]' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' /></group>",
+      ),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).datasource).toBe('federated.returns');
+    const appliedXml = appliedDocumentXml(applyWorkbookDocument);
+    expect(datasourceBlock(appliedXml, 'federated.returns')).toContain("caption='Returned Orders'");
+    expect(datasourceBlock(appliedXml, 'federated.orders')).not.toContain(
+      "caption='Returned Orders'",
+    );
+    expect(JSON.parse(result.content[0].text).datasource).not.toBe('textscan.returns');
+  });
+
   it('creates an empty group that matches the author-action set resolver predicate', async () => {
     const { applyWorkbookDocument } = await getToolResult({
       args: {
@@ -483,6 +526,25 @@ function withGroup(baseXml: string, groupXml: string): string {
   const superstoreOpen = baseXml.indexOf("<datasource name='Sample - Superstore'>");
   const close = baseXml.indexOf('</datasource>', superstoreOpen);
   return baseXml.slice(0, close) + groupXml + baseXml.slice(close);
+}
+
+function withGroupInDatasource(xml: string, datasourceName: string, groupXml: string): string {
+  const block = datasourceBlock(xml, datasourceName);
+  return xml.replace(block, block.replace('</datasource>', `${groupXml}</datasource>`));
+}
+
+function datasourceBlock(xml: string, datasourceName: string): string {
+  let cursor = xml.indexOf('<datasource');
+  while (cursor !== -1) {
+    const openEnd = xml.indexOf('>', cursor) + 1;
+    const openTag = xml.slice(cursor, openEnd);
+    if (openTag.includes(`name='${datasourceName}'`)) {
+      const closeEnd = xml.indexOf('</datasource>', openEnd) + '</datasource>'.length;
+      return xml.slice(cursor, closeEnd);
+    }
+    cursor = xml.indexOf('<datasource', openEnd);
+  }
+  throw new Error(`missing datasource ${datasourceName}`);
 }
 
 type AuthorSetArgs = {
