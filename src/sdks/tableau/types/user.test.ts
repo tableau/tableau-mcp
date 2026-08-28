@@ -44,8 +44,9 @@ describe('siteRoleMeetsMinimum', () => {
     expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', 'SupportUser')).toBe(true);
   });
 
-  it('uses the lowest admin role as the admin threshold', () => {
-    expect(MIN_ADMIN_SITE_ROLE).toBe('SiteAdministratorExplorer');
+  it('uses SupportUser as the admin threshold', () => {
+    expect(MIN_ADMIN_SITE_ROLE).toBe('SupportUser');
+    expect(siteRoleMeetsMinimum('SupportUser', MIN_ADMIN_SITE_ROLE)).toBe(true);
     expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', MIN_ADMIN_SITE_ROLE)).toBe(true);
     expect(siteRoleMeetsMinimum('SiteAdministratorCreator', MIN_ADMIN_SITE_ROLE)).toBe(true);
     expect(siteRoleMeetsMinimum('ServerAdministrator', MIN_ADMIN_SITE_ROLE)).toBe(true);

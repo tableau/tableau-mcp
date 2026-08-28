@@ -55,8 +55,8 @@ export const SITE_ROLE_HIERARCHY = {
 
 export type SiteRole = keyof typeof SITE_ROLE_HIERARCHY;
 
-/** The lowest site role that still carries administrator privileges. */
-export const MIN_ADMIN_SITE_ROLE: SiteRole = 'SiteAdministratorExplorer';
+/** The lowest site role permitted to register the admin/site-health tools. */
+export const MIN_ADMIN_SITE_ROLE: SiteRole = 'SupportUser';
 
 /**
  * True when `siteRole` ranks at or above `minRole` in {@link SITE_ROLE_HIERARCHY}. Fail-closed:
