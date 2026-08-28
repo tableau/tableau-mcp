@@ -1,6 +1,6 @@
 import { Zodios } from '@zodios/core';
 
-import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -282,19 +282,28 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       },
     ]);
 
-    const response = await this._apiClient.axios.post(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks/validateWorkbookAndUpload`,
-      body,
-      {
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': contentType,
-          ...this.authHeader.headers,
+    try {
+      const response = await this._apiClient.axios.post(
+        `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks/validateWorkbookAndUpload`,
+        body,
+        {
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': contentType,
+            ...this.authHeader.headers,
+          },
         },
-      },
-    );
+      );
 
-    return workbookValidationResultSchema.parse(response.data);
+      return workbookValidationResultSchema.parse(response.data);
+    } catch (error) {
+      // Tableau returns HTTP 422 with a validation-result body when the workbook fails validation.
+      // Parse that structured result instead of letting axios throw; any other status still throws.
+      if (isAxiosError(error) && error.response?.status === 422) {
+        return workbookValidationResultSchema.parse(error.response.data);
+      }
+      throw error;
+    }
   };
 }
 
