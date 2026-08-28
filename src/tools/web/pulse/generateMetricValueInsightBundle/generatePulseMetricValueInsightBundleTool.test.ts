@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { AxiosError } from 'axios';
 import { Err, Ok } from 'ts-results-es';
 
 import {
@@ -229,6 +230,31 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(result.isError).toBe(false);
   });
 
+  it('forwards the request unchanged when readMetadata throws instead of returning Err', async () => {
+    // readMetadata only returns Err for a 404 ('feature-disabled'); any other
+    // failure (auth, 5xx, network) throws instead.
+    mocks.mockReadMetadata.mockRejectedValue(
+      new AxiosError('Internal Server Error', 'ERR_BAD_RESPONSE', undefined, undefined, {
+        status: 500,
+        statusText: 'Internal Server Error',
+        data: {},
+        headers: {},
+        config: {} as any,
+      }),
+    );
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+
+    const result = await getToolResult();
+
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(
+      bundleRequest,
+      'ban',
+    );
+    expect(result.isError).toBe(false);
+  });
+
   it('sets id_type to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE when queryDatasource returns an embedded contentUrl', async () => {
     // Pulse must always call HBI directly (never a cached query result) for
     // embedded workbook datasources. Callers can't be relied on to set
@@ -257,8 +283,43 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(result.isError).toBe(false);
   });
 
-  it('sets id_type to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE when queryDatasource does not recognize the LUID at all', async () => {
-    mocks.mockQueryDatasource.mockRejectedValue(new Error('not found'));
+  it('sets id_type to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE when queryDatasource does not recognize the LUID at all (404)', async () => {
+    mocks.mockQueryDatasource.mockRejectedValue(
+      new AxiosError('Not Found', 'ERR_BAD_REQUEST', undefined, undefined, {
+        status: 404,
+        statusText: 'Not Found',
+        data: {},
+        headers: {},
+        config: {} as any,
+      }),
+    );
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+
+    const result = await getToolResult();
+
+    const [sentRequest] = mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0];
+    expect(sentRequest.bundle_request.input.metric.definition.datasource).toEqual({
+      id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
+      id_type: 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE',
+    });
+    expect(result.isError).toBe(false);
+  });
+
+  it('defaults to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE (and logs) when queryDatasource fails for a non-404 reason', async () => {
+    // A published/embedded lookup that fails for an operational reason (auth,
+    // 5xx, network) can't be distinguished from a genuinely unknown LUID, so
+    // it defaults the same way as a 404 — but this case is logged separately.
+    mocks.mockQueryDatasource.mockRejectedValue(
+      new AxiosError('Internal Server Error', 'ERR_BAD_RESPONSE', undefined, undefined, {
+        status: 500,
+        statusText: 'Internal Server Error',
+        data: {},
+        headers: {},
+        config: {} as any,
+      }),
+    );
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
       new Ok(mockBundleRequestResponse),
     );

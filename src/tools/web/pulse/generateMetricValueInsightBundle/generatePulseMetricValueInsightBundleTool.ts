@@ -1,7 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err } from 'ts-results-es';
 import z from 'zod';
 
 import { ArgsValidationError, DatasourceNotAllowedError } from '../../../../errors/mcpToolError.js';
+import { log } from '../../../../logging/logger.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import {
@@ -10,6 +12,7 @@ import {
   pulseInsightBundleTypeEnum,
 } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
+import { isAxiosError } from '../../../../utils/axios.js';
 import { WebTool } from '../../tool.js';
 import { validateBundleRequest } from '../validatePulsePayload.js';
 
@@ -213,7 +216,20 @@ async function resolveBundleRequestFieldNames(
   const datasourceLuid = datasource.id;
 
   const [metadataResult, idType] = await Promise.all([
-    restApi.vizqlDataServiceMethods.readMetadata({ datasource: { datasourceLuid } }),
+    // readMetadata only returns Err for a 404 ('feature-disabled'); any other
+    // failure (auth, 5xx, network) throws. Catch it here too so a metadata
+    // outage forwards the request unchanged instead of failing the whole call.
+    restApi.vizqlDataServiceMethods
+      .readMetadata({ datasource: { datasourceLuid } })
+      .catch((error): Err<'feature-disabled'> => {
+        log({
+          message: `readMetadata failed for datasource ${datasourceLuid}; forwarding field captions unchanged`,
+          level: 'warning',
+          logger: 'pulse',
+          data: error,
+        });
+        return Err('feature-disabled');
+      }),
     resolveDatasourceIdType(restApi, datasourceLuid),
   ]);
 
@@ -282,8 +298,11 @@ async function resolveBundleRequestFieldNames(
 // The Datasources REST API returns an entry for embedded/workbook datasources
 // too (it doesn't 404), but marks them with a contentUrl of the form
 // '$embedded$_<workbookLuid>' instead of a normal published contentUrl. A
-// LUID the API doesn't recognize at all is treated the same way, since
-// Pulse's HBI-direct, uncached path is the safer default for an unknown ID.
+// LUID the API genuinely doesn't recognize (404) is treated the same way,
+// since Pulse's HBI-direct, uncached path is the safer default for an
+// unknown ID. Any other failure (auth, 5xx, network) can't distinguish
+// published from embedded either, so it defaults the same way, but is logged
+// separately since it's an operational problem rather than an expected case.
 async function resolveDatasourceIdType(
   restApi: RestApi,
   datasourceLuid: string,
@@ -296,7 +315,16 @@ async function resolveDatasourceIdType(
     return datasource.contentUrl?.startsWith('$embedded$')
       ? 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE'
       : undefined;
-  } catch {
+  } catch (error) {
+    const isNotFound = isAxiosError(error) && error.response?.status === 404;
+    if (!isNotFound) {
+      log({
+        message: `queryDatasource failed for datasource ${datasourceLuid} with a non-404 error; defaulting to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE since published/embedded status could not be verified`,
+        level: 'warning',
+        logger: 'pulse',
+        data: error,
+      });
+    }
     return 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE';
   }
 }

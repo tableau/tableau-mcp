@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as configModule from '../../config.js';
 import {
   getRequiredApiScopesForTool,
+  getRequiredScopesForTool,
   getSupportedApiScopes,
   getSupportedMcpScopes,
   getSupportedScopes,
@@ -294,6 +295,20 @@ describe('scopes', () => {
 
       expect(scopes).toEqual(['tableau:workbooks:create', 'tableau:file_uploads:create']);
       expect(scopes).not.toContain('tableau:content:read');
+    });
+
+    it('should require content read and viz data service read for generate-pulse-metric-value-insight-bundle', () => {
+      // This tool calls VDS readMetadata and the Datasources REST API
+      // (queryDatasource) to resolve field captions and detect embedded
+      // workbook datasources, so it needs the same API scopes as
+      // generate-insight-cards, which makes the same calls.
+      const apiScopes = getRequiredApiScopesForTool('generate-pulse-metric-value-insight-bundle');
+      expect(apiScopes).toContain('tableau:content:read');
+      expect(apiScopes).toContain('tableau:viz_data_service:read');
+
+      mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as any);
+      const mcpScopes = getRequiredScopesForTool('generate-pulse-metric-value-insight-bundle');
+      expect(mcpScopes).toContain('tableau:mcp:datasource:read');
     });
 
     it('should include tableau:users:update when adminToolsEnabled is true', async () => {

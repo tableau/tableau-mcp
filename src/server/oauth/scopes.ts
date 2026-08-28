@@ -302,8 +302,13 @@ const toolScopeMap: Record<
     ]),
   },
   'generate-pulse-metric-value-insight-bundle': {
-    mcp: ['tableau:mcp:insight:create'],
-    api: new Set(['tableau:insights:read', 'tableau:mcp_site_settings:read']),
+    mcp: ['tableau:mcp:insight:create', 'tableau:mcp:datasource:read'],
+    api: new Set([
+      'tableau:insights:read',
+      'tableau:content:read',
+      'tableau:viz_data_service:read',
+      'tableau:mcp_site_settings:read',
+    ]),
   },
   'generate-pulse-insight-brief': {
     mcp: ['tableau:mcp:insight:create'],
