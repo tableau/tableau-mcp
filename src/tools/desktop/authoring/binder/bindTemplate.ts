@@ -55,6 +55,7 @@ import { resolveSession } from '../../../../desktop/session/sessionResolution.js
 import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
+  workbookHasSheetNamed,
 } from '../../../../desktop/templates/injectTemplateCore.js';
 import { createPuppetCompatibilityProjection } from '../../../../desktop/templates/puppetCompatibilityProjection.js';
 import { loadRuntimeTemplateCatalogSnapshots } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
@@ -1580,7 +1581,10 @@ function collisionFreeWorksheetTitle(workbookXml: string, requestedTitle: string
   for (let copy = 2; copy <= 10_000; copy += 1) {
     const suffix = ` (${copy})`;
     const candidate = `${requestedTitle.slice(0, Math.max(1, 80 - suffix.length))}${suffix}`;
-    if (classifyWorksheetReplaceTarget(workbookXml, candidate) === 'not-found') {
+    if (
+      classifyWorksheetReplaceTarget(workbookXml, candidate) === 'not-found' &&
+      !workbookHasSheetNamed(workbookXml, candidate)
+    ) {
       return candidate;
     }
   }

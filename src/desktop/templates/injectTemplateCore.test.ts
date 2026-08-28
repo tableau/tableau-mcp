@@ -12,6 +12,7 @@ import {
   classifyWorksheetReplaceTarget,
   removeSameNamedWorksheet,
   stripDonorCurrencyOrLocaleFormats,
+  workbookHasSheetNamed,
 } from './injectTemplateCore.js';
 import { getRuntimeTemplateSnapshot } from './runtimeTemplateCatalog.js';
 import { readTemplate } from './templatePath.js';
@@ -757,5 +758,22 @@ describe('classifyWorksheetReplaceTarget', () => {
 
   it('reports not-found on unparseable XML (downstream parse surfaces the real error)', () => {
     expect(classifyWorksheetReplaceTarget('<workbook', 'Loose Sheet')).toBe('not-found');
+  });
+});
+
+describe('workbookHasSheetNamed', () => {
+  const WB = `<workbook>
+    <worksheets><worksheet name='Sheet'/></worksheets>
+    <dashboards><dashboard name='Dashboard'/></dashboards>
+    <stories><story name='Story'/></stories>
+  </workbook>`;
+
+  it.each(['Sheet', 'Dashboard', 'Story'])('finds the global sheet name %s', (name) => {
+    expect(workbookHasSheetNamed(WB, name)).toBe(true);
+  });
+
+  it('does not report an unused or unparseable sheet name', () => {
+    expect(workbookHasSheetNamed(WB, 'Unused')).toBe(false);
+    expect(workbookHasSheetNamed('<workbook', 'Sheet')).toBe(false);
   });
 });

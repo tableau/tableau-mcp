@@ -21,6 +21,7 @@ import { serializeRouteReceipt, sessionRouteState } from '../../../../desktop/ro
 import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
+  workbookHasSheetNamed,
 } from '../../../../desktop/templates/injectTemplateCore.js';
 import type { RuntimeTemplateCatalogSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
 import * as runtimeTemplateCatalogModule from '../../../../desktop/templates/runtimeTemplateCatalog.js';
@@ -73,6 +74,7 @@ vi.mock('../../../../desktop/templates/injectTemplateCore.js', async (importOrig
     ...actual,
     buildInjectedWorkbookXml: vi.fn(),
     classifyWorksheetReplaceTarget: vi.fn(),
+    workbookHasSheetNamed: vi.fn(),
   };
 });
 vi.mock('../../../../desktop/templates/templatePath.js');
@@ -754,6 +756,7 @@ beforeEach(() => {
   vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockReset();
   vi.mocked(binderModule.bindTemplate).mockReset();
   vi.mocked(classifyWorksheetReplaceTarget).mockReset();
+  vi.mocked(workbookHasSheetNamed).mockReset();
   vi.mocked(validationRegistry.runValidation).mockReturnValue({ valid: true, issues: [] });
   vi.mocked(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).mockImplementation(
     mockedRuntimeCatalog,
@@ -5857,6 +5860,31 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
     expect(body.sheet_name).toBe('Sales by Region (2)');
     expect(vi.mocked(buildInjectedWorkbookXml)).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Sales by Region (2)' }),
+    );
+  });
+
+  it('skips suffixed titles already owned by a dashboard or story', async () => {
+    const { getExecutor } = setupAutoApplyMocks();
+    vi.mocked(classifyWorksheetReplaceTarget).mockImplementation((_xml, name) =>
+      name === 'Sales by Region' ? 'in-dashboard' : 'not-found',
+    );
+    vi.mocked(workbookHasSheetNamed).mockImplementation(
+      (_xml, name) => name === 'Sales by Region (2)',
+    );
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.sheet_name).toBe('Sales by Region (3)');
+    expect(vi.mocked(buildInjectedWorkbookXml)).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Sales by Region (3)' }),
     );
   });
 });

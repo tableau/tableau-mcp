@@ -300,6 +300,34 @@ export function classifyWorksheetReplaceTarget(
   return hasZoneNamed(workbook, name) ? 'in-dashboard' : 'replaceable';
 }
 
+/** Whether any worksheet, dashboard, or story already owns a global sheet name. */
+export function workbookHasSheetNamed(workbookXml: string, name: string): boolean {
+  let workbook: ParsedWorkbook;
+  try {
+    workbook = parseXML(workbookXml);
+  } catch {
+    return false;
+  }
+  const root = workbook.workbook as Record<string, unknown> | undefined;
+  return (
+    [
+      ['worksheets', 'worksheet'],
+      ['dashboards', 'dashboard'],
+      ['stories', 'story'],
+    ] as const
+  ).some(([containerName, sheetName]) => {
+    const container = root?.[containerName];
+    if (!container || typeof container !== 'object') return false;
+    const sheets = (container as Record<string, unknown>)[sheetName] as
+      | Record<string, unknown>
+      | Record<string, unknown>[]
+      | undefined;
+    return normalizeArray<Record<string, unknown>>(sheets).some(
+      (sheet) => sheet['@_name'] === name,
+    );
+  });
+}
+
 /**
  * Remove every existing same-named worksheet (and worksheet-class window entry) so a
  * re-inject REPLACES the sheet instead of Desktop deduplicating it to "Name (1)" (W60:
