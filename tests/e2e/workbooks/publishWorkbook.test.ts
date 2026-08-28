@@ -9,8 +9,10 @@ import { McpClient } from '../mcpClient.js';
 const validationFindingSchema = z.object({
   severity: z.string(),
   message: z.string(),
-  line: z.number(),
-  column: z.number(),
+  // Structural XML errors (e.g. an unclosed tag) omit line/column since Tableau's parser
+  // can't map them to a specific location, unlike content-validation errors which include them.
+  line: z.number().optional(),
+  column: z.number().optional(),
   elementName: z.string(),
 });
 
@@ -118,13 +120,16 @@ describe('publish-workbook local file', () => {
     expect(publishResult.status).toBe('invalid');
     if (publishResult.status === 'invalid') {
       expect(publishResult.errors.length).toBeGreaterThan(0);
+      // This fixture is structurally malformed XML (unclosed tag), which Tableau reports as a
+      // generic parse error without line/column - unlike content-validation errors, which include
+      // them.
       expect(publishResult.errors[0]).toMatchObject({
         severity: 'ERROR',
         message: expect.any(String),
-        line: expect.any(Number),
-        column: expect.any(Number),
         elementName: expect.any(String),
       });
+      expect(publishResult.errors[0].line).toBeUndefined();
+      expect(publishResult.errors[0].column).toBeUndefined();
     }
   });
 

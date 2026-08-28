@@ -72,8 +72,8 @@ export type PublishWorkbookResult =
 type ValidationFinding = {
   severity: string;
   message: string;
-  line: number;
-  column: number;
+  line?: number;
+  column?: number;
   elementName: string;
 };
 
