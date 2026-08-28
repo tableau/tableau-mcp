@@ -33,7 +33,6 @@ const NON_TOOL_VOCABULARY = [
   'as-is',
   'async-settle',
   'auto-apply',
-  'auto-detect',
   'auto-grid',
   'auto-updates',
   'awaiting-user',

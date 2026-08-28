@@ -2,6 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.js';
+import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
+import { planRoundStackedBar } from '../../../../desktop/refine/roundStackedBar.js';
+import * as applyRoundedStackedBarModule from '../../../../desktop/wrappers/applyRoundedStackedBar.js';
 import * as getWorksheetXmlModule from '../../../../desktop/wrappers/getWorksheetXml.js';
 import * as loadWorksheetXmlModule from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import {
@@ -17,6 +21,7 @@ import { getRefineWorksheetTool } from './refineWorksheet.js';
 
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js');
+vi.mock('../../../../desktop/wrappers/applyRoundedStackedBar.js');
 
 // A single-worksheet fragment shaped like the fetch returns: one nominal dimension CI
 // (Region) + one measure CI (SUM Sales), a safe self-closing <computed-sort>, and
@@ -48,6 +53,33 @@ const SOURCE = `<worksheet name='Sales by Region' xmlns:user='http://www.tableau
     <cols>[Superstore].[sum:Sales:qk]</cols>
   </table>
   <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>`;
+
+const ROUND_STACKED_SOURCE = `<worksheet name='Profit by Category' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <table>
+    <view>
+      <datasources><datasource caption='Superstore' name='Superstore' /></datasources>
+      <datasource-dependencies datasource='Superstore'>
+        <column caption='Category' datatype='string' name='[Category]' role='dimension' type='nominal' />
+        <column caption='Segment' datatype='string' name='[Segment]' role='dimension' type='nominal' />
+        <column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Segment]' derivation='None' name='[none:Segment:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <computed-sort column='[Superstore].[none:Category:nk]' direction='DESC' using='[Superstore].[sum:Profit:qk]' />
+      <aggregation value='true' />
+    </view>
+    <style><style-rule element='zeroline'><format attr='line-visibility' value='off' /></style-rule></style>
+    <panes><pane>
+      <view><breakdown value='auto' /></view>
+      <mark class='Bar' />
+      <encodings><color column='[Superstore].[none:Segment:nk]' /></encodings>
+    </pane></panes>
+    <rows>[Superstore].[sum:Profit:qk]</rows>
+    <cols>[Superstore].[none:Category:nk]</cols>
+  </table>
+  <simple-id uuid='{B157D4FA-12A0-495E-BEC4-3572B3567648}' />
 </worksheet>`;
 
 // A source that PLANS fine (one dim, one measure, an anchor) but fails preflight: the extra
@@ -114,6 +146,9 @@ const getMock = (): ReturnType<typeof vi.mocked<typeof getWorksheetXmlModule.get
   vi.mocked(getWorksheetXmlModule.getWorksheetXml);
 const loadMock = (): ReturnType<typeof vi.mocked<typeof loadWorksheetXmlModule.loadWorksheetXml>> =>
   vi.mocked(loadWorksheetXmlModule.loadWorksheetXml);
+const roundedApplyMock = (): ReturnType<
+  typeof vi.mocked<typeof applyRoundedStackedBarModule.applyRoundedStackedBar>
+> => vi.mocked(applyRoundedStackedBarModule.applyRoundedStackedBar);
 
 // The get-worksheet-xml result now carries the resolved display name; mirror how the live
 // resolver returns it — the decoded <worksheet name> attribute, not the XML-escaped form.
@@ -180,13 +215,276 @@ describe('refineWorksheetTool — instance', () => {
       sortByField: expect.any(Object),
       direction: expect.any(Object),
       markType: expect.any(Object),
+      preset: expect.any(Object),
     });
-    expect(paramsSchema.sortDirection.description).toContain('numeric DESC=largest first');
-    expect(paramsSchema.direction.description).toContain('numeric desc=largest first');
+    expect(paramsSchema.operation.safeParse('round_stacked_bar').success).toBe(true);
+    expect(paramsSchema.preset.safeParse('subtle').success).toBe(true);
+    expect(paramsSchema.preset.safeParse('strong').success).toBe(false);
+    expect(paramsSchema.sortDirection.description).toContain('numeric DESC=largest');
+    expect(paramsSchema.direction.description).toContain('numeric desc=largest');
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,
     });
+  });
+});
+
+describe('refineWorksheetTool — round_stacked_bar', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('refuses a missing subtle preset without reading or writing Tableau', async () => {
+    const result = await getToolResult({
+      worksheetName: 'Profit by Category',
+      operation: 'round_stacked_bar',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(refusalSchema.parse(JSON.parse(result.content[0].text))).toMatchObject({
+      refined: false,
+      operation: 'round_stacked_bar',
+      reason: expect.stringMatching(/preset.*subtle/i),
+    });
+    expect(getMock()).not.toHaveBeenCalled();
+    expect(roundedApplyMock()).not.toHaveBeenCalled();
+  });
+
+  it('refuses a non-subtle preset without reading or writing Tableau', async () => {
+    const result = await getToolResult({
+      worksheetName: 'Profit by Category',
+      operation: 'round_stacked_bar',
+      preset: 'strong' as never,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(refusalSchema.parse(JSON.parse(result.content[0].text)).reason).toMatch(
+      /preset.*subtle/i,
+    );
+    expect(getMock()).not.toHaveBeenCalled();
+    expect(roundedApplyMock()).not.toHaveBeenCalled();
+  });
+
+  it('refuses an unsupported chart shape before applying', async () => {
+    setupMocks({ source: SOURCE });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'round_stacked_bar',
+      preset: 'subtle',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.reason).toMatch(/stacked|segment|color/i);
+    expect(roundedApplyMock()).not.toHaveBeenCalled();
+  });
+
+  it('reports the complete programmatic readback and the remaining visual and disclosure work', async () => {
+    setupMocks({ source: ROUND_STACKED_SOURCE });
+    roundedApplyMock().mockResolvedValue({
+      state: 'applied',
+      mutation: 'sent',
+      retrySafe: false,
+      worksheet: {
+        id: '{B157D4FA-12A0-495E-BEC4-3572B3567648}',
+        name: 'Profit by Category',
+      },
+      baseline: {
+        worksheetId: '{B157D4FA-12A0-495E-BEC4-3572B3567648}',
+        groups: [
+          { category: 'Furniture', segment: 'Consumer', value: 10 },
+          { category: 'Furniture', segment: 'Corporate', value: 5 },
+        ],
+        segmentOrderFromZero: ['Corporate', 'Consumer'],
+        expectedVertexRows: 24,
+        categoryVisualOrder: 'live-only',
+      },
+    });
+
+    const result = await getToolResult({
+      worksheetName: 'Profit by Category',
+      operation: 'round_stacked_bar',
+      preset: 'subtle',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed).toMatchObject({
+      refined: true,
+      operation: 'round_stacked_bar',
+      verification: {
+        helperFields: 18,
+        summaryGroups: 2,
+        summaryRows: 24,
+      },
+    });
+    expect(parsed.message).toContain(
+      'Programmatic readback confirmed the 18-field helper structure, 2 summary groups, 24 summary rows, the worksheet caption and alt text.',
+    );
+    expect(parsed.message).toContain('Manually inspect rendered stack order.');
+    expect(parsed.message).toContain(
+      'Tableau Data Guide and View Data may show internal polygon helper fields.',
+    );
+    expect(roundedApplyMock()).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceWorksheetXml: ROUND_STACKED_SOURCE,
+        intendedWorksheetXml: expect.stringContaining("<mark class='Polygon' />"),
+        focus: { navigate: 'artifact', sheetName: 'Profit by Category' },
+      }),
+    );
+    expect(loadMock()).not.toHaveBeenCalled();
+  });
+
+  it('reports an already-rounded sheet as a truthful no-op without live claims', async () => {
+    const compiled = planRoundStackedBar(ROUND_STACKED_SOURCE, { preset: 'subtle' });
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    setupMocks({ source: compiled.xml });
+
+    const result = await getToolResult({
+      worksheetName: 'Profit by Category',
+      operation: 'round_stacked_bar',
+      preset: 'subtle',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const raw = JSON.parse(result.content[0].text);
+    const parsed = refusalSchema.parse(raw);
+    expect(parsed).toMatchObject({ refined: false, operation: 'round_stacked_bar' });
+    expect(parsed.reason).toMatch(/already.*rounded/i);
+    expect(parsed.reason).not.toMatch(/verif|caption|alt text|data guide|view data|visual/i);
+    expect(raw).not.toHaveProperty('verification');
+    expect(roundedApplyMock()).not.toHaveBeenCalled();
+  });
+
+  it('reports caption suppression instead of claiming a visible caption', async () => {
+    const source = ROUND_STACKED_SOURCE.replace(
+      '  <table>',
+      "  <layout-options export-no-caption='true' />\n  <table>",
+    );
+    setupMocks({ source });
+    roundedApplyMock().mockResolvedValue({
+      state: 'applied',
+      mutation: 'sent',
+      retrySafe: false,
+      worksheet: {
+        id: '{B157D4FA-12A0-495E-BEC4-3572B3567648}',
+        name: 'Profit by Category',
+      },
+      baseline: {
+        worksheetId: '{B157D4FA-12A0-495E-BEC4-3572B3567648}',
+        groups: [
+          { category: 'Furniture', segment: 'Consumer', value: 10 },
+          { category: 'Furniture', segment: 'Corporate', value: 5 },
+        ],
+        segmentOrderFromZero: ['Corporate', 'Consumer'],
+        expectedVertexRows: 24,
+        categoryVisualOrder: 'live-only',
+      },
+    });
+
+    const result = await getToolResult({
+      worksheetName: 'Profit by Category',
+      operation: 'round_stacked_bar',
+      preset: 'subtle',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.message).toContain(
+      'Programmatic readback confirmed the 18-field helper structure, 2 summary groups, 24 summary rows, preserved caption suppression state and alt text.',
+    );
+    expect(parsed.message).not.toContain('the worksheet caption');
+    expect(parsed.message).toContain('Manually inspect rendered stack order.');
+    expect(parsed.message).toContain(
+      'Tableau Data Guide and View Data may show internal polygon helper fields.',
+    );
+  });
+
+  it('returns a normal refusal when strict pre-write evidence blocks the conversion', async () => {
+    setupMocks({ source: ROUND_STACKED_SOURCE });
+    roundedApplyMock().mockResolvedValue({
+      state: 'failed',
+      mutation: 'not-sent',
+      retrySafe: true,
+      stage: 'seed-preflight',
+      message: 'Each Category×Segment group needs two distinct raw seed values.',
+    });
+
+    const result = await getToolResult({
+      worksheetName: 'Profit by Category',
+      operation: 'round_stacked_bar',
+      preset: 'subtle',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const raw = JSON.parse(result.content[0].text);
+    expect(refusalSchema.parse(raw)).toMatchObject({
+      refined: false,
+      reason: expect.stringMatching(/seed-preflight.*two distinct raw seed values/i),
+    });
+    expect(raw).not.toHaveProperty('verification');
+    expect(JSON.stringify(raw)).not.toMatch(/worksheet caption|alt text|view data/i);
+  });
+
+  it('maps any unknown post-write state to a typed do-not-retry incomplete result', async () => {
+    setupMocks({ source: ROUND_STACKED_SOURCE });
+    roundedApplyMock().mockResolvedValue({
+      state: 'unknown',
+      mutation: 'sent',
+      retrySafe: false,
+      stage: 'verification',
+      message: 'Strict readback did not settle.',
+    });
+
+    const result = await getToolResult({
+      worksheetName: 'Profit by Category',
+      operation: 'round_stacked_bar',
+      preset: 'subtle',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const raw = JSON.parse(result.content[0].text);
+    expect(raw).toMatchObject({
+      refined: 'unknown',
+      operation: 'round_stacked_bar',
+      retrySafe: false,
+      stage: 'verification',
+      guidance: expect.stringMatching(/inspect.*do not retry/i),
+    });
+    expect(raw).not.toHaveProperty('verification');
+    expect(JSON.stringify(raw)).not.toMatch(/worksheet caption|alt text|view data/i);
+  });
+
+  it('treats an unexpected wrapper throw as unknown and unsafe to retry', async () => {
+    setupMocks({ source: ROUND_STACKED_SOURCE });
+    roundedApplyMock().mockRejectedValue(new Error('unexpected wrapper failure'));
+
+    const result = await getToolResult({
+      worksheetName: 'Profit by Category',
+      operation: 'round_stacked_bar',
+      preset: 'subtle',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const raw = JSON.parse(result.content[0].text);
+    expect(raw).toMatchObject({
+      refined: 'unknown',
+      operation: 'round_stacked_bar',
+      retrySafe: false,
+      stage: 'wrapper',
+      guidance: expect.stringMatching(/inspect.*do not retry/i),
+    });
+    expect(raw).not.toHaveProperty('verification');
+    expect(JSON.stringify(raw)).not.toMatch(/worksheet caption|alt text|view data/i);
   });
 });
 
@@ -648,6 +946,46 @@ describe('refineWorksheetTool — refusals and errors', () => {
     );
   });
 
+  it('does not post when the worksheet changes between the refine fetch and locked apply', async () => {
+    const liveSource = SOURCE.replace("<mark class='Bar' />", "<mark class='Line' />");
+    const worksheetId = '00000000-0000-0000-0000-000000000001';
+    const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml: liveSource }));
+    const applyWorksheetDocument = vi.fn().mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: { code: 'FAILED', message: 'stale input was posted', recoverable: false },
+      }),
+    );
+    const executor = makeExecutorMock({
+      listWorksheets: vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ id: worksheetId, name: 'Sales by Region', hidden: false }],
+        }),
+      ),
+      getWorksheetDocument,
+      applyWorksheetDocument,
+    });
+    const actualLoadModule = await vi.importActual<typeof loadWorksheetXmlModule>(
+      '../../../../desktop/wrappers/loadWorksheetXml.js',
+    );
+
+    setupMocks({ source: SOURCE });
+    loadMock().mockImplementation(actualLoadModule.loadWorksheetXml);
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+      executor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('changed since this cache was read');
+    expect(getWorksheetDocument).toHaveBeenCalledTimes(1);
+    expect(applyWorksheetDocument).not.toHaveBeenCalled();
+  });
+
   it('errors when the single apply fails, with no second apply', async () => {
     const applyErr = {
       type: 'load-worksheet-xml-error' as const,
@@ -784,14 +1122,21 @@ describe('refineWorksheetTool — refusals and errors', () => {
 
 const successSchema = z.object({
   refined: z.literal(true),
-  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type']),
+  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type', 'round_stacked_bar']),
   worksheetName: z.string(),
   message: z.string(),
+  verification: z
+    .object({
+      helperFields: z.number().int().nonnegative(),
+      summaryGroups: z.number().int().nonnegative(),
+      summaryRows: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 
 const refusalSchema = z.object({
   refined: z.literal(false),
-  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type']),
+  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type', 'round_stacked_bar']),
   worksheetName: z.string(),
   reason: z.string(),
 });
@@ -805,10 +1150,12 @@ async function getToolResult({
   sortByField,
   direction,
   markType,
+  preset,
   session = '12345',
+  executor = makeExecutorMock(),
 }: {
   worksheetName: string;
-  operation: 'top_n' | 'sort_direction' | 'sort_by_field' | 'mark_type';
+  operation: 'top_n' | 'sort_direction' | 'sort_by_field' | 'mark_type' | 'round_stacked_bar';
   topN?: { n: number; end?: 'top' | 'bottom' };
   sortDirection?: { direction: 'ASC' | 'DESC' };
   targetField?: string;
@@ -826,14 +1173,16 @@ async function getToolResult({
     | 'pie'
     | 'gantt_bar'
     | 'polygon';
+  preset?: 'subtle';
   session?: string;
+  executor?: ExternalApiToolExecutor;
 }): Promise<CallToolResult> {
   const tool = getRefineWorksheetTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
 
   const extra = {
     ...getMockRequestHandlerExtra(),
-    getExecutor: vi.fn().mockResolvedValue({}),
+    getExecutor: vi.fn().mockResolvedValue(executor),
   };
 
   return await callback(
@@ -847,6 +1196,7 @@ async function getToolResult({
       sortByField,
       direction,
       markType,
+      preset,
     },
     extra,
   );
