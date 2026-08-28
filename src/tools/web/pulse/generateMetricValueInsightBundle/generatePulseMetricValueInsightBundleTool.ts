@@ -14,6 +14,12 @@ import {
 import { WebMcpServer } from '../../../../server.web.js';
 import { isAxiosError } from '../../../../utils/axios.js';
 import { WebTool } from '../../tool.js';
+import {
+  applyFieldNameResolution,
+  buildFieldNameByCaption,
+  resolveIdTypeFromContentUrl,
+  WorkbookDatasourceIdType,
+} from '../resolveBundleRequestFieldNames.js';
 import { validateBundleRequest } from '../validatePulsePayload.js';
 
 const paramsSchema = {
@@ -233,66 +239,11 @@ async function resolveBundleRequestFieldNames(
     resolveDatasourceIdType(restApi, datasourceLuid),
   ]);
 
-  const fieldNameByCaption = new Map<string, string>();
-  if (metadataResult.isOk()) {
-    for (const field of metadataResult.value.data ?? []) {
-      if (typeof field.fieldCaption === 'string' && typeof field.fieldName === 'string') {
-        fieldNameByCaption.set(field.fieldCaption, field.fieldName);
-      }
-    }
-  }
-  const toFieldName = (caption: string): string => fieldNameByCaption.get(caption) ?? caption;
+  const fieldNameByCaption = metadataResult.isOk()
+    ? buildFieldNameByCaption(metadataResult.value.data ?? [])
+    : new Map<string, string>();
 
-  const metric = bundleRequest.bundle_request.input.metric;
-  const basicSpecification = metric.definition.basic_specification;
-
-  return {
-    ...bundleRequest,
-    bundle_request: {
-      ...bundleRequest.bundle_request,
-      input: {
-        ...bundleRequest.bundle_request.input,
-        metric: {
-          ...metric,
-          definition: {
-            ...metric.definition,
-            datasource: {
-              ...datasource,
-              ...(idType ? { id_type: idType } : {}),
-            },
-            basic_specification: {
-              ...basicSpecification,
-              measure: {
-                ...basicSpecification.measure,
-                field: toFieldName(basicSpecification.measure.field),
-              },
-              time_dimension: {
-                ...basicSpecification.time_dimension,
-                field: toFieldName(basicSpecification.time_dimension.field),
-              },
-              filters: basicSpecification.filters.map((filter) => ({
-                ...filter,
-                field: toFieldName(filter.field),
-              })),
-            },
-          },
-          metric_specification: {
-            ...metric.metric_specification,
-            filters: metric.metric_specification.filters?.map((filter) => ({
-              ...filter,
-              field: toFieldName(filter.field),
-            })),
-          },
-          extension_options: metric.extension_options
-            ? {
-                ...metric.extension_options,
-                allowed_dimensions: metric.extension_options.allowed_dimensions?.map(toFieldName),
-              }
-            : metric.extension_options,
-        },
-      },
-    },
-  };
+  return applyFieldNameResolution(bundleRequest, fieldNameByCaption, idType);
 }
 
 // The Datasources REST API returns an entry for embedded/workbook datasources
@@ -306,15 +257,13 @@ async function resolveBundleRequestFieldNames(
 async function resolveDatasourceIdType(
   restApi: RestApi,
   datasourceLuid: string,
-): Promise<'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE' | undefined> {
+): Promise<WorkbookDatasourceIdType | undefined> {
   try {
     const datasource = await restApi.datasourcesMethods.queryDatasource({
       siteId: restApi.siteId,
       datasourceId: datasourceLuid,
     });
-    return datasource.contentUrl?.startsWith('$embedded$')
-      ? 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE'
-      : undefined;
+    return resolveIdTypeFromContentUrl(datasource.contentUrl);
   } catch (error) {
     const isNotFound = isAxiosError(error) && error.response?.status === 404;
     if (!isNotFound) {

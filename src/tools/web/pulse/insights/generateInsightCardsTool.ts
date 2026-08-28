@@ -18,6 +18,11 @@ import { getVizqlDataServiceDisabledError } from '../../getVizqlDataServiceDisab
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
 import { TableauWebRequestHandlerExtra } from '../../toolContext.js';
+import {
+  applyFieldNameResolution,
+  buildFieldNameByCaption,
+  resolveIdTypeFromContentUrl,
+} from '../resolveBundleRequestFieldNames.js';
 import { buildInsightBundleRequest } from './requestBuilder.js';
 import { runInsightBundle } from './runInsightBundle.js';
 
@@ -290,18 +295,31 @@ export const getGenerateInsightCardsTool = (server: WebMcpServer): WebTool<typeo
               const activeDimensions = breakdownDimension ? [breakdownDimension] : allDimensions;
               const primaryDimension = activeDimensions[0] ?? null;
 
+              // Reuse the metadata and contentUrl already fetched above (via
+              // readMetadata / resolveDatasource) rather than re-fetching them
+              // per bundle request — this datasource is the same for every
+              // measure in this call. See resolveBundleRequestFieldNames.ts for
+              // why captions need resolving to fieldNames and why embedded
+              // workbook datasources need id_type set.
+              const fieldNameByCaption = buildFieldNameByCaption(metadataFields);
+              const idType = resolveIdTypeFromContentUrl(resolved.contentUrl);
+
               const cards: InsightCard[] = [];
               const bundleErrors: Array<{ measure: string; error: string }> = [];
               let firstBundleError: McpToolError | null = null;
               for (const measure of selectedMeasures) {
-                const request = buildInsightBundleRequest({
-                  datasourceLuid: resolved.luid,
-                  datasourceName: resolved.name,
-                  measure,
-                  timeField: selectedTimeField,
-                  allowedDimensions: activeDimensions,
-                  filters,
-                });
+                const request = applyFieldNameResolution(
+                  buildInsightBundleRequest({
+                    datasourceLuid: resolved.luid,
+                    datasourceName: resolved.name,
+                    measure,
+                    timeField: selectedTimeField,
+                    allowedDimensions: activeDimensions,
+                    filters,
+                  }),
+                  fieldNameByCaption,
+                  idType,
+                );
                 const bundle = await runInsightBundle({
                   extra,
                   request,
