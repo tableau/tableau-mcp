@@ -77,6 +77,7 @@ import {
   publicReadbackVerificationResult,
   verifyPostApplyWorksheetReadback,
 } from '../../../../desktop/wrappers/loadWorksheetXml.js';
+import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
@@ -1840,23 +1841,6 @@ function spliceCardIntoWindowBody(inner: string, card: string, columnRef: string
 }
 
 /**
- * Fully decode XML entities to a FIXPOINT. The inject path escapes the title TWICE (the binder
- * escapes proposal.title once into args.title, then inject core escapes it again for {{TITLE}}),
- * so a serialized window name can be doubly-escaped (`&amp;amp;`). decodeXmlEntities peels ONE
- * level; iterating to stability collapses any escape depth so a decoded window name compares
- * equal to the plain literal title. Bounded (each pass strictly shrinks or is the last).
- */
-function fullyDecodeXmlEntities(value: string): string {
-  let prev = value;
-  for (let i = 0; i < 8; i++) {
-    const next = decodeXmlEntities(prev);
-    if (next === prev) break;
-    prev = next;
-  }
-  return prev;
-}
-
-/**
  * Emit a SHOWN interactive filter CARD into the sheet's worksheet <window> (the judge's
  * filter_action_wired gate — a context filter alone is OoO-correct but INVISIBLE). Adds
  * `<card mode='dropdown' param='<CI>' type='filter' />` on the window's LEFT edge, creating
@@ -1864,16 +1848,15 @@ function fullyDecodeXmlEntities(value: string): string {
  * miss (no matching window, card already present) it returns the XML unchanged rather than
  * corrupting the tree — the OoO filter still applied, the card is a visibility add-on.
  *
- * `literalTitle` is the PLAIN (fully-decoded) sheet name: each candidate window's `name` is
- * fully decoded before comparison, so single- OR double-escaped serializations both match and a
- * whole-workbook re-serialize never mutates a sibling sheet's cards.
+ * `literalTitle` has the binder's one escaping layer removed. The shared injection core then
+ * applies exactly one XML escaping layer, so decode candidate window names exactly once too.
  */
 function insertShownFilterCard(xml: string, literalTitle: string, columnRef: string): string {
   const card = `<card mode='dropdown' param='${escapeXmlAttribute(columnRef)}' type='filter' />`;
   const windowRe = /<window\b([^>]*)\bclass=(['"])worksheet\2([^>]*)>([\s\S]*?)<\/window>/g;
   return xml.replace(windowRe, (whole, pre: string, _q, post: string, inner: string) => {
     const nameAttr = attrValue(`${pre} ${post}`, 'name');
-    if (nameAttr === null || fullyDecodeXmlEntities(nameAttr) !== literalTitle) return whole;
+    if (nameAttr === null || decodeXmlEntities(nameAttr) !== literalTitle) return whole;
     const openTag = whole.slice(0, whole.length - inner.length - '</window>'.length);
     return `${openTag}${spliceCardIntoWindowBody(inner, card, columnRef)}</window>`;
   });
@@ -1890,7 +1873,7 @@ function worksheetXmlByTitle(xml: string, literalTitle: string): string | null {
   const worksheetRe = /<worksheet\b([^>]*)>[\s\S]*?<\/worksheet>/g;
   for (const match of xml.matchAll(worksheetRe)) {
     const nameAttr = attrValue(match[1] ?? '', 'name');
-    if (nameAttr !== null && fullyDecodeXmlEntities(nameAttr) === literalTitle) {
+    if (nameAttr !== null && decodeXmlEntities(nameAttr) === literalTitle) {
       return match[0];
     }
   }
@@ -1906,7 +1889,7 @@ function applyProposalSplices({
   xml: string;
   args: BoundResult['args'];
   schemaSummary: SchemaSummary;
-  /** The PLAIN (fully-decoded) sheet name — scopes the shown-filter-card edit to this sheet's window. */
+  /** The binder-decoded sheet name — scopes the shown-filter-card edit to this sheet's window. */
   literalTitle: string;
 }):
   | { ok: true; xml: string; warnings: string[]; appliedFilterCount: number }
@@ -2087,19 +2070,16 @@ async function performAutoApply({
       // Binder output is escaped for the manual artifact path. The shared core
       // accepts raw values and owns the single escaping boundary, so decode the
       // binder payload before using it in this in-process auto-apply path.
-      title: fullyDecodeXmlEntities(args.title),
+      title: decodeXmlEntities(args.title),
       sheetType: args.sheet_type,
       templateParameters: Object.fromEntries(
         Object.entries(args.template_parameters).map(([key, value]) => [
           key,
-          fullyDecodeXmlEntities(value),
+          decodeXmlEntities(value),
         ]),
       ),
       fieldMapping: Object.fromEntries(
-        Object.entries(args.field_mapping).map(([key, value]) => [
-          key,
-          fullyDecodeXmlEntities(value),
-        ]),
+        Object.entries(args.field_mapping).map(([key, value]) => [key, decodeXmlEntities(value)]),
       ),
       templateSlots: templateSnapshot.descriptor.slots,
       applyNonce,
@@ -2122,10 +2102,9 @@ async function performAutoApply({
   if (injected.warnings && injected.warnings.length > 0) {
     base.warnings = [...(base.warnings ?? []), ...injected.warnings];
   }
-  // The window name in the injected doc is escaped to the SAME depth as {{TITLE}} in the
-  // worksheet (both come from args.title through inject core), so fully-decode args.title to
-  // the plain literal and scope the shown-filter-card splice to that window by name.
-  const literalTitle = fullyDecodeXmlEntities(args.title);
+  // Binder output carries one escaping layer; the shared core owns the next and only
+  // serialization boundary. Remove exactly the binder layer so entity-like literal text survives.
+  const literalTitle = decodeXmlEntities(args.title);
   const spliced = applyProposalSplices({ xml: injected.xml, args, schemaSummary, literalTitle });
   if (!spliced.ok) {
     return {
@@ -2201,8 +2180,13 @@ async function performAutoApply({
   // the combined document back and verifying every new calculation identity before
   // claiming success or returning authored_calcs.
   if (atomicCalcs && atomicCalcs.length > 0) {
-    const calcReadback = await getWorkbookXml({ executor, signal });
-    if (calcReadback.isErr()) {
+    const calcReadback = await pollReadback({
+      read: () => getWorkbookXml({ executor, signal }),
+      settled: (xml) =>
+        atomicCalcs.every((calc) => hasColumnNameAndCaption(xml, calc.calcName, calc.caption)),
+      signal,
+    });
+    if (!calcReadback.ok) {
       return {
         result: applyFallback(
           base,
@@ -2211,10 +2195,10 @@ async function performAutoApply({
         failureDisposition: 'post-dispatch',
       };
     }
-    const missing = atomicCalcs.filter(
-      (calc) => !hasColumnNameAndCaption(calcReadback.value, calc.calcName, calc.caption),
-    );
-    if (missing.length > 0) {
+    if (!calcReadback.settled) {
+      const missing = atomicCalcs.filter(
+        (calc) => !hasColumnNameAndCaption(calcReadback.value, calc.calcName, calc.caption),
+      );
       return {
         result: applyFallback(
           base,

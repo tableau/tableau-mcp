@@ -205,11 +205,13 @@ function prepareCalculationBatch({
       const existingFormula = getAttr(existingColumn, 'formula');
       const existingRole = unescapeXml(getAttr(existingColumn, 'role') ?? '');
       const existingDatatype = unescapeXml(getAttr(existingColumn, 'datatype') ?? '');
+      const existingDefaultFormat = unescapeXml(getAttr(existingColumn, 'default-format') ?? '');
       if (
         existingFormula !== undefined &&
         normalizeFormula(unescapeXml(existingFormula)) === normalizeFormula(resolvedFormula) &&
         existingRole === role &&
-        existingDatatype === datatype
+        existingDatatype === datatype &&
+        existingDefaultFormat === (calc.defaultFormat ?? '')
       ) {
         // Idempotent retry: the live workbook already contains this exact
         // deterministic calculation, so keep it and continue with dependent calcs.
@@ -493,7 +495,72 @@ function findDatasourceClose(
 }
 
 function normalizeFormula(formula: string): string {
-  return formula.replace(/\s+/g, ' ').trim();
+  let normalized = '';
+  let index = 0;
+  let state: 'code' | 'quoted' | 'field' | 'lineNote' | 'blockNote' = 'code';
+  let quote = '';
+
+  while (index < formula.length) {
+    const char = formula[index];
+    const next = formula[index + 1];
+
+    if (state === 'code') {
+      if (/\s/.test(char)) {
+        if (normalized.length > 0 && normalized[normalized.length - 1] !== ' ') normalized += ' ';
+        while (index + 1 < formula.length && /\s/.test(formula[index + 1])) index += 1;
+      } else if (char === '"' || char === "'") {
+        state = 'quoted';
+        quote = char;
+        normalized += char;
+      } else if (char === '[') {
+        state = 'field';
+        normalized += char;
+      } else if (char === '/' && next === '/') {
+        state = 'lineNote';
+        normalized += '//';
+        index += 1;
+      } else if (char === '/' && next === '*') {
+        state = 'blockNote';
+        normalized += '/*';
+        index += 1;
+      } else {
+        normalized += char;
+      }
+    } else if (state === 'quoted') {
+      normalized += char;
+      if (char === quote) {
+        if (next === quote) {
+          normalized += next;
+          index += 1;
+        } else {
+          state = 'code';
+        }
+      }
+    } else if (state === 'field') {
+      normalized += char;
+      if (char === ']') {
+        if (next === ']') {
+          normalized += next;
+          index += 1;
+        } else {
+          state = 'code';
+        }
+      }
+    } else if (state === 'lineNote') {
+      normalized += char;
+      if (char === '\n' || char === '\r') state = 'code';
+    } else {
+      normalized += char;
+      if (char === '*' && next === '/') {
+        normalized += '/';
+        index += 1;
+        state = 'code';
+      }
+    }
+    index += 1;
+  }
+
+  return normalized.trim();
 }
 
 function findColumnByCaption(datasourceXml: string, caption: string): string | undefined {

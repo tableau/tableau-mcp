@@ -4875,6 +4875,10 @@ describe('bindTemplateTool auto_apply gate', () => {
 
   it('prepares Insights KPI calcs and auto-applies the workbook once', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const appliedKpiXml = CALC_READBACK_XML.replace(
+      '</worksheets>',
+      "<worksheet name='Period change — Sales' /></worksheets>",
+    );
     const insightBoundResult: BinderResult = {
       ...boundResult,
       args: {
@@ -4883,21 +4887,24 @@ describe('bindTemplateTool auto_apply gate', () => {
         title: 'Period change — Sales',
         template_parameters: {
           ...boundResult.args.template_parameters,
-          METRIC_NAME: 'R&amp;D Sales',
+          METRIC_NAME: 'R&amp;amp;D Sales',
           VALUE_FORMAT: 'c&quot;$&quot;#,##0.0;-&quot;$&quot;#,##0.0',
+        },
+        field_mapping: {
+          ...boundResult.args.field_mapping,
+          '{{field_base_1}}': '[DS].[none:R&amp;amp;D:qk]',
         },
       },
     };
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: insightBoundResult,
-      workbookReads: [CALC_BASE_XML],
+      // The first atomic readback still sees the pre-apply document; the poll must
+      // wait for the combined calc + worksheet mutation to settle.
+      workbookReads: [CALC_BASE_XML, CALC_BASE_XML, appliedKpiXml],
     });
-    vi.mocked(buildInjectedWorkbookXml).mockImplementation(({ workbookXml }) => ({
+    vi.mocked(buildInjectedWorkbookXml).mockImplementation(() => ({
       ok: true,
-      xml: workbookXml.replace(
-        '</worksheets>',
-        "<worksheet name='Period change — Sales' /></worksheets>",
-      ),
+      xml: appliedKpiXml,
     }));
 
     const result = await getToolResult({
@@ -4928,11 +4935,15 @@ describe('bindTemplateTool auto_apply gate', () => {
       expect.objectContaining({
         workbookXml: expect.stringContaining("caption='Margin'"),
         templateParameters: expect.objectContaining({
-          METRIC_NAME: 'R&D Sales',
+          METRIC_NAME: 'R&amp;D Sales',
           VALUE_FORMAT: 'c"$"#,##0.0;-"$"#,##0.0',
+        }),
+        fieldMapping: expect.objectContaining({
+          '{{field_base_1}}': '[DS].[none:R&amp;D:qk]',
         }),
       }),
     );
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(3);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     expect(applyWorkbookDocument).toHaveBeenCalledWith(
       expect.stringMatching(/caption='Margin'[\s\S]*worksheet name='Period change — Sales'/),

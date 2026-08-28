@@ -553,4 +553,40 @@ describe('prepareCalculationsInWorkbook idempotency', () => {
     if (result.isOk()) return;
     expect(result.error.message).toContain('caption collision');
   });
+
+  it('does not collapse meaningful whitespace inside a string literal', () => {
+    const stringCalc =
+      "<column caption='Bucket' datatype='string' name='[Calculation_901]' role='dimension' type='nominal'>" +
+      "<calculation class='tableau' formula='IF [Region] = &quot;A  B&quot; THEN &quot;match&quot; END' /></column>";
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, stringCalc),
+      calcs: [
+        {
+          caption: 'Bucket',
+          formula: 'IF [Region] = "A B" THEN "match" END',
+          role: 'dimension',
+          datatype: 'string',
+        },
+      ],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+
+  it('does not reuse a calculation when its default format differs', () => {
+    const formattedCalc = existingCalc.replace(
+      " type='quantitative'",
+      " default-format='p0%' type='quantitative'",
+    );
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, formattedCalc),
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
 });
