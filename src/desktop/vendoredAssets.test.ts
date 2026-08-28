@@ -66,6 +66,8 @@ describe('desktop vendored assets', () => {
     expect(kpi?.snapshot.xml).toContain("fontname='Tableau Medium' fontsize='24'");
     expect(kpi?.snapshot.xml).toContain('<run>Æ&#10;</run>');
     expect(kpi?.snapshot.xml).toContain("<format attr='text-align' value='left' />");
+    expect(kpi?.snapshot.xml).toContain('PREVIOUS PERIOD | {{COMPARISON_PERIOD_CONTEXT}} | ');
+    expect(kpi?.snapshot.xml).toContain('&lt;[{{DATASOURCE}}].[sum:{{field_base_3}}:qk]&gt;');
     expect(kpi?.snapshot.xml).toContain('CHANGE FROM PREVIOUS PERIOD | ');
     expect(kpi?.snapshot.xml).not.toContain('ABSOLUTE CHANGE | ');
     expect(kpi?.snapshot.xml).not.toContain('PREVIOUS VALUE | ');

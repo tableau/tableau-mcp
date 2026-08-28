@@ -74,6 +74,9 @@
             <run fontcolor='#898989'>{{METRIC_NAME}} | </run>
             <run bold='true' fontcolor='#000000'>&lt;[Sample - Superstore].[sum:Profit:qk]&gt;</run>
             <run>Æ&#10;</run>
+            <run fontcolor='#898989'>PREVIOUS PERIOD | {{COMPARISON_PERIOD_CONTEXT}} | </run>
+            <run bold='true' fontcolor='#000000'>&lt;[Sample - Superstore].[sum:Sales:qk]&gt;</run>
+            <run>Æ&#10;</run>
             <run fontcolor='#898989'>CHANGE FROM PREVIOUS PERIOD | </run>
             <run bold='true' fontcolor='{{CHANGE_COLOR}}'>{{DIRECTION_SYMBOL}} </run>
             <run bold='true' fontcolor='#000000'>&lt;[Sample - Superstore].[sum:Discount:qk]&gt;</run>

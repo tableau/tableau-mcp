@@ -94,6 +94,8 @@ describe('buildInjectedWorkbookXml — caller-authored KPI formatting', () => {
     expect(result.xml).toContain('R&amp;D Sales');
     expect(result.xml).not.toContain('R&amp;amp;D Sales');
     expect(result.xml).toContain('Q1 &quot;actual&quot;');
+    expect(result.xml).toContain("PREVIOUS PERIOD | Prior year's Q1 | ");
+    expect(result.xml).toContain('&lt;[Analytics].[usr:Comparison:qk]&gt;');
   });
 });
 
