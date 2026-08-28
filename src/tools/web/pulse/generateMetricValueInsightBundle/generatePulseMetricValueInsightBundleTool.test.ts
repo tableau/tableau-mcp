@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { AxiosError } from 'axios';
+import { Err, Ok } from 'ts-results-es';
 
 import {
   PulseDisabledError,
@@ -19,13 +20,22 @@ import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMet
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 const mocks = vi.hoisted(() => ({
   mockGeneratePulseMetricValueInsightBundle: vi.fn(),
+  mockReadMetadata: vi.fn(),
+  mockQueryDatasource: vi.fn(),
 }));
 
 vi.mock('../../../../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
     callback({
+      siteId: 'site-id',
       pulseMethods: {
         generatePulseMetricValueInsightBundle: mocks.mockGeneratePulseMetricValueInsightBundle,
+      },
+      vizqlDataServiceMethods: {
+        readMetadata: mocks.mockReadMetadata,
+      },
+      datasourcesMethods: {
+        queryDatasource: mocks.mockQueryDatasource,
       },
     }),
   ),
@@ -120,6 +130,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
+    mocks.mockReadMetadata.mockResolvedValue(new Ok({ data: [] }));
+    mocks.mockQueryDatasource.mockResolvedValue({ name: 'Some Datasource' });
   });
 
   afterEach(() => {
@@ -173,6 +185,168 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       expect(parsedValue).toEqual(mockBundleRequestResponse);
     },
   );
+
+  it('resolves field captions to fieldName using VDS metadata before calling Pulse', async () => {
+    // The Insight Service validates `field` against HBI metadata's fieldName,
+    // not fieldCaption. Callers build bundleRequest from captions (all
+    // getDatasourceMetadata exposes), so a calc field's caption must be
+    // resolved to its fieldName before the request reaches Pulse.
+    mocks.mockReadMetadata.mockResolvedValue(
+      new Ok({
+        data: [
+          { fieldCaption: 'Sales', fieldName: 'Calculation_0013913069531140' },
+          { fieldCaption: 'Order Date', fieldName: 'Order Date' },
+        ],
+      }),
+    );
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+
+    const result = await getToolResult();
+
+    expect(mocks.mockReadMetadata).toHaveBeenCalledWith({
+      datasource: { datasourceLuid: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11' },
+    });
+    const [sentRequest] = mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0];
+    const basicSpec = sentRequest.bundle_request.input.metric.definition.basic_specification;
+    expect(basicSpec.measure.field).toBe('Calculation_0013913069531140');
+    expect(basicSpec.time_dimension.field).toBe('Order Date');
+    expect(result.isError).toBe(false);
+  });
+
+  it('forwards the request unchanged when metadata cannot be read', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(new Err('boom'));
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+
+    const result = await getToolResult();
+
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(
+      bundleRequest,
+      'ban',
+    );
+    expect(result.isError).toBe(false);
+  });
+
+  it('forwards the request unchanged when readMetadata throws instead of returning Err', async () => {
+    // readMetadata only returns Err for a 404 ('feature-disabled'); any other
+    // failure (auth, 5xx, network) throws instead.
+    mocks.mockReadMetadata.mockRejectedValue(
+      new AxiosError('Internal Server Error', 'ERR_BAD_RESPONSE', undefined, undefined, {
+        status: 500,
+        statusText: 'Internal Server Error',
+        data: {},
+        headers: {},
+        config: {} as any,
+      }),
+    );
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+
+    const result = await getToolResult();
+
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(
+      bundleRequest,
+      'ban',
+    );
+    expect(result.isError).toBe(false);
+  });
+
+  it('sets id_type to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE when queryDatasource returns an embedded contentUrl', async () => {
+    // Pulse must always call HBI directly (never a cached query result) for
+    // embedded workbook datasources. Callers can't be relied on to set
+    // id_type themselves, so the tool detects it: the Datasources REST API
+    // resolves embedded/workbook datasource LUIDs too, but marks them with a
+    // contentUrl of the form '$embedded$_<workbookLuid>' instead of 404ing.
+    mocks.mockQueryDatasource.mockResolvedValue({
+      name: 'SalesCloud',
+      contentUrl: '$embedded$_857cae8f-aaee-4e7a-ad78-851b465b5121',
+    });
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+
+    const result = await getToolResult();
+
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
+      siteId: 'site-id',
+      datasourceId: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
+    });
+    const [sentRequest] = mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0];
+    expect(sentRequest.bundle_request.input.metric.definition.datasource).toEqual({
+      id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
+      id_type: 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE',
+    });
+    expect(result.isError).toBe(false);
+  });
+
+  it('sets id_type to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE when queryDatasource does not recognize the LUID at all (404)', async () => {
+    mocks.mockQueryDatasource.mockRejectedValue(
+      new AxiosError('Not Found', 'ERR_BAD_REQUEST', undefined, undefined, {
+        status: 404,
+        statusText: 'Not Found',
+        data: {},
+        headers: {},
+        config: {} as any,
+      }),
+    );
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+
+    const result = await getToolResult();
+
+    const [sentRequest] = mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0];
+    expect(sentRequest.bundle_request.input.metric.definition.datasource).toEqual({
+      id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
+      id_type: 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE',
+    });
+    expect(result.isError).toBe(false);
+  });
+
+  it('defaults to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE (and logs) when queryDatasource fails for a non-404 reason', async () => {
+    // A published/embedded lookup that fails for an operational reason (auth,
+    // 5xx, network) can't be distinguished from a genuinely unknown LUID, so
+    // it defaults the same way as a 404 — but this case is logged separately.
+    mocks.mockQueryDatasource.mockRejectedValue(
+      new AxiosError('Internal Server Error', 'ERR_BAD_RESPONSE', undefined, undefined, {
+        status: 500,
+        statusText: 'Internal Server Error',
+        data: {},
+        headers: {},
+        config: {} as any,
+      }),
+    );
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+
+    const result = await getToolResult();
+
+    const [sentRequest] = mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0];
+    expect(sentRequest.bundle_request.input.metric.definition.datasource).toEqual({
+      id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
+      id_type: 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE',
+    });
+    expect(result.isError).toBe(false);
+  });
+
+  it('leaves id_type unset when the datasource resolves as a published datasource', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+
+    const result = await getToolResult();
+
+    const [sentRequest] = mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0];
+    expect(sentRequest.bundle_request.input.metric.definition.datasource).toEqual({
+      id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
+    });
+    expect(result.isError).toBe(false);
+  });
 
   it('should have correct tool properties', () => {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());

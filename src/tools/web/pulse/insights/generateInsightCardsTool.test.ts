@@ -391,6 +391,122 @@ describe('getGenerateInsightCardsTool', () => {
     expect(req.definition.basic_specification.filters).toEqual([]);
   });
 
+  it('resolves field captions to fieldName using VDS metadata before calling Pulse', async () => {
+    // Same caption/fieldName mismatch handled in generatePulseMetricValueInsightBundleTool:
+    // the Insight Service validates `field` against HBI metadata's fieldName, not
+    // fieldCaption, so a calculated field's caption must be resolved before the
+    // request reaches Pulse. See resolveBundleRequestFieldNames.ts.
+    mocks.mockListDatasources.mockResolvedValue({
+      datasources: [{ id: 'ds-luid', name: 'GUS Work', contentUrl: 'GUS-Work' }],
+    });
+    mocks.mockReadMetadata.mockResolvedValue(
+      Ok({
+        data: [
+          { fieldCaption: 'Created Date', fieldName: 'Created Date', dataType: 'DATE' },
+          {
+            fieldCaption: 'Cases',
+            fieldName: 'Calculation_0013913069531140',
+            dataType: 'INTEGER',
+          },
+        ],
+      }),
+    );
+    mocks.mockGenerateBundle.mockResolvedValue(
+      Ok({
+        bundle_response: {
+          result: {
+            insight_groups: [
+              {
+                type: 'ban',
+                summaries: [],
+                insights: [
+                  {
+                    insight_type: 'popc',
+                    result: {
+                      type: 'popc',
+                      version: 1,
+                      question: '',
+                      score: 1,
+                      markup: 'Cases are up 12%',
+                      facts: { formatted_current_value: '2.2K', delta_percent: 12 },
+                    },
+                  },
+                ],
+              },
+            ],
+            has_errors: false,
+            characterization: 'CHARACTERIZATION_UNSPECIFIED',
+          },
+        },
+      }),
+    );
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    const req = parsed.cards[0].briefConfig.args.bundleRequest.bundle_request.input.metric;
+    expect(req.definition.basic_specification.measure.field).toBe('Calculation_0013913069531140');
+    expect(req.definition.basic_specification.time_dimension.field).toBe('Created Date');
+  });
+
+  it('sets id_type to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE for an embedded workbook datasource', async () => {
+    // resolveDatasource resolves { luid } input via queryDatasource, whose
+    // contentUrl for an embedded/workbook datasource is '$embedded$_<workbookLuid>'.
+    // Pulse must always call HBI directly (id_type set) for those.
+    mocks.mockQueryDatasource.mockResolvedValue({
+      name: 'SalesCloud',
+      contentUrl: '$embedded$_857cae8f-aaee-4e7a-ad78-851b465b5121',
+    });
+    mocks.mockReadMetadata.mockResolvedValue(
+      Ok({
+        data: [
+          { fieldCaption: 'Created Date', dataType: 'DATE' },
+          { fieldCaption: 'Cases', dataType: 'INTEGER' },
+        ],
+      }),
+    );
+    mocks.mockGenerateBundle.mockResolvedValue(
+      Ok({
+        bundle_response: {
+          result: {
+            insight_groups: [
+              {
+                type: 'ban',
+                summaries: [],
+                insights: [
+                  {
+                    insight_type: 'popc',
+                    result: {
+                      type: 'popc',
+                      version: 1,
+                      question: '',
+                      score: 1,
+                      markup: 'Cases are up 12%',
+                      facts: { formatted_current_value: '2.2K', delta_percent: 12 },
+                    },
+                  },
+                ],
+              },
+            ],
+            has_errors: false,
+            characterization: 'CHARACTERIZATION_UNSPECIFIED',
+          },
+        },
+      }),
+    );
+
+    const result = await getToolResult({ datasource: { luid: 'ds-luid' } });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    const req = parsed.cards[0].briefConfig.args.bundleRequest.bundle_request.input.metric;
+    expect(req.definition.datasource).toEqual({
+      id: 'ds-luid',
+      id_type: 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE',
+    });
+  });
+
   it('parses delta direction from markup when facts omit percentage', async () => {
     mocks.mockListDatasources.mockResolvedValue({
       datasources: [{ id: 'ds-luid', name: 'GUS Work', contentUrl: 'GUS-Work' }],

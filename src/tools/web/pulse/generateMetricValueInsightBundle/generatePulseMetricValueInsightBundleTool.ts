@@ -1,15 +1,25 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err } from 'ts-results-es';
 import z from 'zod';
 
 import { ArgsValidationError, DatasourceNotAllowedError } from '../../../../errors/mcpToolError.js';
+import { log } from '../../../../logging/logger.js';
 import { useRestApi } from '../../../../restApiInstance.js';
+import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
   pulseInsightBundleTypeEnum,
 } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
+import { isAxiosError } from '../../../../utils/axios.js';
 import { WebTool } from '../../tool.js';
+import {
+  applyFieldNameResolution,
+  buildFieldNameByCaption,
+  resolveIdTypeFromContentUrl,
+  WorkbookDatasourceIdType,
+} from '../resolveBundleRequestFieldNames.js';
 import { validateBundleRequest } from '../validatePulsePayload.js';
 
 const paramsSchema = {
@@ -32,9 +42,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
     - time_zone: 'UTC'
     - language: 'LANGUAGE_EN_US'
     - locale: 'LOCALE_EN_US'
-    - The \`datasource\` field under \`metric.definition\` requires an \`id\` (datasource LUID) and accepts an optional \`id_type\`:
-      - Omit \`id_type\` for standard published datasources (default behavior).
-      - Use \`'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE'\` when the metric is based on an embedded workbook datasource rather than a published datasource.
+    - The \`datasource\` field under \`metric.definition\` requires an \`id\` (datasource LUID). An optional \`id_type\` may also be set, but it does not need to be — this tool automatically detects embedded workbook datasources and sets \`id_type\` accordingly.
 - \`bundleType\` (optional): The type of bundle to generate.  The default is 'ban'.
   - 'ban' - Return a basic insight bundle with the current aggregated value for the Pulse Metric, period over period change, and the highest ranked insight for each filterable dimension of the metric.
   - 'springboard' - Return a springboard insight bundle with the current value, period over period change, and the highest ranked insight for the metric.
@@ -171,7 +179,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
             jwtScopes: generatePulseMetricValueInsightBundleTool.requiredApiScopes,
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
-                bundleRequest,
+                await resolveBundleRequestFieldNames(restApi, bundleRequest),
                 bundleType ?? 'ban',
               ),
           });
@@ -190,3 +198,82 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
 
   return generatePulseMetricValueInsightBundleTool;
 };
+
+// The Insight Service validates every `field` string against HBI metadata's
+// fieldName, not fieldCaption. Callers build bundleRequest from field captions
+// (that's all getDatasourceMetadata exposes), so a calculated field's caption
+// (e.g. "Amount_Billions") 400s while its underlying fieldName (e.g.
+// "Calculation_00...") succeeds. VDS readMetadata returns both, so resolve
+// caption -> fieldName here before forwarding to Pulse. Best-effort: if
+// metadata can't be read, forward the request unchanged rather than blocking
+// the call — this is a caption/fieldName workaround, not a hard dependency.
+//
+// Separately, Pulse must always call HBI directly (never a cached query
+// result) for embedded/workbook datasources, which requires
+// id_type: 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE' on the request. Callers
+// can't be relied on to set this themselves, so determine it here: a LUID
+// that queryDatasource (the published Datasources REST API) doesn't
+// recognize is an embedded workbook datasource.
+async function resolveBundleRequestFieldNames(
+  restApi: RestApi,
+  bundleRequest: z.infer<typeof pulseBundleRequestSchema>,
+): Promise<z.infer<typeof pulseBundleRequestSchema>> {
+  const datasource = bundleRequest.bundle_request.input.metric.definition.datasource;
+  const datasourceLuid = datasource.id;
+
+  const [metadataResult, idType] = await Promise.all([
+    // readMetadata only returns Err for a 404 ('feature-disabled'); any other
+    // failure (auth, 5xx, network) throws. Catch it here too so a metadata
+    // outage forwards the request unchanged instead of failing the whole call.
+    restApi.vizqlDataServiceMethods
+      .readMetadata({ datasource: { datasourceLuid } })
+      .catch((error): Err<'feature-disabled'> => {
+        log({
+          message: `readMetadata failed for datasource ${datasourceLuid}; forwarding field captions unchanged`,
+          level: 'warning',
+          logger: 'pulse',
+          data: error,
+        });
+        return Err('feature-disabled');
+      }),
+    resolveDatasourceIdType(restApi, datasourceLuid),
+  ]);
+
+  const fieldNameByCaption = metadataResult.isOk()
+    ? buildFieldNameByCaption(metadataResult.value.data ?? [])
+    : new Map<string, string>();
+
+  return applyFieldNameResolution(bundleRequest, fieldNameByCaption, idType);
+}
+
+// The Datasources REST API returns an entry for embedded/workbook datasources
+// too (it doesn't 404), but marks them with a contentUrl of the form
+// '$embedded$_<workbookLuid>' instead of a normal published contentUrl. A
+// LUID the API genuinely doesn't recognize (404) is treated the same way,
+// since Pulse's HBI-direct, uncached path is the safer default for an
+// unknown ID. Any other failure (auth, 5xx, network) can't distinguish
+// published from embedded either, so it defaults the same way, but is logged
+// separately since it's an operational problem rather than an expected case.
+async function resolveDatasourceIdType(
+  restApi: RestApi,
+  datasourceLuid: string,
+): Promise<WorkbookDatasourceIdType | undefined> {
+  try {
+    const datasource = await restApi.datasourcesMethods.queryDatasource({
+      siteId: restApi.siteId,
+      datasourceId: datasourceLuid,
+    });
+    return resolveIdTypeFromContentUrl(datasource.contentUrl);
+  } catch (error) {
+    const isNotFound = isAxiosError(error) && error.response?.status === 404;
+    if (!isNotFound) {
+      log({
+        message: `queryDatasource failed for datasource ${datasourceLuid} with a non-404 error; defaulting to DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE since published/embedded status could not be verified`,
+        level: 'warning',
+        logger: 'pulse',
+        data: error,
+      });
+    }
+    return 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE';
+  }
+}
