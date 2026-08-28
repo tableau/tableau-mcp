@@ -351,6 +351,17 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
     }
   });
 
+  it.each([
+    'audit this workbook for misleading logarithmic chart scales',
+    'bar chart on a log scale',
+    'audit this workbook for misleading charts',
+  ])('ranks chart scale audit guidance #1 for %s', (query) => {
+    const hits = searchKnowledge(query, 5);
+
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0].slug).toBe('strategy/viz-design/chart-best-practices');
+  });
+
   it('negative control: a generic filter query is not over-captured by the performance entry', () => {
     const hits = searchKnowledge('add a region filter to a dashboard', 5);
     expect(hits[0]?.slug.endsWith('dashboard-performance-efficient-workbooks')).not.toBe(true);
