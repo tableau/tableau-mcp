@@ -1575,7 +1575,11 @@ function applyFailureDisposition(
 type BoundResult = Extract<BinderResult, { status: 'bound' }>;
 
 function collisionFreeWorksheetTitle(workbookXml: string, requestedTitle: string): string {
-  if (classifyWorksheetReplaceTarget(workbookXml, requestedTitle) !== 'in-dashboard') {
+  const requestedTarget = classifyWorksheetReplaceTarget(workbookXml, requestedTitle);
+  if (
+    requestedTarget === 'replaceable' ||
+    (requestedTarget !== 'in-dashboard' && !workbookHasSheetNamed(workbookXml, requestedTitle))
+  ) {
     return requestedTitle;
   }
   for (let copy = 2; copy <= 10_000; copy += 1) {

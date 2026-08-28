@@ -5887,6 +5887,23 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
       expect.objectContaining({ title: 'Sales by Region (3)' }),
     );
   });
+
+  it('chooses a new title when a dashboard or story owns the requested title', async () => {
+    const { getExecutor } = setupAutoApplyMocks();
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('not-found');
+    vi.mocked(workbookHasSheetNamed).mockImplementation((_xml, name) => name === 'Sales by Region');
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).sheet_name).toBe('Sales by Region (2)');
+  });
 });
 
 describe('bindTemplateTool route-state recording', () => {

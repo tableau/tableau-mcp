@@ -752,6 +752,10 @@ describe('classifyWorksheetReplaceTarget', () => {
     expect(classifyWorksheetReplaceTarget(WB, 'Dash Member')).toBe('in-dashboard');
   });
 
+  it('uses canonical XML name equality for dashboard-member protection', () => {
+    expect(classifyWorksheetReplaceTarget(WB, '  Dash Member  ')).toBe('in-dashboard');
+  });
+
   it('reports a missing name as not-found', () => {
     expect(classifyWorksheetReplaceTarget(WB, 'Nope')).toBe('not-found');
   });
@@ -775,5 +779,11 @@ describe('workbookHasSheetNamed', () => {
   it('does not report an unused or unparseable sheet name', () => {
     expect(workbookHasSheetNamed(WB, 'Unused')).toBe(false);
     expect(workbookHasSheetNamed('<workbook', 'Sheet')).toBe(false);
+  });
+
+  it('uses Tableau XML name normalization across sheet types', () => {
+    const normalized = '<workbook><dashboards><dashboard name="Café"/></dashboards></workbook>';
+
+    expect(workbookHasSheetNamed(normalized, '  Cafe\u0301  ')).toBe(true);
   });
 });
