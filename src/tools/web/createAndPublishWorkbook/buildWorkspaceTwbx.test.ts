@@ -7,6 +7,7 @@ import { EXTENSIONS_LIB_PATH } from './buildTwbx.js';
 import {
   buildWorkspaceTwbx,
   listPackagedWorkspaceFiles,
+  readAllowedOrigins,
   readDatasourceBindings,
   WORKSPACE_ENTRYPOINT,
   WORKSPACE_MANIFEST,
@@ -98,6 +99,25 @@ describe('buildWorkspaceTwbx', () => {
     expect(shipped.some((p) => p.includes('dataapp.json'))).toBe(false);
   });
 
+  it('copies the manifest allowedOrigins from dataapp.json into the package manifest.json', () => {
+    const withOrigins = {
+      ...SCAFFOLD,
+      'dataapp.json': JSON.stringify({
+        ...MANIFEST,
+        allowedOrigins: 'https://api.example.com https://cdn.example.com',
+      }),
+    };
+    const files = entries(buildWorkspaceTwbx(snapshot(withOrigins), options).bytes);
+    const manifest = JSON.parse(files['Packages/com.example.myapp/manifest.json']);
+    expect(manifest.allowedOrigins).toBe('https://api.example.com https://cdn.example.com');
+  });
+
+  it('omits allowedOrigins from the package manifest when dataapp.json declares none', () => {
+    const files = entries(buildWorkspaceTwbx(snapshot(SCAFFOLD), options).bytes);
+    const manifest = JSON.parse(files['Packages/com.example.myapp/manifest.json']);
+    expect(manifest).not.toHaveProperty('allowedOrigins');
+  });
+
   it('preserves the entrypoint bytes verbatim as content/index.html', () => {
     const entrypoint = new Uint8Array([
       0xef, 0xbb, 0xbf, 0x00, 0x80, 0xff, 0x3c, 0x68, 0x74, 0x6d, 0x6c,
@@ -155,6 +175,51 @@ describe('buildWorkspaceTwbx', () => {
         readDatasourceBindings(snapshot({ 'index.html': '<html></html>', 'dataapp.json': '{}' })),
       ).toEqual([]);
     });
+  });
+
+  describe('readAllowedOrigins', () => {
+    it('reads a trimmed allowedOrigins string from the manifest', () => {
+      const snap = snapshot({
+        ...SCAFFOLD,
+        'dataapp.json': JSON.stringify({
+          ...MANIFEST,
+          allowedOrigins: '  https://api.example.com ',
+        }),
+      });
+      expect(readAllowedOrigins(snap)).toBe('https://api.example.com');
+    });
+
+    it('returns undefined when the manifest is missing, malformed, or omits/blanks the field', () => {
+      expect(readAllowedOrigins(snapshot({ 'index.html': '<html></html>' }))).toBeUndefined();
+      expect(
+        readAllowedOrigins(snapshot({ 'index.html': '<html></html>', 'dataapp.json': 'not json' })),
+      ).toBeUndefined();
+      expect(readAllowedOrigins(snapshot(SCAFFOLD))).toBeUndefined();
+      expect(
+        readAllowedOrigins(
+          snapshot({
+            ...SCAFFOLD,
+            'dataapp.json': JSON.stringify({ ...MANIFEST, allowedOrigins: '   ' }),
+          }),
+        ),
+      ).toBeUndefined();
+    });
+
+    it.each([123, ['https://a.com'], true, { origin: 'x' }])(
+      'degrades a non-string allowedOrigins (%j) to undefined instead of throwing',
+      (badValue) => {
+        // A hand-edited/corrupted dataapp.json can carry a non-string value; optional chaining alone
+        // would let it reach .trim() and throw a TypeError, so a type guard must catch it.
+        expect(
+          readAllowedOrigins(
+            snapshot({
+              ...SCAFFOLD,
+              'dataapp.json': JSON.stringify({ ...MANIFEST, allowedOrigins: badValue }),
+            }),
+          ),
+        ).toBeUndefined();
+      },
+    );
   });
 
   describe('listPackagedWorkspaceFiles', () => {

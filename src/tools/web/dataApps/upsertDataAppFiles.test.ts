@@ -6,6 +6,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { buildDataAppManifest, DATA_APP_MANIFEST_PATH } from './templates.js';
 import { getUpsertDataAppFilesTool, UpsertDataAppFilesResult } from './upsertDataAppFiles.js';
 import { FakeWorkspaceStore } from './workspaceStore.mock.js';
 
@@ -142,11 +143,102 @@ describe('upsertDataAppFilesTool', () => {
     });
     expect(result.isError).toBe(true);
   });
+
+  describe('allowedOrigins', () => {
+    it('sets the manifest allowedOrigins alongside a file write, preserving every other field', async () => {
+      await store.writeManifest(SCOPE, appId, realisticManifestJson());
+      const writeManifest = vi.spyOn(store, 'writeManifest');
+
+      const result = await getToolResult({
+        appId,
+        files: [{ path: 'src/app.js', content: 'fetch("https://api.example.com/data");' }],
+        allowedOrigins: 'https://api.example.com',
+      });
+
+      expect(result.isError).toBe(false);
+      expect(writeManifest).toHaveBeenCalledTimes(1);
+
+      // The reported files exclude the protected manifest — only the source file the caller wrote.
+      const data = getData(result);
+      expect(data.files.map((f) => f.path)).toEqual(['src/app.js']);
+
+      // The manifest is re-serialized byte-identically to a scaffold carrying the same origin, so
+      // appName / packageId / template / datasources all survive untouched.
+      const bytes = await getDataAppWorkspaceStore().readFile(SCOPE, appId, DATA_APP_MANIFEST_PATH);
+      expect(Buffer.from(bytes).toString('utf8')).toBe(
+        realisticManifestJson('https://api.example.com'),
+      );
+    });
+
+    it('clears the allowedOrigins key when an empty string is passed', async () => {
+      await store.writeManifest(SCOPE, appId, realisticManifestJson('https://api.example.com'));
+
+      const result = await getToolResult({
+        appId,
+        files: [{ path: 'src/app.js', content: 'noFetch();' }],
+        allowedOrigins: '',
+      });
+
+      expect(result.isError).toBe(false);
+      const bytes = await getDataAppWorkspaceStore().readFile(SCOPE, appId, DATA_APP_MANIFEST_PATH);
+      const manifest = JSON.parse(Buffer.from(bytes).toString('utf8'));
+      expect(manifest.allowedOrigins).toBeUndefined();
+      // The key is removed, not blanked — byte-identical to a no-origins scaffold.
+      expect(Buffer.from(bytes).toString('utf8')).toBe(realisticManifestJson());
+    });
+
+    it('leaves the manifest untouched and never calls writeManifest when the param is omitted', async () => {
+      await store.writeManifest(SCOPE, appId, realisticManifestJson());
+      const before = Buffer.from(
+        await getDataAppWorkspaceStore().readFile(SCOPE, appId, DATA_APP_MANIFEST_PATH),
+      ).toString('utf8');
+      const writeManifest = vi.spyOn(store, 'writeManifest');
+
+      const result = await getToolResult({
+        appId,
+        files: [{ path: 'src/app.js', content: 'x();' }],
+      });
+
+      expect(result.isError).toBe(false);
+      expect(writeManifest).not.toHaveBeenCalled();
+      const after = Buffer.from(
+        await getDataAppWorkspaceStore().readFile(SCOPE, appId, DATA_APP_MANIFEST_PATH),
+      ).toString('utf8');
+      expect(after).toBe(before);
+    });
+  });
 });
+
+// A fully-populated manifest mirroring what scaffold-data-app writes, so tests can assert that
+// setting/clearing allowedOrigins preserves every other field rather than clobbering a `{}` seed.
+function realisticManifestJson(allowedOrigins?: string): string {
+  return `${JSON.stringify(
+    buildDataAppManifest({
+      appName: 'My App',
+      packageId: 'com.example.myapp',
+      template: 'live-extension',
+      datasources: [
+        {
+          luid: 'ds-luid-1',
+          contentUrl: 'sales/Sales',
+          name: 'Sales',
+          sqlproxyName: 'sqlproxy.abc123',
+          host: 'my-tableau-server.com',
+          port: '443',
+          field: { fieldName: 'amount', caption: 'Amount', dataType: 'REAL' },
+        },
+      ],
+      allowedOrigins,
+    }),
+    null,
+    2,
+  )}\n`;
+}
 
 async function getToolResult(args: {
   appId: string;
   files: Array<{ path: string; content: string }>;
+  allowedOrigins?: string;
 }): Promise<CallToolResult> {
   const tool = getUpsertDataAppFilesTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);

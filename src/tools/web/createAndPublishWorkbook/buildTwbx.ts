@@ -82,6 +82,11 @@ export interface BuildTwbxInput {
    *  with only the extension on its host worksheet (no live wiring) — a degenerate case kept so the
    *  builder never throws on a datasource-less workspace. */
   datasources?: DataAppDatasource[];
+  /** Space-separated CSP origin sources injected into the package manifest's `allowedOrigins`, which
+   *  the server prepends to the served content CSP's `default-src` (see monolith PR #61836). This is
+   *  what lets the embedded app `fetch`/XHR to an origin other than its own isolated content origin.
+   *  Omit (or pass blank) for none — the key is then absent and the manifest stays byte-identical. */
+  allowedOrigins?: string;
 }
 
 /** bytes = the zip; warnings = non-fatal advisories (e.g. a content extension not on the reader's
@@ -174,12 +179,21 @@ const DEFAULT_ICON_PNG_B64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 function renderManifest(i: BuildTwbxInput): string {
-  // 4 fields, exactly the reader-test shape. version/author are provenance only (reader ignores them).
-  return JSON.stringify(
-    { id: i.packageId, version: '1.0.0', name: i.workbookName, author: 'Claude' },
-    null,
-    2,
-  );
+  // 4 base fields, exactly the reader-test shape. version/author are provenance only (reader ignores
+  // them). `allowedOrigins` is emitted ONLY when set (trimmed, non-empty): the server reads it to
+  // widen the content CSP's default-src, and omitting the key otherwise keeps output byte-identical
+  // for apps that declare no extra origins (existing golden/determinism assertions stay valid).
+  const manifest: Record<string, string> = {
+    id: i.packageId,
+    version: '1.0.0',
+    name: i.workbookName,
+    author: 'Claude',
+  };
+  const origins = i.allowedOrigins?.trim();
+  if (origins) {
+    manifest.allowedOrigins = origins;
+  }
+  return JSON.stringify(manifest, null, 2);
 }
 
 function renderTrex(i: BuildTwbxInput): string {

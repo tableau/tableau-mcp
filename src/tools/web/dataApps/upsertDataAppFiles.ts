@@ -8,6 +8,7 @@ import type { DataAppFile } from '../../../dataApps/types.js';
 import { McpToolError, UnsafeWorkspacePathError } from '../../../errors/mcpToolError.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
+import { allowedOriginsParam, updateManifestAllowedOrigins } from './manifestOrigins.js';
 import { resolveScopeFromExtra } from './scopeFromExtra.js';
 
 const paramsSchema = {
@@ -27,6 +28,7 @@ const paramsSchema = {
       'One or more files to write in a single atomic batch. Every path/content item is validated ' +
         'before anything is written; if any item fails, nothing in the batch is written.',
     ),
+  allowedOrigins: allowedOriginsParam,
 };
 
 export type UpsertDataAppFilesResult = {
@@ -59,10 +61,15 @@ any item fails, the whole batch is rejected and nothing changes. This tool makes
 API call.
 
 \`dataapp.json\` is a tool-managed manifest and cannot be overwritten by this tool; attempting to
-include it in \`files\` fails the whole batch.
+include it in \`files\` fails the whole batch. To let the app fetch an external origin at runtime,
+declare it with the \`allowedOrigins\` param below instead of editing the manifest — do it in the
+same call that writes the fetch, or the request is blocked by the published app's Content-Security-
+Policy and fails silently on-screen.
 
 **Parameters:** \`appId\` (required) — the workspace handle from \`scaffold-data-app\`. \`files\`
-(required) — one or more \`{ path, content }\` entries; \`content\` is UTF-8 text.
+(required) — one or more \`{ path, content }\` entries; \`content\` is UTF-8 text. \`allowedOrigins\`
+(optional) — space-separated external origins the app may fetch/XHR at runtime; omit to leave the
+current setting unchanged, pass an empty string to clear it.
 
 **Result:** \`{ files, digest }\` — \`files\` lists the path and byte size of each file just written;
 \`digest\` is the content digest of the whole workspace immediately after this batch.
@@ -96,11 +103,25 @@ include it in \`files\` fails the whole batch.
           }
 
           try {
-            const result = await getDataAppWorkspaceStore().upsertFiles(
+            const store = getDataAppWorkspaceStore();
+            const result = await store.upsertFiles(
               scope.value,
               args.appId,
               args.files.map((file) => ({ path: file.path, content: file.content })),
             );
+
+            // Declaring an origin rides along with the file write, so the author never touches the
+            // protected manifest directly. Only when the param is present (empty clears it); the
+            // manifest write is the last mutation, so its digest is the workspace's final digest.
+            if (args.allowedOrigins !== undefined) {
+              const manifestWrite = await updateManifestAllowedOrigins(
+                store,
+                scope.value,
+                args.appId,
+                args.allowedOrigins,
+              );
+              return new Ok({ files: result.files, digest: manifestWrite.digest });
+            }
 
             return new Ok(result);
           } catch (error) {

@@ -42,6 +42,8 @@ export interface ReconstructedWorkspace {
   packageId: string;
   /** The published-datasource bindings recovered from the .twb (empty if the app wired none). */
   datasources: DataAppDatasourceBinding[];
+  /** The `allowedOrigins` recovered from the package manifest, or undefined if the app declared none. */
+  allowedOrigins?: string;
   /** The workspace source files: `content/**` (minus the injected lib) + the rebuilt `dataapp.json`. */
   files: DataAppFileInput[];
 }
@@ -77,21 +79,27 @@ export function reconstructWorkspaceFromTwbx(bytes: Uint8Array): ReconstructedWo
   }
   const folderId = MANIFEST_PATH_RE.exec(manifestPath)![1];
 
-  // The manifest carries the canonical package id and the display name (renderManifest emits
-  // { id, version, name, author }). Prefer them; fall back to the folder id / .twb base name so a
-  // hand-authored or older package that omits a field still reopens.
+  // The manifest carries the canonical package id, the display name, and the optional allowedOrigins
+  // (renderManifest emits { id, version, name, author, allowedOrigins? }). Prefer them; fall back to
+  // the folder id / .twb base name so a hand-authored or older package that omits a field still
+  // reopens. Recovering allowedOrigins keeps it from being dropped on an edit -> republish round trip.
   let packageId = folderId;
   let manifestName: string | undefined;
+  let allowedOrigins: string | undefined;
   try {
     const manifest = JSON.parse(strFromU8(archive[manifestPath])) as {
       id?: unknown;
       name?: unknown;
+      allowedOrigins?: unknown;
     };
     if (typeof manifest.id === 'string' && manifest.id.length > 0) {
       packageId = manifest.id;
     }
     if (typeof manifest.name === 'string' && manifest.name.length > 0) {
       manifestName = manifest.name;
+    }
+    if (typeof manifest.allowedOrigins === 'string' && manifest.allowedOrigins.trim().length > 0) {
+      allowedOrigins = manifest.allowedOrigins.trim();
     }
   } catch {
     // A malformed manifest.json is non-fatal for recovery: fall back to the folder id and .twb name.
@@ -145,13 +153,14 @@ export function reconstructWorkspaceFromTwbx(bytes: Uint8Array): ReconstructedWo
     packageId,
     template: LIVE_EXTENSION_TEMPLATE,
     datasources,
+    allowedOrigins,
   });
   files.push({
     path: DATA_APP_MANIFEST_PATH,
     content: `${JSON.stringify(manifest, null, 2)}\n`,
   });
 
-  return { appName, packageId, datasources, files };
+  return { appName, packageId, datasources, allowedOrigins, files };
 }
 
 // Reverse of buildTwbx's columnMeta(): map the lowercase workbook `datatype` attribute back to the

@@ -12,10 +12,12 @@ import { EXTENSIONS_LIB_PATH } from '../createAndPublishWorkbook/buildTwbx.js';
 import {
   buildWorkspaceTwbx,
   listPackagedWorkspaceFiles,
+  readAllowedOrigins,
 } from '../createAndPublishWorkbook/buildWorkspaceTwbx.js';
 import { resolveScopeFromExtra } from '../dataApps/scopeFromExtra.js';
 import { WebTool } from '../tool.js';
 import { assetReferenceCheck } from './assetReferenceCheck.js';
+import { undeclaredOriginsCheck } from './undeclaredOriginsCheck.js';
 
 const paramsSchema = {
   appId: appIdSchema,
@@ -67,6 +69,13 @@ It checks:
   to a file that is actually packaged. A referenced-but-missing asset would 404 at serve time and
   render blank; it is a hard failure that blocks a receipt.
 - **Size** — the built package is under the 64 MB single-request publish limit.
+
+It also emits **advisory** (non-blocking) warnings when the packaged code appears to request an
+external origin (\`fetch\`/XHR/WebSocket/\`<script src>\`/etc.) that is not declared in the manifest's
+\`allowedOrigins\`. The published app's Content-Security-Policy blocks undeclared origins, so this is a
+best-effort nudge to declare them (via the \`allowedOrigins\` param on \`upsert-data-app-files\` /
+\`patch-data-app-file\`) before publishing. It never blocks a receipt: statically-built URLs can slip
+past it, and a bare reference is not proof of a runtime fetch.
 
 **Parameters:** \`appId\` (required) — the workspace handle. \`workbookName\` (required) — the display
 name for the workbook.
@@ -145,6 +154,18 @@ A successful (ok:true) result means the package is structurally VALID and under 
             ...listPackagedWorkspaceFiles(snapshot),
             { path: EXTENSIONS_LIB_PATH, content: '' },
           ]);
+
+          // UNDECLARED ORIGINS (advisory) — scan the packaged content for external origins the code
+          // requests and flag any not declared in the manifest's `allowedOrigins`. Best-effort and
+          // non-blocking: a runtime-built URL can't be caught statically, and a bare code reference
+          // isn't proof of a fetch, so this nudges rather than blocks. Scans only the author's files
+          // (not the injected lib), which is why it does not reuse the asset-reference input above.
+          advisoryWarnings.push(
+            ...undeclaredOriginsCheck(
+              listPackagedWorkspaceFiles(snapshot),
+              readAllowedOrigins(snapshot),
+            ),
+          );
 
           // SIZE (hard).
           const sizeError = checkUnder64Mb(bytes.byteLength);

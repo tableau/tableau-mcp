@@ -258,6 +258,59 @@ describe('FileSystemWorkspaceStore', () => {
     });
   });
 
+  describe('writeManifest', () => {
+    it('is the sanctioned writer for the protected dataapp.json that ordinary upsert rejects', async () => {
+      const store = makeStore();
+      const app = await store.create(scopeA, {
+        appName: 'App',
+        packageId: 'pkg',
+        files: [{ path: 'dataapp.json', content: '{"schema":1}' }],
+      });
+
+      // Ordinary upsert cannot touch the manifest...
+      await expect(
+        store.upsertFiles(scopeA, app.appId, [{ path: 'dataapp.json', content: '{"v":2}' }]),
+      ).rejects.toBeInstanceOf(UnsafeWorkspacePathError);
+
+      // ...but writeManifest overwrites that one fixed path.
+      const result = await store.writeManifest(scopeA, app.appId, '{"v":2}');
+      expect(result.files.map((f) => f.path)).toEqual(['dataapp.json']);
+
+      const bytes = await store.readFile(scopeA, app.appId, 'dataapp.json');
+      expect(Buffer.from(bytes).toString('utf8')).toBe('{"v":2}');
+    });
+
+    it('reports a workspace digest that changes with the manifest content', async () => {
+      const store = makeStore();
+      const app = await store.create(scopeA, {
+        appName: 'App',
+        packageId: 'pkg',
+        files: [{ path: 'dataapp.json', content: '{"a":1}' }],
+      });
+
+      const first = await store.writeManifest(scopeA, app.appId, '{"a":1}');
+      const second = await store.writeManifest(scopeA, app.appId, '{"a":2}');
+      expect(second.digest).not.toBe(first.digest);
+    });
+
+    it('still enforces the per-file size limit on the manifest and writes nothing when exceeded', async () => {
+      const store = makeStore({ maxFileBytes: 16 });
+      const app = await store.create(scopeA, {
+        appName: 'App',
+        packageId: 'pkg',
+        files: [{ path: 'dataapp.json', content: '{}' }],
+      });
+
+      await expect(
+        store.writeManifest(scopeA, app.appId, `{"origins":"${'x'.repeat(64)}"}`),
+      ).rejects.toBeInstanceOf(DataAppWorkspaceLimitExceededError);
+
+      // Atomic: the oversize content was rejected before any write, so the original is intact.
+      const bytes = await store.readFile(scopeA, app.appId, 'dataapp.json');
+      expect(Buffer.from(bytes).toString('utf8')).toBe('{}');
+    });
+  });
+
   describe('case-insensitive path identity', () => {
     it('rejects case-colliding paths in one create batch', async () => {
       const store = makeStore();

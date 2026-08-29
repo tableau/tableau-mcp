@@ -93,10 +93,24 @@ web page, and these rules are the difference between an app that renders and a s
   first paint on \`await tableau.extensions.initializeAsync()\`, the page can stay blank. Paint the
   app shell / loading state immediately, then upgrade to live data after \`initializeAsync()\`
   resolves.
-- **Vendor libraries locally — no CDN.** The sandbox is same-origin with the bundled content and
-  blocks most external CDNs. Any charting/util library (e.g. D3) must be added to the workspace as an
-  asset via \`upsert-data-app-files\` and referenced with a relative path — never a
-  \`<script src="https://cdn…">\`.
+- **Vendor library _code_ locally — no CDN script/style tags.** The sandbox blocks external CDNs for
+  code assets, so any charting/util library (e.g. D3) must be added to the workspace via
+  \`upsert-data-app-files\` and referenced with a relative path — never a
+  \`<script src="https://cdn…">\` or a remote \`<link rel="stylesheet">\`. This rule is about *loading
+  library code*, not about *fetching data*: calling an external data API at runtime is allowed, but
+  its origin must be declared (next rule).
+- **Declare every external origin the app fetches at runtime.** If the app \`fetch()\`/XHRs any origin
+  other than its own — e.g. an external API the user wants it to pull live data from — that origin
+  must be declared via the \`allowedOrigins\` param on \`upsert-data-app-files\` /
+  \`patch-data-app-file\`, **in the same call that writes the fetch**. The published app runs under a
+  strict Content-Security-Policy: a request to an undeclared origin is blocked, and (per the no-console
+  rule above) the only symptom is the on-screen error your fetch's \`catch\` renders. So when a user
+  says "have the app pull X from <service>", author the fetch AND pass
+  \`allowedOrigins: "https://<service-host>"\` in the same tool call. The param **replaces** the whole
+  allow-list (it does not append), so when a later call adds a fetch to a *new* origin, pass the
+  **complete** set — the new origin *and* every origin declared earlier — or the earlier ones are
+  silently dropped and their fetches start failing. List exactly the origins the app needs — nothing
+  speculative. Same-origin requests need no declaration.
 - **Prefer 2D (SVG / Canvas / plain DOM) over WebGL.** The sandbox often cannot create a WebGL
   context, so three.js / globe.gl-style renderers paint blank. Draw with SVG, 2D Canvas, or DOM.
 
@@ -108,7 +122,12 @@ worksheet, and the worksheet-extension manifest) and checks structure, asset ref
 clean validation is a precondition to publish; it says nothing about whether the app is the right app
 (you cannot verify that until it renders in Tableau after publish).
 
-If validation reports problems, fix the workspace and validate again.
+If validation reports problems, fix the workspace and validate again. Validation also emits
+**advisory** warnings when the packaged code appears to fetch an external origin you did not declare
+in \`allowedOrigins\` — treat each one as a prompt to declare that origin (re-passing the complete set,
+since the param replaces the list) and re-validate, unless the reference genuinely isn't a runtime
+fetch. These advisories do not block the receipt, but an undeclared origin *will* be blocked by the
+published app's CSP.
 
 When validation succeeds, preserve the returned \`validationId\` exactly as returned. That
 \`validationId\` is the receipt for the immutable package that was validated; do not discard, rewrite,

@@ -229,6 +229,39 @@ describe('validateWorkbookPackageTool', () => {
     expect(payload.warnings.some((w) => w.includes('data.parquet'))).toBe(true);
   });
 
+  it('advises (ok:true, receipt issued) when code requests an origin absent from allowedOrigins', async () => {
+    const appId = await createApp([
+      {
+        path: 'index.html',
+        content: '<!doctype html><html><body><script src="src/app.js"></script></body></html>',
+      },
+      { path: 'src/app.js', content: 'fetch("https://api.acme.org/data").then(r => r.json());' },
+      { path: 'dataapp.json', content: '{"schemaVersion":1,"appName":"My App"}' },
+    ]);
+    const payload = await getData(await run({ appId, workbookName: 'My App' }));
+    // Advisory: it does NOT block the receipt.
+    expect(payload.ok).toBe(true);
+    expect(payload.validationId).toMatch(/^[0-9a-f]{32}$/);
+    expect(payload.warnings.some((w) => w.includes("'https://api.acme.org'"))).toBe(true);
+  });
+
+  it('stays silent when the requested origin is declared in the manifest allowedOrigins', async () => {
+    const appId = await createApp([
+      {
+        path: 'index.html',
+        content: '<!doctype html><html><body><script src="src/app.js"></script></body></html>',
+      },
+      { path: 'src/app.js', content: 'fetch("https://api.acme.org/data");' },
+      {
+        path: 'dataapp.json',
+        content: '{"schemaVersion":1,"appName":"My App","allowedOrigins":"https://api.acme.org"}',
+      },
+    ]);
+    const payload = await getData(await run({ appId, workbookName: 'My App' }));
+    expect(payload.ok).toBe(true);
+    expect(payload.warnings.some((w) => w.includes('acme.org'))).toBe(false);
+  });
+
   it('returns a not-found error for an unknown appId rather than throwing', async () => {
     const result = await run({ appId: '0'.repeat(32), workbookName: 'My App' });
     expect(result.isError).toBe(true);

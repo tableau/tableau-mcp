@@ -60,6 +60,46 @@ describe('buildTwbx', () => {
     expect(manifest.id).toBe('com.example.myviz');
   });
 
+  describe('manifest allowedOrigins', () => {
+    const manifestOf = (input: Parameters<typeof buildTwbx>[0]): Record<string, unknown> =>
+      JSON.parse(entries(buildTwbx(input).bytes)['Packages/com.example.myviz/manifest.json']);
+
+    it('omits allowedOrigins entirely when unset (manifest keeps the base 4-field shape)', () => {
+      const manifest = manifestOf(base);
+      expect(manifest).toEqual({
+        id: 'com.example.myviz',
+        version: '1.0.0',
+        name: 'My Viz',
+        author: 'Claude',
+      });
+      expect('allowedOrigins' in manifest).toBe(false);
+    });
+
+    it('emits a single-origin string verbatim when set', () => {
+      const manifest = manifestOf({ ...base, allowedOrigins: 'https://api.example.com' });
+      expect(manifest.allowedOrigins).toBe('https://api.example.com');
+    });
+
+    it('emits multiple origins as the one space-joined string', () => {
+      const manifest = manifestOf({
+        ...base,
+        allowedOrigins: 'https://api.example.com https://cdn.example.com',
+      });
+      expect(manifest.allowedOrigins).toBe('https://api.example.com https://cdn.example.com');
+    });
+
+    it('treats a blank/whitespace value as unset (key omitted, output byte-identical to no-origins)', () => {
+      const withBlank = buildTwbx({ ...base, allowedOrigins: '   ' }).bytes;
+      const without = buildTwbx(base).bytes;
+      expect(Buffer.from(withBlank).equals(Buffer.from(without))).toBe(true);
+    });
+
+    it('trims surrounding whitespace from the stored value', () => {
+      const manifest = manifestOf({ ...base, allowedOrigins: '  https://api.example.com  ' });
+      expect(manifest.allowedOrigins).toBe('https://api.example.com');
+    });
+  });
+
   it('emits a WORKSHEET-extension (viz) .trex (id == packageId) with min-api 1.11, full data, and a <url> source', () => {
     const trex = entries(buildTwbx(base).bytes)[
       'Packages/com.example.myviz/extensions/toolbar.trex'

@@ -87,6 +87,25 @@ describe('buildScaffoldFiles', () => {
     expect(manifest.template).toBe(LIVE_EXTENSION_TEMPLATE);
   });
 
+  it('persists allowedOrigins into dataapp.json (trimmed) when provided', () => {
+    const files = buildScaffoldFiles({ ...input, allowedOrigins: '  https://api.example.com  ' });
+    const manifest = JSON.parse(
+      files.find((f) => f.path === DATA_APP_MANIFEST_PATH)!.content,
+    ) as DataAppManifest;
+    expect(manifest.allowedOrigins).toBe('https://api.example.com');
+  });
+
+  it('omits allowedOrigins from dataapp.json when unset or blank (byte-identical manifest)', () => {
+    const withBlank = buildScaffoldFiles({ ...input, allowedOrigins: '   ' }).find(
+      (f) => f.path === DATA_APP_MANIFEST_PATH,
+    )!.content;
+    const without = buildScaffoldFiles(input).find(
+      (f) => f.path === DATA_APP_MANIFEST_PATH,
+    )!.content;
+    expect(withBlank).toBe(without);
+    expect(JSON.parse(without)).not.toHaveProperty('allowedOrigins');
+  });
+
   it('escapes the app name when embedding it in index.html', () => {
     const files = buildScaffoldFiles({ ...input, appName: '<script>alert(1)</script>' });
     const indexHtml = files.find((f) => f.path === DATA_APP_ENTRYPOINT)!.content;

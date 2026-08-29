@@ -59,6 +59,36 @@ export function readDatasourceBindings(snapshot: DataAppSnapshot): DataAppDataso
   }));
 }
 
+/**
+ * Read the optional `allowedOrigins` the app declared at scaffold time from the workspace's
+ * `dataapp.json` manifest. The builder copies it into the published package manifest's
+ * `allowedOrigins`, which the server prepends to the served content CSP's `default-src`. A missing or
+ * malformed manifest, or a blank/absent value, yields `undefined` — the package manifest then omits
+ * the key entirely (byte-identical to a no-origins app).
+ */
+export function readAllowedOrigins(snapshot: DataAppSnapshot): string | undefined {
+  const manifestFile = snapshot.files.find(
+    (file) => normalizePath(file.path) === WORKSPACE_MANIFEST,
+  );
+  if (!manifestFile) {
+    return undefined;
+  }
+  let manifest: DataAppManifest;
+  try {
+    manifest = JSON.parse(new TextDecoder().decode(manifestFile.content)) as DataAppManifest;
+  } catch {
+    return undefined;
+  }
+  // `manifest` is an unchecked cast, so a hand-edited/corrupted dataapp.json could carry a
+  // non-string `allowedOrigins`. Guard the type (mirroring readDatasourceBindings' Array.isArray
+  // check and reconstruct's typeof guard) so a bad value degrades to "omit", never a TypeError.
+  if (typeof manifest.allowedOrigins !== 'string') {
+    return undefined;
+  }
+  const origins = manifest.allowedOrigins.trim();
+  return origins ? origins : undefined;
+}
+
 // A single decoded content-relative file (path already normalized) that will be packaged.
 type PackagedFile = { path: string; content: Uint8Array };
 
@@ -109,6 +139,7 @@ export function buildWorkspaceTwbx(
     .map((file) => ({ path: file.path, bytes: file.content }));
 
   const datasources = readDatasourceBindings(snapshot);
+  const allowedOrigins = readAllowedOrigins(snapshot);
 
   return buildTwbx({
     packageId: options.packageId,
@@ -116,5 +147,6 @@ export function buildWorkspaceTwbx(
     html: entry.content,
     assets: assets.length > 0 ? assets : undefined,
     datasources: datasources.length > 0 ? datasources : undefined,
+    allowedOrigins,
   });
 }

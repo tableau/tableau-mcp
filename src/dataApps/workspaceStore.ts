@@ -42,6 +42,18 @@ export interface DataAppWorkspaceStore {
     files: DataAppFileInput[],
   ): Promise<DataAppUpsertResult>;
 
+  /**
+   * Overwrite the tool-managed `dataapp.json` manifest with `content`, at that one fixed path only
+   * (never a caller-selected path). This is the single sanctioned writer for the manifest after
+   * creation — ordinary {@link DataAppWorkspaceStore.upsertFiles} rejects `dataapp.json` as
+   * protected. Returns the post-write workspace digest, identical in meaning to `upsertFiles`.
+   */
+  writeManifest(
+    scope: WorkspaceScope,
+    appId: string,
+    content: string | Uint8Array,
+  ): Promise<DataAppUpsertResult>;
+
   /** Capture an immutable snapshot of every publishable file plus a content digest. */
   snapshot(scope: WorkspaceScope, appId: string): Promise<DataAppSnapshot>;
 

@@ -7,6 +7,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getPatchDataAppFileTool, PatchDataAppFileResult } from './patchDataAppFile.js';
+import { buildDataAppManifest, DATA_APP_MANIFEST_PATH } from './templates.js';
 import { FakeWorkspaceStore } from './workspaceStore.mock.js';
 
 // Must match what resolveScopeFromExtra derives from getMockRequestHandlerExtra() (stdio
@@ -361,15 +362,117 @@ describe('patchDataAppFileTool', () => {
       vi.stubEnv('DATA_APP_MAX_FILE_BYTES', undefined);
     }
   });
+
+  describe('allowedOrigins', () => {
+    it('sets the manifest allowedOrigins alongside a patch, preserving every other field', async () => {
+      await store.writeManifest(SCOPE, appId, realisticManifestJson());
+      const writeManifest = vi.spyOn(store, 'writeManifest');
+
+      const result = await getToolResult({
+        appId,
+        edits: [
+          {
+            path: 'src/app.js',
+            oldString: 'const a = 1;',
+            newString: 'fetch("https://api.example.com/x");',
+          },
+        ],
+        allowedOrigins: 'https://api.example.com',
+      });
+
+      expect(result.isError).toBe(false);
+      expect(writeManifest).toHaveBeenCalledTimes(1);
+
+      // The patched file is reported; the protected manifest is never in `files`.
+      const data = getData(result);
+      expect(data.files.map((f) => f.path)).toEqual(['src/app.js']);
+
+      // The manifest is re-serialized byte-identically to a scaffold carrying the same origin, so
+      // appName / packageId / template / datasources all survive untouched.
+      const bytes = await getDataAppWorkspaceStore().readFile(SCOPE, appId, DATA_APP_MANIFEST_PATH);
+      expect(Buffer.from(bytes).toString('utf8')).toBe(
+        realisticManifestJson('https://api.example.com'),
+      );
+    });
+
+    it('clears the allowedOrigins key when an empty string is passed', async () => {
+      await store.writeManifest(SCOPE, appId, realisticManifestJson('https://api.example.com'));
+
+      const result = await getToolResult({
+        appId,
+        edits: [{ path: 'src/app.js', oldString: 'const a = 1;', newString: 'const a = 2;' }],
+        allowedOrigins: '',
+      });
+
+      expect(result.isError).toBe(false);
+      const bytes = await getDataAppWorkspaceStore().readFile(SCOPE, appId, DATA_APP_MANIFEST_PATH);
+      // The key is removed, not blanked — byte-identical to a no-origins scaffold.
+      expect(Buffer.from(bytes).toString('utf8')).toBe(realisticManifestJson());
+    });
+
+    it('leaves the manifest untouched and never calls writeManifest when the param is omitted', async () => {
+      await store.writeManifest(SCOPE, appId, realisticManifestJson());
+      const before = Buffer.from(
+        await getDataAppWorkspaceStore().readFile(SCOPE, appId, DATA_APP_MANIFEST_PATH),
+      ).toString('utf8');
+      const writeManifest = vi.spyOn(store, 'writeManifest');
+
+      const result = await getToolResult({
+        appId,
+        edits: [{ path: 'src/app.js', oldString: 'const a = 1;', newString: 'const a = 3;' }],
+      });
+
+      expect(result.isError).toBe(false);
+      expect(writeManifest).not.toHaveBeenCalled();
+      const after = Buffer.from(
+        await getDataAppWorkspaceStore().readFile(SCOPE, appId, DATA_APP_MANIFEST_PATH),
+      ).toString('utf8');
+      expect(after).toBe(before);
+    });
+  });
 });
 
-async function getToolResult(args: { appId: string; edits: Edit[] }): Promise<CallToolResult> {
+// A fully-populated manifest mirroring what scaffold-data-app writes, so tests can assert that
+// setting/clearing allowedOrigins preserves every other field rather than clobbering a `{}` seed.
+function realisticManifestJson(allowedOrigins?: string): string {
+  return `${JSON.stringify(
+    buildDataAppManifest({
+      appName: 'My App',
+      packageId: 'com.example.myapp',
+      template: 'live-extension',
+      datasources: [
+        {
+          luid: 'ds-luid-1',
+          contentUrl: 'sales/Sales',
+          name: 'Sales',
+          sqlproxyName: 'sqlproxy.abc123',
+          host: 'my-tableau-server.com',
+          port: '443',
+          field: { fieldName: 'amount', caption: 'Amount', dataType: 'REAL' },
+        },
+      ],
+      allowedOrigins,
+    }),
+    null,
+    2,
+  )}\n`;
+}
+
+async function getToolResult(args: {
+  appId: string;
+  edits: Edit[];
+  allowedOrigins?: string;
+}): Promise<CallToolResult> {
   const tool = getPatchDataAppFileTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   // The MCP framework parses input against the schema before invoking the callback, applying the
   // `replaceAll` default. Mirror that here so unit tests exercise the same resolved shape.
   return await callback(
-    { appId: args.appId, edits: args.edits.map((e) => ({ replaceAll: false, ...e })) },
+    {
+      appId: args.appId,
+      edits: args.edits.map((e) => ({ replaceAll: false, ...e })),
+      ...(args.allowedOrigins !== undefined ? { allowedOrigins: args.allowedOrigins } : {}),
+    },
     getMockRequestHandlerExtra(),
   );
 }

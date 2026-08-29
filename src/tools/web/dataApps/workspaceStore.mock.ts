@@ -133,6 +133,26 @@ export class FakeWorkspaceStore implements DataAppWorkspaceStore {
     };
   }
 
+  // The sanctioned manifest writer: overwrites the one protected path that upsertFiles rejects.
+  async writeManifest(
+    scope: WorkspaceScope,
+    appId: string,
+    content: string | Uint8Array,
+  ): Promise<DataAppUpsertResult> {
+    const entry = this.load(scope, appId);
+    const bytes = toBytes(content);
+    entry.fileContents.set('dataapp.json', bytes);
+    const record = { path: 'dataapp.json', bytes: bytes.byteLength };
+    const existingIndex = entry.workspace.files.findIndex((f) => f.path === 'dataapp.json');
+    if (existingIndex >= 0) {
+      entry.workspace.files[existingIndex] = record;
+    } else {
+      entry.workspace.files.push(record);
+    }
+    entry.workspace.updatedAt = new Date();
+    return { files: [record], digest: this.digestFor(entry) };
+  }
+
   async snapshot(scope: WorkspaceScope, appId: string): Promise<DataAppSnapshot> {
     const entry = this.load(scope, appId);
     return {

@@ -159,6 +159,48 @@ describe('reconstructWorkspaceFromTwbx', () => {
     expect(Buffer.from(rebuilt).equals(Buffer.from(original))).toBe(true);
   });
 
+  it('recovers allowedOrigins from the package manifest and rebuilds it into dataapp.json', () => {
+    const withOrigins = {
+      ...SCAFFOLD,
+      'dataapp.json': JSON.stringify({
+        ...MANIFEST,
+        allowedOrigins: 'https://api.example.com https://cdn.example.com',
+      }),
+    };
+    const bytes = buildWorkspaceTwbx(snapshot(withOrigins), options).bytes;
+    const workspace = reconstructWorkspaceFromTwbx(bytes);
+
+    expect(workspace.allowedOrigins).toBe('https://api.example.com https://cdn.example.com');
+    const manifest = JSON.parse(
+      text(workspace.files.find((f) => f.path === 'dataapp.json')!.content),
+    );
+    expect(manifest.allowedOrigins).toBe('https://api.example.com https://cdn.example.com');
+  });
+
+  it('leaves allowedOrigins undefined when the package declared none', () => {
+    const bytes = buildWorkspaceTwbx(snapshot(SCAFFOLD), options).bytes;
+    const workspace = reconstructWorkspaceFromTwbx(bytes);
+    expect(workspace.allowedOrigins).toBeUndefined();
+    const manifest = JSON.parse(
+      text(workspace.files.find((f) => f.path === 'dataapp.json')!.content),
+    );
+    expect(manifest).not.toHaveProperty('allowedOrigins');
+  });
+
+  it('round-trips allowedOrigins byte-identically through reopen + rebuild', () => {
+    const withOrigins = {
+      ...SCAFFOLD,
+      'dataapp.json': JSON.stringify({ ...MANIFEST, allowedOrigins: 'https://api.example.com' }),
+    };
+    const original = buildWorkspaceTwbx(snapshot(withOrigins), options).bytes;
+    const workspace = reconstructWorkspaceFromTwbx(original);
+    const rebuilt = buildWorkspaceTwbx(snapshot(objectFromFiles(workspace.files)), {
+      workbookName: workspace.appName,
+      packageId: workspace.packageId,
+    }).bytes;
+    expect(Buffer.from(rebuilt).equals(Buffer.from(original))).toBe(true);
+  });
+
   it('preserves a binary asset verbatim through the round trip', () => {
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff]);
     const bytes = buildWorkspaceTwbx(

@@ -9,6 +9,7 @@ import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getScaffoldDataAppTool, ScaffoldDataAppResult } from './scaffoldDataApp.js';
+import { resolveScopeFromExtra } from './scopeFromExtra.js';
 import { FakeWorkspaceStore } from './workspaceStore.mock.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
@@ -33,6 +34,7 @@ type ScaffoldArgs = {
   packageId: string;
   datasources: Array<{ luid: string; contentUrl?: string; name?: string }>;
   template?: 'live-extension';
+  allowedOrigins?: string;
 };
 
 const base: ScaffoldArgs = {
@@ -130,6 +132,30 @@ describe('scaffoldDataAppTool', () => {
     const first = getData(await getToolResult(base));
     const second = getData(await getToolResult(base));
     expect(first.appId).not.toBe(second.appId);
+  });
+
+  it('persists a provided allowedOrigins (trimmed) into the workspace dataapp.json', async () => {
+    const extra = getMockRequestHandlerExtra();
+    const data = getData(
+      await getToolResult({ ...base, allowedOrigins: '  https://api.example.com  ' }, extra),
+    );
+    const scope = resolveScopeFromExtra(extra);
+    invariant(scope.isOk());
+    const manifest = JSON.parse(
+      new TextDecoder().decode(await store.readFile(scope.value, data.appId, 'dataapp.json')),
+    );
+    expect(manifest.allowedOrigins).toBe('https://api.example.com');
+  });
+
+  it('omits allowedOrigins from the workspace dataapp.json when the arg is absent', async () => {
+    const extra = getMockRequestHandlerExtra();
+    const data = getData(await getToolResult(base, extra));
+    const scope = resolveScopeFromExtra(extra);
+    invariant(scope.isOk());
+    const manifest = JSON.parse(
+      new TextDecoder().decode(await store.readFile(scope.value, data.appId, 'dataapp.json')),
+    );
+    expect(manifest).not.toHaveProperty('allowedOrigins');
   });
 
   it('fails cleanly when VizQL Data Service metadata is unavailable', async () => {

@@ -58,6 +58,10 @@ export type DataAppManifest = {
   template: string;
   /** Bindings the builder reads to synthesize the datasource references + host sheet. */
   datasources: DataAppDatasourceBinding[];
+  /** Optional space-separated CSP origin sources the app may fetch/connect to at runtime. Persisted
+   *  here so it survives to publish; the builder copies it into the package manifest's `allowedOrigins`
+   *  (see buildTwbx). Absent/blank ⇒ omitted (dataapp.json stays byte-identical to a no-origins app). */
+  allowedOrigins?: string;
 };
 
 export type ScaffoldFile = { path: string; content: string };
@@ -67,10 +71,12 @@ export type ScaffoldInput = {
   packageId: string;
   template?: string;
   datasources: DataAppDatasourceBinding[];
+  /** Optional space-separated CSP origin sources (see {@link DataAppManifest.allowedOrigins}). */
+  allowedOrigins?: string;
 };
 
 export function buildDataAppManifest(input: ScaffoldInput): DataAppManifest {
-  return {
+  const manifest: DataAppManifest = {
     schemaVersion: DATA_APP_MANIFEST_SCHEMA_VERSION,
     appName: input.appName,
     packageId: input.packageId,
@@ -78,6 +84,13 @@ export function buildDataAppManifest(input: ScaffoldInput): DataAppManifest {
     template: input.template ?? LIVE_EXTENSION_TEMPLATE,
     datasources: input.datasources,
   };
+  // Emit the key only when set (trimmed, non-empty), always as the last field for deterministic
+  // ordering, so a no-origins app's dataapp.json is byte-identical to before this field existed.
+  const origins = input.allowedOrigins?.trim();
+  if (origins) {
+    manifest.allowedOrigins = origins;
+  }
+  return manifest;
 }
 
 /** Build the exact, deterministic four-file live scaffold for a new workspace (no data.js). */

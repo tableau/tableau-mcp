@@ -84,6 +84,18 @@ const paramsSchema = {
     .literal(LIVE_EXTENSION_TEMPLATE)
     .optional()
     .describe(`The scaffold template to use. Only "${LIVE_EXTENSION_TEMPLATE}" exists today.`),
+  allowedOrigins: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .describe(
+      'Optional. Space-separated CSP origin sources the app may fetch/connect to at runtime ' +
+        '(e.g. "https://api.example.com https://cdn.example.com"). Persisted in dataapp.json and ' +
+        "written to the published package manifest's allowedOrigins; the server adds them to the " +
+        'content Content-Security-Policy so the embedded app can reach them. Omit if the app only ' +
+        'talks to its own origin or its wired Tableau datasources (VDS).',
+    ),
 };
 
 export type ScaffoldDataAppResult = {
@@ -293,6 +305,7 @@ handle — pass it, never a path, to every other data-app tool.
             packageId: args.packageId,
             template: args.template,
             datasources,
+            allowedOrigins: args.allowedOrigins,
           });
 
           try {
