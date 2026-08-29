@@ -19,6 +19,7 @@ import {
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
 import { fileDigest } from './fileDigest.js';
+import { requestedOriginsParam, updateManifestRequestedOrigins } from './manifestOrigins.js';
 import { resolveScopeFromExtra } from './scopeFromExtra.js';
 
 const paramsSchema = {
@@ -66,6 +67,7 @@ const paramsSchema = {
         'the batch is written. Edits targeting the same file apply in array order against the ' +
         'progressively-updated content.',
     ),
+  requestedOrigins: requestedOriginsParam,
 };
 
 export type PatchDataAppFileResult = {
@@ -112,6 +114,10 @@ progressively-updated content.
 \`{ path, oldString, newString, replaceAll?, expectedDigest? }\` entries. \`oldString\` must match the
 current file byte-for-byte (including indentation and line breaks) and must match exactly one
 location unless \`replaceAll\` is true. \`newString\` may be empty to delete the matched text.
+\`requestedOrigins\` (optional) — space-separated external origins the app may fetch/XHR at runtime;
+declare them in the same call that patches in the fetch, or the published app's Content-Security-
+Policy blocks the request and it fails silently on-screen. Omit to leave the current setting
+unchanged; pass an empty string to clear it.
 
 **Result:** \`{ files, digest }\`. \`files\` lists \`{ path, bytes, matched, digest }\` per patched
 file (\`matched\` = occurrences replaced; \`digest\` = the file's new per-file digest, usable as a
@@ -260,7 +266,21 @@ recompute. \`data-app-workspace-limit-exceeded\` — the result exceeds a size c
               }))
               .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 
-            return new Ok({ files, digest: upsertResult.digest });
+            // Declaring an origin rides along with the edit, so the author never touches the
+            // protected manifest directly. Only when the param is present (empty clears it); the
+            // manifest write is the last mutation, so its digest is the workspace's final digest.
+            let digest = upsertResult.digest;
+            if (args.requestedOrigins !== undefined) {
+              const manifestWrite = await updateManifestRequestedOrigins(
+                store,
+                scope.value,
+                args.appId,
+                args.requestedOrigins,
+              );
+              digest = manifestWrite.digest;
+            }
+
+            return new Ok({ files, digest });
           } catch (error) {
             if (error instanceof McpToolError) {
               return error.toErr();

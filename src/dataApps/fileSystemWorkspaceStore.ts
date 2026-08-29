@@ -53,9 +53,12 @@ import type {
 } from './types.js';
 import type { DataAppWorkspaceStore } from './workspaceStore.js';
 
+/** The one tool-managed manifest path. Ordinary upserts may never overwrite it; only writeManifest. */
+export const WORKSPACE_MANIFEST_FILENAME = 'dataapp.json';
+
 /** Tool-managed files that ordinary upserts may never overwrite. */
 export const PROTECTED_WORKSPACE_FILES: ReadonlySet<string> = new Set([
-  caseInsensitivePathKey('dataapp.json'),
+  caseInsensitivePathKey(WORKSPACE_MANIFEST_FILENAME),
 ]);
 
 export type FileSystemWorkspaceStoreOptions = {
@@ -204,6 +207,39 @@ export class FileSystemWorkspaceStore implements DataAppWorkspaceStore {
       // All provider work above and this digest computation are synchronous within this async
       // method (there is no await/interleaving point), so the returned digest identifies exactly
       // the post-write state produced by this operation.
+      digest: this.buildSnapshot(meta, filesDir).digest,
+    };
+  }
+
+  async writeManifest(
+    scope: WorkspaceScope,
+    appId: string,
+    content: string | Uint8Array,
+  ): Promise<DataAppUpsertResult> {
+    const meta = this.loadWorkspaceMeta(scope, appId);
+    const filesDir = this.workspaceFilesDir(meta.scopeHash, appId);
+
+    // The single writer allowed to touch the protected manifest, and only ever at its one fixed
+    // path (never a caller-selected path). `allowProtected` lets validateBatch accept dataapp.json;
+    // it still enforces the same size/count/containment limits as an ordinary upsert.
+    const batch = this.validateBatch(
+      filesDir,
+      meta.files,
+      [{ path: WORKSPACE_MANIFEST_FILENAME, content }],
+      { allowProtected: true },
+    );
+
+    for (const { resolvedPath, bytes } of batch.writes) {
+      mkdirSync(dirname(resolvedPath), { recursive: true });
+      this.writeFileAtomic(resolvedPath, bytes);
+    }
+
+    meta.files = batch.files;
+    meta.updatedAt = new Date().toISOString();
+    this.writeMeta(meta.scopeHash, appId, meta);
+
+    return {
+      files: meta.files.filter((f) => f.path === WORKSPACE_MANIFEST_FILENAME),
       digest: this.buildSnapshot(meta, filesDir).digest,
     };
   }
