@@ -1,4 +1,4 @@
-import { MIN_ADMIN_SITE_ROLE, siteRoleMeetsMinimum } from './user.js';
+import { isAdminSiteRole, MIN_ADMIN_SITE_ROLE, siteRoleMeetsMinimum } from './user.js';
 
 describe('siteRoleMeetsMinimum', () => {
   it('returns true when the role outranks the minimum', () => {
@@ -51,5 +51,29 @@ describe('siteRoleMeetsMinimum', () => {
     expect(siteRoleMeetsMinimum('SiteAdministratorCreator', MIN_ADMIN_SITE_ROLE)).toBe(true);
     expect(siteRoleMeetsMinimum('ServerAdministrator', MIN_ADMIN_SITE_ROLE)).toBe(true);
     expect(siteRoleMeetsMinimum('Creator', MIN_ADMIN_SITE_ROLE)).toBe(false);
+  });
+});
+
+describe('isAdminSiteRole', () => {
+  it('treats SupportUser as an admin role (execution gate)', () => {
+    expect(isAdminSiteRole('SupportUser')).toBe(true);
+  });
+
+  it('treats the site/server administrator roles as admin', () => {
+    expect(isAdminSiteRole('SiteAdministratorExplorer')).toBe(true);
+    expect(isAdminSiteRole('SiteAdministratorCreator')).toBe(true);
+    expect(isAdminSiteRole('ServerAdministrator')).toBe(true);
+  });
+
+  it('treats content roles as non-admin', () => {
+    expect(isAdminSiteRole('Creator')).toBe(false);
+    expect(isAdminSiteRole('ExplorerCanPublish')).toBe(false);
+    expect(isAdminSiteRole('Viewer')).toBe(false);
+  });
+
+  it('fails closed for undefined, empty, or unrecognized roles', () => {
+    expect(isAdminSiteRole(undefined)).toBe(false);
+    expect(isAdminSiteRole('')).toBe(false);
+    expect(isAdminSiteRole('GuestUser')).toBe(false);
   });
 });

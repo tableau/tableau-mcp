@@ -63,12 +63,16 @@ describe('assertAdmin', () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error).toContain('Viewer');
+      expect(result.error).toContain('administrative permissions');
     }
   });
 
   it('returns Err when user LUID is missing', async () => {
     const result = await assertAdmin(makeRestApi(), makeExtra({ userLuid: '' }));
     expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error).toContain('administrative permissions');
+    }
   });
 });
 
@@ -132,6 +136,41 @@ describe('getCurrentUserSiteRole', () => {
     expect(siteRole).toBeUndefined();
   });
 
+  it('retries a failed fetch and returns the role once a retry succeeds', async () => {
+    mocks.useRestApi
+      .mockRejectedValueOnce(new Error('transient 1'))
+      .mockRejectedValueOnce(new Error('transient 2'))
+      .mockImplementationOnce(async ({ callback }) =>
+        callback({
+          usersMethods: {
+            queryUserOnSite: vi.fn().mockResolvedValue({
+              id: 'user-A',
+              name: 'name',
+              siteRole: 'SiteAdministratorCreator',
+            }),
+          },
+        }),
+      );
+
+    const siteRole = await getCurrentUserSiteRole(
+      makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-A', userId: 'user-A' })),
+    );
+
+    expect(siteRole).toBe('SiteAdministratorCreator');
+    expect(mocks.useRestApi).toHaveBeenCalledTimes(3);
+  });
+
+  it('retries up to 3 times then returns undefined when every attempt fails', async () => {
+    mocks.useRestApi.mockRejectedValue(new Error('network down'));
+
+    const siteRole = await getCurrentUserSiteRole(
+      makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-A', userId: 'user-A' })),
+    );
+
+    expect(siteRole).toBeUndefined();
+    expect(mocks.useRestApi).toHaveBeenCalledTimes(3);
+  });
+
   it('returns the admin site role when the current user is an admin', async () => {
     stubUseRestApiWithSiteRole('SiteAdministratorCreator');
 
@@ -152,20 +191,24 @@ describe('getCurrentUserSiteRole', () => {
     expect(siteRole).toBe('Viewer');
   });
 
+  // Missing/invalid auth is fail-closed via the REST path, not a short-circuit: with no usable
+  // identity, sign-in throws, so after the retries getCurrentUserSiteRole resolves to undefined.
   it('returns undefined when tableauAuthInfo is missing (no user to gate on)', async () => {
+    mocks.useRestApi.mockRejectedValue(new Error('no auth to sign in with'));
+
     const siteRole = await getCurrentUserSiteRole(makeRestApiArgs(undefined));
 
     expect(siteRole).toBeUndefined();
-    expect(mocks.useRestApi).not.toHaveBeenCalled();
   });
 
   it('returns undefined when tableauAuthInfo has no userId', async () => {
+    mocks.useRestApi.mockRejectedValue(new Error('no userId to query'));
+
     const siteRole = await getCurrentUserSiteRole(
       makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-x', userId: undefined })),
     );
 
     expect(siteRole).toBeUndefined();
-    expect(mocks.useRestApi).not.toHaveBeenCalled();
   });
 
   it('does not share state with assertAdmin — a subsequent assertAdmin still queries the REST API', async () => {

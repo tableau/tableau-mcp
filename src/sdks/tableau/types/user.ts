@@ -21,6 +21,7 @@ export const userSchema = z.object({
 export type User = z.infer<typeof userSchema>;
 
 export const ADMIN_SITE_ROLES: readonly string[] = [
+  'SupportUser',
   'SiteAdministratorCreator',
   'SiteAdministratorExplorer',
   'ServerAdministrator',

@@ -18,6 +18,7 @@ import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { log } from './logging/logger.js';
 import { registerPrompts } from './prompts/index.js';
 import { RestApiArgs } from './restApiInstance';
 import { siteRoleMeetsMinimum } from './sdks/tableau/types/user.js';
@@ -53,6 +54,15 @@ const ADMIN_INSTRUCTIONS =
   'job/extract optimization, user-license reclamation) and the query-admin-insights tool ' +
   '(e.g. stale-content, job-performance, ts-users) for supporting data — even when the user asks broadly ' +
   'rather than naming a specific tool.';
+
+// Appended to the initialize instructions when the caller's site role could not be fetched (after
+// retries) and that failure hid one or more role-gated tools. Signals that the incomplete tool set
+// is a transient error, not a permissions decision, so the user can reconnect to retry.
+const SITE_ROLE_UNAVAILABLE_WARNING =
+  "WARNING: Some tools were omitted from this session because the current user's Tableau site " +
+  'role could not be determined after multiple attempts. This is likely a transient error rather ' +
+  'than a permissions problem. Disconnect and reconnect to retry; if it persists, contact your ' +
+  'Tableau administrator.';
 
 /**
  * Single source of truth for the web server's `initialize` instructions string. Returns the base
@@ -201,18 +211,45 @@ export class WebMcpServer extends Server {
       return cachedSiteRole.value;
     };
 
+    // Names of role-gated tools hidden specifically because the role fetch FAILED (returned
+    // undefined) rather than because the caller's role was genuinely too low. Drives both the
+    // telemetry warning and the client-facing instructions notice below.
+    const toolsOmittedForRoleFetchFailure: string[] = [];
+
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
-      if (
-        enforceRoleRequirements &&
-        tool.minRequiredRole &&
-        !siteRoleMeetsMinimum(await resolveSiteRole(), tool.minRequiredRole)
-      )
-        continue;
+      if (enforceRoleRequirements && tool.minRequiredRole) {
+        const siteRole = await resolveSiteRole();
+        if (!siteRoleMeetsMinimum(siteRole, tool.minRequiredRole)) {
+          // `undefined` uniquely means the fetch failed (a successful low-role fetch returns the
+          // role string), so we can tell a transient outage apart from a legitimately low role.
+          if (siteRole === undefined) {
+            toolsOmittedForRoleFetchFailure.push(tool.name);
+          }
+          continue;
+        }
+      }
       toolsToRegister.push(tool);
+    }
+
+    if (toolsOmittedForRoleFetchFailure.length > 0) {
+      // Telemetry: registration runs before the transport connects, so client notifications aren't
+      // available — the process logger (stderr/file, honors LOG_LEVEL) is the only sink here.
+      log({
+        level: 'warning',
+        logger: 'server',
+        message:
+          "Could not determine the current user's site role; " +
+          `${toolsOmittedForRoleFetchFailure.length} role-gated tool(s) were omitted from this ` +
+          `session: ${toolsOmittedForRoleFetchFailure.join(', ')}.`,
+      });
+
+      // Client-facing counterpart: surface the omission in the initialize instructions so the user
+      // knows the tool set is incomplete due to a fetch failure (not their permissions).
+      this.appendInstructions(SITE_ROLE_UNAVAILABLE_WARNING);
     }
 
     return toolsToRegister;

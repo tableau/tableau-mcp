@@ -84,6 +84,22 @@ export abstract class Server {
     this._clientInfo = clientInfo;
   }
 
+  /**
+   * Appends a sentence to the server-level instructions surfaced in the `initialize` result.
+   *
+   * Safe to call after construction but before the transport handles the initialize request (e.g.
+   * during {@link registerTools}): the SDK reads its `_instructions` field at initialize-time
+   * (server/index.js `_oninitialize`), not at construction. The SDK exposes no setter, so we write
+   * that internal field directly — the same field the constructor guard above reads. A no-op-safe
+   * concatenation preserves any base guidance composed at construction.
+   */
+  protected appendInstructions(sentence: string): void {
+    const sdkServer = this.mcpServer.server as unknown as { _instructions?: string };
+    sdkServer._instructions = sdkServer._instructions
+      ? `${sdkServer._instructions} ${sentence}`
+      : sentence;
+  }
+
   get userAgent(): string {
     const userAgentParts = [`${this.name}/${this.version}`];
     if (this.clientInfo) {
