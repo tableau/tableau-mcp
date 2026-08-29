@@ -322,13 +322,13 @@ export class Config extends BaseConfig {
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
 
-    // S3 offload: when MCP_S3_BUCKET is set, view-image, view-data, and
-    // download-workbook tools upload the payload to S3 and return a short-lived
-    // presigned URL instead of inlining it (or writing a local temp file, for
-    // workbooks). AWS credentials are resolved via the default AWS SDK
-    // credential chain (IAM role / instance profile / standard AWS_* env vars),
-    // so no credentials are read here. When unset, the tools fall back to
-    // returning the payload inline / as a local temp path (unchanged behavior).
+    // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
+    // upload the payload (rendered image or CSV) to S3 and return a short-lived
+    // presigned URL instead of inlining base64/text. AWS credentials are
+    // resolved via the default AWS SDK credential chain (IAM role / instance
+    // profile / standard AWS_* env vars), so no credentials are read here. When
+    // unset, the tools fall back to returning the payload inline (unchanged
+    // behavior).
     //
     // `keyPrefix` (MCP_IMAGE_PREFIX) is the shared base folder; each tool
     // appends its own segment (e.g. `view-images/`, `view-data/`), so an unset

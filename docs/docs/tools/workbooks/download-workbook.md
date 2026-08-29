@@ -6,6 +6,10 @@ sidebar_position: 3
 
 Downloads workbook content from Tableau as either an unpackaged TWB XML file or a packaged TWBX file.
 
+:::warning[Disabled by Default]
+This tool is gated behind the `authoring-tools` feature flag, which defaults to `false` in `features.json`. It is unavailable unless an administrator enables `authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
+:::
+
 ## APIs called
 
 - [Download Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook)
@@ -33,8 +37,8 @@ Example: `true`
 
 The tool returns one of two result shapes:
 
-- **`MCP_S3_BUCKET` set:** returns a `resource_link` with a short-lived presigned URL to the workbook file.
-- **`MCP_S3_BUCKET` unset or upload failure:** writes the workbook to a local temporary directory and returns a JSON object containing a local file path.
+- **S3 file mode enabled:** returns a `resource_link` with a short-lived presigned URL to the workbook file.
+- **S3 file mode disabled or upload failure:** writes the workbook to a local temporary directory and returns a JSON object containing a local file path.
 
 The tool preserves Tableau response metadata when present:
 

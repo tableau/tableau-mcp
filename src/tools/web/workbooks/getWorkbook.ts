@@ -9,7 +9,9 @@ import { useRestApi } from '../../../restApiInstance.js';
 import {
   getWorkbookLineageByLuid,
   getWorkbookLineageQuery,
+  LineageContent,
   mergeWorkbookLineage,
+  toEmbeddedLineageContents,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -76,31 +78,57 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                 workbook.views.view = views;
               }
 
-              if (configWithOverrides.disableMetadataApiRequests) {
-                return workbook;
-              }
-
+              // Embedded datasource discovery via REST /connections. Runs regardless of
+              // disableMetadataApiRequests since it does not use the Metadata API. The
+              // connection's datasource.id is the VDS-queryable embedded LUID.
+              let embedded: Array<LineageContent> = [];
               try {
-                const response = await restApi.metadataMethods.graphql(
-                  getWorkbookLineageQuery([workbook.id]),
-                );
-                return mergeWorkbookLineage(
-                  [workbook],
-                  getWorkbookLineageByLuid(response),
-                  configWithOverrides.boundedContext.datasourceIds,
-                )[0];
+                const connections = await restApi.workbooksMethods.queryWorkbookConnections({
+                  workbookId: workbook.id,
+                  siteId: restApi.siteId,
+                });
+                embedded = toEmbeddedLineageContents(connections);
               } catch (error) {
                 log(
                   {
-                    message: `Failed to enrich workbook ${workbook.id} with lineage metadata`,
+                    message: `Failed to enrich workbook ${workbook.id} with embedded data sources`,
                     level: 'warning',
                     logger: 'lineage',
                     data: getExceptionMessage(error),
                   },
                   extra,
                 );
-                return workbook;
               }
+
+              let published: Array<LineageContent> = [];
+              if (!configWithOverrides.disableMetadataApiRequests) {
+                try {
+                  const response = await restApi.metadataMethods.graphql(
+                    getWorkbookLineageQuery([workbook.id]),
+                  );
+                  published = (getWorkbookLineageByLuid(response).get(workbook.id) ?? []).map(
+                    (ds) => ({ ...ds, datasourceType: 'published' as const }),
+                  );
+                } catch (error) {
+                  log(
+                    {
+                      message: `Failed to enrich workbook ${workbook.id} with lineage metadata`,
+                      level: 'warning',
+                      logger: 'lineage',
+                      data: getExceptionMessage(error),
+                    },
+                    extra,
+                  );
+                }
+              }
+
+              // Published and embedded LUIDs are distinct (globally-unique GUIDs), so no
+              // cross-list dedup is needed; toEmbeddedLineageContents already dedupes embedded.
+              return mergeWorkbookLineage(
+                [workbook],
+                new Map([[workbook.id, [...published, ...embedded]]]),
+                configWithOverrides.boundedContext.datasourceIds,
+              )[0];
             },
           });
 

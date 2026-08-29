@@ -6,7 +6,7 @@ import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
 import { Pagination } from '../types/pagination.js';
-import { Workbook, workbookSchema } from '../types/workbook.js';
+import { Workbook, WorkbookConnection, workbookSchema } from '../types/workbook.js';
 import {
   WorkbookValidationResult,
   workbookValidationResultSchema,
@@ -80,6 +80,30 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       pagination: response.pagination,
       workbooks: response.workbooks.workbook ?? [],
     };
+  };
+
+  /**
+   * Returns the data connections for the specified workbook. Each connection's
+   * datasource id is the queryable embedded datasource LUID.
+   *
+   * Required scopes: `tableau:content:read`
+   *
+   * @param workbookId - The ID of the workbook to return connections for.
+   * @param siteId - The Tableau site ID
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook_connections
+   */
+  queryWorkbookConnections = async ({
+    workbookId,
+    siteId,
+  }: {
+    workbookId: string;
+    siteId: string;
+  }): Promise<WorkbookConnection[]> => {
+    const response = await this._apiClient.queryWorkbookConnections({
+      params: { siteId, workbookId },
+      ...this.authHeader,
+    });
+    return response.connections.connection ?? [];
   };
 
   /**

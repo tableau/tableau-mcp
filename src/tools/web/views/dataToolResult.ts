@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Config } from '../../../config.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { joinS3Prefix } from '../s3Client.js';
@@ -19,14 +20,17 @@ export type DataToolResult = { kind: 'url'; url: string } | { kind: 'inline'; cs
 
 /**
  * Given a view's CSV data, either upload it to S3 and return a presigned URL
- * (when MCP_S3_BUCKET is configured), or carry the raw CSV for an inline text
- * result. On any S3 failure this falls back to inline CSV so data retrieval
- * never hard-fails; the failure is logged as a warning so a persistently broken
- * S3 configuration is observable.
+ * (when the `view-data-file-mode` feature is enabled and MCP_S3_BUCKET is
+ * configured), or carry the raw CSV for an inline text result. On any S3
+ * failure this falls back to inline CSV so data retrieval never hard-fails; the
+ * failure is logged as a warning so a persistently broken S3 configuration is
+ * observable.
  *
- * `bucketS3.enabled` (MCP_S3_BUCKET) governs the entire S3-offload path, so an
- * unset bucket keeps the presigned-URL result behind that gate and preserves
- * the original inline behavior.
+ * The `view-data-file-mode` feature gate governs the entire S3-offload path, so
+ * disabling the flag keeps the presigned-URL result behind the gate and
+ * preserves the original inline behavior. The `bucketS3.enabled` check still
+ * guards against a missing bucket so an enabled flag without config doesn't
+ * attempt a doomed upload on every request.
  *
  * `keyPrefixSegment` is the caller's per-tool folder (e.g. `view-data/`); it is
  * appended to the shared base prefix (MCP_IMAGE_PREFIX) so each tool namespaces
@@ -45,7 +49,10 @@ export async function buildDataToolResult({
   toolName: string;
   keyPrefixSegment: string;
 }): Promise<DataToolResult> {
-  if (!config.bucketS3.enabled) {
+  if (
+    !config.bucketS3.enabled ||
+    !(await getFeatureGate().isFeatureEnabled('view-data-file-mode'))
+  ) {
     return { kind: 'inline', csv };
   }
 
@@ -76,7 +83,7 @@ export async function buildDataToolResult({
  * Converts a {@link DataToolResult} into the final MCP tool result.
  *
  * The inline branch emits `JSON.stringify(csv)` as a text block — byte-for-byte
- * identical to the tools' previous default output — so an unset MCP_S3_BUCKET
+ * identical to the tools' previous default output — so disabling the feature
  * preserves the original behavior exactly. The URL branch emits a single
  * `resource_link` block carrying the short-lived presigned URL; the client
  * fetches the CSV bytes directly from S3.

@@ -2,7 +2,7 @@ import features from '../../features.json';
 import pkg from '../../package.json';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
-import { resetEnv, setEnv } from '../testEnv.js';
+import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
 import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
@@ -66,7 +66,7 @@ describe('server', () => {
       // authoring tools are gated off by default (authoring-tools feature flag)
       const authoringTools: ReadonlyArray<WebToolName> = [
         'request-workbook-upload',
-        'validate-upload-and-publish-workbook',
+        'publish-workbook',
       ];
 
       let expectedToolNames = [...webToolNames];
@@ -103,6 +103,51 @@ describe('server', () => {
 
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
+    });
+
+    // The default client spawns with getDefaultEnv(), which intentionally omits ADMIN_TOOLS_ENABLED,
+    // so the server advertises only the base instructions and no admin guidance. The substrings here
+    // are kept in lockstep with the unit test in src/server.web.test.ts.
+    it('should carry base instructions without admin guidance when admin tools are disabled', async () => {
+      const instructions = await client.getInstructions();
+      expect(instructions).toBeTruthy();
+      expect(instructions).toContain('Tableau MCP exposes tools');
+      expect(instructions).not.toContain('site-administration capabilities');
+      expect(instructions).not.toContain('general admin/site-health');
+      expect(instructions).not.toContain('user-license reclamation');
+      expect(instructions).not.toContain('query-admin-insights');
+    });
+  });
+
+  // Instructions depend on ADMIN_TOOLS_ENABLED, which is fixed at process spawn, so the admin-on case
+  // needs its own client with the flag injected into its env (mirroring how admin-tool tests inject it).
+  describe('default variant with admin tools enabled', () => {
+    let client: McpClient;
+
+    beforeAll(async () => {
+      await buildVariant('default');
+      client = new McpClient({
+        variant: 'default',
+        env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
+      });
+      await client.connect();
+    });
+
+    afterAll(async () => {
+      await client.close();
+    });
+
+    // The substrings here are kept in lockstep with the unit test in src/server.web.test.ts.
+    it('should append admin site-health guidance to instructions when admin tools are enabled', async () => {
+      const instructions = await client.getInstructions();
+      expect(instructions).toBeTruthy();
+      // Base guidance is still present...
+      expect(instructions).toContain('Tableau MCP exposes tools');
+      // ...and the admin capability menu + generic-intent tie-in is appended.
+      expect(instructions).toContain('site-administration capabilities');
+      expect(instructions).toContain('general admin/site-health');
+      expect(instructions).toContain('user-license reclamation');
+      expect(instructions).toContain('query-admin-insights');
     });
   });
 
@@ -187,7 +232,7 @@ describe('server', () => {
       // authoring tools are gated off by default (authoring-tools feature flag)
       const authoringTools: ReadonlyArray<WebToolName> = [
         'request-workbook-upload',
-        'validate-upload-and-publish-workbook',
+        'publish-workbook',
       ];
 
       let expectedWebToolNames = [...webToolNames];
@@ -231,6 +276,23 @@ describe('server', () => {
       const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
+    });
+
+    // The combined bundle supplies its own McpServer to WebMcpServer, so instructions can only reach
+    // the handshake if index.combined.ts constructs that McpServer with buildWebInstructions(). This
+    // asserts the web guidance actually survives that provided-mcpServer path (it FAILS against
+    // pre-fix combined code, where the composed instructions were silently dropped). The default
+    // client spawns with getDefaultEnv(), which omits ADMIN_TOOLS_ENABLED, so only base guidance is
+    // advertised and no admin guidance. Substrings kept in lockstep with the unit test in
+    // src/server.web.test.ts.
+    it('should carry base web instructions without admin guidance when admin tools are disabled', async () => {
+      const instructions = await client.getInstructions();
+      expect(instructions).toBeTruthy();
+      expect(instructions).toContain('Tableau MCP exposes tools');
+      expect(instructions).not.toContain('site-administration capabilities');
+      expect(instructions).not.toContain('general admin/site-health');
+      expect(instructions).not.toContain('user-license reclamation');
+      expect(instructions).not.toContain('query-admin-insights');
     });
   });
 });

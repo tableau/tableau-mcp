@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
+  filterLineageContentsByAllowedIds,
   getSearchContentLineageQuery,
   getViewLineageByLuid,
   getWorkbookLineageByLuid,
@@ -143,7 +144,7 @@ async function enrichSearchResultsWithLineage({
 
   return searchResults.map((item) => {
     if (item.type === 'workbook' && typeof item.luid === 'string') {
-      const upstreamDatasources = filterUpstreamDatasources(
+      const upstreamDatasources = filterLineageContentsByAllowedIds(
         workbookLineageByLuid.get(item.luid),
         datasourceIds,
       );
@@ -151,7 +152,7 @@ async function enrichSearchResultsWithLineage({
     }
 
     if (item.type === 'view' && typeof item.luid === 'string') {
-      const upstreamDatasources = filterUpstreamDatasources(
+      const upstreamDatasources = filterLineageContentsByAllowedIds(
         viewLineageByLuid.get(item.luid)?.upstreamDatasources,
         datasourceIds,
       );
@@ -201,21 +202,5 @@ function getSearchResultLuids(
 ): Array<string> {
   return searchResults.flatMap((item) =>
     item.type === type && typeof item.luid === 'string' ? [item.luid] : [],
-  );
-}
-
-function filterUpstreamDatasources(
-  upstreamDatasources: unknown,
-  datasourceIds?: Set<string> | null,
-): Array<{ luid: string; name: string }> {
-  if (!Array.isArray(upstreamDatasources)) {
-    return [];
-  }
-
-  return upstreamDatasources.filter(
-    (datasource): datasource is { luid: string; name: string } =>
-      typeof datasource?.luid === 'string' &&
-      typeof datasource.name === 'string' &&
-      (!datasourceIds || datasourceIds.has(datasource.luid)),
   );
 }

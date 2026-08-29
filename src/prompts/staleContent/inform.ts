@@ -27,7 +27,8 @@ export const getStaleContentCleanupInformPrompt: WebPromptFactory = () => ({
   description:
     'Tableau Cloud admin workflow: identify stale workbooks and published datasources by ' +
     'invoking the deterministic `query-admin-insights` tool (kind: "stale-content"), which performs the ' +
-    'TS Events / Site Content anti-join and threshold filter server-side. Read-only.',
+    'TS Events / Site Content anti-join and threshold filter server-side. Read-only. ' +
+    'Consider for general admin/site-health, governance, and cleanup questions.',
   argsSchema,
   disabled: (config) => !config.adminToolsEnabled,
   callback: (args) => {

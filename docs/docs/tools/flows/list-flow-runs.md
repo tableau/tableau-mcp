@@ -21,14 +21,20 @@ This is the dedicated, filterable, site-wide run-history tool:
 
 ## Required Tableau API scopes
 
-When the MCP server authenticates with OAuth (connected-app JWT), this tool requests:
+When the MCP server authenticates with OAuth (connected-app JWT), this tool requests at most:
 
-- `tableau:flow_runs:read`
-- `tableau:flows:read` — to resolve a failed run's flow `webpageUrl` into the run-history deep link
-  in `mcp.failureInsight`.
-- `tableau:mcp_site_settings:read`
+- `tableau:flow_runs:read` (always)
+- `tableau:mcp_site_settings:read` (always)
+- `tableau:flows:read` (only when the returned window contains at least one `Failed` run)
 
-See [OAuth configuration](../../configuration/mcp-config/oauth.md) for how scopes are negotiated.
+The primary Get Flow Runs call requests only `tableau:flow_runs:read` plus the always-on
+site-settings scope. `tableau:flows:read` is requested in a **separate**, best-effort call made
+only when a `Failed` run is present in the window — it resolves that failed run's flow
+`webpageUrl` into the run-history deep link surfaced in `mcp.failureInsight` (see
+[Response shape](#response-shape)). A call whose window has no failures never requests
+`tableau:flows:read`, so it succeeds against a Connected App that grants only
+`tableau:flow_runs:read`. See [OAuth configuration](../../configuration/mcp-config/oauth.md) for
+how scopes are negotiated.
 
 ## Caller-role visibility
 
@@ -159,6 +165,52 @@ When `truncated` is `true`, report "at least N" — never invent a total.
 :::tip For client / LLM authors `mcp.resultInfo` is a signal **for the model**, not text to show the
 user. Translate it into one plain sentence — "These are all 12 matching runs" or "Here are the first
 50; more match" — and never surface the field names to the end user. :::
+
+### `mcp.failureInsight`
+
+Present **only** when the returned window contains at least one `Failed` run. A flow run reports
+only its `status`, never *why* it failed — the Get Flow Runs endpoint carries no error message, and
+`backgroundJobId` (populated only for recent runs) requires site-administrator access to inspect.
+As a workaround, the tool resolves a **run-history deep link** for one affected flow so the caller
+can open it in Tableau and read the error there:
+
+- `failedRunCount` — number of `Failed` runs in the returned window.
+- `failedFlowCount` — number of **distinct** flows with a failure in that window.
+- `example` (present when resolvable) — `{ flowId, runHistoryUrl }` for **one** affected flow (the
+  most-recent failure). `runHistoryUrl` is a best-effort deep link (the flow's `webpageUrl` + `/
+  runHistory`) — resolving it costs one extra REST call and is swallowed on failure, so `example`
+  may be absent even when failures exist. If `failedFlowCount` is greater than 1, this link covers
+  only one of the affected flows; fetch the others via [Get Flow](get-flow.md).
+
+```json
+{
+  "flowRuns": [
+    {
+      "id": "c3c3c3c3-3333-3333-3333-333333333333",
+      "flowId": "d00700fe-28a0-4ece-a7af-5543ddf38a82",
+      "status": "Failed",
+      "startedAt": "2025-04-02T10:00:00Z",
+      "completedAt": "2025-04-02T10:01:12Z",
+      "progress": 100,
+      "backgroundJobId": "b4b4b4b4-4444-4444-4444-444444444444"
+    }
+  ],
+  "mcp": {
+    "resultInfo": {
+      "returnedCount": 1,
+      "truncated": false
+    },
+    "failureInsight": {
+      "failedRunCount": 1,
+      "failedFlowCount": 1,
+      "example": {
+        "flowId": "d00700fe-28a0-4ece-a7af-5543ddf38a82",
+        "runHistoryUrl": "https://10ax.online.tableau.com/#/site/mysite/flows/12345/runHistory"
+      }
+    }
+  }
+}
+```
 
 ## Bounded context (fail-closed)
 
