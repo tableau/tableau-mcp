@@ -1,3 +1,5 @@
+import { AxiosError, AxiosResponse } from 'axios';
+
 import { Config } from '../../config.js';
 import { RestApiArgs } from '../../restApiInstance.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
@@ -110,6 +112,19 @@ describe('getCurrentUserSiteRole', () => {
     vi.clearAllMocks();
   });
 
+  // getCurrentUserSiteRole retries with real backoff delays. Fake timers keep the retry-path tests
+  // fast: schedule the call, drain all pending timers/microtasks, then await the settled result.
+  async function resolveWithFakeTimers<T>(op: () => Promise<T>): Promise<T> {
+    vi.useFakeTimers();
+    try {
+      const pending = op();
+      await vi.runAllTimersAsync();
+      return await pending;
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
   function stubUseRestApiWithSiteRole(siteRole: string | undefined): void {
     mocks.useRestApi.mockImplementation(async ({ callback }) =>
       callback({
@@ -129,8 +144,10 @@ describe('getCurrentUserSiteRole', () => {
       throw new Error('network down');
     });
 
-    const siteRole = await getCurrentUserSiteRole(
-      makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-fail', userId: 'user-fail' })),
+    const siteRole = await resolveWithFakeTimers(() =>
+      getCurrentUserSiteRole(
+        makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-fail', userId: 'user-fail' })),
+      ),
     );
 
     expect(siteRole).toBeUndefined();
@@ -152,8 +169,10 @@ describe('getCurrentUserSiteRole', () => {
         }),
       );
 
-    const siteRole = await getCurrentUserSiteRole(
-      makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-A', userId: 'user-A' })),
+    const siteRole = await resolveWithFakeTimers(() =>
+      getCurrentUserSiteRole(
+        makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-A', userId: 'user-A' })),
+      ),
     );
 
     expect(siteRole).toBe('SiteAdministratorCreator');
@@ -163,12 +182,28 @@ describe('getCurrentUserSiteRole', () => {
   it('retries up to 3 times then returns undefined when every attempt fails', async () => {
     mocks.useRestApi.mockRejectedValue(new Error('network down'));
 
+    const siteRole = await resolveWithFakeTimers(() =>
+      getCurrentUserSiteRole(
+        makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-A', userId: 'user-A' })),
+      ),
+    );
+
+    expect(siteRole).toBeUndefined();
+    expect(mocks.useRestApi).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry a 4xx client error (deterministic — retrying cannot help)', async () => {
+    const forbidden = new AxiosError('Forbidden', 'ERR_BAD_REQUEST', undefined, undefined, {
+      status: 403,
+    } as AxiosResponse);
+    mocks.useRestApi.mockRejectedValue(forbidden);
+
     const siteRole = await getCurrentUserSiteRole(
       makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-A', userId: 'user-A' })),
     );
 
     expect(siteRole).toBeUndefined();
-    expect(mocks.useRestApi).toHaveBeenCalledTimes(3);
+    expect(mocks.useRestApi).toHaveBeenCalledTimes(1);
   });
 
   it('returns the admin site role when the current user is an admin', async () => {
@@ -196,7 +231,9 @@ describe('getCurrentUserSiteRole', () => {
   it('returns undefined when tableauAuthInfo is missing (no user to gate on)', async () => {
     mocks.useRestApi.mockRejectedValue(new Error('no auth to sign in with'));
 
-    const siteRole = await getCurrentUserSiteRole(makeRestApiArgs(undefined));
+    const siteRole = await resolveWithFakeTimers(() =>
+      getCurrentUserSiteRole(makeRestApiArgs(undefined)),
+    );
 
     expect(siteRole).toBeUndefined();
   });
@@ -204,8 +241,10 @@ describe('getCurrentUserSiteRole', () => {
   it('returns undefined when tableauAuthInfo has no userId', async () => {
     mocks.useRestApi.mockRejectedValue(new Error('no userId to query'));
 
-    const siteRole = await getCurrentUserSiteRole(
-      makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-x', userId: undefined })),
+    const siteRole = await resolveWithFakeTimers(() =>
+      getCurrentUserSiteRole(
+        makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-x', userId: undefined })),
+      ),
     );
 
     expect(siteRole).toBeUndefined();
