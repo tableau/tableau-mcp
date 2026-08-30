@@ -54,3 +54,9 @@ src/web/apps/dist/
 *.tsv
 stale-*.md
 /logs/
+
+# Claude Code project-local settings (tn autonomy grants)
+.claude/settings.local.json
+
+# HyperAPI runtime log (emitted by eval runs)
+hyperd.log
