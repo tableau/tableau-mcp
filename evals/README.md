@@ -160,6 +160,27 @@ npm run eval:run -- input "how many schools have SAT scores above 1200?"
 npm run eval:grade -- evals/runs/YYYY-MM-DD/<run-id>   # tool-coverage grading (trace-sourced)
 ```
 
+### Run + grade in one step (`run-and-grade.sh`)
+
+`evals/run-and-grade.sh` wraps the two-step `eval:run` → (capture the fresh run dir it
+prints) → `eval:grade` loop into a single command, repeats it N times, parses each
+`result.json` outcome, and prints a per-run verdict + a pass-rate summary. It exists
+because the LLM-behavioral cases (e.g. the W-23757364 proactive-surfacing case) are
+non-deterministic and want an **N≥5 pass-rate**, not a single 1/1 pass.
+
+```bash
+evals/run-and-grade.sh [CASE_FILE] [N]
+# defaults: CASE_FILE=evals/cases/admin/jtbd/admin-proactive-surfacing-broad-health.json  N=5
+evals/run-and-grade.sh evals/cases/admin/list-users.json 5
+```
+
+Exit code: `0` all runs PASS, `1` at least one FAIL, `2` at least one `grading_error`
+(no LangSmith trace — the tracing plugin is not installed; see Prerequisites §3).
+Grading is trace-only, so installing the plugin does **not** rescue past runs — re-run
+after installing. Same `.env` prerequisites as the manual two-step
+(`SERVER`/`SITE_NAME`/`PAT_*`/`ADMIN_TOOLS_ENABLED`/`INSIGHTS_TOOLS_ENABLED`/
+`LANGSMITH_API_KEY`/`LANGSMITH_PROJECT`) plus a prior `npm install` + `npm run build`.
+
 ---
 
 ## Admin Tool Cases
@@ -276,6 +297,7 @@ are diagnostic (subset matching — extra columns/filters are fine).
 | `grade-suite.ts` | Batch grade a suite run; aggregate quality/latency/cost |
 | `grade.ts` | Ad hoc tool-coverage grader (trace-sourced) |
 | `report.ts` | Longitudinal cohort report (JSON/CSV/Markdown) |
+| `run-and-grade.sh` | Wraps `eval:run` → `eval:grade` for one case, loops N times, prints a pass-rate summary |
 
 ---
 

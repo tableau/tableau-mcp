@@ -218,6 +218,7 @@ The 3 remediation cases are **PREVIEW only** (mutation forbidden in the prompt).
 | `jobperf-remediation-preview.json` | `list-extract-refresh-tasks`, `update-cloud-extract-refresh-task` (preview) | no |
 | `inactive-users-safety-nomutate.json` | `query-admin-insights` (negative control) | no (read) |
 | `stale-content-empty-graceful.json` | `query-admin-insights` (edge case) | no (read) |
+| `admin-proactive-surfacing-broad-health.json` | `query-admin-insights` (W-23757364 regression — broad un-hinted prompt; FAILS pre-fix, PASSES on a PR-#840 build) | no (read) |
 
 The `jtbd/` mutation-preview cases need the same `EVAL_*_LUID` env targets as §6
 (`EVAL_UPDATE_USER_LUID`, `EVAL_DELETE_WORKBOOK_LUID`, `EVAL_EXTRACT_TASK_LUID`).

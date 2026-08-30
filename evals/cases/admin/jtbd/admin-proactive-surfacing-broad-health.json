@@ -1,0 +1,12 @@
+{
+  "id": "admin-proactive-surfacing-broad-health",
+  "name": "Broad admin-health prompt surfaces admin insights",
+  "description": "Regression case for W-23757364 (PR #840). Requires ADMIN_TOOLS_ENABLED=true and a site-admin PAT. A broad, un-hinted admin-health prompt (no role self-declaration, no tool name) must lead the model to proactively invoke query-admin-insights rather than answer generically. FAILS on a pre-fix build (no server initialize instructions block → tool not surfaced) and PASSES only on a PR-#840 build that emits the ADMIN_TOOLS_ENABLED instructions block. LLM-mediated, so treat as a pass-rate over N>=5 runs, not a single pass. Read-only, no mutation.",
+  "tags": ["admin", "regression", "W-23757364", "proactive-surfacing", "real-server"],
+  "prompt": "Give me a health check of this Tableau site — anything I should clean up or worry about?",
+  "expected_tools": ["query-admin-insights"],
+  "budget": {
+    "max_tool_calls": 8,
+    "max_wall_ms": 300000
+  }
+}
