@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import invariant from './utils/invariant.js';
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
@@ -21,19 +22,34 @@ export abstract class Server {
   // With stdio transport, we can use the getClientVersion() method to get the client info.
   private readonly _clientInfo: ClientInfo | undefined;
 
+  // Client-advertised capabilities and OAuth `client_id`, threaded in per-request on both HTTP
+  // branches (session-managed and stateless) the same way `clientInfo` is (see note above).
+  // `capabilities` falls back to the SDK's populated value for stdio; `clientId` has no stdio
+  // equivalent (no OAuth handshake), so it is simply undefined there.
+  private readonly _capabilities: ClientCapabilitiesWithUiExtension | undefined;
+  readonly clientId: string | undefined;
+
   get clientInfo(): ClientInfo | undefined {
     return this._clientInfo ?? this.mcpServer.server.getClientVersion();
+  }
+
+  get capabilities(): ClientCapabilitiesWithUiExtension | undefined {
+    return this._capabilities ?? this.mcpServer.server.getClientCapabilities();
   }
 
   constructor({
     mcpServer,
     clientInfo,
+    capabilities,
+    clientId,
     serverName,
     serverVersion,
     instructions,
   }: {
     mcpServer?: McpServer;
     clientInfo?: ClientInfo;
+    capabilities?: ClientCapabilitiesWithUiExtension;
+    clientId?: string;
     serverName: string;
     serverVersion: string;
     // Optional server-level instructions surfaced in the MCP `initialize` result. Composed by
@@ -82,6 +98,8 @@ export abstract class Server {
     this.name = serverName;
     this.version = serverVersion;
     this._clientInfo = clientInfo;
+    this._capabilities = capabilities;
+    this.clientId = clientId;
   }
 
   get userAgent(): string {

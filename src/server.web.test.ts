@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { serverName, WebMcpServer } from './server.web.js';
+import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
@@ -22,11 +23,21 @@ const mocks = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
 }));
 
+const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
+
 vi.mock('@modelcontextprotocol/ext-apps/server', () => ({
   registerAppTool: mocks.mockRegisterAppTool,
   registerAppResource: mocks.mockRegisterAppResource,
   RESOURCE_MIME_TYPE: 'text/html',
+  // Mirror ext-apps' real getUiCapability: return the SEP-1724 UI extension object, if present.
+  getUiCapability: (capabilities: { extensions?: Record<string, unknown> } | undefined) =>
+    capabilities?.extensions?.[UI_EXTENSION_ID],
 }));
+
+// Client capabilities advertising MCP-Apps rendering support (uses the mocked RESOURCE_MIME_TYPE).
+const uiCapableClientCapabilities: ClientCapabilitiesWithUiExtension = {
+  extensions: { [UI_EXTENSION_ID]: { mimeTypes: ['text/html'] } },
+};
 
 vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
@@ -51,8 +62,14 @@ describe('server', () => {
   });
 
   // Helper functions
-  function getServer(): WebMcpServer {
-    const server = new WebMcpServer();
+  function getServer(opts?: {
+    capabilities?: ClientCapabilitiesWithUiExtension;
+    clientId?: string;
+  }): WebMcpServer {
+    const server = new WebMcpServer({
+      capabilities: opts?.capabilities,
+      clientId: opts?.clientId,
+    });
     server.mcpServer.registerTool = vi.fn();
     return server;
   }
@@ -323,7 +340,8 @@ describe('server', () => {
 
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
 
-    const server = getServer();
+    // Flag on + client advertises the UI capability + a non-Claude clientId → app tool registers.
+    const server = getServer({ capabilities: uiCapableClientCapabilities });
     const mockAppTool = createMockAppTool();
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
 
@@ -431,5 +449,85 @@ describe('server', () => {
     // Should NOT register as app tool
     expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
     expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register as standard tool when client capabilities lack the UI extension', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // Flag on, but no client capabilities advertised → falls back to plain tool.
+    const server = getServer();
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register as standard tool when flag is off even if client is UI-capable', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+
+    const server = getServer({ capabilities: uiCapableClientCapabilities });
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register as standard tool for a known-incompatible client (claude.ai) despite UI support', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // Flag on + UI-capable, but clientId resolves to 'Claude' via getClientDisplayName → plain tool.
+    const server = getServer({
+      capabilities: uiCapableClientCapabilities,
+      clientId: 'https://claude.ai/some/cimd',
+    });
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register app tool for a non-Claude known client (Cursor) that is UI-capable', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    const server = getServer({
+      capabilities: uiCapableClientCapabilities,
+      clientId: 'https://cursor.com/some/cimd',
+    });
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
+      server.mcpServer,
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppResource).toHaveBeenCalled();
   });
 });
