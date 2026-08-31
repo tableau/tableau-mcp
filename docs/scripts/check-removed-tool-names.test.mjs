@@ -68,10 +68,7 @@ test('flags a removed tool name in prose and inside backticks (.md and .mdx)', (
       const { violations } = findRemovedToolNameReferences(root);
       assert.equal(violations.length, 2);
       assert.ok(violations.every((v) => v.name === 'get-stale-content-report'));
-      assert.deepEqual(
-        violations.map((v) => v.line).sort(),
-        [1, 1],
-      );
+      assert.deepEqual(violations.map((v) => v.line).sort(), [1, 1]);
     },
   );
 });
@@ -121,14 +118,11 @@ test('CLI exits 0 on the real docs tree (default root)', () => {
 });
 
 test('CLI exits 1 when a removed tool name is present', () => {
-  withDocsTree(
-    { 'intro.md': 'Use the `get-stale-content-report` tool.' },
-    (root) => {
-      const result = runGuardCli(root);
-      assert.equal(result.status, 1);
-      assert.match(result.stderr, /get-stale-content-report/);
-    },
-  );
+  withDocsTree({ 'intro.md': 'Use the `get-stale-content-report` tool.' }, (root) => {
+    const result = runGuardCli(root);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /get-stale-content-report/);
+  });
 });
 
 test('CLI exits 1 when it scans zero doc files (never passes vacuously)', () => {
