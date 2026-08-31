@@ -9,6 +9,8 @@
  * back from LangSmith (single source of truth).
  */
 
+import * as path from 'path';
+
 export type AgentHarness = 'claude-code' | 'cursor' | 'codex';
 
 export const AGENT_HARNESSES: ReadonlyArray<AgentHarness> = ['claude-code', 'cursor', 'codex'];
@@ -112,4 +114,39 @@ export function buildEvalMetadata(ctx: {
   if (ctx.questionId != null) meta.question_id = ctx.questionId;
   if (ctx.role) meta.eval_role = ctx.role;
   return meta;
+}
+
+/** The standard `{ mcpServers: { tableau: {...} } }` config shared by adapters. */
+export type StandardMcpConfig = {
+  mcpServers: {
+    tableau: {
+      command: string;
+      args: Array<string>;
+      env: Record<string, string>;
+    };
+  };
+};
+
+/**
+ * Build the standard MCP server config (`{ mcpServers: { tableau: {...} } }`) that
+ * the claude-code and cursor adapters both write (only the destination file path
+ * differs). Points the server at `ctx.mcpServerEntry` over stdio and enables the
+ * file logger into `<runDir>/logs`.
+ */
+export function buildStandardMcpConfig(ctx: RunContext): StandardMcpConfig {
+  const logsDir = path.join(ctx.runDir, 'logs');
+  return {
+    mcpServers: {
+      tableau: {
+        command: 'node',
+        args: [ctx.mcpServerEntry],
+        env: {
+          ...ctx.mcpServerEnv,
+          TRANSPORT: 'stdio',
+          FILE_LOGGER_DIRECTORY: logsDir,
+          ENABLED_LOGGERS: 'fileLogger',
+        },
+      },
+    },
+  };
 }
