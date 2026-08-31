@@ -543,6 +543,25 @@ describe('prepareCalculationsInWorkbook idempotency', () => {
     expect(result.value.authoredCalcs).toEqual([]);
   });
 
+  it.each(['&#10;', '&#xA;'])(
+    'reuses a multiline calculation after Desktop encodes line breaks as %s',
+    (lineBreak) => {
+      const multilineCalc =
+        "<column caption='Period Total' datatype='real' name='[Calculation_901]' role='measure' type='quantitative'>" +
+        `<calculation class='tableau' formula='SUM(${lineBreak}  [Sales]${lineBreak})' /></column>`;
+      const workbookXml = withColumn(BASE_XML, multilineCalc);
+      const result = prepareCalculationsInWorkbook({
+        workbookXml,
+        calcs: [{ caption: 'Period Total', formula: 'SUM(\n  [Sales]\n)' }],
+      });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) return;
+      expect(result.value.workbookXml).toBe(workbookXml);
+      expect(result.value.authoredCalcs).toEqual([]);
+    },
+  );
+
   it('still rejects the same caption when its formula differs', () => {
     const result = prepareCalculationsInWorkbook({
       workbookXml: withColumn(BASE_XML, existingCalc),

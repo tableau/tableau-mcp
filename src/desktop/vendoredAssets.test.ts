@@ -62,11 +62,12 @@ describe('desktop vendored assets', () => {
     expect(kpi?.snapshot.xml).not.toContain("<zoom type='entire-view' />");
     expect(kpi?.snapshot.xml).toContain('<cols>[{{DATASOURCE}}].[none:{{field_base_1}}:nk]</cols>');
     expect(kpi?.snapshot.xml).toContain("fontcolor='#898989' fontsize='12'>{{METRIC_NAME}}");
-    expect(kpi?.snapshot.xml).toContain("value='{{VALUE_FORMAT}}'");
+    expect(kpi?.snapshot.xml.match(/value='\{\{VALUE_FORMAT\}\}'/g)).toHaveLength(2);
     expect(kpi?.snapshot.xml).toContain("fontname='Tableau Medium' fontsize='24'");
     expect(kpi?.snapshot.xml).toContain('<run>Æ&#10;</run>');
     expect(kpi?.snapshot.xml).toContain("<format attr='text-align' value='left' />");
-    expect(kpi?.snapshot.xml).toContain('PREVIOUS PERIOD | {{COMPARISON_PERIOD_CONTEXT}} | ');
+    expect(kpi?.snapshot.xml).toContain('{{COMPARISON_PERIOD_CONTEXT}} | ');
+    expect(kpi?.snapshot.xml).not.toContain('PREVIOUS PERIOD | {{COMPARISON_PERIOD_CONTEXT}} | ');
     expect(kpi?.snapshot.xml).toContain('&lt;[{{DATASOURCE}}].[sum:{{field_base_3}}:qk]&gt;');
     expect(kpi?.snapshot.xml).toContain('CHANGE FROM PREVIOUS PERIOD | ');
     expect(kpi?.snapshot.xml).not.toContain('ABSOLUTE CHANGE | ');

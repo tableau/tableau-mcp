@@ -69,6 +69,34 @@ export function validateBundleRequest(req: BundleRequest): string | null {
     );
   }
 
+  const lastXPeriod = ms.measurement_period.last_x_period;
+  if (lastXPeriod && ms.measurement_period.range !== 'RANGE_BY_CONFIG') {
+    errors.push(
+      `measurement_period.last_x_period is only honored when measurement_period.range is 'RANGE_BY_CONFIG' (got '${ms.measurement_period.range}').`,
+    );
+  }
+  if (lastXPeriod && ms.measurement_period.specific_period) {
+    errors.push(
+      'measurement_period.last_x_period and measurement_period.specific_period cannot both be set — use last_x_period for a supported rolling window or specific_period for a fixed span.',
+    );
+  }
+  if (
+    lastXPeriod?.period_type === 'GRANULARITY_BY_DAY' &&
+    ms.measurement_period.granularity !== 'GRANULARITY_BY_DAY'
+  ) {
+    errors.push(
+      "a day-based measurement_period.last_x_period requires measurement_period.granularity = 'GRANULARITY_BY_DAY'.",
+    );
+  }
+  if (
+    lastXPeriod?.period_type === 'GRANULARITY_BY_YEAR' &&
+    ms.measurement_period.granularity !== 'GRANULARITY_BY_MONTH'
+  ) {
+    errors.push(
+      "the trailing-year measurement_period.last_x_period requires measurement_period.granularity = 'GRANULARITY_BY_MONTH'.",
+    );
+  }
+
   // `options.now` (anchor a whole relative period) and `specific_period` (an
   // explicit period/span under RANGE_BY_CONFIG) are two different ways to move the
   // window, and their combined precedence at the service is unconfirmed. Reject
@@ -77,6 +105,11 @@ export function validateBundleRequest(req: BundleRequest): string | null {
     errors.push(
       'options.now and measurement_period.specific_period cannot both be set — they are alternative ways to target a period. ' +
         'Use options.now to anchor a relative whole period, or specific_period (with range RANGE_BY_CONFIG) for an explicit period/span.',
+    );
+  }
+  if (br.options.now && lastXPeriod) {
+    errors.push(
+      'options.now and measurement_period.last_x_period cannot both be set — rolling windows are relative to the live data offset.',
     );
   }
 

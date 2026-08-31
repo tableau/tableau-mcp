@@ -4876,7 +4876,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
   });
 
-  it('prepares Insights KPI calcs and auto-applies the workbook once', async () => {
+  it('authors live Insights KPI calcs and worksheet in one mutation', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const appliedKpiXml = CALC_READBACK_XML.replace(
       '</worksheets>',
@@ -4930,6 +4930,17 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
     expect(body.authored_calcs).toEqual(['Margin']);
+    expect(body.verification).toEqual({ ok: true, status: 'passed' });
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_error).toBeUndefined();
+    expect(body.phase_ms).toEqual({
+      bind: 0,
+      inject: 0,
+      apply: 0,
+      readback: 0,
+      summary: 0,
+      total: 0,
+    });
     expect(body.guidance).toContain('Calcs authored: Margin');
     expect(binderModule.bindTemplate).toHaveBeenCalledWith(
       expect.objectContaining({ workbookXml: expect.stringContaining("caption='Margin'") }),
@@ -4953,6 +4964,39 @@ describe('bindTemplateTool auto_apply gate', () => {
       expect.anything(),
       undefined,
     );
+  });
+
+  it('atomically authors calcs for any trusted deterministic proposal', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const appliedBarXml = CALC_READBACK_XML.replace(
+      '</worksheets>',
+      "<worksheet name='Sales by Region' /></worksheets>",
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [CALC_BASE_XML, appliedBarXml],
+    });
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({ ok: true, xml: appliedBarXml });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Sales by Region',
+      proposal: sampleProposal,
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+      auto_apply: true,
+      skip_validation: true,
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.authored_calcs).toEqual(['Margin']);
+    expect(body.verification).toEqual({ ok: true, status: 'passed' });
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_error).toBeUndefined();
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
   it('keeps untrusted Insights KPI calc application on the ordinary two-apply path', async () => {

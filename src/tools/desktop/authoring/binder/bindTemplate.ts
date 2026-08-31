@@ -67,6 +67,8 @@ import {
 import {
   formatReadbackVerificationError,
   formatReadbackVerificationWarnings,
+  type ReadbackVerificationResult,
+  verifyWorksheetReadback,
 } from '../../../../desktop/validation/readback-verify.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
@@ -75,6 +77,7 @@ import {
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import {
+  type PostApplyWorksheetReadbackVerification,
   publicReadbackVerificationResult,
   verifyPostApplyWorksheetReadback,
 } from '../../../../desktop/wrappers/loadWorksheetXml.js';
@@ -156,6 +159,18 @@ type PublicBinderResult =
   | Extract<BinderResult, { status: 'propose' }>
   | Extract<BinderResult, { status: 'escalate' }>;
 
+type AuthoringPhaseMs = {
+  bind: number;
+  inject: number;
+  apply: number;
+  create?: number;
+  rename?: number;
+  replenish?: number;
+  readback?: number;
+  summary?: number;
+  total?: number;
+};
+
 type BindTemplateToolResultBase = PublicBinderResult & {
   guidance: string;
   call_2_contract?: Call2Contract;
@@ -163,7 +178,7 @@ type BindTemplateToolResultBase = PublicBinderResult & {
   warnings?: string[];
   applied?: boolean;
   sheet_name?: string;
-  phase_ms?: { bind: number; inject: number; apply: number };
+  phase_ms?: AuthoringPhaseMs;
   apply_error?: string;
   retry_safe?: boolean;
 };
@@ -187,7 +202,8 @@ type AppliedFastPathResult = {
   authored_calcs?: string[];
   warnings?: string[];
   sheet_name: string;
-  phase_ms: { bind: number; inject: number; apply: number };
+  phase_ms: AuthoringPhaseMs;
+  verification?: ReadbackVerificationResult;
   guidance: string;
   applied_default?: AppliedDefault;
   summary_rows?: { columns: unknown[]; rows: unknown[][] };
@@ -2029,6 +2045,89 @@ function applyFallback(
 }
 
 /**
+ * Trusted deterministic authoring writes calculations and the worksheet in one
+ * workbook mutation. Verify both from the same workbook snapshot so the caller
+ * does not pay for two independently-polled Desktop readbacks. This verification
+ * is evidence after a confirmed dispatch: a mismatch is reported, never replayed.
+ */
+async function verifyTrustedWorkbookReadback({
+  worksheetName,
+  intendedWorksheetXml,
+  atomicCalcs,
+  executor,
+  signal,
+}: {
+  worksheetName: string;
+  intendedWorksheetXml: string;
+  atomicCalcs: AuthoredCalc[];
+  executor: ExternalApiToolExecutor;
+  signal: AbortSignal;
+}): Promise<PostApplyWorksheetReadbackVerification> {
+  try {
+    const polled = await pollReadback({
+      read: () => getWorkbookXml({ executor, signal }),
+      settled: (xml) => {
+        const calculationsPresent = atomicCalcs.every((calc) =>
+          hasColumnNameAndCaption(xml, calc.calcName, calc.caption),
+        );
+        const fragment = extractSheetXml(xml, worksheetName);
+        return (
+          calculationsPresent &&
+          fragment !== null &&
+          !verifyWorksheetReadback(intendedWorksheetXml, fragment).some(
+            (finding) => finding.severity === 'error',
+          )
+        );
+      },
+      signal,
+    });
+    if (!polled.ok) {
+      return {
+        ok: true,
+        status: 'skipped',
+        findings: [],
+        message: `could not re-read the latest workbook after apply: ${getExceptionMessage(polled.error)}`,
+      };
+    }
+
+    const missingCalcs = atomicCalcs.filter(
+      (calc) => !hasColumnNameAndCaption(polled.value, calc.calcName, calc.caption),
+    );
+    const fragment = extractSheetXml(polled.value, worksheetName);
+    if (missingCalcs.length > 0 || fragment === null) {
+      const problems = [
+        ...(missingCalcs.length > 0
+          ? [`calculations were absent: ${missingCalcs.map((calc) => calc.caption).join(', ')}`]
+          : []),
+        ...(fragment === null ? [`worksheet "${worksheetName}" was absent`] : []),
+      ];
+      return {
+        ok: false,
+        status: 'failed',
+        findings: [],
+        message: `Post-apply workbook readback did not match: ${problems.join('; ')}.`,
+      };
+    }
+
+    const findings = verifyWorksheetReadback(intendedWorksheetXml, fragment);
+    if (findings.some((finding) => finding.severity === 'error')) {
+      return { ok: false, status: 'failed', findings };
+    }
+    if (findings.some((finding) => finding.severity === 'warning')) {
+      return { ok: true, status: 'warning', findings };
+    }
+    return { ok: true, status: 'passed', findings: [] };
+  } catch (error) {
+    return {
+      ok: true,
+      status: 'skipped',
+      findings: [],
+      message: getExceptionMessage(error),
+    };
+  }
+}
+
+/**
  * Server-side collapse of the proven STAMPED path: inject the bound template into
  * the live workbook (shared inject core) and apply it through the SAME validated
  * apply path (loadWorkbookXml runs the runValidation preflight before dispatch).
@@ -2051,6 +2150,7 @@ async function performAutoApply({
   skipValidation,
   hostBaselineWorkbookXml,
   atomicCalcs,
+  trustedDeterministicApply,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -2067,6 +2167,7 @@ async function performAutoApply({
   skipValidation?: boolean;
   hostBaselineWorkbookXml?: string;
   atomicCalcs?: AuthoredCalc[];
+  trustedDeterministicApply?: boolean;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
@@ -2202,40 +2303,6 @@ async function performAutoApply({
   }
   const applyMs = Date.now() - applyStart;
 
-  // The optimized Insights path authors calculations and the worksheet in one
-  // workbook mutation. Match the ordinary author-calc safety contract by reading
-  // the combined document back and verifying every new calculation identity before
-  // claiming success or returning authored_calcs.
-  if (atomicCalcs && atomicCalcs.length > 0) {
-    const calcReadback = await pollReadback({
-      read: () => getWorkbookXml({ executor, signal }),
-      settled: (xml) =>
-        atomicCalcs.every((calc) => hasColumnNameAndCaption(xml, calc.calcName, calc.caption)),
-      signal,
-    });
-    if (!calcReadback.ok) {
-      return {
-        result: applyFallback(
-          base,
-          `calculation readback failed: ${getExceptionMessage(calcReadback.error)}`,
-        ),
-        failureDisposition: 'post-dispatch',
-      };
-    }
-    if (!calcReadback.settled) {
-      const missing = atomicCalcs.filter(
-        (calc) => !hasColumnNameAndCaption(calcReadback.value, calc.calcName, calc.caption),
-      );
-      return {
-        result: applyFallback(
-          base,
-          `calculation readback did not contain: ${missing.map((calc) => calc.caption).join(', ')}`,
-        ),
-        failureDisposition: 'post-dispatch',
-      };
-    }
-  }
-
   // ── Host verification receipt on the HOT path (W-23447506) ────────
   // apply-worksheet and build-and-apply-worksheet re-read the sheet they just wrote and
   // report what the host actually saw. bind-template — the path nearly every chart ask
@@ -2254,9 +2321,26 @@ async function performAutoApply({
   } catch {
     intendedWorksheetXml = null;
   }
+  const readbackStart = Date.now();
   const verification = intendedWorksheetXml
-    ? await verifyPostApplyWorksheetReadback(literalTitle, intendedWorksheetXml, executor, signal)
-    : undefined;
+    ? trustedDeterministicApply
+      ? await verifyTrustedWorkbookReadback({
+          worksheetName: literalTitle,
+          intendedWorksheetXml,
+          atomicCalcs: atomicCalcs ?? [],
+          executor,
+          signal,
+        })
+      : await verifyPostApplyWorksheetReadback(literalTitle, intendedWorksheetXml, executor, signal)
+    : trustedDeterministicApply
+      ? {
+          ok: false,
+          status: 'failed' as const,
+          findings: [],
+          message: `Applied worksheet "${literalTitle}" could not be extracted for verification.`,
+        }
+      : undefined;
+  const readbackMs = Date.now() - readbackStart;
   const receiptInput = {
     validationWarnings: applyResult.value.validationWarnings,
     readback: verification ? publicReadbackVerificationResult(verification) : undefined,
@@ -2307,11 +2391,19 @@ async function performAutoApply({
     res.encodings && res.encodings.unfilled.length > 0 ? res.encodings : undefined;
   const encodingAnalysisComplete =
     res.encodings !== undefined && res.encodings.unfilled.length === 0;
-  const summaryRows = await readAppliedSummaryRows({
-    executor,
-    signal,
-    worksheetName: literalTitle,
-  });
+  const summaryStart = Date.now();
+  // Trusted deterministic callers use one structural workbook readback for the
+  // authored calculations and worksheet. Avoid a second summary-data round trip;
+  // the live worksheet remains the source of truth after datasource refreshes.
+  // Ordinary binds keep their existing summary-read behavior unchanged.
+  const summaryRows: Awaited<ReturnType<typeof readAppliedSummaryRows>> = !trustedDeterministicApply
+    ? await readAppliedSummaryRows({
+        executor,
+        signal,
+        worksheetName: literalTitle,
+      })
+    : {};
+  const summaryMs = Date.now() - summaryStart;
   const emptySummaryReadback = summaryRows.summary_rows_error === EMPTY_SUMMARY_ROWS_ERROR;
   // A splice warning means requested work was skipped before readback. The core incomplete
   // evidence stays separate from rewriter diagnostics so this truth flag keeps its audited,
@@ -2363,7 +2455,19 @@ async function performAutoApply({
     ...(appliedDefault ? { applied_default: appliedDefault } : {}),
     applied: true,
     sheet_name: literalTitle,
-    phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
+    phase_ms: trustedDeterministicApply
+      ? {
+          bind: bindMs,
+          inject: injectMs,
+          apply: applyMs,
+          readback: readbackMs,
+          summary: summaryMs,
+          total: bindMs + injectMs + applyMs + readbackMs + summaryMs,
+        }
+      : { bind: bindMs, inject: injectMs, apply: applyMs },
+    ...(trustedDeterministicApply && receiptInput.readback
+      ? { verification: receiptInput.readback }
+      : {}),
     ...summaryRows,
     ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
@@ -2653,13 +2757,13 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
-          const atomicCalcApply =
+          const trustedDeterministicApply =
             extra.config.allowSkipValidation === true &&
             skip_validation === true &&
             auto_apply === true &&
-            proposal?.template === 'insights__kpi' &&
-            calcs !== undefined &&
-            calcs.length > 0;
+            proposal !== undefined;
+          const atomicCalcApply =
+            trustedDeterministicApply && calcs !== undefined && calcs.length > 0;
           const askKey = normalizeAskForMatch(ask);
           const currentProposalSignature =
             proposal !== undefined ? proposalSignature(proposal as BindingProposal) : undefined;
@@ -2760,7 +2864,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           const executor = await extra.getExecutor(resolvedSession);
-
           // Phase timing (only reported when auto_apply performs). The bind phase
           // subsumes the live workbook read since server-side they are one step.
           const bindStart = Date.now();
@@ -3094,12 +3197,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new Ok(base);
           }
 
-          if (atomicCalcApply && res.args.template_name !== 'insights__kpi') {
-            return new ArgsValidationError(
-              'trusted Insights KPI bind resolved to a different template',
-            ).toErr();
-          }
-
           if (!canAutoApply || selectedTemplate === undefined) {
             if (isStructuredCorrectionCall) {
               recordBindRecoveryAttemptFailOpen({
@@ -3157,6 +3254,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             appliedDefault,
             hostBaselineWorkbookXml: atomicCalcApply ? hostBaselineWorkbookXml : undefined,
             atomicCalcs,
+            trustedDeterministicApply,
             // Honor skip_validation only for a server-trusted caller (config gate set by the
             // deterministic spawner). An untrusted LLM turn that passes the flag gets full
             // validation, not a bypass — the param alone cannot skip the preflight.

@@ -701,5 +701,14 @@ function unescapeXml(value: string): string {
     .replaceAll('&apos;', "'")
     .replaceAll('&gt;', '>')
     .replaceAll('&lt;', '<')
+    .replace(
+      /&#(?:x([0-9a-fA-F]+)|(\d+));/g,
+      (entity, hex: string | undefined, decimal: string | undefined) => {
+        const codePoint = Number.parseInt(hex ?? decimal ?? '', hex === undefined ? 10 : 16);
+        return Number.isSafeInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+          ? String.fromCodePoint(codePoint)
+          : entity;
+      },
+    )
     .replaceAll('&amp;', '&');
 }
