@@ -1,6 +1,9 @@
 /**
  * Batch grader for a completed BIRD suite run.
  *
+ * BIRD-specific, not a generic suite grader — the admin/JTBD eval cases (evals/cases/admin/)
+ * don't have a batch-grading path yet and are graded one-at-a-time via grade.ts instead.
+ *
  * Grades every case in a suite run and writes a single suite-grade.json
  * to evals/grades/YYYY-MM-DD/<suite-run-id>/.
  *
@@ -16,10 +19,13 @@
 
 /* eslint-disable no-console */
 
-import { execFileSync } from 'child_process';
 import dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
+
+import { gradeBirdCase } from './grade-bird.js';
+import { BirdGradeResult } from './lib/birdResult.js';
+import { mean, round, sum } from './lib/stats.js';
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 dotenv.config({ path: path.join(REPO_ROOT, '.env') });
@@ -27,7 +33,6 @@ dotenv.config({ path: path.join(REPO_ROOT, '.env') });
 const EVALS_DIR = path.join(REPO_ROOT, 'evals');
 const SUITE_RUNS_DIR = path.join(EVALS_DIR, 'suite-runs');
 const GRADES_DIR = path.join(EVALS_DIR, 'grades');
-const GRADE_BIRD_SCRIPT = path.join(EVALS_DIR, 'grade-bird.ts');
 
 function dateSlug(): string {
   const d = new Date();
@@ -56,44 +61,11 @@ type SuiteSummary = {
   }>;
 };
 
-type BirdResult = {
-  run_id: string;
-  eval_run_id: string;
-  question_id: number;
-  difficulty: string;
-  graded_at: string;
-  harness: string | null;
-  model: string | null;
-  model_normalized: string | null;
-  wall_s: number | null;
-  ttft_s: number | null;
-  cost_usd: number | null;
-  tokens: {
-    input_tokens: number | null;
-    output_tokens: number | null;
-    cache_creation_tokens: number | null;
-    cache_read_tokens: number | null;
-    total_tokens: number | null;
-  };
-  tool_calls: number;
-  tools_used: Array<string>;
-  llm_calls: number;
-  error_count: number;
-  signals: {
-    numeric_match: boolean | null;
-    semantic_match: number | null;
-    columns_match: boolean | null;
-    filters_match: boolean | null;
-  };
-  accuracy: number | null;
-  verdict: 'pass' | 'partial' | 'fail' | 'error' | 'skip' | 'grading_error';
-};
-
 type CaseGrade = {
   question_id: number;
   difficulty: string;
   run_id: string;
-  verdict: BirdResult['verdict'];
+  verdict: BirdGradeResult['verdict'];
   numeric_match: boolean | null;
   semantic_match: number | null;
   columns_match: boolean | null;
@@ -109,7 +81,7 @@ type CaseGrade = {
   tools_used: Array<string>;
   llm_calls: number | null;
   error_count: number | null;
-  tokens: BirdResult['tokens'] | null;
+  tokens: BirdGradeResult['tokens'] | null;
   grade_file: string | null;
   grading_error: string | null;
 };
@@ -179,23 +151,13 @@ async function main(): Promise<void> {
     // Derive where grade-bird.ts will write its output
     const gradeFile = path.join(GRADES_DIR, today, c.run_id, 'bird-result.json');
 
-    let gradeResult: BirdResult | null = null;
+    let gradeResult: BirdGradeResult | null = null;
     let gradingError: string | null = null;
 
     try {
-      execFileSync('npx', ['tsx', GRADE_BIRD_SCRIPT, c.run_dir], {
-        env: process.env,
-        cwd: REPO_ROOT,
-        stdio: 'pipe',
-      });
-      if (fs.existsSync(gradeFile)) {
-        gradeResult = JSON.parse(fs.readFileSync(gradeFile, 'utf-8')) as BirdResult;
-      } else {
-        gradingError = 'bird-result.json not found after grading';
-      }
+      gradeResult = await gradeBirdCase(c.run_dir);
     } catch (err: unknown) {
-      const e = err as { message?: string; stderr?: Buffer };
-      gradingError = e.stderr?.toString().trim() || e.message || 'unknown grading error';
+      gradingError = err instanceof Error ? err.message : 'unknown grading error';
     }
 
     const verdict = gradeResult?.verdict ?? 'grading_error';
@@ -253,10 +215,6 @@ async function main(): Promise<void> {
   const total = caseGrades.length;
   const passRate = total > 0 ? counts.pass / total : 0;
 
-  const mean = (values: Array<number>): number | null =>
-    values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null;
-  const sum = (values: Array<number>): number => values.reduce((a, b) => a + b, 0);
-
   const accuracyValues = caseGrades.map((g) => g.accuracy).filter((v): v is number => v != null);
   const wallValues = caseGrades.map((g) => g.wall_s).filter((v): v is number => v != null);
   const ttftValues = caseGrades.map((g) => g.ttft_s).filter((v): v is number => v != null);
@@ -280,19 +238,15 @@ async function main(): Promise<void> {
       error: counts.error,
       skip: counts.skip,
       grading_error: counts.grading_error,
-      pass_rate: Math.round(passRate * 1000) / 1000,
+      pass_rate: round(passRate, 3),
     },
     metrics: {
-      mean_accuracy: accuracyValues.length
-        ? Math.round((mean(accuracyValues) ?? 0) * 1000) / 1000
-        : null,
-      mean_wall_s: wallValues.length ? Math.round((mean(wallValues) ?? 0) * 10) / 10 : null,
-      mean_ttft_s: ttftValues.length ? Math.round((mean(ttftValues) ?? 0) * 10) / 10 : null,
-      total_cost_usd: costValues.length ? Math.round(sum(costValues) * 1e4) / 1e4 : null,
-      mean_cost_usd: costValues.length ? Math.round((mean(costValues) ?? 0) * 1e6) / 1e6 : null,
-      mean_tool_calls: toolCallValues.length
-        ? Math.round((mean(toolCallValues) ?? 0) * 10) / 10
-        : null,
+      mean_accuracy: round(mean(accuracyValues), 3),
+      mean_wall_s: round(mean(wallValues), 1),
+      mean_ttft_s: round(mean(ttftValues), 1),
+      total_cost_usd: costValues.length ? round(sum(costValues), 4) : null,
+      mean_cost_usd: round(mean(costValues), 6),
+      mean_tool_calls: round(mean(toolCallValues), 1),
       total_errors: errorValues.length ? sum(errorValues) : null,
     },
     cases: caseGrades,

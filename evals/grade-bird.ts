@@ -27,6 +27,7 @@ import * as path from 'path';
 import { getAdapter, HeadlessContext, resolveHarness } from './adapters/index.js';
 import { extractJsonObject, runHeadless } from './adapters/run-headless.js';
 import { fetchTraceSummary, findVizqlQuery, makeClient, TraceSummary } from './langsmith-reader.js';
+import { BirdGradeResult, LlmJudgeResult } from './lib/birdResult.js';
 import { normalizeModel } from './model-normalize.js';
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -40,12 +41,6 @@ function dateSlug(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-const runDirArg = process.argv[2];
-if (!runDirArg) {
-  console.error('Usage: npx tsx evals/grade-bird.ts <run-dir>');
-  process.exit(1);
-}
-const absRunDir = path.resolve(runDirArg);
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -80,62 +75,6 @@ type BirdCase = {
   ai_summarized_answer: string;
   expected_columns: Array<string>;
   expected_filter_fields: Array<string>;
-};
-
-type LlmJudgeResult = { correct: boolean; score: number; reason: string };
-
-type BirdGradeResult = {
-  run_id: string;
-  eval_run_id: string;
-  question_id: number;
-  difficulty: string;
-  graded_at: string;
-  harness: string | null;
-  model: string | null;
-  model_normalized: string | null;
-  grader_harness: string;
-  grader_model: string | null;
-  // Latency / cost / volume metrics (from trace).
-  wall_s: number | null;
-  ttft_s: number | null;
-  cost_usd: number | null;
-  cost_source: TraceSummary['costSource'] | 'n/a';
-  tokens: {
-    input_tokens: number | null;
-    output_tokens: number | null;
-    cache_read_tokens: number | null;
-    cache_creation_tokens: number | null;
-    total_tokens: number | null;
-  };
-  tool_calls: number;
-  tools_used: Array<string>;
-  llm_calls: number;
-  subagent_count: number;
-  error_count: number;
-  // Quality signals.
-  signals: {
-    numeric_match: boolean | null;
-    semantic_match: number | null;
-    columns_match: boolean | null;
-    filters_match: boolean | null;
-  };
-  accuracy: number | null;
-  details: {
-    expected_columns: Array<string>;
-    actual_columns: Array<string>;
-    missing_columns: Array<string>;
-    expected_filter_fields: Array<string>;
-    actual_filter_fields: Array<string>;
-    missing_filter_fields: Array<string>;
-    expected_value: number | string | null;
-    expected_row_count: number | null;
-    extracted_number: number | null;
-    final_message_preview: string;
-    llm_judge: LlmJudgeResult | null;
-    llm_judge_error: string | null;
-    trace_error: string | null;
-  };
-  verdict: 'pass' | 'partial' | 'fail' | 'error' | 'skip' | 'grading_error';
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -206,6 +145,7 @@ function checkNumericMatch(
 // ─── LLM Judge (via GRADER_HARNESS) ────────────────────────────────────────────
 
 function runJudge(
+  runDir: string,
   birdCase: BirdCase,
   finalMessage: string,
 ): {
@@ -244,11 +184,11 @@ function runJudge(
     '{"correct": true|false, "score": 0.0-1.0, "reason": "one sentence"}',
   ].join('\n');
 
-  const judgeDir = path.join(absRunDir, 'judge');
+  const judgeDir = path.join(runDir, 'judge');
   fs.mkdirSync(judgeDir, { recursive: true });
 
   const ctx: HeadlessContext = {
-    runId: `${path.basename(absRunDir)}-judge`,
+    runId: `${path.basename(runDir)}-judge`,
     runDir: judgeDir,
     prompt,
     model: graderModel,
@@ -302,39 +242,181 @@ function writeResult(result: BirdGradeResult): string {
   return resultPath;
 }
 
-async function main(): Promise<void> {
-  const runMeta = readOptionalJson<RunMeta>(path.join(absRunDir, 'run.json'));
+/** Resolved inputs for grading a single run: the run metadata + its BIRD case. */
+type GradingContext = {
+  runMeta: RunMeta;
+  birdCase: BirdCase;
+  runId: string;
+  evalRunId: string;
+  projectName: string;
+  difficulty: string;
+  questionId: number;
+};
+
+/**
+ * Read run.json + the referenced suite file and resolve the BIRD case being graded.
+ * Throws (rather than exiting the process) on any missing/invalid input, so that
+ * gradeBirdCase() callers running in-process (e.g. grade-suite.ts's batch loop) can
+ * catch the failure for just this one case instead of the whole process dying.
+ */
+function loadGradingContext(runDir: string): GradingContext {
+  const runMeta = readOptionalJson<RunMeta>(path.join(runDir, 'run.json'));
   if (!runMeta) {
-    console.error(`run.json not found in ${absRunDir}`);
-    process.exit(1);
+    throw new Error(`run.json not found in ${runDir}`);
   }
 
   const questionId = runMeta.metadata?.question_id;
   const suiteFilePath = runMeta.metadata?.suite_file;
   if (!questionId || !suiteFilePath) {
-    console.error(
+    throw new Error(
       'run.json is missing metadata.question_id or metadata.suite_file.\n' +
         'This grader only works on runs produced by run-suite.ts.',
     );
-    process.exit(1);
   }
   if (!fs.existsSync(suiteFilePath)) {
-    console.error(`Suite file not found: ${suiteFilePath}`);
-    process.exit(1);
+    throw new Error(`Suite file not found: ${suiteFilePath}`);
   }
 
   const suite = JSON.parse(fs.readFileSync(suiteFilePath, 'utf-8')) as Array<BirdCase>;
   const birdCase = suite.find((c) => c.question_id === questionId);
   if (!birdCase) {
-    console.error(`Question ID ${questionId} not found in suite file.`);
-    process.exit(1);
+    throw new Error(`Question ID ${questionId} not found in suite file.`);
   }
 
-  const runId = runMeta.run_id ?? path.basename(absRunDir);
+  const runId = runMeta.run_id ?? path.basename(runDir);
   const evalRunId = runMeta.eval_run_id ?? runId;
   const projectName =
     runMeta.langsmith_project ?? process.env.LANGSMITH_PROJECT ?? 'tableau-mcp-evals';
   const difficulty = runMeta.metadata?.difficulty ?? birdCase.difficulty ?? 'unknown';
+
+  return { runMeta, birdCase, runId, evalRunId, projectName, difficulty, questionId };
+}
+
+/**
+ * Populate the four quality signals on `result` (mutating `result.signals`,
+ * `result.details`, and the grader_* fields) from the trace summary + final message.
+ * Extracted verbatim from main() — mutation is retained so the exact set of details
+ * fields written to bird-result.json is unchanged.
+ */
+function computeSignals(
+  runDir: string,
+  result: BirdGradeResult,
+  birdCase: BirdCase,
+  summary: TraceSummary,
+  finalMessage: string,
+): void {
+  // ── Signals 1 & 2: columns_match / filters_match ─────────────────────────
+  const queryCalls = summary.toolCalls.filter((t) => t.normalizedName === 'query-datasource');
+  if (queryCalls.length > 0) {
+    const allActualColumns = new Set<string>();
+    const allActualFilters = new Set<string>();
+    for (const call of queryCalls) {
+      const query = findVizqlQuery(call.inputs) as VizqlQuery | null;
+      for (const c of collectFieldCaptions(query?.fields)) allActualColumns.add(c);
+      for (const f of collectFilterCaptions(query?.filters)) allActualFilters.add(f);
+    }
+    result.details.actual_columns = [...allActualColumns];
+    result.details.actual_filter_fields = [...allActualFilters];
+    result.details.missing_columns = birdCase.expected_columns.filter(
+      (c) => !allActualColumns.has(c.toLowerCase()),
+    );
+    result.details.missing_filter_fields = birdCase.expected_filter_fields.filter(
+      (f) => !allActualFilters.has(f.toLowerCase()),
+    );
+    result.signals.columns_match =
+      result.details.missing_columns.length === 0 && birdCase.expected_columns.length > 0;
+    result.signals.filters_match =
+      result.details.missing_filter_fields.length === 0 &&
+      birdCase.expected_filter_fields.length > 0;
+  }
+
+  // ── Signal 3: numeric_match ───────────────────────────────────────────────
+  if (finalMessage) {
+    const numeric = checkNumericMatch(finalMessage, birdCase);
+    result.signals.numeric_match = numeric.matched;
+    result.details.extracted_number = numeric.extracted;
+  }
+
+  // ── Signal 4: semantic_match (judge via GRADER_HARNESS) ──────────────────
+  if (!finalMessage) {
+    result.details.llm_judge_error = 'No final message found in trace outputs.';
+  } else {
+    const judge = runJudge(runDir, birdCase, finalMessage);
+    result.grader_harness = judge.harness;
+    result.grader_model = judge.model;
+    result.details.llm_judge = judge.result;
+    result.details.llm_judge_error = judge.error;
+    result.signals.semantic_match = judge.result?.score ?? null;
+  }
+}
+
+/**
+ * Derive verdict + accuracy from the signals, isolating the grading thresholds
+ * (semantic_match >= 0.8, accuracy pass=1/partial=0.5/fail=0) in one place.
+ */
+function deriveVerdict(
+  signals: BirdGradeResult['signals'],
+  context: { agentExitCode?: number; hadError: boolean },
+): { verdict: BirdGradeResult['verdict']; accuracy: number | null } {
+  const verdict: BirdGradeResult['verdict'] = (() => {
+    if (context.agentExitCode != null && context.agentExitCode !== 0) return 'error';
+    if (context.hadError && signals.semantic_match === null && signals.numeric_match === null)
+      return 'error';
+    if (signals.semantic_match === null && signals.numeric_match === null) return 'skip';
+    const semanticOk = signals.semantic_match != null && signals.semantic_match >= 0.8;
+    const numericOk = signals.numeric_match === true;
+    if (semanticOk && numericOk) return 'pass';
+    if (semanticOk || numericOk) return 'partial';
+    return 'fail';
+  })();
+  const accuracy =
+    verdict === 'pass' ? 1 : verdict === 'partial' ? 0.5 : verdict === 'fail' ? 0 : null;
+  return { verdict, accuracy };
+}
+
+/** Print the human-readable per-case grade summary (CLI output only). */
+function printSummary(result: BirdGradeResult, resultPath: string): void {
+  const s = result.signals;
+  console.log(
+    `\nGrade: Q${result.question_id} (${result.difficulty}) — ${result.verdict.toUpperCase()}`,
+  );
+  console.log(`Harness/model:  ${result.harness ?? '?'} / ${result.model ?? 'n/a'}`);
+  console.log(
+    `numeric_match:  ${s.numeric_match === null ? 'n/a' : s.numeric_match ? 'YES' : 'NO'}`,
+  );
+  console.log(
+    `semantic_match: ${s.semantic_match === null ? 'n/a' : s.semantic_match.toFixed(2)}` +
+      (result.details.llm_judge
+        ? ` — ${result.details.llm_judge.reason}`
+        : result.details.llm_judge_error
+          ? ` (${result.details.llm_judge_error})`
+          : ''),
+  );
+  console.log(
+    `columns_match:  ${s.columns_match === null ? 'n/a' : s.columns_match ? 'YES' : `NO (missing: ${result.details.missing_columns.join(', ')})`}`,
+  );
+  console.log(
+    `filters_match:  ${s.filters_match === null ? 'n/a' : s.filters_match ? 'YES' : `NO (missing: ${result.details.missing_filter_fields.join(', ')})`}`,
+  );
+  console.log(`Wall / TTFT:    ${result.wall_s ?? '?'}s / ${result.ttft_s ?? '?'}s`);
+  console.log(
+    `Cost:           ${result.cost_usd != null ? `$${result.cost_usd.toFixed(4)} (${result.cost_source})` : 'n/a'}`,
+  );
+  console.log(
+    `Tokens (total): ${result.tokens.total_tokens ?? 'n/a'} | LLM calls: ${result.llm_calls} | errors: ${result.error_count}`,
+  );
+  console.log(`Tool calls:     ${result.tool_calls} (${result.tools_used.join(', ') || 'none'})`);
+  console.log(`Result:         ${resultPath}`);
+}
+
+/**
+ * Grade a single run directory and write its bird-result.json.
+ * Exported so grade-suite.ts can call this in-process instead of shelling
+ * out to `npx tsx grade-bird.ts <run-dir>` per case.
+ */
+export async function gradeBirdCase(runDir: string): Promise<BirdGradeResult> {
+  const { runMeta, birdCase, runId, evalRunId, projectName, difficulty, questionId } =
+    loadGradingContext(runDir);
 
   const baseResult: BirdGradeResult = {
     run_id: runId,
@@ -404,7 +486,7 @@ async function main(): Promise<void> {
     console.error(`\nGrade: Q${questionId} — GRADING_ERROR (no trace)`);
     console.error(baseResult.details.trace_error);
     console.error(`Result: ${p}`);
-    return;
+    return baseResult;
   }
 
   // ── Metrics from trace ────────────────────────────────────────────────────
@@ -430,107 +512,35 @@ async function main(): Promise<void> {
   const finalMessage = summary.finalText;
   baseResult.details.final_message_preview = finalMessage.slice(0, 500);
 
-  // ── Signals 1 & 2: columns_match / filters_match ─────────────────────────
-  const queryCalls = summary.toolCalls.filter((t) => t.normalizedName === 'query-datasource');
-  if (queryCalls.length > 0) {
-    const allActualColumns = new Set<string>();
-    const allActualFilters = new Set<string>();
-    for (const call of queryCalls) {
-      const query = findVizqlQuery(call.inputs) as VizqlQuery | null;
-      for (const c of collectFieldCaptions(query?.fields)) allActualColumns.add(c);
-      for (const f of collectFilterCaptions(query?.filters)) allActualFilters.add(f);
-    }
-    baseResult.details.actual_columns = [...allActualColumns];
-    baseResult.details.actual_filter_fields = [...allActualFilters];
-    baseResult.details.missing_columns = birdCase.expected_columns.filter(
-      (c) => !allActualColumns.has(c.toLowerCase()),
-    );
-    baseResult.details.missing_filter_fields = birdCase.expected_filter_fields.filter(
-      (f) => !allActualFilters.has(f.toLowerCase()),
-    );
-    baseResult.signals.columns_match =
-      baseResult.details.missing_columns.length === 0 && birdCase.expected_columns.length > 0;
-    baseResult.signals.filters_match =
-      baseResult.details.missing_filter_fields.length === 0 &&
-      birdCase.expected_filter_fields.length > 0;
-  }
+  computeSignals(runDir, baseResult, birdCase, summary, finalMessage);
 
-  // ── Signal 3: numeric_match ───────────────────────────────────────────────
-  if (finalMessage) {
-    const numeric = checkNumericMatch(finalMessage, birdCase);
-    baseResult.signals.numeric_match = numeric.matched;
-    baseResult.details.extracted_number = numeric.extracted;
-  }
-
-  // ── Signal 4: semantic_match (judge via GRADER_HARNESS) ──────────────────
-  if (!finalMessage) {
-    baseResult.details.llm_judge_error = 'No final message found in trace outputs.';
-  } else {
-    const judge = runJudge(birdCase, finalMessage);
-    baseResult.grader_harness = judge.harness;
-    baseResult.grader_model = judge.model;
-    baseResult.details.llm_judge = judge.result;
-    baseResult.details.llm_judge_error = judge.error;
-    baseResult.signals.semantic_match = judge.result?.score ?? null;
-  }
-
-  // ── Verdict + accuracy ────────────────────────────────────────────────────
-  const s = baseResult.signals;
-  baseResult.verdict = (() => {
-    if (runMeta.agent_exit_code != null && runMeta.agent_exit_code !== 0) return 'error';
-    if (summary.hadError && s.semantic_match === null && s.numeric_match === null) return 'error';
-    if (s.semantic_match === null && s.numeric_match === null) return 'skip';
-    const semanticOk = s.semantic_match != null && s.semantic_match >= 0.8;
-    const numericOk = s.numeric_match === true;
-    if (semanticOk && numericOk) return 'pass';
-    if (semanticOk || numericOk) return 'partial';
-    return 'fail';
-  })();
-  baseResult.accuracy =
-    baseResult.verdict === 'pass'
-      ? 1
-      : baseResult.verdict === 'partial'
-        ? 0.5
-        : baseResult.verdict === 'fail'
-          ? 0
-          : null;
+  const { verdict, accuracy } = deriveVerdict(baseResult.signals, {
+    agentExitCode: runMeta.agent_exit_code,
+    hadError: summary.hadError,
+  });
+  baseResult.verdict = verdict;
+  baseResult.accuracy = accuracy;
 
   const resultPath = writeResult(baseResult);
 
-  // ── Print summary ─────────────────────────────────────────────────────────
-  console.log(`\nGrade: Q${questionId} (${difficulty}) — ${baseResult.verdict.toUpperCase()}`);
-  console.log(`Harness/model:  ${baseResult.harness ?? '?'} / ${baseResult.model ?? 'n/a'}`);
-  console.log(
-    `numeric_match:  ${s.numeric_match === null ? 'n/a' : s.numeric_match ? 'YES' : 'NO'}`,
-  );
-  console.log(
-    `semantic_match: ${s.semantic_match === null ? 'n/a' : s.semantic_match.toFixed(2)}` +
-      (baseResult.details.llm_judge
-        ? ` — ${baseResult.details.llm_judge.reason}`
-        : baseResult.details.llm_judge_error
-          ? ` (${baseResult.details.llm_judge_error})`
-          : ''),
-  );
-  console.log(
-    `columns_match:  ${s.columns_match === null ? 'n/a' : s.columns_match ? 'YES' : `NO (missing: ${baseResult.details.missing_columns.join(', ')})`}`,
-  );
-  console.log(
-    `filters_match:  ${s.filters_match === null ? 'n/a' : s.filters_match ? 'YES' : `NO (missing: ${baseResult.details.missing_filter_fields.join(', ')})`}`,
-  );
-  console.log(`Wall / TTFT:    ${baseResult.wall_s ?? '?'}s / ${baseResult.ttft_s ?? '?'}s`);
-  console.log(
-    `Cost:           ${baseResult.cost_usd != null ? `$${baseResult.cost_usd.toFixed(4)} (${baseResult.cost_source})` : 'n/a'}`,
-  );
-  console.log(
-    `Tokens (total): ${baseResult.tokens.total_tokens ?? 'n/a'} | LLM calls: ${baseResult.llm_calls} | errors: ${baseResult.error_count}`,
-  );
-  console.log(
-    `Tool calls:     ${baseResult.tool_calls} (${baseResult.tools_used.join(', ') || 'none'})`,
-  );
-  console.log(`Result:         ${resultPath}`);
+  printSummary(baseResult, resultPath);
+
+  return baseResult;
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+async function main(): Promise<void> {
+  const runDirArg = process.argv[2];
+  if (!runDirArg) {
+    console.error('Usage: npx tsx evals/grade-bird.ts <run-dir>');
+    process.exit(1);
+  }
+  await gradeBirdCase(path.resolve(runDirArg));
+}
+
+const isMainModule = path.resolve(process.argv[1] ?? '') === path.resolve(new URL(import.meta.url).pathname);
+if (isMainModule) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
+}

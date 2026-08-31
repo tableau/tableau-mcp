@@ -28,6 +28,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { AgentInvocation, getAdapter, resolveHarness, RunContext } from './adapters/index.js';
+import { captureExecError } from './lib/execError.js';
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 dotenv.config({ path: path.join(REPO_ROOT, '.env') });
@@ -162,18 +163,11 @@ try {
     maxBuffer: 25 * 1024 * 1024,
   }).toString();
 } catch (error: unknown) {
-  const e = error as {
-    status?: number;
-    stdout?: Buffer;
-    stderr?: Buffer;
-    message?: string;
-    killed?: boolean;
-    signal?: string | null;
-  };
-  exitCode = e.status ?? 1;
-  stdout = e.stdout?.toString() ?? '';
-  errorMessage = [e.message, e.stderr?.toString()].filter(Boolean).join('\n');
-  timedOut = e.killed === true || e.signal === 'SIGTERM';
+  const e = captureExecError(error);
+  exitCode = e.exitCode ?? 1;
+  stdout = e.stdout ?? '';
+  errorMessage = [e.message, e.stderr].filter(Boolean).join('\n');
+  timedOut = e.timedOut;
   console.error(`${invocation.command} exited with code ${exitCode}`);
   if (errorMessage) console.error(errorMessage);
 }

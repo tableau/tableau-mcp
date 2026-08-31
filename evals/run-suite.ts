@@ -27,6 +27,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { getAdapter, resolveHarness } from './adapters/index.js';
+import { captureExecError } from './lib/execError.js';
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 dotenv.config({ path: path.join(REPO_ROOT, '.env') });
@@ -236,8 +237,8 @@ function main(): void {
         stdio: 'pipe',
       });
     } catch (error: unknown) {
-      const e = error as { message?: string };
-      spawnError = e.message ?? 'unknown spawn error';
+      const e = captureExecError(error);
+      spawnError = e.message || 'unknown spawn error';
     }
     process.stdout.write(' done\n');
 

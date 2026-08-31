@@ -18,10 +18,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { extractFinalTextFromStreamJson } from './streamJson.js';
 import {
   AgentAdapter,
   AgentInvocation,
   buildEvalMetadata,
+  buildStandardMcpConfig,
   HeadlessContext,
   RunContext,
 } from './types.js';
@@ -60,20 +62,7 @@ export const cursorAdapter: AgentAdapter = {
     const logsDir = path.join(ctx.runDir, 'logs');
     fs.mkdirSync(cursorDir, { recursive: true });
     fs.mkdirSync(logsDir, { recursive: true });
-    const mcpConfig = {
-      mcpServers: {
-        tableau: {
-          command: 'node',
-          args: [ctx.mcpServerEntry],
-          env: {
-            ...ctx.mcpServerEnv,
-            TRANSPORT: 'stdio',
-            FILE_LOGGER_DIRECTORY: logsDir,
-            ENABLED_LOGGERS: 'fileLogger',
-          },
-        },
-      },
-    };
+    const mcpConfig = buildStandardMcpConfig(ctx);
     fs.writeFileSync(path.join(cursorDir, 'mcp.json'), JSON.stringify(mcpConfig, null, 2));
   },
 
@@ -127,42 +116,6 @@ export const cursorAdapter: AgentAdapter = {
   },
 
   extractFinalText(stdout: string): string {
-    const trimmed = stdout.trim();
-    // `--output-format json` → single object; try direct parse first.
-    try {
-      const obj = JSON.parse(trimmed) as {
-        result?: string;
-        text?: string;
-        message?: { content?: Array<{ type?: string; text?: string }> | string };
-      };
-      if (typeof obj.result === 'string') return obj.result;
-      if (typeof obj.text === 'string') return obj.text;
-    } catch {
-      // Fall through to JSONL scan.
-    }
-    const lines = trimmed.split('\n').filter((l) => l.trim());
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try {
-        const ev = JSON.parse(lines[i]) as {
-          type?: string;
-          result?: string;
-          message?: { content?: Array<{ type?: string; text?: string }> | string };
-        };
-        if (ev.type === 'result' && typeof ev.result === 'string') return ev.result;
-        const content = ev.message?.content;
-        if (Array.isArray(content)) {
-          const text = content
-            .filter((b) => b.type === 'text' && b.text)
-            .map((b) => b.text)
-            .join('\n');
-          if (text) return text;
-        } else if (typeof content === 'string' && content.trim()) {
-          return content;
-        }
-      } catch {
-        continue;
-      }
-    }
-    return trimmed;
+    return extractFinalTextFromStreamJson(stdout);
   },
 };
