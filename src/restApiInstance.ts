@@ -17,6 +17,8 @@ import {
 import { buildAuthConfig } from './sdks/tableau/buildAuthConfig.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
+import { getTelemetryProvider } from './telemetry/init.js';
+import type { SpanHandle } from './telemetry/telemetryProvider.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
@@ -210,11 +212,24 @@ export const useRestApi = async <T>(
   }
 };
 
+const activeRestApiSpans = new WeakMap<object, SpanHandle>();
+
 export const getRequestInterceptor =
   (server: Server, requestId: RequestId): RequestInterceptor =>
   (request) => {
     request.headers['User-Agent'] = server.userAgent;
     logRequest(server, request, requestId);
+
+    if (request.rawConfig) {
+      const span = getTelemetryProvider().startSpan?.('tableau.rest_api.request', {
+        method: request.method,
+        url: request.url,
+      });
+      if (span) {
+        activeRestApiSpans.set(request.rawConfig, span);
+      }
+    }
+
     return request;
   };
 
@@ -225,6 +240,10 @@ export const getRequestErrorInterceptor =
     ctx?: { getSiteLuid?: () => string; getUserLuid?: () => string },
   ): ErrorInterceptor =>
   (error, baseUrl) => {
+    if (isAxiosError(error) && error.config) {
+      activeRestApiSpans.get(error.config)?.end(error);
+    }
+
     if (!isAxiosError(error) || !error.request) {
       log(
         {
@@ -261,6 +280,11 @@ export const getResponseInterceptor =
   (server: Server, requestId: RequestId): ResponseInterceptor =>
   (response) => {
     logResponse(server, response, requestId);
+
+    if (response.rawConfig) {
+      activeRestApiSpans.get(response.rawConfig)?.end();
+    }
+
     return response;
   };
 
@@ -271,6 +295,10 @@ export const getResponseErrorInterceptor =
     ctx?: { getSiteLuid?: () => string; getUserLuid?: () => string },
   ): ErrorInterceptor =>
   (error, baseUrl) => {
+    if (isAxiosError(error) && error.config) {
+      activeRestApiSpans.get(error.config)?.end(error);
+    }
+
     if (!isAxiosError(error) || !error.response) {
       log(
         {

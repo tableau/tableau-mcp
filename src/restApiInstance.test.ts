@@ -12,6 +12,7 @@ import {
 } from './restApiInstance.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { WebMcpServer } from './server.web.js';
+import { getTelemetryProvider } from './telemetry/init.js';
 
 vi.mock('./logging/logger.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./logging/logger.js')>();
@@ -24,6 +25,10 @@ vi.mock('./logging/notification.js', () => ({
     error: vi.fn(),
   },
   shouldNotifyWhenLevelIsAtLeast: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock('./telemetry/init.js', () => ({
+  getTelemetryProvider: vi.fn(),
 }));
 
 describe('restApiInstance', () => {
@@ -312,6 +317,7 @@ describe('restApiInstance', () => {
           requestId: mockRequestId,
         }),
       );
+      expect(getTelemetryProvider).not.toHaveBeenCalled();
     });
   });
 
@@ -344,6 +350,7 @@ describe('restApiInstance', () => {
           requestId: mockRequestId,
         }),
       );
+      expect(getTelemetryProvider).not.toHaveBeenCalled();
     });
   });
 
@@ -562,6 +569,148 @@ describe('restApiInstance', () => {
         },
         ctx,
       );
+    });
+  });
+
+  describe('Span tracing', () => {
+    it('starts a span on request and ends it on response using the shared rawConfig identity', () => {
+      const mockSpan = { end: vi.fn() };
+      const mockProvider = {
+        initialize: vi.fn(),
+        recordMetric: vi.fn(),
+        recordHistogram: vi.fn(),
+        startSpan: vi.fn().mockReturnValue(mockSpan),
+      };
+      vi.mocked(getTelemetryProvider).mockReturnValue(mockProvider);
+
+      const server = new WebMcpServer();
+      const rawConfig = { method: 'GET', url: '/api/test', headers: {} };
+
+      const requestInterceptor = getRequestInterceptor(server, mockRequestId);
+      requestInterceptor({
+        headers: {} as Record<string, string>,
+        method: 'GET',
+        url: '/api/test',
+        baseUrl: mockHost,
+        rawConfig,
+      });
+
+      expect(mockProvider.startSpan).toHaveBeenCalledWith('tableau.rest_api.request', {
+        method: 'GET',
+        url: '/api/test',
+      });
+      expect(mockSpan.end).not.toHaveBeenCalled();
+
+      const responseInterceptor = getResponseInterceptor(server, mockRequestId);
+      responseInterceptor({
+        status: 200,
+        url: '/api/test',
+        baseUrl: mockHost,
+        params: {},
+        headers: {},
+        data: {},
+        rawConfig,
+      });
+
+      expect(mockSpan.end).toHaveBeenCalledWith();
+    });
+
+    it('does not throw when the provider has no startSpan (feature-detection fallback)', () => {
+      vi.mocked(getTelemetryProvider).mockReturnValue({
+        initialize: vi.fn(),
+        recordMetric: vi.fn(),
+        recordHistogram: vi.fn(),
+      });
+
+      const server = new WebMcpServer();
+      const rawConfig = { method: 'GET', url: '/api/test', headers: {} };
+
+      const requestInterceptor = getRequestInterceptor(server, mockRequestId);
+      expect(() =>
+        requestInterceptor({
+          headers: {} as Record<string, string>,
+          method: 'GET',
+          url: '/api/test',
+          baseUrl: mockHost,
+          rawConfig,
+        }),
+      ).not.toThrow();
+    });
+
+    it('ends the span with the error via error.config on a request error', () => {
+      const mockSpan = { end: vi.fn() };
+      const mockProvider = {
+        initialize: vi.fn(),
+        recordMetric: vi.fn(),
+        recordHistogram: vi.fn(),
+        startSpan: vi.fn().mockReturnValue(mockSpan),
+      };
+      vi.mocked(getTelemetryProvider).mockReturnValue(mockProvider);
+
+      const server = new WebMcpServer();
+      const rawConfig = { method: 'GET', url: '/api/test', headers: {} };
+
+      getRequestInterceptor(server, mockRequestId)({
+        headers: {} as Record<string, string>,
+        method: 'GET',
+        url: '/api/test',
+        baseUrl: mockHost,
+        rawConfig,
+      });
+
+      const mockError = {
+        isAxiosError: true,
+        config: rawConfig,
+        request: {
+          method: 'GET',
+          url: '/api/test',
+          baseUrl: mockHost,
+          headers: {},
+        },
+      };
+
+      getRequestErrorInterceptor(server, mockRequestId)(mockError, mockHost);
+
+      expect(mockSpan.end).toHaveBeenCalledWith(mockError);
+    });
+
+    it('ends the span with the error via error.config on a response error', () => {
+      const mockSpan = { end: vi.fn() };
+      const mockProvider = {
+        initialize: vi.fn(),
+        recordMetric: vi.fn(),
+        recordHistogram: vi.fn(),
+        startSpan: vi.fn().mockReturnValue(mockSpan),
+      };
+      vi.mocked(getTelemetryProvider).mockReturnValue(mockProvider);
+
+      const server = new WebMcpServer();
+      const rawConfig = { method: 'GET', url: '/api/test', headers: {} };
+
+      getRequestInterceptor(server, mockRequestId)({
+        headers: {} as Record<string, string>,
+        method: 'GET',
+        url: '/api/test',
+        baseUrl: mockHost,
+        rawConfig,
+      });
+
+      const mockError = {
+        isAxiosError: true,
+        config: rawConfig,
+        response: {
+          status: 500,
+          url: '/api/test',
+          baseUrl: mockHost,
+          headers: {},
+          data: {},
+          config: rawConfig,
+        },
+      };
+
+      getResponseErrorInterceptor(server, mockRequestId)(mockError, mockHost);
+
+      expect(mockSpan.end).toHaveBeenCalledWith(mockError);
     });
   });
 });
