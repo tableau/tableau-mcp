@@ -135,7 +135,9 @@ request interceptor and ending it in the matching response/error interceptor. Co
 invocations via a module-level `WeakMap<AxiosRequestConfig, SpanHandle>` keyed on the request
 config object — axios preserves that same object reference through to `response.config` and
 `error.config`, since the existing interceptors mutate and return the same object rather than
-returning a new one.
+returning a new one. No explicit cleanup call is needed: a `WeakMap` entry is garbage-collection-
+eligible as soon as nothing else references the config object, so a response that never arrives
+can't leak a `SpanHandle` — this is the reason to use `WeakMap` here instead of `Map`.
 
 This single boundary also covers, for free, every API that shares the same `RestApi`/Zodios
 interceptor registration:
