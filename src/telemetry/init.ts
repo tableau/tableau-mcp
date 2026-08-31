@@ -9,29 +9,24 @@ import { log } from '../logging/logger.js';
 import { NoOpTelemetryProvider } from './noop.js';
 import type { TelemetryProvider } from './telemetryProvider.js';
 
-/**
- * Get all instance methods from a class prototype
- */
-function getInstanceMethods(cls: new (...args: unknown[]) => unknown): string[] {
-  return Object.getOwnPropertyNames(cls.prototype).filter(
-    (name) => name !== 'constructor' && typeof cls.prototype[name] === 'function',
-  );
-}
-
 function isRecord(obj: unknown): obj is Record<string, unknown> {
   return typeof obj === 'object' && obj !== null && !Array.isArray(obj);
 }
 
 /**
- * Validate that a provider implements all required TelemetryProvider methods
+ * Validate that a provider implements all required TelemetryProvider methods.
+ *
+ * The required-methods list is a fixed, explicit list rather than derived from
+ * NoOpTelemetryProvider's prototype, so adding an optional method (e.g. startSpan)
+ * to NoOpTelemetryProvider never silently makes that method required for existing
+ * external custom providers.
  */
-function validateTelemetryProvider(provider: unknown): asserts provider is TelemetryProvider {
+export function validateTelemetryProvider(provider: unknown): asserts provider is TelemetryProvider {
   if (!isRecord(provider)) {
     throw new Error('Provider must be an object');
   }
 
-  const requiredMethods = getInstanceMethods(NoOpTelemetryProvider);
-  // Keep only methods that provider doesn't have (i.e., missing or miscategorized methods)
+  const requiredMethods = ['initialize', 'recordMetric', 'recordHistogram'] as const;
   const missingMethods = requiredMethods.filter((method) => typeof provider[method] !== 'function');
 
   if (missingMethods.length > 0) {

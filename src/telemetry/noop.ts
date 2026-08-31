@@ -6,7 +6,7 @@
  * when telemetry is not needed.
  */
 
-import type { TelemetryAttributes, TelemetryProvider } from './telemetryProvider.js';
+import type { SpanHandle, TelemetryAttributes, TelemetryProvider } from './telemetryProvider.js';
 
 export class NoOpTelemetryProvider implements TelemetryProvider {
   initialize(): void {
@@ -19,5 +19,9 @@ export class NoOpTelemetryProvider implements TelemetryProvider {
 
   recordHistogram(_name: string, _value: number, _attributes: TelemetryAttributes): void {
     // No-op
+  }
+
+  startSpan(): SpanHandle {
+    return { end: () => {} };
   }
 }
