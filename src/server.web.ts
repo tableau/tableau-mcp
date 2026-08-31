@@ -170,6 +170,8 @@ export class WebMcpServer extends Server {
 
       if (mcpAppsEnabled && tool.app && supportsMcpApps && !isKnownIncompatibleClient) {
         await this._registerAppTool(tool, toolCallback);
+      } else if (tool.app?.hideWhenUnsupported) {
+        continue;
       } else {
         await this._registerTool(tool, toolCallback);
       }

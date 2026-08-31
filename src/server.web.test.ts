@@ -74,7 +74,7 @@ describe('server', () => {
     return server;
   }
 
-  function createMockAppTool(): WebTool<any> {
+  function createMockAppTool(opts?: { hideWhenUnsupported?: boolean }): WebTool<any> {
     return {
       name: 'mock-app-tool' as WebToolName,
       server: {} as any,
@@ -97,6 +97,7 @@ describe('server', () => {
         name: 'test-app',
         resourceUri: 'tableau://app/test',
         htmlPath: '<html><body>Test App UI</body></html>',
+        ...(opts?.hideWhenUnsupported ? { hideWhenUnsupported: true } : {}),
       },
     };
   }
@@ -529,5 +530,71 @@ describe('server', () => {
       expect.any(Function),
     );
     expect(mocks.mockRegisterAppResource).toHaveBeenCalled();
+  });
+
+  it('should not register a hideWhenUnsupported app tool at all when the client lacks MCP-Apps support', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // Flag on, but no UI capability advertised. A hideWhenUnsupported tool skips the plain-tool
+    // fallback entirely, so it must be absent from registration (neither app nor plain).
+    const server = getServer();
+    const mockAppTool = createMockAppTool({ hideWhenUnsupported: true });
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should not register a hideWhenUnsupported app tool for the known-incompatible client (claude.ai)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // UI-capable but claude.ai → app path is blocked; hideWhenUnsupported means no plain fallback either.
+    const server = getServer({
+      capabilities: uiCapableClientCapabilities,
+      clientId: 'https://claude.ai/some/cimd',
+    });
+    const mockAppTool = createMockAppTool({ hideWhenUnsupported: true });
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should still register a hideWhenUnsupported app tool as an app tool when the client supports MCP Apps', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // hideWhenUnsupported only changes the fallback; the happy path still registers it as an app tool.
+    const server = getServer({ capabilities: uiCapableClientCapabilities });
+    const mockAppTool = createMockAppTool({ hideWhenUnsupported: true });
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
+      server.mcpServer,
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppResource).toHaveBeenCalled();
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });
