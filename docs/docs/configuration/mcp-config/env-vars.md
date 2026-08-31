@@ -497,7 +497,7 @@ TTL (in minutes) for caches used by admin-only tools. Affects:
 
 - Admin role lookups (`assertAdmin`)
 - Admin Insights dataset LUID resolution
-- Project ID → name resolution used by `get-stale-content-report`
+- Project ID → name resolution used by `query-admin-insights` (`kind: "stale-content"`)
 
 - Default: `5`
 - Minimum: `1`
