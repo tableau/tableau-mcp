@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
-import { LineageContent } from '../types/lineageContent.js';
+import { LineageContent, PublishedParent } from '../types/lineageContent.js';
 import { View } from '../types/view.js';
 import { Workbook, WorkbookConnection } from '../types/workbook.js';
 
-export type { LineageContent };
+export type { LineageContent, PublishedParent };
 
 // Lenient wire-parse schema for Metadata-API GraphQL responses: luid is absent for embedded
 // datasources and name can be null, so both are optional here. normalizeLineageContents drops
@@ -14,6 +14,21 @@ const metadataLineageContentSchema = z.object({
   name: z.string().nullable().optional(),
 });
 
+// Metadata-API embedded datasource: name is the only join key shared with the REST /connections
+// LUID (the Metadata EmbeddedDatasource.id is an unqueryable hash). parentPublishedDatasources is
+// the authoritative published-parent linkage.
+const metadataEmbeddedDatasourceSchema = z.object({
+  name: z.string().nullable().optional(),
+  parentPublishedDatasources: z
+    .array(
+      z.object({
+        luid: z.string().nullable().optional(),
+        name: z.string().nullable().optional(),
+      }),
+    )
+    .nullish(),
+});
+
 const workbookLineageResponseSchema = z.object({
   data: z.object({
     workbooksConnection: z.object({
@@ -21,6 +36,7 @@ const workbookLineageResponseSchema = z.object({
         z.object({
           luid: z.string(),
           upstreamDatasources: z.array(metadataLineageContentSchema).nullish(),
+          embeddedDatasources: z.array(metadataEmbeddedDatasourceSchema).nullish(),
         }),
       ),
     }),
@@ -96,6 +112,13 @@ export function getWorkbookLineageQuery(workbookLuids: Array<string>): string {
             luid
             name
           }
+          embeddedDatasources {
+            name
+            parentPublishedDatasources {
+              luid
+              name
+            }
+          }
         }
       }
     }
@@ -151,6 +174,52 @@ export function getWorkbookLineageByLuid(response: unknown): Map<string, Array<L
       normalizeLineageContents(node.upstreamDatasources),
     ]),
   );
+}
+
+// Authoritative embedded-datasource -> published-parent map, keyed by embedded datasource name (the
+// join key we can correlate against the REST /connections LUID). Names with anything other than
+// exactly one identifiable parent are omitted: a duplicated embedded name makes the name->LUID join
+// ambiguous, and multiple/zero parentPublishedDatasources cannot be represented as one publishedParent.
+// Omitting is deliberate (R5) — an embedded entry with no authoritative parent is emitted standalone.
+export function getWorkbookEmbeddedParentsByLuid(
+  response: unknown,
+): Map<string, Map<string, PublishedParent>> {
+  const parsed = workbookLineageResponseSchema.parse(response);
+  return new Map(
+    parsed.data.workbooksConnection.nodes.map((node) => [
+      node.luid,
+      buildEmbeddedParentMap(node.embeddedDatasources),
+    ]),
+  );
+}
+
+function buildEmbeddedParentMap(
+  embeddedDatasources: Array<z.infer<typeof metadataEmbeddedDatasourceSchema>> | null | undefined,
+): Map<string, PublishedParent> {
+  const parents = new Map<string, PublishedParent>();
+  const seenNames = new Set<string>();
+
+  for (const { name, parentPublishedDatasources } of embeddedDatasources ?? []) {
+    if (!name) {
+      continue;
+    }
+    if (seenNames.has(name)) {
+      // Duplicate embedded name -> the name->LUID join is ambiguous. Drop it entirely.
+      parents.delete(name);
+      continue;
+    }
+    seenNames.add(name);
+
+    const validParents = (parentPublishedDatasources ?? []).filter(
+      (parent): parent is { luid: string; name?: string | null } => !!parent.luid,
+    );
+    if (validParents.length === 1) {
+      const parent = validParents[0];
+      parents.set(name, { luid: parent.luid, name: parent.name ?? parent.luid });
+    }
+  }
+
+  return parents;
 }
 
 export function getViewLineageByLuid(response: unknown): Map<string, ViewLineage> {
@@ -333,20 +402,34 @@ function toGraphqlStringArray(values: Array<string>): string {
 
 // datasource.id is the VDS-queryable embedded LUID. Multi-connection datasources repeat it
 // across rows, so dedupe by luid. name is optional on the wire; fall back to the luid.
+// When parentByName is supplied (authoritative Metadata linkage keyed by embedded name), attach a
+// publishedParent pointer — but only when the name maps to a single embedded LUID here, since the
+// name is the join key and a duplicated name would attach the parent to the wrong LUID (R5).
 export function toEmbeddedLineageContents(
   connections: Array<WorkbookConnection>,
+  parentByName?: Map<string, PublishedParent>,
 ): Array<LineageContent> {
   const byLuid = new Map<string, LineageContent>();
+  const nameCounts = new Map<string, number>();
   for (const { datasource } of connections) {
     if (datasource && !byLuid.has(datasource.id)) {
-      byLuid.set(datasource.id, {
-        luid: datasource.id,
-        name: datasource.name ?? datasource.id,
-        datasourceType: 'embedded',
-      });
+      const name = datasource.name ?? datasource.id;
+      byLuid.set(datasource.id, { luid: datasource.id, name, datasourceType: 'embedded' });
+      nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
     }
   }
-  return [...byLuid.values()];
+
+  if (!parentByName?.size) {
+    return [...byLuid.values()];
+  }
+
+  return [...byLuid.values()].map((entry) => {
+    if ((nameCounts.get(entry.name) ?? 0) > 1) {
+      return entry; // ambiguous name->LUID join; emit standalone.
+    }
+    const publishedParent = parentByName.get(entry.name);
+    return publishedParent ? { ...entry, publishedParent } : entry;
+  });
 }
 
 function normalizeLineageContents(

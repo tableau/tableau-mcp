@@ -2,6 +2,7 @@ import {
   getSearchContentLineageQuery,
   getViewLineageByLuid,
   getViewLineageQuery,
+  getWorkbookEmbeddedParentsByLuid,
   getWorkbookLineageByLuid,
   mergeViewLineage,
   mergeWorkbookLineage,
@@ -21,6 +22,115 @@ describe('lineageUtils', () => {
       { luid: 'emb-1', name: 'Embedded DS', datasourceType: 'embedded' },
       { luid: 'emb-2', name: 'emb-2', datasourceType: 'embedded' },
     ]);
+  });
+
+  it('attaches a publishedParent pointer to embedded entries by name', () => {
+    const result = toEmbeddedLineageContents(
+      [
+        { id: 'conn-1', datasource: { id: 'emb-1', name: 'Embedded DS' } },
+        { id: 'conn-2', datasource: { id: 'emb-2', name: 'Orphan DS' } },
+      ],
+      new Map([['Embedded DS', { luid: 'pub-1', name: 'Parent DS' }]]),
+    );
+
+    expect(result).toEqual([
+      {
+        luid: 'emb-1',
+        name: 'Embedded DS',
+        datasourceType: 'embedded',
+        publishedParent: { luid: 'pub-1', name: 'Parent DS' },
+      },
+      { luid: 'emb-2', name: 'Orphan DS', datasourceType: 'embedded' },
+    ]);
+  });
+
+  it('omits the publishedParent pointer when the embedded name is ambiguous across LUIDs', () => {
+    const result = toEmbeddedLineageContents(
+      [
+        { id: 'conn-1', datasource: { id: 'emb-1', name: 'Dup DS' } },
+        { id: 'conn-2', datasource: { id: 'emb-2', name: 'Dup DS' } },
+      ],
+      new Map([['Dup DS', { luid: 'pub-1', name: 'Parent DS' }]]),
+    );
+
+    expect(result).toEqual([
+      { luid: 'emb-1', name: 'Dup DS', datasourceType: 'embedded' },
+      { luid: 'emb-2', name: 'Dup DS', datasourceType: 'embedded' },
+    ]);
+  });
+
+  it('builds an authoritative embedded->published-parent map keyed by embedded name', () => {
+    const parentsByLuid = getWorkbookEmbeddedParentsByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              embeddedDatasources: [
+                {
+                  name: 'Has Parent',
+                  parentPublishedDatasources: [{ luid: 'pub-1', name: 'Parent DS' }],
+                },
+                { name: 'No Parent', parentPublishedDatasources: [] },
+                {
+                  name: 'Multi Parent',
+                  parentPublishedDatasources: [
+                    { luid: 'pub-2', name: 'A' },
+                    { luid: 'pub-3', name: 'B' },
+                  ],
+                },
+                { name: 'Missing Luid', parentPublishedDatasources: [{ name: 'No Luid' }] },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(parentsByLuid.get('workbook-1')).toEqual(
+      new Map([['Has Parent', { luid: 'pub-1', name: 'Parent DS' }]]),
+    );
+  });
+
+  it('drops a published parent when the same embedded name appears more than once', () => {
+    const parentsByLuid = getWorkbookEmbeddedParentsByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              embeddedDatasources: [
+                { name: 'Dup', parentPublishedDatasources: [{ luid: 'pub-1', name: 'A' }] },
+                { name: 'Dup', parentPublishedDatasources: [{ luid: 'pub-2', name: 'B' }] },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(parentsByLuid.get('workbook-1')?.size).toBe(0);
+  });
+
+  it('falls back to the parent luid when the parent name is missing', () => {
+    const parentsByLuid = getWorkbookEmbeddedParentsByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              embeddedDatasources: [
+                { name: 'Named', parentPublishedDatasources: [{ luid: 'pub-1' }] },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(parentsByLuid.get('workbook-1')).toEqual(
+      new Map([['Named', { luid: 'pub-1', name: 'pub-1' }]]),
+    );
   });
 
   it('parses and merges upstream workbook lineage', () => {

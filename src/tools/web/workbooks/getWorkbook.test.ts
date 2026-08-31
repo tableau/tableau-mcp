@@ -181,6 +181,55 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
+    it('attaches a publishedParent pointer from authoritative metadata linkage', async () => {
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                upstreamDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                embeddedDatasources: [
+                  {
+                    name: 'Embedded DS',
+                    parentPublishedDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        { luid: 'pub-luid-1', name: 'Published DS', datasourceType: 'published' },
+        {
+          luid: 'emb-luid-1',
+          name: 'Embedded DS',
+          datasourceType: 'embedded',
+          publishedParent: { luid: 'pub-luid-1', name: 'Published DS' },
+        },
+      ]);
+    });
+
+    it('does not attach a publishedParent when the Metadata API is disabled', async () => {
+      vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'emb-luid-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
+    });
+
     it('falls back to the luid when a connection datasource has no name', async () => {
       mocks.mockQueryWorkbookConnections.mockResolvedValue([
         { id: 'conn-1', datasource: { id: 'emb-luid-1' } },
