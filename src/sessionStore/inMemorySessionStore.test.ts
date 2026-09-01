@@ -75,4 +75,39 @@ describe('InMemorySessionStore', () => {
     await expect(store.get('b')).resolves.toBe(2);
     await expect(store.get('c')).resolves.toBe(3);
   });
+
+  it('survives a ttl beyond the 32-bit setTimeout cap by re-arming in chunks', async () => {
+    const store = new InMemorySessionStore<string>();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000; // exceeds 2**31 - 1 (~24.86 days)
+    await store.set('key', 'value', thirtyDaysMs);
+
+    // Past the first chunk boundary but still well short of the full ttl: must not have expired.
+    await vi.advanceTimersByTimeAsync(25 * 24 * 60 * 60 * 1000);
+    await expect(store.get('key')).resolves.toBe('value');
+
+    // Past the full logical ttl: must now be gone.
+    await vi.advanceTimersByTimeAsync(6 * 24 * 60 * 60 * 1000);
+    await expect(store.get('key')).resolves.toBeUndefined();
+  });
+
+  it('does not resurrect a key deleted before its chunk boundary re-arm fires', async () => {
+    const store = new InMemorySessionStore<string>();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    await store.set('key', 'value', thirtyDaysMs);
+    await store.delete('key');
+
+    // Advance past where the pending chunk re-arm would have fired had it not been cancelled.
+    await vi.advanceTimersByTimeAsync(26 * 24 * 60 * 60 * 1000);
+    await expect(store.get('key')).resolves.toBeUndefined();
+  });
+
+  it('does not resurrect a key consumed before its chunk boundary re-arm fires', async () => {
+    const store = new InMemorySessionStore<string>();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    await store.set('key', 'value', thirtyDaysMs);
+    await expect(store.consume('key')).resolves.toBe('value');
+
+    await vi.advanceTimersByTimeAsync(26 * 24 * 60 * 60 * 1000);
+    await expect(store.get('key')).resolves.toBeUndefined();
+  });
 });
