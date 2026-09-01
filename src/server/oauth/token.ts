@@ -8,8 +8,8 @@ import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
+import { SessionStore } from '../../sessionStore/sessionStore.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
-import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { mcpTokenSchema } from './schemas.js';
 import { formatScopes, getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
@@ -26,10 +26,10 @@ export const AUDIENCE = 'tableau-mcp-server';
  */
 export function token(
   app: express.Application,
-  authorizationCodes: Map<string, AuthorizationCode>,
-  refreshTokens: Map<string, RefreshTokenData>,
+  authorizationCodes: SessionStore<AuthorizationCode>,
+  refreshTokens: SessionStore<RefreshTokenData>,
   publicKey: KeyObject,
-  refreshTokenIndex: Map<string, string>,
+  refreshTokenIndex: SessionStore<string>,
 ): void {
   const config = getConfig();
 
@@ -69,9 +69,8 @@ export function token(
         case 'authorization_code': {
           // Handle authorization code exchange
           const { code, codeVerifier } = result.data;
-          const authCode = authorizationCodes.get(code);
+          const authCode = await authorizationCodes.consume(code);
           if (!authCode || authCode.expiresAt < Math.floor(Date.now() / 1000)) {
-            authorizationCodes.delete(code);
             res.status(400).json({
               error: 'invalid_grant',
               error_description: 'Invalid or expired authorization code',
@@ -112,24 +111,25 @@ export function token(
           // Generate tokens
           const refreshTokenId = randomBytes(32).toString('hex');
           const accessToken = await createAccessToken(authCode, publicKey);
-          refreshTokens.set(refreshTokenId, {
-            user: authCode.user,
-            server: authCode.server,
-            clientId: authCode.clientId,
-            tokens: authCode.tokens,
-            scopes: authCode.scopes,
-            siteContentUrl: authCode.siteContentUrl,
-            expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
-            tableauClientId: authCode.tableauClientId,
-          });
-          refreshTokenIndex.set(authCode.tokens.accessToken, refreshTokenId);
-
-          setLongTimeout(
-            () => refreshTokens.delete(refreshTokenId),
+          await refreshTokens.set(
+            refreshTokenId,
+            {
+              user: authCode.user,
+              server: authCode.server,
+              clientId: authCode.clientId,
+              tokens: authCode.tokens,
+              scopes: authCode.scopes,
+              siteContentUrl: authCode.siteContentUrl,
+              expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
+              tableauClientId: authCode.tableauClientId,
+            },
             config.oauth.refreshTokenTimeoutMs,
           );
-
-          authorizationCodes.delete(code);
+          await refreshTokenIndex.set(
+            authCode.tokens.accessToken,
+            refreshTokenId,
+            config.oauth.refreshTokenTimeoutMs,
+          );
 
           res.json({
             access_token: accessToken,
@@ -186,11 +186,11 @@ export function token(
         case 'refresh_token': {
           // Handle refresh token
           const { refreshToken } = result.data;
-          const tokenData = refreshTokens.get(refreshToken);
+          const tokenData = await refreshTokens.get(refreshToken);
           if (!tokenData || tokenData.expiresAt < Math.floor(Date.now() / 1000)) {
             // Refresh token is expired
-            if (tokenData) refreshTokenIndex.delete(tokenData.tokens.accessToken);
-            refreshTokens.delete(refreshToken);
+            if (tokenData) await refreshTokenIndex.delete(tokenData.tokens.accessToken);
+            await refreshTokens.delete(refreshToken);
             res.status(400).json({
               error: 'invalid_grant',
               error_description: 'Invalid or expired refresh token',
@@ -254,21 +254,29 @@ export function token(
           }
 
           // Rotate the refresh token and extend its expiration time
-          refreshTokenIndex.delete(tokenData.tokens.accessToken);
-          refreshTokens.delete(refreshToken);
           const refreshTokenId = randomBytes(32).toString('hex');
 
-          refreshTokens.set(refreshTokenId, {
-            user: tokenData.user,
-            server: tokenData.server,
-            clientId: tokenData.clientId,
-            tokens: tokensToStore,
-            scopes: tokenData.scopes,
-            siteContentUrl: tokenData.siteContentUrl,
-            expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
-            tableauClientId: tokenData.tableauClientId,
-          });
-          refreshTokenIndex.set(tokensToStore.accessToken, refreshTokenId);
+          await refreshTokens.rotate!(
+            refreshToken,
+            refreshTokenId,
+            {
+              user: tokenData.user,
+              server: tokenData.server,
+              clientId: tokenData.clientId,
+              tokens: tokensToStore,
+              scopes: tokenData.scopes,
+              siteContentUrl: tokenData.siteContentUrl,
+              expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
+              tableauClientId: tokenData.tableauClientId,
+            },
+            config.oauth.refreshTokenTimeoutMs,
+          );
+          await refreshTokenIndex.rotate!(
+            tokenData.tokens.accessToken,
+            tokensToStore.accessToken,
+            refreshTokenId,
+            config.oauth.refreshTokenTimeoutMs,
+          );
 
           res.json({
             access_token: accessToken,
