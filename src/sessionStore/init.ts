@@ -59,9 +59,7 @@ function validateSessionStore(provider: unknown): asserts provider is SessionSto
  * The `memory` marker means "construct a fresh InMemorySessionStore per namespace on demand";
  * `custom` holds the single shared provider that every namespace prefixes into.
  */
-type SessionStoreState =
-  | { kind: 'memory' }
-  | { kind: 'custom'; store: SessionStore<unknown> };
+type SessionStoreState = { kind: 'memory' } | { kind: 'custom'; store: SessionStore<unknown> };
 
 // Module singleton
 let state: SessionStoreState | null = null;
