@@ -220,7 +220,7 @@ const NON_TOOL_VOCABULARY = [
   'unexpected-error',
   'unresolved-column-ref',
   'unresolved-field-mapping',
-  'unsupported-version',  
+  'unsupported-version',
   'url-action-target',
   'url-action-type',
   'url-escape',
