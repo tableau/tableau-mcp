@@ -582,6 +582,67 @@ describe('verifyRoundStackedBarSeedEvidence', () => {
     expect(filterResult.findings.map((finding) => finding.code)).toContain('filter');
   });
 
+  it('resolves the underlying filter by its source column when the caption differs', () => {
+    const technicalFilterContract: RoundStackedBarSemanticContract = {
+      ...contract,
+      filter: {
+        ...contract.filter!,
+        caption: 'Sales Territory',
+        column: '[Region Code]',
+      },
+    };
+    const underlying = rawData();
+    underlying.columns = underlying.columns.map((column) =>
+      (column as { name: string }).name === 'Region' ? { name: 'Region Code' } : column,
+    );
+
+    expect(
+      verifyRoundStackedBarSeedEvidence(underlying, captureBaseline(), technicalFilterContract),
+    ).toEqual({ ok: true, findings: [] });
+  });
+
+  it.each([
+    ['number', '2024', 2024],
+    ['boolean true', 'true', true],
+    ['boolean false', 'false', false],
+  ])('accepts a native %s filter value matching the XML member', (_label, member, value) => {
+    const scalarContract: RoundStackedBarSemanticContract = {
+      ...contract,
+      filter: { ...contract.filter!, member },
+    };
+    const underlying = rawData(rawData().rows.map((row) => [row[0], value, row[2], row[3]]));
+
+    expect(
+      verifyRoundStackedBarSeedEvidence(underlying, captureBaseline(), scalarContract),
+    ).toEqual({ ok: true, findings: [] });
+  });
+
+  it.each([
+    ['different numeric spelling', '01', 1],
+    ['different boolean spelling', 'TRUE', true],
+    ['null', 'null', null],
+    ['undefined', 'undefined', undefined],
+    ['NaN', 'NaN', Number.NaN],
+    ['positive infinity', 'Infinity', Number.POSITIVE_INFINITY],
+    ['negative infinity', '-Infinity', Number.NEGATIVE_INFINITY],
+    ['object', '[object Object]', { value: 'West' }],
+  ])('rejects %s instead of coercing it to the XML member', (_label, member, value) => {
+    const scalarContract: RoundStackedBarSemanticContract = {
+      ...contract,
+      filter: { ...contract.filter!, member },
+    };
+    const underlying = rawData(rawData().rows.map((row) => [row[0], value, row[2], row[3]]));
+
+    const verification = verifyRoundStackedBarSeedEvidence(
+      underlying,
+      captureBaseline(),
+      scalarContract,
+    );
+
+    expect(verification.ok).toBe(false);
+    expect(verification.findings).toContainEqual(expect.objectContaining({ code: 'filter' }));
+  });
+
   it.each([
     ['null', null],
     ['blank', ''],

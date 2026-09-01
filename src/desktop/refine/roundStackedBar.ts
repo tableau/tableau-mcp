@@ -19,7 +19,7 @@ export interface RoundStackedBarSemanticContract {
   category: FieldSemantics;
   segment: FieldSemantics;
   measure: FieldSemantics & { aggregation: 'SUM' };
-  filter?: { caption: string; columnInstance: string; member: string };
+  filter?: { caption: string; column: string; columnInstance: string; member: string };
   helperPrefix: string;
   helpers: Record<
     RoundStackedBarHelperRole,
@@ -63,7 +63,7 @@ interface BaseShape {
   datasourceCaption: string;
   datasourceName: string;
   dependency: Element;
-  filter?: { caption: string; columnInstance: string; member: string };
+  filter?: { caption: string; column: string; columnInstance: string; member: string };
   measure: ColumnInstance;
   pane: Element;
   segment: ColumnInstance;
@@ -579,6 +579,7 @@ function readFilter(
     allowedColumn: filterInstance.column,
     value: {
       caption: definitions.get(filterInstance.column)?.caption ?? unbracket(filterInstance.column),
+      column: filterInstance.column,
       columnInstance: filterInstance.name,
       member,
     },

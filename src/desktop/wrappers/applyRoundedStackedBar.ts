@@ -125,11 +125,11 @@ export async function applyRoundedStackedBar({
     }
 
     const requestedUnderlyingColumns = unique([
-      qualifyField(contract.datasource.caption, contract.category.caption),
-      qualifyField(contract.datasource.caption, contract.segment.caption),
-      qualifyField(contract.datasource.caption, contract.measure.caption),
+      qualifyField(contract.datasource.caption, contract.category.column),
+      qualifyField(contract.datasource.caption, contract.segment.column),
+      qualifyField(contract.datasource.caption, contract.measure.column),
       ...(contract.filter
-        ? [qualifyField(contract.datasource.caption, contract.filter.caption)]
+        ? [qualifyField(contract.datasource.caption, contract.filter.column)]
         : []),
     ]);
     const underlying = await executor.getWorksheetUnderlyingData(
@@ -355,8 +355,12 @@ function afterMutationUnknown(
   };
 }
 
-function qualifyField(datasourceCaption: string, fieldCaption: string): string {
-  return `[${datasourceCaption}].[${fieldCaption}]`;
+function qualifyField(datasourceCaption: string, fieldColumn: string): string {
+  const sourceName =
+    fieldColumn.startsWith('[') && fieldColumn.endsWith(']')
+      ? fieldColumn.slice(1, -1)
+      : fieldColumn;
+  return `[${datasourceCaption}].[${sourceName}]`;
 }
 
 function unique(values: string[]): string[] {

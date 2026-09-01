@@ -2,13 +2,12 @@
 // the top five", "flip the sort") to ONE bounded, validated, worksheet-level mutation
 // instead of whole-workbook XML surgery.
 //
-// Flow: get-worksheet-xml (ONE fetch) -> pure minimal patch (envelope check inside the
-// planner) -> ensureUserNamespace -> preflight validation -> load-worksheet-xml (apply
-// ONCE, itself validated) -> get-worksheet-xml readback -> confirm the expected node.
-// On ANY out-of-envelope condition it REFUSES with a precise reason and hands back to the
-// standard authoring path — it never retries, never applies twice, never falls back to
-// whole-workbook XML. The WHAT (which nodes, which refusals) lives in the pure planners
-// under src/desktop/refine/refineWorksheet.ts; this file is the I/O wrapper + registration.
+// Most operations flow through get -> pure minimal planner -> validated one-shot load ->
+// focused readback. round_stacked_bar has its own planRoundStackedBar/applyRoundedStackedBar
+// route: it locks the live source, preflights summary/underlying/workbook evidence, sends one
+// per-sheet apply, then strictly polls worksheet/workbook/summary readback. Both routes refuse
+// out-of-envelope input without retrying, applying twice, or falling back to whole-workbook XML.
+// The pure planners own the mutation shape; this file owns I/O and registration.
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
@@ -215,7 +214,7 @@ export const getRefineWorksheetTool = (
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
 
-          // 1. ONE fetch of the target worksheet.
+          // 1. Initial fetch of the target worksheet.
           const fetched = await getWorksheetXml({
             worksheetName,
             executor,

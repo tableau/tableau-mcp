@@ -334,6 +334,30 @@ describe('planRoundStackedBar', () => {
     );
   });
 
+  it('records the filter source column when its caption differs', () => {
+    const source = worksheet({
+      extraColumnInstances:
+        "<column caption='Sales Territory' datatype='string' name='[Region Code]' role='dimension' type='nominal' /><column-instance column='[Region Code]' derivation='None' name='[none:Region Code:nk]' pivot='key' type='nominal' />",
+      filter: `<filter class='categorical' column='[${INTERNAL_DS}].[none:Region Code:nk]'>
+        <groupfilter function='union' user:ui-enumeration='inclusive'>
+          <groupfilter function='member' level='[none:Region Code:nk]' member='&quot;West&quot;' />
+        </groupfilter>
+      </filter>`,
+      slices: `<slices><column>[${INTERNAL_DS}].[none:Region Code:nk]</column></slices>`,
+    });
+
+    const result = planRoundStackedBar(source, { preset: 'subtle' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.semanticContract.filter).toEqual({
+      caption: 'Sales Territory',
+      column: '[Region Code]',
+      columnInstance: '[none:Region Code:nk]',
+      member: 'West',
+    });
+  });
+
   it('uses the top-level/dependency datasource name, never the nested connection id, in generated refs', () => {
     const result = planRoundStackedBar(worksheet(), { preset: 'subtle' });
     expect(result.ok).toBe(true);

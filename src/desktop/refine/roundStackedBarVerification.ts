@@ -173,6 +173,13 @@ function groupKey(category: string, segment: string): string {
   return JSON.stringify([category, segment]);
 }
 
+function filterMemberText(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'boolean') return String(value);
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
+}
+
 function naturalCompare(left: string, right: string): number {
   const compared = new Intl.Collator('en', { numeric: true, sensitivity: 'base' }).compare(
     left,
@@ -290,7 +297,7 @@ export function verifyRoundStackedBarSeedEvidence(
         underlying.columns,
         underlyingFieldAliases(contract, {
           caption: contract.filter.caption,
-          column: `[${contract.filter.caption}]`,
+          column: contract.filter.column,
         }),
       )
     : undefined;
@@ -306,13 +313,16 @@ export function verifyRoundStackedBarSeedEvidence(
   const visible = new Set(baseline.groups.map((group) => groupKey(group.category, group.segment)));
   const values = new Map<string, Set<number>>();
   for (const row of underlying.rows) {
-    if (contract.filter && filter?.ok && row[filter.index] !== contract.filter.member) {
-      addFinding(
-        findings,
-        'filter',
-        `Underlying data contains a row outside filter member ${JSON.stringify(contract.filter.member)}.`,
-      );
-      continue;
+    if (contract.filter && filter?.ok) {
+      const member = filterMemberText(row[filter.index]);
+      if (member === null || member !== contract.filter.member) {
+        addFinding(
+          findings,
+          'filter',
+          `Underlying data contains a row outside filter member ${JSON.stringify(contract.filter.member)}.`,
+        );
+        continue;
+      }
     }
     const categoryValue = row[category.index];
     const segmentValue = row[segment.index];

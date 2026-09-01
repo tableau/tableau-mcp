@@ -45,6 +45,14 @@ function sourceWorksheet(): string {
 </worksheet>`;
 }
 
+function sourceWorksheetWithDisplayCaptions(): string {
+  return sourceWorksheet()
+    .replace("caption='Category' datatype", "caption='Product Family' datatype")
+    .replace("caption='Segment' datatype", "caption='Customer Type' datatype")
+    .replace("caption='Profit' datatype", "caption='Net Margin' datatype")
+    .replace("caption='Region' datatype", "caption='Sales Territory' datatype");
+}
+
 function blankWorksheet(): string {
   return `<worksheet name='Orders'>
   <table>
@@ -63,8 +71,8 @@ function blankWorksheet(): string {
 
 type TableData = { columns: Array<{ name: string }>; rows: unknown[][] };
 
-function plan(): RoundStackedBarPlan {
-  const planned = planRoundStackedBar(sourceWorksheet(), { preset: 'subtle' });
+function plan(source = sourceWorksheet()): RoundStackedBarPlan {
+  const planned = planRoundStackedBar(source, { preset: 'subtle' });
   expect(planned.ok).toBe(true);
   if (!planned.ok) throw new Error(planned.reason);
   return planned;
@@ -208,7 +216,9 @@ function document(xml: string): WorkbookDocument {
   return { xml, applicationVersion: undefined, xsdPayloadVersion: undefined };
 }
 
-function successfulExecutor(options: { distinctSeeds?: boolean } = {}): {
+function successfulExecutor(
+  options: { distinctSeeds?: boolean; sourceWorksheetXml?: string } = {},
+): {
   planned: RoundStackedBarPlan;
   executor: ExternalApiToolExecutor;
   applyWorksheetDocument: ReturnType<typeof vi.fn>;
@@ -216,8 +226,8 @@ function successfulExecutor(options: { distinctSeeds?: boolean } = {}): {
   getWorksheetSummaryData: ReturnType<typeof vi.fn>;
   getWorksheetUnderlyingData: ReturnType<typeof vi.fn>;
 } {
-  const planned = plan();
-  const source = sourceWorksheet();
+  const source = options.sourceWorksheetXml ?? sourceWorksheet();
+  const planned = plan(source);
   const intended = planned.xml;
   const applyWorksheetDocument = vi
     .fn()
@@ -346,6 +356,36 @@ describe('applyRoundedStackedBar', () => {
       },
       SIGNAL,
     );
+  });
+
+  it('projects source columns when display captions differ and reaches apply', async () => {
+    const source = sourceWorksheetWithDisplayCaptions();
+    const harness = successfulExecutor({ sourceWorksheetXml: source });
+
+    const outcome = await applyRoundedStackedBar({
+      sourceWorksheetXml: source,
+      intendedWorksheetXml: harness.planned.xml,
+      contract: harness.planned.semanticContract,
+      focus: NO_FOCUS,
+      executor: harness.executor,
+      signal: SIGNAL,
+    });
+
+    expect(outcome, JSON.stringify(outcome)).toMatchObject({ state: 'applied', mutation: 'sent' });
+    expect(harness.getWorksheetUnderlyingData).toHaveBeenCalledWith(
+      WORKSHEET_ID,
+      'orders',
+      expect.objectContaining({
+        columnsToIncludeByFieldName: [
+          '[Friendly Sales].[Category]',
+          '[Friendly Sales].[Segment]',
+          '[Friendly Sales].[Profit]',
+          '[Friendly Sales].[Region]',
+        ],
+      }),
+      SIGNAL,
+    );
+    expect(harness.applyWorksheetDocument).toHaveBeenCalledOnce();
   });
 
   it('fails before mutation when any visible group lacks two distinct raw seed values', async () => {
