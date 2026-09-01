@@ -9,7 +9,7 @@ import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getAuthorCalcTool } from './authorCalc.js';
-import { authorCalculationsInWorkbook } from './authorCalcCore.js';
+import { authorCalculationsInWorkbook, prepareCalculationsInWorkbook } from './authorCalcCore.js';
 
 const BASE_XML = [
   "<?xml version='1.0' encoding='utf-8'?>",
@@ -524,3 +524,123 @@ function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): st
   invariant(typeof xml === 'string');
   return xml;
 }
+
+describe('prepareCalculationsInWorkbook idempotency', () => {
+  const existingCalc =
+    "<column caption='Margin' datatype='real' name='[Calculation_900]' role='measure' type='quantitative'>" +
+    "<calculation class='tableau' formula='[Sales] * 0.2' /></column>";
+
+  it('reuses an identical caption/formula/type/role without editing the workbook', () => {
+    const workbookXml = withColumn(BASE_XML, existingCalc);
+    const result = prepareCalculationsInWorkbook({
+      workbookXml,
+      calcs: [{ caption: 'Margin', formula: '[Sales]  *  0.2' }],
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    expect(result.value.workbookXml).toBe(workbookXml);
+    expect(result.value.authoredCalcs).toEqual([]);
+  });
+
+  it.each(['&#10;', '&#xA;'])(
+    'reuses a multiline calculation after Desktop encodes line breaks as %s',
+    (lineBreak) => {
+      const multilineCalc =
+        "<column caption='Period Total' datatype='real' name='[Calculation_901]' role='measure' type='quantitative'>" +
+        `<calculation class='tableau' formula='SUM(${lineBreak}  [Sales]${lineBreak})' /></column>`;
+      const workbookXml = withColumn(BASE_XML, multilineCalc);
+      const result = prepareCalculationsInWorkbook({
+        workbookXml,
+        calcs: [{ caption: 'Period Total', formula: 'SUM(\n  [Sales]\n)' }],
+      });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) return;
+      expect(result.value.workbookXml).toBe(workbookXml);
+      expect(result.value.authoredCalcs).toEqual([]);
+    },
+  );
+
+  it('still rejects the same caption when its formula differs', () => {
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, existingCalc),
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.3' }],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+
+  it('does not collapse meaningful whitespace inside a string literal', () => {
+    const stringCalc =
+      "<column caption='Bucket' datatype='string' name='[Calculation_901]' role='dimension' type='nominal'>" +
+      "<calculation class='tableau' formula='IF [Region] = &quot;A  B&quot; THEN &quot;match&quot; END' /></column>";
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, stringCalc),
+      calcs: [
+        {
+          caption: 'Bucket',
+          formula: 'IF [Region] = "A B" THEN "match" END',
+          role: 'dimension',
+          datatype: 'string',
+        },
+      ],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+
+  it.each([
+    {
+      existing:
+        "<calculation class='tableau' formula='IF [Region] = &quot;A\\&quot;  B&quot; THEN &quot;match&quot; END' />",
+      requested: 'IF [Region] = "A\\" B" THEN "match" END',
+    },
+    {
+      existing:
+        '<calculation class="tableau" formula="IF [Region] = &apos;A\\&apos;  B&apos; THEN &apos;match&apos; END" />',
+      requested: "IF [Region] = 'A\\' B' THEN 'match' END",
+    },
+  ])(
+    'does not collapse literal whitespace after a backslash-escaped quote',
+    ({ existing, requested }) => {
+      const escapedQuoteCalc =
+        "<column caption='Bucket' datatype='string' name='[Calculation_902]' role='dimension' type='nominal'>" +
+        `${existing}</column>`;
+      const result = prepareCalculationsInWorkbook({
+        workbookXml: withColumn(BASE_XML, escapedQuoteCalc),
+        calcs: [
+          {
+            caption: 'Bucket',
+            formula: requested,
+            role: 'dimension',
+            datatype: 'string',
+          },
+        ],
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) return;
+      expect(result.error.message).toContain('caption collision');
+    },
+  );
+
+  it('does not reuse a calculation when its default format differs', () => {
+    const formattedCalc = existingCalc.replace(
+      " type='quantitative'",
+      " default-format='p0%' type='quantitative'",
+    );
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, formattedCalc),
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+});

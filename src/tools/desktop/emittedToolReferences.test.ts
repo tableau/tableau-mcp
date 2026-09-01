@@ -199,6 +199,7 @@ const NON_TOOL_VOCABULARY = [
   'style-theme',
   'success-already-present',
   'summary-data',
+  'tableau-agent-idempotency-key',
   'target-group',
   'target-parameter',
   'template-artifact-unavailable',

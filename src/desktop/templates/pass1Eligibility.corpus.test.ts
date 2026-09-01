@@ -32,7 +32,7 @@ const EXPECTED_EXCLUDED = [
 describe('bundled bookmark pass-1 eligibility', () => {
   // WHY: Full-suite CPU contention can push this all-bookmark validation sweep past Vitest's 5s default.
   it(
-    'converts all 136 bookmarks and excludes only the 22 unsafe pass-1 templates',
+    'converts all 137 bookmarks and excludes only the 22 unsafe pass-1 templates',
     { timeout: 30_000 },
     () => {
       const names = listBookmarkNames();
@@ -86,12 +86,12 @@ describe('bundled bookmark pass-1 eligibility', () => {
         }
       }
 
-      expect(names).toHaveLength(136);
+      expect(names).toHaveLength(137);
       expect(conversionErrors).toEqual([]);
       expect(retainedMappedSourceAttrs).toEqual([]);
       expect(unexpectedValidationErrors).toEqual([]);
       expect(excluded).toEqual(EXPECTED_EXCLUDED);
-      expect(names.length - excluded.length).toBe(114);
+      expect(names.length - excluded.length).toBe(115);
     },
   );
 });
