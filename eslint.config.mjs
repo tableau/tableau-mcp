@@ -60,7 +60,8 @@ export default [
       'build/**',
       'docs/.docusaurus/**',
       'docs/build/**',
-      '.claude/worktrees/**',
+      '.claude/**',
+      '.worktrees/**',
     ],
   },
   {

@@ -128,19 +128,6 @@ export async function startExpressServer({
       let transport: StreamableHTTPServerTransport;
 
       if (config.disableSessionManagement) {
-        // Stateless mode re-registers tools on every request (not just `initialize`), so client
-        // capabilities are only present on the `initialize` request itself — subsequent requests
-        // legitimately have none, which safe-defaults to plain-tool registration. `clientId` comes
-        // from the OAuth Bearer token and is available on every authenticated request.
-        //
-        // Known, accepted limitation (not a bug): because a fresh server/transport is built and torn
-        // down per request with no cross-request state, `capabilities` is `undefined` on every
-        // `tools/call` / `tools/list` request. So MCP-Apps client-capability detection — and therefore
-        // rendering tools as interactive app tools — never actually activates for real tool-call
-        // traffic under `DISABLE_SESSION_MANAGEMENT=true`; app tools always fall back to plain tool
-        // registration regardless of what the client declared at its own `initialize`. Session
-        // management is required for MCP-Apps rendering. `clientId`-based checks (e.g. the claude.ai
-        // exclusion) are unaffected, since `clientId` is available on every request.
         const capabilities = isInitializeRequest(req.body)
           ? req.body.params.capabilities
           : undefined;
