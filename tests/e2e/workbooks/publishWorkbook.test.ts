@@ -2,31 +2,22 @@ import { resolve } from 'path';
 import { z } from 'zod';
 
 import { workbookSchema } from '../../../src/sdks/tableau/types/workbook.js';
+import { validationIssueSchema } from '../../../src/sdks/tableau/types/workbookValidation.js';
 import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { buildVariant } from '../build.js';
 import { McpClient } from '../mcpClient.js';
-
-const validationFindingSchema = z.object({
-  severity: z.string(),
-  message: z.string(),
-  // Structural XML errors (e.g. an unclosed tag) omit line/column since Tableau's parser
-  // can't map them to a specific location, unlike content-validation errors which include them.
-  line: z.number().optional(),
-  column: z.number().optional(),
-  elementName: z.string(),
-});
 
 const publishWorkbookResultSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('published'),
     data: workbookSchema,
     url: z.string(),
-    warnings: z.array(validationFindingSchema),
+    warnings: z.array(validationIssueSchema),
   }),
   z.object({
     status: z.literal('invalid'),
-    errors: z.array(validationFindingSchema),
-    warnings: z.array(validationFindingSchema),
+    errors: z.array(validationIssueSchema),
+    warnings: z.array(validationIssueSchema),
   }),
 ]);
 
