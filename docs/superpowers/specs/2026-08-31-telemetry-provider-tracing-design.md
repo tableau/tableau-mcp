@@ -113,7 +113,13 @@ try {
 A span started while another span is active automatically becomes that span's child, via
 OpenTelemetry's own execution-context propagation (e.g. `AsyncLocalStorage`-based), *provided*
 the concrete provider registers a real OTel context manager (as `MonCloudTelemetryProvider`
-already does via `Apm.start()`). tableau-mcp needs no explicit parent-linking code for this —
+already does via `Apm.start()`). This automatic nesting depends on the provider's `startSpan`
+implementation actually making the returned span *active* in that context for the handle's
+lifetime — Elastic-APM-style providers (like `MonCloudTelemetryProvider`) do this natively;
+a provider built directly on bare `@opentelemetry/api` would need to call `context.with(...)`
+(or an equivalent of `startActiveSpan`) around the handle's lifetime itself, since plain
+`tracer.startSpan()` alone does not set the active context. tableau-mcp needs no explicit
+parent-linking code for this —
 it's fundamentally different from the LUID pattern (`src/logging/logger.ts`'s `LuidContext`),
 which needs explicit closure-threading only because LUID *values* have no execution-context
 carrier of their own. A tool-call span (started in `WebTool.logAndExecute`) and a REST-call span
