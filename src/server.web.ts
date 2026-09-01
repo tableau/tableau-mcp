@@ -54,7 +54,9 @@ const ADMIN_INSTRUCTIONS =
   'cleanup, or cost/license questions, proactively consider the admin prompts (stale-content cleanup, ' +
   'job/extract optimization, user-license reclamation) and the query-admin-insights tool ' +
   '(e.g. stale-content, job-performance, ts-users) for supporting data — even when the user asks broadly ' +
-  'rather than naming a specific tool.';
+  'rather than naming a specific tool. ' +
+  'When rendering admin/list results (users, admin-insights, etc.) to a chat or Slack surface, present ' +
+  'them as Markdown tables.';
 
 /**
  * Single source of truth for the web server's `initialize` instructions string. Returns the base

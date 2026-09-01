@@ -3,7 +3,10 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { ViewNotAllowedError } from '../../../errors/mcpToolError.js';
+import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { parseViewAllData } from '../../../sdks/tableau/methods/viewAllData.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
@@ -21,13 +24,24 @@ const paramsSchema = {
     .describe('Optional map of view filter field names to values.'),
 };
 
+type ViewDataResult =
+  | DataToolResult
+  | Array<{
+      sheetName: string;
+      columns: string[];
+      rows: string[][];
+      sheetStatus: 'OK' | 'ERROR';
+      errorDetail?: string;
+    }>;
+
 export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getViewDataTool = new WebTool({
     server,
     name: 'get-view-data',
     description: [
-      "Retrieves comma-separated value (CSV) data for the specified view in a Tableau workbook, including the user's filters.",
-      "If the request is for a dashboard, only data for the dashboard's first view is returned.",
+      "Retrieves data for the specified view in a Tableau workbook, including the user's filters.",
+      "On Tableau REST API versions below 3.30, returns CSV data for the dashboard's first view.",
+      'On version 3.30 or later, returns parsed data for the sheets included in the server response.',
       'Requires the view LUID from the content URL (not the published view id).',
       'For custom views, use the tool to get custom view data by custom view id instead.',
     ].join(' '),
@@ -40,7 +54,7 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
       openWorldHint: false,
     },
     callback: async ({ viewId, viewFilters }, extra): Promise<CallToolResult> => {
-      return await getViewDataTool.logAndExecute<DataToolResult>({
+      return await getViewDataTool.logAndExecute<ViewDataResult>({
         extra,
         args: { viewId, viewFilters },
         callback: async () => {
@@ -51,6 +65,44 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
 
           if (!isViewAllowedResult.allowed) {
             return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
+          }
+
+          if (RestApi.versionIsAtLeast('3.30')) {
+            const response = await useRestApi({
+              ...extra,
+              jwtScopes: getViewDataTool.requiredApiScopes,
+              callback: async (restApi) =>
+                await restApi.viewsMethods.getViewAllData({
+                  viewId,
+                  siteId: restApi.siteId,
+                  viewFilters,
+                }),
+            });
+            const sheets = parseViewAllData(response.body, response.contentType);
+            log(
+              {
+                message: 'Parsed view all-data response',
+                level: 'debug',
+                logger: 'tool',
+                data: {
+                  requestId: extra.requestId,
+                  viewId,
+                  sheetCount: sheets.length,
+                  sheetNames: sheets.map((sheet) => sheet.sheetName),
+                },
+              },
+              extra,
+            );
+
+            return new Ok(
+              sheets.map((sheet) => ({
+                sheetName: sheet.sheetName,
+                columns: sheet.status === 'OK' ? sheet.columns : [],
+                rows: sheet.status === 'OK' ? sheet.rows : [],
+                sheetStatus: sheet.status === 'OK' ? 'OK' : 'ERROR',
+                errorDetail: sheet.errorDetail,
+              })),
+            );
           }
 
           const csv = await useRestApi({
@@ -84,7 +136,15 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
             result: dataToolResult,
           };
         },
-        getSuccessResult: (dataToolResult) => dataToolResultToCallToolResult(dataToolResult),
+        getSuccessResult: (dataToolResult) => {
+          if ('kind' in dataToolResult) {
+            return dataToolResultToCallToolResult(dataToolResult);
+          }
+          return {
+            isError: false,
+            content: [{ type: 'text', text: JSON.stringify(dataToolResult) }],
+          };
+        },
       });
     },
   });

@@ -9,6 +9,7 @@ test.describe('get-view-data', () => {
 
     const viewData = await client.callTool('get-view-data', {
       schema: z.string(),
+      textFormat: 'raw',
       toolArgs: {
         viewId: superstore.defaultView.id,
       },
