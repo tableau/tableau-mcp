@@ -85,6 +85,10 @@ export function buildWebInstructions(): string {
   return adminToolsEnabled ? `${BASE_INSTRUCTIONS} ${ADMIN_INSTRUCTIONS}` : BASE_INSTRUCTIONS;
 }
 
+type RegistrationContext = {
+  siteRole?: string;
+};
+
 export class WebMcpServer extends Server {
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
     super({
@@ -196,24 +200,12 @@ export class WebMcpServer extends Server {
       'enforce-role-requirements',
     );
 
-    // Fetched lazily so we only issue the /users/{userId} call when at least one candidate tool
-    // declares a `minRequiredRole`. Fail-closed: `getCurrentUserSiteRole` returns `undefined` on
-    // any error, and `siteRoleMeetsMinimum(undefined, ...)` is false, so the tool stays hidden.
-    // Cached as a sentinel-holding object so a legitimately-undefined role isn't re-fetched every
-    // iteration.
-    let cachedSiteRole: { value: string | undefined } | undefined;
-    const resolveSiteRole = async (): Promise<string | undefined> => {
-      if (cachedSiteRole === undefined) {
-        cachedSiteRole = {
-          value: await getCurrentUserSiteRole(restApiArgs),
-        };
-      }
-      return cachedSiteRole.value;
-    };
+    // Stores context that is used for determining if registration conditions have been met.
+    // Registration context is uninitialized, but then gets populated with each condition checked.
+    const registrationContext: RegistrationContext = {};
 
-    // Names of role-gated tools hidden specifically because the role fetch FAILED (returned
-    // undefined) rather than because the caller's role was genuinely too low. Drives both the
-    // telemetry warning and the client-facing instructions notice below.
+    // Names of role-gated tools hidden specifically because the role fetch FAILED
+    // rather than because the caller's role was genuinely too low.
     const toolsOmittedForRoleFetchFailure: string[] = [];
 
     const toolsToRegister: typeof allTools = [];
@@ -222,10 +214,17 @@ export class WebMcpServer extends Server {
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
       if (enforceRoleRequirements && tool.minRequiredRole) {
-        const siteRole = await resolveSiteRole();
+        // Site role is fetched lazily when at least one candidate tool declares a `minRequiredRole`.
+        // Fail-closed: tools with role requirements are ommited during registration if a user's role
+        // is unable to be fetched. Using `Object.hasOwn` to check if site role context has been populated, as
+        // site role may be undefined as a result of failure to fetch. Retries are used when fetching site role,
+        // so there is no need to keep calling `getCurrentUserSiteRole` if it has already failed before.
+        if (!Object.hasOwn(registrationContext, 'siteRole')) {
+          registrationContext.siteRole = await getCurrentUserSiteRole(restApiArgs);
+        }
+        const siteRole = registrationContext.siteRole;
         if (!siteRoleMeetsMinimum(siteRole, tool.minRequiredRole)) {
-          // `undefined` uniquely means the fetch failed (a successful low-role fetch returns the
-          // role string), so we can tell a transient outage apart from a legitimately low role.
+          // An `undefined` role means the fetch failed
           if (siteRole === undefined) {
             toolsOmittedForRoleFetchFailure.push(tool.name);
           }

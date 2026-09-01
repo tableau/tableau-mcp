@@ -43,21 +43,16 @@ export const MAX_SITE_ROLE_FETCH_ATTEMPTS = 3;
 /**
  * Fetches the site role of the caller identified by `tableauAuthInfo`.
  *
- * Used at tool-registration time to gate tools by role — callers pair this with
- * {@link isAdminSiteRole} (or future role predicates) to decide which tools to expose.
+ * Used at tool-registration time to gate tools by role.
  *
  * Retries a failing fetch (up to {@link MAX_SITE_ROLE_FETCH_ATTEMPTS} total attempts) via the shared
- * {@link retry} helper, which waits with exponential backoff + jitter between attempts so a transient
- * network/sign-in blip during registration doesn't needlessly hide role-gated tools — an immediate
- * retry rarely outlasts the blip it's meant to survive. A 4xx client error (e.g. 401/403) is *not*
+ * {@link retry} helper. A 4xx client error (e.g. 401/403) is *not*
  * retried: it's a deterministic "not allowed" that retrying cannot change, so we fail fast rather
  * than delaying registration for every genuinely-unauthorized caller.
  *
  * Fail-closed: once retries are exhausted (or a non-retryable error is thrown), returns `undefined`
  * (as does any missing-auth case, since the sign-in path throws) so a failure never grants access
- * via a falsy role predicate. A *successful* fetch with no role returns `''` — so `undefined`
- * uniquely signals "the fetch failed", letting the caller distinguish an outage from a legitimately
- * low role. The caller is expected to fetch the role once per registration pass and reuse it.
+ * via a falsy role predicate.
  */
 export async function getCurrentUserSiteRole(
   restApiArgs: RestApiArgs,
@@ -73,7 +68,7 @@ export async function getCurrentUserSiteRole(
               siteId: restApi.siteId,
               userId: restApi.userId,
             });
-            return user.siteRole ?? '';
+            return user.siteRole;
           },
         }),
       {
