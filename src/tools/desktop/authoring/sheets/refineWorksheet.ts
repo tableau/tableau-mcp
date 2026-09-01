@@ -37,6 +37,7 @@ import {
   runValidation,
 } from '../../../../desktop/validation/registry.js';
 import { ValidationIssue } from '../../../../desktop/validation/types.js';
+import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorksheetXml } from '../../../../desktop/wrappers/getWorksheetXml.js';
 import { loadWorksheetXml } from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import {
@@ -324,6 +325,7 @@ export const getRefineWorksheetTool = (
             requireExistingSheet: true,
             // Refine already ran stricter candidate-only preflight, so an introduced-issue GET is redundant.
             callerPreflightsBlockingIssues: true,
+            expectedSourceHash: sourceSha256(sourceXml),
           });
           if (applied.isErr()) {
             const { type, error } = applied.error;
