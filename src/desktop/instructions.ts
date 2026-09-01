@@ -50,11 +50,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a request for slight rounded outer corners on an existing or just-built stacked bar chart',
     action:
-      'call refine-worksheet with operation=round_stacked_bar and preset=subtle. It rebuilds a compatible stack as Polygon, not a native Bar corner property. V1 refuses any workbook with top-level actions. If refine refuses a workbook with actions, stop. Dashboard object/container radius stays with format-dashboard-zones. After success require programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered stack order; disclose that Data Guide and View Data may show internal polygon helper fields. Do not fall back to shell commands or raw whole-workbook XML.',
+      'call refine-worksheet with operation=round_stacked_bar and preset=subtle. It rebuilds a compatible stack as Polygon, not a native Bar corner property. V1 refuses any workbook with top-level actions. If refine refuses a workbook with actions, stop. Dashboard object/container radius stays with the separate dashboard rounded-corners route. After success require programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered stack order; disclose that Data Guide and View Data may show internal polygon helper fields. Do not fall back to shell commands or raw whole-workbook XML.',
     toolSequence: ['refine-worksheet'],
     stopConditions: [
       'If refine refuses a workbook with actions, stop',
-      'Dashboard object/container radius stays with format-dashboard-zones',
+      'Dashboard object/container radius stays with the separate dashboard rounded-corners route',
       'Do not fall back to shell commands or raw whole-workbook XML',
     ],
     requiredEvidence: [
@@ -199,6 +199,20 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
+    id: 'rounded-corners',
+    trigger: 'rounded corners on dashboard objects or containers',
+    action:
+      'For dashboard or container corners, call list-dashboards, then call format-dashboard-zones. If the tool refuses, report the reason and stop. Never claim dashboard or container rounded corners are impossible before the typed tool refuses. Never use shell commands, raw whole-workbook XML, or cached XML for this ask.',
+    toolSequence: ['list-dashboards', 'format-dashboard-zones'],
+    stopConditions: [
+      'If the tool refuses, report the reason and stop',
+      'Never claim dashboard or container rounded corners are impossible before the typed tool refuses',
+      'Never use shell commands, raw whole-workbook XML, or cached XML for this ask',
+    ],
+    requiredEvidence: ['dashboard-zone readback receipt when dashboard corners were requested'],
+  },
+  {
+    kind: 'route',
     id: 'dynamic-authoring',
     trigger:
       'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total and LOD)',
@@ -243,7 +257,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded stacked bars; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded stacked bars; format-dashboard-zones rounds dashboard objects; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
   },
   {
     kind: 'prose',

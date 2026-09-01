@@ -507,7 +507,10 @@ describe('refineWorksheetTool — mark_type', () => {
     expect(getMock()).toHaveBeenCalledTimes(2);
     expect(loadMock()).toHaveBeenCalledTimes(1);
     expect(loadMock()).toHaveBeenCalledWith(
-      expect.objectContaining({ requireExistingSheet: true }),
+      expect.objectContaining({
+        expectedSourceHash: 'fadc5ab801ffeb4f25a87195ef7f9514dddd286273a530d5f6b0d859ba4814f7',
+        requireExistingSheet: true,
+      }),
     );
   });
 
@@ -529,6 +532,57 @@ describe('refineWorksheetTool — mark_type', () => {
     const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.reason).toMatch(/exactly one pane/i);
     expect(loadMock()).not.toHaveBeenCalled();
+  });
+});
+
+describe('refineWorksheetTool — source drift', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('rechecks the source hash and sends zero applies after worksheet drift', async () => {
+    setupMocks();
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      listWorksheets: vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [
+            {
+              id: '00000000-0000-0000-0000-000000000001',
+              name: 'Sales by Region',
+            },
+          ],
+        }),
+      ),
+      getWorksheetDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: SOURCE.replace(
+            "<mark class='Bar' />",
+            "<mark class='Bar' /><mark-sizing mark-sizing-setting='marks-scaling-off' />",
+          ),
+        }),
+      ),
+      applyWorksheetDocument,
+      executeCommand: vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'cmd-focus', status: 'completed', submitted_at: '' })),
+    });
+    const actualLoadWorksheetXml = await vi.importActual<typeof loadWorksheetXmlModule>(
+      '../../../../desktop/wrappers/loadWorksheetXml.js',
+    );
+    loadMock().mockImplementation(actualLoadWorksheetXml.loadWorksheetXml);
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+      executor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toMatch(/worksheet changed since/i);
+    expect(applyWorksheetDocument).not.toHaveBeenCalled();
   });
 });
 

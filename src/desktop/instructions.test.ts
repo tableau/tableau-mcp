@@ -64,7 +64,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rounded?.action).toContain('preset=subtle');
     expect(rounded?.action).toContain('Polygon');
     expect(rounded?.action).toContain('not a native Bar corner property');
-    expect(rounded?.action).toContain('format-dashboard-zones');
+    expect(rounded?.action).toContain('separate dashboard rounded-corners route');
     expect(rounded?.action).toMatch(/dashboard object\/container/i);
     expect(rounded?.action).toContain('V1 refuses any workbook with top-level actions');
     expect(rounded?.action).toContain('If refine refuses a workbook with actions, stop');
@@ -155,11 +155,33 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(editInPlace?.action).not.toContain('requested new chart');
   });
 
-  it('census routes mark-type changes through refine-worksheet and names the encoding pair', () => {
+  it('census names both rounded-corner routes and the encoding pair', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
 
     expect(rendered).toContain('refine-worksheet edits top-N/sort/mark type');
+    expect(rendered).toContain('compatible rounded stacked bars');
+    expect(rendered).toContain('format-dashboard-zones rounds dashboard objects');
     expect(rendered).toContain('add-field + apply-worksheet change encodings.');
+  });
+
+  it('routes dashboard rounded-corner asks through a typed scoped tool', () => {
+    const roundedCorners = routes.find((route) => route.id === 'rounded-corners');
+
+    expect(roundedCorners?.trigger).toContain('rounded corners');
+    expect(roundedCorners?.action).toContain('If the tool refuses, report the reason and stop');
+    expect(roundedCorners?.action).toContain(
+      'dashboard or container corners, call list-dashboards, then call format-dashboard-zones',
+    );
+    expect(roundedCorners?.action).toContain(
+      'Never claim dashboard or container rounded corners are impossible before the typed tool refuses',
+    );
+    expect(roundedCorners?.action).toContain(
+      'Never use shell commands, raw whole-workbook XML, or cached XML for this ask',
+    );
+    expect(roundedCorners?.toolSequence).toEqual(['list-dashboards', 'format-dashboard-zones']);
+    expect(roundedCorners?.requiredEvidence).toEqual([
+      'dashboard-zone readback receipt when dashboard corners were requested',
+    ]);
   });
 
   it('routes unnamed derived metrics through semantic authoring before the modern flow', () => {

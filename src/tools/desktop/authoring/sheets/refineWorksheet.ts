@@ -433,9 +433,9 @@ export const getRefineWorksheetTool = (
             // apply-worksheet uses. It never creates a sheet, so it must not take the whole-workbook
             // upsert (create) path. A name that no longer resolves surfaces as an error, not a create.
             requireExistingSheet: true,
-            expectedSourceHash: sourceSha256(sourceXml),
             // Refine already ran stricter candidate-only preflight, so an introduced-issue GET is redundant.
             callerPreflightsBlockingIssues: true,
+            expectedSourceHash: sourceSha256(sourceXml),
           });
           if (applied.isErr()) {
             const { type, error } = applied.error;
