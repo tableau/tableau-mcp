@@ -15,7 +15,7 @@ describe('convertViewImageUrlToToolResult', () => {
       uri: url,
       name: 'view-image.png',
       mimeType: 'image/png',
-      description: 'Rendered view image stored in S3. This is a short-lived presigned URL.',
+      description: 'Rendered view image stored in blob storage.',
     });
   });
 

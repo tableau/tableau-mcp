@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "4.5.8",
+  "version": "5.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -26,6 +26,9 @@
     },
     "./telemetry/telemetryProvider": {
       "types": "./build/telemetry/telemetryProvider.d.ts"
+    },
+    "./blobStorage/blobStorageProvider": {
+      "types": "./build/blobStorage/blobStorageProvider.d.ts"
     }
   },
   "scripts": {
@@ -63,8 +66,6 @@
     "docs:start": "npm run start --prefix docs"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1095.0",
-    "@aws-sdk/s3-request-presigner": "^3.1095.0",
     "@mjackson/multipart-parser": "^0.10.1",
     "@modelcontextprotocol/ext-apps": "^1.7.2",
     "@modelcontextprotocol/sdk": "^1.26.0",

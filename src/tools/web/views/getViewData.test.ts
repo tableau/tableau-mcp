@@ -50,9 +50,10 @@ const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
   mockGetViewAllData: vi.fn(),
   mockQueryViewData: vi.fn(),
-  mockUploadCsvToS3: vi.fn(),
+  mockUpload: vi.fn(),
   mockLog: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
+  mockIsBlobStorageEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -68,9 +69,9 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../uploadDataToS3.js', async (importActual) => ({
-  ...(await importActual<typeof import('../uploadDataToS3.js')>()),
-  uploadCsvToS3: mocks.mockUploadCsvToS3,
+vi.mock('../../../blobStorage/init.js', () => ({
+  getBlobStorageProvider: vi.fn(() => ({ upload: mocks.mockUpload })),
+  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
 
 vi.mock('../../../features/init.js', () => ({
@@ -290,16 +291,17 @@ describe('getViewDataTool', () => {
     expect(mocks.mockGetView).not.toHaveBeenCalled();
   });
 
-  describe('S3 data offload', () => {
+  describe('blob storage data offload', () => {
     beforeEach(() => {
-      // The S3-offload path is gated behind the `view-data-file-mode` feature flag.
+      // The offload path is gated behind the `view-data-file-mode` feature flag
+      // and an enabled (successfully-loaded custom) blob storage provider.
       mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+      mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
       mocks.mockQueryViewData.mockResolvedValue(mockViewData);
     });
 
-    it('should return a resource_link (no inline CSV) when MCP_S3_BUCKET is configured', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
-      mocks.mockUploadCsvToS3.mockResolvedValue('https://s3.example.com/signed-url');
+    it('should return a resource_link (no inline CSV) when blob storage is enabled', async () => {
+      mocks.mockUpload.mockResolvedValue({ url: 'https://blob.example.com/signed-url' });
 
       const result = await getToolResult({ viewId: mockView.id });
 
@@ -307,51 +309,35 @@ describe('getViewDataTool', () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0]).toMatchObject({
         type: 'resource_link',
-        uri: 'https://s3.example.com/signed-url',
+        uri: 'https://blob.example.com/signed-url',
         name: 'view-data.csv',
         mimeType: 'text/csv',
       });
-      // No inline text block is emitted when offloading to S3.
+      // No inline text block is emitted when offloading to blob storage.
       expect(result.content.some((c) => c.type === 'text')).toBe(false);
       // No Slack _meta block is emitted for CSV data.
       expect(result._meta).toBeUndefined();
 
-      expect(mocks.mockUploadCsvToS3).toHaveBeenCalledWith(mockViewData, {
-        resourceId: mockView.id,
-        config: expect.objectContaining({
-          bucket: 'tableau-data',
-          keyPrefix: 'view-data/',
-        }),
+      expect(mocks.mockUpload).toHaveBeenCalledWith({
+        key: `data/${mockView.id}.csv`,
+        data: Buffer.from(mockViewData, 'utf-8'),
+        contentType: 'text/csv; charset=utf-8',
       });
     });
 
-    it('prefixes the S3 key with the base prefix followed by the view-data segment', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
-      vi.stubEnv('MCP_IMAGE_PREFIX', 'tableau/');
-      mocks.mockUploadCsvToS3.mockResolvedValue('https://s3.example.com/signed-url');
+    it('should return inline CSV when blob storage is not enabled', async () => {
+      mocks.mockIsBlobStorageEnabled.mockReturnValue(false);
 
-      await getToolResult({ viewId: mockView.id });
-
-      expect(mocks.mockUploadCsvToS3).toHaveBeenCalledWith(
-        mockViewData,
-        expect.objectContaining({
-          config: expect.objectContaining({ keyPrefix: 'tableau/view-data/' }),
-        }),
-      );
-    });
-
-    it('should return inline CSV when MCP_S3_BUCKET is not configured', async () => {
       const result = await getToolResult({ viewId: mockView.id });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toBe(JSON.stringify(mockViewData));
-      expect(mocks.mockUploadCsvToS3).not.toHaveBeenCalled();
+      expect(mocks.mockUpload).not.toHaveBeenCalled();
     });
 
-    it('should fall back to inline CSV and warn when the S3 upload fails', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
-      mocks.mockUploadCsvToS3.mockRejectedValue(new Error('access denied'));
+    it('should fall back to inline CSV and warn when the blob storage upload fails', async () => {
+      mocks.mockUpload.mockRejectedValue(new Error('access denied'));
 
       const result = await getToolResult({ viewId: mockView.id });
 
@@ -366,16 +352,15 @@ describe('getViewDataTool', () => {
       );
     });
 
-    it('should return inline CSV (no S3 upload) when view-data-file-mode is disabled even if MCP_S3_BUCKET is configured', async () => {
+    it('should return inline CSV (no upload) when view-data-file-mode is disabled even if blob storage is enabled', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
 
       const result = await getToolResult({ viewId: mockView.id });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toBe(JSON.stringify(mockViewData));
-      expect(mocks.mockUploadCsvToS3).not.toHaveBeenCalled();
+      expect(mocks.mockUpload).not.toHaveBeenCalled();
     });
   });
 });

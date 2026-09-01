@@ -69,16 +69,14 @@ export const getGetCustomViewDataTool = (server: WebMcpServer): WebTool<typeof p
             },
           });
 
-          // Offload to S3 (returning a presigned URL) when configured, otherwise
-          // carry the raw CSV for an inline text result. Falls back to inline on
-          // any S3 failure.
+          // Offload to blob storage (returning a URL) when configured,
+          // otherwise carry the raw CSV for an inline text result. Falls back
+          // to inline on any upload failure.
           return new Ok(
             await buildDataToolResult({
               csv,
               resourceId: customViewId,
-              config: extra.config,
               toolName: getCustomViewDataTool.name,
-              keyPrefixSegment: 'custom-view-data/',
             }),
           );
         },
