@@ -124,6 +124,24 @@ describe('removeSameNamedWorksheet — quote-agnostic strip (adversary P0-3)', (
     expect(out).not.toContain('OLD BODY');
     expect(out).not.toContain("<window class='worksheet' name='Sales'/>");
   });
+
+  it('does not double-decode already parsed worksheet names', () => {
+    const workbookXml = [
+      '<workbook><worksheets>',
+      '<worksheet name="A &amp; B">PLAIN AMPERSAND</worksheet>',
+      '<worksheet name="A &amp;amp; B">LITERAL ENTITY TEXT</worksheet>',
+      '</worksheets><windows>',
+      '<window class="worksheet" name="A &amp; B"/>',
+      '<window class="worksheet" name="A &amp;amp; B"/>',
+      '</windows></workbook>',
+    ].join('');
+
+    const out = removeSameNamedWorksheet(workbookXml, 'A & B');
+
+    expect(out).not.toContain('PLAIN AMPERSAND');
+    expect(out).toContain('LITERAL ENTITY TEXT');
+    expect(out).toContain('name="A &amp;amp; B"');
+  });
 });
 
 describe('removeSameNamedWorksheet — attribute-order tolerant window strip (adversary P2-7)', () => {

@@ -32,11 +32,13 @@ import { ExecuteCommandError } from '../../../../desktop/externalApi/executorTyp
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
 import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { addFieldToEncoding } from '../../../../desktop/metadata/fields.js';
+import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
 import {
   extractSheetXml,
   resolveWorksheetRef,
   upsertSheetIntoWorkbook,
 } from '../../../../desktop/metadata/sheets.js';
+import type { ParsedWorkbook, ParsedWorksheet } from '../../../../desktop/metadata/types.js';
 import {
   planSortByFieldOnCategoricalAxis,
   planTopN,
@@ -55,6 +57,7 @@ import { resolveSession } from '../../../../desktop/session/sessionResolution.js
 import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
+  ensureUserNamespace,
   workbookHasSheetNamed,
 } from '../../../../desktop/templates/injectTemplateCore.js';
 import { createPuppetCompatibilityProjection } from '../../../../desktop/templates/puppetCompatibilityProjection.js';
@@ -181,6 +184,8 @@ type BindTemplateToolResultBase = PublicBinderResult & {
   phase_ms?: AuthoringPhaseMs;
   apply_error?: string;
   retry_safe?: boolean;
+  may_have_applied?: boolean;
+  verification?: ReadbackVerificationResult;
 };
 
 type AppliedDefault = Pick<
@@ -1590,10 +1595,14 @@ function applyFailureDisposition(
 
 type BoundResult = Extract<BinderResult, { status: 'bound' }>;
 
-function collisionFreeWorksheetTitle(workbookXml: string, requestedTitle: string): string {
+function collisionFreeWorksheetTitle(
+  workbookXml: string,
+  requestedTitle: string,
+  replaceExisting = true,
+): string {
   const requestedTarget = classifyWorksheetReplaceTarget(workbookXml, requestedTitle);
   if (
-    requestedTarget === 'replaceable' ||
+    (replaceExisting && requestedTarget === 'replaceable') ||
     (requestedTarget !== 'in-dashboard' && !workbookHasSheetNamed(workbookXml, requestedTitle))
   ) {
     return requestedTitle;
@@ -1609,6 +1618,62 @@ function collisionFreeWorksheetTitle(workbookXml: string, requestedTitle: string
     }
   }
   throw new Error(`could not find an unused worksheet title for "${requestedTitle}"`);
+}
+
+const IDEMPOTENCY_ATTRIBUTE = '@_user:tableau-agent-idempotency-key';
+const IDEMPOTENCY_TEMPLATE_PARAMETER = '__TABLEAU_AGENT_IDEMPOTENCY_KEY__';
+
+function worksheetTitleForIdempotencyKey(workbookXml: string, key: string): string | undefined {
+  let workbook: ParsedWorkbook;
+  try {
+    workbook = parseXML(workbookXml);
+  } catch {
+    return undefined;
+  }
+  const worksheet = normalizeArray<ParsedWorksheet>(workbook.workbook?.worksheets?.worksheet).find(
+    (candidate) => (candidate as unknown as Record<string, unknown>)[IDEMPOTENCY_ATTRIBUTE] === key,
+  );
+  return worksheet?.['@_name'];
+}
+
+function deterministicWorksheetTitle(
+  workbookXml: string,
+  requestedTitle: string,
+  idempotencyKey: string | undefined,
+): string {
+  if (!idempotencyKey) {
+    return collisionFreeWorksheetTitle(workbookXml, requestedTitle);
+  }
+  const existingTitle = worksheetTitleForIdempotencyKey(workbookXml, idempotencyKey);
+  if (
+    existingTitle &&
+    classifyWorksheetReplaceTarget(workbookXml, existingTitle) === 'replaceable'
+  ) {
+    return existingTitle;
+  }
+  // A clean visible title is not an identity. Never overwrite an unrelated loose
+  // worksheet merely because it has the same label; choose a normal Tableau suffix.
+  return collisionFreeWorksheetTitle(workbookXml, requestedTitle, false);
+}
+
+function stampWorksheetIdempotencyKey(
+  workbookXml: string,
+  worksheetTitle: string,
+  idempotencyKey: string,
+): string {
+  const worksheetXml = extractSheetXml(workbookXml, worksheetTitle);
+  if (!worksheetXml) {
+    throw new Error(`injected worksheet "${worksheetTitle}" was not found for identity stamping`);
+  }
+  const attributeName = 'user:tableau-agent-idempotency-key';
+  const escapedKey = escapeXmlAttribute(idempotencyKey);
+  const existing = new RegExp(`\\s${attributeName}=(['"])[^'"]*\\1`);
+  const stampedWorksheet = existing.test(worksheetXml)
+    ? worksheetXml.replace(existing, ` ${attributeName}='${escapedKey}'`)
+    : worksheetXml.replace(/<worksheet\b/, `<worksheet ${attributeName}='${escapedKey}'`);
+  return ensureUserNamespace(
+    upsertSheetIntoWorkbook(workbookXml, worksheetTitle, stampedWorksheet),
+  );
 }
 
 function sortDirectionForApply(direction: 'asc' | 'desc'): SortDirection {
@@ -2151,6 +2216,7 @@ async function performAutoApply({
   hostBaselineWorkbookXml,
   atomicCalcs,
   trustedDeterministicApply,
+  idempotencyKey,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -2168,6 +2234,7 @@ async function performAutoApply({
   hostBaselineWorkbookXml?: string;
   atomicCalcs?: AuthoredCalc[];
   trustedDeterministicApply?: boolean;
+  idempotencyKey?: string;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
@@ -2191,7 +2258,7 @@ async function performAutoApply({
     const requestedTitle = decodeXmlEntities(args.title);
     literalTitle =
       args.sheet_type === 'worksheet'
-        ? collisionFreeWorksheetTitle(workbookXml, requestedTitle)
+        ? deterministicWorksheetTitle(workbookXml, requestedTitle, idempotencyKey)
         : requestedTitle;
     injected = buildInjectedWorkbookXml({
       workbookXml,
@@ -2273,6 +2340,25 @@ async function performAutoApply({
         ...(base.warnings ?? []),
         `context measures dropped: ${getExceptionMessage(err)}`,
       ];
+    }
+  }
+  if (idempotencyKey && args.sheet_type === 'worksheet') {
+    try {
+      appliedWorkbookXml = stampWorksheetIdempotencyKey(
+        appliedWorkbookXml,
+        literalTitle,
+        idempotencyKey,
+      );
+    } catch (err) {
+      return {
+        result: applyFallback(
+          base,
+          `identity stamp failed: ${getExceptionMessage(err)}`,
+          undefined,
+          true,
+        ),
+        failureDisposition: 'pre-dispatch',
+      };
     }
   }
   const injectMs = Date.now() - injectStart;
@@ -2366,6 +2452,43 @@ async function performAutoApply({
   const readbackError = formatReadbackVerificationError(receiptInput.readbackFindings);
   const readbackWarnings = formatReadbackVerificationWarnings(receiptInput.readbackFindings);
   const readbackEvidence = `${readbackError ? `\n\n${readbackError}` : ''}${readbackWarnings}`;
+
+  if (
+    trustedDeterministicApply &&
+    verification &&
+    (verification.status === 'failed' || verification.status === 'skipped')
+  ) {
+    const publicVerification = publicReadbackVerificationResult(verification);
+    const failed = applyFallback(
+      {
+        ...base,
+        authored_calcs: [
+          ...(base.authored_calcs ?? []),
+          ...(atomicCalcs ?? []).map((calc) => calc.caption),
+        ],
+      },
+      `post-apply verification ${verification.status}${verification.message ? `: ${verification.message}` : ''}`,
+    );
+    return {
+      result: {
+        ...failed,
+        sheet_name: literalTitle,
+        may_have_applied: true,
+        retry_safe: false,
+        verification: publicVerification,
+        phase_ms: {
+          bind: bindMs,
+          inject: injectMs,
+          apply: applyMs,
+          readback: readbackMs,
+          summary: 0,
+          total: bindMs + injectMs + applyMs + readbackMs,
+        },
+      },
+      failureDisposition: 'post-dispatch',
+      incomplete: true,
+    };
+  }
 
   // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
@@ -2762,6 +2885,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             skip_validation === true &&
             auto_apply === true &&
             proposal !== undefined;
+          const idempotencyKey = trustedDeterministicApply
+            ? proposal.template_parameters?.[IDEMPOTENCY_TEMPLATE_PARAMETER]
+            : undefined;
           const atomicCalcApply =
             trustedDeterministicApply && calcs !== undefined && calcs.length > 0;
           const askKey = normalizeAskForMatch(ask);
@@ -3255,6 +3381,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             hostBaselineWorkbookXml: atomicCalcApply ? hostBaselineWorkbookXml : undefined,
             atomicCalcs,
             trustedDeterministicApply,
+            idempotencyKey,
             // Honor skip_validation only for a server-trusted caller (config gate set by the
             // deterministic spawner). An untrusted LLM turn that passes the flag gets full
             // validation, not a bypass — the param alone cannot skip the preflight.

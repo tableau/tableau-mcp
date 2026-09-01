@@ -21,6 +21,7 @@ import { serializeRouteReceipt, sessionRouteState } from '../../../../desktop/ro
 import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
+  ensureUserNamespace,
   workbookHasSheetNamed,
 } from '../../../../desktop/templates/injectTemplateCore.js';
 import type { RuntimeTemplateCatalogSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
@@ -4997,6 +4998,170 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.summary_rows).toBeUndefined();
     expect(body.summary_rows_error).toBeUndefined();
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a may-have-applied error when trusted verification is skipped', async () => {
+    const appliedBarXml = CALC_BASE_XML.replace(
+      '</worksheets>',
+      "<worksheet name='Sales by Region'><table /></worksheet></worksheets>",
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [CALC_BASE_XML],
+    });
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({ ok: true, xml: appliedBarXml });
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml)
+      .mockResolvedValueOnce(Ok(CALC_BASE_XML))
+      .mockResolvedValue(
+        Err({ type: 'execute-command-error', error: { code: 'readback-failed' } } as any),
+      );
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Sales by Region',
+      proposal: sampleProposal,
+      auto_apply: true,
+      skip_validation: true,
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      applied: false,
+      may_have_applied: true,
+      retry_safe: false,
+      sheet_name: 'Sales by Region',
+      verification: { status: 'skipped' },
+    });
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a may-have-applied error when trusted verification fails', async () => {
+    vi.useFakeTimers();
+    try {
+      const appliedBarXml = CALC_BASE_XML.replace(
+        '</worksheets>',
+        "<worksheet name='Sales by Region'><table /></worksheet></worksheets>",
+      );
+      const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+        workbookReads: [CALC_BASE_XML],
+      });
+      vi.mocked(buildInjectedWorkbookXml).mockReturnValue({ ok: true, xml: appliedBarXml });
+      vi.mocked(getWorkbookXmlModule.getWorkbookXml)
+        .mockResolvedValueOnce(Ok(CALC_BASE_XML))
+        .mockResolvedValue(Ok(CALC_BASE_XML));
+
+      const resultPromise = getToolResult({
+        session: '1',
+        ask: 'Sales by Region',
+        proposal: sampleProposal,
+        auto_apply: true,
+        skip_validation: true,
+        allowSkipValidation: true,
+        getExecutor,
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      const result = await resultPromise;
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        applied: false,
+        may_have_applied: true,
+        retry_safe: false,
+        sheet_name: 'Sales by Region',
+        verification: { status: 'failed' },
+      });
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not overwrite an unrelated worksheet that shares a deterministic KPI title', async () => {
+    const key = 'a'.repeat(64);
+    const existingWorkbook = CALC_BASE_XML.replace(
+      '</worksheets>',
+      "<worksheet name='Sales by Region'><table /></worksheet></worksheets>",
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [existingWorkbook],
+    });
+    vi.mocked(classifyWorksheetReplaceTarget).mockImplementation((_xml, name) =>
+      name === 'Sales by Region' ? 'replaceable' : 'not-found',
+    );
+    vi.mocked(workbookHasSheetNamed).mockImplementation((_xml, name) => name === 'Sales by Region');
+    vi.mocked(buildInjectedWorkbookXml).mockImplementation(({ title }) => ({
+      ok: true,
+      xml: existingWorkbook.replace(
+        '</worksheets>',
+        `<worksheet name='${title}'><table /></worksheet></worksheets>`,
+      ),
+    }));
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Sales by Region',
+      auto_apply: true,
+      skip_validation: true,
+      proposal: {
+        ...sampleProposal,
+        template_parameters: { __TABLEAU_AGENT_IDEMPOTENCY_KEY__: key },
+      },
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).sheet_name).toBe('Sales by Region (2)');
+    const appliedXml = applyWorkbookDocument.mock.calls[0]?.[0] as string;
+    expect(appliedXml).toMatch(/worksheet name=["']Sales by Region["']/);
+    expect(appliedXml).toMatch(/worksheet\b[^>]*name=["']Sales by Region \(2\)["']/);
+    expect(appliedXml).toMatch(new RegExp(`user:tableau-agent-idempotency-key=["']${key}["']`));
+  });
+
+  it('reuses the hidden deterministic identity while keeping the visible title clean', async () => {
+    const key = 'b'.repeat(64);
+    const existingWorkbook = ensureUserNamespace(
+      CALC_BASE_XML.replace(
+        "<worksheet name='Sheet 1' />",
+        `<worksheet name='Sales by Region' user:tableau-agent-idempotency-key='${key}'><table /></worksheet>`,
+      ),
+    );
+    const { getExecutor } = setupAutoApplyMocks({ workbookReads: [existingWorkbook] });
+    vi.mocked(classifyWorksheetReplaceTarget).mockImplementation((_xml, name) =>
+      name === 'Sales by Region' ? 'replaceable' : 'not-found',
+    );
+    vi.mocked(workbookHasSheetNamed).mockImplementation((_xml, name) => name === 'Sales by Region');
+    vi.mocked(buildInjectedWorkbookXml).mockImplementation(({ title }) => ({
+      ok: true,
+      xml: existingWorkbook.replace(
+        /<worksheet name='Sales by Region'[^>]*><table \/><\/worksheet>/,
+        `<worksheet name='${title}'><table /></worksheet>`,
+      ),
+    }));
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Sales by Region',
+      auto_apply: true,
+      skip_validation: true,
+      proposal: {
+        ...sampleProposal,
+        template_parameters: { __TABLEAU_AGENT_IDEMPOTENCY_KEY__: key },
+      },
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).sheet_name).toBe('Sales by Region');
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Sales by Region' }),
+    );
   });
 
   it('keeps untrusted Insights KPI calc application on the ordinary two-apply path', async () => {

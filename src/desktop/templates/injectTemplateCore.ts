@@ -19,7 +19,7 @@ import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
 import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types.js';
 import { unsubstitutedTemplateTokenRule } from '../validation/rules/unsubstitutedTemplateToken.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
-import { xmlNamesEqual } from '../xmlElement.js';
+import { parsedXmlNamesEqual } from '../xmlElement.js';
 import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparseTemporalAxis.js';
 import { spliceBoundFacet } from './facetSplice.js';
 import {
@@ -270,7 +270,7 @@ function hasZoneNamed(node: unknown, title: string): boolean {
     zones.some((zone) => {
       if (!zone || typeof zone !== 'object') return false;
       const zoneName = (zone as Record<string, unknown>)['@_name'];
-      return typeof zoneName === 'string' && xmlNamesEqual(zoneName, title);
+      return typeof zoneName === 'string' && parsedXmlNamesEqual(zoneName, title);
     })
   ) {
     return true;
@@ -296,7 +296,7 @@ export function classifyWorksheetReplaceTarget(
     return 'not-found';
   }
   const worksheets = normalizeArray<ParsedWorksheet>(workbook.workbook?.worksheets?.worksheet);
-  if (!worksheets.some((ws) => ws?.['@_name'] && xmlNamesEqual(ws['@_name'], name))) {
+  if (!worksheets.some((ws) => ws?.['@_name'] && parsedXmlNamesEqual(ws['@_name'], name))) {
     return 'not-found';
   }
   return hasZoneNamed(workbook, name) ? 'in-dashboard' : 'replaceable';
@@ -326,7 +326,7 @@ export function workbookHasSheetNamed(workbookXml: string, name: string): boolea
       | undefined;
     return normalizeArray<Record<string, unknown>>(sheets).some((sheet) => {
       const sheetName = sheet['@_name'];
-      return typeof sheetName === 'string' && xmlNamesEqual(sheetName, name);
+      return typeof sheetName === 'string' && parsedXmlNamesEqual(sheetName, name);
     });
   });
 }
@@ -357,7 +357,9 @@ export function removeSameNamedWorksheet(workbookXml: string, title: string): st
   const wb = workbook.workbook;
   const container = wb?.worksheets;
   const worksheets = normalizeArray<ParsedWorksheet>(container?.worksheet);
-  const kept = worksheets.filter((ws) => !ws?.['@_name'] || !xmlNamesEqual(ws['@_name'], title));
+  const kept = worksheets.filter(
+    (ws) => !ws?.['@_name'] || !parsedXmlNamesEqual(ws['@_name'], title),
+  );
   if (!wb || !container || kept.length === worksheets.length) {
     return workbookXml;
   }
@@ -371,7 +373,8 @@ export function removeSameNamedWorksheet(workbookXml: string, title: string): st
   }
   const windows = normalizeArray<ParsedWindow>(wb.windows?.window);
   const keptWindows = windows.filter(
-    (w) => !(w?.['@_class'] === 'worksheet' && w?.['@_name'] && xmlNamesEqual(w['@_name'], title)),
+    (w) =>
+      !(w?.['@_class'] === 'worksheet' && w?.['@_name'] && parsedXmlNamesEqual(w['@_name'], title)),
   );
   if (wb.windows && keptWindows.length !== windows.length) {
     wb.windows.window = keptWindows.length === 1 ? keptWindows[0] : keptWindows;
