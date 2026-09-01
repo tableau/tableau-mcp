@@ -1,8 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
-import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
+import { TableauAuthInfo } from './server/oauth/schemas.js';
 import invariant from './utils/invariant.js';
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
