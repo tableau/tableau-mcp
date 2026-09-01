@@ -2,13 +2,12 @@
 // the top five", "flip the sort") to ONE bounded, validated, worksheet-level mutation
 // instead of whole-workbook XML surgery.
 //
-// Flow: get-worksheet-xml (ONE fetch) -> pure minimal patch (envelope check inside the
-// planner) -> ensureUserNamespace -> preflight validation -> load-worksheet-xml (apply
-// ONCE, itself validated) -> get-worksheet-xml readback -> confirm the expected node.
-// On ANY out-of-envelope condition it REFUSES with a precise reason and hands back to the
-// standard authoring path — it never retries, never applies twice, never falls back to
-// whole-workbook XML. The WHAT (which nodes, which refusals) lives in the pure planners
-// under src/desktop/refine/refineWorksheet.ts; this file is the I/O wrapper + registration.
+// Most operations flow through get -> pure minimal planner -> validated one-shot load ->
+// focused readback. round_stacked_bar has its own planRoundStackedBar/applyRoundedStackedBar
+// route: it locks the live source, preflights summary/underlying/workbook evidence, sends one
+// per-sheet apply, then strictly polls worksheet/workbook/summary readback. Both routes refuse
+// out-of-envelope input without retrying, applying twice, or falling back to whole-workbook XML.
+// The pure planners own the mutation shape; this file owns I/O and registration.
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
@@ -30,6 +29,10 @@ import {
   type TableauMarkType,
   type TopNEnd,
 } from '../../../../desktop/refine/refineWorksheet.js';
+import {
+  planRoundStackedBar,
+  type RoundStackedBarPreset,
+} from '../../../../desktop/refine/roundStackedBar.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { ensureUserNamespace } from '../../../../desktop/templates/injectTemplateCore.js';
 import {
@@ -37,6 +40,7 @@ import {
   runValidation,
 } from '../../../../desktop/validation/registry.js';
 import { ValidationIssue } from '../../../../desktop/validation/types.js';
+import { applyRoundedStackedBar } from '../../../../desktop/wrappers/applyRoundedStackedBar.js';
 import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorksheetXml } from '../../../../desktop/wrappers/getWorksheetXml.js';
 import { loadWorksheetXml } from '../../../../desktop/wrappers/loadWorksheetXml.js';
@@ -49,16 +53,34 @@ import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
+  IncompleteOperationError,
   UnknownError,
   WorksheetXmlLoadFailedError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
 
-type RefineOperation = 'top_n' | 'sort_direction' | 'sort_by_field' | 'mark_type';
+type RefineOperation =
+  | 'top_n'
+  | 'sort_direction'
+  | 'sort_by_field'
+  | 'mark_type'
+  | 'round_stacked_bar';
+
+type ProgrammaticRoundedBarVerification = {
+  helperFields: number;
+  summaryGroups: number;
+  summaryRows: number;
+};
 
 type RefineWorksheetToolResult =
-  | { refined: true; operation: RefineOperation; worksheetName: string; message: string }
+  | {
+      refined: true;
+      operation: RefineOperation;
+      worksheetName: string;
+      message: string;
+      verification?: ProgrammaticRoundedBarVerification;
+    }
   | { refined: false; operation: RefineOperation; worksheetName: string; reason: string };
 
 /** A hand-back-to-the-standard-path refusal — not an error, so isError stays false. */
@@ -80,38 +102,34 @@ function formatValidationErrors(issues: ValidationIssue[]): string {
 
 const paramsSchema = {
   session: z.string().optional().describe('Desktop session; omit if one.'),
-  worksheetName: z.string().min(1).describe('Worksheet display name.'),
+  worksheetName: z.string().min(1).describe('Sheet name.'),
   operation: z
-    .enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type'])
-    .describe('Refinement type.'),
+    .enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type', 'round_stacked_bar'])
+    .describe('Refinement.'),
   topN: z
     .object({
-      n: z.number().int().min(1).max(50).describe('Members to keep (1-50).'),
-      end: z.enum(['top', 'bottom']).optional().describe('top/bottom; default top.'),
+      n: z.number().int().min(1).max(50).describe('Count (1-50).'),
+      end: z.enum(['top', 'bottom']).optional().describe('End; default top.'),
     })
     .optional()
-    .describe('Top/Bottom N.'),
+    .describe('top_n.'),
   sortDirection: z
     .object({
-      direction: z.enum(['ASC', 'DESC']).describe('Existing-sort direction.'),
+      direction: z.enum(['ASC', 'DESC']).describe('ASC/DESC.'),
     })
     .optional()
-    .describe('sort_direction; numeric DESC=largest first.'),
-  targetField: z.string().min(1).optional().describe('Axis; omit to auto-detect categorical axis.'),
-  sortByField: z.string().min(1).optional().describe('Measure to sort by.'),
-  direction: z
-    .enum(['asc', 'desc'])
-    .optional()
-    .describe('sort_by_field; asc default; numeric desc=largest first.'),
-  markType: z
-    .enum(TABLEAU_MARK_TYPES)
-    .optional()
-    .describe('mark_type target, such as area, line, bar, or circle.'),
+    .describe('sort_direction; numeric DESC=largest.'),
+  targetField: z.string().min(1).optional().describe('Axis; omit to detect.'),
+  sortByField: z.string().min(1).optional().describe('Sort measure.'),
+  direction: z.enum(['asc', 'desc']).optional().describe('sort_by_field; numeric desc=largest.'),
+  markType: z.enum(TABLEAU_MARK_TYPES).optional().describe('mark_type target.'),
+  preset: z.enum(['subtle']).optional().describe('round_stacked_bar only.'),
 };
 
 const title = 'Refining worksheet';
 
-export const REFINE_WORKSHEET_DESCRIPTION = 'Refine sheet: top-N, sort, or mark type.';
+export const REFINE_WORKSHEET_DESCRIPTION =
+  'Refine sheet: top-N, sort, mark type, or rounded stack.';
 
 export const getRefineWorksheetTool = (
   server: DesktopMcpServer,
@@ -139,6 +157,7 @@ export const getRefineWorksheetTool = (
         sortByField,
         direction,
         markType,
+        preset,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -154,6 +173,7 @@ export const getRefineWorksheetTool = (
           sortByField,
           direction,
           markType,
+          preset,
         },
         callback: async () => {
           if (!worksheetName || !worksheetName.trim()) {
@@ -180,6 +200,13 @@ export const getRefineWorksheetTool = (
               'markType is required when operation=mark_type.',
             ).toErr();
           }
+          if (operation === 'round_stacked_bar' && preset !== 'subtle') {
+            return refusal(
+              operation,
+              worksheetName,
+              'round_stacked_bar requires preset=subtle; no worksheet change was sent.',
+            );
+          }
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
@@ -187,7 +214,7 @@ export const getRefineWorksheetTool = (
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
 
-          // 1. ONE fetch of the target worksheet.
+          // 1. Initial fetch of the target worksheet.
           const fetched = await getWorksheetXml({
             worksheetName,
             executor,
@@ -211,6 +238,89 @@ export const getRefineWorksheetTool = (
           // Read back by the fragment's stable simple-id, not the display name, so a rename between
           // this fetch and the readback can't miss.
           const readbackRef = worksheetFragmentSimpleId(sourceXml) ?? canonicalWorksheetName;
+
+          if (operation === 'round_stacked_bar') {
+            const plan = planRoundStackedBar(sourceXml, {
+              preset: preset as RoundStackedBarPreset,
+            });
+            if (!plan.ok) {
+              return refusal(operation, canonicalWorksheetName, plan.reason);
+            }
+            if (plan.alreadyRounded) {
+              return refusal(
+                operation,
+                canonicalWorksheetName,
+                'The worksheet already has the deterministic subtle rounded bar structure; no write was sent.',
+              );
+            }
+
+            let outcome: Awaited<ReturnType<typeof applyRoundedStackedBar>>;
+            try {
+              outcome = await applyRoundedStackedBar({
+                sourceWorksheetXml: sourceXml,
+                intendedWorksheetXml: plan.xml,
+                contract: plan.semanticContract,
+                focus: { navigate: 'artifact', sheetName: canonicalWorksheetName },
+                executor,
+                signal: extra.signal,
+              });
+            } catch {
+              return new IncompleteOperationError({
+                refined: 'unknown' as const,
+                operation,
+                worksheetName: canonicalWorksheetName,
+                mutation: 'unknown' as const,
+                retrySafe: false as const,
+                stage: 'wrapper',
+                message:
+                  'The rounded bar apply path stopped unexpectedly and cannot prove whether Desktop received a write.',
+                guidance:
+                  'Inspect the live worksheet and workbook state; do not retry round_stacked_bar.',
+              }).toErr();
+            }
+            if (outcome.state === 'failed') {
+              return refusal(
+                operation,
+                canonicalWorksheetName,
+                `${outcome.stage}: ${outcome.message}`,
+              );
+            }
+            if (outcome.state === 'unknown') {
+              return new IncompleteOperationError({
+                refined: 'unknown' as const,
+                operation,
+                worksheetName: canonicalWorksheetName,
+                mutation: outcome.mutation,
+                retrySafe: false as const,
+                stage: outcome.stage,
+                message: outcome.message,
+                guidance:
+                  'Inspect the live worksheet and workbook state; do not retry round_stacked_bar.',
+              }).toErr();
+            }
+
+            const verification: ProgrammaticRoundedBarVerification = {
+              helperFields: Object.values(plan.semanticContract.helpers).length,
+              summaryGroups: outcome.baseline.groups.length,
+              summaryRows: outcome.baseline.expectedVertexRows,
+            };
+            const narrationEvidence =
+              'text' in plan.semanticContract.narration.caption
+                ? 'the worksheet caption and alt text'
+                : 'preserved caption suppression state and alt text';
+            return new Ok({
+              refined: true,
+              operation,
+              worksheetName: outcome.worksheet.name,
+              verification,
+              message:
+                `Rebuilt worksheet "${outcome.worksheet.name}" as subtle Polygon geometry. ` +
+                `Programmatic readback confirmed the ${verification.helperFields}-field helper structure, ` +
+                `${verification.summaryGroups} summary groups, ${verification.summaryRows} summary rows, ` +
+                `${narrationEvidence}. Manually inspect rendered stack order. ` +
+                'Tableau Data Guide and View Data may show internal polygon helper fields.',
+            });
+          }
 
           // 2. Pure minimal patch + the readback confirmation target for this operation.
           let patched: string;
