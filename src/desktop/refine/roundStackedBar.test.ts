@@ -358,6 +358,46 @@ describe('planRoundStackedBar', () => {
     });
   });
 
+  it('decodes Tableau-escaped quotes in a categorical filter member', () => {
+    const source = worksheet({
+      extraColumnInstances:
+        "<column caption='Product Name' datatype='string' name='[Product Name]' role='dimension' type='nominal' /><column-instance column='[Product Name]' derivation='None' name='[none:Product Name:nk]' pivot='key' type='nominal' />",
+      filter: `<filter class='categorical' column='[${INTERNAL_DS}].[none:Product Name:nk]'>
+        <groupfilter function='union' user:ui-enumeration='inclusive'>
+          <groupfilter function='member' level='[none:Product Name:nk]' member='&quot;Message Book, Standard Line \\&quot;While You Were Out\\&quot;, 5 1/2\\&quot; X 4\\&quot;, 200 Sets/Book&quot;' />
+        </groupfilter>
+      </filter>`,
+      slices: `<slices><column>[${INTERNAL_DS}].[none:Product Name:nk]</column></slices>`,
+    });
+
+    const result = planRoundStackedBar(source, { preset: 'subtle' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.semanticContract.filter?.member).toBe(
+      'Message Book, Standard Line "While You Were Out", 5 1/2" X 4", 200 Sets/Book',
+    );
+  });
+
+  it('preserves backslash sequences in an unquoted categorical filter member', () => {
+    const source = worksheet({
+      extraColumnInstances:
+        "<column caption='Region' datatype='string' name='[Region]' role='dimension' type='nominal' /><column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />",
+      filter: `<filter class='categorical' column='[${INTERNAL_DS}].[none:Region:nk]'>
+        <groupfilter function='union' user:ui-enumeration='inclusive'>
+          <groupfilter function='member' level='[none:Region:nk]' member='true\\&quot;sentinel' />
+        </groupfilter>
+      </filter>`,
+      slices: `<slices><column>[${INTERNAL_DS}].[none:Region:nk]</column></slices>`,
+    });
+
+    const result = planRoundStackedBar(source, { preset: 'subtle' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.semanticContract.filter?.member).toBe('true\\"sentinel');
+  });
+
   it('uses the top-level/dependency datasource name, never the nested connection id, in generated refs', () => {
     const result = planRoundStackedBar(worksheet(), { preset: 'subtle' });
     expect(result.ok).toBe(true);

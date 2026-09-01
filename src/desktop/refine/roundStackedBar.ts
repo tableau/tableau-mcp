@@ -572,7 +572,7 @@ function readFilter(
   const encodedMember = members[0].getAttribute('member') ?? '';
   const member =
     encodedMember.startsWith('"') && encodedMember.endsWith('"')
-      ? encodedMember.slice(1, -1)
+      ? encodedMember.slice(1, -1).replaceAll('\\"', '"')
       : encodedMember;
   return {
     ok: true,

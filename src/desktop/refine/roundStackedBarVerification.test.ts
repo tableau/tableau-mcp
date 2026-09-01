@@ -168,8 +168,7 @@ type Interval = {
   radiusScale?: number;
 };
 
-function polygonRows(interval: Interval): unknown[][] {
-  const categorySpan = interval.category === 'Alpha' ? 60 : 10;
+function polygonRows(interval: Interval, categorySpan: number): unknown[][] {
   const radius =
     Math.min((interval.high - interval.low) / 2, 0.02 * categorySpan) * (interval.radiusScale ?? 1);
   const topY = interval.roundTop ? radius : 0;
@@ -225,7 +224,10 @@ function goodIntervals(): Interval[] {
   ];
 }
 
-function polygonSummary(intervals = goodIntervals()): TabularData {
+function polygonSummary(
+  intervals = goodIntervals(),
+  categorySpans: Readonly<Record<string, number>> = { Alpha: 60, Beta: 10 },
+): TabularData {
   return {
     worksheet: { id: WORKSHEET_ID },
     columns: [
@@ -237,7 +239,9 @@ function polygonSummary(intervals = goodIntervals()): TabularData {
       { name: helperCaption('bin') },
       { name: 'Tooltip Only' },
     ],
-    rows: intervals.flatMap(polygonRows).reverse(),
+    rows: intervals
+      .flatMap((interval) => polygonRows(interval, categorySpans[interval.category] ?? 0))
+      .reverse(),
   };
 }
 
@@ -709,6 +713,29 @@ describe('verifyRoundStackedBarPostSummary', () => {
   it('accepts unordered 12-row polygons and extra summary columns', () => {
     const result = verifyRoundStackedBarPostSummary(polygonSummary(), captureBaseline(), contract);
     expect(result).toEqual({ ok: true, findings: [] });
+  });
+
+  it('verifies positive and negative stacks independently within one category', () => {
+    const mixedGroups = [
+      ['Mixed', 'D', 3],
+      ['Mixed', 'C', 5],
+      ['Mixed', 'B', -4],
+      ['Mixed', 'A', -6],
+    ] as const;
+    const mixedIntervals: Interval[] = [
+      { category: 'Mixed', segment: 'D', low: 0, high: 3 },
+      { category: 'Mixed', segment: 'C', low: 3, high: 8, roundTop: true },
+      { category: 'Mixed', segment: 'B', low: -4, high: 0 },
+      { category: 'Mixed', segment: 'A', low: -10, high: -4, roundBottom: true },
+    ];
+
+    expect(
+      verifyRoundStackedBarPostSummary(
+        polygonSummary(mixedIntervals, { Mixed: 18 }),
+        captureBaseline(summary(mixedGroups)),
+        contract,
+      ),
+    ).toEqual({ ok: true, findings: [] });
   });
 
   it('rejects the minimized live reversal even when spans and outer tips are otherwise correct', () => {
