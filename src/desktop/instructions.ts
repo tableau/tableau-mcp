@@ -182,6 +182,20 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
+    id: 'rounded-corners',
+    trigger: 'rounded corners on dashboard objects or containers',
+    action:
+      'For dashboard or container corners, call list-dashboards, then call format-dashboard-zones. If the tool refuses, report the reason and stop. Never claim dashboard or container rounded corners are impossible before the typed tool refuses. Never use shell commands, raw whole-workbook XML, or cached XML for this ask.',
+    toolSequence: ['list-dashboards', 'format-dashboard-zones'],
+    stopConditions: [
+      'If the tool refuses, report the reason and stop',
+      'Never claim dashboard or container rounded corners are impossible before the typed tool refuses',
+      'Never use shell commands, raw whole-workbook XML, or cached XML for this ask',
+    ],
+    requiredEvidence: ['dashboard-zone readback receipt when dashboard corners were requested'],
+  },
+  {
+    kind: 'route',
     id: 'dynamic-authoring',
     trigger:
       'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total and LOD)',
@@ -226,7 +240,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type; format-dashboard-zones rounds dashboard objects; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
   },
   {
     kind: 'prose',
