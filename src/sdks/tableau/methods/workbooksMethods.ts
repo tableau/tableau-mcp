@@ -300,7 +300,10 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       // Tableau returns HTTP 422 with a validation-result body when the workbook fails validation.
       // Parse that structured result instead of letting axios throw; any other status still throws.
       if (isAxiosError(error) && error.response?.status === 422) {
-        return workbookValidationResultSchema.parse(error.response.data);
+        const result = workbookValidationResultSchema.safeParse(error.response.data);
+        if (result.success) {
+          return result.data;
+        }
       }
       throw error;
     }

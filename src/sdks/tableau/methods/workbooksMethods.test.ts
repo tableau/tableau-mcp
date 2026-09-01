@@ -380,6 +380,35 @@ describe('WorkbooksMethods', () => {
       expect(validation.uploadId).toBeUndefined();
     });
 
+    it('rethrows the original axios error when the 422 body does not match the validation-result schema', async () => {
+      // A 422 whose body is missing the required `timestamp` field (and is otherwise unrelated
+      // JSON) must not be masked by a ZodError - the original axios error is rethrown.
+      const malformedBody = { unexpected: 'shape', detail: 'not a validation result' };
+      const axiosError = new AxiosError('Request failed with status code 422');
+      axiosError.response = { status: 422, data: malformedBody } as AxiosError['response'];
+
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        axios: {
+          post: vi.fn().mockRejectedValue(axiosError),
+          defaults: { baseURL: 'http://test' },
+        } as unknown as AxiosInstance,
+      };
+
+      await expect(
+        workbooksMethods.validateWorkbookAndUpload({
+          siteId: 'site-1',
+          filename: 'malformed.twb',
+          workbook: Buffer.from('<workbook>'),
+        }),
+      ).rejects.toBe(axiosError);
+    });
+
     it('rethrows axios errors whose status is not 422', async () => {
       const axiosError = new AxiosError('Request failed with status code 403');
       axiosError.response = { status: 403 } as AxiosError['response'];
