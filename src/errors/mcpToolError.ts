@@ -94,6 +94,19 @@ export class FlowNotAllowedError extends McpToolError {
   }
 }
 
+// Tableau Knowledge is a Tableau Cloud feature; the REST routes do not exist on
+// Tableau Server, where the request falls through to a bare 404 (no error code).
+export class KnowledgeNotAvailableError extends McpToolError {
+  constructor() {
+    super({
+      type: 'tableau-server',
+      message:
+        'Tableau Knowledge is only available on Tableau Cloud. Consider removing the knowledge tools from your client or excluding them with the EXCLUDE_TOOLS environment variable.',
+      statusCode: 404,
+    });
+  }
+}
+
 export class PulseDisabledError extends McpToolError {
   constructor() {
     super({ type: 'pulse-disabled', message: 'Pulse is disabled', statusCode: 400 });
