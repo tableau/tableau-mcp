@@ -58,17 +58,21 @@ test('passes when no removed tool names are present', () => {
   );
 });
 
-test('flags a removed tool name in prose and inside backticks (.md and .mdx)', () => {
+test('flags a removed tool name in prose and backticks, with accurate line numbers (.md and .mdx)', () => {
   withDocsTree(
     {
-      'intro.md': 'Call the `get-stale-content-report` tool to find stale content.',
+      // Removed name on line 3 (not line 1) so the reported line number is actually exercised.
+      'intro.md': '# Intro\n\nCall the `get-stale-content-report` tool to find stale content.',
       'guide/usage.mdx': 'The get-stale-content-report output lists workbooks.',
     },
     (root) => {
       const { violations } = findRemovedToolNameReferences(root);
       assert.equal(violations.length, 2);
       assert.ok(violations.every((v) => v.name === 'get-stale-content-report'));
-      assert.deepEqual(violations.map((v) => v.line).sort(), [1, 1]);
+      const intro = violations.find((v) => v.file.endsWith('intro.md'));
+      const usage = violations.find((v) => v.file.endsWith('usage.mdx'));
+      assert.equal(intro.line, 3);
+      assert.equal(usage.line, 1);
     },
   );
 });
