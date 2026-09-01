@@ -167,6 +167,102 @@ describe('server', () => {
     expect(instructions).not.toContain('Markdown tables');
   });
 
+  it('should name the connected server and site in instructions when SERVER and SITE_NAME are set', () => {
+    vi.mocked(McpServer).mockClear();
+    vi.stubEnv('SERVER', 'https://10ax.online.tableau.com');
+    vi.stubEnv('SITE_NAME', 'admin-insights');
+    new WebMcpServer();
+    const instructions = getConstructedInstructions();
+
+    expect(instructions).toBeTruthy();
+    expect(instructions).toContain(
+      'This server is connected to Tableau server https://10ax.online.tableau.com (site: admin-insights).',
+    );
+  });
+
+  it('should fall back to the "Default" site label when SITE_NAME is empty but SERVER is set', () => {
+    vi.mocked(McpServer).mockClear();
+    vi.stubEnv('SERVER', 'https://10ax.online.tableau.com');
+    vi.stubEnv('SITE_NAME', '');
+    new WebMcpServer();
+    const instructions = getConstructedInstructions();
+
+    expect(instructions).toContain(
+      'This server is connected to Tableau server https://10ax.online.tableau.com (site: Default).',
+    );
+  });
+
+  it('should omit the connection clause entirely when SERVER is unset', () => {
+    vi.mocked(McpServer).mockClear();
+    vi.stubEnv('SERVER', undefined);
+    vi.stubEnv('SITE_NAME', 'tc25');
+    new WebMcpServer();
+    const instructions = getConstructedInstructions();
+
+    // Base guidance is still present...
+    expect(instructions).toContain('Tableau MCP exposes tools');
+    // ...but no static connection clause: hosted/multi-tenant OAuth resolves the site per-user at sign-in.
+    expect(instructions).not.toContain('This server is connected to Tableau server');
+    expect(instructions).not.toContain('(site:');
+  });
+
+  it('should not leak an unresolved ${user_config.*} template verbatim into the connection clause', () => {
+    vi.mocked(McpServer).mockClear();
+    // The Claude MCP Bundle leaves this placeholder verbatim when the user configures no site name.
+    vi.stubEnv('SERVER', 'https://10ax.online.tableau.com');
+    vi.stubEnv('SITE_NAME', '${user_config.site_name}');
+    new WebMcpServer();
+    const instructions = getConstructedInstructions();
+
+    // The sanitizer blanks the placeholder, so the site falls back to "Default" and the raw template
+    // never reaches the model-facing instructions.
+    expect(instructions).not.toContain('${user_config.site_name}');
+    expect(instructions).toContain(
+      'This server is connected to Tableau server https://10ax.online.tableau.com (site: Default).',
+    );
+  });
+
+  it('should defer the site to sign-in when OAuth site-locking is off (OAUTH_LOCK_SITE=false)', () => {
+    vi.mocked(McpServer).mockClear();
+    vi.stubEnv('SERVER', 'https://10ay.online.tableau.com');
+    vi.stubEnv('SITE_NAME', 'strawberrysugar10ay');
+    vi.stubEnv('OAUTH_LOCK_SITE', 'false');
+    new WebMcpServer();
+    const instructions = getConstructedInstructions();
+
+    // The pod is still named, but the now non-authoritative static SITE_NAME is suppressed rather than
+    // asserted — under lock-off each user signs in to their own site.
+    expect(instructions).toContain(
+      'This server is connected to Tableau server https://10ay.online.tableau.com (site: determined per user at sign-in).',
+    );
+    expect(instructions).not.toContain('strawberrysugar10ay');
+  });
+
+  it('should name the static site when OAuth site-locking is on (OAUTH_LOCK_SITE=true)', () => {
+    vi.mocked(McpServer).mockClear();
+    vi.stubEnv('SERVER', 'https://10ay.online.tableau.com');
+    vi.stubEnv('SITE_NAME', 'strawberrysugar10ay');
+    vi.stubEnv('OAUTH_LOCK_SITE', 'true');
+    new WebMcpServer();
+    const instructions = getConstructedInstructions();
+
+    expect(instructions).toContain(
+      'This server is connected to Tableau server https://10ay.online.tableau.com (site: strawberrysugar10ay).',
+    );
+  });
+
+  it('should defer the site to sign-in under passthrough auth (ENABLE_PASSTHROUGH_AUTH=true)', () => {
+    vi.mocked(McpServer).mockClear();
+    vi.stubEnv('SERVER', 'https://10ay.online.tableau.com');
+    vi.stubEnv('SITE_NAME', 'strawberrysugar10ay');
+    vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+    new WebMcpServer();
+    const instructions = getConstructedInstructions();
+
+    expect(instructions).toContain('(site: determined per user at sign-in)');
+    expect(instructions).not.toContain('strawberrysugar10ay');
+  });
+
   it('should not register disabled tools', async () => {
     const server = getServer();
     await server.registerTools();

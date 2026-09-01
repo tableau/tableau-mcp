@@ -15,6 +15,7 @@ import { join } from 'path';
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
+import { removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
@@ -57,11 +58,13 @@ const ADMIN_INSTRUCTIONS =
  * Single source of truth for the web server's `initialize` instructions string. Returns the base
  * guidance, with the admin/site-health guidance appended only when ADMIN_TOOLS_ENABLED is set.
  *
- * ADMIN_TOOLS_ENABLED is read straight from env (matching Config's exact semantics in config.ts:
- * `ADMIN_TOOLS_ENABLED === 'true'`) rather than via getConfig(). The instructions string depends
- * ONLY on this flag, and it is composed at handshake/registration-independent construction time —
- * eagerly building the full Config here would newly require SERVER to be set and would consume test
- * getConfig() mocks. Direct env read keeps composition side-effect-free.
+ * All inputs are read straight from env rather than via getConfig(): ADMIN_TOOLS_ENABLED (matching Config's
+ * exact semantics in config.ts, `ADMIN_TOOLS_ENABLED === 'true'`); SERVER/SITE_NAME through
+ * removeClaudeMcpBundleUserConfigTemplates so an unreplaced Claude-Bundle `${user_config.*}` template is
+ * blanked rather than leaked; and OAUTH_LOCK_SITE / ENABLE_PASSTHROUGH_AUTH, which decide whether the site
+ * is statically pinned. Composed at handshake/registration-independent construction time — eagerly building
+ * the full Config here would newly require SERVER to be set and would consume test getConfig() mocks. Direct
+ * env reads keep composition side-effect-free.
  *
  * Both the default/web path (WebMcpServer constructs its own McpServer) and the combined path
  * (index.combined.ts supplies a pre-built McpServer) MUST feed instructions through this function.
@@ -71,7 +74,30 @@ const ADMIN_INSTRUCTIONS =
  */
 export function buildWebInstructions(): string {
   const adminToolsEnabled = process.env.ADMIN_TOOLS_ENABLED === 'true';
-  return adminToolsEnabled ? `${BASE_INSTRUCTIONS} ${ADMIN_INSTRUCTIONS}` : BASE_INSTRUCTIONS;
+  const instructions = adminToolsEnabled
+    ? `${BASE_INSTRUCTIONS} ${ADMIN_INSTRUCTIONS}`
+    : BASE_INSTRUCTIONS;
+
+  // Connection clause: name the single Tableau instance this process is bound to so a client/model can tell
+  // which one it maps to. SERVER (the pod) is printed verbatim (no URL reparse, matching the operator's
+  // configured value); the whole clause is omitted when SERVER is unset (hosted/multi-tenant OAuth).
+  const { SERVER: server, SITE_NAME: siteName } = removeClaudeMcpBundleUserConfigTemplates(
+    process.env,
+  );
+  if (!server) {
+    return instructions;
+  }
+
+  // The SERVER (pod) is fixed, but the SITE is only statically pinned when every session binds to one site.
+  // Two opt-in modes float the site per connecting user, so a static SITE_NAME would misstate the live
+  // connection: OAuth with site-locking off (OAUTH_LOCK_SITE=false — mirrors Config's default
+  // `lockSite: oauthLockSite !== 'false'`) and passthrough auth (ENABLE_PASSTHROUGH_AUTH=true, where each
+  // request carries its own site). In those modes name the pod but defer the site to sign-in rather than
+  // assert a stale value.
+  const siteFloatsPerUser =
+    process.env.OAUTH_LOCK_SITE === 'false' || process.env.ENABLE_PASSTHROUGH_AUTH === 'true';
+  const site = siteFloatsPerUser ? 'determined per user at sign-in' : siteName || 'Default';
+  return `${instructions} This server is connected to Tableau server ${server} (site: ${site}).`;
 }
 
 export class WebMcpServer extends Server {
