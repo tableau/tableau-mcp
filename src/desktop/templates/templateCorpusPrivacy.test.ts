@@ -77,7 +77,7 @@ describe('bundled bookmark privacy', () => {
       }
     }
 
-    expect(templateFiles).toHaveLength(136);
+    expect(templateFiles).toHaveLength(137);
     expect(violations).toEqual([]);
   });
 });

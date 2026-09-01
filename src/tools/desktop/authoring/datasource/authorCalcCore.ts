@@ -73,7 +73,7 @@ export async function authorCalculationsInWorkbook({
   labelErrors?: boolean;
   resolveLooseReferences?: boolean;
 } & WithExecutorAndAbortSignal): Promise<Result<AuthorCalculationsResult, AuthorCalcError>> {
-  const prepared = prepareCalculationBatch({
+  const prepared = prepareCalculationsInWorkbook({
     workbookXml,
     calcs,
     datasource,
@@ -87,7 +87,7 @@ export async function authorCalculationsInWorkbook({
   // A calc is not something the user looks at, and this helper also runs as an early leg of
   // bind-template, where the apply that follows names the chart it built.
   const outcome = await applyAndVerify({
-    xml: prepared.value.editedXml,
+    xml: prepared.value.workbookXml,
     baselineXml: workbookXml,
     settled: (xml) =>
       prepared.value.authoredCalcs.every((calc) =>
@@ -106,6 +106,41 @@ export async function authorCalculationsInWorkbook({
   }
 
   return new Ok({ workbookXml: outcome.workbookXml, authoredCalcs: prepared.value.authoredCalcs });
+}
+
+/**
+ * Pure calculation-authoring seam for a trusted caller that composes datasource
+ * calculations and a worksheet into one workbook mutation. The ordinary
+ * author-calc path still uses {@link authorCalculationsInWorkbook}, which applies
+ * and verifies immediately.
+ */
+export function prepareCalculationsInWorkbook({
+  workbookXml,
+  calcs,
+  datasource,
+  labelErrors = true,
+  resolveLooseReferences = false,
+}: {
+  workbookXml: string;
+  calcs: AuthorCalcInput[];
+  datasource?: string;
+  labelErrors?: boolean;
+  resolveLooseReferences?: boolean;
+}): Result<AuthorCalculationsResult, ArgsValidationError> {
+  const prepared = prepareCalculationBatch({
+    workbookXml,
+    calcs,
+    datasource,
+    labelErrors,
+    resolveLooseReferences,
+  });
+  if (prepared.isErr()) {
+    return prepared;
+  }
+  return new Ok({
+    workbookXml: prepared.value.editedXml,
+    authoredCalcs: prepared.value.authoredCalcs,
+  });
 }
 
 function prepareCalculationBatch({
@@ -150,13 +185,6 @@ function prepareCalculationBatch({
       return new ArgsValidationError(message).toErr();
     }
     const target = targetResult.value;
-    if (hasColumnCaption(target.xml, caption)) {
-      return new ArgsValidationError(
-        `${label}caption collision — pick a new caption or use the existing field`,
-      ).toErr();
-    }
-
-    const calcName = nextCalculationName(editedXml, Date.now());
     let formula = calc.formula;
     if (resolveLooseReferences) {
       const workbookSchema = summarizeSchema(editedXml);
@@ -172,6 +200,29 @@ function prepareCalculationBatch({
       formula = looseFormula.value;
     }
     const resolvedFormula = resolveCaptionReferences(formula, target.xml, editedXml);
+    const existingColumn = findColumnByCaption(target.xml, caption);
+    if (existingColumn !== undefined) {
+      const existingFormula = getAttr(existingColumn, 'formula');
+      const existingRole = unescapeXml(getAttr(existingColumn, 'role') ?? '');
+      const existingDatatype = unescapeXml(getAttr(existingColumn, 'datatype') ?? '');
+      const existingDefaultFormat = unescapeXml(getAttr(existingColumn, 'default-format') ?? '');
+      if (
+        existingFormula !== undefined &&
+        normalizeFormula(unescapeXml(existingFormula)) === normalizeFormula(resolvedFormula) &&
+        existingRole === role &&
+        existingDatatype === datatype &&
+        existingDefaultFormat === (calc.defaultFormat ?? '')
+      ) {
+        // Idempotent retry: the live workbook already contains this exact
+        // deterministic calculation, so keep it and continue with dependent calcs.
+        continue;
+      }
+      return new ArgsValidationError(
+        `${label}caption collision — pick a new caption or use the existing field`,
+      ).toErr();
+    }
+
+    const calcName = nextCalculationName(editedXml, Date.now());
     const columnXml = renderCalculationColumn({
       caption,
       formula: resolvedFormula,
@@ -443,13 +494,89 @@ function findDatasourceClose(
   return findTokenOutsideOpaque(xml, '</datasource>', from, scanTo, opaqueRanges);
 }
 
-function hasColumnCaption(datasourceXml: string, caption: string): boolean {
-  return findColumnTags(datasourceXml).some(
+function normalizeFormula(formula: string): string {
+  let normalized = '';
+  let index = 0;
+  let state: 'code' | 'quoted' | 'field' | 'lineNote' | 'blockNote' = 'code';
+  let quote = '';
+
+  while (index < formula.length) {
+    const char = formula[index];
+    const next = formula[index + 1];
+
+    if (state === 'code') {
+      if (/\s/.test(char)) {
+        if (normalized.length > 0 && normalized[normalized.length - 1] !== ' ') normalized += ' ';
+        while (index + 1 < formula.length && /\s/.test(formula[index + 1])) index += 1;
+      } else if (char === '"' || char === "'") {
+        state = 'quoted';
+        quote = char;
+        normalized += char;
+      } else if (char === '[') {
+        state = 'field';
+        normalized += char;
+      } else if (char === '/' && next === '/') {
+        state = 'lineNote';
+        normalized += '//';
+        index += 1;
+      } else if (char === '/' && next === '*') {
+        state = 'blockNote';
+        normalized += '/*';
+        index += 1;
+      } else {
+        normalized += char;
+      }
+    } else if (state === 'quoted') {
+      normalized += char;
+      if (char === quote) {
+        let backslashes = 0;
+        for (let cursor = index - 1; cursor >= 0 && formula[cursor] === '\\'; cursor -= 1) {
+          backslashes += 1;
+        }
+        if (backslashes % 2 === 1) {
+          // Backslash-escaped delimiters remain inside the literal. Tableau also
+          // accepts doubled delimiters, handled by the next branch.
+        } else if (next === quote) {
+          normalized += next;
+          index += 1;
+        } else {
+          state = 'code';
+        }
+      }
+    } else if (state === 'field') {
+      normalized += char;
+      if (char === ']') {
+        if (next === ']') {
+          normalized += next;
+          index += 1;
+        } else {
+          state = 'code';
+        }
+      }
+    } else if (state === 'lineNote') {
+      normalized += char;
+      if (char === '\n' || char === '\r') state = 'code';
+    } else {
+      normalized += char;
+      if (char === '*' && next === '/') {
+        normalized += '/';
+        index += 1;
+        state = 'code';
+      }
+    }
+    index += 1;
+  }
+
+  return normalized.trim();
+}
+
+function findColumnByCaption(datasourceXml: string, caption: string): string | undefined {
+  return findColumnTags(datasourceXml).find(
     (tag) => unescapeXml(getAttr(tag, 'caption') ?? '') === caption,
   );
 }
 
-function hasColumnNameAndCaption(xml: string, name: string, caption: string): boolean {
+export function hasColumnNameAndCaption(xml: string, name: string, caption: string): boolean {
   return findColumnTags(xml).some(
     (tag) =>
       unescapeXml(getAttr(tag, 'name') ?? '') === name &&
@@ -574,5 +701,14 @@ function unescapeXml(value: string): string {
     .replaceAll('&apos;', "'")
     .replaceAll('&gt;', '>')
     .replaceAll('&lt;', '<')
+    .replace(
+      /&#(?:x([0-9a-fA-F]+)|(\d+));/g,
+      (entity, hex: string | undefined, decimal: string | undefined) => {
+        const codePoint = Number.parseInt(hex ?? decimal ?? '', hex === undefined ? 10 : 16);
+        return Number.isSafeInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+          ? String.fromCodePoint(codePoint)
+          : entity;
+      },
+    )
     .replaceAll('&amp;', '&');
 }
