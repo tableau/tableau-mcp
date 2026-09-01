@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { fromError } from 'zod-validation-error/v3';
 
 import { log } from '../../logging/logger.js';
+import { getTelemetryProvider } from '../../telemetry/init.js';
 import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema } from './schemas.js';
 import { RefreshTokenData } from './types.js';
 
@@ -102,7 +103,7 @@ function tryRevokeRefreshToken(
  * Returns silently if the token is not a valid JWE or does not contain Tableau
  * credentials — per RFC 7009, callers always receive 200.
  */
-async function tryRevokeAccessToken(
+export async function tryRevokeAccessToken(
   token: string,
   privateKey: KeyObject,
   refreshTokens: Map<string, RefreshTokenData>,
@@ -144,18 +145,25 @@ async function tryRevokeAccessToken(
 
     // Best-effort signout of the upstream Tableau session
     if (tableauServer) {
+      const span = getTelemetryProvider().startSpan?.('tableau.oauth.signout', {
+        server: tableauServer,
+      });
+      let signoutError: unknown;
       try {
         await fetch(`${tableauServer}/api/3.24/auth/signout`, {
           method: 'POST',
           headers: { 'X-Tableau-Auth': tableauAccessToken },
         });
       } catch (error) {
+        signoutError = error;
         log({
           message: 'Best-effort Tableau signout failed during token revocation',
           level: 'error',
           logger: 'oauth',
           data: error,
         });
+      } finally {
+        span?.end(signoutError);
       }
     }
   }

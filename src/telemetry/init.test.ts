@@ -1,5 +1,5 @@
 import { stubDefaultEnvVars } from '../testShared.js';
-import { initializeTelemetry } from './init.js';
+import { initializeTelemetry, validateTelemetryProvider } from './init.js';
 const mocks = vi.hoisted(() => ({
   MockNoOpTelemetryProvider: vi.fn(),
 }));
@@ -41,5 +41,43 @@ describe('initializeTelemetry', () => {
     initializeTelemetry();
 
     expect(mocks.MockNoOpTelemetryProvider).toHaveBeenCalled();
+  });
+});
+
+describe('validateTelemetryProvider', () => {
+  it('accepts a provider missing startSpan (backward compatibility)', () => {
+    const provider = {
+      initialize: () => {},
+      recordMetric: () => {},
+      recordHistogram: () => {},
+    };
+
+    expect(() => validateTelemetryProvider(provider)).not.toThrow();
+  });
+
+  it('accepts a provider that also implements startSpan', () => {
+    const provider = {
+      initialize: () => {},
+      recordMetric: () => {},
+      recordHistogram: () => {},
+      startSpan: () => ({ end: () => {} }),
+    };
+
+    expect(() => validateTelemetryProvider(provider)).not.toThrow();
+  });
+
+  it('throws when a required method is missing', () => {
+    const provider = {
+      initialize: () => {},
+      recordHistogram: () => {},
+    };
+
+    expect(() => validateTelemetryProvider(provider)).toThrowError(
+      'Custom provider missing required methods: recordMetric',
+    );
+  });
+
+  it('throws when the provider is not an object', () => {
+    expect(() => validateTelemetryProvider('not-an-object')).toThrowError('Provider must be an object');
   });
 });

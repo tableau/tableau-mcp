@@ -19,13 +19,16 @@ vi.mock('../../telemetry/productTelemetry/telemetryForwarder.js', () => ({
   }),
 }));
 
-// Mock for MonCloud telemetry - tracks calls to recordMetric()
+// Mock for MonCloud telemetry - tracks calls to recordMetric() and startSpan()
 const mockRecordMetric = vi.hoisted(() => vi.fn());
+const mockSpanEnd = vi.hoisted(() => vi.fn());
+const mockStartSpan = vi.hoisted(() => vi.fn().mockReturnValue({ end: mockSpanEnd }));
 vi.mock('../../telemetry/init.js', () => ({
   getTelemetryProvider: vi.fn().mockReturnValue({
     initialize: vi.fn(),
     recordMetric: mockRecordMetric,
     recordHistogram: vi.fn(),
+    startSpan: mockStartSpan,
   }),
 }));
 
@@ -580,6 +583,60 @@ describe('Tool', () => {
         request_id: '2',
         error_code: '',
       });
+    });
+  });
+
+  describe('tool-call span', () => {
+    beforeEach(() => {
+      mockStartSpan.mockClear();
+      mockSpanEnd.mockClear();
+    });
+
+    it('starts a span with the tool name and ends it with no error on success', async () => {
+      const tool = new WebTool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockStartSpan).toHaveBeenCalledWith('tableau.tool.call', {
+        tool_name: 'get-datasource-metadata',
+      });
+      expect(mockSpanEnd).toHaveBeenCalledWith(undefined);
+    });
+
+    it('ends the span with the thrown error when the callback throws', async () => {
+      const tool = new WebTool(mockParams);
+      const error = new Error('boom');
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw error;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockSpanEnd).toHaveBeenCalledWith(error);
+    });
+
+    it('does not throw when startSpan returns no handle', async () => {
+      mockStartSpan.mockReturnValueOnce(undefined);
+
+      const tool = new WebTool(mockParams);
+
+      await expect(
+        tool.logAndExecute({
+          extra: mockExtra,
+          args: { param1: 'test-value' },
+          callback: () => Promise.resolve(Ok({ data: 'success' })),
+          constrainSuccessResult: (result) => ({ type: 'success', result }),
+        }),
+      ).resolves.not.toThrow();
     });
   });
 

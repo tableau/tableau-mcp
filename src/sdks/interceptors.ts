@@ -10,6 +10,7 @@ export type AxiosRequestInterceptorConfig = Parameters<NonNullable<AxiosRequestI
 export type RequestInterceptorConfig = {
   baseUrl: string;
   headers: Record<string, any>;
+  rawConfig?: AxiosRequestInterceptorConfig;
   // AxiosHeaders is a complex class, overwrite it for simplicity.
 } & Omit<AxiosRequestInterceptorConfig, 'headers'>;
 
@@ -19,6 +20,7 @@ export type ResponseInterceptorConfig = {
   baseUrl: string;
   url: string;
   headers: Record<string, any>;
+  rawConfig?: AxiosRequestInterceptorConfig;
   // AxiosHeaders is a complex class, overwrite it for simplicity.
 } & Omit<AxiosResponseInterceptorConfig, 'headers' | 'statusText' | 'config'> & {
     params: AxiosResponseInterceptorConfig['config']['params'];
