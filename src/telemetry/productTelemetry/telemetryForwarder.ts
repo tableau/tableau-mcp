@@ -1,6 +1,7 @@
 import os from 'os';
 
 import { log } from '../../logging/logger';
+import { getTelemetryProvider } from '../init.js';
 
 type ValidPropertyValueType = string | number | boolean;
 type PropertiesType = { [key: string]: ValidPropertyValueType };
@@ -86,6 +87,8 @@ class DirectTelemetryForwarder {
 }
 
 async function sendTelemetryRequest(req: Request): Promise<void> {
+  const span = getTelemetryProvider().startSpan?.('tableau.telemetry.forward', { url: req.url });
+  let error: unknown;
   try {
     const res = await fetch(req);
     const body = await res.text();
@@ -96,13 +99,16 @@ async function sendTelemetryRequest(req: Request): Promise<void> {
         logger: 'telemetry',
       });
     }
-  } catch (error) {
+  } catch (caughtError) {
+    error = caughtError;
     log({
       message: 'Telemetry request failed',
       level: 'error',
       logger: 'telemetry',
       data: error,
     });
+  } finally {
+    span?.end(error);
   }
 }
 
