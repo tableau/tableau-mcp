@@ -11,17 +11,13 @@ const paramsSchema = {
     .string()
     .regex(/^[A-Za-z0-9._-]{1,128}$/)
     .refine((value) => value !== '.' && value !== '..')
-    .describe('Knowledge graph ID.'),
-  query: z.string().trim().min(1).describe('Natural-language description of the node to resolve.'),
-  nodeType: z.string().trim().min(1).optional().describe('Optional knowledge node type filter.'),
-  scopeId: z.string().trim().min(1).optional().describe('Optional source/container node ID scope.'),
-  maxCandidates: z
-    .number()
-    .int()
-    .min(1)
-    .max(25)
     .optional()
-    .describe('Maximum disambiguation candidates to return.'),
+    .describe("Knowledge graph ID. Omit to use the site's active (default) graph."),
+  nodeId: z.string().trim().min(1).describe('Exact id of the node to fetch.'),
+  includeChildren: z
+    .boolean()
+    .optional()
+    .describe("Include the node's outgoing child nodes in connected_nodes. Defaults to true."),
 };
 
 export const getGetKnowledgeNodeTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -29,7 +25,7 @@ export const getGetKnowledgeNodeTool = (server: WebMcpServer): WebTool<typeof pa
     server,
     name: 'get-knowledge-node',
     description:
-      'Resolution-only lookup that returns full node properties when a natural-language reference has not already been resolved in an explicit Tableau Cloud knowledge graph; ambiguous references return sparse candidates; when candidates are returned, ask the user which one they mean rather than selecting one and answering as if it were resolved. Never call after search-knowledge-nodes selected a match with an exact id: use that search evidence directly and pass its id to relationship tools. Also do not call merely to expand a connected node whose ID, name, and type are already present in a relationship result.',
+      'Fetches a single knowledge node by its exact id, returning its full properties, attached semantic statements, and directly connected child nodes. Requires an id you already have: take it from a search-knowledge-nodes match or a connected node in a relationship result. Do not use to resolve a natural-language reference; use search-knowledge-nodes for that. Set includeChildren=false to skip connected children.',
     paramsSchema,
     annotations: {
       title: 'Get Knowledge Node',

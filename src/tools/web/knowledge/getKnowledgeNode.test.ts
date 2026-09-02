@@ -17,6 +17,15 @@ vi.mock('../../../restApiInstance.js', () => ({
     ),
 }));
 
+const nodeContext = {
+  id: 'field-1',
+  type: 'FIELD',
+  name: 'Net Revenue',
+  properties: { formula: '[Sales] - [Tax]' },
+  semantic_statements: [{ id: 'stmt-1', statement: 'Revenue excludes tax.' }],
+  connected_nodes: [{ id: 'table-1', name: 'Orders', type: 'TABLE', edge_type: 'CONTAINS' }],
+};
+
 describe('getKnowledgeNodeTool', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -25,15 +34,11 @@ describe('getKnowledgeNodeTool', () => {
     expect(tool.name).toBe('get-knowledge-node');
     expect(tool.paramsSchema).toMatchObject({
       graphId: expect.any(Object),
-      query: expect.any(Object),
-      nodeType: expect.any(Object),
-      scopeId: expect.any(Object),
-      maxCandidates: expect.any(Object),
+      nodeId: expect.any(Object),
+      includeChildren: expect.any(Object),
     });
-    expect(tool.description).toContain('full node properties');
-    expect(tool.description).toContain('Resolution-only');
-    expect(tool.description).toContain('Never call after search-knowledge-nodes');
-    expect(tool.description).toContain('use that search evidence directly');
+    expect(tool.description).toContain('by its exact id');
+    expect(tool.description).toContain('search-knowledge-nodes');
     expect(await Provider.from(tool.annotations)).toMatchObject({
       readOnlyHint: true,
       destructiveHint: false,
@@ -42,73 +47,34 @@ describe('getKnowledgeNodeTool', () => {
     });
   });
 
-  it('requires a trimmed non-empty query and maxCandidates from 1 through 25', async () => {
+  it('requires a trimmed non-empty nodeId and an optional boolean includeChildren', async () => {
     const schema = await Provider.from(getTool().paramsSchema);
-    expect(schema.query.parse('  net revenue  ')).toBe('net revenue');
-    expect(schema.query.safeParse('  ').success).toBe(false);
-    expect(schema.maxCandidates.safeParse(1).success).toBe(true);
-    expect(schema.maxCandidates.safeParse(25).success).toBe(true);
-    expect(schema.maxCandidates.safeParse(0).success).toBe(false);
-    expect(schema.maxCandidates.safeParse(26).success).toBe(false);
-    expect(schema.maxCandidates.safeParse(1.5).success).toBe(false);
+    expect(schema.nodeId.parse('  field-1  ')).toBe('field-1');
+    expect(schema.nodeId.safeParse('  ').success).toBe(false);
+    expect(schema.includeChildren.safeParse(false).success).toBe(true);
+    expect(schema.includeChildren.safeParse(undefined).success).toBe(true);
+    expect(schema.includeChildren.safeParse('yes').success).toBe(false);
+    // graphId is optional: omitting it targets the site's active/default graph.
+    expect(schema.graphId.safeParse(undefined).success).toBe(true);
+    expect(schema.graphId.safeParse('graph-1').success).toBe(true);
   });
 
-  it('forwards filters, maxCandidates, and exact knowledge API scope', async () => {
-    mocks.getKnowledgeNode.mockResolvedValue({
-      needs_disambiguation: true,
-      node: null,
-      candidates: [],
-    });
-    await getJsonResult({
-      graphId: 'graph-1',
-      query: 'revenue',
-      nodeType: 'FIELD',
-      scopeId: 'pds-1',
-      maxCandidates: 7,
-    });
+  it('forwards nodeId, includeChildren, and exact knowledge API scope', async () => {
+    mocks.getKnowledgeNode.mockResolvedValue(nodeContext);
+    await getJsonResult({ graphId: 'graph-1', nodeId: 'field-1', includeChildren: false });
     expect(mocks.getKnowledgeNode).toHaveBeenCalledWith({
       graphId: 'graph-1',
-      query: 'revenue',
-      nodeType: 'FIELD',
-      scopeId: 'pds-1',
-      maxCandidates: 7,
+      nodeId: 'field-1',
+      includeChildren: false,
     });
     expect(vi.mocked(useRestApi)).toHaveBeenCalledWith(
       expect.objectContaining({ jwtScopes: ['tableau:knowledge:read'] }),
     );
   });
 
-  it('preserves the confident full-node response branch', async () => {
-    const response = {
-      needs_disambiguation: false,
-      node: {
-        id: 'field-1',
-        type: 'FIELD',
-        name: 'Revenue',
-        properties: {},
-        score: 0.9,
-      },
-    };
-    mocks.getKnowledgeNode.mockResolvedValue(response);
-    expect(await getJsonResult({ graphId: 'graph-1', query: 'revenue' })).toEqual(response);
-  });
-
-  it('preserves the sparse candidate response branch', async () => {
-    const response = {
-      needs_disambiguation: true,
-      node: null,
-      candidates: [
-        {
-          id: 'field-1',
-          name: 'Revenue',
-          type: 'FIELD',
-          score: 0.5,
-          certified: null,
-        },
-      ],
-    };
-    mocks.getKnowledgeNode.mockResolvedValue(response);
-    expect(await getJsonResult({ graphId: 'graph-1', query: 'revenue' })).toEqual(response);
+  it('returns the fetched node context with statements and connected nodes', async () => {
+    mocks.getKnowledgeNode.mockResolvedValue(nodeContext);
+    expect(await getJsonResult({ graphId: 'graph-1', nodeId: 'field-1' })).toEqual(nodeContext);
   });
 });
 

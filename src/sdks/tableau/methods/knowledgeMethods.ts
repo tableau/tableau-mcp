@@ -5,12 +5,13 @@ import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import {
   knowledgeApis,
   KnowledgeLineage,
+  KnowledgeNodeContext,
   KnowledgeNodeImpact,
   KnowledgeNodeRelationships,
-  KnowledgeNodeResolveResponse,
   KnowledgeNodeSearchResponse,
   KnowledgeSource,
   KnowledgeSourceNodeType,
+  SemanticContextNode,
   SemanticStatementContext,
   SemanticStatementInput,
   SuggestionReport,
@@ -44,7 +45,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     type,
     limit,
   }: {
-    graphId: string;
+    graphId?: string;
     pdsId?: string | null;
     severity?: SuggestionSeverity | null;
     type?: string | null;
@@ -61,7 +62,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     graphId,
     nodeType,
   }: {
-    graphId: string;
+    graphId?: string;
     nodeType?: KnowledgeSourceNodeType | null;
   }): Promise<KnowledgeSource[]> =>
     guardKnowledgeAvailability(
@@ -78,7 +79,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     scopeId,
     limit,
   }: {
-    graphId: string;
+    graphId?: string;
     query: string;
     nodeType?: string | null;
     scopeId?: string | null;
@@ -93,22 +94,19 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
 
   getKnowledgeNode = async ({
     graphId,
-    query,
-    nodeType,
-    scopeId,
-    maxCandidates,
+    nodeId,
+    includeChildren,
   }: {
-    graphId: string;
-    query: string;
-    nodeType?: string | null;
-    scopeId?: string | null;
-    maxCandidates?: number | null;
-  }): Promise<KnowledgeNodeResolveResponse> =>
+    graphId?: string;
+    nodeId: string;
+    includeChildren?: boolean | null;
+  }): Promise<KnowledgeNodeContext> =>
     guardKnowledgeAvailability(
-      this._apiClient.resolveNode(
-        { query, node_type: nodeType, scope_id: scopeId, max_candidates: maxCandidates },
-        { queries: { graph_id: graphId }, ...this.authHeader },
-      ),
+      this._apiClient.getNode({
+        params: { node_id: encodeURIComponent(nodeId) },
+        queries: { graph_id: graphId, include_children: includeChildren ?? undefined },
+        ...this.authHeader,
+      }),
     );
 
   getKnowledgeNodeRelationships = async ({
@@ -118,7 +116,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     edgeType,
     direction,
   }: {
-    graphId: string;
+    graphId?: string;
     nodeId?: string | null;
     query?: string | null;
     edgeType?: string | null;
@@ -135,7 +133,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     graphId,
     nodeId,
   }: {
-    graphId: string;
+    graphId?: string;
     nodeId: string;
   }): Promise<KnowledgeLineage> =>
     guardKnowledgeAvailability(
@@ -150,7 +148,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     graphId,
     nodeId,
   }: {
-    graphId: string;
+    graphId?: string;
     nodeId: string;
   }): Promise<KnowledgeNodeImpact> =>
     guardKnowledgeAvailability(
@@ -168,7 +166,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     isGlobal,
     name,
   }: {
-    graphId: string;
+    graphId?: string;
     statements: SemanticStatementInput[];
     targetNodeId?: string | null;
     isGlobal?: boolean | null;
@@ -191,10 +189,10 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     nodeId,
     isGlobal,
   }: {
-    graphId: string;
+    graphId?: string;
     nodeId?: string;
     isGlobal?: boolean | null;
-  }): Promise<SemanticStatementContext[]> =>
+  }): Promise<SemanticContextNode[]> =>
     guardKnowledgeAvailability(
       nodeId === undefined
         ? this._apiClient.listSemanticStatements(
@@ -219,7 +217,7 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     isGlobal,
     name,
   }: {
-    graphId: string;
+    graphId?: string;
     contextId: string;
     statements?: SemanticStatementInput[] | null;
     targetNodeId?: string | null;
@@ -246,14 +244,15 @@ export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowle
     graphId,
     contextId,
   }: {
-    graphId: string;
+    graphId?: string;
     contextId: string;
-  }): Promise<void> =>
-    guardKnowledgeAvailability(
+  }): Promise<void> => {
+    await guardKnowledgeAvailability(
       this._apiClient.deleteSemanticStatements(undefined, {
         params: { ctx_id: encodeURIComponent(contextId) },
         queries: { graph_id: graphId },
         ...this.authHeader,
       }),
     );
+  };
 }

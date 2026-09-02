@@ -22,7 +22,7 @@ describe('listSemanticStatementsTool', () => {
 
   it('is registered as read-only and does not expose ignored backend filters', async () => {
     const tool = getTool();
-    expect(tool.name).toBe('list-knowledge-semantic-statements');
+    expect(tool.name).toBe('list-knowledge-semantic-contexts');
     expect(tool.paramsSchema).toMatchObject({
       graphId: expect.any(Object),
       nodeId: expect.any(Object),

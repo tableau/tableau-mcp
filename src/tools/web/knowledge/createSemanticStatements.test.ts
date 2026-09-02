@@ -64,7 +64,7 @@ describe('createSemanticStatementsTool', () => {
 
   it('is registered with direct-mutation annotations', async () => {
     const tool = getTool();
-    expect(tool.name).toBe('create-knowledge-semantic-statements');
+    expect(tool.name).toBe('create-knowledge-semantic-contexts');
     expect(await Provider.from(tool.annotations)).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,

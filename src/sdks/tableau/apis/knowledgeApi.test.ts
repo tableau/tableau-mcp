@@ -171,32 +171,35 @@ describe('knowledge node endpoints', () => {
   const searchResponse = {
     matches: [
       {
-        id: 'context-1',
-        name: 'Revenue definition',
-        type: 'SEMANTIC_CONTEXT',
-        score: 0.91,
-        certified: null,
-        statements: [{ id: 'stmt-1', statement: 'Revenue excludes tax.' }],
-      },
-      {
         id: 'field-1',
-        name: 'Net Revenue',
         type: 'FIELD',
+        name: 'Net Revenue',
+        properties: { formula: '[Sales] - [Tax]' },
         score: 0.91,
         certified: true,
+        semantic_statements: [{ id: 'stmt-1', statement: 'Revenue excludes tax.', score: 0.88 }],
+      },
+      {
+        id: 'field-2',
+        type: 'FIELD',
+        name: 'Gross Revenue',
+        properties: {},
+        score: 0.72,
+        semantic_statements: [],
       },
     ],
   };
 
-  const fullNode = {
+  const nodeContext = {
     id: 'field-1',
     type: 'FIELD',
     name: 'Net Revenue',
     properties: { formula: '[Sales] - [Tax]' },
-    score: 0.93,
+    semantic_statements: [{ id: 'stmt-1', statement: 'Revenue excludes tax.' }],
+    connected_nodes: [{ id: 'table-1', name: 'Orders', type: 'TABLE', edge_type: 'CONTAINS' }],
   };
 
-  it('registers search and resolve POST endpoints with the backend paths', () => {
+  it('registers the search POST and get-node GET endpoints with the backend paths', () => {
     expect(knowledgeApis).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -205,52 +208,45 @@ describe('knowledge node endpoints', () => {
           path: '/nodes/search',
         }),
         expect.objectContaining({
-          alias: 'resolveNode',
-          method: 'post',
-          path: '/nodes/resolve',
+          alias: 'getNode',
+          method: 'get',
+          path: '/nodes/:node_id',
         }),
       ]),
     );
   });
 
-  it('parses ranked matches with optional semantic-context statements', () => {
+  it('parses ranked matches, each a node carrying scored semantic statements', () => {
     const schema = (knowledgeApi as any).knowledgeNodeSearchResponseSchema;
     expect(schema).toBeDefined();
     expect(schema.parse(searchResponse)).toEqual(searchResponse);
   });
 
-  it('parses a candidate with explicitly null statements', () => {
-    const candidate = { ...searchResponse.matches[1], statements: null };
-    expect(knowledgeNodeCandidateSchema.parse(candidate)).toEqual(candidate);
+  it('rejects a match missing the required semantic_statements array', () => {
+    const missing = { ...searchResponse.matches[0] };
+    delete (missing as { semantic_statements?: unknown }).semantic_statements;
+    expect(knowledgeNodeCandidateSchema.safeParse(missing).success).toBe(false);
   });
 
-  it('parses the confident full-node resolve branch', () => {
-    const response = {
-      needs_disambiguation: false,
-      node: fullNode,
-    };
-    const schema = (knowledgeApi as any).knowledgeNodeResolveResponseSchema;
+  it('parses a get-node NodeContext with statements and connected nodes', () => {
+    const schema = (knowledgeApi as any).knowledgeNodeContextSchema;
     expect(schema).toBeDefined();
-    expect(schema.parse(response)).toEqual(response);
+    expect(schema.parse(nodeContext)).toEqual(nodeContext);
   });
 
-  it('parses sparse candidates in the disambiguation branch', () => {
-    const response = {
-      needs_disambiguation: true,
-      node: null,
-      candidates: [
-        {
-          id: 'field-1',
-          name: 'Net Revenue',
-          type: 'FIELD',
-          score: 0.51,
-          certified: null,
-        },
-      ],
-    };
-    const schema = (knowledgeApi as any).knowledgeNodeResolveResponseSchema;
-    expect(schema).toBeDefined();
-    expect(schema.parse(response)).toEqual(response);
+  it('rejects a NodeContext missing connected_nodes', () => {
+    const schema = (knowledgeApi as any).knowledgeNodeContextSchema;
+    const missing = { ...nodeContext };
+    delete (missing as { connected_nodes?: unknown }).connected_nodes;
+    expect(schema.safeParse(missing).success).toBe(false);
+  });
+});
+
+describe('delete semantic context response', () => {
+  it('accepts the empty-string 204 body the Knowledge service returns', () => {
+    const del = knowledgeApis.find((e) => e.alias === 'deleteSemanticStatements')!;
+    expect(del.response.safeParse('').success).toBe(true);
+    expect(del.response.safeParse(undefined).success).toBe(true);
   });
 });
 
@@ -266,7 +262,7 @@ describe('knowledge traversal endpoints', () => {
         expect.objectContaining({
           alias: 'getLineage',
           method: 'get',
-          path: '/lineage/:node_id',
+          path: '/nodes/:node_id/lineage',
         }),
         expect.objectContaining({
           alias: 'getNodeImpact',
@@ -327,22 +323,22 @@ describe('semantic statement endpoints', () => {
         expect.objectContaining({
           alias: 'createSemanticStatements',
           method: 'post',
-          path: '/semantic-statements',
+          path: '/semantic-contexts',
         }),
         expect.objectContaining({
           alias: 'listSemanticStatements',
           method: 'post',
-          path: '/semantic-statements/search',
+          path: '/semantic-contexts/search',
         }),
         expect.objectContaining({
           alias: 'listNodeSemanticStatements',
           method: 'post',
-          path: '/nodes/:node_id/semantic-statements/search',
+          path: '/nodes/:node_id/semantic-contexts/search',
         }),
         expect.objectContaining({
           alias: 'updateSemanticStatements',
           method: 'patch',
-          path: '/semantic-statements/:ctx_id',
+          path: '/semantic-contexts/:ctx_id',
         }),
       ]),
     );
@@ -416,10 +412,29 @@ describe('semantic statement endpoints', () => {
       expect(schema.safeParse({ ...base, properties }).success).toBe(false);
     }
   });
+
+  it('search response union parses a Tableau-managed external context', () => {
+    const external = {
+      id: 'semctx-ext:1',
+      type: 'SEMANTIC_CONTEXT_EXTERNAL',
+      name: 'Best practice',
+      properties: {
+        statements: [{ id: 'stmt:1', statement: 'Use certified sources.' }],
+        source: 'tableau',
+        updated_at: '2026-08-12T15:04:05Z',
+        category: 'governance',
+      },
+      last_synced_at: null,
+      target_node_id: 'field:Revenue',
+    };
+    expect((knowledgeApi as any).semanticContextNodeSchema.parse(external)).toEqual(external);
+    // The strict user-context schema must reject an external node — that gap is why search returns the union.
+    expect(knowledgeApi.semanticStatementContextSchema.safeParse(external).success).toBe(false);
+  });
 });
 
 describe('knowledge endpoint request contracts', () => {
-  it('accepts omitted and null optional search, resolve, edge, source, and suggestion filters', () => {
+  it('accepts omitted and null optional search, edge, source, and suggestion filters', () => {
     expect(bodySchema('searchNodes').parse({ query: 'revenue' })).toEqual({ query: 'revenue' });
     expect(
       bodySchema('searchNodes').parse({
@@ -427,16 +442,9 @@ describe('knowledge endpoint request contracts', () => {
         node_type: null,
         scope_id: null,
         limit: null,
+        threshold: null,
       }),
-    ).toEqual({ query: 'revenue', node_type: null, scope_id: null, limit: null });
-    expect(
-      bodySchema('resolveNode').parse({
-        query: 'revenue',
-        node_type: null,
-        scope_id: null,
-        max_candidates: null,
-      }),
-    ).toEqual({ query: 'revenue', node_type: null, scope_id: null, max_candidates: null });
+    ).toEqual({ query: 'revenue', node_type: null, scope_id: null, limit: null, threshold: null });
     expect(bodySchema('searchNodeRelationships').parse({})).toEqual({});
     expect(
       bodySchema('searchNodeRelationships').parse({

@@ -76,6 +76,7 @@ export const nodeTypeSchema = z.enum([
   'WAREHOUSE_TABLE',
   'WAREHOUSE_COLUMN',
   'SEMANTIC_CONTEXT',
+  'SEMANTIC_CONTEXT_EXTERNAL',
 ]);
 
 export const edgeTypeSchema = z.enum([
@@ -104,17 +105,21 @@ export const knowledgeSourcesSchema = z.array(
 
 const nullableStringSchema = z.string().nullable();
 
+export const scoredStatementSchema = z.object({
+  id: z.string(),
+  statement: z.string(),
+  score: z.number(),
+});
+
 export const knowledgeNodeCandidateSchema = z
   .object({
     id: z.string(),
-    name: z.string(),
     type: nodeTypeSchema,
+    name: z.string(),
+    properties: z.record(z.unknown()),
     score: z.number(),
     certified: z.unknown().optional(),
-    statements: z
-      .array(z.object({ id: z.string(), statement: z.string() }))
-      .nullable()
-      .optional(),
+    semantic_statements: z.array(scoredStatementSchema),
   })
   .passthrough();
 
@@ -198,6 +203,30 @@ export const semanticStatementContextSchema = z
   })
   .passthrough();
 
+// Tableau-managed context: read-only, no is_global/kind/source, carries a category.
+const semanticContextExternalSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal('SEMANTIC_CONTEXT_EXTERNAL'),
+    name: z.string(),
+    properties: z
+      .object({
+        statements: z.array(storedSemanticStatementSchema),
+        source: z.string().optional(),
+        updated_at: z.string().datetime({ offset: true }).nullable().optional(),
+        category: nullableStringSchema.optional(),
+      })
+      .passthrough(),
+    last_synced_at: z.string().datetime({ offset: true }).nullable().optional(),
+    target_node_id: nullableStringSchema.optional(),
+  })
+  .passthrough();
+
+export const semanticContextNodeSchema = z.discriminatedUnion('type', [
+  semanticStatementContextSchema,
+  semanticContextExternalSchema,
+]);
+
 const createSemanticStatementsBodySchema = z.object({
   statements: z.array(semanticStatementInputSchema),
   target_node_id: nullableStringSchema.optional(),
@@ -208,29 +237,29 @@ const updateSemanticStatementsBodySchema = createSemanticStatementsBodySchema
   .omit({ statements: true })
   .extend({ statements: z.array(semanticStatementInputSchema).nullable().optional() });
 
-const knowledgeNodeDetailSchema = knowledgeNodeSchema.and(
-  z
-    .object({
-      score: z.number(),
-    })
-    .passthrough(),
-);
+const connectedNodeWithEdgeSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: nodeTypeSchema,
+    edge_type: edgeTypeSchema,
+  })
+  .passthrough();
+
+export const knowledgeNodeContextSchema = z
+  .object({
+    id: z.string(),
+    type: nodeTypeSchema,
+    name: z.string(),
+    properties: z.record(z.unknown()),
+    semantic_statements: z.array(storedSemanticStatementSchema),
+    connected_nodes: z.array(connectedNodeWithEdgeSchema),
+  })
+  .passthrough();
 
 export const knowledgeNodeSearchResponseSchema = z.object({
   matches: z.array(knowledgeNodeCandidateSchema),
 });
-
-export const knowledgeNodeResolveResponseSchema = z.discriminatedUnion('needs_disambiguation', [
-  z.object({
-    needs_disambiguation: z.literal(false),
-    node: knowledgeNodeDetailSchema,
-  }),
-  z.object({
-    needs_disambiguation: z.literal(true),
-    node: z.null(),
-    candidates: z.array(knowledgeNodeCandidateSchema),
-  }),
-]);
 
 const searchSuggestionsEndpoint = makeEndpoint({
   method: 'post',
@@ -284,31 +313,24 @@ const searchNodesEndpoint = makeEndpoint({
         node_type: nullableStringSchema.optional(),
         scope_id: nullableStringSchema.optional(),
         limit: z.number().int().nullable().optional(),
+        threshold: z.number().nullable().optional(),
       }),
     },
   ],
   response: knowledgeNodeSearchResponseSchema,
 });
 
-const resolveNodeEndpoint = makeEndpoint({
-  method: 'post',
-  path: '/nodes/resolve',
-  alias: 'resolveNode',
-  description: 'Resolves a natural-language query to one knowledge node or candidates.',
+const getNodeEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/nodes/:node_id',
+  alias: 'getNode',
+  description: 'Fetches a knowledge node by id with its statements and connected nodes.',
   parameters: [
     { name: 'graph_id', type: 'Query', schema: z.string().optional() },
-    {
-      name: 'body',
-      type: 'Body',
-      schema: z.object({
-        query: z.string(),
-        node_type: nullableStringSchema.optional(),
-        scope_id: nullableStringSchema.optional(),
-        max_candidates: z.number().int().nullable().optional(),
-      }),
-    },
+    { name: 'include_children', type: 'Query', schema: z.boolean().optional() },
+    { name: 'node_id', type: 'Path', schema: z.string() },
   ],
-  response: knowledgeNodeResolveResponseSchema,
+  response: knowledgeNodeContextSchema,
 });
 
 const searchNodeRelationshipsEndpoint = makeEndpoint({
@@ -334,7 +356,7 @@ const searchNodeRelationshipsEndpoint = makeEndpoint({
 
 const getLineageEndpoint = makeEndpoint({
   method: 'get',
-  path: '/lineage/:node_id',
+  path: '/nodes/:node_id/lineage',
   alias: 'getLineage',
   description: 'Returns lineage around one knowledge node.',
   parameters: [
@@ -358,7 +380,7 @@ const getNodeImpactEndpoint = makeEndpoint({
 
 const createSemanticStatementsEndpoint = makeEndpoint({
   method: 'post',
-  path: '/semantic-statements',
+  path: '/semantic-contexts',
   alias: 'createSemanticStatements',
   description: 'Creates semantic statements in a knowledge graph.',
   parameters: [
@@ -370,7 +392,7 @@ const createSemanticStatementsEndpoint = makeEndpoint({
 
 const listSemanticStatementsEndpoint = makeEndpoint({
   method: 'post',
-  path: '/semantic-statements/search',
+  path: '/semantic-contexts/search',
   alias: 'listSemanticStatements',
   description: 'Lists semantic statements in a knowledge graph.',
   parameters: [
@@ -381,12 +403,12 @@ const listSemanticStatementsEndpoint = makeEndpoint({
       schema: z.object({ is_global: z.boolean().nullable().optional() }),
     },
   ],
-  response: z.array(semanticStatementContextSchema),
+  response: z.array(semanticContextNodeSchema),
 });
 
 const listNodeSemanticStatementsEndpoint = makeEndpoint({
   method: 'post',
-  path: '/nodes/:node_id/semantic-statements/search',
+  path: '/nodes/:node_id/semantic-contexts/search',
   alias: 'listNodeSemanticStatements',
   description: 'Lists attached and global semantic statements for a knowledge node.',
   parameters: [
@@ -394,12 +416,12 @@ const listNodeSemanticStatementsEndpoint = makeEndpoint({
     { name: 'node_id', type: 'Path', schema: z.string() },
     { name: 'body', type: 'Body', schema: z.object({}) },
   ],
-  response: z.array(semanticStatementContextSchema),
+  response: z.array(semanticContextNodeSchema),
 });
 
 const updateSemanticStatementsEndpoint = makeEndpoint({
   method: 'patch',
-  path: '/semantic-statements/:ctx_id',
+  path: '/semantic-contexts/:ctx_id',
   alias: 'updateSemanticStatements',
   description: 'Updates semantic statements or their attachment.',
   parameters: [
@@ -412,21 +434,22 @@ const updateSemanticStatementsEndpoint = makeEndpoint({
 
 const deleteSemanticStatementsEndpoint = makeEndpoint({
   method: 'delete',
-  path: '/semantic-statements/:ctx_id',
+  path: '/semantic-contexts/:ctx_id',
   alias: 'deleteSemanticStatements',
   description: 'Deletes a Knowledge-managed semantic context and its statements.',
   parameters: [
     { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     { name: 'ctx_id', type: 'Path', schema: z.string() },
   ],
-  response: z.void(),
+  // The Knowledge service returns 204 with an empty-string body, which z.void() rejects.
+  response: z.union([z.void(), z.literal('')]),
 });
 
 const knowledgeApi = makeApi([
   searchSuggestionsEndpoint,
   searchSourcesEndpoint,
   searchNodesEndpoint,
-  resolveNodeEndpoint,
+  getNodeEndpoint,
   searchNodeRelationshipsEndpoint,
   getLineageEndpoint,
   getNodeImpactEndpoint,
@@ -442,11 +465,12 @@ export type KnowledgeSourceNodeType = z.infer<typeof knowledgeSourceNodeTypeSche
 export type NodeType = z.infer<typeof nodeTypeSchema>;
 export type EdgeType = z.infer<typeof edgeTypeSchema>;
 export type KnowledgeNodeSearchResponse = z.infer<typeof knowledgeNodeSearchResponseSchema>;
-export type KnowledgeNodeResolveResponse = z.infer<typeof knowledgeNodeResolveResponseSchema>;
+export type KnowledgeNodeContext = z.infer<typeof knowledgeNodeContextSchema>;
 export type KnowledgeNodeRelationships = z.infer<typeof knowledgeNodeRelationshipsSchema>;
 export type KnowledgeLineage = z.infer<typeof knowledgeLineageSchema>;
 export type KnowledgeNodeImpact = z.infer<typeof knowledgeNodeImpactSchema>;
 export type SemanticStatementInput = z.infer<typeof semanticStatementInputSchema>;
 export type SemanticStatementContext = z.infer<typeof semanticStatementContextSchema>;
+export type SemanticContextNode = z.infer<typeof semanticContextNodeSchema>;
 export type SuggestionReport = z.infer<typeof suggestionReportSchema>;
 export type SuggestionSeverity = z.infer<typeof severitySchema>;

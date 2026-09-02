@@ -10,9 +10,12 @@ import { getTraversalLimit, truncateKnowledgeArrays } from './truncateKnowledgeT
 const graphIdSchema = z
   .string()
   .regex(/^[A-Za-z0-9._-]{1,128}$/)
-  .refine((value) => value !== '.' && value !== '..');
+  .refine((value) => value !== '.' && value !== '..')
+  .optional();
 const paramsSchema = {
-  graphId: graphIdSchema.describe('Knowledge graph ID.'),
+  graphId: graphIdSchema.describe(
+    "Knowledge graph ID. Omit to use the site's active (default) graph.",
+  ),
   nodeId: z.string().trim().min(1).optional().describe('Exact anchor node ID.'),
   query: z.string().trim().min(1).optional().describe('Natural-language anchor query.'),
   edgeType: z.string().trim().min(1).optional().describe('Optional edge type filter.'),

@@ -82,19 +82,19 @@ describe('scopes', () => {
     } as any);
     await expect(getSupportedMcpScopes()).resolves.toContain('tableau:mcp:knowledge:write');
     await expect(getSupportedApiScopes()).resolves.toContain('tableau:knowledge:write');
-    expect(getRequiredScopesForTool('create-knowledge-semantic-statements' as any)).toEqual([
+    expect(getRequiredScopesForTool('create-knowledge-semantic-contexts' as any)).toEqual([
       'tableau:mcp:knowledge:write',
     ]);
-    expect(getRequiredApiScopesForTool('create-knowledge-semantic-statements' as any)).toEqual([
+    expect(getRequiredApiScopesForTool('create-knowledge-semantic-contexts' as any)).toEqual([
       'tableau:knowledge:write',
     ]);
-    expect(getRequiredScopesForTool('list-knowledge-semantic-statements' as any)).toEqual([
+    expect(getRequiredScopesForTool('list-knowledge-semantic-contexts' as any)).toEqual([
       'tableau:mcp:knowledge:read',
     ]);
-    expect(getRequiredApiScopesForTool('list-knowledge-semantic-statements' as any)).toEqual([
+    expect(getRequiredApiScopesForTool('list-knowledge-semantic-contexts' as any)).toEqual([
       'tableau:knowledge:read',
     ]);
-    expect(getRequiredScopesForTool('update-knowledge-semantic-statements' as any)).toEqual([
+    expect(getRequiredScopesForTool('update-knowledge-semantic-contexts' as any)).toEqual([
       'tableau:mcp:knowledge:write',
     ]);
   });
@@ -104,9 +104,9 @@ describe('scopes', () => {
       adminToolsEnabled: false,
       oauth: { enforceScopes: false },
     } as any);
-    expect(getRequiredScopesForTool('create-knowledge-semantic-statements' as any)).toEqual([]);
-    expect(getRequiredScopesForTool('list-knowledge-semantic-statements' as any)).toEqual([]);
-    expect(getRequiredApiScopesForTool('update-knowledge-semantic-statements' as any)).toEqual([
+    expect(getRequiredScopesForTool('create-knowledge-semantic-contexts' as any)).toEqual([]);
+    expect(getRequiredScopesForTool('list-knowledge-semantic-contexts' as any)).toEqual([]);
+    expect(getRequiredApiScopesForTool('update-knowledge-semantic-contexts' as any)).toEqual([
       'tableau:knowledge:write',
     ]);
   });

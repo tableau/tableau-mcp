@@ -14,7 +14,8 @@ const paramsSchema = {
     .string()
     .regex(/^[A-Za-z0-9._-]{1,128}$/)
     .refine((value) => value !== '.' && value !== '..')
-    .describe('Knowledge graph ID.'),
+    .optional()
+    .describe("Knowledge graph ID. Omit to use the site's active (default) graph."),
   pdsId: z.string().max(256).optional().describe('Scope the report to one PDS subtree.'),
   severity: z.enum(['high', 'medium', 'low']).optional(),
   type: z.string().max(128).optional().describe('Filter suggestions by suggestion type.'),

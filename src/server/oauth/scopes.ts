@@ -206,19 +206,19 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:knowledge:read'],
     api: new Set(['tableau:knowledge:read']),
   },
-  'create-knowledge-semantic-statements': {
+  'create-knowledge-semantic-contexts': {
     mcp: ['tableau:mcp:knowledge:write'],
     api: new Set(['tableau:knowledge:write']),
   },
-  'list-knowledge-semantic-statements': {
+  'list-knowledge-semantic-contexts': {
     mcp: ['tableau:mcp:knowledge:read'],
     api: new Set(['tableau:knowledge:read']),
   },
-  'update-knowledge-semantic-statements': {
+  'update-knowledge-semantic-contexts': {
     mcp: ['tableau:mcp:knowledge:write'],
     api: new Set(['tableau:knowledge:write']),
   },
-  'delete-knowledge-semantic-statements': {
+  'delete-knowledge-semantic-contexts': {
     mcp: ['tableau:mcp:knowledge:write'],
     api: new Set(['tableau:knowledge:write']),
   },
@@ -482,9 +482,9 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   }
 
   if (!knowledgeWriteToolsEnabled) {
-    enabledTools.delete('create-knowledge-semantic-statements');
-    enabledTools.delete('update-knowledge-semantic-statements');
-    enabledTools.delete('delete-knowledge-semantic-statements');
+    enabledTools.delete('create-knowledge-semantic-contexts');
+    enabledTools.delete('update-knowledge-semantic-contexts');
+    enabledTools.delete('delete-knowledge-semantic-contexts');
   }
 
   return enabledTools;

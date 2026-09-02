@@ -133,7 +133,7 @@ describe('secretMask', () => {
     const request = maskRequest({
       method: 'POST',
       baseUrl: 'https://example.com/api/v1/knowledge',
-      url: '/graphs/graph-1/semantic-statements',
+      url: '/graphs/graph-1/semantic-contexts',
       headers: {},
       data: { statements: [{ statement: 'Revenue excludes refunds.' }] },
     });
@@ -141,7 +141,7 @@ describe('secretMask', () => {
       status: 200,
       baseUrl: 'https://example.com/api/v1/knowledge',
       params: {},
-      url: '/graphs/graph-1/semantic-statements/search',
+      url: '/graphs/graph-1/semantic-contexts/search',
       headers: {},
       data: {
         result: {
@@ -161,7 +161,7 @@ describe('secretMask', () => {
       status: 400,
       baseUrl: 'https://example.com/api/v1/knowledge',
       params: {},
-      url: '/graphs/graph-1/semantic-statements/context-1',
+      url: '/graphs/graph-1/semantic-contexts/context-1',
       headers: {},
       data: {
         error: {

@@ -62,7 +62,7 @@ describe('updateSemanticStatementsTool', () => {
 
   it('is registered with destructive direct-mutation annotations', async () => {
     const tool = getTool();
-    expect(tool.name).toBe('update-knowledge-semantic-statements');
+    expect(tool.name).toBe('update-knowledge-semantic-contexts');
     expect(await Provider.from(tool.annotations)).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,

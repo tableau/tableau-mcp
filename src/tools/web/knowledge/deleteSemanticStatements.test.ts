@@ -36,7 +36,7 @@ describe('deleteSemanticStatementsTool', () => {
 
   it('is registered with destructive, idempotent annotations', async () => {
     const tool = getTool();
-    expect(tool.name).toBe('delete-knowledge-semantic-statements');
+    expect(tool.name).toBe('delete-knowledge-semantic-contexts');
     expect(await Provider.from(tool.annotations)).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,

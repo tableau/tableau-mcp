@@ -49,10 +49,10 @@ export const webToolNames = [
   'get-knowledge-node-relationships',
   'get-knowledge-lineage',
   'get-knowledge-node-impact',
-  'create-knowledge-semantic-statements',
-  'list-knowledge-semantic-statements',
-  'update-knowledge-semantic-statements',
-  'delete-knowledge-semantic-statements',
+  'create-knowledge-semantic-contexts',
+  'list-knowledge-semantic-contexts',
+  'update-knowledge-semantic-contexts',
+  'delete-knowledge-semantic-contexts',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -122,10 +122,10 @@ export const webToolGroups = {
     'get-knowledge-node-relationships',
     'get-knowledge-lineage',
     'get-knowledge-node-impact',
-    'create-knowledge-semantic-statements',
-    'list-knowledge-semantic-statements',
-    'update-knowledge-semantic-statements',
-    'delete-knowledge-semantic-statements',
+    'create-knowledge-semantic-contexts',
+    'list-knowledge-semantic-contexts',
+    'update-knowledge-semantic-contexts',
+    'delete-knowledge-semantic-contexts',
   ],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 

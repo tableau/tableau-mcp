@@ -21,7 +21,7 @@ export const getListSemanticStatementsTool = (
 ): WebTool<typeof paramsSchema> => {
   const tool = new WebTool({
     server,
-    name: 'list-knowledge-semantic-statements',
+    name: 'list-knowledge-semantic-contexts',
     description:
       'Fallback-only statement lookup for an explicit Tableau Knowledge graph. Call this tool only to inspect global statements or when search-knowledge-nodes returned no attached statement that answers the question. Never call it for a node whose selected search match already contains the needed definition or formula; that would repeat the same evidence and add latency. With nodeId, results include statements attached to that node plus global statements. Results are capped at 100 or the configured result limit and include truncation metadata.',
     paramsSchema,

@@ -33,7 +33,7 @@ export const getUpdateSemanticStatementsTool = (
 ): WebTool<typeof paramsSchema> => {
   const tool = new WebTool({
     server,
-    name: 'update-knowledge-semantic-statements',
+    name: 'update-knowledge-semantic-contexts',
     description:
       'Directly replaces semantic statements or changes their attachment. Attached-to-global requires isGlobal true and targetNodeId null; global-to-attached requires isGlobal false and a targetNodeId.',
     paramsSchema,

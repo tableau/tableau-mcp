@@ -18,7 +18,7 @@ export const getDeleteSemanticStatementsTool = (
 ): WebTool<typeof paramsSchema> => {
   const tool = new WebTool({
     server,
-    name: 'delete-knowledge-semantic-statements',
+    name: 'delete-knowledge-semantic-contexts',
     description:
       'Deletes a Tableau Knowledge-managed semantic context and its statements. Idempotent: an absent, hidden, or non-semantic context ID succeeds without deleting anything. Tableau-managed external contexts cannot be deleted.',
     paramsSchema,

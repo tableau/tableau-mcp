@@ -12,7 +12,9 @@ const paramsSchema = {
   graphId: z
     .string()
     .regex(/^[A-Za-z0-9._-]{1,128}$/)
-    .refine((value) => value !== '.' && value !== '..'),
+    .refine((value) => value !== '.' && value !== '..')
+    .optional()
+    .describe("Knowledge graph ID. Omit to use the site's active (default) graph."),
   nodeId: knowledgePathIdSchema,
 };
 

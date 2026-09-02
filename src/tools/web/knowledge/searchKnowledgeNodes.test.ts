@@ -37,7 +37,7 @@ describe('searchKnowledgeNodesTool', () => {
     expect(tool.description).toContain('attached semantic statements');
     expect(tool.description).toContain('limit to 10 or less');
     expect(tool.description).toContain('treat that evidence as complete');
-    expect(tool.description).toContain('do not call list-knowledge-semantic-statements');
+    expect(tool.description).toContain('do not call list-knowledge-semantic-contexts');
     expect(tool.description).toContain('not scope evidence');
     expect(tool.description).toContain('exact id');
     expect(tool.description).toContain('governed definition or formula');
@@ -55,7 +55,9 @@ describe('searchKnowledgeNodesTool', () => {
 
   it('trims a non-empty query and accepts optional node and scope filters', async () => {
     const schema = await Provider.from(getTool().paramsSchema);
-    expect(schema.graphId.safeParse(undefined).success).toBe(false);
+    // graphId is optional: omitting it targets the site's active/default graph.
+    expect(schema.graphId.safeParse(undefined).success).toBe(true);
+    expect(schema.graphId.safeParse('graph-1').success).toBe(true);
     expect(schema.query.parse('  net revenue  ')).toBe('net revenue');
     expect(schema.query.safeParse('   ').success).toBe(false);
     expect(schema.nodeType.safeParse('SEMANTIC_CONTEXT').success).toBe(true);

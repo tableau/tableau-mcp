@@ -184,7 +184,7 @@ describe('KnowledgeMethods', () => {
     });
 
     expect(requests.map(({ url }) => url)).toEqual([
-      '/lineage/field%3AProfit%20Ratio',
+      '/nodes/field%3AProfit%20Ratio/lineage',
       '/nodes/field%3AProfit%20Ratio/impact',
     ]);
     expect(requests.map(({ params }) => params)).toEqual([
@@ -233,8 +233,15 @@ describe('KnowledgeMethods', () => {
     expect(searchNodes.mock.calls.map(([body]) => body.limit)).toEqual([undefined, null]);
   });
 
-  it('forwards node resolution filters and max candidates', async () => {
-    const resolveNode = vi.fn().mockResolvedValue({ needs_disambiguation: true, node: null });
+  it('forwards the url-encoded node id path, include_children, and session auth', async () => {
+    const getNode = vi.fn().mockResolvedValue({
+      id: 'field-1',
+      type: 'FIELD',
+      name: 'Net Revenue',
+      properties: {},
+      semantic_statements: [],
+      connected_nodes: [],
+    });
     const methods = new KnowledgeMethods(
       'https://tableau.example/api/v1/knowledge',
       {
@@ -246,21 +253,28 @@ describe('KnowledgeMethods', () => {
       {},
     );
     // @ts-expect-error - Mocking private property
-    methods._apiClient = { resolveNode };
+    methods._apiClient = { getNode };
 
     expect((methods as any).getKnowledgeNode).toBeTypeOf('function');
     await (methods as any).getKnowledgeNode({
       graphId: 'graph-1',
-      query: 'revenue',
-      nodeType: 'FIELD',
-      scopeId: 'pds-1',
-      maxCandidates: 7,
+      nodeId: 'field 1/x',
+      includeChildren: false,
     });
 
-    expect(resolveNode).toHaveBeenCalledWith(
-      { query: 'revenue', node_type: 'FIELD', scope_id: 'pds-1', max_candidates: 7 },
-      { queries: { graph_id: 'graph-1' }, headers: { 'X-Tableau-Auth': 'session-token' } },
-    );
+    expect(getNode).toHaveBeenCalledWith({
+      params: { node_id: 'field%201%2Fx' },
+      queries: { graph_id: 'graph-1', include_children: false },
+      headers: { 'X-Tableau-Auth': 'session-token' },
+    });
+
+    // A null includeChildren must be sent as undefined (omit the param), not null.
+    await (methods as any).getKnowledgeNode({
+      graphId: 'graph-1',
+      nodeId: 'n',
+      includeChildren: null,
+    });
+    expect(getNode.mock.calls.at(-1)![0].queries.include_children).toBeUndefined();
   });
 
   it('forwards the graph path, snake_case body, and bearer auth', async () => {

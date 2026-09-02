@@ -30,7 +30,7 @@ export const getCreateSemanticStatementsTool = (
 ): WebTool<typeof paramsSchema> => {
   const tool = new WebTool({
     server,
-    name: 'create-knowledge-semantic-statements',
+    name: 'create-knowledge-semantic-contexts',
     description:
       'Creates one semantic context containing business-rule statements in an explicit Tableau Knowledge graph. Attach it to exactly one node, or set isGlobal true.',
     paramsSchema,

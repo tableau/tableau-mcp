@@ -125,9 +125,9 @@ describe('server', () => {
     expect(registeredToolNames).toContain('get-knowledge-node-relationships');
     expect(registeredToolNames).toContain('get-knowledge-lineage');
     expect(registeredToolNames).toContain('get-knowledge-node-impact');
-    expect(registeredToolNames).toContain('list-knowledge-semantic-statements');
-    expect(registeredToolNames).not.toContain('create-knowledge-semantic-statements');
-    expect(registeredToolNames).not.toContain('update-knowledge-semantic-statements');
+    expect(registeredToolNames).toContain('list-knowledge-semantic-contexts');
+    expect(registeredToolNames).not.toContain('create-knowledge-semantic-contexts');
+    expect(registeredToolNames).not.toContain('update-knowledge-semantic-contexts');
   });
 
   it('should register knowledge write tools when knowledge-write-tools is enabled', async () => {
@@ -141,8 +141,8 @@ describe('server', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
 
-    expect(registeredToolNames).toContain('create-knowledge-semantic-statements');
-    expect(registeredToolNames).toContain('update-knowledge-semantic-statements');
+    expect(registeredToolNames).toContain('create-knowledge-semantic-contexts');
+    expect(registeredToolNames).toContain('update-knowledge-semantic-contexts');
   });
 
   it('should use the web variant server name', () => {
