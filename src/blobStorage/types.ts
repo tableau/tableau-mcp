@@ -9,9 +9,7 @@ export type BlobStorageProviderType = z.infer<typeof blobStorageProviderSchema>;
 /**
  * Type guard for blob storage provider names
  */
-export function isBlobStorageProviderType(
-  provider: unknown,
-): provider is BlobStorageProviderType {
+export function isBlobStorageProviderType(provider: unknown): provider is BlobStorageProviderType {
   return blobStorageProviderSchema.safeParse(provider).success;
 }
 

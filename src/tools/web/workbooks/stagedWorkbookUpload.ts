@@ -40,10 +40,11 @@ export async function requestStagedWorkbookUpload({
 
   const workbookUploadId = randomUUID();
   const contentType = getWorkbookUploadContentType(fileType);
-  const { uploadUrl, requiredHeaders, expiresAt } = await getBlobStorageProvider().getPresignedUploadUrl({
-    key: buildWorkbookUploadKey(workbookUploadId, fileType),
-    contentType,
-  });
+  const { uploadUrl, requiredHeaders, expiresAt } =
+    await getBlobStorageProvider().getPresignedUploadUrl({
+      key: buildWorkbookUploadKey(workbookUploadId, fileType),
+      contentType,
+    });
 
   return {
     workbookUploadId,

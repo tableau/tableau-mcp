@@ -104,9 +104,7 @@ describe('resolveStagedWorkbookUpload', () => {
   });
 
   it('downloads the staged workbook bytes from the .twb key when it exists', async () => {
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId }),
-    ).resolves.toEqual({
+    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).resolves.toEqual({
       fileName: `${uploadId}.twb`,
       bytes: Buffer.from('<workbook />'),
     });
@@ -121,9 +119,7 @@ describe('resolveStagedWorkbookUpload', () => {
     mocks.download.mockResolvedValueOnce(undefined);
     mocks.download.mockResolvedValueOnce(Buffer.from('PK\x03\x04'));
 
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId }),
-    ).resolves.toEqual({
+    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).resolves.toEqual({
       fileName: `${uploadId}.twbx`,
       bytes: Buffer.from('PK\x03\x04'),
     });
@@ -140,23 +136,23 @@ describe('resolveStagedWorkbookUpload', () => {
   it('throws when neither the .twb nor .twbx key exists', async () => {
     mocks.download.mockResolvedValue(undefined);
 
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId }),
-    ).rejects.toThrow('Workbook upload not found');
+    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).rejects.toThrow(
+      'Workbook upload not found',
+    );
   });
 
   it('rejects invalid workbook upload ids', async () => {
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: '../not-safe' }),
-    ).rejects.toThrow('upload id is invalid');
+    await expect(resolveStagedWorkbookUpload({ workbookUploadId: '../not-safe' })).rejects.toThrow(
+      'upload id is invalid',
+    );
   });
 
   it('rejects empty uploaded workbook bytes', async () => {
     mocks.download.mockResolvedValue(Buffer.alloc(0));
 
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId }),
-    ).rejects.toThrow('must not be empty');
+    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).rejects.toThrow(
+      'must not be empty',
+    );
   });
 });
 

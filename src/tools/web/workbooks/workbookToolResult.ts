@@ -29,10 +29,7 @@ export async function buildWorkbookToolResult({
   toolName: string;
   keyPrefixSegment: string;
 }): Promise<WorkbookToolResult> {
-  if (
-    !isBlobStorageEnabled() ||
-    !(await getFeatureGate().isFeatureEnabled('workbook-file-mode'))
-  ) {
+  if (!isBlobStorageEnabled() || !(await getFeatureGate().isFeatureEnabled('workbook-file-mode'))) {
     return await persistWorkbookToTempPath({ content, mimeType, filename });
   }
 
