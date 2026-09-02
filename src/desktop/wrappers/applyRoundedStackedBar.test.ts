@@ -45,6 +45,26 @@ function sourceWorksheet(): string {
 </worksheet>`;
 }
 
+function simpleSourceWorksheet(): string {
+  return sourceWorksheet()
+    .replace(
+      "        <column caption='Segment' datatype='string' name='[Segment]' role='dimension' type='nominal' />\n",
+      '',
+    )
+    .replace(
+      "        <column-instance column='[Segment]' derivation='None' name='[none:Segment:nk]' pivot='key' type='nominal' />\n",
+      '',
+    )
+    .replace(
+      "      <style-rule element='mark'><encoding attr='color' field='[Sales].[none:Segment:nk]' palette='Safe Palette' type='palette'><map to='#123456'><bucket>&quot;Consumer&quot;</bucket></map></encoding></style-rule>\n",
+      '',
+    )
+    .replace(
+      "<encodings><color column='[Sales].[none:Segment:nk]' /></encodings>",
+      '<encodings />',
+    );
+}
+
 function sourceWorksheetWithDisplayCaptions(): string {
   return sourceWorksheet()
     .replace("caption='Category' datatype", "caption='Product Family' datatype")
@@ -129,8 +149,10 @@ type Interval = {
   roundBottom?: boolean;
 };
 
-function polygonRows(interval: Interval): unknown[][] {
-  const categorySpan = interval.category === 'Alpha' ? 60 : 10;
+function polygonRows(
+  interval: Interval,
+  categorySpan = interval.category === 'Alpha' ? 60 : 10,
+): unknown[][] {
   const radius = Math.min((interval.high - interval.low) / 2, 0.02 * categorySpan);
   const topY = interval.roundTop ? radius : 0;
   const bottomY = interval.roundBottom ? radius : 0;
@@ -193,7 +215,60 @@ function polygonSummary(): TableData {
       { name: 'TMCP rounded path frame' },
       { name: 'Tooltip Only' },
     ],
-    rows: intervals.flatMap(polygonRows).reverse(),
+    rows: intervals.flatMap((interval) => polygonRows(interval)).reverse(),
+  };
+}
+
+function simpleBaselineSummary(): TableData {
+  return {
+    columns: [{ name: 'Tooltip Only' }, { name: 'Category' }, { name: 'SUM(Profit)' }],
+    rows: [
+      ['extra', 'Alpha', 12],
+      ['extra', 'Beta', -8],
+    ],
+  };
+}
+
+function simpleUnderlyingRows(): TableData {
+  return {
+    columns: [
+      { name: '[Friendly Sales].[Profit]' },
+      { name: '[Friendly Sales].[Category]' },
+      { name: '[Friendly Sales].[Region]' },
+    ],
+    rows: [
+      [4, 'Alpha', 'West'],
+      [8, 'Alpha', 'West'],
+      [-3, 'Beta', 'West'],
+      [-5, 'Beta', 'West'],
+    ],
+  };
+}
+
+function simplePolygonSummary(): TableData {
+  const intervals: Interval[] = [
+    { category: 'Alpha', segment: '', low: 0, high: 12, roundTop: true },
+    { category: 'Beta', segment: '', low: -8, high: 0, roundBottom: true },
+  ];
+  return {
+    columns: [
+      { name: 'AGG(TMCP rounded path)' },
+      { name: 'Category' },
+      { name: 'AGG(TMCP rounded y)' },
+      { name: 'TMCP rounded path frame' },
+      { name: 'AGG(TMCP rounded x)' },
+    ],
+    rows: intervals
+      .flatMap((interval) =>
+        polygonRows(interval, Math.abs(interval.high - interval.low)).map((row) => [
+          row[2],
+          row[3],
+          row[4],
+          row[5],
+          row[0],
+        ]),
+      )
+      .reverse(),
   };
 }
 
@@ -268,6 +343,17 @@ function successfulExecutor(
     getWorksheetSummaryData,
     getWorksheetUnderlyingData,
   };
+}
+
+function successfulSimpleExecutor(): ReturnType<typeof successfulExecutor> {
+  const source = simpleSourceWorksheet();
+  const harness = successfulExecutor({ sourceWorksheetXml: source });
+  harness.getWorksheetSummaryData
+    .mockReset()
+    .mockResolvedValueOnce(Ok(simpleBaselineSummary()))
+    .mockResolvedValue(Ok(simplePolygonSummary()));
+  harness.getWorksheetUnderlyingData.mockReset().mockResolvedValue(Ok(simpleUnderlyingRows()));
+  return harness;
 }
 
 describe('applyRoundedStackedBar', () => {
@@ -356,6 +442,53 @@ describe('applyRoundedStackedBar', () => {
       },
       SIGNAL,
     );
+  });
+
+  it('applies a simple bar without requesting a Segment projection', async () => {
+    const harness = successfulSimpleExecutor();
+    const source = simpleSourceWorksheet();
+
+    const outcome = await applyRoundedStackedBar({
+      sourceWorksheetXml: source,
+      intendedWorksheetXml: harness.planned.xml,
+      contract: harness.planned.semanticContract,
+      focus: NO_FOCUS,
+      executor: harness.executor,
+      signal: SIGNAL,
+    });
+
+    expect(outcome, JSON.stringify(outcome)).toMatchObject({ state: 'applied', mutation: 'sent' });
+    expect(harness.getWorksheetUnderlyingData).toHaveBeenCalledWith(
+      WORKSHEET_ID,
+      'orders',
+      expect.objectContaining({
+        columnsToIncludeByFieldName: [
+          '[Friendly Sales].[Category]',
+          '[Friendly Sales].[Profit]',
+          '[Friendly Sales].[Region]',
+        ],
+      }),
+      SIGNAL,
+    );
+  });
+
+  it('uses a generic refusal when the logical table contract is not satisfied', async () => {
+    const harness = successfulSimpleExecutor();
+    vi.mocked(harness.executor.listWorksheetLogicalTables).mockResolvedValue(
+      Ok({ tables: [{ id: undefined, caption: 'Orders' }] }),
+    );
+
+    const outcome = await applyRoundedStackedBar({
+      sourceWorksheetXml: simpleSourceWorksheet(),
+      intendedWorksheetXml: harness.planned.xml,
+      contract: harness.planned.semanticContract,
+      focus: NO_FOCUS,
+      executor: harness.executor,
+      signal: SIGNAL,
+    });
+
+    expect(outcome).toMatchObject({ state: 'failed', stage: 'logical-table-preflight' });
+    if (outcome.state !== 'applied') expect(outcome.message).toMatch(/^Rounded bars require/);
   });
 
   it('projects source columns when display captions differ and reaches apply', async () => {

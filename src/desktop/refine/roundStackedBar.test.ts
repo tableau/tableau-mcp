@@ -8,6 +8,7 @@ type FixtureOptions = {
   colorEncoding?: string;
   datasourceCount?: number;
   dependenciesCount?: number;
+  encodings?: boolean;
   extraColumnDefinitions?: string;
   extraColumnInstances?: string;
   extraPaneNode?: string;
@@ -19,6 +20,7 @@ type FixtureOptions = {
   rows?: string;
   cols?: string;
   simpleId?: string;
+  stacked?: boolean;
   slices?: string;
   sourceTableCalc?: string;
   sourceMeasureCalculation?: string;
@@ -107,6 +109,27 @@ function tableauHostRoundedReadback(xml: string): string {
   return serializeFixture(document);
 }
 
+function tableauHostSimpleRoundedReadback(xml: string): string {
+  const document = new DOMParser().parseFromString(xml, 'application/xml') as unknown as Document;
+  const dependency = document.getElementsByTagName('datasource-dependencies')[0];
+  const prunedSuffixes = ['_pos]', '_neg]', '_pos_end]', '_neg_end]'];
+  for (const definition of directElements(dependency, 'column')) {
+    const name = definition.getAttribute('name') ?? '';
+    if (prunedSuffixes.some((suffix) => name.endsWith(suffix))) {
+      dependency.removeChild(definition);
+    }
+  }
+  for (const instance of directElements(dependency, 'column-instance')) {
+    for (const tableCalc of directElements(instance, 'table-calc')) {
+      const field = tableCalc.getAttribute('field') ?? '';
+      if (prunedSuffixes.some((suffix) => field.endsWith(suffix))) {
+        instance.removeChild(tableCalc);
+      }
+    }
+  }
+  return serializeFixture(document);
+}
+
 function mutateGeometryTableCalc(
   xml: string,
   role: 'x' | 'y',
@@ -136,6 +159,7 @@ function worksheet(options: FixtureOptions = {}): string {
   const datasourceCount = options.datasourceCount ?? 1;
   const dependenciesCount = options.dependenciesCount ?? 1;
   const panes = options.panes ?? 1;
+  const stacked = options.stacked ?? true;
   const datasourceRefs = Array.from({ length: datasourceCount }, (_, index) =>
     index === 0
       ? `<datasource caption='Friendly &amp; &lt;Sales&gt;' name='${INTERNAL_DS}'>
@@ -149,11 +173,11 @@ function worksheet(options: FixtureOptions = {}): string {
     const datasource = index === 0 ? INTERNAL_DS : `second.${index}`;
     return `<datasource-dependencies datasource='${datasource}'>
         <column caption='Category &amp; &lt;Group&gt;' datatype='string' name='[Category &amp; Group]' role='dimension' type='nominal' />
-        <column caption='Segment &amp; Team' datatype='string' name='[Segment]' role='dimension' type='nominal' />
+        ${stacked ? "<column caption='Segment &amp; Team' datatype='string' name='[Segment]' role='dimension' type='nominal' />" : ''}
         <column caption='Profit &amp; Margin' datatype='real'${options.sourceMeasureDefaultFormat === undefined ? '' : ` default-format='${options.sourceMeasureDefaultFormat}'`} name='[Profit &amp; Margin]' role='measure' type='quantitative'${options.sourceMeasureCalculation ? `>${options.sourceMeasureCalculation}</column>` : ' />'}
         ${options.extraColumnDefinitions ?? ''}
         <column-instance column='[Category &amp; Group]' derivation='None' name='[none:Category &amp; Group:nk]' pivot='key' type='nominal' />
-        <column-instance column='[Segment]' derivation='None' name='[none:Segment:nk]' pivot='key' type='nominal' />
+        ${stacked ? "<column-instance column='[Segment]' derivation='None' name='[none:Segment:nk]' pivot='key' type='nominal' />" : ''}
         <column-instance column='[Profit &amp; Margin]' derivation='Sum' name='[sum:Profit &amp; Margin:qk]' pivot='key' type='quantitative' />
         ${options.extraColumnInstances ?? ''}
         ${options.sourceTableCalc ?? ''}
@@ -165,13 +189,19 @@ function worksheet(options: FixtureOptions = {}): string {
     options.categorySort === undefined
       ? `<computed-sort column='${category.replaceAll('&', '&amp;')}' direction='DESC' using='${measure.replaceAll('&', '&amp;')}' />`
       : options.categorySort;
-  const color = options.colorEncoding ?? `<color column='${segment.replaceAll('&', '&amp;')}' />`;
+  const color =
+    options.colorEncoding ??
+    (stacked ? `<color column='${segment.replaceAll('&', '&amp;')}' />` : '');
+  const encodings =
+    options.encodings === false
+      ? ''
+      : `<encodings>${color}${options.sourceTooltip ?? ''}</encodings>`;
   const paneXml = Array.from(
     { length: panes },
     () => `<pane id='1' selection-relaxation-option='selection-relaxation-allow'>
       <view><breakdown value='auto' /></view>
       <mark class='${options.mark ?? 'Bar'}' />
-      <encodings>${color}${options.sourceTooltip ?? ''}</encodings>
+      ${encodings}
       ${options.extraPaneNode ?? ''}
     </pane>`,
   ).join('');
@@ -195,11 +225,15 @@ function worksheet(options: FixtureOptions = {}): string {
     </view>
     <style>
       ${axis}
-      <style-rule element='mark'>
+      ${
+        stacked
+          ? `<style-rule element='mark'>
         <encoding attr='color' field='${segment.replaceAll('&', '&amp;')}' palette='Safe Palette' type='palette'>
           <map to='#123456'><bucket>&quot;Consumer&quot;</bucket></map>
         </encoding>
-      </style-rule>
+      </style-rule>`
+          : ''
+      }
       <style-rule element='gridline'><format attr='line-visibility' value='off' /></style-rule>
       <style-rule element='zeroline'><format attr='line-visibility' value='off' /></style-rule>
       <style-rule element='worksheet'><format attr='display-field-labels' scope='rows' value='false' /></style-rule>
@@ -249,6 +283,198 @@ function expectRoundedSignatureRefusal(
 }
 
 describe('planRoundStackedBar', () => {
+  it('rounds a live-shaped simple vertical bar without inventing a segment', () => {
+    const result = planRoundStackedBar(worksheet({ stacked: false }), { preset: 'subtle' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.alreadyRounded).toBe(false);
+    expect(result.semanticContract).not.toHaveProperty('segment');
+    expect(result.semanticContract).toHaveProperty('orientation', 'vertical');
+    expect(Object.values(result.semanticContract.helpers)).toHaveLength(14);
+    expect(result.xml).toContain("<mark class='Polygon' />");
+    expect(result.xml).not.toContain("name='[Segment]'");
+    expect(result.xml).not.toContain('[none:Segment:nk]');
+    expect(result.xml).not.toContain('RUNNING_SUM(');
+    expect(result.xml).toContain(
+      'IF [__tmcp_round_b157d4fa12a0_dense] &gt;= 0 THEN 0 ELSE [__tmcp_round_b157d4fa12a0_dense] END',
+    );
+    expect(result.xml).toContain(
+      'IF [__tmcp_round_b157d4fa12a0_dense] &gt; 0 THEN [__tmcp_round_b157d4fa12a0_radius_y] ELSE 0 END',
+    );
+    expect(result.xml).toContain(
+      'IF [__tmcp_round_b157d4fa12a0_dense] &lt; 0 THEN [__tmcp_round_b157d4fa12a0_radius_y] ELSE 0 END',
+    );
+
+    const readback = tableauHostSimpleRoundedReadback(result.xml);
+    const second = planRoundStackedBar(readback, { preset: 'subtle' });
+    expect(second.ok, !second.ok ? second.reason : '').toBe(true);
+    if (!second.ok) return;
+    expect(second.alreadyRounded).toBe(true);
+    expect(second.xml).toBe(readback);
+  });
+
+  it('rounds a live-shaped horizontal stacked bar with sign-safe endpoints', () => {
+    const measure = `[${DS_REF}].[sum:Profit & Margin:qk]`.replaceAll('&', '&amp;');
+    const result = planRoundStackedBar(
+      worksheet({
+        rows: `[${INTERNAL_DS}].[none:Category &amp; Group:nk]`,
+        cols: measure,
+        axis: `<style-rule element='axis'>
+          <format attr='title' class='0' field='${measure}' scope='cols' value='Profit &amp; Margin (USD)' />
+        </style-rule>`,
+      }),
+      { preset: 'subtle' },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.semanticContract.orientation).toBe('horizontal');
+    expect(result.xml).toContain(
+      '<rows>([federated.sales&amp;ops].[none:Category &amp; Group:nk] * [federated.sales&amp;ops].[usr:__tmcp_round_b157d4fa12a0_y:qk])</rows>',
+    );
+    expect(result.xml).toContain(
+      '<cols>[federated.sales&amp;ops].[usr:__tmcp_round_b157d4fa12a0_x:qk]</cols>',
+    );
+    expect(result.xml).toContain('-RUNNING_SUM([');
+
+    const second = planRoundStackedBar(result.xml, { preset: 'subtle' });
+    expect(second.ok, !second.ok ? second.reason : '').toBe(true);
+    if (!second.ok) return;
+    expect(second.alreadyRounded).toBe(true);
+    expect(second.xml).toBe(result.xml);
+  });
+
+  it('rounds and recognizes a horizontal simple bar without adding Color', () => {
+    const measure = `[${DS_REF}].[sum:Profit & Margin:qk]`.replaceAll('&', '&amp;');
+    const result = planRoundStackedBar(
+      worksheet({
+        stacked: false,
+        rows: `[${INTERNAL_DS}].[none:Category &amp; Group:nk]`,
+        cols: measure,
+        axis: `<style-rule element='axis'>
+          <format attr='title' class='0' field='${measure}' scope='cols' value='Profit &amp; Margin (USD)' />
+        </style-rule>`,
+      }),
+      { preset: 'subtle' },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.semanticContract).toMatchObject({ orientation: 'horizontal' });
+    expect(result.semanticContract).not.toHaveProperty('segment');
+    expect(result.xml).not.toContain('<color ');
+    expect(result.xml).toMatch(
+      /name='\[__tmcp_round_b157d4fa12a0_x\]'[\s\S]*?CASE INDEX\(\) WHEN 1 THEN \[__tmcp_round_b157d4fa12a0_lo\]/,
+    );
+    expect(result.xml).toMatch(
+      /name='\[__tmcp_round_b157d4fa12a0_y\]'[\s\S]*?CASE INDEX\(\) WHEN 1 THEN -0\.35/,
+    );
+
+    const second = planRoundStackedBar(result.xml, { preset: 'subtle' });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.alreadyRounded).toBe(true);
+    expect(second.xml).toBe(result.xml);
+  });
+
+  it.each([
+    ['vertical simple', worksheet({ mark: 'Automatic', stacked: false })],
+    [
+      'horizontal simple',
+      worksheet({
+        mark: 'Automatic',
+        stacked: false,
+        rows: `[${INTERNAL_DS}].[none:Category &amp; Group:nk]`,
+        cols: `[${INTERNAL_DS}].[sum:Profit &amp; Margin:qk]`,
+        axis: `<style-rule element='axis'>
+          <format attr='title' class='0' field='[${INTERNAL_DS}].[sum:Profit &amp; Margin:qk]' scope='cols' value='Profit &amp; Margin (USD)' />
+        </style-rule>`,
+      }),
+    ],
+    ['vertical stacked', worksheet({ mark: 'Automatic' })],
+  ])('accepts an eligible Automatic %s only after bar-shape classification', (_label, source) => {
+    const result = planRoundStackedBar(source, { preset: 'subtle' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain("<mark class='Polygon' />");
+  });
+
+  it('creates the one missing encodings container for a live-shaped Automatic simple bar', () => {
+    const first = planRoundStackedBar(
+      worksheet({ encodings: false, mark: 'Automatic', stacked: false }),
+      { preset: 'subtle' },
+    );
+
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const document = new DOMParser().parseFromString(
+      first.xml,
+      'application/xml',
+    ) as unknown as Document;
+    const pane = document.getElementsByTagName('pane')[0];
+    expect(directElements(pane).map((element) => element.tagName)).toEqual([
+      'view',
+      'mark',
+      'encodings',
+      'customized-tooltip',
+    ]);
+    expect(directElements(pane, 'encodings')).toHaveLength(1);
+    expect(
+      directElements(directElements(pane, 'encodings')[0]).map((element) => element.tagName),
+    ).toEqual(['lod', 'path']);
+
+    const second = planRoundStackedBar(first.xml, { preset: 'subtle' });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.alreadyRounded).toBe(true);
+    expect(second.xml).toBe(first.xml);
+  });
+
+  it('refuses duplicate encodings containers instead of treating them as absent', () => {
+    const source = worksheet({ stacked: false }).replace(
+      '<encodings></encodings>',
+      '<encodings></encodings><encodings></encodings>',
+    );
+
+    expectRefusal(source, /at most one encodings container/i);
+  });
+
+  it('refuses a malformed encodings container instead of replacing it', () => {
+    const source = worksheet({ stacked: false }).replace(
+      '<encodings></encodings>',
+      "<encodings unexpected='true'></encodings>",
+    );
+
+    expectRefusal(source, /plain encodings container/i);
+  });
+
+  it.each([
+    ['missing column', worksheet({ colorEncoding: '<color />', stacked: false })],
+    [
+      'foreign datasource',
+      worksheet({
+        colorEncoding: "<color column='[foreign.datasource].[none:Segment:nk]' />",
+        stacked: false,
+      }),
+    ],
+    [
+      'extra attribute',
+      worksheet({
+        colorEncoding: `<color column='[${INTERNAL_DS}].[none:Segment:nk]' unexpected='true' />`,
+      }),
+    ],
+    [
+      'element child',
+      worksheet({
+        colorEncoding: `<color column='[${INTERNAL_DS}].[none:Segment:nk]'><unexpected /></color>`,
+      }),
+    ],
+  ])('refuses a Color encoding with %s', (_label, source) => {
+    expectRefusal(source, /one plain Color encoding.*selected datasource/i);
+  });
+
   it('exposes only runtime verification evidence in the semantic contract', () => {
     const result = planRoundStackedBar(worksheet(), { preset: 'subtle' });
     expect(result.ok).toBe(true);
@@ -274,7 +500,7 @@ describe('planRoundStackedBar', () => {
       caption: 'Friendly & <Sales>',
     });
     expect(result.semanticContract.category.caption).toBe('Category & <Group>');
-    expect(result.semanticContract.segment.caption).toBe('Segment & Team');
+    expect(result.semanticContract.segment?.caption).toBe('Segment & Team');
     expect(result.semanticContract.measure.caption).toBe('Profit & Margin');
     expect(result.semanticContract.measure.aggregation).toBe('SUM');
     expect(result.semanticContract.helpers.bin).toEqual({
@@ -1040,7 +1266,7 @@ describe('planRoundStackedBar', () => {
       worksheet({ dependenciesCount: 2 }),
       /exactly one datasource-dependencies/i,
     ],
-    ['non-Bar mark', worksheet({ mark: 'Automatic' }), /Bar mark/i],
+    ['non-Bar mark', worksheet({ mark: 'Line' }), /Bar or bar-shaped Automatic mark/i],
     ['multiple panes', worksheet({ panes: 2 }), /exactly one pane/i],
     [
       'extra encoding',
@@ -1055,14 +1281,6 @@ describe('planRoundStackedBar', () => {
         sourceTooltip: `<tooltip column='[${INTERNAL_DS}].[sum:Profit &amp; Margin:qk]' />`,
       }),
       /custom label or tooltip/i,
-    ],
-    [
-      'horizontal chart',
-      worksheet({
-        rows: `[${INTERNAL_DS}].[none:Category &amp; Group:nk]`,
-        cols: `[${INTERNAL_DS}].[sum:Profit &amp; Margin:qk]`,
-      }),
-      /vertical/i,
     ],
     [
       'non-SUM measure',
@@ -1209,6 +1427,10 @@ describe('planRoundStackedBar', () => {
       preset: 'very-rounded' as 'subtle',
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toMatch(/subtle/i);
+    if (!result.ok) {
+      expect(result.reason).toMatch(/subtle/i);
+      expect(result.reason).toContain('round_bar');
+      expect(result.reason).not.toContain('round_stacked_bar');
+    }
   });
 });
