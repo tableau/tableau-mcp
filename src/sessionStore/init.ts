@@ -9,18 +9,6 @@ import { log } from '../logging/logger.js';
 import { InMemorySessionStore } from './inMemorySessionStore.js';
 import type { SessionStore } from './sessionStore.js';
 
-/**
- * Namespace names for the OAuth session stores. Exact string values only matter for key
- * isolation on a shared custom backend; they are exported so call sites reuse them consistently.
- */
-export const SESSION_NAMESPACE = {
-  pendingAuthorization: 'pendingAuthorization',
-  authorizationCode: 'authorizationCode',
-  refreshToken: 'refreshToken',
-  refreshTokenIndex: 'refreshTokenIndex',
-  clientRegistration: 'clientRegistration',
-} as const;
-
 function isRecord(obj: unknown): obj is Record<string, unknown> {
   return typeof obj === 'object' && obj !== null && !Array.isArray(obj);
 }
