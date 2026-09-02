@@ -1,4 +1,5 @@
 import { AxiosError, AxiosResponse } from 'axios';
+import { Err, Ok } from 'ts-results-es';
 
 import { Config } from '../../config.js';
 import { RestApiArgs } from '../../restApiInstance.js';
@@ -128,12 +129,13 @@ describe('getCurrentUserSiteRole', () => {
   function stubUseRestApiWithSiteRole(siteRole: string | undefined): void {
     mocks.useRestApi.mockImplementation(async ({ callback }) =>
       callback({
-        usersMethods: {
-          queryUserOnSite: vi.fn().mockResolvedValue({
-            id: 'user-A',
-            name: 'name',
-            siteRole,
-          }),
+        authenticatedServerMethods: {
+          getCurrentServerSession: vi.fn().mockResolvedValue(
+            Ok({
+              site: { id: 'site-A' },
+              user: { id: 'user-A', name: 'name', siteRole },
+            }),
+          ),
         },
       }),
     );
@@ -159,12 +161,13 @@ describe('getCurrentUserSiteRole', () => {
       .mockRejectedValueOnce(new Error('transient 2'))
       .mockImplementationOnce(async ({ callback }) =>
         callback({
-          usersMethods: {
-            queryUserOnSite: vi.fn().mockResolvedValue({
-              id: 'user-A',
-              name: 'name',
-              siteRole: 'SiteAdministratorCreator',
-            }),
+          authenticatedServerMethods: {
+            getCurrentServerSession: vi.fn().mockResolvedValue(
+              Ok({
+                site: { id: 'site-A' },
+                user: { id: 'user-A', name: 'name', siteRole: 'SiteAdministratorCreator' },
+              }),
+            ),
           },
         }),
       );
@@ -226,6 +229,34 @@ describe('getCurrentUserSiteRole', () => {
     expect(siteRole).toBe('Viewer');
   });
 
+  // Regression (W-Bearer-no-MFA): a Bearer token for a user without MFA carries no
+  // `https://tableau.com/userId` claim, so restApi.userId is ''. The role must still resolve via
+  // GET /sessions/current, which needs no userId. The stubbed restApi deliberately exposes ONLY
+  // getCurrentServerSession (no usersMethods) to prove the gate no longer depends on a
+  // userId-keyed /users/:userId lookup.
+  it('resolves the site role from the current session for a Bearer token with no userId claim', async () => {
+    mocks.useRestApi.mockImplementation(async ({ callback }) =>
+      callback({
+        authenticatedServerMethods: {
+          getCurrentServerSession: vi.fn().mockResolvedValue(
+            Ok({
+              site: { id: 'site-x' },
+              user: { id: 'user-session', name: 'name', siteRole: 'SiteAdministratorCreator' },
+            }),
+          ),
+        },
+      }),
+    );
+
+    const siteRole = await resolveWithFakeTimers(() =>
+      getCurrentUserSiteRole(
+        makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-x', userId: undefined })),
+      ),
+    );
+
+    expect(siteRole).toBe('SiteAdministratorCreator');
+  });
+
   // Missing/invalid auth is fail-closed via the REST path, not a short-circuit: with no usable
   // identity, sign-in throws, so after the retries getCurrentUserSiteRole resolves to undefined.
   it('returns undefined when tableauAuthInfo is missing (no user to gate on)', async () => {
@@ -238,16 +269,60 @@ describe('getCurrentUserSiteRole', () => {
     expect(siteRole).toBeUndefined();
   });
 
-  it('returns undefined when tableauAuthInfo has no userId', async () => {
-    mocks.useRestApi.mockRejectedValue(new Error('no userId to query'));
+  it('does not retry when the current session lookup is unauthorized (deterministic — retrying cannot help)', async () => {
+    mocks.useRestApi.mockImplementation(async ({ callback }) =>
+      callback({
+        authenticatedServerMethods: {
+          getCurrentServerSession: vi.fn().mockResolvedValue(
+            Err({
+              type: 'unauthorized',
+              message: { code: '401001', summary: 'Unauthorized', detail: 'expired token' },
+            }),
+          ),
+        },
+      }),
+    );
 
-    const siteRole = await resolveWithFakeTimers(() =>
-      getCurrentUserSiteRole(
-        makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-x', userId: undefined })),
-      ),
+    const siteRole = await getCurrentUserSiteRole(
+      makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-A', userId: 'user-A' })),
     );
 
     expect(siteRole).toBeUndefined();
+    expect(mocks.useRestApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a transient (unknown) current-session failure, then returns the role once it succeeds', async () => {
+    mocks.useRestApi
+      .mockImplementationOnce(async ({ callback }) =>
+        callback({
+          authenticatedServerMethods: {
+            getCurrentServerSession: vi
+              .fn()
+              .mockResolvedValue(Err({ type: 'unknown', message: 'gateway timeout' })),
+          },
+        }),
+      )
+      .mockImplementationOnce(async ({ callback }) =>
+        callback({
+          authenticatedServerMethods: {
+            getCurrentServerSession: vi.fn().mockResolvedValue(
+              Ok({
+                site: { id: 'site-A' },
+                user: { id: 'user-A', name: 'name', siteRole: 'Viewer' },
+              }),
+            ),
+          },
+        }),
+      );
+
+    const siteRole = await resolveWithFakeTimers(() =>
+      getCurrentUserSiteRole(
+        makeRestApiArgs(makeTableauAuthInfo({ siteId: 'site-A', userId: 'user-A' })),
+      ),
+    );
+
+    expect(siteRole).toBe('Viewer');
+    expect(mocks.useRestApi).toHaveBeenCalledTimes(2);
   });
 
   it('does not share state with assertAdmin — a subsequent assertAdmin still queries the REST API', async () => {
