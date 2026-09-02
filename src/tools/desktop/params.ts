@@ -12,7 +12,11 @@ import { ArgsValidationError } from '../../errors/mcpToolError.js';
  */
 
 export type ArtifactParamKind =
-  'workbook' | 'worksheet' | 'dashboard' | 'storyboard' | 'datasource';
+  | 'workbook'
+  | 'worksheet'
+  | 'dashboard'
+  | 'storyboard'
+  | 'datasource';
 
 export function sessionParam(options: { max?: number } = {}): z.ZodOptional<z.ZodString> {
   const base = options.max === undefined ? z.string() : z.string().max(options.max);

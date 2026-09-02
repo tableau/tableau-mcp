@@ -26,10 +26,16 @@ export interface InstanceFingerprint {
 }
 
 export type CacheArtifactKind =
-  'worksheet' | 'workbook' | 'dashboard' | 'storyboard' | 'datasource';
+  | 'worksheet'
+  | 'workbook'
+  | 'dashboard'
+  | 'storyboard'
+  | 'datasource';
 
 export type CacheSidecarInput =
-  { type: 'read'; text: string } | { type: 'missing' } | { type: 'unreadable'; error?: unknown };
+  | { type: 'read'; text: string }
+  | { type: 'missing' }
+  | { type: 'unreadable'; error?: unknown };
 
 export interface CacheSidecarMeta extends InstanceFingerprint {
   session_id: string;
