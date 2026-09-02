@@ -221,6 +221,8 @@ describe('refineWorksheetTool — instance', () => {
     expect(paramsSchema.operation.safeParse('round_stacked_bar').success).toBe(true);
     expect(paramsSchema.preset.safeParse('subtle').success).toBe(true);
     expect(paramsSchema.preset.safeParse('strong').success).toBe(false);
+    expect(paramsSchema.preset.description).toContain('round_bar');
+    expect(paramsSchema.preset.description).toContain('round_stacked_bar');
     expect(paramsSchema.sortDirection.description).toContain('numeric DESC=largest');
     expect(paramsSchema.direction.description).toContain('numeric desc=largest');
     expect(tool.annotations).toMatchObject({

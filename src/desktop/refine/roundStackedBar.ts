@@ -759,6 +759,28 @@ function classifyOrdinary(
   if (segment?.name === category.name) {
     return refusal('Category and Segment must be different fields.');
   }
+  if (segment) {
+    const paneViews = elements(pane, 'view');
+    const paneView = paneViews.length === 1 ? paneViews[0] : null;
+    const breakdown = paneView ? oneChild(paneView, 'breakdown') : null;
+    const breakdownValue = breakdown?.getAttribute('value') ?? '';
+    if (
+      !paneView ||
+      paneView.attributes.length > 0 ||
+      elements(paneView).length !== 1 ||
+      (paneView.textContent?.trim() ?? '') !== '' ||
+      !breakdown ||
+      !hasOnlyAttributes(breakdown, { value: breakdownValue }) ||
+      elements(breakdown).length > 0 ||
+      (breakdown.textContent?.trim() ?? '') !== '' ||
+      !['auto', 'on', 'off'].includes(breakdownValue)
+    ) {
+      return refusal('round_bar requires one plain Stack Marks setting for a Color bar.');
+    }
+    if (breakdownValue === 'off') {
+      return refusal('round_bar does not support a Color bar when Stack Marks is off.');
+    }
+  }
   if (
     [category, segment, measure]
       .filter((instance): instance is ColumnInstance => !!instance)

@@ -16,6 +16,7 @@ type FixtureOptions = {
   layoutOptions?: string;
   mark?: string;
   panes?: number;
+  paneView?: string;
   preset?: string;
   rows?: string;
   cols?: string;
@@ -199,7 +200,7 @@ function worksheet(options: FixtureOptions = {}): string {
   const paneXml = Array.from(
     { length: panes },
     () => `<pane id='1' selection-relaxation-option='selection-relaxation-allow'>
-      <view><breakdown value='auto' /></view>
+      ${options.paneView ?? "<view><breakdown value='auto' /></view>"}
       <mark class='${options.mark ?? 'Bar'}' />
       ${encodings}
       ${options.extraPaneNode ?? ''}
@@ -343,6 +344,42 @@ describe('planRoundStackedBar', () => {
     if (!second.ok) return;
     expect(second.alreadyRounded).toBe(true);
     expect(second.xml).toBe(result.xml);
+  });
+
+  it.each([
+    ['vertical', {}],
+    [
+      'horizontal',
+      {
+        rows: `[${INTERNAL_DS}].[none:Category &amp; Group:nk]`,
+        cols: `[${INTERNAL_DS}].[sum:Profit &amp; Margin:qk]`,
+        axis: `<style-rule element='axis'>
+          <format attr='title' class='0' field='[${INTERNAL_DS}].[sum:Profit &amp; Margin:qk]' scope='cols' value='Profit &amp; Margin (USD)' />
+        </style-rule>`,
+      },
+    ],
+  ])('refuses a %s Color bar when Stack Marks is explicitly off', (_orientation, options) => {
+    expectRefusal(
+      worksheet({
+        ...options,
+        paneView: "<view><breakdown value='off' /></view>",
+      }),
+      /Stack Marks.*off/i,
+    );
+  });
+
+  it.each([
+    ['missing pane view', ''],
+    [
+      'duplicate pane views',
+      "<view><breakdown value='auto' /></view><view><breakdown value='on' /></view>",
+    ],
+    ['missing breakdown', '<view></view>'],
+    ['duplicate breakdowns', "<view><breakdown value='auto' /><breakdown value='on' /></view>"],
+    ['invalid breakdown value', "<view><breakdown value='unsupported' /></view>"],
+    ['pane view text', "<view>unexpected<breakdown value='auto' /></view>"],
+  ])('refuses a Color bar with %s', (_label, paneView) => {
+    expectRefusal(worksheet({ paneView }), /one plain Stack Marks setting/i);
   });
 
   it('rounds and recognizes a horizontal simple bar without adding Color', () => {

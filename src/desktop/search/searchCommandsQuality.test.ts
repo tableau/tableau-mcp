@@ -245,15 +245,19 @@ describe('search-commands routing recommendation', () => {
     expect(result.recommendation).toBeTypeOf('string');
   });
 
-  it('names the bounded populated-sheet routes, including compatible rounded stacks', () => {
+  it('names the bounded populated-sheet routes, including compatible rounded bars', () => {
     const { recommendation } = searchCommandsByKeywords(['field']) as { recommendation?: string };
     expect(recommendation).toBeTypeOf('string');
     expect(recommendation).toContain('add-field');
     expect(recommendation).toContain('apply-worksheet');
     expect(recommendation).toContain('encoding');
     expect(recommendation).toContain('refine-worksheet');
-    expect(recommendation).toContain('operation=round_stacked_bar');
-    expect(recommendation).toMatch(/compatible stacked bar/i);
+    expect(recommendation).toContain('operation=round_bar');
+    expect(recommendation).toContain('preset=subtle');
+    expect(recommendation).toMatch(
+      /compatible ordinary vertical or horizontal simple or stacked bar/i,
+    );
+    expect(recommendation).not.toContain('operation=round_stacked_bar');
     expect(recommendation).not.toMatch(/refine-worksheet only for top-N or sort/);
   });
 

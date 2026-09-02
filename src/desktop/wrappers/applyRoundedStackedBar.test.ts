@@ -38,7 +38,7 @@ function sourceWorksheet(): string {
       <style-rule element='zeroline'><format attr='line-visibility' value='off' /></style-rule>
       <style-rule element='worksheet'><format attr='display-field-labels' scope='rows' value='false' /></style-rule>
     </style>
-    <panes><pane><mark class='Bar' /><encodings><color column='[Sales].[none:Segment:nk]' /></encodings></pane></panes>
+    <panes><pane><view><breakdown value='auto' /></view><mark class='Bar' /><encodings><color column='[Sales].[none:Segment:nk]' /></encodings></pane></panes>
     <rows>[Sales].[sum:Profit:qk]</rows><cols>[Sales].[none:Category:nk]</cols>
   </table>
   <simple-id uuid='${WORKSHEET_ID}' />
@@ -447,6 +447,9 @@ describe('applyRoundedStackedBar', () => {
   it('applies a simple bar without requesting a Segment projection', async () => {
     const harness = successfulSimpleExecutor();
     const source = simpleSourceWorksheet();
+
+    expect(source).toContain("<view><breakdown value='auto' /></view>");
+    expect(source).not.toContain("column='[Sales].[none:Segment:nk]'");
 
     const outcome = await applyRoundedStackedBar({
       sourceWorksheetXml: source,

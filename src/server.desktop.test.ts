@@ -203,9 +203,9 @@ describe('desktop tools/list serialized surface', () => {
     );
 
     // Tool search owns discovery; pin the merged filter recovery, dense-scatter repair,
-    // executive-dashboard guidance, rounded-bar proof/disclosure route, and dashboard
+    // executive-dashboard guidance, rounded-bar build/refine proof route, and dashboard
     // corner routing without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(8_173);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(8_318);
   });
 });
 
@@ -271,7 +271,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['apply-worksheet', 1579], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
-    ['refine-worksheet', 1657], // ratcheted down while making round_bar the preferred ordinary-bar operation; its legacy alias remains without growing the schema
+    ['refine-worksheet', 1652], // lowered while naming both rounded-bar operations without growing the schema
     ['build-worksheets-from-templates', 1150], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow

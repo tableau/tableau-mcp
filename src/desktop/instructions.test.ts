@@ -62,6 +62,9 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(`${rounded?.trigger} ${rounded?.action}`).toContain('slight rounded');
     expect(`${rounded?.trigger} ${rounded?.action}`).toContain('vertical or horizontal');
     expect(`${rounded?.trigger} ${rounded?.action}`).toContain('simple or stacked');
+    expect(rounded?.action).toMatch(/New chart: follow plain-chart to build it/i);
+    expect(rounded?.action).toMatch(/then call refine-worksheet on its returned worksheet/i);
+    expect(rounded?.action).toMatch(/Existing or just-built compatible bar.*directly/i);
     expect(rounded?.action).toContain('operation=round_bar');
     expect(rounded?.action).toContain('preset=subtle');
     expect(rounded?.action).toContain('Polygon');

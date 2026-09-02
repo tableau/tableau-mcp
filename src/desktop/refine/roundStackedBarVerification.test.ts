@@ -284,7 +284,7 @@ function sourceWorksheet(): string {
       <style-rule element='gridline'><format attr='line-visibility' value='off' /></style-rule>
       <style-rule element='table-div'><format attr='line-visibility' value='off' /></style-rule>
     </style>
-    <panes><pane><mark class='Bar' /><encodings><color column='[Sales].[none:Segment:nk]' /></encodings></pane></panes>
+    <panes><pane><view><breakdown value='auto' /></view><mark class='Bar' /><encodings><color column='[Sales].[none:Segment:nk]' /></encodings></pane></panes>
     <rows>[Sales].[sum:Profit:qk]</rows><cols>[Sales].[none:Category:nk]</cols>
   </table>
   <simple-id uuid='${WORKSHEET_ID}' />
@@ -316,7 +316,7 @@ function sourceWorksheetWithPreservedContent(): string {
     .replace("<column caption='Category'", "<column caption='Category' original='[Category]'")
     .replace(
       '<panes><pane>',
-      "<panes><pane selection-relaxation-option='selection-relaxation-allow'><view><breakdown value='auto' /></view>",
+      "<panes><pane selection-relaxation-option='selection-relaxation-allow'>",
     )
     .replace(
       `<simple-id uuid='${WORKSHEET_ID}' />`,
@@ -659,6 +659,30 @@ describe('captureRoundStackedBarBaseline', () => {
     expect(result.baseline.categoryVisualOrder).toBe('live-only');
   });
 
+  it('normalizes finite numeric and boolean nominal keys from summary data', () => {
+    expect(
+      captureRoundStackedBarBaseline(
+        summary([
+          [2024, true, 10],
+          [2025, false, -8],
+        ]),
+        contract,
+      ),
+    ).toEqual({
+      ok: true,
+      baseline: {
+        worksheetId: WORKSHEET_ID,
+        groups: [
+          { category: '2024', segment: 'true', value: 10 },
+          { category: '2025', segment: 'false', value: -8 },
+        ],
+        segmentOrderFromZero: ['true', 'false'],
+        expectedVertexRows: 24,
+        categoryVisualOrder: 'live-only',
+      },
+    });
+  });
+
   it.each([
     ['wrong worksheet', { ...summary(), worksheet: { id: '{OTHER}' } }, /worksheet/i],
     ['null key', summary([['Alpha', null, 1]]), /null/i],
@@ -695,6 +719,30 @@ describe('verifyRoundStackedBarSeedEvidence', () => {
     expect(
       verifyRoundStackedBarSeedEvidence(oneSeed, captureSimpleBaseline(), simpleContract).findings,
     ).toContainEqual(expect.objectContaining({ code: 'seed-evidence' }));
+  });
+
+  it('matches finite numeric and boolean nominal keys across underlying data', () => {
+    const baseline: RoundStackedBarBaseline = {
+      worksheetId: WORKSHEET_ID,
+      groups: [
+        { category: '2024', segment: 'true', value: 10 },
+        { category: '2025', segment: 'false', value: -8 },
+      ],
+      segmentOrderFromZero: ['true', 'false'],
+      expectedVertexRows: 24,
+      categoryVisualOrder: 'live-only',
+    };
+    const underlying = rawData([
+      [true, 'West', 4, 2024],
+      [true, 'West', 6, 2024],
+      [false, 'West', -3, 2025],
+      [false, 'West', -5, 2025],
+    ]);
+
+    expect(verifyRoundStackedBarSeedEvidence(underlying, baseline, contract)).toEqual({
+      ok: true,
+      findings: [],
+    });
   });
 
   it('requires two distinct finite raw values for every visible group and the requested filter member', () => {
@@ -844,6 +892,74 @@ describe('verifyRoundStackedBarSeedEvidence', () => {
 });
 
 describe('verifyRoundStackedBarPostSummary', () => {
+  it.each([
+    ['a null zero coordinate', 4, 0, null, 'segment-value'],
+    ['a blank zero coordinate', 4, 0, '   ', 'segment-value'],
+    ['a boolean zero coordinate', 4, 0, false, 'segment-value'],
+    ['a null zero frame', 5, 0, null, 'frame-domain'],
+    ['a boolean first path', 2, 1, true, 'path-domain'],
+  ] as const)(
+    'rejects %s instead of coercing it into valid polygon geometry',
+    (_label, columnIndex, originalValue, malformedValue, expectedCode) => {
+      const malformed = polygonSummary();
+      const rows = malformed.rows.map((row) => [...row]);
+      const rowIndex = rows.findIndex((row) => row[columnIndex] === originalValue);
+      expect(rowIndex).toBeGreaterThanOrEqual(0);
+      rows[rowIndex][columnIndex] = malformedValue;
+      malformed.rows = rows;
+
+      const verification = verifyRoundStackedBarPostSummary(malformed, captureBaseline(), contract);
+
+      expect(verification.ok).toBe(false);
+      expect(verification.findings.map((finding) => finding.code)).toContain(expectedCode);
+    },
+  );
+
+  it('accepts finite numeric strings for polygon geometry', () => {
+    const readback = polygonSummary();
+    const numericColumns = new Set([0, 2, 4, 5]);
+    readback.rows = readback.rows.map((row) =>
+      row.map((cell, index) => (numericColumns.has(index) ? String(cell) : cell)),
+    );
+
+    expect(verifyRoundStackedBarPostSummary(readback, captureBaseline(), contract)).toEqual({
+      ok: true,
+      findings: [],
+    });
+  });
+
+  it('matches finite numeric and boolean nominal keys across post-apply summary data', () => {
+    const baseline: RoundStackedBarBaseline = {
+      worksheetId: WORKSHEET_ID,
+      groups: [
+        { category: '2024', segment: 'true', value: 10 },
+        { category: '2025', segment: 'false', value: -8 },
+      ],
+      segmentOrderFromZero: ['true', 'false'],
+      expectedVertexRows: 24,
+      categoryVisualOrder: 'live-only',
+    };
+    const readback = polygonSummary(
+      [
+        { category: '2024', segment: 'true', low: 0, high: 10, roundTop: true },
+        { category: '2025', segment: 'false', low: -8, high: 0, roundBottom: true },
+      ],
+      { '2024': 10, '2025': 8 },
+    );
+    readback.rows = readback.rows.map((row) => [
+      row[0],
+      row[1] === 'true',
+      row[2],
+      Number(row[3]),
+      ...row.slice(4),
+    ]);
+
+    expect(verifyRoundStackedBarPostSummary(readback, baseline, contract)).toEqual({
+      ok: true,
+      findings: [],
+    });
+  });
+
   it('verifies horizontal simple bars after normalizing the band and value axes', () => {
     expect(
       verifyRoundStackedBarPostSummary(

@@ -177,11 +177,18 @@ function groupLabel(category: string, segment?: string): string {
   return segment === undefined ? category : `${category} / ${segment}`;
 }
 
-function filterMemberText(value: unknown): string | null {
+function scalarMemberText(value: unknown): string | null {
   if (typeof value === 'string') return value;
   if (typeof value === 'boolean') return String(value);
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return null;
+}
+
+function finiteNumericCell(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NaN;
+  if (typeof value !== 'string' || value.trim() === '') return Number.NaN;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
 function naturalCompare(left: string, right: string): number {
@@ -234,15 +241,17 @@ export function captureRoundStackedBarBaseline(
     if (categoryValue === null || categoryValue === undefined) {
       return { ok: false, reason: 'Summary contains a null Category key.' };
     }
-    if (typeof categoryValue !== 'string') {
-      return { ok: false, reason: 'Summary Category keys must be strings.' };
+    const normalizedCategory = scalarMemberText(categoryValue);
+    if (normalizedCategory === null) {
+      return { ok: false, reason: 'Summary Category keys must be finite scalar values.' };
     }
     const segmentValue = segment?.ok ? row[segment.index] : undefined;
     if (segment && (segmentValue === null || segmentValue === undefined)) {
       return { ok: false, reason: 'Summary contains a null Segment key.' };
     }
-    if (segment && typeof segmentValue !== 'string') {
-      return { ok: false, reason: 'Summary Segment keys must be strings.' };
+    const normalizedSegment = segment ? scalarMemberText(segmentValue) : null;
+    if (segment && normalizedSegment === null) {
+      return { ok: false, reason: 'Summary Segment keys must be finite scalar values.' };
     }
     const value = Number(row[measure.index]);
     if (!Number.isFinite(value)) {
@@ -251,16 +260,15 @@ export function captureRoundStackedBarBaseline(
     if (near(value, 0)) {
       return { ok: false, reason: 'Every visible group must have a nonzero SUM measure.' };
     }
-    const normalizedSegment = typeof segmentValue === 'string' ? segmentValue : undefined;
-    const key = groupKey(categoryValue, normalizedSegment);
+    const key = groupKey(normalizedCategory, normalizedSegment ?? undefined);
     if (seen.has(key)) {
       return { ok: false, reason: `Summary contains duplicate bar group key ${key}.` };
     }
     seen.add(key);
     groups.push({
-      category: categoryValue,
+      category: normalizedCategory,
       value,
-      ...(normalizedSegment !== undefined ? { segment: normalizedSegment } : {}),
+      ...(normalizedSegment !== null ? { segment: normalizedSegment } : {}),
     });
   }
   if (groups.length === 0 || groups.length > MAX_GROUPS) {
@@ -326,7 +334,7 @@ export function verifyRoundStackedBarSeedEvidence(
   const values = new Map<string, Set<number>>();
   for (const row of underlying.rows) {
     if (contract.filter && filter?.ok) {
-      const member = filterMemberText(row[filter.index]);
+      const member = scalarMemberText(row[filter.index]);
       if (member === null || member !== contract.filter.member) {
         addFinding(
           findings,
@@ -338,16 +346,12 @@ export function verifyRoundStackedBarSeedEvidence(
     }
     const categoryValue = row[category.index];
     const segmentValue = segment?.ok ? row[segment.index] : undefined;
-    if (
-      typeof categoryValue !== 'string' ||
-      (segment !== undefined && typeof segmentValue !== 'string')
-    ) {
+    const normalizedCategory = scalarMemberText(categoryValue);
+    const normalizedSegment = segment ? scalarMemberText(segmentValue) : null;
+    if (normalizedCategory === null || (segment !== undefined && normalizedSegment === null)) {
       continue;
     }
-    const key = groupKey(
-      categoryValue,
-      typeof segmentValue === 'string' ? segmentValue : undefined,
-    );
+    const key = groupKey(normalizedCategory, normalizedSegment ?? undefined);
     if (!visible.has(key)) continue;
     const rawValue = row[measure.index];
     const value =
@@ -483,25 +487,22 @@ export function verifyRoundStackedBarPostSummary(
   );
   const rowsByKey = new Map<string, ParsedPoint[]>();
   for (const row of readback.rows) {
-    const category = row[indices.category];
-    const segment = indices.segment === undefined ? undefined : row[indices.segment];
-    if (
-      typeof category !== 'string' ||
-      (indices.segment !== undefined && typeof segment !== 'string')
-    ) {
+    const category = scalarMemberText(row[indices.category]);
+    const segment = indices.segment === undefined ? null : scalarMemberText(row[indices.segment]);
+    if (category === null || (indices.segment !== undefined && segment === null)) {
       addFinding(
         findings,
         'summary-groups',
-        'Post-apply summary contains a null or non-string bar group key.',
+        'Post-apply summary contains a null or non-scalar bar group key.',
       );
       continue;
     }
-    const key = groupKey(category, typeof segment === 'string' ? segment : undefined);
-    const x = Number(row[indices.x]);
-    const y = Number(row[indices.y]);
+    const key = groupKey(category, segment ?? undefined);
+    const x = finiteNumericCell(row[indices.x]);
+    const y = finiteNumericCell(row[indices.y]);
     const point: ParsedPoint = {
-      frame: Number(row[indices.frame]),
-      path: Number(row[indices.path]),
+      frame: finiteNumericCell(row[indices.frame]),
+      path: finiteNumericCell(row[indices.path]),
       band: contract.orientation === 'vertical' ? x : y,
       value: contract.orientation === 'vertical' ? y : x,
     };

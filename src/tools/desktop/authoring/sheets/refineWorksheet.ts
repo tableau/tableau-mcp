@@ -102,8 +102,8 @@ function formatValidationErrors(issues: ValidationIssue[]): string {
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe('Desktop session; omit if one.'),
-  worksheetName: z.string().min(1).describe('Sheet name.'),
+  session: z.string().optional().describe('Session; omit if one.'),
+  worksheetName: z.string().min(1).describe('Sheet.'),
   operation: z
     .enum([
       'top_n',
@@ -113,10 +113,10 @@ const paramsSchema = {
       'round_bar',
       'round_stacked_bar',
     ])
-    .describe('Refinement.'),
+    .describe('Operation.'),
   topN: z
     .object({
-      n: z.number().int().min(1).max(50).describe('Count (1-50).'),
+      n: z.number().int().min(1).max(50).describe('1-50.'),
       end: z.enum(['top', 'bottom']).optional().describe('End; default top.'),
     })
     .optional()
@@ -131,7 +131,7 @@ const paramsSchema = {
   sortByField: z.string().min(1).optional().describe('Sort measure.'),
   direction: z.enum(['asc', 'desc']).optional().describe('sort_by_field; numeric desc=largest.'),
   markType: z.enum(TABLEAU_MARK_TYPES).optional().describe('mark_type target.'),
-  preset: z.enum(['subtle']).optional().describe('round_bar.'),
+  preset: z.enum(['subtle']).optional().describe('round_bar|round_stacked_bar'),
 };
 
 const title = 'Refining worksheet';
