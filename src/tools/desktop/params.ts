@@ -11,7 +11,8 @@ import { ArgsValidationError } from '../../errors/mcpToolError.js';
  * every added byte counts against the tools/list surface budgets — keep them terse.
  */
 
-export type ArtifactParamKind = 'workbook' | 'worksheet' | 'dashboard' | 'storyboard';
+export type ArtifactParamKind =
+  'workbook' | 'worksheet' | 'dashboard' | 'storyboard' | 'datasource';
 
 export function sessionParam(options: { max?: number } = {}): z.ZodOptional<z.ZodString> {
   const base = options.max === undefined ? z.string() : z.string().max(options.max);

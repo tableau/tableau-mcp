@@ -12,15 +12,17 @@ import {
 import { sourceSha256, writeSidecar } from '../../../desktop/wrappers/cacheFingerprint.js';
 import { log } from '../../../logging/logger.js';
 
-type XmlReadKind = 'workbook' | 'worksheet' | 'dashboard' | 'storyboard';
+type XmlReadKind = 'workbook' | 'worksheet' | 'dashboard' | 'storyboard' | 'datasource';
 
 // What the fetched document is called in prose: workbook/worksheet reads return
-// "content", a dashboard read returns its "layout", a storyboard read its "document".
+// "content", a dashboard read returns its "layout", and storyboard/datasource reads return a
+// "document".
 const DOC_NOUN: Record<XmlReadKind, string> = {
   workbook: 'content',
   worksheet: 'content',
   dashboard: 'layout',
   storyboard: 'document',
+  datasource: 'document',
 };
 
 export type XmlReadFileResult = { message: string; file: string; instructions: string };
@@ -84,6 +86,25 @@ export function finishXmlRead<K extends string>({
 
   if (capFired) {
     logInlineXmlCapHit({ tool: toolName, bytes, capBytes, file: cacheFile });
+    if (kind === 'datasource') {
+      return new Ok({
+        message: [
+          `${label} document is ${bytes} bytes, over the ${capBytes}-byte inline cap. ` +
+            'Returned in file mode to keep large content out of the conversation.',
+          '',
+          'Structural summary:',
+          formatArtifactSummary(artifactKind, xml),
+          '',
+          `Edit the cached datasource document, then call ${applyTool} with ${pathParam} ` +
+            'set to the returned file path.',
+        ].join('\n'),
+        file: cacheFile,
+        instructions:
+          'Use the cache read tool with startByte/endByte when a slice is needed. Edit the ' +
+          'cached datasource document, use the cache write tool without a worksheet/dashboard ' +
+          `selector, then call ${applyTool} with ${pathParam} set to this file path.`,
+      });
+    }
     // The cache read/write selector vocabulary: a workbook slices by contained sheet
     // kinds; the per-sheet documents slice by their own (a storyboard is a dashboard).
     const selector = artifactKind === 'workbook' ? 'worksheet/dashboard' : artifactKind;
@@ -115,7 +136,10 @@ export function finishXmlRead<K extends string>({
   return new Ok({
     message: `${label} saved to cache file (${bytes} bytes)\n\nArtifact summary:\n${formatArtifactSummary(artifactKind, xml)}`,
     file: cacheFile,
-    instructions: `Use this file path with ${applyTool} instead of passing content directly.`,
+    instructions:
+      kind === 'datasource'
+        ? `Edit this cached datasource document, then call ${applyTool} with ${pathParam} set to this file path.`
+        : `Use this file path with ${applyTool} instead of passing content directly.`,
   });
 }
 

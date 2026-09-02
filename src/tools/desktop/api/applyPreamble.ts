@@ -1,8 +1,19 @@
 import { existsSync, readFileSync } from 'fs';
 import { Ok, Result } from 'ts-results-es';
 
+import {
+  CONTAINED_CACHE_READ_ISSUE,
+  getCacheDir,
+  readContainedCacheTextFile,
+} from '../../../desktop/cachePath.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
-import { CacheArtifactKind, checkSidecar } from '../../../desktop/wrappers/cacheFingerprint.js';
+import {
+  CacheArtifactKind,
+  type CacheSidecarInput,
+  checkSidecar,
+  checkSidecarInput,
+  sidecarPath,
+} from '../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
   CacheSessionMismatchError,
@@ -24,6 +35,7 @@ export function runApplyPreamble({
   session,
   emptyPathGuidance,
   notFoundGuidance,
+  secureContainedCacheRead = false,
 }: {
   kind: CacheArtifactKind;
   file: string | undefined;
@@ -32,6 +44,8 @@ export function runApplyPreamble({
   emptyPathGuidance: string;
   /** Where to get a path, appended to the missing-file error. */
   notFoundGuidance: string;
+  /** Opt into a descriptor-grounded cache containment check for the file and sidecar. */
+  secureContainedCacheRead?: boolean;
 }): Result<{ xml: string; resolvedSession: string; sourceHash?: string }, McpToolError> {
   // No inline document parameter: the cached file path IS the handle. Making the
   // model retype a document cost ~190s of pure emission across six asks, and
@@ -41,6 +55,62 @@ export function runApplyPreamble({
     return new ArgsValidationError(
       `A non-empty ${kind} file path is required. ${emptyPathGuidance}`,
     ).toErr();
+  }
+
+  if (secureContainedCacheRead) {
+    const readResult = readContainedCacheTextFile(file);
+    if (!readResult.ok) {
+      switch (readResult.issue) {
+        case CONTAINED_CACHE_READ_ISSUE.outsideCache:
+        case CONTAINED_CACHE_READ_ISSUE.unsafeFile:
+          return new ArgsValidationError(
+            `Security error: the ${kind} file must be a regular file contained in the Desktop cache directory.\n\n` +
+              `Cache directory: ${getCacheDir()}\nRequested: ${file}`,
+          ).toErr();
+        case CONTAINED_CACHE_READ_ISSUE.missing: {
+          const NotFoundError =
+            kind === 'worksheet' ? WorksheetNotFoundError : WorkbookNotFoundError;
+          return new NotFoundError(
+            `Cached ${kind} file not found: ${file} ${notFoundGuidance}`,
+          ).toErr();
+        }
+        case CONTAINED_CACHE_READ_ISSUE.readError:
+          return new FileReadError(
+            readResult.error ?? new Error(`Unable to read cached ${kind} file.`),
+          ).toErr();
+      }
+    }
+
+    const sessionResult = resolveSession(session);
+    if (sessionResult.isErr()) {
+      return sessionResult.error.toErr();
+    }
+    const resolvedSession = sessionResult.value;
+
+    const metaFile = sidecarPath(readResult.path);
+    const sidecarRead = readContainedCacheTextFile(metaFile);
+    let sidecarInput: CacheSidecarInput;
+    if (sidecarRead.ok) {
+      sidecarInput = { type: 'read', text: sidecarRead.text };
+    } else if (sidecarRead.issue === CONTAINED_CACHE_READ_ISSUE.missing) {
+      sidecarInput = { type: 'missing' };
+    } else {
+      sidecarInput = {
+        type: 'unreadable',
+        error: sidecarRead.error ?? new Error(`Secure sidecar read rejected: ${sidecarRead.issue}`),
+      };
+    }
+
+    const sidecar = checkSidecarInput(readResult.path, resolvedSession, kind, sidecarInput);
+    if (!sidecar.ok) {
+      return new CacheSessionMismatchError(sidecar.message!).toErr();
+    }
+
+    return new Ok({
+      xml: readResult.text,
+      resolvedSession,
+      sourceHash: sidecar.sourceHash,
+    });
   }
 
   if (!existsSync(file)) {
@@ -75,7 +145,7 @@ export function runApplyPreamble({
   return new Ok({ xml, resolvedSession, sourceHash: sidecar.sourceHash });
 }
 
-type NoReadbackApplyKind = 'dashboard' | 'storyboard' | 'workbook';
+type NoReadbackApplyKind = 'dashboard' | 'storyboard' | 'workbook' | 'datasource';
 
 // Per-kind wording for the shared receipt below: what the unverified structure is
 // called, and how the class of applies with no structural readback is named.
@@ -83,6 +153,7 @@ const NO_READBACK_WORDING: Record<NoReadbackApplyKind, { noun: string; scope: st
   dashboard: { noun: 'layout', scope: 'dashboard' },
   storyboard: { noun: 'structure', scope: 'storyboard' },
   workbook: { noun: 'structure', scope: 'whole workbook' },
+  datasource: { noun: 'structure', scope: 'datasource' },
 };
 
 /**
