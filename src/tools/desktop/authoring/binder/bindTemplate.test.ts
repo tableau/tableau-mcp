@@ -4679,7 +4679,13 @@ describe('bindTemplateTool auto_apply gate', () => {
         ...boundM7TopNContextFilterResult,
         args: {
           ...boundM7TopNContextFilterResult.args,
-          filters: [{ field: 'Region', values: ['East'], context: true }],
+          filters: [
+            {
+              field: 'Region',
+              values: ['Archive - DLM', 'FIREInfra', 'MCIS - Operations Team'],
+              context: true,
+            },
+          ],
         },
       } as BinderResult,
       inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
@@ -4692,7 +4698,13 @@ describe('bindTemplateTool auto_apply gate', () => {
       proposal: {
         ...sampleProposal,
         top_n: 10,
-        filters: [{ field: 'Region', values: ['East'], context: true }],
+        filters: [
+          {
+            field: 'Region',
+            values: ['Archive - DLM', 'FIREInfra', 'MCIS - Operations Team'],
+            context: true,
+          },
+        ],
       },
       auto_apply: true,
       getExecutor,
@@ -4704,10 +4716,82 @@ describe('bindTemplateTool auto_apply gate', () => {
       "<filter class='categorical' column='[M7].[none:region:nk]' context='true'>",
     );
     expect(xml).toContain(
-      "<groupfilter function='member' level='[none:region:nk]' member='East' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />",
+      "<groupfilter function='member' level='[none:region:nk]' member='&quot;Archive - DLM&quot;' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />",
     );
+    expect(xml).toContain("member='&quot;FIREInfra&quot;'");
+    expect(xml).toContain("member='&quot;MCIS - Operations Team&quot;'");
     // top-N unaffected.
     expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
+  });
+
+  it('m7: leaves non-string categorical members unquoted', async () => {
+    const integerRegionWorkbook = M7_WORKBOOK_XML.replace(
+      "<column caption='Region' name='[region]' role='dimension' type='nominal' datatype='string' />",
+      "<column caption='Region' name='[region]' role='dimension' type='ordinal' datatype='integer' />",
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundM7TopNContextFilterResult,
+        args: {
+          ...boundM7TopNContextFilterResult.args,
+          filters: [{ field: 'Region', values: ['42'], context: true }],
+        },
+      } as BinderResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [integerRegionWorkbook],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'top 10 products by sales in region 42',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [{ field: 'Region', values: ['42'], context: true }],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+    expect(xml).toContain("member='42'");
+    expect(xml).not.toContain("member='&quot;42&quot;'");
+  });
+
+  it('m7: escapes special characters in string categorical members', async () => {
+    const values = ["O'Brien", 'A "quoted" member', 'Path\\Name', 'A&B <Team>', ''];
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundM7TopNContextFilterResult,
+        args: {
+          ...boundM7TopNContextFilterResult.args,
+          filters: [{ field: 'Region', values, context: true }],
+        },
+      } as BinderResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'top 10 products by sales for exact region members',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [{ field: 'Region', values, context: true }],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+    expect(xml).toContain("member='&quot;O&apos;Brien&quot;'");
+    expect(xml).toContain("member='&quot;A \\&quot;quoted\\&quot; member&quot;'");
+    expect(xml).toContain("member='&quot;Path\\\\Name&quot;'");
+    expect(xml).toContain("member='&quot;A&amp;B &lt;Team&gt;&quot;'");
+    expect(xml).toContain("member='&quot;&quot;'");
   });
 
   it('preserves two proposal filters, both slices and shown dropdown cards without losing the grouping shelf', async () => {
@@ -4738,7 +4822,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       "<filter class='categorical' column='[M7].[none:region:nk]' context='true'>",
     );
     expect(xml).toContain("<filter class='categorical' column='[M7].[none:segment:nk]'>");
-    expect(xml).toContain("member='Consumer'");
+    expect(xml).toContain("member='&quot;Consumer&quot;'");
     expect(xml).toContain('<column>[M7].[none:region:nk]</column>');
     expect(xml).toContain('<column>[M7].[none:segment:nk]</column>');
     expect(xml).toContain("<card mode='dropdown' param='[M7].[none:region:nk]' type='filter' />");
