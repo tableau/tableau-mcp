@@ -1855,6 +1855,7 @@ function ensureFilterColumnDependency(
 function buildInteractiveFilterNode(p: {
   columnRef: string;
   level: string;
+  datatype: string;
   context: boolean;
   values?: string[];
 }): string {
@@ -1864,7 +1865,7 @@ function buildInteractiveFilterNode(p: {
     const members = p.values
       .map(
         (v) =>
-          `<groupfilter function='member' level='${level}' member='${escapeXmlAttribute(v)}' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />`,
+          `<groupfilter function='member' level='${level}' member='${serializeFilterMember(v, p.datatype)}' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />`,
       )
       .join('');
     return (
@@ -1878,6 +1879,18 @@ function buildInteractiveFilterNode(p: {
     `<groupfilter function='level-members' level='${level}' user:ui-enumeration='all' />` +
     '</filter>'
   );
+}
+
+/**
+ * Tableau stores string members as quoted literals inside the XML attribute
+ * (`member='&quot;East&quot;'`). Raw strings are accepted at document dispatch but
+ * Desktop silently drops the filter during persistence. Non-string members use
+ * Tableau's unquoted representation (for example, a discrete year is `2026`).
+ */
+function serializeFilterMember(value: string, datatype: string): string {
+  if (datatype.trim().toLowerCase() !== 'string') return escapeXmlAttribute(value);
+  const tableauString = `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  return escapeXmlAttribute(tableauString);
 }
 
 /**
@@ -2069,6 +2082,7 @@ function applyProposalSplices({
       const filterNode = buildInteractiveFilterNode({
         columnRef: declared.columnRef,
         level: declared.level,
+        datatype: resolved.field.datatype,
         context: filter.context === true,
         values: filter.values,
       });
