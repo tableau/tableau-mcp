@@ -24,6 +24,14 @@ request! -->
 - [ ] Documentation update
 - [ ] Other (please describe):
 
+## Version Bump
+
+Version is bumped automatically after merge. Select the bump this PR needs (defaults to Patch if none selected):
+
+- [ ] Patch
+- [ ] Minor
+- [ ] Major
+
 ## How Has This Been Tested?
 
 <!-- Please describe the tests that you performed to verify your changes. -->
@@ -34,8 +42,6 @@ request! -->
 
 ## Checklist
 
-- [ ] I have updated the version in the package.json file by using `npm run version`. For example,
-      use `npm run version:patch` for a patch version bump.
 - [ ] I have made any necessary changes to the documentation
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] New and existing unit tests pass locally with my changes
