@@ -11,6 +11,34 @@ import {
 } from './toolName.js';
 
 describe('WebToolName', () => {
+  it('registers all knowledge tools in the knowledge group', () => {
+    expect(webToolNames).toContain('get-knowledge-suggestions');
+    expect(webToolNames).toContain('list-knowledge-sources');
+    expect(webToolNames).toContain('search-knowledge-nodes');
+    expect(webToolNames).toContain('get-knowledge-node');
+    expect(webToolNames).toContain('get-knowledge-node-relationships');
+    expect(webToolNames).toContain('get-knowledge-lineage');
+    expect(webToolNames).toContain('get-knowledge-node-impact');
+    expect(webToolNames).toContain('create-knowledge-semantic-contexts');
+    expect(webToolNames).toContain('list-knowledge-semantic-contexts');
+    expect(webToolNames).toContain('update-knowledge-semantic-contexts');
+    expect(webToolNames).toContain('delete-knowledge-semantic-contexts');
+    expect(webToolGroupNames).toContain('knowledge');
+    expect((webToolGroups as any).knowledge).toEqual([
+      'get-knowledge-suggestions',
+      'list-knowledge-sources',
+      'search-knowledge-nodes',
+      'get-knowledge-node',
+      'get-knowledge-node-relationships',
+      'get-knowledge-lineage',
+      'get-knowledge-node-impact',
+      'create-knowledge-semantic-contexts',
+      'list-knowledge-semantic-contexts',
+      'update-knowledge-semantic-contexts',
+      'delete-knowledge-semantic-contexts',
+    ]);
+  });
+
   it('should validate each tool belongs to a group', () => {
     const toolNamesToGroups = Object.entries(webToolGroups).reduce(
       (acc, [group, tools]) => {

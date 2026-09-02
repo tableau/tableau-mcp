@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import * as configModule from '../../config.js';
 import {
+  DEFAULT_SCOPES_SUPPORTED,
   getRequiredApiScopesForTool,
+  getRequiredScopesForTool,
   getSupportedApiScopes,
   getSupportedMcpScopes,
   getSupportedScopes,
@@ -29,6 +31,84 @@ describe('scopes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+  });
+
+  it('advertises and maps the knowledge read scopes', async () => {
+    mockGetConfig.mockReturnValue({
+      adminToolsEnabled: false,
+      oauth: { enforceScopes: true },
+    } as any);
+    expect(DEFAULT_SCOPES_SUPPORTED).toContain('tableau:mcp:knowledge:read');
+    await expect(getSupportedMcpScopes()).resolves.toContain('tableau:mcp:knowledge:read');
+    await expect(getSupportedApiScopes()).resolves.toContain('tableau:knowledge:read');
+    expect(getRequiredApiScopesForTool('get-knowledge-suggestions' as any)).toEqual([
+      'tableau:knowledge:read',
+    ]);
+    expect(getRequiredApiScopesForTool('list-knowledge-sources' as any)).toEqual([
+      'tableau:knowledge:read',
+    ]);
+    expect(getRequiredScopesForTool('list-knowledge-sources' as any)).toEqual([
+      'tableau:mcp:knowledge:read',
+    ]);
+    for (const toolName of [
+      'search-knowledge-nodes',
+      'get-knowledge-node',
+      'get-knowledge-node-relationships',
+      'get-knowledge-lineage',
+      'get-knowledge-node-impact',
+    ] as const) {
+      expect(getRequiredApiScopesForTool(toolName as any)).toEqual(['tableau:knowledge:read']);
+      expect(getRequiredScopesForTool(toolName as any)).toEqual(['tableau:mcp:knowledge:read']);
+    }
+  });
+
+  it('excludes knowledge write scopes when knowledge-write-tools is disabled', async () => {
+    mockGetConfig.mockReturnValue({
+      adminToolsEnabled: false,
+      oauth: { enforceScopes: true },
+    } as any);
+    expect(DEFAULT_SCOPES_SUPPORTED).not.toContain('tableau:mcp:knowledge:write');
+    await expect(getSupportedMcpScopes()).resolves.not.toContain('tableau:mcp:knowledge:write');
+    await expect(getSupportedApiScopes()).resolves.not.toContain('tableau:knowledge:write');
+  });
+
+  it('includes and maps knowledge write scopes when knowledge-write-tools is enabled', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+      return featureName === 'knowledge-write-tools';
+    });
+    mockGetConfig.mockReturnValue({
+      adminToolsEnabled: false,
+      oauth: { enforceScopes: true },
+    } as any);
+    await expect(getSupportedMcpScopes()).resolves.toContain('tableau:mcp:knowledge:write');
+    await expect(getSupportedApiScopes()).resolves.toContain('tableau:knowledge:write');
+    expect(getRequiredScopesForTool('create-knowledge-semantic-contexts' as any)).toEqual([
+      'tableau:mcp:knowledge:write',
+    ]);
+    expect(getRequiredApiScopesForTool('create-knowledge-semantic-contexts' as any)).toEqual([
+      'tableau:knowledge:write',
+    ]);
+    expect(getRequiredScopesForTool('list-knowledge-semantic-contexts' as any)).toEqual([
+      'tableau:mcp:knowledge:read',
+    ]);
+    expect(getRequiredApiScopesForTool('list-knowledge-semantic-contexts' as any)).toEqual([
+      'tableau:knowledge:read',
+    ]);
+    expect(getRequiredScopesForTool('update-knowledge-semantic-contexts' as any)).toEqual([
+      'tableau:mcp:knowledge:write',
+    ]);
+  });
+
+  it('disables MCP scope enforcement without changing semantic statement API scopes', () => {
+    mockGetConfig.mockReturnValue({
+      adminToolsEnabled: false,
+      oauth: { enforceScopes: false },
+    } as any);
+    expect(getRequiredScopesForTool('create-knowledge-semantic-contexts' as any)).toEqual([]);
+    expect(getRequiredScopesForTool('list-knowledge-semantic-contexts' as any)).toEqual([]);
+    expect(getRequiredApiScopesForTool('update-knowledge-semantic-contexts' as any)).toEqual([
+      'tableau:knowledge:write',
+    ]);
   });
 
   describe('getSupportedMcpScopes', () => {

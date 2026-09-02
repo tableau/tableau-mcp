@@ -30,7 +30,9 @@ export type McpScope =
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read'
-  | 'tableau:mcp:users:write';
+  | 'tableau:mcp:users:write'
+  | 'tableau:mcp:knowledge:read'
+  | 'tableau:mcp:knowledge:write';
 
 export type TableauApiScope =
   | 'tableau:content:read'
@@ -59,7 +61,9 @@ export type TableauApiScope =
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
-  | 'tableau:users:update';
+  | 'tableau:users:update'
+  | 'tableau:knowledge:read'
+  | 'tableau:knowledge:write';
 
 /**
  * Default scopes supported by the MCP server
@@ -82,6 +86,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:flow:read',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
+  'tableau:mcp:knowledge:read',
 ];
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
@@ -172,6 +177,50 @@ const toolScopeMap: Record<
   'list-jobs': {
     mcp: ['tableau:mcp:jobs:read'],
     api: new Set(['tableau:jobs:read', 'tableau:users:read']),
+  },
+  'get-knowledge-suggestions': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'list-knowledge-sources': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'search-knowledge-nodes': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'get-knowledge-node': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'get-knowledge-node-relationships': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'get-knowledge-lineage': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'get-knowledge-node-impact': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'create-knowledge-semantic-contexts': {
+    mcp: ['tableau:mcp:knowledge:write'],
+    api: new Set(['tableau:knowledge:write']),
+  },
+  'list-knowledge-semantic-contexts': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'update-knowledge-semantic-contexts': {
+    mcp: ['tableau:mcp:knowledge:write'],
+    api: new Set(['tableau:knowledge:write']),
+  },
+  'delete-knowledge-semantic-contexts': {
+    mcp: ['tableau:mcp:knowledge:write'],
+    api: new Set(['tableau:knowledge:write']),
   },
   'list-users': {
     mcp: ['tableau:mcp:users:read'],
@@ -391,6 +440,7 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
   const authoringToolsEnabled = await featureGate.isFeatureEnabled('authoring-tools');
+  const knowledgeWriteToolsEnabled = await featureGate.isFeatureEnabled('knowledge-write-tools');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -429,6 +479,12 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
     enabledTools.delete('download-workbook');
+  }
+
+  if (!knowledgeWriteToolsEnabled) {
+    enabledTools.delete('create-knowledge-semantic-contexts');
+    enabledTools.delete('update-knowledge-semantic-contexts');
+    enabledTools.delete('delete-knowledge-semantic-contexts');
   }
 
   return enabledTools;
