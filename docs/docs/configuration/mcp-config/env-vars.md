@@ -330,6 +330,10 @@ information about the client's identity, capabilities, and protocol version comp
   clients to provide that session ID in the `mcp-session-id` header for subsequent requests.
 - Set this to `true` if you are using the HTTP transport and your client does not support or need
   session management.
+- MCP-Apps interactive tool rendering requires session management to detect client capabilities.
+  When `true`, app tools fall back to plain tool registration, regardless of what the connecting
+  client supports — except tools that opt out of the plain-tool fallback entirely (via
+  `hideWhenUnsupported`), which are omitted from registration altogether in this mode.
 
 <hr />
 
