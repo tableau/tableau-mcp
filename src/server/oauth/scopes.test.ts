@@ -296,6 +296,14 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:content:read');
     });
 
+    it('should require all view-data API scopes for get-view-data', () => {
+      expect(getRequiredApiScopesForTool('get-view-data')).toEqual([
+        'tableau:views:download',
+        'tableau:content:read',
+        'tableau:mcp_site_settings:read',
+      ]);
+    });
+
     it('should include tableau:users:update when adminToolsEnabled is true', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
