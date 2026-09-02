@@ -110,17 +110,15 @@ export const getGetCustomViewImageTool = (
             return new UnknownError(imageResult.error.message, 400).toErr();
           }
 
-          // Offload to S3 (returning a presigned URL) when configured, otherwise
-          // carry the raw bytes for inline base64. Falls back to inline on any
-          // S3 failure.
+          // Offload to blob storage (returning a URL) when configured,
+          // otherwise carry the raw bytes for inline base64. Falls back to
+          // inline on any upload failure.
           return new Ok(
             await buildImageToolResult({
               imageData: imageResult.value,
               format,
               resourceId: customViewId,
-              config: extra.config,
               toolName: getCustomViewImageTool.name,
-              keyPrefixSegment: 'custom-view-images/',
             }),
           );
         },

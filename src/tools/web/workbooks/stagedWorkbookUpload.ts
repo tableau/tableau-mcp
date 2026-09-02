@@ -1,14 +1,10 @@
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
 
-import {
-  BucketS3Config,
-  createPresignedPutUrlToS3,
-  downloadObjectFromS3IfExists,
-  joinS3Prefix,
-} from '../s3Client.js';
+import { getBlobStorageProvider } from '../../../blobStorage/init.js';
 
-// Intentionally decimal GB (not GiB) to leave headroom under S3's 5GB single-PUT ceiling.
+// Intentionally decimal GB (not GiB) to leave headroom under common blob storage
+// single-PUT ceilings (e.g. S3's 5GB limit).
 export const MAX_STAGED_WORKBOOK_BYTES = 5 * 1000 * 1000 * 1000;
 export const WORKBOOK_UPLOAD_PREFIX_SEGMENT = 'workbook-uploads';
 
@@ -23,59 +19,51 @@ export type ResolvedWorkbook = {
 export type RequestWorkbookUploadResult = {
   workbookUploadId: string;
   uploadUrl: string;
-  expiresAt: string;
+  expiresAt?: string;
   maxSizeBytes: number;
   requiredHeaders: Record<string, string>;
 };
 
 type WorkbookUploadOptions = {
   fileName: string;
-  config: BucketS3Config;
 };
 
 type ResolveWorkbookUploadOptions = {
   workbookUploadId: string;
-  config: BucketS3Config;
   maxBytes?: number;
 };
 
 export async function requestStagedWorkbookUpload({
   fileName,
-  config,
 }: WorkbookUploadOptions): Promise<RequestWorkbookUploadResult> {
   const fileType = assertWorkbookUploadFileName(fileName);
 
   const workbookUploadId = randomUUID();
   const contentType = getWorkbookUploadContentType(fileType);
-  const uploadUrl = await createPresignedPutUrlToS3({
-    key: buildWorkbookUploadS3Key(config.keyPrefix, workbookUploadId, fileType),
-    contentType,
-    bucket: config.bucket,
-    region: config.region,
-    presignTtlSeconds: config.presignTtlSeconds,
-  });
+  const { uploadUrl, requiredHeaders, expiresAt } =
+    await getBlobStorageProvider().getPresignedUploadUrl({
+      key: buildWorkbookUploadKey(workbookUploadId, fileType),
+      contentType,
+    });
 
   return {
     workbookUploadId,
     uploadUrl,
-    expiresAt: new Date(Date.now() + config.presignTtlSeconds * 1000).toISOString(),
+    expiresAt,
     maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
-    requiredHeaders: { 'Content-Type': contentType },
+    requiredHeaders,
   };
 }
 
 export async function resolveStagedWorkbookUpload({
   workbookUploadId,
-  config,
   maxBytes = MAX_STAGED_WORKBOOK_BYTES,
 }: ResolveWorkbookUploadOptions): Promise<ResolvedWorkbook> {
   assertWorkbookUploadId(workbookUploadId);
 
   for (const fileType of WORKBOOK_FILE_TYPES) {
-    const bytes = await downloadObjectFromS3IfExists({
-      key: buildWorkbookUploadS3Key(config.keyPrefix, workbookUploadId, fileType),
-      bucket: config.bucket,
-      region: config.region,
+    const bytes = await getBlobStorageProvider().download({
+      key: buildWorkbookUploadKey(workbookUploadId, fileType),
       maxBytes,
     });
 
@@ -96,13 +84,12 @@ export async function resolveStagedWorkbookUpload({
   throw new Error('Workbook upload not found. Upload the workbook bytes before publishing.');
 }
 
-export function buildWorkbookUploadS3Key(
-  keyPrefix: string,
+export function buildWorkbookUploadKey(
   workbookUploadId: string,
   fileType: WorkbookFileType,
 ): string {
   assertWorkbookUploadId(workbookUploadId);
-  return `${joinS3Prefix(keyPrefix, WORKBOOK_UPLOAD_PREFIX_SEGMENT)}${workbookUploadId}/workbook.${fileType}`;
+  return `${WORKBOOK_UPLOAD_PREFIX_SEGMENT}/${workbookUploadId}/workbook.${fileType}`;
 }
 
 function assertWorkbookUploadFileName(fileName: string): WorkbookFileType {

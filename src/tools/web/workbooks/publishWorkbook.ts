@@ -4,6 +4,7 @@ import { basename } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { isBlobStorageEnabled } from '../../../blobStorage/init.js';
 import {
   ArgsValidationError,
   ProjectNotAllowedError,
@@ -17,7 +18,6 @@ import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
-import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import {
@@ -39,7 +39,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Path to a local TWB or TWBX workbook file on the MCP server filesystem. Only supported when staged S3 uploads are not configured.',
+      'Path to a local TWB or TWBX workbook file on the MCP server filesystem. Only supported when staged uploads are not configured.',
     ),
   name: z.string().min(1).describe('The name to give the published workbook.'),
   projectId: z
@@ -117,7 +117,6 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
               const resolvedWorkbookFile = await resolveWorkbookInput({
-                config: extra.config.bucketS3,
                 workbookUploadId,
                 workbookFilePath,
               });
@@ -234,11 +233,9 @@ async function uploadTwbx({
 }
 
 async function resolveWorkbookInput({
-  config,
   workbookUploadId,
   workbookFilePath,
 }: {
-  config: BucketS3Config & { enabled: boolean };
   workbookUploadId?: string;
   workbookFilePath?: string;
 }): Promise<ResolvedWorkbook> {
@@ -247,9 +244,9 @@ async function resolveWorkbookInput({
   }
 
   if (workbookFilePath) {
-    if (config.enabled) {
+    if (isBlobStorageEnabled()) {
       throw new ArgsValidationError(
-        'workbookFilePath is only supported when staged S3 uploads are not configured. Call request-workbook-upload first and pass workbookUploadId.',
+        'workbookFilePath is only supported when staged uploads are not configured. Call request-workbook-upload first and pass workbookUploadId.',
       );
     }
     return await resolveLocalWorkbookFile(workbookFilePath);
@@ -260,15 +257,12 @@ async function resolveWorkbookInput({
       'Either workbookFilePath or workbookUploadId must be provided. For local MCP servers, pass workbookFilePath. For hosted clients, call request-workbook-upload first and pass workbookUploadId.',
     );
   }
-  if (!config.enabled) {
+  if (!isBlobStorageEnabled()) {
     throw new UnknownError(
-      'MCP_S3_BUCKET must be configured before publishing staged workbook uploads.',
+      'Blob storage provider must be configured before requesting staged workbook uploads.',
     );
   }
-  return await resolveStagedWorkbookUpload({
-    workbookUploadId,
-    config,
-  });
+  return await resolveStagedWorkbookUpload({ workbookUploadId });
 }
 
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {

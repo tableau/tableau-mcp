@@ -284,6 +284,21 @@ export class WorkbookXmlLoadFailedError extends McpToolError {
   }
 }
 
+// Thrown by NoopBlobStorageProvider's methods when blob storage has not been
+// configured with a custom provider (BLOB_STORAGE_PROVIDER=custom). Callers that
+// need blob storage should check `isBlobStorageEnabled()` before calling into the
+// provider; this error is the fallback signal when they don't.
+export class BlobStorageNotConfiguredError extends McpToolError {
+  constructor() {
+    super({
+      type: 'blob-storage-not-configured',
+      message:
+        'Blob storage is not configured. Set BLOB_STORAGE_PROVIDER=custom and BLOB_STORAGE_PROVIDER_CONFIG to enable it.',
+      statusCode: 501,
+    });
+  }
+}
+
 export class FileReadError extends McpToolError {
   constructor(error: unknown) {
     super({

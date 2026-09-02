@@ -5,8 +5,12 @@
     "emitDeclarationOnly": true,
     "outDir": "./build",
     "rootDir": "./src",
-    "types": []
+    "types": ["node"]
   },
-  "include": ["src/features/featureGateProvider.ts", "src/telemetry/telemetryProvider.ts"],
+  "include": [
+    "src/features/featureGateProvider.ts",
+    "src/telemetry/telemetryProvider.ts",
+    "src/blobStorage/blobStorageProvider.ts"
+  ],
   "exclude": ["node_modules", "tests"]
 }

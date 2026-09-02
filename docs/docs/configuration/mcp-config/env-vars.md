@@ -624,81 +624,57 @@ This allows embedding Tableau visualizations from custom Tableau Server domains 
 
 <hr />
 
-## `MCP_S3_BUCKET`
+## `BLOB_STORAGE_PROVIDER`
 
-Enables offloading rendered view images to Amazon S3. When set, the `get-view-image` and
-`get-custom-view-image` tools upload the rendered image to this bucket and return a short-lived
-presigned URL (as a `resource_link` content block) instead of inlining the image as base64. The
-client fetches the image bytes directly from S3, so the image never streams back through the MCP
-server on read.
+The blob storage provider to use for offloading large tool payloads (rendered view images,
+exported view data, downloaded/staged workbook files) out of MCP tool responses and into
+provider-hosted URLs. This follows the same "bring your own infra" pattern as
+[`TELEMETRY_PROVIDER`](#telemetry_provider) and [`FEATURE_GATE_PROVIDER`](#feature_gate_provider) —
+tableau-mcp ships no cloud-vendor-specific storage implementation; on-prem/self-hosted deployments
+plug in their own.
 
-- Requires the `view-file-mode` feature flag to be enabled (see `features.json`). When the flag is
-  disabled, this variable has no effect and the tools return inline base64.
-- Default: unset (feature disabled — tools return inline base64, the original behavior).
-- When set, must be a valid S3 bucket name (lowercase letters, numbers, dots, and hyphens only).
-- AWS credentials are resolved via the default AWS SDK credential chain (IAM role / instance
-  profile / standard `AWS_*` environment variables); no credentials are read from the MCP config.
-- If an upload fails, the tool falls back to returning inline base64 and logs a warning, so image
-  retrieval never hard-fails.
+- Default: `noop`
+- Possible values:
+  - `noop` - Blob storage disabled (default). Tools that support offload fall back to their
+    original behavior (inline base64/text, or a local temp-file path for workbook downloads); tools
+    that require staged uploads (e.g. `request-workbook-upload`) return a clear "not configured"
+    error instead.
+  - `custom` - Use a custom blob storage provider (requires
+    [`BLOB_STORAGE_PROVIDER_CONFIG`](#blob_storage_provider_config))
 
-**Example:**
+:::tip[Custom Provider]
+
+To use a custom blob storage provider, set `BLOB_STORAGE_PROVIDER=custom` and provide the module
+path via `BLOB_STORAGE_PROVIDER_CONFIG`:
 
 ```bash
-MCP_S3_BUCKET=tableau-images
+BLOB_STORAGE_PROVIDER=custom
+BLOB_STORAGE_PROVIDER_CONFIG='{"module":"./my-blob-storage-provider.js"}'
 ```
+
+The custom provider module should export a default class (or named export `BlobStorageProvider`)
+that implements the [`BlobStorageProvider`](https://github.com/tableau/tableau-mcp/blob/main/src/blobStorage/blobStorageProvider.ts)
+interface. Bucket/region/key-prefix/URL-expiry concerns are entirely the custom provider's own
+concern — tableau-mcp only passes it a logical, unprefixed key.
+
+:::
 
 <hr />
 
-## `AWS_DEFAULT_REGION`
+## `BLOB_STORAGE_PROVIDER_CONFIG`
 
-The AWS region of the S3 bucket used for image offload.
+Configuration for the custom blob storage provider (JSON string). Required when
+[`BLOB_STORAGE_PROVIDER`](#blob_storage_provider) is `custom`.
 
-- Default: unset. If not set, the AWS SDK resolves the region from the environment via its standard
-  credential/region chain.
-- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
+- Format: `{"module": "<path-to-module>", ...additional-config}`
 
-**Example:**
-
-```bash
-AWS_DEFAULT_REGION=us-east-1
-```
-
-<hr />
-
-## `MCP_IMAGE_PREFIX`
-
-The base key prefix (folder path) under which uploaded images are stored in the bucket. Each
-view-image tool appends its own segment to this base, so images are namespaced per tool. Slashes are
-normalized automatically.
-
-- Default: unset (empty). When unset, each tool uses only its own segment.
-- Per-tool segments: `get-view-image` → `view-images/`, `get-custom-view-image` →
-  `custom-view-images/`.
-- Objects are keyed as `<base><tool-segment><resourceId>/<uuid>.<ext>`. For example, with
-  `MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under `tableau/view-images/...` and a custom
-  view image under `tableau/custom-view-images/...`. Unset, they are keyed under `view-images/...`
-  and `custom-view-images/...` respectively.
-- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
+The `module` field can be:
+- A relative file path (e.g., `./my-provider.js`) - resolved from process working directory
+- An absolute file path (e.g., `/path/to/provider.js`)
+- An npm package name (e.g., `@company/blob-storage-provider`)
 
 **Example:**
 
 ```bash
-MCP_IMAGE_PREFIX=tableau/
-```
-
-<hr />
-
-## `FILE_TTL`
-
-The lifetime of the presigned GET URL that is returned to the client. The value is in seconds. The link
-should be fetched promptly rather than stored.
-
-- Default: `30` (30 seconds).
-- Clamped to the range `5`–`900` (5 seconds–15 minutes).
-- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
-
-**Example:**
-
-```bash
-FILE_TTL=30
+BLOB_STORAGE_PROVIDER_CONFIG='{"module": "./providers/s3-blob-storage-provider.js"}'
 ```

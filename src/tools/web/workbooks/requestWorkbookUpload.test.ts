@@ -10,11 +10,16 @@ import { MAX_STAGED_WORKBOOK_BYTES } from './stagedWorkbookUpload.js';
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
+  mockIsBlobStorageEnabled: vi.fn(),
   mockRequestStagedWorkbookUpload: vi.fn(),
 }));
 
 vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
+}));
+
+vi.mock('../../../blobStorage/init.js', () => ({
+  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
 
 vi.mock('./stagedWorkbookUpload.js', async (importOriginal) => ({
@@ -28,6 +33,7 @@ describe('requestWorkbookUploadTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockRequestStagedWorkbookUpload.mockResolvedValue({
       workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
       uploadUrl: 'https://s3.example.com/signed-put',
@@ -76,11 +82,6 @@ describe('requestWorkbookUploadTool', () => {
     });
     expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
       fileName: 'BoltBikes Workbook.twb',
-      config: expect.objectContaining({
-        enabled: true,
-        bucket: 'tableau-workbooks',
-        region: 'us-east-1',
-      }),
     });
   });
 
@@ -100,30 +101,19 @@ describe('requestWorkbookUploadTool', () => {
     expect(result.isError).toBe(false);
     expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
       fileName: 'BoltBikes Workbook.twbx',
-      config: expect.objectContaining({ enabled: true }),
     });
   });
 
-  it('returns an error when S3 is not configured', async () => {
-    const result = await getToolResult(
-      { fileName: 'BoltBikes Workbook.twb' },
-      {
-        config: {
-          ...getMockRequestHandlerExtra().config,
-          bucketS3: {
-            enabled: false,
-            bucket: '',
-            region: '',
-            keyPrefix: '',
-            presignTtlSeconds: 60,
-          },
-        },
-      },
-    );
+  it('returns an error when blob storage is not configured', async () => {
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(false);
+
+    const result = await getToolResult({ fileName: 'BoltBikes Workbook.twb' });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('MCP_S3_BUCKET must be configured');
+    expect(result.content[0].text).toContain(
+      'Blob storage provider must be configured before requesting staged workbook uploads.',
+    );
     expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
   });
 
@@ -190,16 +180,5 @@ function getMockExtra(
   return {
     ...extra,
     ...overrides,
-    config: {
-      ...extra.config,
-      bucketS3: {
-        enabled: true,
-        bucket: 'tableau-workbooks',
-        region: 'us-east-1',
-        keyPrefix: 'mcp/',
-        presignTtlSeconds: 300,
-      },
-      ...overrides.config,
-    },
   };
 }

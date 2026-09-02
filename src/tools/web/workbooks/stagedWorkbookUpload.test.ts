@@ -1,6 +1,5 @@
-import { BucketS3Config } from '../s3Client.js';
 import {
-  buildWorkbookUploadS3Key,
+  buildWorkbookUploadKey,
   getWorkbookFileType,
   MAX_STAGED_WORKBOOK_BYTES,
   requestStagedWorkbookUpload,
@@ -8,45 +7,36 @@ import {
 } from './stagedWorkbookUpload.js';
 
 const mocks = vi.hoisted(() => ({
-  createPresignedPutUrlToS3: vi.fn(),
-  downloadObjectFromS3IfExists: vi.fn(),
+  getPresignedUploadUrl: vi.fn(),
+  download: vi.fn(),
 }));
 
-vi.mock('../s3Client.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../s3Client.js')>()),
-  createPresignedPutUrlToS3: mocks.createPresignedPutUrlToS3,
-  downloadObjectFromS3IfExists: mocks.downloadObjectFromS3IfExists,
+vi.mock('../../../blobStorage/init.js', () => ({
+  getBlobStorageProvider: vi.fn(() => ({
+    getPresignedUploadUrl: mocks.getPresignedUploadUrl,
+    download: mocks.download,
+  })),
 }));
-
-const config: BucketS3Config = {
-  bucket: 'tableau-workbooks',
-  region: 'us-east-1',
-  keyPrefix: 'mcp/',
-  presignTtlSeconds: 300,
-};
 
 const uploadId = '123e4567-e89b-42d3-a456-426614174000';
 
 describe('requestStagedWorkbookUpload', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-12T18:00:00.000Z'));
-    mocks.createPresignedPutUrlToS3.mockResolvedValue('https://s3.example.com/signed-put');
+    mocks.getPresignedUploadUrl.mockResolvedValue({
+      uploadUrl: 'https://blob.example.com/signed-put',
+      requiredHeaders: { 'Content-Type': 'application/xml' },
+      expiresAt: '2026-08-12T18:05:00.000Z',
+    });
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('returns a presigned PUT URL and workbook upload id', async () => {
+  it('returns a presigned upload URL and workbook upload id', async () => {
     const result = await requestStagedWorkbookUpload({
       fileName: 'BoltBikes Workbook.twb',
-      config,
     });
 
     expect(result).toMatchObject({
-      uploadUrl: 'https://s3.example.com/signed-put',
+      uploadUrl: 'https://blob.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
@@ -54,38 +44,54 @@ describe('requestStagedWorkbookUpload', () => {
     expect(result.workbookUploadId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
-    expect(mocks.createPresignedPutUrlToS3).toHaveBeenCalledWith({
-      key: `mcp/workbook-uploads/${result.workbookUploadId}/workbook.twb`,
+    expect(mocks.getPresignedUploadUrl).toHaveBeenCalledWith({
+      key: `workbook-uploads/${result.workbookUploadId}/workbook.twb`,
       contentType: 'application/xml',
-      bucket: 'tableau-workbooks',
-      region: 'us-east-1',
-      presignTtlSeconds: 300,
     });
   });
 
   it('returns an octet-stream content type for TWBX filenames', async () => {
+    mocks.getPresignedUploadUrl.mockResolvedValue({
+      uploadUrl: 'https://blob.example.com/signed-put',
+      requiredHeaders: { 'Content-Type': 'application/octet-stream' },
+      expiresAt: '2026-08-12T18:05:00.000Z',
+    });
+
     const result = await requestStagedWorkbookUpload({
       fileName: 'BoltBikes Workbook.twbx',
-      config,
     });
 
     expect(result).toMatchObject({
       requiredHeaders: { 'Content-Type': 'application/octet-stream' },
     });
-    expect(mocks.createPresignedPutUrlToS3).toHaveBeenCalledWith({
-      key: `mcp/workbook-uploads/${result.workbookUploadId}/workbook.twbx`,
+    expect(mocks.getPresignedUploadUrl).toHaveBeenCalledWith({
+      key: `workbook-uploads/${result.workbookUploadId}/workbook.twbx`,
       contentType: 'application/octet-stream',
-      bucket: 'tableau-workbooks',
-      region: 'us-east-1',
-      presignTtlSeconds: 300,
     });
+  });
+
+  it('uses the requiredHeaders and expiresAt returned by the blob storage provider', async () => {
+    mocks.getPresignedUploadUrl.mockResolvedValue({
+      uploadUrl: 'https://blob.example.com/signed-put',
+      requiredHeaders: { 'Content-Type': 'application/xml', 'x-custom-header': 'value' },
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+
+    const result = await requestStagedWorkbookUpload({
+      fileName: 'BoltBikes Workbook.twb',
+    });
+
+    expect(result.requiredHeaders).toEqual({
+      'Content-Type': 'application/xml',
+      'x-custom-header': 'value',
+    });
+    expect(result.expiresAt).toBe('2099-01-01T00:00:00.000Z');
   });
 
   it('rejects filenames that are neither TWB nor TWBX', async () => {
     await expect(
       requestStagedWorkbookUpload({
         fileName: 'workbook.xml',
-        config,
       }),
     ).rejects.toThrow('filename must end in .twb or .twbx');
   });
@@ -94,82 +100,72 @@ describe('requestStagedWorkbookUpload', () => {
 describe('resolveStagedWorkbookUpload', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.downloadObjectFromS3IfExists.mockResolvedValue(Buffer.from('<workbook />'));
+    mocks.download.mockResolvedValue(Buffer.from('<workbook />'));
   });
 
   it('downloads the staged workbook bytes from the .twb key when it exists', async () => {
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, config }),
-    ).resolves.toEqual({
+    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).resolves.toEqual({
       fileName: `${uploadId}.twb`,
       bytes: Buffer.from('<workbook />'),
     });
-    expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledWith({
-      key: `mcp/workbook-uploads/${uploadId}/workbook.twb`,
-      bucket: 'tableau-workbooks',
-      region: 'us-east-1',
+    expect(mocks.download).toHaveBeenCalledWith({
+      key: `workbook-uploads/${uploadId}/workbook.twb`,
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
-    expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledTimes(1);
+    expect(mocks.download).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to the .twbx key when the .twb key does not exist', async () => {
-    mocks.downloadObjectFromS3IfExists.mockResolvedValueOnce(undefined);
-    mocks.downloadObjectFromS3IfExists.mockResolvedValueOnce(Buffer.from('PK\x03\x04'));
+    mocks.download.mockResolvedValueOnce(undefined);
+    mocks.download.mockResolvedValueOnce(Buffer.from('PK\x03\x04'));
 
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, config }),
-    ).resolves.toEqual({
+    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).resolves.toEqual({
       fileName: `${uploadId}.twbx`,
       bytes: Buffer.from('PK\x03\x04'),
     });
-    expect(mocks.downloadObjectFromS3IfExists).toHaveBeenNthCalledWith(1, {
-      key: `mcp/workbook-uploads/${uploadId}/workbook.twb`,
-      bucket: 'tableau-workbooks',
-      region: 'us-east-1',
+    expect(mocks.download).toHaveBeenNthCalledWith(1, {
+      key: `workbook-uploads/${uploadId}/workbook.twb`,
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
-    expect(mocks.downloadObjectFromS3IfExists).toHaveBeenNthCalledWith(2, {
-      key: `mcp/workbook-uploads/${uploadId}/workbook.twbx`,
-      bucket: 'tableau-workbooks',
-      region: 'us-east-1',
+    expect(mocks.download).toHaveBeenNthCalledWith(2, {
+      key: `workbook-uploads/${uploadId}/workbook.twbx`,
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
   });
 
   it('throws when neither the .twb nor .twbx key exists', async () => {
-    mocks.downloadObjectFromS3IfExists.mockResolvedValue(undefined);
+    mocks.download.mockResolvedValue(undefined);
 
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, config }),
-    ).rejects.toThrow('Workbook upload not found');
+    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).rejects.toThrow(
+      'Workbook upload not found',
+    );
   });
 
   it('rejects invalid workbook upload ids', async () => {
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: '../not-safe', config }),
-    ).rejects.toThrow('upload id is invalid');
+    await expect(resolveStagedWorkbookUpload({ workbookUploadId: '../not-safe' })).rejects.toThrow(
+      'upload id is invalid',
+    );
   });
 
   it('rejects empty uploaded workbook bytes', async () => {
-    mocks.downloadObjectFromS3IfExists.mockResolvedValue(Buffer.alloc(0));
+    mocks.download.mockResolvedValue(Buffer.alloc(0));
 
-    await expect(
-      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, config }),
-    ).rejects.toThrow('must not be empty');
+    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).rejects.toThrow(
+      'must not be empty',
+    );
   });
 });
 
-describe('buildWorkbookUploadS3Key', () => {
-  it('normalizes the configured prefix', () => {
-    expect(buildWorkbookUploadS3Key('/base', uploadId, 'twb')).toBe(
-      `base/workbook-uploads/${uploadId}/workbook.twb`,
+describe('buildWorkbookUploadKey', () => {
+  it('builds a key without any prefix', () => {
+    expect(buildWorkbookUploadKey(uploadId, 'twb')).toBe(
+      `workbook-uploads/${uploadId}/workbook.twb`,
     );
   });
 
   it('includes the file type extension', () => {
-    expect(buildWorkbookUploadS3Key('/base', uploadId, 'twbx')).toBe(
-      `base/workbook-uploads/${uploadId}/workbook.twbx`,
+    expect(buildWorkbookUploadKey(uploadId, 'twbx')).toBe(
+      `workbook-uploads/${uploadId}/workbook.twbx`,
     );
   });
 });
