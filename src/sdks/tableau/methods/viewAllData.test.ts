@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { log } from '../../../logging/logger.js';
 import { parseViewAllData } from './viewAllData.js';
 import ViewsMethods from './viewsMethods.js';
+
+vi.mock('../../../logging/logger.js', () => ({ log: vi.fn() }));
 
 const boundary = 'all-data-boundary';
 
@@ -122,6 +125,45 @@ describe('ViewsMethods.getViewAllData', () => {
       headers: { Authorization: 'Bearer token' },
       params: { vf_Region: 'West', vf_Category: 'Furniture' },
       responseType: 'arraybuffer',
+    });
+    expect(log).toHaveBeenCalledWith({
+      message: 'Received view all-data response',
+      level: 'debug',
+      logger: 'rest-api',
+      data: {
+        status: undefined,
+        contentType: `multipart/form-data; boundary=${boundary}`,
+        bodyBytes: multipartBody.byteLength,
+      },
+    });
+  });
+});
+
+describe('ViewsMethods.queryViewData', () => {
+  it('requests CSV as text without Axios JSON parsing', async () => {
+    const viewsMethods = new ViewsMethods(
+      'https://tableau.example/api/3.0',
+      {
+        type: 'Bearer',
+        token: 'token',
+      },
+      {},
+    );
+    const get = vi.fn().mockResolvedValue({ data: 'Region,Sales\nWest,100' });
+    // @ts-expect-error - Replacing the Axios client for transport configuration coverage.
+    viewsMethods._apiClient.axios.get = get;
+
+    await expect(
+      viewsMethods.queryViewData({
+        siteId: 'site-1',
+        viewId: 'view-1',
+        viewFilters: { Region: 'West', vf_Category: 'Furniture' },
+      }),
+    ).resolves.toBe('Region,Sales\nWest,100');
+    expect(get).toHaveBeenCalledWith('/sites/site-1/views/view-1/data', {
+      headers: { Authorization: 'Bearer token' },
+      params: { vf_Region: 'West', vf_Category: 'Furniture' },
+      responseType: 'text',
     });
   });
 });

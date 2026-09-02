@@ -149,6 +149,19 @@ describe('server', () => {
     expect(instructions).toContain('general admin/site-health');
     expect(instructions).toContain('user-license reclamation');
     expect(instructions).toContain('query-admin-insights');
+    // Output-formatting nudge so chat/Slack surfaces render admin/list results as tables.
+    // Assert on a distinctive slice of the actual clause, not the bare words "Markdown tables",
+    // so a future edit that drops the rendering guidance can't silently pass.
+    expect(instructions).toContain('present them as Markdown tables');
+    expect(instructions).toContain('to a chat or Slack surface');
+
+    // The clause belongs to the admin block specifically: it must be appended after the base
+    // guidance and after the admin lead-in, never spliced into the base sentence.
+    expect(instructions!.startsWith('Tableau MCP exposes tools')).toBe(true);
+    const adminStart = instructions!.indexOf('site-administration capabilities');
+    const clauseStart = instructions!.indexOf('present them as Markdown tables');
+    expect(adminStart).toBeGreaterThan(-1);
+    expect(clauseStart).toBeGreaterThan(adminStart);
   });
 
   it('should omit admin guidance from instructions when ADMIN_TOOLS_ENABLED is unset', () => {
@@ -164,6 +177,11 @@ describe('server', () => {
     expect(instructions).not.toContain('site-administration capabilities');
     expect(instructions).not.toContain('general admin/site-health');
     expect(instructions).not.toContain('query-admin-insights');
+    // The admin-only output-formatting nudge is also absent (assert on the distinctive clause
+    // slice, not the bare words, so we're certain the whole admin block — not just a keyword —
+    // stayed out of the base instructions).
+    expect(instructions).not.toContain('present them as Markdown tables');
+    expect(instructions).not.toContain('Markdown tables');
   });
 
   it('should not register disabled tools', async () => {

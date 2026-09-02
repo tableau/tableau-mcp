@@ -53,7 +53,9 @@ const ADMIN_INSTRUCTIONS =
   'cleanup, or cost/license questions, proactively consider the admin prompts (stale-content cleanup, ' +
   'job/extract optimization, user-license reclamation) and the query-admin-insights tool ' +
   '(e.g. stale-content, job-performance, ts-users) for supporting data — even when the user asks broadly ' +
-  'rather than naming a specific tool.';
+  'rather than naming a specific tool. ' +
+  'When rendering admin/list results (users, admin-insights, etc.) to a chat or Slack surface, present ' +
+  'them as Markdown tables.';
 
 // Appended to the initialize instructions when the caller's site role could not be fetched (after
 // retries) and that failure hid one or more role-gated tools. Signals that the incomplete tool set
