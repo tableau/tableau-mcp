@@ -4759,6 +4759,41 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).not.toContain("member='&quot;42&quot;'");
   });
 
+  it('m7: escapes special characters in string categorical members', async () => {
+    const values = ["O'Brien", 'A "quoted" member', 'Path\\Name', 'A&B <Team>', ''];
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundM7TopNContextFilterResult,
+        args: {
+          ...boundM7TopNContextFilterResult.args,
+          filters: [{ field: 'Region', values, context: true }],
+        },
+      } as BinderResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'top 10 products by sales for exact region members',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [{ field: 'Region', values, context: true }],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+    expect(xml).toContain("member='&quot;O&apos;Brien&quot;'");
+    expect(xml).toContain("member='&quot;A \\&quot;quoted\\&quot; member&quot;'");
+    expect(xml).toContain("member='&quot;Path\\\\Name&quot;'");
+    expect(xml).toContain("member='&quot;A&amp;B &lt;Team&gt;&quot;'");
+    expect(xml).toContain("member='&quot;&quot;'");
+  });
+
   it('preserves two proposal filters, both slices and shown dropdown cards without losing the grouping shelf', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundM7TwoFilterResult,
