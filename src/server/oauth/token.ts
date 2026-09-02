@@ -111,25 +111,17 @@ export function token(
           // Generate tokens
           const refreshTokenId = randomBytes(32).toString('hex');
           const accessToken = await createAccessToken(authCode, publicKey);
-          await refreshTokens.set(
-            refreshTokenId,
-            {
-              user: authCode.user,
-              server: authCode.server,
-              clientId: authCode.clientId,
-              tokens: authCode.tokens,
-              scopes: authCode.scopes,
-              siteContentUrl: authCode.siteContentUrl,
-              expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
-              tableauClientId: authCode.tableauClientId,
-            },
-            config.oauth.refreshTokenTimeoutMs,
-          );
-          await refreshTokenIndex.set(
-            authCode.tokens.accessToken,
-            refreshTokenId,
-            config.oauth.refreshTokenTimeoutMs,
-          );
+          await refreshTokens.set(refreshTokenId, {
+            user: authCode.user,
+            server: authCode.server,
+            clientId: authCode.clientId,
+            tokens: authCode.tokens,
+            scopes: authCode.scopes,
+            siteContentUrl: authCode.siteContentUrl,
+            expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
+            tableauClientId: authCode.tableauClientId,
+          });
+          await refreshTokenIndex.set(authCode.tokens.accessToken, refreshTokenId);
 
           res.json({
             access_token: accessToken,
@@ -256,26 +248,20 @@ export function token(
           // Rotate the refresh token and extend its expiration time
           const refreshTokenId = randomBytes(32).toString('hex');
 
-          await refreshTokens.rotate!(
-            refreshToken,
-            refreshTokenId,
-            {
-              user: tokenData.user,
-              server: tokenData.server,
-              clientId: tokenData.clientId,
-              tokens: tokensToStore,
-              scopes: tokenData.scopes,
-              siteContentUrl: tokenData.siteContentUrl,
-              expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
-              tableauClientId: tokenData.tableauClientId,
-            },
-            config.oauth.refreshTokenTimeoutMs,
-          );
+          await refreshTokens.rotate!(refreshToken, refreshTokenId, {
+            user: tokenData.user,
+            server: tokenData.server,
+            clientId: tokenData.clientId,
+            tokens: tokensToStore,
+            scopes: tokenData.scopes,
+            siteContentUrl: tokenData.siteContentUrl,
+            expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
+            tableauClientId: tokenData.tableauClientId,
+          });
           await refreshTokenIndex.rotate!(
             tokenData.tokens.accessToken,
             tokensToStore.accessToken,
             refreshTokenId,
-            config.oauth.refreshTokenTimeoutMs,
           );
 
           res.json({

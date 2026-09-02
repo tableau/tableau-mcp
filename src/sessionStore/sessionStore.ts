@@ -17,7 +17,14 @@
  */
 export interface SessionStore<V> {
   get(key: string): Promise<V | undefined>;
-  set(key: string, value: V, ttlMs: number): Promise<void>;
+
+  /**
+   * TTL is not a per-call argument: every call site for a given namespace always uses the
+   * same constant (e.g. authorization codes always use `authzCodeTimeoutMs`), so it is
+   * configured once, at construction time, per provider/namespace instead of being threaded
+   * through every `set`/`rotate` call.
+   */
+  set(key: string, value: V): Promise<void>;
   delete(key: string): Promise<void>;
 
   /**
@@ -47,5 +54,5 @@ export interface SessionStore<V> {
    * because the OAuth refresh-token rotation call sites invoke it directly with no runtime
    * branching on whether it exists.
    */
-  rotate?(oldKey: string, newKey: string, value: V, ttlMs: number): Promise<void>;
+  rotate?(oldKey: string, newKey: string, value: V): Promise<void>;
 }

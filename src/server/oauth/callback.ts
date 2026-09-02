@@ -151,26 +151,22 @@ export function callback(
 
       // Generate authorization code
       const authorizationCode = randomBytes(32).toString('hex');
-      await authorizationCodes.set(
-        authorizationCode,
-        {
-          clientId: pendingAuth.clientId,
-          redirectUri: pendingAuth.redirectUri,
-          codeChallenge: pendingAuth.codeChallenge,
-          user: sessionResult.value.user,
-          server,
-          tableauClientId: pendingAuth.tableauClientId,
-          scopes: pendingAuth.scopes,
-          tokens: {
-            accessToken,
-            refreshToken,
-            expiresInSeconds,
-          },
-          siteContentUrl: sessionResult.value.site.contentUrl ?? '',
-          expiresAt: Math.floor((Date.now() + config.oauth.authzCodeTimeoutMs) / 1000),
+      await authorizationCodes.set(authorizationCode, {
+        clientId: pendingAuth.clientId,
+        redirectUri: pendingAuth.redirectUri,
+        codeChallenge: pendingAuth.codeChallenge,
+        user: sessionResult.value.user,
+        server,
+        tableauClientId: pendingAuth.tableauClientId,
+        scopes: pendingAuth.scopes,
+        tokens: {
+          accessToken,
+          refreshToken,
+          expiresInSeconds,
         },
-        config.oauth.authzCodeTimeoutMs,
-      );
+        siteContentUrl: sessionResult.value.site.contentUrl ?? '',
+        expiresAt: Math.floor((Date.now() + config.oauth.authzCodeTimeoutMs) / 1000),
+      });
 
       // Clean up
       await pendingAuthorizations.delete(authKey);

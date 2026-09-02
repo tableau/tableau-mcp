@@ -2,7 +2,6 @@ import { randomUUID } from 'crypto';
 import express from 'express';
 
 import type { SessionStore } from '../../sessionStore/sessionStore.js';
-import { milliseconds } from '../../utils/milliseconds.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { ClientRegistration } from './types.js';
 
@@ -46,13 +45,9 @@ export function register(
 
     // Mint a unique client ID and store the allowlisted redirect URIs
     const clientId = randomUUID();
-    await clientRegistrations.set(
-      clientId,
-      {
-        redirectUris: validatedRedirectUris,
-      },
-      milliseconds.fromDays(24),
-    );
+    await clientRegistrations.set(clientId, {
+      redirectUris: validatedRedirectUris,
+    });
 
     res.json({
       client_id: clientId,

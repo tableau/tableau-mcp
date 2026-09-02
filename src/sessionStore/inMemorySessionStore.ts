@@ -15,13 +15,16 @@ const CHUNK_MS = MAX_SIGNED_INT32 - REFRESH_MARGIN_MS;
 export class InMemorySessionStore<V> implements SessionStore<V> {
   private readonly map: ExpiringMap<string, V>;
   private readonly refreshTimers = new Map<string, NodeJS.Timeout>();
+  private readonly ttlMs: number;
 
-  constructor(options?: { maxSize?: number }) {
-    // Every set() below passes an explicit ttlMs, so this default is never used. ExpiringMap's
-    // constructor rejects defaultExpirationTimeMs <= 0, so a valid non-zero placeholder is needed.
+  constructor(options: { ttlMs: number; maxSize?: number }) {
+    this.ttlMs = options.ttlMs;
+    // scheduleSet() always passes an explicit (possibly chunked) expirationTimeMs, so this
+    // default is never used. ExpiringMap's constructor rejects defaultExpirationTimeMs <= 0,
+    // so a valid non-zero placeholder is needed.
     this.map = new ExpiringMap<string, V>({
       defaultExpirationTimeMs: 1,
-      maxSize: options?.maxSize,
+      maxSize: options.maxSize,
     });
   }
 
@@ -29,8 +32,8 @@ export class InMemorySessionStore<V> implements SessionStore<V> {
     return Promise.resolve(this.map.get(key));
   }
 
-  set(key: string, value: V, ttlMs: number): Promise<void> {
-    this.scheduleSet(key, value, ttlMs);
+  set(key: string, value: V): Promise<void> {
+    this.scheduleSet(key, value, this.ttlMs);
     return Promise.resolve();
   }
 
@@ -48,11 +51,11 @@ export class InMemorySessionStore<V> implements SessionStore<V> {
     return Promise.resolve(value);
   }
 
-  rotate(oldKey: string, newKey: string, value: V, ttlMs: number): Promise<void> {
+  rotate(oldKey: string, newKey: string, value: V): Promise<void> {
     // No await between the delete and the re-arm, so both keys are never simultaneously valid.
     this.clearRefreshTimer(oldKey);
     this.map.delete(oldKey);
-    this.scheduleSet(newKey, value, ttlMs);
+    this.scheduleSet(newKey, value, this.ttlMs);
     return Promise.resolve();
   }
 

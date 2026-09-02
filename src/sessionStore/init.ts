@@ -171,6 +171,9 @@ function loadCustomProvider(config?: Record<string, unknown>): SessionStore<unkn
 /**
  * Wrap a shared custom store so a single logical namespace prefixes all of its keys, keeping
  * distinct namespaces from colliding on identical raw keys in the shared backend.
+ *
+ * TTL is not threaded through here: a custom backend manages its own expiration policy, the
+ * same way it manages its own bounding (there is no `maxSize` passthrough either).
  */
 function createPrefixedStore<V>(namespace: string, store: SessionStore<unknown>): SessionStore<V> {
   const prefix = `${namespace}:`;
@@ -178,11 +181,11 @@ function createPrefixedStore<V>(namespace: string, store: SessionStore<unknown>)
 
   return {
     get: (key) => shared.get(`${prefix}${key}`),
-    set: (key, value, ttlMs) => shared.set(`${prefix}${key}`, value, ttlMs),
+    set: (key, value) => shared.set(`${prefix}${key}`, value),
     delete: (key) => shared.delete(`${prefix}${key}`),
     consume: (key) => shared.consume(`${prefix}${key}`),
-    rotate: (oldKey, newKey, value, ttlMs) =>
-      shared.rotate!(`${prefix}${oldKey}`, `${prefix}${newKey}`, value, ttlMs),
+    rotate: (oldKey, newKey, value) =>
+      shared.rotate!(`${prefix}${oldKey}`, `${prefix}${newKey}`, value),
   };
 }
 
@@ -195,10 +198,13 @@ function createPrefixedStore<V>(namespace: string, store: SessionStore<unknown>)
  * On the `memory` path a FRESH InMemorySessionStore is returned on every call (never memoized),
  * so each caller (e.g. each EmbeddedOAuthProvider instance) gets its own isolated, non-leaking
  * state. On the `custom` path a key-prefixing wrapper over the single shared provider is returned.
+ *
+ * `ttlMs` configures the in-memory provider's expiration for this namespace; it is ignored on
+ * the `custom` path, where the backend manages its own expiration policy.
  */
 export function createNamespacedStore<V>(
   namespace: string,
-  options?: { maxSize?: number },
+  options: { ttlMs: number; maxSize?: number },
 ): SessionStore<V> {
   if (state === null) {
     initializeSessionStore();

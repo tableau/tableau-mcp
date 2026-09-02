@@ -14,9 +14,9 @@ const INVALID = (redirectUri: string): { error: string; error_description: strin
 async function registrations(
   entries: Record<string, string[]>,
 ): Promise<SessionStore<ClientRegistration>> {
-  const store = new InMemorySessionStore<ClientRegistration>();
+  const store = new InMemorySessionStore<ClientRegistration>({ ttlMs: milliseconds.fromDays(24) });
   for (const [clientId, redirectUris] of Object.entries(entries)) {
-    await store.set(clientId, { redirectUris }, milliseconds.fromDays(24));
+    await store.set(clientId, { redirectUris });
   }
   return store;
 }

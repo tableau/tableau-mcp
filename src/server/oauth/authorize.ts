@@ -161,20 +161,16 @@ export function authorize(
     const numCodeVerifierBytes = randomInt(22, 65);
     const tableauCodeVerifier = randomBytes(numCodeVerifierBytes).toString('hex');
     const tableauCodeChallenge = generateCodeChallenge(tableauCodeVerifier);
-    await pendingAuthorizations.set(
-      authKey,
-      {
-        clientId: client_id,
-        redirectUri: redirect_uri,
-        codeChallenge: code_challenge,
-        state: state ?? '',
-        tableauState,
-        tableauClientId,
-        tableauCodeVerifier,
-        scopes: scopesToGrant,
-      },
-      config.oauth.authzCodeTimeoutMs,
-    );
+    await pendingAuthorizations.set(authKey, {
+      clientId: client_id,
+      redirectUri: redirect_uri,
+      codeChallenge: code_challenge,
+      state: state ?? '',
+      tableauState,
+      tableauClientId,
+      tableauCodeVerifier,
+      scopes: scopesToGrant,
+    });
 
     // Redirect to Tableau OAuth
     const server = config.server || TABLEAU_CLOUD_SERVER_URL;

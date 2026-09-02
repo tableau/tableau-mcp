@@ -6,6 +6,7 @@ import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
 import { createNamespacedStore } from '../../sessionStore/init.js';
 import type { SessionStore } from '../../sessionStore/sessionStore.js';
+import { milliseconds } from '../../utils/milliseconds.js';
 import { oauthAuthorizationServer } from './.well-known/oauth-authorization-server.js';
 import { oauthProtectedResource } from './.well-known/oauth-protected-resource.js';
 import {
@@ -56,18 +57,26 @@ abstract class OAuthProvider {
  */
 export class EmbeddedOAuthProvider extends OAuthProvider {
   private readonly pendingAuthorizations: SessionStore<PendingAuthorization> =
-    createNamespacedStore('pendingAuthorization');
-  private readonly authorizationCodes: SessionStore<AuthorizationCode> =
-    createNamespacedStore('authorizationCode');
-  private readonly refreshTokens: SessionStore<RefreshTokenData> =
-    createNamespacedStore('refreshToken');
+    createNamespacedStore('pendingAuthorization', {
+      ttlMs: getConfig().oauth.authzCodeTimeoutMs,
+    });
+  private readonly authorizationCodes: SessionStore<AuthorizationCode> = createNamespacedStore(
+    'authorizationCode',
+    { ttlMs: getConfig().oauth.authzCodeTimeoutMs },
+  );
+  private readonly refreshTokens: SessionStore<RefreshTokenData> = createNamespacedStore(
+    'refreshToken',
+    { ttlMs: getConfig().oauth.refreshTokenTimeoutMs },
+  );
   // Secondary index for O(1) revocation: Tableau access token -> MCP refresh token ID.
   // Expiry-timeout entries may become stale but are harmless and self-clean on next revoke.
-  private readonly refreshTokenIndex: SessionStore<string> =
-    createNamespacedStore('refreshTokenIndex');
+  private readonly refreshTokenIndex: SessionStore<string> = createNamespacedStore(
+    'refreshTokenIndex',
+    { ttlMs: getConfig().oauth.refreshTokenTimeoutMs },
+  );
   private readonly clientRegistrations: SessionStore<ClientRegistration> = createNamespacedStore(
     'clientRegistration',
-    { maxSize: 10_000 },
+    { ttlMs: milliseconds.fromDays(24), maxSize: 10_000 },
   );
 
   private readonly privateKey: KeyObject;

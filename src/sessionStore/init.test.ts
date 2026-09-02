@@ -22,8 +22,8 @@ describe('SessionStore init', () => {
 
   describe('provider selection', () => {
     it('defaults to the memory provider when unconfigured', async () => {
-      const store = createNamespacedStore<string>('ns');
-      await store.set('key', 'value', 10000);
+      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      await store.set('key', 'value');
       await expect(store.get('key')).resolves.toBe('value');
     });
 
@@ -36,14 +36,14 @@ describe('SessionStore init', () => {
       } as any);
 
       initializeSessionStore();
-      const store = createNamespacedStore<string>('ns');
+      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
 
-      await store.set('key', 'value', 10000);
+      await store.set('key', 'value');
       await expect(store.get('key')).resolves.toBe('value');
 
       // Proves the custom backend (not the memory fallback) is in use: two calls for the same
       // namespace share the one loaded provider, whereas the memory path returns fresh instances.
-      const second = createNamespacedStore<string>('ns');
+      const second = createNamespacedStore<string>('ns', { ttlMs: 10000 });
       await expect(second.get('key')).resolves.toBe('value');
     });
 
@@ -55,9 +55,9 @@ describe('SessionStore init', () => {
       initializeSessionStore();
 
       // Two calls on the memory fallback must be independent instances.
-      const a = createNamespacedStore<string>('ns');
-      const b = createNamespacedStore<string>('ns');
-      await a.set('key', 'value', 10000);
+      const a = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      const b = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      await a.set('key', 'value');
       await expect(b.get('key')).resolves.toBeUndefined();
     });
 
@@ -70,9 +70,9 @@ describe('SessionStore init', () => {
       } as any);
 
       initializeSessionStore();
-      const store = createNamespacedStore<string>('ns');
+      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
 
-      await store.set('key', 'value', 10000);
+      await store.set('key', 'value');
       await expect(store.get('key')).resolves.toBe('value');
     });
 
@@ -87,9 +87,9 @@ describe('SessionStore init', () => {
       initializeSessionStore();
 
       // Memory fallback: fresh independent instances per call.
-      const a = createNamespacedStore<string>('ns');
-      const b = createNamespacedStore<string>('ns');
-      await a.set('key', 'value', 10000);
+      const a = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      const b = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      await a.set('key', 'value');
       await expect(b.get('key')).resolves.toBeUndefined();
     });
 
@@ -99,27 +99,27 @@ describe('SessionStore init', () => {
       });
 
       initializeSessionStore();
-      const store = createNamespacedStore<string>('ns');
+      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
 
-      await store.set('key', 'value', 10000);
+      await store.set('key', 'value');
       await expect(store.get('key')).resolves.toBe('value');
     });
   });
 
   describe('createNamespacedStore', () => {
     it('returns independent stores for the same namespace on the memory path', async () => {
-      const a = createNamespacedStore<string>('ns');
-      const b = createNamespacedStore<string>('ns');
+      const a = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      const b = createNamespacedStore<string>('ns', { ttlMs: 10000 });
 
-      await a.set('key', 'value', 10000);
+      await a.set('key', 'value');
       await expect(a.get('key')).resolves.toBe('value');
       await expect(b.get('key')).resolves.toBeUndefined();
     });
 
     it('lazily initializes when initializeSessionStore was not called', async () => {
       // No initializeSessionStore() call; createNamespacedStore initializes on demand.
-      const store = createNamespacedStore<string>('ns');
-      await store.set('key', 'value', 10000);
+      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      await store.set('key', 'value');
       await expect(store.get('key')).resolves.toBe('value');
     });
 
@@ -133,18 +133,18 @@ describe('SessionStore init', () => {
 
       initializeSessionStore();
 
-      const nsA = createNamespacedStore<string>('alpha');
-      const nsB = createNamespacedStore<string>('beta');
+      const nsA = createNamespacedStore<string>('alpha', { ttlMs: 10000 });
+      const nsB = createNamespacedStore<string>('beta', { ttlMs: 10000 });
 
-      await nsA.set('shared', 'a-value', 10000);
-      await nsB.set('shared', 'b-value', 10000);
+      await nsA.set('shared', 'a-value');
+      await nsB.set('shared', 'b-value');
 
       // Prefixing keeps the identical raw key 'shared' from colliding on the shared backend.
       await expect(nsA.get('shared')).resolves.toBe('a-value');
       await expect(nsB.get('shared')).resolves.toBe('b-value');
 
       // rotate on one namespace prefixes both keys and does not disturb the other.
-      await nsA.rotate!('shared', 'rotated', 'a-rotated', 10000);
+      await nsA.rotate!('shared', 'rotated', 'a-rotated');
       await expect(nsA.get('shared')).resolves.toBeUndefined();
       await expect(nsA.get('rotated')).resolves.toBe('a-rotated');
       await expect(nsB.get('shared')).resolves.toBe('b-value');

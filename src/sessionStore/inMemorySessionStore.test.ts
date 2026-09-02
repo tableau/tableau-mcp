@@ -10,26 +10,26 @@ describe('InMemorySessionStore', () => {
   });
 
   it('set then get returns the value', async () => {
-    const store = new InMemorySessionStore<string>();
-    await store.set('key', 'value', 10000);
+    const store = new InMemorySessionStore<string>({ ttlMs: 10000 });
+    await store.set('key', 'value');
     await expect(store.get('key')).resolves.toBe('value');
   });
 
   it('delete then get returns undefined', async () => {
-    const store = new InMemorySessionStore<string>();
-    await store.set('key', 'value', 10000);
+    const store = new InMemorySessionStore<string>({ ttlMs: 10000 });
+    await store.set('key', 'value');
     await store.delete('key');
     await expect(store.get('key')).resolves.toBeUndefined();
   });
 
   it('delete on a missing key does not throw', async () => {
-    const store = new InMemorySessionStore<string>();
+    const store = new InMemorySessionStore<string>({ ttlMs: 10000 });
     await expect(store.delete('missing')).resolves.toBeUndefined();
   });
 
   it('consume returns the value and removes it', async () => {
-    const store = new InMemorySessionStore<string>();
-    await store.set('key', 'value', 10000);
+    const store = new InMemorySessionStore<string>({ ttlMs: 10000 });
+    await store.set('key', 'value');
 
     await expect(store.consume('key')).resolves.toBe('value');
     await expect(store.get('key')).resolves.toBeUndefined();
@@ -38,38 +38,38 @@ describe('InMemorySessionStore', () => {
   });
 
   it('rotate removes oldKey and makes newKey readable with no window where both are valid', async () => {
-    const store = new InMemorySessionStore<string>();
-    await store.set('old', 'value', 10000);
+    const store = new InMemorySessionStore<string>({ ttlMs: 10000 });
+    await store.set('old', 'value');
 
-    await store.rotate('old', 'new', 'value', 10000);
+    await store.rotate('old', 'new', 'value');
 
     await expect(store.get('old')).resolves.toBeUndefined();
     await expect(store.get('new')).resolves.toBe('value');
   });
 
   it('expires values after the ttl', async () => {
-    const store = new InMemorySessionStore<string>();
-    await store.set('key', 'value', 1000);
+    const store = new InMemorySessionStore<string>({ ttlMs: 1000 });
+    await store.set('key', 'value');
     await expect(store.get('key')).resolves.toBe('value');
 
     vi.advanceTimersByTime(1000);
     await expect(store.get('key')).resolves.toBeUndefined();
   });
 
-  it('applies the ttl passed to each set independently of rotate', async () => {
-    const store = new InMemorySessionStore<string>();
-    await store.set('old', 'value', 5000);
-    await store.rotate('old', 'new', 'value', 1000);
+  it('applies the store-configured ttl to rotate as well as set', async () => {
+    const store = new InMemorySessionStore<string>({ ttlMs: 1000 });
+    await store.set('old', 'value');
+    await store.rotate('old', 'new', 'value');
 
     vi.advanceTimersByTime(1000);
     await expect(store.get('new')).resolves.toBeUndefined();
   });
 
   it('evicts the oldest key when constructed with maxSize', async () => {
-    const store = new InMemorySessionStore<number>({ maxSize: 2 });
-    await store.set('a', 1, 10000);
-    await store.set('b', 2, 10000);
-    await store.set('c', 3, 10000);
+    const store = new InMemorySessionStore<number>({ ttlMs: 10000, maxSize: 2 });
+    await store.set('a', 1);
+    await store.set('b', 2);
+    await store.set('c', 3);
 
     await expect(store.get('a')).resolves.toBeUndefined();
     await expect(store.get('b')).resolves.toBe(2);
@@ -77,9 +77,9 @@ describe('InMemorySessionStore', () => {
   });
 
   it('survives a ttl beyond the 32-bit setTimeout cap by re-arming in chunks', async () => {
-    const store = new InMemorySessionStore<string>();
     const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000; // exceeds 2**31 - 1 (~24.86 days)
-    await store.set('key', 'value', thirtyDaysMs);
+    const store = new InMemorySessionStore<string>({ ttlMs: thirtyDaysMs });
+    await store.set('key', 'value');
 
     // Past the first chunk boundary but still well short of the full ttl: must not have expired.
     await vi.advanceTimersByTimeAsync(25 * 24 * 60 * 60 * 1000);
@@ -91,9 +91,9 @@ describe('InMemorySessionStore', () => {
   });
 
   it('does not resurrect a key deleted before its chunk boundary re-arm fires', async () => {
-    const store = new InMemorySessionStore<string>();
     const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-    await store.set('key', 'value', thirtyDaysMs);
+    const store = new InMemorySessionStore<string>({ ttlMs: thirtyDaysMs });
+    await store.set('key', 'value');
     await store.delete('key');
 
     // Advance past where the pending chunk re-arm would have fired had it not been cancelled.
@@ -102,9 +102,9 @@ describe('InMemorySessionStore', () => {
   });
 
   it('does not resurrect a key consumed before its chunk boundary re-arm fires', async () => {
-    const store = new InMemorySessionStore<string>();
     const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-    await store.set('key', 'value', thirtyDaysMs);
+    const store = new InMemorySessionStore<string>({ ttlMs: thirtyDaysMs });
+    await store.set('key', 'value');
     await expect(store.consume('key')).resolves.toBe('value');
 
     await vi.advanceTimersByTimeAsync(26 * 24 * 60 * 60 * 1000);
