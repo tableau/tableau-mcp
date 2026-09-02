@@ -210,7 +210,7 @@ function prepareCalculationBatch({
         existingFormula !== undefined &&
         normalizeFormula(unescapeXml(existingFormula)) === normalizeFormula(resolvedFormula) &&
         existingRole === role &&
-        existingDatatype === datatype &&
+        calculationDatatypesMatch(existingDatatype, datatype, role) &&
         existingDefaultFormat === (calc.defaultFormat ?? '')
       ) {
         // Idempotent retry: the live workbook already contains this exact
@@ -241,6 +241,18 @@ function prepareCalculationBatch({
   }
 
   return new Ok({ editedXml, authoredCalcs });
+}
+
+function calculationDatatypesMatch(existing: string, requested: Datatype, role: Role): boolean {
+  if (existing === requested) return true;
+  if (role !== 'measure') return false;
+
+  // Tableau may canonicalize a numeric calculation between real and integer on
+  // workbook readback based on the formula's result type. When the normalized
+  // formula, role, and default format are unchanged, both representations refer
+  // to the same numeric measure and are safe to reuse on an idempotent retry.
+  const numericDatatypes = new Set<string>(['integer', 'real']);
+  return numericDatatypes.has(existing) && numericDatatypes.has(requested);
 }
 
 function resolveLooseFormulaReferences(

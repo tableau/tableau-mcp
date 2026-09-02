@@ -562,6 +562,104 @@ describe('prepareCalculationsInWorkbook idempotency', () => {
     },
   );
 
+  it.each([
+    { existingDatatype: 'integer', requestedDatatype: 'real' as const },
+    { existingDatatype: 'real', requestedDatatype: 'integer' as const },
+  ])(
+    'reuses an identical numeric measure when Desktop stores $existingDatatype and the caller requests $requestedDatatype',
+    ({ existingDatatype, requestedDatatype }) => {
+      const numericReadback = existingCalc.replace(
+        "datatype='real'",
+        `datatype='${existingDatatype}'`,
+      );
+      const workbookXml = withColumn(BASE_XML, numericReadback);
+      const result = prepareCalculationsInWorkbook({
+        workbookXml,
+        calcs: [
+          {
+            caption: 'Margin',
+            formula: '[Sales] * 0.2',
+            datatype: requestedDatatype,
+            role: 'measure',
+          },
+        ],
+      });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) return;
+      expect(result.value.workbookXml).toBe(workbookXml);
+      expect(result.value.authoredCalcs).toEqual([]);
+    },
+  );
+
+  it.each([
+    { existingDatatype: 'integer', requestedDatatype: 'string' as const },
+    { existingDatatype: 'date', requestedDatatype: 'real' as const },
+    { existingDatatype: 'boolean', requestedDatatype: 'integer' as const },
+  ])(
+    'rejects an identical formula when $existingDatatype and $requestedDatatype are not both numeric',
+    ({ existingDatatype, requestedDatatype }) => {
+      const incompatibleReadback = existingCalc.replace(
+        "datatype='real'",
+        `datatype='${existingDatatype}'`,
+      );
+      const result = prepareCalculationsInWorkbook({
+        workbookXml: withColumn(BASE_XML, incompatibleReadback),
+        calcs: [
+          {
+            caption: 'Margin',
+            formula: '[Sales] * 0.2',
+            datatype: requestedDatatype,
+            role: 'measure',
+          },
+        ],
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) return;
+      expect(result.error.message).toContain('caption collision');
+    },
+  );
+
+  it('does not treat integer and real as compatible for a dimension', () => {
+    const integerDimension = existingCalc
+      .replace("datatype='real'", "datatype='integer'")
+      .replace("role='measure'", "role='dimension'");
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, integerDimension),
+      calcs: [
+        {
+          caption: 'Margin',
+          formula: '[Sales] * 0.2',
+          datatype: 'real',
+          role: 'dimension',
+        },
+      ],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+
+  it('still rejects the same caption when its role differs', () => {
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, existingCalc),
+      calcs: [
+        {
+          caption: 'Margin',
+          formula: '[Sales] * 0.2',
+          datatype: 'real',
+          role: 'dimension',
+        },
+      ],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+
   it('still rejects the same caption when its formula differs', () => {
     const result = prepareCalculationsInWorkbook({
       workbookXml: withColumn(BASE_XML, existingCalc),
