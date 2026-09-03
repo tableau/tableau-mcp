@@ -334,6 +334,7 @@ export async function startMockExternalApiServer(
   const overrides = new Map<string, MockOverride>();
   const operations = new Map<string, MockOperation>();
   const operationCursors = new Map<string, number>();
+  let isStartPageVisible = false;
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const method = req.method ?? 'GET';
@@ -422,7 +423,7 @@ export async function startMockExternalApiServer(
         locale: 'en_US',
         repositoryLocation: '/Users/tableau/Documents/My Tableau Repository',
         logLocation: '/Users/tableau/Library/Logs/Tableau',
-        isStartPageVisible: false,
+        isStartPageVisible,
         isDataSourcePageActive: false,
         isPresentationMode: false,
       });
@@ -837,6 +838,28 @@ export async function startMockExternalApiServer(
         return;
       }
       sendOperation(res, 'open-workbook-file');
+      return;
+    }
+
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.appToggleStartPage) {
+      let parsed: { isStartPageVisible?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (typeof parsed.isStartPageVisible !== 'boolean') {
+        sendProblem(
+          res,
+          400,
+          'invalid-request-body',
+          'toggleStartPage requires a boolean `isStartPageVisible`.',
+        );
+        return;
+      }
+      isStartPageVisible = parsed.isStartPageVisible;
+      sendJson(res, 200, { isStartPageVisible });
       return;
     }
 

@@ -113,7 +113,7 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
  * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Fifty-four tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
+ * Sixty-one tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
  * first-class workbook/data reads/navigation, scoped dashboard/story cached-XML fallbacks, and a
  * narrow whole-workbook cached-XML fallback. Standalone validation and unrelated info/site tools
  * stay out. This is the
@@ -162,6 +162,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'add-storyboard',
     'compose-story',
     'open-file',
+    'set-start-page-visibility',
     'save-workbook',
     'workbook-export-as',
     'publish-workbook',

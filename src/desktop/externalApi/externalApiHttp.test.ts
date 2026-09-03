@@ -15,6 +15,7 @@ import {
   siteDatasourceListSchema,
   siteSchema,
   siteWorkbookListSchema,
+  startPageVisibilitySchema,
   storyboardDocumentRoute,
   storyboardItemSchema,
   storyboardListSchema,
@@ -135,6 +136,85 @@ describe('ExternalApiHttp', () => {
     });
     expect(envelope.createdAt).toBe('2026-07-07T10:00:00Z');
     expect(envelope.completedAt).toBe('2026-07-07T10:00:01Z');
+  });
+
+  describe('start-page visibility contract', () => {
+    it('pins the route and requires a boolean visibility result', () => {
+      expect(EXTERNAL_API_ROUTES.appToggleStartPage).toBe('/v0/app:toggleStartPage');
+      expect(startPageVisibilitySchema.safeParse({ isStartPageVisible: true }).success).toBe(true);
+      expect(startPageVisibilitySchema.safeParse({ isStartPageVisible: false }).success).toBe(true);
+      expect(startPageVisibilitySchema.safeParse({}).success).toBe(false);
+      expect(startPageVisibilitySchema.safeParse({ isStartPageVisible: 'false' }).success).toBe(
+        false,
+      );
+    });
+
+    it.each([true, false])(
+      'POSTs and returns isStartPageVisible=%s without coercion',
+      async (value) => {
+        const result = await http.postJsonForBody(
+          EXTERNAL_API_ROUTES.appToggleStartPage,
+          { isStartPageVisible: value },
+          startPageVisibilitySchema,
+        );
+
+        expect(result.isOk()).toBe(true);
+        expect(result.unwrap()).toEqual({ isStartPageVisible: value });
+        const posted = server.requests.at(-1);
+        expect(posted).toMatchObject({
+          method: 'POST',
+          path: '/v0/app:toggleStartPage',
+          authorization: 'Bearer valid-token',
+          contentType: 'application/json',
+        });
+        expect(JSON.parse(posted?.body ?? '{}')).toEqual({ isStartPageVisible: value });
+      },
+    );
+
+    it.each([
+      ['missing', {}],
+      ['wrong-type', { isStartPageVisible: 'false' }],
+    ])('fails closed on a %s visibility success body', async (_label, body) => {
+      server.setOverride('POST /v0/app:toggleStartPage', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
+
+      const result = await http.postJsonForBody(
+        EXTERNAL_API_ROUTES.appToggleStartPage,
+        { isStartPageVisible: false },
+        startPageVisibilitySchema,
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('invalid-response');
+    });
+
+    it('preserves an HTTP Problem response', async () => {
+      server.setOverride('POST /v0/app:toggleStartPage', {
+        status: 500,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({
+          code: 'operation-failed',
+          status: 500,
+          title: 'The Start Page could not be toggled.',
+        }),
+      });
+
+      const result = await http.postJsonForBody(
+        EXTERNAL_API_ROUTES.appToggleStartPage,
+        { isStartPageVisible: true },
+        startPageVisibilitySchema,
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr()).toMatchObject({
+        type: 'problem',
+        status: 500,
+        code: 'operation-failed',
+      });
+    });
   });
 
   it('maps a command-not-found problem', async () => {

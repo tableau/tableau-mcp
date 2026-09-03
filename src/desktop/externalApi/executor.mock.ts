@@ -42,6 +42,7 @@ export function makeExecutorMock(
     getWorksheetSummaryData: vi.fn(),
     listWorksheetLogicalTables: vi.fn(),
     getWorksheetUnderlyingData: vi.fn(),
+    setStartPageVisibility: vi.fn(),
     exportWorksheetImage: vi.fn(),
     exportDashboardImage: vi.fn(),
     exportStoryboardImage: vi.fn(),
