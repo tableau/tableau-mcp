@@ -7,6 +7,7 @@
 
 import { getConfig } from '../../config.js';
 import { getFeatureGate } from '../../features/init.js';
+import { isSlackClient } from '../../telemetry/clientDisplayName.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
 /**
@@ -141,8 +142,8 @@ export const LIST_FLOW_RUNS_FAILURE_INSIGHT_API_SCOPE: TableauApiScope = 'tablea
 /**
  * Validates that a scope string is a valid MCP scope
  */
-export async function isValidScope(scope: string): Promise<boolean> {
-  return (await getSupportedMcpScopes()).some((supported) => supported === scope);
+export async function isValidScope(scope: string, clientId?: string): Promise<boolean> {
+  return (await getSupportedMcpScopes(clientId)).some((supported) => supported === scope);
 }
 
 const toolScopeMap: Record<
@@ -385,12 +386,16 @@ const toolScopeMap: Record<
   },
 };
 
-async function getEnabledToolNames(): Promise<Set<WebToolName>> {
+async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>> {
   const config = getConfig();
   const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
-  const authoringToolsEnabled = await featureGate.isFeatureEnabled('authoring-tools');
+  // Authoring tools require the `authoring-tools` flag and are hidden only from Slack clients.
+  // Undefined `client_id` (stdio and generic discovery metadata) and unknown/non-Slack clients are
+  // allowed, mirroring the per-client `disabled` provider on the authoring tool registrations.
+  const authoringToolsEnabled =
+    (await featureGate.isFeatureEnabled('authoring-tools')) && !isSlackClient(clientId);
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -434,8 +439,8 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   return enabledTools;
 }
 
-export async function getSupportedMcpScopes(): Promise<McpScope[]> {
-  const enabledTools = await getEnabledToolNames();
+export async function getSupportedMcpScopes(clientId?: string): Promise<McpScope[]> {
+  const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<McpScope>();
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
@@ -449,8 +454,8 @@ export async function getSupportedMcpScopes(): Promise<McpScope[]> {
   return Array.from(scopes);
 }
 
-export async function getSupportedApiScopes(): Promise<TableauApiScope[]> {
-  const enabledTools = await getEnabledToolNames();
+export async function getSupportedApiScopes(clientId?: string): Promise<TableauApiScope[]> {
+  const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<TableauApiScope>();
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
@@ -466,11 +471,13 @@ export async function getSupportedApiScopes(): Promise<TableauApiScope[]> {
 
 export async function getSupportedScopes({
   includeApiScopes,
+  clientId,
 }: {
   includeApiScopes: boolean;
+  clientId?: string;
 }): Promise<string[]> {
-  const mcpScopes = await getSupportedMcpScopes();
-  const apiScopes = await getSupportedApiScopes();
+  const mcpScopes = await getSupportedMcpScopes(clientId);
+  const apiScopes = await getSupportedApiScopes(clientId);
   return includeApiScopes ? [...mcpScopes, ...apiScopes] : mcpScopes;
 }
 
