@@ -7,6 +7,7 @@ import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { DownloadWorkbookResult } from '../../../sdks/tableau/types/downloadWorkbookResult.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { Provider } from '../../../utils/provider.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
@@ -43,7 +44,9 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
       openWorldHint: false,
     },
     disabled: new Provider(
-      async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
+      async () =>
+        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
+        isSlackClient(server.clientId),
     ),
     callback: async ({ workbookId, includeExtract }, extra): Promise<CallToolResult> => {
       return await downloadWorkbookTool.logAndExecute<WorkbookToolResult>({
