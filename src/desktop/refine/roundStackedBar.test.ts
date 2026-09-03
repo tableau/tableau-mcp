@@ -315,6 +315,38 @@ describe('planRoundStackedBar', () => {
     expect(second.xml).toBe(readback);
   });
 
+  it.each([
+    [
+      'source definition',
+      {
+        extraColumnDefinitions:
+          "<column caption='Category &amp; &lt;Group&gt;' datatype='string' name='[Category &amp; Group]' role='dimension' type='nominal' />",
+      },
+      /duplicate Category, Segment, SUM, or filter source definitions/,
+    ],
+    [
+      'Category column instance',
+      {
+        extraColumnInstances:
+          "<column-instance column='[Category &amp; Group]' derivation='None' name='[none:Category &amp; Group:nk]' pivot='key' type='nominal' />",
+      },
+      /duplicate Category, Segment, SUM, or filter column instances/,
+    ],
+    [
+      'SUM column instance',
+      {
+        extraColumnInstances:
+          "<column-instance column='[Profit &amp; Margin]' derivation='Sum' name='[sum:Profit &amp; Margin:qk]' pivot='key' type='quantitative' />",
+      },
+      /duplicate Category, Segment, SUM, or filter column instances/,
+    ],
+  ] as const)(
+    'refuses a simple bar with a conflicting duplicate %s instead of mutating an ambiguous shape',
+    (_label, extra, pattern) => {
+      expectRefusal(worksheet({ stacked: false, ...extra }), pattern);
+    },
+  );
+
   it('rounds a live-shaped horizontal stacked bar with sign-safe endpoints', () => {
     const measure = `[${DS_REF}].[sum:Profit & Margin:qk]`.replaceAll('&', '&amp;');
     const result = planRoundStackedBar(

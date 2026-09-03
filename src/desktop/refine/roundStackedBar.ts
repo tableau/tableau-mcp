@@ -795,6 +795,39 @@ function classifyOrdinary(
 
   const filter = readFilter(base.view, base.datasourceName, instances, definitions);
   if (!filter.ok) return filter;
+  const acceptedInstanceNames = [
+    category.name,
+    measure.name,
+    ...(segment ? [segment.name] : []),
+    ...(filter.value ? [filter.value.columnInstance] : []),
+  ];
+  if (
+    acceptedInstanceNames.some(
+      (name) => instances.filter((instance) => instance.name === name).length !== 1,
+    )
+  ) {
+    return refusal(
+      'round_bar refuses duplicate Category, Segment, SUM, or filter column instances.',
+    );
+  }
+  const acceptedDefinitionNames = [
+    category.column,
+    measure.column,
+    ...(segment ? [segment.column] : []),
+    ...(filter.allowedColumn ? [filter.allowedColumn] : []),
+  ];
+  if (
+    acceptedDefinitionNames.some(
+      (name) =>
+        elements(base.dependency, 'column').filter(
+          (definition) => definition.getAttribute('name') === name,
+        ).length !== 1,
+    )
+  ) {
+    return refusal(
+      'round_bar refuses duplicate Category, Segment, SUM, or filter source definitions.',
+    );
+  }
   const allowedColumns = new Set([
     category.column,
     ...(segment ? [segment.column] : []),
