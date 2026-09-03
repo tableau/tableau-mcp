@@ -3,6 +3,11 @@ import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
+import {
+  getClientDisplayName,
+  isSlackClient,
+  sanitizeClientIdForTelemetry,
+} from '../../telemetry/clientDisplayName.js';
 import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
@@ -125,6 +130,14 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
           message: `Insufficient scopes: missing [${missingScopes.join(', ')}]`,
           level: 'error',
           logger: 'oauth',
+          data: {
+            client_id: sanitizeClientIdForTelemetry(authInfo.clientId),
+            client_display_name: getClientDisplayName(authInfo.clientId) ?? '',
+            is_slack_client: isSlackClient(authInfo.clientId),
+            token_scopes: authInfo.scopes,
+            required_mcp_scopes: requiredMcpScopes,
+            required_api_scopes: shouldCheckApiScopes ? requiredApiScopes : [],
+          },
         });
         const { resourceUri } = getConfig().oauth;
         const baseUrl = new URL(resourceUri).origin;
