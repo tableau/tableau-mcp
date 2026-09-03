@@ -60,7 +60,10 @@ describe('desktop vendored assets', () => {
     expect(kpi).toBeDefined();
     expect(kpi?.snapshot.xml).toContain("<mark class='Text' />");
     expect(kpi?.snapshot.xml).not.toContain("<zoom type='entire-view' />");
-    expect(kpi?.snapshot.xml).toContain('<cols>[{{DATASOURCE}}].[none:{{field_base_1}}:nk]</cols>');
+    expect(kpi?.snapshot.xml).toContain('<cols />');
+    expect(kpi?.snapshot.xml).toContain(
+      "<tooltip column='[{{DATASOURCE}}].[attr:{{field_base_1}}:nk]' />",
+    );
     expect(kpi?.snapshot.xml).toContain("fontcolor='#898989' fontsize='12'>{{METRIC_NAME}}");
     expect(kpi?.snapshot.xml.match(/value='\{\{VALUE_FORMAT\}\}'/g)).toHaveLength(2);
     expect(kpi?.snapshot.xml).toContain("fontname='Tableau Medium' fontsize='24'");
