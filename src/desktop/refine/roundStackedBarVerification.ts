@@ -90,6 +90,11 @@ const MAX_GROUPS = 83;
 const VERTICES_PER_GROUP = 12;
 const ABSOLUTE_TOLERANCE = 1e-6;
 const RELATIVE_TOLERANCE = 1e-8;
+// Rounded-tip detection must scale with the tip's own radius: the generated Y radius is
+// min(|value|/2, 0.02*span), which for tiny values falls below ABSOLUTE_TOLERANCE while still
+// producing a real rounded tip. A fraction of the expected radius stays well under the smallest
+// rounded-point offset (0.292893*r) and well above float noise.
+const ROUNDED_TIP_TOLERANCE_RATIO = 0.1;
 
 function result(findings: RoundStackedBarFinding[]): RoundStackedBarVerification {
   return { ok: findings.length === 0, findings };
@@ -443,24 +448,32 @@ function verifySummaryColumns(
   };
 }
 
-function isTopRounded(points: Map<number, ParsedPoint>, high: number): boolean {
+function isTopRounded(points: Map<number, ParsedPoint>, high: number, tolerance: number): boolean {
   const p2 = points.get(2)?.value ?? Number.NaN;
   const p3 = points.get(3)?.value ?? Number.NaN;
-  return p2 < high - ABSOLUTE_TOLERANCE && p3 > p2 + ABSOLUTE_TOLERANCE;
+  return p2 < high - tolerance && p3 > p2 + tolerance;
 }
 
-function isTopSquare(points: Map<number, ParsedPoint>, high: number): boolean {
-  return [2, 3, 4, 5, 6, 7].every((path) => near(points.get(path)?.value ?? Number.NaN, high));
+function isTopSquare(points: Map<number, ParsedPoint>, high: number, tolerance: number): boolean {
+  return [2, 3, 4, 5, 6, 7].every(
+    (path) => Math.abs((points.get(path)?.value ?? Number.NaN) - high) <= tolerance,
+  );
 }
 
-function isBottomRounded(points: Map<number, ParsedPoint>, low: number): boolean {
+function isBottomRounded(
+  points: Map<number, ParsedPoint>,
+  low: number,
+  tolerance: number,
+): boolean {
   const p1 = points.get(1)?.value ?? Number.NaN;
   const p9 = points.get(9)?.value ?? Number.NaN;
-  return p1 > low + ABSOLUTE_TOLERANCE && p9 > low + ABSOLUTE_TOLERANCE;
+  return p1 > low + tolerance && p9 > low + tolerance;
 }
 
-function isBottomSquare(points: Map<number, ParsedPoint>, low: number): boolean {
-  return [1, 8, 9, 10, 11, 12].every((path) => near(points.get(path)?.value ?? Number.NaN, low));
+function isBottomSquare(points: Map<number, ParsedPoint>, low: number, tolerance: number): boolean {
+  return [1, 8, 9, 10, 11, 12].every(
+    (path) => Math.abs((points.get(path)?.value ?? Number.NaN) - low) <= tolerance,
+  );
 }
 
 export function verifyRoundStackedBarPostSummary(
@@ -585,8 +598,13 @@ export function verifyRoundStackedBarPostSummary(
         `${groupLabel(group.category, group.segment)} polygon span does not match its baseline value.`,
       );
     }
-    const topRounded = isTopRounded(byPath, high);
-    const bottomRounded = isBottomRounded(byPath, low);
+    const categorySpan = baseline.groups
+      .filter((candidate) => candidate.category === group.category)
+      .reduce((sum, candidate) => sum + Math.abs(candidate.value), 0);
+    const expectedRadius = Math.min(Math.abs(group.value) / 2, 0.02 * categorySpan);
+    const roundedTipTolerance = expectedRadius * ROUNDED_TIP_TOLERANCE_RATIO;
+    const topRounded = isTopRounded(byPath, high, roundedTipTolerance);
+    const bottomRounded = isBottomRounded(byPath, low, roundedTipTolerance);
     const topRadiusX = topRounded ? 0.06 : 0;
     const bottomRadiusX = bottomRounded ? 0.06 : 0;
     const expectedX = [
@@ -614,9 +632,6 @@ export function verifyRoundStackedBarPostSummary(
         `${groupLabel(group.category, group.segment)} does not use the exact subtle 12-point band geometry.`,
       );
     }
-    const categorySpan = baseline.groups
-      .filter((candidate) => candidate.category === group.category)
-      .reduce((sum, candidate) => sum + Math.abs(candidate.value), 0);
     const sameSignOrder = contract.segment
       ? baseline.segmentOrderFromZero.filter((segment) =>
           baseline.groups.some(
@@ -628,7 +643,6 @@ export function verifyRoundStackedBarPostSummary(
         )
       : [];
     const outerSegment = sameSignOrder[sameSignOrder.length - 1];
-    const expectedRadius = Math.min(Math.abs(group.value) / 2, 0.02 * categorySpan);
     const expectedTopRadius =
       group.value > 0 && (!contract.segment || group.segment === outerSegment) ? expectedRadius : 0;
     const expectedBottomRadius =
@@ -665,9 +679,9 @@ export function verifyRoundStackedBarPostSummary(
       low,
       high,
       topRounded,
-      topSquare: isTopSquare(byPath, high),
+      topSquare: isTopSquare(byPath, high, roundedTipTolerance),
       bottomRounded,
-      bottomSquare: isBottomSquare(byPath, low),
+      bottomSquare: isBottomSquare(byPath, low, roundedTipTolerance),
     });
   }
 

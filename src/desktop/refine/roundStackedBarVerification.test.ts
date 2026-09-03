@@ -355,6 +355,23 @@ function captureSimpleBaseline(): RoundStackedBarBaseline {
   return captured.baseline;
 }
 
+function tinySimpleBaseline(): RoundStackedBarBaseline {
+  const captured = captureRoundStackedBarBaseline(
+    {
+      worksheet: { id: WORKSHEET_ID },
+      columns: [{ name: 'Tooltip Only' }, { name: 'Category' }, { name: 'SUM(Profit)' }],
+      rows: [
+        ['extra', 'Alpha', 1e-5],
+        ['extra', 'Beta', -1e-5],
+      ],
+    },
+    simpleContract,
+  );
+  expect(captured.ok).toBe(true);
+  if (!captured.ok) throw new Error(captured.reason);
+  return captured.baseline;
+}
+
 function simpleRawData(): TabularData {
   return {
     columns: [
@@ -1006,6 +1023,33 @@ describe('verifyRoundStackedBarPostSummary', () => {
     expect(verification.findings).toContainEqual(
       expect.objectContaining({ code: 'segment-value' }),
     );
+  });
+
+  it('verifies positive and negative simple bars whose rounded tips are just above the zero gate', () => {
+    const readback = simplePolygonSummary([
+      { category: 'Alpha', segment: '', low: 0, high: 1e-5, roundTop: true },
+      { category: 'Beta', segment: '', low: -1e-5, high: 0, roundBottom: true },
+    ]);
+
+    expect(
+      verifyRoundStackedBarPostSummary(readback, tinySimpleBaseline(), simpleContract),
+    ).toEqual({ ok: true, findings: [] });
+  });
+
+  it('still rejects a tiny simple bar whose nonzero tip is square instead of rounded', () => {
+    const squareTips = simplePolygonSummary([
+      { category: 'Alpha', segment: '', low: 0, high: 1e-5 },
+      { category: 'Beta', segment: '', low: -1e-5, high: 0 },
+    ]);
+
+    const verification = verifyRoundStackedBarPostSummary(
+      squareTips,
+      tinySimpleBaseline(),
+      simpleContract,
+    );
+
+    expect(verification.ok).toBe(false);
+    expect(verification.findings).toContainEqual(expect.objectContaining({ code: 'outer-tip' }));
   });
 
   it('treats a one-member colored bar as a stack because Segment remains in the contract', () => {
