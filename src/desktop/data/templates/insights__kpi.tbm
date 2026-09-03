@@ -63,8 +63,8 @@
         <mark-sizing mark-sizing-setting='marks-scaling-off' />
         <encodings>
           <text column='[Sample - Superstore].[sum:Profit:qk]' />
-          <text column='[Sample - Superstore].[sum:Sales:qk]' />
-          <text column='[Sample - Superstore].[sum:Quantity:qk]' />
+          <tooltip column='[Sample - Superstore].[sum:Sales:qk]' />
+          <tooltip column='[Sample - Superstore].[sum:Quantity:qk]' />
           <text column='[Sample - Superstore].[sum:Discount:qk]' />
         </encodings>
         <customized-tooltip>
@@ -78,8 +78,7 @@
             <run bold='true' fontcolor='#000000'>&lt;[Sample - Superstore].[sum:Sales:qk]&gt;</run>
             <run>Æ&#10;</run>
             <run fontcolor='#898989'>CHANGE FROM PREVIOUS PERIOD | </run>
-            <run bold='true' fontcolor='{{CHANGE_COLOR}}'>{{DIRECTION_SYMBOL}} </run>
-            <run bold='true' fontcolor='#000000'>&lt;[Sample - Superstore].[sum:Discount:qk]&gt;</run>
+            <run bold='true' fontcolor='{{CHANGE_COLOR}}'>&lt;[Sample - Superstore].[sum:Discount:qk]&gt;</run>
           </formatted-text>
         </customized-tooltip>
         <customized-label>
@@ -88,9 +87,7 @@
             <run>Æ&#10;</run>
             <run bold='true' fontname='Tableau Medium' fontsize='24'>&lt;[Sample - Superstore].[sum:Profit:qk]&gt;</run>
             <run>Æ&#10;</run>
-            <run fontcolor='{{CHANGE_COLOR}}'>{{DIRECTION_SYMBOL}}</run>
-            <run>Æ </run>
-            <run bold='true'>&lt;[Sample - Superstore].[sum:Discount:qk]&gt;</run>
+            <run bold='true' fontcolor='{{CHANGE_COLOR}}'>&lt;[Sample - Superstore].[sum:Discount:qk]&gt;</run>
             <run>Æ&#10;</run>
           </formatted-text>
         </customized-label>
