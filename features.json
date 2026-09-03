@@ -1,7 +1,7 @@
 {
   "mcp-apps": false,
-  "authoring-tools": false,
+  "authoring-tools": true,
   "view-file-mode": false,
   "view-data-file-mode": false,
-  "workbook-file-mode": false
+  "workbook-file-mode": true
 }
