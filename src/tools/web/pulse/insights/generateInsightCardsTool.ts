@@ -151,6 +151,7 @@ export const getGenerateInsightCardsTool = (server: WebMcpServer): WebTool<typeo
   const tool = new WebTool({
     server,
     name: 'generate-insight-cards',
+    registrationConditions: ['RequiresPulse', 'RequiresPulsePremium'],
     description: 'Generate deterministic insights for a published datasource.',
     // Gated off by default (INSIGHTS_TOOLS_ENABLED) so it's never frontloaded
     // onto the default surface / into hosts like Slackbot; set the env var to

@@ -44,6 +44,7 @@ export type TableauApiScope =
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
+  | 'tableau:entitlements:read'
   | 'tableau:insight_brief:create'
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
