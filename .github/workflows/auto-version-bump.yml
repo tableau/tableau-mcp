@@ -56,6 +56,9 @@ jobs:
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Commit and push if version changed
+        env:
+          VERSION: ${{ steps.apply.outputs.version }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           if git diff --quiet -- package.json package-lock.json; then
             echo "package.json already at the correct version, nothing to push"
@@ -65,8 +68,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json
-          git commit -m "chore: bump version to ${{ steps.apply.outputs.version }}"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          git commit -m "chore: bump version to $VERSION"
+          git push origin "HEAD:$HEAD_REF"
 
   tag-release:
     if: github.event.action == 'closed' && github.event.pull_request.merged == true
