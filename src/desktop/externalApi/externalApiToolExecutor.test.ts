@@ -578,6 +578,38 @@ describe('ExternalApiToolExecutor', () => {
       expect(result.unwrap().build).toBe('20261.26.0701.1234');
       expect(server.requests.at(-1)?.path).toBe('/v0/app');
     });
+
+    it.each([true, false])(
+      'sets start-page visibility to %s through a command-classified JSON POST',
+      async (isStartPageVisible) => {
+        const onRpc = vi.fn();
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [instanceFor(server)],
+          onRpc,
+        });
+        await executor.start();
+
+        const result = await executor.setStartPageVisibility(isStartPageVisible, signal);
+
+        expect(result.isOk()).toBe(true);
+        expect(result.unwrap()).toEqual({ isStartPageVisible });
+        const posted = server.requests.at(-1);
+        expect(posted).toMatchObject({
+          method: 'POST',
+          path: '/v0/app:toggleStartPage',
+          contentType: 'application/json',
+        });
+        expect(JSON.parse(posted?.body ?? '{}')).toEqual({ isStartPageVisible });
+        expect(onRpc).toHaveBeenCalledOnce();
+        expect(onRpc).toHaveBeenCalledWith(
+          expect.objectContaining({
+            operation: 'command',
+            transportSuccess: true,
+            rescanCount: 0,
+          }),
+        );
+      },
+    );
   });
 
   describe('request deadline errors', () => {

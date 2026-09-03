@@ -15,6 +15,7 @@ export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
   appOpenFile: '/v0/app:openFile',
+  appToggleStartPage: '/v0/app:toggleStartPage',
   root: '/v0/',
   workbook: '/v0/workbook',
   workbookDashboards: '/v0/workbook/dashboards',
@@ -727,6 +728,14 @@ export const appInfoSchema = z
   })
   .passthrough();
 export type AppInfo = z.infer<typeof appInfoSchema>;
+
+/** Desired and resulting Start Page visibility for `POST /v0/app:toggleStartPage`. */
+export const startPageVisibilitySchema = z
+  .object({
+    isStartPageVisible: z.boolean(),
+  })
+  .passthrough();
+export type StartPageVisibility = z.infer<typeof startPageVisibilitySchema>;
 
 /**
  * Typed error surfaced by {@link ExternalApiHttp} methods. The internal

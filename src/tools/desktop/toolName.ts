@@ -82,6 +82,7 @@ export const desktopToolNames = [
   'read-knowledge-resource',
   'search-knowledge',
   'open-file',
+  'set-start-page-visibility',
   'save-workbook',
   'workbook-export-as',
   'add-worksheet',

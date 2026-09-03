@@ -190,6 +190,7 @@ const NON_TOOL_VOCABULARY = [
   'slot-to-field',
   'source-field',
   'specific-zone',
+  'start-page',
   'story-point',
   'story-points',
   'storyboard-image',
