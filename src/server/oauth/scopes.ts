@@ -409,7 +409,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     level: 'info',
     logger: 'oauth',
     data: {
-      client_id: sanitizeClientIdForTelemetry(clientId),
+      client_id: getClientDisplayName(clientId),
       client_display_name: clientDisplayName ?? '',
       is_slack_client: slackClient,
       authoring_tools_enabled: authoringToolsEnabled,
