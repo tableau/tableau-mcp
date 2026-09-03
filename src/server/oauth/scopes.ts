@@ -7,7 +7,12 @@
 
 import { getConfig } from '../../config.js';
 import { getFeatureGate } from '../../features/init.js';
-import { isSlackClient } from '../../telemetry/clientDisplayName.js';
+import { log } from '../../logging/logger.js';
+import {
+  getClientDisplayName,
+  isSlackClient,
+  sanitizeClientIdForTelemetry,
+} from '../../telemetry/clientDisplayName.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
 /**
@@ -391,11 +396,25 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
+  const clientDisplayName = getClientDisplayName(clientId);
+  const slackClient = isSlackClient(clientId);
   // Authoring tools require the `authoring-tools` flag and are hidden only from Slack clients.
   // Undefined `client_id` (stdio and generic discovery metadata) and unknown/non-Slack clients are
   // allowed, mirroring the per-client `disabled` provider on the authoring tool registrations.
   const authoringToolsEnabled =
-    (await featureGate.isFeatureEnabled('authoring-tools')) && !isSlackClient(clientId);
+    (await featureGate.isFeatureEnabled('authoring-tools')) && !slackClient;
+
+  log({
+    message: 'Resolved OAuth client for Tableau MCP scope filtering',
+    level: 'info',
+    logger: 'oauth',
+    data: {
+      client_id: sanitizeClientIdForTelemetry(clientId),
+      client_display_name: clientDisplayName ?? '',
+      is_slack_client: slackClient,
+      authoring_tools_enabled: authoringToolsEnabled,
+    },
+  });
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
