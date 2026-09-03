@@ -64,7 +64,6 @@ export const getApplyDatasourceTool = (
             emptyPathGuidance:
               'Use a cached datasource path, edit it with the cache read/write tools, then pass that path here.',
             notFoundGuidance: 'Provide an existing cached datasource path.',
-            secureContainedCacheRead: true,
           });
           if (preamble.isErr()) {
             return preamble;

@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'fs';
 import { Ok, Result } from 'ts-results-es';
 
 import {
@@ -10,7 +9,6 @@ import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import {
   CacheArtifactKind,
   type CacheSidecarInput,
-  checkSidecar,
   checkSidecarInput,
   sidecarPath,
 } from '../../../desktop/wrappers/cacheFingerprint.js';
@@ -35,7 +33,6 @@ export function runApplyPreamble({
   session,
   emptyPathGuidance,
   notFoundGuidance,
-  secureContainedCacheRead = false,
 }: {
   kind: CacheArtifactKind;
   file: string | undefined;
@@ -44,8 +41,6 @@ export function runApplyPreamble({
   emptyPathGuidance: string;
   /** Where to get a path, appended to the missing-file error. */
   notFoundGuidance: string;
-  /** Opt into a descriptor-grounded cache containment check for the file and sidecar. */
-  secureContainedCacheRead?: boolean;
 }): Result<{ xml: string; resolvedSession: string; sourceHash?: string }, McpToolError> {
   // No inline document parameter: the cached file path IS the handle. Making the
   // model retype a document cost ~190s of pure emission across six asks, and
@@ -57,75 +52,26 @@ export function runApplyPreamble({
     ).toErr();
   }
 
-  if (secureContainedCacheRead) {
-    const readResult = readContainedCacheTextFile(file);
-    if (!readResult.ok) {
-      switch (readResult.issue) {
-        case CONTAINED_CACHE_READ_ISSUE.outsideCache:
-        case CONTAINED_CACHE_READ_ISSUE.unsafeFile:
-          return new ArgsValidationError(
-            `Security error: the ${kind} file must be a regular file contained in the Desktop cache directory.\n\n` +
-              `Cache directory: ${getCacheDir()}\nRequested: ${file}`,
-          ).toErr();
-        case CONTAINED_CACHE_READ_ISSUE.missing: {
-          const NotFoundError =
-            kind === 'worksheet' ? WorksheetNotFoundError : WorkbookNotFoundError;
-          return new NotFoundError(
-            `Cached ${kind} file not found: ${file} ${notFoundGuidance}`,
-          ).toErr();
-        }
-        case CONTAINED_CACHE_READ_ISSUE.readError:
-          return new FileReadError(
-            readResult.error ?? new Error(`Unable to read cached ${kind} file.`),
-          ).toErr();
+  const readResult = readContainedCacheTextFile(file);
+  if (!readResult.ok) {
+    switch (readResult.issue) {
+      case CONTAINED_CACHE_READ_ISSUE.outsideCache:
+      case CONTAINED_CACHE_READ_ISSUE.unsafeFile:
+        return new ArgsValidationError(
+          `Security error: the ${kind} file must be a regular file contained in the Desktop cache directory.\n\n` +
+            `Cache directory: ${getCacheDir()}\nRequested: ${file}`,
+        ).toErr();
+      case CONTAINED_CACHE_READ_ISSUE.missing: {
+        const NotFoundError = kind === 'worksheet' ? WorksheetNotFoundError : WorkbookNotFoundError;
+        return new NotFoundError(
+          `Cached ${kind} file not found: ${file} ${notFoundGuidance}`,
+        ).toErr();
       }
+      case CONTAINED_CACHE_READ_ISSUE.readError:
+        return new FileReadError(
+          readResult.error ?? new Error(`Unable to read cached ${kind} file.`),
+        ).toErr();
     }
-
-    const sessionResult = resolveSession(session);
-    if (sessionResult.isErr()) {
-      return sessionResult.error.toErr();
-    }
-    const resolvedSession = sessionResult.value;
-
-    const metaFile = sidecarPath(readResult.path);
-    const sidecarRead = readContainedCacheTextFile(metaFile);
-    let sidecarInput: CacheSidecarInput;
-    if (sidecarRead.ok) {
-      sidecarInput = { type: 'read', text: sidecarRead.text };
-    } else if (sidecarRead.issue === CONTAINED_CACHE_READ_ISSUE.missing) {
-      sidecarInput = { type: 'missing' };
-    } else {
-      sidecarInput = {
-        type: 'unreadable',
-        error: sidecarRead.error ?? new Error(`Secure sidecar read rejected: ${sidecarRead.issue}`),
-      };
-    }
-
-    const sidecar = checkSidecarInput(readResult.path, resolvedSession, kind, sidecarInput);
-    if (!sidecar.ok) {
-      return new CacheSessionMismatchError(sidecar.message!).toErr();
-    }
-
-    return new Ok({
-      xml: readResult.text,
-      resolvedSession,
-      sourceHash: sidecar.sourceHash,
-    });
-  }
-
-  if (!existsSync(file)) {
-    // Dashboard/storyboard have no kind-specific NotFound error class; the
-    // 'workbook-not-found' type string may be load-bearing, so keep the class
-    // and name the right artifact kind in the message instead.
-    const NotFoundError = kind === 'worksheet' ? WorksheetNotFoundError : WorkbookNotFoundError;
-    return new NotFoundError(`Cached ${kind} file not found: ${file} ${notFoundGuidance}`).toErr();
-  }
-
-  let xml: string;
-  try {
-    xml = readFileSync(file, 'utf-8');
-  } catch (error) {
-    return new FileReadError(error).toErr();
   }
 
   const sessionResult = resolveSession(session);
@@ -134,15 +80,29 @@ export function runApplyPreamble({
   }
   const resolvedSession = sessionResult.value;
 
+  const metaFile = sidecarPath(readResult.path);
+  const sidecarRead = readContainedCacheTextFile(metaFile);
+  let sidecarInput: CacheSidecarInput;
+  if (sidecarRead.ok) {
+    sidecarInput = { type: 'read', text: sidecarRead.text };
+  } else if (sidecarRead.issue === CONTAINED_CACHE_READ_ISSUE.missing) {
+    sidecarInput = { type: 'missing' };
+  } else {
+    sidecarInput = {
+      type: 'unreadable',
+      error: sidecarRead.error ?? new Error(`Secure sidecar read rejected: ${sidecarRead.issue}`),
+    };
+  }
+
   // Cross-instance cache-bleed guard (W9): refuse a cache file produced by a
   // different (or restarted) Desktop session before applying it. Now that every
   // apply goes through a cache file, no payload can skip this check.
-  const sidecar = checkSidecar(file, resolvedSession, kind);
+  const sidecar = checkSidecarInput(readResult.path, resolvedSession, kind, sidecarInput);
   if (!sidecar.ok) {
     return new CacheSessionMismatchError(sidecar.message!).toErr();
   }
 
-  return new Ok({ xml, resolvedSession, sourceHash: sidecar.sourceHash });
+  return new Ok({ xml: readResult.text, resolvedSession, sourceHash: sidecar.sourceHash });
 }
 
 type NoReadbackApplyKind = 'dashboard' | 'storyboard' | 'workbook' | 'datasource';

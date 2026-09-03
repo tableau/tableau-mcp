@@ -86,32 +86,21 @@ export function finishXmlRead<K extends string>({
 
   if (capFired) {
     logInlineXmlCapHit({ tool: toolName, bytes, capBytes, file: cacheFile });
-    if (kind === 'datasource') {
-      return new Ok({
-        message: [
-          `${label} document is ${bytes} bytes, over the ${capBytes}-byte inline cap. ` +
-            'Returned in file mode to keep large content out of the conversation.',
-          '',
-          'Structural summary:',
-          formatArtifactSummary(artifactKind, xml),
-          '',
-          `Edit the cached datasource document, then call ${applyTool} with ${pathParam} ` +
-            'set to the returned file path.',
-        ].join('\n'),
-        file: cacheFile,
-        instructions:
-          'Use the cache read tool with startByte/endByte when a slice is needed. Edit the ' +
-          'cached datasource document, use the cache write tool without a worksheet/dashboard ' +
-          `selector, then call ${applyTool} with ${pathParam} set to this file path.`,
-      });
-    }
     // The cache read/write selector vocabulary: a workbook slices by contained sheet
-    // kinds; the per-sheet documents slice by their own (a storyboard is a dashboard).
-    const selector = artifactKind === 'workbook' ? 'worksheet/dashboard' : artifactKind;
+    // kinds; per-sheet documents slice by their own (a storyboard is a dashboard), while
+    // a datasource document has no selector.
+    const selector =
+      kind === 'datasource'
+        ? null
+        : artifactKind === 'workbook'
+          ? 'worksheet/dashboard'
+          : artifactKind;
     return new Ok({
       message: buildInlineCapFileMessage({
         kind: artifactKind,
         label,
+        documentNoun: kind === 'datasource' ? DOC_NOUN[kind] : undefined,
+        cacheSelector: selector,
         bytes,
         capBytes,
         xml,
@@ -120,9 +109,13 @@ export function finishXmlRead<K extends string>({
       }),
       file: cacheFile,
       instructions:
-        `This ${kind} exceeds the inline cap. Use the cache read tool (with a ${selector} ` +
-        'selector or startByte/endByte to read a slice), the cache write tool (same selector to ' +
-        `splice edits back), then call ${applyTool} with ${pathParam} set to this file path.`,
+        kind === 'datasource'
+          ? 'Use the cache read tool with startByte/endByte when a slice is needed. Edit the ' +
+            'cached datasource document, use the cache write tool without a worksheet/dashboard ' +
+            `selector, then call ${applyTool} with ${pathParam} set to this file path.`
+          : `This ${kind} exceeds the inline cap. Use the cache read tool (with a ${selector} ` +
+            'selector or startByte/endByte to read a slice), the cache write tool (same selector to ' +
+            `splice edits back), then call ${applyTool} with ${pathParam} set to this file path.`,
     });
   }
 

@@ -406,7 +406,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.8). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.10). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -419,6 +419,7 @@ export const PROBLEM_CODES = [
   'missing-payload-version',
   'payload-version-unsupported',
   'not-found',
+  'datasource-not-found',
   'sheet-not-found',
   'logical-table-not-found',
   'operation-not-found',

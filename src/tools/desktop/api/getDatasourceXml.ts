@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { redactDatasourceCredentials } from '../../../desktop/limits/datasourceCredentialRedaction.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactNameParam, sessionParam, xmlModeParam } from '../params.js';
@@ -66,7 +67,7 @@ export const getGetDatasourceXmlTool = (
                 applyTool: 'apply-datasource',
                 pathParam: 'datasourceFile',
                 cacheName: resolved.name,
-                xml: document.value.xml,
+                xml: redactDatasourceCredentials(document.value.xml),
                 mode,
                 capBytes: extra.config.inlineXmlMaxBytes,
                 resolvedSession,

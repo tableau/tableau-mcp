@@ -146,25 +146,41 @@ describe('getGetDatasourceXmlTool', () => {
     },
   );
 
-  it('returns a small datasource document inline', async () => {
-    const xml = '<datasource name="Sales"><column name="[Sales]"/></datasource>';
+  it('returns a small datasource document inline without credential values', async () => {
+    const xml =
+      '<datasource name="Sales"><connection oauth-access-token="inline-secret" ' +
+      'url="https://example.invalid?access_token=embedded-inline-secret"/>' +
+      '<column name="[Sales]"/></datasource>';
     const { result } = await invoke({ datasourceName: 'Sales', mode: 'inline', xml });
 
     expect(result.isError).toBe(false);
-    expect(resultBody(result)).toMatchObject({ datasourceXml: xml });
-    expect(resultBody(result).message).toContain('returned inline');
+    const body = resultBody(result);
+    expect(body.datasourceXml).toBe(
+      '<datasource name="Sales"><connection oauth-access-token="" url=""/>' +
+        '<column name="[Sales]"/></datasource>',
+    );
+    expect(resultText(result)).not.toContain('inline-secret');
+    expect(resultText(result)).not.toContain('embedded-inline-secret');
+    expect(body.message).toContain('returned inline');
   });
 
-  it('writes the exact document and fingerprint sidecar in requested file mode', async () => {
+  it('redacts credentials before writing the document and fingerprint sidecar', async () => {
     const xml =
       '<datasource name="federated.sales" caption="Sales">' +
-      '<connection password="must-not-appear"/><column/><relation/>' +
+      '<connection password="must-not-appear" oauth-refresh-token="also-secret" ' +
+      'connection-string="Server=example.invalid;Password=embedded-cache-secret"/>' +
+      '<column/><relation/>' +
+      '</datasource>';
+    const redactedXml =
+      '<datasource name="federated.sales" caption="Sales">' +
+      '<connection password="" oauth-refresh-token="" connection-string=""/>' +
+      '<column/><relation/>' +
       '</datasource>';
     const { result } = await invoke({ datasourceName: 'Sales', mode: 'file', xml });
     const body = resultBody(result);
     invariant(typeof body.file === 'string');
 
-    expect(readFileSync(body.file, 'utf-8')).toBe(xml);
+    expect(readFileSync(body.file, 'utf-8')).toBe(redactedXml);
     const sidecar = JSON.parse(readFileSync(sidecarPath(body.file), 'utf-8')) as Record<
       string,
       unknown
@@ -173,11 +189,13 @@ describe('getGetDatasourceXmlTool', () => {
       session_id: '123',
       pid: 123,
       instanceId: 'instance-123',
-      source_sha256: sourceSha256(xml),
+      source_sha256: sourceSha256(redactedXml),
     });
     expect(body.message).toContain('datasource name: federated.sales');
     expect(body.message).toContain('connections: 1');
     expect(body.message).not.toContain('must-not-appear');
+    expect(body.message).not.toContain('also-secret');
+    expect(readFileSync(body.file, 'utf-8')).not.toContain('embedded-cache-secret');
     expect(body.instructions).toContain('datasourceFile');
   });
 

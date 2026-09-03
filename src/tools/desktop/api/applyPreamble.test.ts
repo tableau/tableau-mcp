@@ -46,15 +46,14 @@ describe('runApplyPreamble secure contained cache read', () => {
 
   function run(
     file: string,
-    secureContainedCacheRead?: boolean,
+    kind: 'workbook' | 'worksheet' | 'dashboard' | 'storyboard' | 'datasource' = 'datasource',
   ): ReturnType<typeof runApplyPreamble> {
     return runApplyPreamble({
-      kind: 'datasource',
+      kind,
       file,
       session: '7',
-      emptyPathGuidance: 'Read the datasource document first.',
+      emptyPathGuidance: `Read the ${kind} document first.`,
       notFoundGuidance: 'Provide its cached path.',
-      secureContainedCacheRead,
     });
   }
 
@@ -76,7 +75,7 @@ describe('runApplyPreamble secure contained cache read', () => {
     writeFileSync(file, xml);
     writeFileSync(sidecarPath(file), matchingSidecar(sourceHash));
 
-    const result = run(file, true);
+    const result = run(file);
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({ xml, resolvedSession: '7', sourceHash });
@@ -90,12 +89,12 @@ describe('runApplyPreamble secure contained cache read', () => {
 
     const finalSymlink = join(directory, 'final.xml');
     symlinkSync(outsideFile, finalSymlink);
-    const finalResult = run(finalSymlink, true);
+    const finalResult = run(finalSymlink);
     expect(finalResult.isErr()).toBe(true);
     expect(finalResult.unwrapErr().type).toBe('args-validation');
 
     symlinkSync(outside, join(directory, 'linked'));
-    const intermediateResult = run(join(directory, 'linked', 'outside.xml'), true);
+    const intermediateResult = run(join(directory, 'linked', 'outside.xml'));
     expect(intermediateResult.isErr()).toBe(true);
     expect(intermediateResult.unwrapErr().type).toBe('args-validation');
   });
@@ -105,11 +104,11 @@ describe('runApplyPreamble secure contained cache read', () => {
     const outsideFile = join(outside, 'outside.xml');
     writeFileSync(outsideFile, '<datasource/>');
 
-    const outsideResult = run(outsideFile, true);
+    const outsideResult = run(outsideFile);
     expect(outsideResult.isErr()).toBe(true);
     expect(outsideResult.unwrapErr().type).toBe('args-validation');
 
-    const missingResult = run(join(cacheDirectory('missing'), 'missing.xml'), true);
+    const missingResult = run(join(cacheDirectory('missing'), 'missing.xml'));
     expect(missingResult.isErr()).toBe(true);
     expect(missingResult.unwrapErr().type).toBe('workbook-not-found');
   });
@@ -118,7 +117,7 @@ describe('runApplyPreamble secure contained cache read', () => {
     const file = join(cacheDirectory('missing-sidecar'), 'datasource.xml');
     writeFileSync(file, '<datasource/>');
 
-    const result = run(file, true);
+    const result = run(file);
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
@@ -133,7 +132,7 @@ describe('runApplyPreamble secure contained cache read', () => {
     writeFileSync(file, '<datasource/>');
     writeFileSync(sidecarPath(file), 'not json');
 
-    const result = run(file, true);
+    const result = run(file);
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
@@ -152,7 +151,7 @@ describe('runApplyPreamble secure contained cache read', () => {
     writeFileSync(outsideSidecar, matchingSidecar('c'.repeat(64)));
     symlinkSync(outsideSidecar, sidecarPath(file));
 
-    const result = run(file, true);
+    const result = run(file);
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
@@ -175,23 +174,23 @@ describe('runApplyPreamble secure contained cache read', () => {
       }),
     );
 
-    const result = run(file, true);
+    const result = run(file);
 
     expect(result.isErr()).toBe(true);
     expect(result.unwrapErr().type).toBe('cache-session-mismatch');
     expect(result.unwrapErr().message).toContain('get-datasource-xml');
   });
 
-  it.each([undefined, false])(
-    'preserves legacy path behavior when secureContainedCacheRead is %s',
-    (secureContainedCacheRead) => {
-      const file = join(outsideDirectory('legacy'), 'datasource.xml');
-      writeFileSync(file, '<datasource legacy="true"/>');
+  it.each(['workbook', 'worksheet', 'dashboard', 'storyboard', 'datasource'] as const)(
+    'rejects an outside-cache path for the %s apply preamble',
+    (kind) => {
+      const file = join(outsideDirectory(`all-kinds-${kind}`), `${kind}.xml`);
+      writeFileSync(file, `<${kind}/>`);
 
-      const result = run(file, secureContainedCacheRead);
+      const result = run(file, kind);
 
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().xml).toBe('<datasource legacy="true"/>');
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('args-validation');
     },
   );
 });
