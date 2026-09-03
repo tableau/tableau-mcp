@@ -1,54 +1,59 @@
 name: Auto Version Bump
 
-  on:
-    push:
-      branches:
-        - main
+on:
+  push:
+    branches:
+      - main
 
-  permissions:
-    contents: write
+permissions:
+  contents: write
 
-  jobs:
-    bump-version:
-      if: "!contains(github.event.head_commit.message, 'chore: bump version')"
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
-            token: ${{ secrets.GITHUB_TOKEN }}
+jobs:
+  bump-version:
+    if: "!contains(github.event.head_commit.message, 'chore: bump version')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-        - name: Determine bump type
-          id: bump
-          env:
-            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          run: |
-            SUBJECT=$(git log -1 --format=%s)
-            PR_NUMBER=$(echo "$SUBJECT" | grep -oP '\(#\K[0-9]+(?=\)$)' || true)
+      - name: Determine bump type
+        id: bump
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SUBJECT=$(git log -1 --format=%s)
+          PR_NUMBER=$(echo "$SUBJECT" | grep -oP '\(#\K[0-9]+(?=\)$)' || true)
 
-            BUMP="patch"
-            if [ -n "$PR_NUMBER" ]; then
-              BODY=$(gh pr view "$PR_NUMBER" --json body -q .body)
-              if echo "$BODY" | grep -qiE '^\s*-\s*\[[xX]\]\s*Major'; then
-                BUMP="major"
-              elif echo "$BODY" | grep -qiE '^\s*-\s*\[[xX]\]\s*Minor'; then
-                BUMP="minor"
-              fi
+          BUMP="patch"
+          if [ -n "$PR_NUMBER" ]; then
+            BODY=$(gh pr view "$PR_NUMBER" --json body -q .body)
+            if echo "$BODY" | grep -qiE '^\s*-\s*\[[xX]\]\s*Major'; then
+              BUMP="major"
+            elif echo "$BODY" | grep -qiE '^\s*-\s*\[[xX]\]\s*Minor'; then
+              BUMP="minor"
             fi
+          fi
 
-            echo "Resolved bump type: $BUMP (PR #$PR_NUMBER)"
-            echo "type=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "Resolved bump type: $BUMP (PR #$PR_NUMBER)"
+          echo "type=$BUMP" >> "$GITHUB_OUTPUT"
 
-        - name: Bump version
-          run: npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
+      - name: Bump version
+        run: npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
 
-        - name: Commit, tag, and push
-          run: |
-            VERSION=$(node -p "require('./package.json').version")
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add package.json package-lock.json
-            git commit -m "chore: bump version to $VERSION [skip ci]"
+      - name: Commit, tag, and push
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to $VERSION [skip ci]"
+          git push origin main
+
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists, skipping tag creation"
+          else
             git tag "v$VERSION"
-            git push origin main
             git push origin "v$VERSION"
+          fi

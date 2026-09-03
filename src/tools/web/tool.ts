@@ -33,6 +33,8 @@ export type AppDetails = {
   name: string;
   resourceUri: string;
   htmlPath: string;
+  // Skip the plain-tool fallback entirely when the client can't render the app.
+  hideWhenUnsupported?: boolean;
 };
 
 /**
