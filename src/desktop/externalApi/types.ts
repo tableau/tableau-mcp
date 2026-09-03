@@ -20,6 +20,8 @@ export const EXTERNAL_API_ROUTES = {
   workbookDashboards: '/v0/workbook/dashboards',
   workbookDashboardsNew: '/v0/workbook/dashboards:new',
   workbookDatasources: '/v0/workbook/datasources',
+  workbookDatasource: '/v0/workbook/datasources/{id}',
+  workbookDatasourceDocument: '/v0/workbook/datasources/{id}/document',
   workbookDocument: '/v0/workbook/document',
   workbookDocumentValidate: '/v0/workbook/document:validate',
   workbookStoryboards: '/v0/workbook/storyboards',
@@ -179,6 +181,27 @@ export function dashboardDocumentRoute(dashboardId: string): string {
 
 export function storyboardDocumentRoute(storyboardId: string): string {
   return `${storyboardRoute(storyboardId)}/document`;
+}
+
+// Workbook datasource inventory ids are already URL-encoded. Decode the inventory value once,
+// then encode it once for the outbound segment so encoded delimiters stay inside that segment
+// without being double-encoded.
+function canonicalDatasourceSegment(datasourceId: string): string {
+  return encodeURIComponent(decodeURIComponent(datasourceId));
+}
+
+export function workbookDatasourceRoute(datasourceId: string): string {
+  return EXTERNAL_API_ROUTES.workbookDatasource.replace(
+    '{id}',
+    canonicalDatasourceSegment(datasourceId),
+  );
+}
+
+export function workbookDatasourceDocumentRoute(datasourceId: string): string {
+  return EXTERNAL_API_ROUTES.workbookDatasourceDocument.replace(
+    '{id}',
+    canonicalDatasourceSegment(datasourceId),
+  );
 }
 
 export function worksheetSummaryDataRoute(
@@ -383,7 +406,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.8). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.10). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -396,6 +419,7 @@ export const PROBLEM_CODES = [
   'missing-payload-version',
   'payload-version-unsupported',
   'not-found',
+  'datasource-not-found',
   'sheet-not-found',
   'logical-table-not-found',
   'operation-not-found',

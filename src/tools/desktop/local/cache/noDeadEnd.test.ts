@@ -1,10 +1,12 @@
 import { Ok } from 'ts-results-es';
 
+import * as cachePathModule from '../../../../desktop/cachePath.js';
 import * as getWorkbookXmlCmd from '../../../../desktop/wrappers/getWorkbookXml.js';
 import * as loadWorkbookXmlCmd from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { mockContainedCacheReadFromFs } from '../../api/applyPreamble.testUtils.js';
 import { getApplyWorkbookTool } from '../../api/applyWorkbook.js';
 import { getGetWorkbookXmlTool } from '../../api/getWorkbookXml.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
@@ -16,6 +18,10 @@ import { getWriteCachedXmlTool } from './writeCachedXml.js';
 // next. This models a client with NO local filesystem access — the whole edit loop runs
 // through the server's own tools (get -> slice-read -> targeted write -> apply).
 vi.mock('fs');
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof cachePathModule>()),
+  readContainedCacheTextFile: vi.fn(),
+}));
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
 
@@ -49,6 +55,7 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
     vi.mocked(writeFileSync).mockImplementation((p, data) => {
       store.set(String(p), String(data));
     });
+    mockContainedCacheReadFromFs();
   });
 
   it('supports get(capped) -> slice-read -> targeted write -> apply(file) with only server tools', async () => {

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as cachePathModule from '../../../desktop/cachePath.js';
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as loadDashboardXmlModule from '../../../desktop/wrappers/loadDashboardXml.js';
 import { DesktopCommandExecutionError, FileReadError } from '../../../errors/mcpToolError.js';
@@ -11,9 +12,14 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { mockContainedCacheReadFromFs } from './applyPreamble.testUtils.js';
 import { getApplyStoryboardTool } from './applyStoryboard.js';
 
 vi.mock('../../../desktop/wrappers/loadDashboardXml.js');
+vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof cachePathModule>()),
+  readContainedCacheTextFile: vi.fn(),
+}));
 vi.mock('fs');
 
 describe('applyStoryboardTool', () => {
@@ -33,6 +39,7 @@ describe('applyStoryboardTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockContainedCacheReadFromFs();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -89,7 +96,7 @@ describe('applyStoryboardTool', () => {
     const mockXml = '<dashboard name="QBR Story" type="storyboard"><zones></zones></dashboard>';
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
-    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecarInput').mockReturnValue({
       ok: true,
       sourceHash: 'c'.repeat(64),
     });
@@ -111,7 +118,7 @@ describe('applyStoryboardTool', () => {
     vi.mocked(readFileSync).mockReturnValue(
       '<dashboard name="QBR Story" type="storyboard"></dashboard>',
     );
-    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecarInput').mockReturnValue({
       ok: false,
       message: 'Cache produced by a different Desktop session — re-read in the current session.',
     });
@@ -130,6 +137,7 @@ describe('applyStoryboardTool', () => {
       '/path/to/storyboard.xml',
       expect.any(String),
       'storyboard',
+      { type: 'missing' },
     );
     sidecarSpy.mockRestore();
   });

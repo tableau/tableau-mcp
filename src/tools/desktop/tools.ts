@@ -3,6 +3,7 @@ import { getAddDashboardTool } from './api/addDashboard.js';
 import { getAddStoryboardTool } from './api/addStoryboard.js';
 import { getAddWorksheetTool } from './api/addWorksheet.js';
 import { getApplyDashboardTool } from './api/applyDashboard.js';
+import { getApplyDatasourceTool } from './api/applyDatasource.js';
 import { getApplyStoryboardTool } from './api/applyStoryboard.js';
 import { getApplyWorkbookTool } from './api/applyWorkbook.js';
 import { getApplyWorksheetTool } from './api/applyWorksheet.js';
@@ -15,6 +16,8 @@ import { getApiRootTool } from './api/getApiRoot.js';
 import { getAppInfoTool } from './api/getAppInfo.js';
 import { getDashboardInfoTool } from './api/getDashboardInfo.js';
 import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
+import { getDatasourceInfoTool } from './api/getDatasourceInfo.js';
+import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getHealthTool } from './api/getHealth.js';
 import { getSiteInfoTool } from './api/getSiteInfo.js';
 import { getStoryboardInfoTool } from './api/getStoryboardInfo.js';
@@ -119,6 +122,9 @@ export const desktopToolFactories = [
   getRefineWorksheetTool,
   getGetDashboardXmlTool,
   getApplyDashboardTool,
+  getDatasourceInfoTool,
+  getGetDatasourceXmlTool,
+  getApplyDatasourceTool,
   getApplyDashboardWithViewpointsTool,
   getBuildAndApplyDashboardTool,
   getListAvailableFieldsTool,
