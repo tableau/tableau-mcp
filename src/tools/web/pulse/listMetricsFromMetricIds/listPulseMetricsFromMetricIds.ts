@@ -16,6 +16,7 @@ export const getListPulseMetricsFromMetricIdsTool = (
   const listPulseMetricsFromMetricIdsTool = new WebTool({
     server,
     name: 'list-pulse-metrics-from-metric-ids',
+    registrationConditions: ['RequiresPulse'],
     description: `
 Retrieves a list of published Pulse Metrics from a list of metric IDs using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metrics for a list of metric IDs on the current site.
 
