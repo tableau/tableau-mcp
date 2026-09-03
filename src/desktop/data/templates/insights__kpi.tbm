@@ -33,7 +33,7 @@
         <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
         <column-instance column='[Quantity]' derivation='Sum' name='[sum:Quantity:qk]' pivot='key' type='quantitative' />
         <column-instance column='[Discount]' derivation='Sum' name='[sum:Discount:qk]' pivot='key' type='quantitative' />
-        <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Region]' derivation='Attribute' name='[attr:Region:nk]' pivot='key' type='nominal' />
       </datasource-dependencies>
       <aggregation value='true' />
     </view>
@@ -47,7 +47,7 @@
         <format attr='text-format' field='[Sample - Superstore].[sum:Discount:qk]' value='p+0.0%;-0.0%;0.0%' />
       </style-rule>
       <style-rule element='label'>
-        <format attr='display' field='[Sample - Superstore].[none:Region:nk]' value='false' />
+        <format attr='display' field='[Sample - Superstore].[attr:Region:nk]' value='false' />
       </style-rule>
       <style-rule element='table-div'>
         <format attr='stroke-size' scope='cols' value='0' />
@@ -62,9 +62,10 @@
         <mark class='Text' />
         <mark-sizing mark-sizing-setting='marks-scaling-off' />
         <encodings>
+          <tooltip column='[Sample - Superstore].[attr:Region:nk]' />
           <text column='[Sample - Superstore].[sum:Profit:qk]' />
-          <text column='[Sample - Superstore].[sum:Sales:qk]' />
-          <text column='[Sample - Superstore].[sum:Quantity:qk]' />
+          <tooltip column='[Sample - Superstore].[sum:Sales:qk]' />
+          <tooltip column='[Sample - Superstore].[sum:Quantity:qk]' />
           <text column='[Sample - Superstore].[sum:Discount:qk]' />
         </encodings>
         <customized-tooltip>
@@ -78,8 +79,7 @@
             <run bold='true' fontcolor='#000000'>&lt;[Sample - Superstore].[sum:Sales:qk]&gt;</run>
             <run>Æ&#10;</run>
             <run fontcolor='#898989'>CHANGE FROM PREVIOUS PERIOD | </run>
-            <run bold='true' fontcolor='{{CHANGE_COLOR}}'>{{DIRECTION_SYMBOL}} </run>
-            <run bold='true' fontcolor='#000000'>&lt;[Sample - Superstore].[sum:Discount:qk]&gt;</run>
+            <run bold='true' fontcolor='{{CHANGE_COLOR}}'>&lt;[Sample - Superstore].[sum:Discount:qk]&gt;</run>
           </formatted-text>
         </customized-tooltip>
         <customized-label>
@@ -88,9 +88,7 @@
             <run>Æ&#10;</run>
             <run bold='true' fontname='Tableau Medium' fontsize='24'>&lt;[Sample - Superstore].[sum:Profit:qk]&gt;</run>
             <run>Æ&#10;</run>
-            <run fontcolor='{{CHANGE_COLOR}}'>{{DIRECTION_SYMBOL}}</run>
-            <run>Æ </run>
-            <run bold='true'>&lt;[Sample - Superstore].[sum:Discount:qk]&gt;</run>
+            <run bold='true' fontcolor='{{CHANGE_COLOR}}'>&lt;[Sample - Superstore].[sum:Discount:qk]&gt;</run>
             <run>Æ&#10;</run>
           </formatted-text>
         </customized-label>
@@ -107,6 +105,6 @@
       </pane>
     </panes>
     <rows />
-    <cols>[Sample - Superstore].[none:Region:nk]</cols>
+    <cols />
   </table>
 </bookmark>

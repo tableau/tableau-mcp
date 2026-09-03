@@ -38,7 +38,7 @@ import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
-import { TableauDesktopToolContext } from '../../toolContext.js';
+import { TableauDesktopRequestHandlerExtra, TableauDesktopToolContext } from '../../toolContext.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { appliedSheetSignature } from './appliedSheetSignature.js';
 import { getBindTemplateTool } from './bindTemplate.js';
@@ -3300,6 +3300,8 @@ async function getToolResult({
   allowSkipValidation,
   customSignal,
   getExecutor,
+  progressToken,
+  sendNotification,
 }: {
   // Optional: omitted exercises session-default-when-unique resolution.
   session?: string;
@@ -3320,6 +3322,8 @@ async function getToolResult({
   allowSkipValidation?: boolean;
   customSignal?: AbortSignal;
   getExecutor?: TableauDesktopToolContext['getExecutor'];
+  progressToken?: string | number;
+  sendNotification?: TableauDesktopRequestHandlerExtra['sendNotification'];
 }): Promise<CallToolResult> {
   const tool = getBindTemplateTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -3334,6 +3338,8 @@ async function getToolResult({
       ...(allowSkipValidation !== undefined ? { allowSkipValidation } : {}),
     },
     getExecutor: mockExecutor,
+    ...(progressToken !== undefined ? { _meta: { progressToken } } : {}),
+    ...(sendNotification ? { sendNotification } : {}),
     ...(customSignal && { signal: customSignal }),
   };
 
@@ -5206,6 +5212,52 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(appliedXml).toMatch(new RegExp(`user:tableau-agent-idempotency-key=["']${key}["']`));
   });
 
+  it('returns a matching deterministic worksheet without applying after Desktop strips its identity stamp', async () => {
+    const key = 'c'.repeat(64);
+    const existingWorksheet =
+      "<worksheet name='Sales by Region'><table><view>" +
+      "<datasource-dependencies datasource='Orders'>" +
+      "<column datatype='string' name='[Region]' role='dimension' type='nominal' />" +
+      "<column datatype='real' name='[Sales]' role='measure' type='quantitative' />" +
+      '</datasource-dependencies></view></table></worksheet>';
+    const existingWorkbook = CALC_BASE_XML.replace(
+      "<worksheet name='Sheet 1' />",
+      existingWorksheet,
+    );
+    const { getExecutor } = setupAutoApplyMocks({ workbookReads: [existingWorkbook] });
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('in-dashboard');
+    vi.mocked(workbookHasSheetNamed).mockImplementation((_xml, name) => name === 'Sales by Region');
+    vi.mocked(buildInjectedWorkbookXml).mockImplementation(({ title }) => ({
+      ok: true,
+      xml: existingWorkbook.replace(
+        existingWorksheet,
+        `<worksheet name='${title}'><table /></worksheet>`,
+      ),
+    }));
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Sales by Region',
+      auto_apply: true,
+      skip_validation: true,
+      proposal: {
+        ...sampleProposal,
+        template_parameters: { __TABLEAU_AGENT_IDEMPOTENCY_KEY__: key },
+      },
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      applied: false,
+      reused: true,
+      sheet_name: 'Sales by Region',
+    });
+    expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
+  });
+
   it('reuses the hidden deterministic identity while keeping the visible title clean', async () => {
     const key = 'b'.repeat(64);
     const existingWorkbook = ensureUserNamespace(
@@ -5242,10 +5294,12 @@ describe('bindTemplateTool auto_apply gate', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text).sheet_name).toBe('Sales by Region');
-    expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Sales by Region' }),
-    );
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      applied: false,
+      reused: true,
+      sheet_name: 'Sales by Region',
+    });
+    expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
   });
 
   it('keeps untrusted Insights KPI calc application on the ordinary two-apply path', async () => {
@@ -7152,6 +7206,62 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     vi.clearAllMocks();
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
     vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+  });
+
+  it('reports generic preparation, apply, and verification progress at the real boundaries', async () => {
+    const mocks = setupAutoApplyMocks({ inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML } });
+    const sendNotification = vi.fn(
+      async (_notification: Parameters<TableauDesktopRequestHandlerExtra['sendNotification']>[0]) =>
+        undefined,
+    );
+
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: readbackExecutor(mocks),
+      progressToken: 'bind-1',
+      sendNotification,
+    });
+
+    expect(sendNotification.mock.calls.map(([notification]) => notification)).toEqual([
+      {
+        method: 'notifications/progress',
+        params: {
+          progressToken: 'bind-1',
+          progress: 1,
+          total: 3,
+          message: 'Preparing template',
+        },
+      },
+      {
+        method: 'notifications/progress',
+        params: {
+          progressToken: 'bind-1',
+          progress: 2,
+          total: 3,
+          message: 'Applying workbook changes',
+        },
+      },
+      {
+        method: 'notifications/progress',
+        params: {
+          progressToken: 'bind-1',
+          progress: 3,
+          total: 3,
+          message: 'Verifying workbook changes',
+        },
+      },
+    ]);
+    expect(sendNotification.mock.invocationCallOrder[1]).toBeLessThan(
+      mocks.applyWorkbookDocument.mock.invocationCallOrder[0],
+    );
+    expect(sendNotification.mock.invocationCallOrder[2]).toBeGreaterThan(
+      mocks.applyWorkbookDocument.mock.invocationCallOrder[0],
+    );
+    expect(sendNotification.mock.invocationCallOrder[2]).toBeLessThan(
+      vi.mocked(getWorkbookXmlModule.getWorkbookXml).mock.invocationCallOrder.at(-1)!,
+    );
   });
 
   it('a clean readback earns a verified host line', async () => {

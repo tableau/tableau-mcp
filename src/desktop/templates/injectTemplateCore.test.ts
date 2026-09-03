@@ -97,6 +97,15 @@ describe('buildInjectedWorkbookXml — caller-authored KPI formatting', () => {
     expect(result.xml).toContain("Prior year's Q1 | ");
     expect(result.xml).not.toContain("PREVIOUS PERIOD | Prior year's Q1 | ");
     expect(result.xml).toContain('&lt;[Analytics].[usr:Comparison:qk]&gt;');
+    expect(result.xml).toContain('<text column="[Analytics].[usr:Target:qk]">');
+    expect(result.xml).toContain('<text column="[Analytics].[usr:Relative Change:qk]">');
+    expect(result.xml).toContain('<tooltip column="[Analytics].[usr:Comparison:qk]">');
+    expect(result.xml).toContain('<tooltip column="[Analytics].[usr:Absolute Change:qk]">');
+    expect(result.xml).not.toContain('<text column="[Analytics].[usr:Comparison:qk]">');
+    expect(result.xml).not.toContain('<text column="[Analytics].[usr:Absolute Change:qk]">');
+    expect(result.xml).toContain(
+      '<run bold="true" fontcolor="#208591">&lt;[Analytics].[usr:Relative Change:qk]&gt;</run>',
+    );
   });
 });
 

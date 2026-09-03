@@ -91,6 +91,7 @@ import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
 } from '../../../../errors/mcpToolError.js';
+import { log } from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import {
@@ -1640,11 +1641,17 @@ function deterministicWorksheetTitle(
   workbookXml: string,
   requestedTitle: string,
   idempotencyKey: string | undefined,
+  bindingFields: string[] = [],
 ): string {
   if (!idempotencyKey) {
     return collisionFreeWorksheetTitle(workbookXml, requestedTitle);
   }
-  const existingTitle = worksheetTitleForIdempotencyKey(workbookXml, idempotencyKey);
+  const existingTitle = existingDeterministicWorksheetTitle(
+    workbookXml,
+    requestedTitle,
+    idempotencyKey,
+    bindingFields,
+  );
   if (
     existingTitle &&
     classifyWorksheetReplaceTarget(workbookXml, existingTitle) === 'replaceable'
@@ -1654,6 +1661,56 @@ function deterministicWorksheetTitle(
   // A clean visible title is not an identity. Never overwrite an unrelated loose
   // worksheet merely because it has the same label; choose a normal Tableau suffix.
   return collisionFreeWorksheetTitle(workbookXml, requestedTitle, false);
+}
+
+function existingDeterministicWorksheetTitle(
+  workbookXml: string,
+  requestedTitle: string,
+  idempotencyKey: string,
+  bindingFields: string[],
+): string | undefined {
+  const stampedTitle = worksheetTitleForIdempotencyKey(workbookXml, idempotencyKey);
+  if (stampedTitle && workbookHasSheetNamed(workbookXml, stampedTitle)) {
+    return stampedTitle;
+  }
+  // Tableau currently strips the custom worksheet identity attribute on live
+  // workbook readback. Recover that identity without trusting the visible title
+  // alone: the requested sheet must also contain every deterministic binding.
+  return workbookHasSheetNamed(workbookXml, requestedTitle) &&
+    worksheetContainsBindingFields(workbookXml, requestedTitle, bindingFields)
+    ? requestedTitle
+    : undefined;
+}
+
+function worksheetContainsBindingFields(
+  workbookXml: string,
+  worksheetTitle: string,
+  bindingFields: string[],
+): boolean {
+  if (bindingFields.length === 0) return false;
+  let worksheetXml: string | null;
+  try {
+    worksheetXml = extractSheetXml(workbookXml, worksheetTitle);
+  } catch {
+    return false;
+  }
+  if (!worksheetXml) return false;
+
+  const identities = new Set<string>();
+  for (const match of worksheetXml.matchAll(/<column\b[^>]*>/g)) {
+    const tag = match[0];
+    for (const attribute of ['caption', 'name']) {
+      const value = tag.match(new RegExp(`\\b${attribute}=(['"])(.*?)\\1`))?.[2];
+      if (value === undefined) continue;
+      const decoded = decodeXmlEntities(value);
+      identities.add(decoded);
+      identities.add(decoded.replace(/^\[|\]$/g, ''));
+    }
+  }
+  return bindingFields.every((field) => {
+    const decoded = decodeXmlEntities(field);
+    return identities.has(decoded) || identities.has(decoded.replace(/^\[|\]$/g, ''));
+  });
 }
 
 function stampWorksheetIdempotencyKey(
@@ -2231,6 +2288,8 @@ async function performAutoApply({
   atomicCalcs,
   trustedDeterministicApply,
   idempotencyKey,
+  deterministicBindingFields,
+  reportProgress,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -2249,6 +2308,8 @@ async function performAutoApply({
   atomicCalcs?: AuthoredCalc[];
   trustedDeterministicApply?: boolean;
   idempotencyKey?: string;
+  deterministicBindingFields?: string[];
+  reportProgress: (progress: 1 | 2 | 3, message: string) => Promise<void>;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
@@ -2272,7 +2333,12 @@ async function performAutoApply({
     const requestedTitle = decodeXmlEntities(args.title);
     literalTitle =
       args.sheet_type === 'worksheet'
-        ? deterministicWorksheetTitle(workbookXml, requestedTitle, idempotencyKey)
+        ? deterministicWorksheetTitle(
+            workbookXml,
+            requestedTitle,
+            idempotencyKey,
+            deterministicBindingFields,
+          )
         : requestedTitle;
     injected = buildInjectedWorkbookXml({
       workbookXml,
@@ -2378,6 +2444,7 @@ async function performAutoApply({
   const injectMs = Date.now() - injectStart;
 
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
+  await reportProgress(2, 'Applying workbook changes');
   const applyStart = Date.now();
   const applyBaselineXml = hostBaselineWorkbookXml ?? workbookXml;
   const applyResult = await loadWorkbookXml({
@@ -2415,6 +2482,7 @@ async function performAutoApply({
   // the document we posted. If it cannot be sliced (or the re-read fails), verification is
   // SKIPPED, not assumed — the receipt then says "unverified" rather than claiming a check
   // that never ran.
+  await reportProgress(3, 'Verifying workbook changes');
   let intendedWorksheetXml: string | null = null;
   try {
     intendedWorksheetXml = extractSheetXml(appliedWorkbookXml, literalTitle);
@@ -2843,6 +2911,38 @@ function hasDivisionOperator(formula: string): boolean {
 
 const title = 'Matching template';
 
+const BIND_TEMPLATE_PROGRESS_TOTAL = 3;
+
+async function reportBindTemplateProgress(
+  extra: TableauDesktopRequestHandlerExtra,
+  progress: 1 | 2 | 3,
+  message: string,
+): Promise<void> {
+  const progressToken = extra._meta?.progressToken;
+  if (progressToken === undefined) return;
+
+  try {
+    await extra.sendNotification({
+      method: 'notifications/progress',
+      params: {
+        progressToken,
+        progress,
+        total: BIND_TEMPLATE_PROGRESS_TOTAL,
+        message,
+      },
+    });
+  } catch (error) {
+    // Progress is presentation-only. A disconnected or older client must never
+    // interrupt template binding or a workbook mutation already in flight.
+    log({
+      level: 'warning',
+      logger: 'tool',
+      message: 'bind-template progress notification failed',
+      data: error,
+    });
+  }
+}
+
 export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const bindTemplateTool = new DesktopTool({
     server,
@@ -2889,6 +2989,10 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           skip_validation,
         },
         callback: async () => {
+          const reportProgress = async (progress: 1 | 2 | 3, message: string): Promise<void> =>
+            await reportBindTemplateProgress(extra, progress, message);
+          await reportProgress(1, 'Preparing template');
+
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
@@ -3379,6 +3483,27 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
           }
 
+          if (target_worksheet === undefined && trustedDeterministicApply && idempotencyKey) {
+            const existingTitle = existingDeterministicWorksheetTitle(
+              workbookXml,
+              decodeXmlEntities(res.args.title),
+              idempotencyKey,
+              proposal?.bindings.map((binding) => binding.field) ?? [],
+            );
+            if (existingTitle !== undefined) {
+              return new Ok(
+                reusedSheetResult(
+                  {
+                    sheetName: existingTitle,
+                    template: res.args.template_name,
+                    ts: new Date().toISOString(),
+                  },
+                  authoredCalcCaptions,
+                ),
+              );
+            }
+          }
+
           const autoApplyResult = await performAutoApply({
             res,
             base,
@@ -3396,6 +3521,10 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             atomicCalcs,
             trustedDeterministicApply,
             idempotencyKey,
+            deterministicBindingFields: trustedDeterministicApply
+              ? proposal?.bindings.map((binding) => binding.field)
+              : undefined,
+            reportProgress,
             // Honor skip_validation only for a server-trusted caller (config gate set by the
             // deterministic spawner). An untrusted LLM turn that passes the flag gets full
             // validation, not a bypass — the param alone cannot skip the preflight.
