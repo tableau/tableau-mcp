@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.9",
+    "version": "0.2.11",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -777,7 +777,7 @@
                 }
               },
               "X-Tableau-XSD-Payload-Version": {
-                "description": "Payload (file-format) version the document was served as.",
+                "description": "Customer-facing Tableau product version the document was served as. On the async poll the JSON Operation envelope is returned instead of the XML, so a polled document carries this value as result.payloadVersion rather than this header.",
                 "schema": {
                   "type": "string"
                 }
@@ -1355,6 +1355,231 @@
         }
       }
     },
+    "/v0/workbook/datasources/{id}": {
+      "get": {
+        "summary": "Get a workbook datasource",
+        "description": "Returns metadata for a single datasource by its URL-encoded inventory id.",
+        "operationId": "getWorkbookDatasource",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns metadata for a single datasource by its URL-encoded inventory id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasourceItem"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/datasources/{id}/document": {
+      "get": {
+        "summary": "Get a datasource document",
+        "description": "Returns the datasource's local workbook representation as a Tableau XML subtree.",
+        "operationId": "getDatasourceDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the datasource's local workbook representation as a Tableau XML subtree.",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-XSD-Payload-Version": {
+                "description": "Customer-facing Tableau product version the document was served as. On the async poll the JSON Operation envelope is returned instead of the XML, so a polled document carries this value as result.payloadVersion rather than this header.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "summary": "Apply a datasource document",
+        "description": "Replaces one datasource's local workbook representation with the submitted Tableau XML, leaving all other datasources and sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. Malformed or invalid workbook XML is rejected with 422. The payload must contain exactly one datasource whose internal name matches {id}; a mismatch is rejected with 409. The apply is unconditional last-writer-wins and does not publish changes to a server-side datasource.",
+        "operationId": "applyDatasourceDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The datasource's Tableau XML -- either the bare <datasource> element returned by GET .../datasources/{id}/document, or that element inside a <datasources> or <workbook> envelope. The payload must contain exactly one datasource whose internal name matches {id}.",
+          "content": {
+            "application/xml": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "text/xml": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaces one datasource's local workbook representation with the submitted Tableau XML, leaving all other datasources and sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. Malformed or invalid workbook XML is rejected with 422. The payload must contain exactly one datasource whose internal name matches {id}; a mismatch is rejected with 409. The apply is unconditional last-writer-wins and does not publish changes to a server-side datasource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableContent"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/v0/workbook/document": {
       "get": {
         "summary": "Get the workbook document",
@@ -1389,7 +1614,7 @@
                 }
               },
               "X-Tableau-XSD-Payload-Version": {
-                "description": "Payload (file-format) version the document was served as.",
+                "description": "Customer-facing Tableau product version the document was served as. On the async poll the JSON Operation envelope is returned instead of the XML, so a polled document carries this value as result.payloadVersion rather than this header.",
                 "schema": {
                   "type": "string"
                 }
@@ -1703,7 +1928,7 @@
                 }
               },
               "X-Tableau-XSD-Payload-Version": {
-                "description": "Payload (file-format) version the document was served as.",
+                "description": "Customer-facing Tableau product version the document was served as. On the async poll the JSON Operation envelope is returned instead of the XML, so a polled document carries this value as result.payloadVersion rather than this header.",
                 "schema": {
                   "type": "string"
                 }
@@ -2245,7 +2470,7 @@
                 }
               },
               "X-Tableau-XSD-Payload-Version": {
-                "description": "Payload (file-format) version the document was served as.",
+                "description": "Customer-facing Tableau product version the document was served as. On the async poll the JSON Operation envelope is returned instead of the XML, so a polled document carries this value as result.payloadVersion rather than this header.",
                 "schema": {
                   "type": "string"
                 }
@@ -2970,6 +3195,81 @@
         }
       }
     },
+    "/v0/workbook/worksheets/{id}:showMe": {
+      "post": {
+        "summary": "Apply Show Me to a worksheet",
+        "description": "Applies a concrete Show Me visualization type to a worksheet using optional datasource and fully qualified selected-field context.",
+        "operationId": "showMeWorksheet",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShowMeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Applies a concrete Show Me visualization type to a worksheet using optional datasource and fully qualified selected-field context.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/v0/workbook/worksheets/{id}:sort": {
       "post": {
         "summary": "Sort a worksheet",
@@ -3349,6 +3649,46 @@
         }
       }
     },
+    "/v0/workbook:runWorkbookOptimizer": {
+      "post": {
+        "summary": "Run Workbook Optimizer",
+        "description": "Evaluates the open workbook with Workbook Optimizer and returns evaluated suggestions, not analyzer metadata. If the request returns 202 Accepted, poll /v0/operations/{id}; the terminal Operation.result has the same WorkbookOptimizerResult shape as the synchronous 200 response.",
+        "operationId": "runWorkbookOptimizer",
+        "responses": {
+          "200": {
+            "description": "Evaluates the open workbook with Workbook Optimizer and returns evaluated suggestions, not analyzer metadata. If the request returns 202 Accepted, poll /v0/operations/{id}; the terminal Operation.result has the same WorkbookOptimizerResult shape as the synchronous 200 response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookOptimizerResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/v0/workbook:save": {
       "post": {
         "summary": "Save the workbook",
@@ -3479,11 +3819,7 @@
       "Problem": {
         "type": "object",
         "description": "RFC 9457 Problem Details. Structured extension members, such as tableauErrorCode, may appear as additional top-level fields.",
-        "required": [
-          "code",
-          "status",
-          "instance"
-        ],
+        "required": ["code", "status", "instance"],
         "properties": {
           "code": {
             "type": "string",
@@ -3499,6 +3835,7 @@
               "missing-payload-version",
               "payload-version-unsupported",
               "not-found",
+              "datasource-not-found",
               "sheet-not-found",
               "logical-table-not-found",
               "operation-not-found",
@@ -3529,14 +3866,7 @@
       "Operation": {
         "type": "object",
         "description": "The state of a dispatched operation.",
-        "required": [
-          "id",
-          "kind",
-          "state",
-          "createdAt",
-          "updatedAt",
-          "warnings"
-        ],
+        "required": ["id", "kind", "state", "createdAt", "updatedAt", "warnings"],
         "properties": {
           "id": {
             "type": "string"
@@ -3593,11 +3923,7 @@
       "WindowInfo": {
         "type": "object",
         "description": "A visible modal Qt top-level window observed at read time. Whether a client must act on it is conveyed by which array carries it: blockingWindows for a window that needs a human decision, progressWindows for a self-clearing one. The content fields (messageText, informativeText, detailedText, iconLevel, buttons) are best-effort: QMessageBox exposes them precisely, while generic dialogs scrape visible QLabel/QAbstractButton children and may include incidental labels alongside diagnostic text.",
-        "required": [
-          "objectName",
-          "title",
-          "className"
-        ],
+        "required": ["objectName", "title", "className"],
         "properties": {
           "objectName": {
             "type": "string"
@@ -3619,12 +3945,7 @@
           },
           "iconLevel": {
             "type": "string",
-            "x-extensible-enum": [
-              "critical",
-              "warning",
-              "information",
-              "question"
-            ]
+            "x-extensible-enum": ["critical", "warning", "information", "question"]
           },
           "buttons": {
             "type": "array",
@@ -3636,9 +3957,7 @@
       },
       "OperationError": {
         "type": "object",
-        "required": [
-          "code"
-        ],
+        "required": ["code"],
         "properties": {
           "code": {
             "type": "string"
@@ -3651,10 +3970,7 @@
       },
       "OperationWarning": {
         "type": "object",
-        "required": [
-          "code",
-          "message"
-        ],
+        "required": ["code", "message"],
         "properties": {
           "code": {
             "type": "string"
@@ -3686,11 +4002,7 @@
           },
           "type": {
             "type": "string",
-            "x-extensible-enum": [
-              "WORKSHEET",
-              "DASHBOARD",
-              "STORYBOARD"
-            ]
+            "x-extensible-enum": ["WORKSHEET", "DASHBOARD", "STORYBOARD"]
           },
           "hidden": {
             "type": "boolean"
@@ -3699,10 +4011,7 @@
             "type": "boolean"
           },
           "index": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "description": "The sheet's workbook-wide tab position, or null when the sheet is hidden."
           },
           "isAutoUpdatesPaused": {
@@ -3738,11 +4047,7 @@
           },
           "type": {
             "type": "string",
-            "x-extensible-enum": [
-              "WORKSHEET",
-              "DASHBOARD",
-              "STORYBOARD"
-            ]
+            "x-extensible-enum": ["WORKSHEET", "DASHBOARD", "STORYBOARD"]
           },
           "hidden": {
             "type": "boolean"
@@ -3751,10 +4056,7 @@
             "type": "boolean"
           },
           "index": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "description": "The sheet's workbook-wide tab position, or null when the sheet is hidden."
           },
           "isAutoUpdatesPaused": {
@@ -3771,15 +4073,7 @@
       "StoryboardItem": {
         "type": "object",
         "description": "A storyboard in the open workbook.",
-        "required": [
-          "id",
-          "name",
-          "type",
-          "hidden",
-          "isActiveSheet",
-          "index",
-          "storyPointCount"
-        ],
+        "required": ["id", "name", "type", "hidden", "isActiveSheet", "index", "storyPointCount"],
         "properties": {
           "id": {
             "type": "string"
@@ -3789,11 +4083,7 @@
           },
           "type": {
             "type": "string",
-            "x-extensible-enum": [
-              "WORKSHEET",
-              "DASHBOARD",
-              "STORYBOARD"
-            ]
+            "x-extensible-enum": ["WORKSHEET", "DASHBOARD", "STORYBOARD"]
           },
           "hidden": {
             "type": "boolean"
@@ -3802,17 +4092,11 @@
             "type": "boolean"
           },
           "index": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "description": "The sheet's workbook-wide tab position, or null when the sheet is hidden."
           },
           "storyPointCount": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "description": "The number of story points in the storyboard, or null when unavailable."
           }
         }
@@ -3833,10 +4117,7 @@
             "type": "string"
           },
           "location": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "unsavedChanges": {
             "type": "boolean"
@@ -3861,11 +4142,87 @@
           }
         }
       },
+      "WorkbookOptimizerResult": {
+        "type": "object",
+        "description": "Evaluated Workbook Optimizer suggestions for the open workbook.",
+        "additionalProperties": false,
+        "required": ["suggestions"],
+        "properties": {
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbookOptimizerSuggestion"
+            }
+          }
+        }
+      },
+      "WorkbookOptimizerSuggestion": {
+        "type": "object",
+        "description": "The evaluated outcome of one optimizer rule.",
+        "additionalProperties": false,
+        "required": ["ruleId", "title", "description", "status", "affected"],
+        "properties": {
+          "ruleId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PASS", "FAIL", "NEEDS_REVIEW", "IGNORED"]
+          },
+          "affected": {
+            "$ref": "#/components/schemas/WorkbookOptimizerAffected"
+          }
+        }
+      },
+      "WorkbookOptimizerAffected": {
+        "type": "object",
+        "description": "Structured workbook objects affected by an optimizer rule.",
+        "additionalProperties": false,
+        "required": ["count", "items"],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbookOptimizerAffectedItem"
+            }
+          }
+        }
+      },
+      "WorkbookOptimizerAffectedItem": {
+        "type": "object",
+        "description": "A named affected object with an optional value or children.",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbookOptimizerAffectedItem"
+            }
+          }
+        }
+      },
       "WorksheetList": {
         "type": "object",
-        "required": [
-          "worksheets"
-        ],
+        "required": ["worksheets"],
         "properties": {
           "worksheets": {
             "type": "array",
@@ -3877,9 +4234,7 @@
       },
       "DashboardList": {
         "type": "object",
-        "required": [
-          "dashboards"
-        ],
+        "required": ["dashboards"],
         "properties": {
           "dashboards": {
             "type": "array",
@@ -3891,9 +4246,7 @@
       },
       "StoryboardList": {
         "type": "object",
-        "required": [
-          "storyboards"
-        ],
+        "required": ["storyboards"],
         "properties": {
           "storyboards": {
             "type": "array",
@@ -3906,9 +4259,7 @@
       "OperationList": {
         "type": "object",
         "description": "Async operations. List entries omit each operation's `result` and per-operation `blockingWindows`: fetch GET /v0/operations/{id} for an operation's `result`, and read blocking-window state once from the top-level `blockingWindows` here.",
-        "required": [
-          "operations"
-        ],
+        "required": ["operations"],
         "properties": {
           "operations": {
             "type": "array",
@@ -3947,10 +4298,7 @@
             "type": "string"
           },
           "luid": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "name": {
             "type": "string"
@@ -3961,31 +4309,21 @@
           "type": {
             "type": "string",
             "description": "The datasource's backend kind, independent of whether it is an extract (see isExtract).",
-            "x-extensible-enum": [
-              "relational",
-              "cube",
-              "parameters",
-              "federated"
-            ]
+            "x-extensible-enum": ["relational", "cube", "parameters", "federated"]
           },
           "isExtract": {
             "type": "boolean",
             "description": "True if the datasource is currently backed by an extract rather than a live connection."
           },
           "hasDownloadFilePermission": {
-            "type": [
-              "boolean",
-              "null"
-            ],
+            "type": ["boolean", "null"],
             "description": "Whether the current user has server permission to download the published datasource file (the Download/Save a Copy permission). Not whether the data can be queried or extracted. null for a datasource that is not published, where the permission does not apply."
           }
         }
       },
       "DatasourceList": {
         "type": "object",
-        "required": [
-          "datasources"
-        ],
+        "required": ["datasources"],
         "properties": {
           "datasources": {
             "type": "array",
@@ -3998,12 +4336,7 @@
       "SiteWorkbookItem": {
         "type": "object",
         "description": "A workbook published to the connected site.",
-        "required": [
-          "id",
-          "luid",
-          "name",
-          "project"
-        ],
+        "required": ["id", "luid", "name", "project"],
         "properties": {
           "id": {
             "type": "string"
@@ -4021,9 +4354,7 @@
       },
       "SiteWorkbookList": {
         "type": "object",
-        "required": [
-          "workbooks"
-        ],
+        "required": ["workbooks"],
         "properties": {
           "workbooks": {
             "type": "array",
@@ -4036,13 +4367,7 @@
       "SiteDatasourceItem": {
         "type": "object",
         "description": "A datasource published to the connected site.",
-        "required": [
-          "id",
-          "luid",
-          "name",
-          "caption",
-          "project"
-        ],
+        "required": ["id", "luid", "name", "caption", "project"],
         "properties": {
           "id": {
             "type": "string"
@@ -4063,9 +4388,7 @@
       },
       "SiteDatasourceList": {
         "type": "object",
-        "required": [
-          "datasources"
-        ],
+        "required": ["datasources"],
         "properties": {
           "datasources": {
             "type": "array",
@@ -4078,10 +4401,7 @@
       "ImageExport": {
         "type": "object",
         "description": "The result of exporting a sheet as an image.",
-        "required": [
-          "width",
-          "height"
-        ],
+        "required": ["width", "height"],
         "properties": {
           "imageBase64": {
             "type": "string"
@@ -4103,10 +4423,7 @@
       "SummaryData": {
         "type": "object",
         "description": "Tabular worksheet data as columns and rows. Returned by both the summary-data and underlying-data endpoints; the shape is identical for each.",
-        "required": [
-          "columns",
-          "rows"
-        ],
+        "required": ["columns", "rows"],
         "properties": {
           "columns": {
             "type": "array",
@@ -4133,10 +4450,7 @@
       "LogicalTableItem": {
         "type": "object",
         "description": "A logical table available for a worksheet's data.",
-        "required": [
-          "id",
-          "caption"
-        ],
+        "required": ["id", "caption"],
         "properties": {
           "id": {
             "type": "string"
@@ -4148,9 +4462,7 @@
       },
       "LogicalTableList": {
         "type": "object",
-        "required": [
-          "tables"
-        ],
+        "required": ["tables"],
         "properties": {
           "tables": {
             "type": "array",
@@ -4163,10 +4475,7 @@
       "ValidationResult": {
         "type": "object",
         "description": "The outcome of validating a workbook document.",
-        "required": [
-          "isValid",
-          "validationIssues"
-        ],
+        "required": ["isValid", "validationIssues"],
         "properties": {
           "isValid": {
             "type": "boolean"
@@ -4182,9 +4491,7 @@
       "GoToSheetRequest": {
         "type": "object",
         "description": "Selects the sheet to activate.",
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "properties": {
           "id": {
             "type": "string"
@@ -4194,21 +4501,68 @@
       "RenameSheetRequest": {
         "type": "object",
         "description": "The sheet's new name.",
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "properties": {
           "name": {
             "type": "string"
           }
         }
       },
+      "ShowMeRequest": {
+        "type": "object",
+        "description": "The Show Me visualization to apply to a worksheet.",
+        "additionalProperties": false,
+        "required": ["showMeType"],
+        "properties": {
+          "showMeType": {
+            "type": "string",
+            "description": "The serialized Show Me visualization type to apply.",
+            "enum": [
+              "text",
+              "heat",
+              "spot-table",
+              "bar-horiz",
+              "bar-stack",
+              "bar-side",
+              "bar-measure",
+              "o-line",
+              "qi-line",
+              "o-area",
+              "qi-area",
+              "circle",
+              "circle-side",
+              "gantt",
+              "scatter",
+              "scatter-matrix",
+              "histogram",
+              "maps",
+              "filled-maps",
+              "pies",
+              "dual-bar-line",
+              "dual-line",
+              "bullet",
+              "treemap",
+              "bubble",
+              "box-plot"
+            ]
+          },
+          "dataSource": {
+            "type": "string",
+            "description": "Optional internal datasource name used to resolve selected fields."
+          },
+          "fieldsSelectedInSchemaViewer": {
+            "type": "array",
+            "description": "Optional fully qualified encoded field names, each with at least a datasource and field component. An explicit empty array supplies an empty field selection; omission preserves ambient selection.",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "SortRequest": {
         "type": "object",
         "description": "The sort to apply to a field on the worksheet.",
-        "required": [
-          "fieldName"
-        ],
+        "required": ["fieldName"],
         "properties": {
           "fieldName": {
             "type": "string",
@@ -4217,18 +4571,12 @@
           "direction": {
             "type": "string",
             "description": "Sort direction; defaults to 'asc' when omitted. Only the listed values are accepted; any other value is rejected with a 400.",
-            "enum": [
-              "asc",
-              "desc"
-            ]
+            "enum": ["asc", "desc"]
           },
           "sortType": {
             "type": "string",
             "description": "Sort type; defaults to 'data-source-order' when omitted. Only the listed values are accepted; any other value is rejected with a 400.",
-            "enum": [
-              "data-source-order",
-              "alpha"
-            ]
+            "enum": ["data-source-order", "alpha"]
           },
           "clearSort": {
             "type": "boolean",
@@ -4239,9 +4587,7 @@
       "OpenFileRequest": {
         "type": "object",
         "description": "The local file to open.",
-        "required": [
-          "filePath"
-        ],
+        "required": ["filePath"],
         "properties": {
           "filePath": {
             "type": "string"
@@ -4261,10 +4607,7 @@
       "ExportAsWorkbookRequest": {
         "type": "object",
         "description": "What to export and where to write it.",
-        "required": [
-          "filePath",
-          "format"
-        ],
+        "required": ["filePath", "format"],
         "properties": {
           "filePath": {
             "type": "string",
@@ -4273,12 +4616,7 @@
           "format": {
             "type": "string",
             "description": "The export format that selects what file to produce. Only the listed values are accepted; any other value is rejected with a 400.",
-            "enum": [
-              "pdf",
-              "powerpoint",
-              "packaged-workbook",
-              "prior-version"
-            ]
+            "enum": ["pdf", "powerpoint", "packaged-workbook", "prior-version"]
           },
           "targetVersion": {
             "type": "string",
@@ -4299,11 +4637,7 @@
       "ApiRoot": {
         "type": "object",
         "description": "API versions and the resource link map.",
-        "required": [
-          "apiVersion",
-          "applicationVersion",
-          "links"
-        ],
+        "required": ["apiVersion", "applicationVersion", "links"],
         "properties": {
           "apiVersion": {
             "type": "string"
@@ -4321,7 +4655,7 @@
       },
       "AppInfo": {
         "type": "object",
-        "description": "Running Tableau Desktop process information and live UI state.",
+        "description": "Running Tableau Desktop process information.",
         "required": [
           "applicationVersion",
           "edition",
@@ -4370,10 +4704,7 @@
       "Site": {
         "type": "object",
         "description": "The connected Tableau site.",
-        "required": [
-          "siteId",
-          "authenticatedUserId"
-        ],
+        "required": ["siteId", "authenticatedUserId"],
         "properties": {
           "siteId": {
             "type": "string"
@@ -4386,9 +4717,7 @@
       "Health": {
         "type": "object",
         "description": "Liveness probe result.",
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "properties": {
           "status": {
             "type": "string"
@@ -4398,10 +4727,7 @@
       "ProtectedResourceMetadata": {
         "type": "object",
         "description": "RFC 9728 OAuth Protected Resource Metadata.",
-        "required": [
-          "authorization_servers",
-          "bearer_methods_supported"
-        ],
+        "required": ["authorization_servers", "bearer_methods_supported"],
         "properties": {
           "authorization_servers": {
             "type": "array",

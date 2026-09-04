@@ -76,6 +76,8 @@ import {
   workbookDashboardsNewRoute,
   WorkbookInventory,
   workbookInventorySchema,
+  WorkbookOptimizerResult,
+  workbookOptimizerResultSchema,
   workbookStoryboardsNewRoute,
   workbookWorksheetsNewRoute,
   worksheetDocumentRoute,
@@ -329,6 +331,19 @@ export class ExternalApiToolExecutor {
   async getWorkbook(signal: AbortSignal): Promise<Result<WorkbookInventory, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(EXTERNAL_API_ROUTES.workbook, workbookInventorySchema, signal),
+    );
+  }
+
+  /** Evaluates the open workbook with Workbook Optimizer without changing the document. */
+  async runWorkbookOptimizer(
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookOptimizerResult, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.postForBody(
+        EXTERNAL_API_ROUTES.workbookRunWorkbookOptimizer,
+        workbookOptimizerResultSchema,
+        signal,
+      ),
     );
   }
 

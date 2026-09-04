@@ -394,6 +394,37 @@ describe('ExternalApiToolExecutor', () => {
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook');
     });
 
+    it('runs Workbook Optimizer through its first-class bodyless POST route', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.runWorkbookOptimizer(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().suggestions[0]).toMatchObject({ ruleId: 1, status: 'FAIL' });
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'POST',
+        path: '/v0/workbook:runWorkbookOptimizer',
+        body: '',
+        contentType: undefined,
+      });
+    });
+
+    it('maps a malformed Workbook Optimizer result through the existing invalid response form', async () => {
+      server.setOverride('POST /v0/workbook:runWorkbookOptimizer', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ suggestions: [{ ruleId: 0 }] }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.runWorkbookOptimizer(signal);
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('invalid-response');
+    });
+
     it('lists workbook datasources', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();

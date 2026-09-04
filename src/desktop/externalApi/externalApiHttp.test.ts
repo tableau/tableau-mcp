@@ -22,6 +22,7 @@ import {
   summaryDataSchema,
   validationResultSchema,
   workbookInventorySchema,
+  workbookOptimizerResultSchema,
   worksheetDocumentRoute,
   worksheetItemSchema,
   worksheetListSchema,
@@ -676,6 +677,27 @@ describe('ExternalApiHttp', () => {
     expect(last?.path).toBe('/v0/workbook/document:validate');
     expect(last?.contentType).toContain('application/xml');
     expect(last?.body).toBe(xml);
+  });
+
+  it('posts a bodyless workbook optimizer dispatch and returns its validated bare result', async () => {
+    const result = await http.postForBody(
+      EXTERNAL_API_ROUTES.workbookRunWorkbookOptimizer,
+      workbookOptimizerResultSchema,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().suggestions[0]).toMatchObject({
+      ruleId: 1,
+      status: 'FAIL',
+      affected: { count: 1 },
+    });
+    const last = server.requests.at(-1);
+    expect(last).toMatchObject({
+      method: 'POST',
+      path: '/v0/workbook:runWorkbookOptimizer',
+      body: '',
+      contentType: undefined,
+    });
   });
 
   it('lists published site datasources from GET /v0/site/datasources', async () => {

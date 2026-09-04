@@ -57,6 +57,20 @@ export type MockExternalApiServer = {
 
 const DEFAULT_TOKEN = 'valid-token';
 const DEFAULT_WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets /></workbook>';
+const DEFAULT_WORKBOOK_OPTIMIZER_RESULT = {
+  suggestions: [
+    {
+      ruleId: 1,
+      title: 'Remove unused fields',
+      description: 'Unused fields can make workbooks harder to maintain.',
+      status: 'FAIL',
+      affected: {
+        count: 1,
+        items: [{ name: '[Sample - Superstore].[Unused Field]' }],
+      },
+    },
+  ],
+};
 // The per-item /document routes return the requested item's bare fragment directly — a
 // `<worksheet>` or `<dashboard>`, not wrapped in a `<workbook>`. The handler serves the same
 // fragment for any known id of that kind, standing in for the resolved item.
@@ -438,6 +452,11 @@ export async function startMockExternalApiServer(
         dashboards: DEFAULT_DASHBOARDS,
         storyboards: DEFAULT_STORYBOARDS,
       });
+      return;
+    }
+
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookRunWorkbookOptimizer) {
+      sendJson(res, 200, DEFAULT_WORKBOOK_OPTIMIZER_RESULT);
       return;
     }
 

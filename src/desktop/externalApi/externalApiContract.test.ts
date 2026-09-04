@@ -32,6 +32,10 @@ import {
   validationResultSchema,
   windowInfoSchema,
   workbookInventorySchema,
+  workbookOptimizerAffectedItemSchema,
+  workbookOptimizerAffectedSchema,
+  workbookOptimizerResultSchema,
+  workbookOptimizerSuggestionSchema,
   worksheetItemSchema,
   worksheetListSchema,
 } from './types.js';
@@ -42,24 +46,20 @@ import {
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.9 — grows `AppInfo`
- * with `isStartPageVisible`/`isDataSourcePageActive`/`isPresentationMode` and `Operation`/
- * `OperationList` with `progressWindows`, documents `UnprocessableContent` (422) on the
- * document-replace routes, on top of the 0.2.8 surface (`workbook:publish`,
- * `datasources/{id}:refreshData`/`:refreshExtract`, `workbook:exportAs`,
- * `storyboards/{id}/image`, `DatasourceItem.type`/`isExtract`/`hasDownloadFilePermission`,
- * required `index`/`type`/`StoryboardItem.storyPointCount`, `unsupported-target-version`).
- * No hand-edits.
+ * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.11, captured
+ * 2026-09-03. Includes the individual-datasource, Show Me, and Workbook Optimizer
+ * routes added after the prior 0.2.9 capture. No hand-edits.
  */
 
 type SpecSchema = {
   required?: Array<string>;
-  properties?: Record<string, { 'x-extensible-enum'?: Array<string> }>;
+  properties?: Record<string, { enum?: Array<string>; 'x-extensible-enum'?: Array<string> }>;
 };
 
 const spec = JSON.parse(
   readFileSync(path.join(__dirname, '__fixtures__', 'externalClientApi-openapi.json'), 'utf-8'),
 ) as {
+  info: { version: string };
   paths: Record<string, unknown>;
   components: { schemas: Record<string, SpecSchema> };
 };
@@ -124,6 +124,10 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
+  it('captures External Client API 0.2.11', () => {
+    expect(spec.info.version).toBe('0.2.11');
+  });
+
   describe('Operation ↔ operationEnvelopeSchema', () => {
     const operation = specSchema('Operation');
 
@@ -201,7 +205,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.9 requiredness exception set', () => {
+    it('pins the complete 0.2.11 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
@@ -314,6 +318,37 @@ describe('external client API contract (captured openapi fixture)', () => {
     });
   });
 
+  describe('Workbook Optimizer', () => {
+    it.each([
+      ['WorkbookOptimizerResult', workbookOptimizerResultSchema],
+      ['WorkbookOptimizerSuggestion', workbookOptimizerSuggestionSchema],
+      ['WorkbookOptimizerAffected', workbookOptimizerAffectedSchema],
+    ] as const)('%s: properties and required set match', (name, schema) => {
+      const component = specSchema(name);
+      expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
+      expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
+    });
+
+    it('matches the recursive affected-item component', () => {
+      const component = specSchema('WorkbookOptimizerAffectedItem');
+      expect(Object.keys(component.properties ?? {}).sort()).toEqual(['items', 'name', 'value']);
+      expect(component.required).toEqual(['name']);
+      expect(
+        workbookOptimizerAffectedItemSchema.safeParse({
+          name: 'Dashboard 1',
+          items: [{ name: 'Sheet 1', value: 2 }],
+        }).success,
+      ).toBe(true);
+      expect(workbookOptimizerAffectedItemSchema.safeParse({ value: 2 }).success).toBe(false);
+    });
+
+    it('matches the documented suggestion statuses', () => {
+      expect([...workbookOptimizerSuggestionSchema.shape.status.options].sort()).toEqual(
+        [...(specSchema('WorkbookOptimizerSuggestion').properties?.status?.enum ?? [])].sort(),
+      );
+    });
+  });
+
   describe('routes', () => {
     it.each([
       EXTERNAL_API_ROUTES.health,
@@ -328,6 +363,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.workbookWorksheets,
       EXTERNAL_API_ROUTES.workbookUndo,
       EXTERNAL_API_ROUTES.workbookRedo,
+      EXTERNAL_API_ROUTES.workbookRunWorkbookOptimizer,
       EXTERNAL_API_ROUTES.dashboardById,
       EXTERNAL_API_ROUTES.dashboardDocument,
       EXTERNAL_API_ROUTES.storyboardById,
