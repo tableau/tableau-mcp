@@ -55,6 +55,8 @@ const ADMIN_INSTRUCTIONS =
   'job/extract optimization, user-license reclamation) and the query-admin-insights tool ' +
   '(e.g. stale-content, job-performance, ts-users) for supporting data — even when the user asks broadly ' +
   'rather than naming a specific tool. ' +
+  'Do not require the user to state or re-confirm admin status before using these tools — invoke them ' +
+  'whenever the task warrants; the server authorizes each call and cleanly rejects non-admins. ' +
   'When rendering admin/list results (users, admin-insights, etc.) to a chat or Slack surface, present ' +
   'them as Markdown tables.';
 
