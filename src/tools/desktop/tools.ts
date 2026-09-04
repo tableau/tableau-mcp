@@ -43,6 +43,8 @@ import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
+import { getStartPerformanceRecordingTool } from './api/startPerformanceRecording.js';
+import { getStopPerformanceRecordingTool } from './api/stopPerformanceRecording.js';
 import { getUndoWorkbookTool } from './api/undoWorkbook.js';
 import { getValidateWorkbookXmlTool } from './api/validateWorkbookXml.js';
 import { getWorkbookExportAsTool } from './api/workbookExportAs.js';
@@ -105,6 +107,8 @@ export const desktopToolFactories = [
   getAddStoryboardTool,
   getComposeStoryTool,
   getPublishWorkbookTool,
+  getStartPerformanceRecordingTool,
+  getStopPerformanceRecordingTool,
   getRefreshDatasourceDataTool,
   getRefreshDatasourceExtractTool,
   getListWorksheetsTool,
