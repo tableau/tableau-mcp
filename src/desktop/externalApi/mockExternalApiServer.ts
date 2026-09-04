@@ -901,6 +901,30 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    if (
+      method === 'POST' &&
+      (path === EXTERNAL_API_ROUTES.workbookStartPerformanceRecording ||
+        path === EXTERNAL_API_ROUTES.workbookStopPerformanceRecording)
+    ) {
+      if (body.length > 0) {
+        sendProblem(res, 400, 'invalid-request-body', 'Performance recording routes take no body.');
+        return;
+      }
+      if (path === EXTERNAL_API_ROUTES.workbookStartPerformanceRecording) {
+        sendOperation(res, 'start-performance-recording');
+      } else {
+        sendJson(res, 200, {
+          id: 'op-stop-performance-recording-1',
+          kind: 'workbook.performance-recording.stop',
+          state: 'succeeded',
+          createdAt: '2026-07-07T10:00:00Z',
+          completedAt: '2026-07-07T10:00:01Z',
+          result: { filePath: 'C:/Temp/PerformanceRecording.twbx' },
+        });
+      }
+      return;
+    }
+
     const datasourceRefreshMatch = path.match(
       /^\/v0\/datasources\/([^/]+):(refreshData|refreshExtract)$/,
     );

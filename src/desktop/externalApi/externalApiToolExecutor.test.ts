@@ -360,6 +360,149 @@ describe('ExternalApiToolExecutor', () => {
     });
   });
 
+  describe('performance recording routes', () => {
+    it('starts recording with an exact bodyless POST', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.startPerformanceRecording(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().status).toBe('completed');
+      const request = server.requests.at(-1);
+      expect(request).toMatchObject({
+        method: 'POST',
+        path: '/v0/workbook:startPerformanceRecording',
+        body: '',
+      });
+    });
+
+    it('stops recording and validates the packaged recording path', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.stopPerformanceRecording(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        status: 'completed',
+        parsedResult: { filePath: 'C:/Temp/PerformanceRecording.twbx' },
+      });
+      const request = server.requests.at(-1);
+      expect(request).toMatchObject({
+        method: 'POST',
+        path: '/v0/workbook:stopPerformanceRecording',
+        body: '',
+      });
+    });
+
+    it('preserves a nonterminal stop without fabricating a filePath', async () => {
+      server.setOverride('POST /v0/workbook:stopPerformanceRecording', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-stop-running',
+          kind: 'workbook.performance-recording.stop',
+          state: 'RUNNING',
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.stopPerformanceRecording(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().status).toBe('running');
+      expect(result.unwrap()).not.toHaveProperty('parsedResult');
+    });
+
+    it.each([{ result: {} }, { result: { filePath: '' } }, { result: { filePath: 42 } }])(
+      'maps a malformed terminal stop result to invalid-response %#',
+      async ({ result: malformedResult }) => {
+        server.setOverride('POST /v0/workbook:stopPerformanceRecording', {
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 'op-stop-malformed',
+            kind: 'workbook.performance-recording.stop',
+            state: 'SUCCEEDED',
+            result: malformedResult,
+          }),
+        });
+        const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+        await executor.start();
+
+        const result = await executor.stopPerformanceRecording(signal);
+
+        expect(result.isErr()).toBe(true);
+        expect(result.unwrapErr().type).toBe('invalid-response');
+      },
+    );
+
+    it.each([
+      {
+        route: '/v0/workbook:startPerformanceRecording',
+        call: (executor: ExternalApiToolExecutor) => executor.startPerformanceRecording(signal),
+        code: 'performance-recording-disabled',
+      },
+      {
+        route: '/v0/workbook:stopPerformanceRecording',
+        call: (executor: ExternalApiToolExecutor) => executor.stopPerformanceRecording(signal),
+        code: 'performance-recording-not-active',
+      },
+    ])('preserves $code from a synchronous Problem', async ({ route, call, code }) => {
+      server.setOverride(`POST ${route}`, {
+        status: 409,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({
+          type: 'problem',
+          title: code,
+          status: 409,
+          instance: route,
+          code,
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await call(executor);
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe(code);
+      }
+    });
+
+    it('preserves the failed asynchronous start code', async () => {
+      server.setOverride('POST /v0/workbook:startPerformanceRecording', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-start-failed',
+          kind: 'workbook.performance-recording.start',
+          state: 'FAILED',
+          error: {
+            code: 'performance-recording-disabled',
+            message: 'Performance recording is disabled.',
+          },
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.startPerformanceRecording(signal);
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('performance-recording-disabled');
+      }
+    });
+  });
+
   describe('first-class read endpoints', () => {
     it('gets the API root', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
@@ -867,6 +1010,36 @@ describe('ExternalApiToolExecutor', () => {
           rescanCount: 0,
         }),
       );
+    });
+
+    it('polls a 202 stop recording operation and parses its packaged path', async () => {
+      server.setOverride('POST /v0/workbook:stopPerformanceRecording', accepted202('op-stop'));
+      server.setOperation('op-stop', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'op-stop',
+            kind: 'workbook.performance-recording.stop',
+            state: 'RUNNING',
+          },
+          {
+            id: 'op-stop',
+            kind: 'workbook.performance-recording.stop',
+            state: 'SUCCEEDED',
+            result: { filePath: 'D:/Temp/PerformanceRecording.twbx' },
+          },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.stopPerformanceRecording(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        status: 'completed',
+        parsedResult: { filePath: 'D:/Temp/PerformanceRecording.twbx' },
+      });
     });
 
     it('reports a still-running operation as running, never completed', async () => {

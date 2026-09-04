@@ -438,10 +438,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 60-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 62-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(60);
+    expect(selected).toHaveLength(62);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -489,6 +489,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'save-workbook',
       'workbook-export-as',
       'publish-workbook',
+      'start-performance-recording',
+      'stop-performance-recording',
       'refresh-datasource-data',
       'refresh-datasource-extract',
       'get-workbook-xml',
@@ -676,6 +678,22 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('publish-workbook')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
+    expect(floors.get('start-performance-recording')).toBe('0.2.11');
+    expect(floors.get('stop-performance-recording')).toBe('0.2.11');
+  });
+
+  it('hides performance recording before 0.2.11 and exposes it at 0.2.11', () => {
+    const fullTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'full',
+    );
+    const at210 = filterToolsByApiVersion(fullTools, '0.2.10').map((tool) => tool.name);
+    const at211 = filterToolsByApiVersion(fullTools, '0.2.11').map((tool) => tool.name);
+
+    for (const route of ['start-performance-recording', 'stop-performance-recording']) {
+      expect(at210).not.toContain(route);
+      expect(at211).toContain(route);
+    }
   });
 
   it('a connected 0.2.5 Desktop hides only the 0.2.6 tools from the profile surface', () => {

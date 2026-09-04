@@ -52,6 +52,8 @@ import {
   OperationEnvelope,
   OperationError,
   OperationWarning,
+  PerformanceRecordingResult,
+  performanceRecordingResultSchema,
   RefreshExtractRequest,
   sheetActionRoute,
   SheetRef,
@@ -139,6 +141,13 @@ type RawOutcome = {
   operationId: string | undefined;
   apiVersion: string | undefined;
 };
+
+export type StopPerformanceRecordingResult =
+  | (ExecuteCommandResult<undefined> & {
+      status: 'completed';
+      parsedResult: PerformanceRecordingResult;
+    })
+  | (ExecuteCommandResult<undefined> & { status: 'queued' | 'running' });
 
 /**
  * The one executor for Tableau Desktop: every tool call reaches Desktop through the
@@ -686,6 +695,26 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async startPerformanceRecording(
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(EXTERNAL_API_ROUTES.workbookStartPerformanceRecording, signal),
+      'start-performance-recording',
+    );
+  }
+
+  async stopPerformanceRecording(
+    signal: AbortSignal,
+  ): Promise<Result<StopPerformanceRecordingResult, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(EXTERNAL_API_ROUTES.workbookStopPerformanceRecording, signal),
+      'stop-performance-recording',
+      undefined,
+      performanceRecordingResultSchema,
+    );
+  }
+
   async refreshDatasourceData(
     datasourceId: string,
     signal: AbortSignal,
@@ -738,16 +767,44 @@ export class ExternalApiToolExecutor {
   }
 
   /**
-   * Shared document-apply pipeline for the whole-workbook and per-sheet POST routes: run the
+   * Shared operation pipeline for direct POST routes: run the
    * HTTP call through withRescan, normalize the operation envelope, then fold it into a
    * command-status result (envelope FAILED / Tableau error → command-failed). `command` labels
-   * the operation for logs and the synthetic command id.
+   * the operation for logs and the synthetic command id. Callers choose separately whether the
+   * operation participates in workbook apply-mutex serialization.
    */
   private async applyDocument(
     call: (http: ExternalApiHttp) => Promise<Result<OperationEnvelope, ExternalApiError>>,
     command: string,
     options?: ApplyWorkbookDocumentOptions,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>>;
+  private async applyDocument<Z extends z.ZodTypeAny>(
+    call: (http: ExternalApiHttp) => Promise<Result<OperationEnvelope, ExternalApiError>>,
+    command: string,
+    options: ApplyWorkbookDocumentOptions | undefined,
+    schema: Z,
+  ): Promise<
+    Result<
+      | (ExecuteCommandResult<undefined> & {
+          status: 'completed';
+          parsedResult: z.infer<Z>;
+        })
+      | (ExecuteCommandResult<undefined> & { status: 'queued' | 'running' }),
+      ExecuteCommandError
+    >
+  >;
+  private async applyDocument(
+    call: (http: ExternalApiHttp) => Promise<Result<OperationEnvelope, ExternalApiError>>,
+    command: string,
+    options?: ApplyWorkbookDocumentOptions,
+    schema?: z.ZodTypeAny,
+  ): Promise<
+    Result<
+      | ExecuteCommandResult<undefined>
+      | (ExecuteCommandResult<undefined> & { parsedResult: unknown }),
+      ExecuteCommandError
+    >
+  > {
     const outcomeResult = await this.withRescan('document_apply', async (http) => {
       if (
         options?.expectedInstanceId !== undefined &&
@@ -789,8 +846,25 @@ export class ExternalApiToolExecutor {
         logger: LOGGER,
         data: statusResult.error,
       });
+      return statusResult;
     }
-    return statusResult;
+
+    if (!schema || statusResult.value.status !== 'completed') {
+      return statusResult;
+    }
+
+    const safeParsedResult = schema.safeParse(statusResult.value.result ?? {});
+    if (!safeParsedResult.success) {
+      log({
+        message: `Failed to parse ${command} result with schema ${schema.toString()}.`,
+        level: 'error',
+        logger: LOGGER,
+        data: safeParsedResult.error,
+      });
+      return Err({ type: 'invalid-response', error: safeParsedResult.error });
+    }
+
+    return Ok({ ...statusResult.value, parsedResult: safeParsedResult.data });
   }
 
   private createHttp(instance: ExternalApiInstance): ExternalApiHttp {
