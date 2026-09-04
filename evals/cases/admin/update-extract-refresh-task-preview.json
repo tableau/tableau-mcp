@@ -1,0 +1,12 @@
+{
+  "id": "update-extract-refresh-task-preview",
+  "name": "Update Cloud Extract Refresh Task — Preview Only (safe)",
+  "description": "SAFE: exercises update-cloud-extract-refresh-task PREVIEW phase only. With confirm omitted the tool returns the proposed schedule change plus a confirmation token without applying it. Prompt forbids confirming. Requires ADMIN_TOOLS_ENABLED=true, site-admin PAT on Tableau Cloud, and EVAL_EXTRACT_TASK_LUID (a disposable test extract-refresh task).",
+  "tags": ["admin", "tasks", "mutation", "preview", "hitl", "cloud", "real-server"],
+  "prompt": "Use the Tableau MCP server to first list extract refresh tasks, then PREVIEW updating task {{env.EVAL_EXTRACT_TASK_LUID}} to a new daily schedule. Only run the preview — do NOT confirm or apply. Report the current schedule, the proposed schedule, and whether a confirmation token was returned. Do not re-call with confirm=true.",
+  "expected_tools": ["list-extract-refresh-tasks", "update-cloud-extract-refresh-task"],
+  "budget": {
+    "max_tool_calls": 6,
+    "max_wall_ms": 180000
+  }
+}

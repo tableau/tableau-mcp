@@ -1,0 +1,12 @@
+{
+  "id": "stale-content-threshold-180d",
+  "name": "JTBD1 — Stale content, raised 180-day bar",
+  "description": "Threshold-variation of the stale-content JTBD. Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT. Model raises the staleness bar to 180 days via query-admin-insights (kind=stale-content, minAgeDays 180) — a subset of the 90-day result. Read-only.",
+  "tags": ["admin", "admin-insights", "stale-content", "read-only", "jtbd1", "threshold", "real-server"],
+  "prompt": "Raise the bar — which content is stale past 180 days? Use the Admin Insights stale-content view. Report the items and state the age threshold you filtered on. Do not modify or delete anything.",
+  "expected_tools": ["query-admin-insights"],
+  "budget": {
+    "max_tool_calls": 8,
+    "max_wall_ms": 180000
+  }
+}
