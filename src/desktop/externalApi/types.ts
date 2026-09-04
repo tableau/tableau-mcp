@@ -53,6 +53,7 @@ export const EXTERNAL_API_ROUTES = {
   worksheetDelete: '/v0/workbook/worksheets/{id}:delete',
   worksheetRename: '/v0/workbook/worksheets/{id}:rename',
   worksheetSort: '/v0/workbook/worksheets/{id}:sort',
+  worksheetShowMe: '/v0/workbook/worksheets/{id}:showMe',
   worksheetPauseAutoUpdates: '/v0/workbook/worksheets/{id}:pauseAutoUpdates',
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   site: '/v0/site',
@@ -104,6 +105,44 @@ export type WorksheetSort = {
   direction?: 'asc' | 'desc';
   sortType?: 'data-source-order' | 'alpha';
   clearSort?: boolean;
+};
+
+/** Serialized visualization types accepted by `POST .../worksheets/{id}:showMe`. */
+export const SHOW_ME_TYPES = [
+  'text',
+  'heat',
+  'spot-table',
+  'bar-horiz',
+  'bar-stack',
+  'bar-side',
+  'bar-measure',
+  'o-line',
+  'qi-line',
+  'o-area',
+  'qi-area',
+  'circle',
+  'circle-side',
+  'gantt',
+  'scatter',
+  'scatter-matrix',
+  'histogram',
+  'maps',
+  'filled-maps',
+  'pies',
+  'dual-bar-line',
+  'dual-line',
+  'bullet',
+  'treemap',
+  'bubble',
+  'box-plot',
+] as const;
+export type ShowMeType = (typeof SHOW_ME_TYPES)[number];
+
+/** Body of `POST /v0/workbook/worksheets/{id}:showMe`. */
+export type WorksheetShowMeRequest = {
+  showMeType: ShowMeType;
+  dataSource?: string;
+  fieldsSelectedInSchemaViewer?: Array<string>;
 };
 
 /** Body of `POST /v0/app:openFile`. `filePath` is the absolute path of the file to open. */
@@ -232,6 +271,10 @@ export function workbookStoryboardsNewRoute(index?: number): string {
 
 export function worksheetSortRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:sort`;
+}
+
+export function worksheetShowMeRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}:showMe`;
 }
 
 export function worksheetPauseAutoUpdatesRoute(worksheetId: string): string {

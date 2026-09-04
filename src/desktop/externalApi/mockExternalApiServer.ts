@@ -5,6 +5,7 @@ import {
   EXTERNAL_API_ROUTES,
   HEADER_APPLICATION_VERSION,
   HEADER_XSD_PAYLOAD_VERSION,
+  SHOW_ME_TYPES,
 } from './types.js';
 
 /**
@@ -794,6 +795,58 @@ export async function startMockExternalApiServer(
         return;
       }
       sendOperation(res, 'sort-worksheet');
+      return;
+    }
+
+    const showMeMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+):showMe$/);
+    if (method === 'POST' && showMeMatch) {
+      const worksheetId = decodeURIComponent(showMeMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        sendProblem(res, 400, 'invalid-request-body', 'showMe requires a JSON object body.');
+        return;
+      }
+      const request = parsed as Record<string, unknown>;
+      const allowed = new Set(['showMeType', 'dataSource', 'fieldsSelectedInSchemaViewer']);
+      if (Object.keys(request).some((key) => !allowed.has(key))) {
+        sendProblem(res, 400, 'invalid-request-body', 'showMe accepts only documented properties.');
+        return;
+      }
+      if (
+        typeof request.showMeType !== 'string' ||
+        !(SHOW_ME_TYPES as readonly string[]).includes(request.showMeType)
+      ) {
+        sendProblem(res, 400, 'invalid-request-body', 'showMe requires a supported `showMeType`.');
+        return;
+      }
+      if (request.dataSource !== undefined && typeof request.dataSource !== 'string') {
+        sendProblem(res, 400, 'invalid-request-body', 'showMe `dataSource` must be a string.');
+        return;
+      }
+      if (
+        request.fieldsSelectedInSchemaViewer !== undefined &&
+        (!Array.isArray(request.fieldsSelectedInSchemaViewer) ||
+          !request.fieldsSelectedInSchemaViewer.every((field) => typeof field === 'string'))
+      ) {
+        sendProblem(
+          res,
+          400,
+          'invalid-request-body',
+          'showMe `fieldsSelectedInSchemaViewer` must be an array of strings.',
+        );
+        return;
+      }
+      sendOperation(res, 'show-me-worksheet');
       return;
     }
 

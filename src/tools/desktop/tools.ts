@@ -42,6 +42,7 @@ import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
+import { getShowMeTool } from './api/showMe.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
 import { getUndoWorkbookTool } from './api/undoWorkbook.js';
 import { getValidateWorkbookXmlTool } from './api/validateWorkbookXml.js';
@@ -114,6 +115,7 @@ export const desktopToolFactories = [
   getDeleteSheetTool,
   getRenameSheetTool,
   getSortWorksheetTool,
+  getShowMeTool,
   getPauseAutoUpdatesTool,
   getResumeAutoUpdatesTool,
   getRefineWorksheetTool,
