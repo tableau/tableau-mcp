@@ -102,7 +102,13 @@ function getViewLineageConnectionQuery(connectionName: string, viewLuids: Array<
       }`;
 }
 
-export function getWorkbookLineageQuery(workbookLuids: Array<string>): string {
+// includeEmbeddedParents adds the embedded-datasource -> published-parent selection. Only getWorkbook
+// consumes it (via getWorkbookLineageWithParentsByLuid); listWorkbooks omits it to avoid over-fetching
+// server-side resolution and payload it would discard.
+export function getWorkbookLineageQuery(
+  workbookLuids: Array<string>,
+  { includeEmbeddedParents = false }: { includeEmbeddedParents?: boolean } = {},
+): string {
   return `
     query workbookLineage {
       workbooksConnection(filter: { luidWithin: ${toGraphqlStringArray(workbookLuids)} }) {
@@ -111,13 +117,17 @@ export function getWorkbookLineageQuery(workbookLuids: Array<string>): string {
           upstreamDatasources {
             luid
             name
-          }
+          }${
+            includeEmbeddedParents
+              ? `
           embeddedDatasources {
             name
             parentPublishedDatasources {
               luid
               name
             }
+          }`
+              : ''
           }
         }
       }
@@ -176,19 +186,30 @@ export function getWorkbookLineageByLuid(response: unknown): Map<string, Array<L
   );
 }
 
-// Authoritative embedded-datasource -> published-parent map, keyed by embedded datasource name (the
-// join key we can correlate against the REST /connections LUID). Names with anything other than
-// exactly one identifiable parent are omitted: a duplicated embedded name makes the name->LUID join
-// ambiguous, and multiple/zero parentPublishedDatasources cannot be represented as one publishedParent.
-// Omitting is deliberate (R5) — an embedded entry with no authoritative parent is emitted standalone.
-export function getWorkbookEmbeddedParentsByLuid(
+export type WorkbookLineage = {
+  upstreamDatasources: Array<LineageContent>;
+  // Authoritative embedded-datasource -> published-parent map, keyed by embedded datasource name (the
+  // join key we can correlate against the REST /connections LUID). Names with anything other than
+  // exactly one identifiable parent are omitted: a duplicated embedded name makes the name->LUID join
+  // ambiguous, and multiple/zero parentPublishedDatasources cannot be represented as one publishedParent.
+  // Omitting is deliberate (R5) — an embedded entry with no authoritative parent is emitted standalone.
+  embeddedParents: Map<string, PublishedParent>;
+};
+
+// Parses the workbook-lineage response once and returns both the published upstream lineage and the
+// embedded->published-parent map per workbook luid, since both derive from the same
+// workbooksConnection.nodes. Used by getWorkbook, which needs both from a single Metadata-API response.
+export function getWorkbookLineageWithParentsByLuid(
   response: unknown,
-): Map<string, Map<string, PublishedParent>> {
+): Map<string, WorkbookLineage> {
   const parsed = workbookLineageResponseSchema.parse(response);
   return new Map(
     parsed.data.workbooksConnection.nodes.map((node) => [
       node.luid,
-      buildEmbeddedParentMap(node.embeddedDatasources),
+      {
+        upstreamDatasources: normalizeLineageContents(node.upstreamDatasources),
+        embeddedParents: buildEmbeddedParentMap(node.embeddedDatasources),
+      },
     ]),
   );
 }
@@ -452,5 +473,13 @@ export function filterLineageContentsByAllowedIds(
     return contents;
   }
 
-  return contents.filter((content) => allowedIds.has(content.luid));
+  // Also strip a publishedParent pointer whose luid is out of bounds: the same excluded datasource
+  // would be dropped as a standalone entry, so it must not leak via a parent pointer either.
+  return contents
+    .filter((content) => allowedIds.has(content.luid))
+    .map((content) =>
+      content.publishedParent && !allowedIds.has(content.publishedParent.luid)
+        ? { ...content, publishedParent: undefined }
+        : content,
+    );
 }

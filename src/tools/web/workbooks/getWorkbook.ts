@@ -7,9 +7,8 @@ import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
-  getWorkbookEmbeddedParentsByLuid,
-  getWorkbookLineageByLuid,
   getWorkbookLineageQuery,
+  getWorkbookLineageWithParentsByLuid,
   LineageContent,
   mergeWorkbookLineage,
   PublishedParent,
@@ -109,13 +108,14 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
               if (!configWithOverrides.disableMetadataApiRequests) {
                 try {
                   const response = await restApi.metadataMethods.graphql(
-                    getWorkbookLineageQuery([workbook.id]),
+                    getWorkbookLineageQuery([workbook.id], { includeEmbeddedParents: true }),
                   );
-                  published = (getWorkbookLineageByLuid(response).get(workbook.id) ?? []).map(
-                    (ds) => ({ ...ds, datasourceType: 'published' as const }),
-                  );
-                  embeddedParents =
-                    getWorkbookEmbeddedParentsByLuid(response).get(workbook.id) ?? new Map();
+                  const lineage = getWorkbookLineageWithParentsByLuid(response).get(workbook.id);
+                  published = (lineage?.upstreamDatasources ?? []).map((ds) => ({
+                    ...ds,
+                    datasourceType: 'published' as const,
+                  }));
+                  embeddedParents = lineage?.embeddedParents ?? new Map();
                 } catch (error) {
                   log(
                     {

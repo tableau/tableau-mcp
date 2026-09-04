@@ -2,8 +2,9 @@ import {
   getSearchContentLineageQuery,
   getViewLineageByLuid,
   getViewLineageQuery,
-  getWorkbookEmbeddedParentsByLuid,
   getWorkbookLineageByLuid,
+  getWorkbookLineageQuery,
+  getWorkbookLineageWithParentsByLuid,
   mergeViewLineage,
   mergeWorkbookLineage,
   toEmbeddedLineageContents,
@@ -60,7 +61,7 @@ describe('lineageUtils', () => {
   });
 
   it('builds an authoritative embedded->published-parent map keyed by embedded name', () => {
-    const parentsByLuid = getWorkbookEmbeddedParentsByLuid({
+    const lineageByLuid = getWorkbookLineageWithParentsByLuid({
       data: {
         workbooksConnection: {
           nodes: [
@@ -87,13 +88,13 @@ describe('lineageUtils', () => {
       },
     });
 
-    expect(parentsByLuid.get('workbook-1')).toEqual(
+    expect(lineageByLuid.get('workbook-1')?.embeddedParents).toEqual(
       new Map([['Has Parent', { luid: 'pub-1', name: 'Parent DS' }]]),
     );
   });
 
   it('drops a published parent when the same embedded name appears more than once', () => {
-    const parentsByLuid = getWorkbookEmbeddedParentsByLuid({
+    const lineageByLuid = getWorkbookLineageWithParentsByLuid({
       data: {
         workbooksConnection: {
           nodes: [
@@ -109,11 +110,11 @@ describe('lineageUtils', () => {
       },
     });
 
-    expect(parentsByLuid.get('workbook-1')?.size).toBe(0);
+    expect(lineageByLuid.get('workbook-1')?.embeddedParents?.size).toBe(0);
   });
 
   it('falls back to the parent luid when the parent name is missing', () => {
-    const parentsByLuid = getWorkbookEmbeddedParentsByLuid({
+    const lineageByLuid = getWorkbookLineageWithParentsByLuid({
       data: {
         workbooksConnection: {
           nodes: [
@@ -128,7 +129,7 @@ describe('lineageUtils', () => {
       },
     });
 
-    expect(parentsByLuid.get('workbook-1')).toEqual(
+    expect(lineageByLuid.get('workbook-1')?.embeddedParents).toEqual(
       new Map([['Named', { luid: 'pub-1', name: 'pub-1' }]]),
     );
   });
@@ -161,6 +162,74 @@ describe('lineageUtils', () => {
         id: 'workbook-1',
         name: 'Workbook',
         upstreamDatasources: [{ luid: 'datasource-1', name: 'Sales' }],
+      },
+    ]);
+  });
+
+  it('strips a publishedParent pointer whose luid is out of the allowed bounds', () => {
+    const lineageByLuid = new Map([
+      [
+        'workbook-1',
+        [
+          {
+            luid: 'emb-1',
+            name: 'Embedded DS',
+            datasourceType: 'embedded' as const,
+            publishedParent: { luid: 'pub-1', name: 'Out Of Bounds Parent' },
+          },
+        ],
+      ],
+    ]);
+
+    const result = mergeWorkbookLineage(
+      [{ id: 'workbook-1', name: 'Workbook' }],
+      lineageByLuid,
+      new Set(['emb-1']), // parent pub-1 is not allowed
+    );
+
+    expect(result).toEqual([
+      {
+        id: 'workbook-1',
+        name: 'Workbook',
+        upstreamDatasources: [{ luid: 'emb-1', name: 'Embedded DS', datasourceType: 'embedded' }],
+      },
+    ]);
+  });
+
+  it('keeps a publishedParent pointer when both the entry and its parent are in bounds', () => {
+    const parent = { luid: 'pub-1', name: 'Parent DS' };
+    const lineageByLuid = new Map([
+      [
+        'workbook-1',
+        [
+          {
+            luid: 'emb-1',
+            name: 'Embedded DS',
+            datasourceType: 'embedded' as const,
+            publishedParent: parent,
+          },
+        ],
+      ],
+    ]);
+
+    const result = mergeWorkbookLineage(
+      [{ id: 'workbook-1', name: 'Workbook' }],
+      lineageByLuid,
+      new Set(['emb-1', 'pub-1']),
+    );
+
+    expect(result).toEqual([
+      {
+        id: 'workbook-1',
+        name: 'Workbook',
+        upstreamDatasources: [
+          {
+            luid: 'emb-1',
+            name: 'Embedded DS',
+            datasourceType: 'embedded',
+            publishedParent: parent,
+          },
+        ],
       },
     ]);
   });
@@ -203,6 +272,21 @@ describe('lineageUtils', () => {
         upstreamDatasources: [{ luid: 'datasource-1', name: 'Sales' }],
       },
     ]);
+  });
+
+  it('omits embeddedDatasources from workbook lineage by default', () => {
+    const query = getWorkbookLineageQuery(['wb-1']);
+
+    expect(query).toContain('workbooksConnection(filter: { luidWithin: ["wb-1"] })');
+    expect(query).not.toContain('embeddedDatasources');
+    expect(query).not.toContain('parentPublishedDatasources');
+  });
+
+  it('includes embeddedDatasources parents when includeEmbeddedParents is set', () => {
+    const query = getWorkbookLineageQuery(['wb-1'], { includeEmbeddedParents: true });
+
+    expect(query).toContain('embeddedDatasources');
+    expect(query).toContain('parentPublishedDatasources');
   });
 
   it('queries both sheetsConnection and dashboardsConnection for view lineage', () => {
