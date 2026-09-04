@@ -499,6 +499,62 @@ describe('ExternalApiToolExecutor', () => {
       expect(last?.body).toBe('');
     });
 
+    it('refreshes a known worksheet now through a bodyless POST', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.refreshWorksheetNow('sheet-sales', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().status).toBe('completed');
+      const last = server.requests.at(-1);
+      expect(last?.method).toBe('POST');
+      expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales:refreshNow');
+      expect(last?.body).toBe('');
+    });
+
+    it('percent-encodes the worksheet id on refresh-now dispatch', async () => {
+      const encodedPath = '/v0/workbook/worksheets/sheet%2Fsales%20now:refreshNow';
+      server.setOverride(`POST ${encodedPath}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-refresh-encoded-1',
+          kind: 'sheet.refreshNow',
+          state: 'SUCCEEDED',
+          createdAt: '2026-09-03T10:00:00Z',
+          completedAt: '2026-09-03T10:00:01Z',
+          result: {},
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.refreshWorksheetNow('sheet/sales now', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().status).toBe('completed');
+      const last = server.requests.at(-1);
+      expect(last?.method).toBe('POST');
+      expect(last?.path).toBe(encodedPath);
+      expect(last?.body).toBe('');
+    });
+
+    it('propagates sheet-not-found when refresh-now targets an unknown worksheet id', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.refreshWorksheetNow('missing-worksheet', signal);
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('sheet-not-found');
+        expect(error.error?.message).toBe('Worksheet not found: missing-worksheet');
+      }
+    });
+
     it('dispatches auto-update pause without an id-existence guard (matches the live command)', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
