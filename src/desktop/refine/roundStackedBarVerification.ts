@@ -49,7 +49,7 @@ type FieldSemantics = RoundStackedBarSemanticContract['category'];
 
 export interface RoundStackedBarGroup {
   category: string;
-  segment: string;
+  segment?: string;
   value: number;
 }
 
@@ -68,13 +68,13 @@ type BaselineResult =
 interface ParsedPoint {
   frame: number;
   path: number;
-  x: number;
-  y: number;
+  band: number;
+  value: number;
 }
 
 interface ParsedInterval {
   category: string;
-  segment: string;
+  segment?: string;
   sign: number;
   low: number;
   high: number;
@@ -90,6 +90,11 @@ const MAX_GROUPS = 83;
 const VERTICES_PER_GROUP = 12;
 const ABSOLUTE_TOLERANCE = 1e-6;
 const RELATIVE_TOLERANCE = 1e-8;
+// Rounded-tip detection must scale with the tip's own radius: the generated Y radius is
+// min(|value|/2, 0.02*span), which for tiny values falls below ABSOLUTE_TOLERANCE while still
+// producing a real rounded tip. A fraction of the expected radius stays well under the smallest
+// rounded-point offset (0.292893*r) and well above float noise.
+const ROUNDED_TIP_TOLERANCE_RATIO = 0.1;
 
 function result(findings: RoundStackedBarFinding[]): RoundStackedBarVerification {
   return { ok: findings.length === 0, findings };
@@ -169,15 +174,26 @@ function resolveColumn(
   return { ok: true, index: matches[0].index };
 }
 
-function groupKey(category: string, segment: string): string {
-  return JSON.stringify([category, segment]);
+function groupKey(category: string, segment?: string): string {
+  return JSON.stringify(segment === undefined ? [category] : [category, segment]);
 }
 
-function filterMemberText(value: unknown): string | null {
+function groupLabel(category: string, segment?: string): string {
+  return segment === undefined ? category : `${category} / ${segment}`;
+}
+
+function scalarMemberText(value: unknown): string | null {
   if (typeof value === 'string') return value;
   if (typeof value === 'boolean') return String(value);
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return null;
+}
+
+function finiteNumericCell(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NaN;
+  if (typeof value !== 'string' || value.trim() === '') return Number.NaN;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
 function naturalCompare(left: string, right: string): number {
@@ -207,17 +223,18 @@ export function captureRoundStackedBarBaseline(
   }
 
   const category = resolveColumn(summary.columns, fieldAliases(contract.category));
-  const segment = resolveColumn(summary.columns, fieldAliases(contract.segment));
+  const segment = contract.segment
+    ? resolveColumn(summary.columns, fieldAliases(contract.segment))
+    : undefined;
   const measure = resolveColumn(summary.columns, [
     ...fieldAliases(contract.measure),
     `${contract.measure.aggregation}(${contract.measure.caption})`,
   ]);
-  if (!category.ok || !segment.ok || !measure.ok) {
+  if (!category.ok || (segment && !segment.ok) || !measure.ok) {
     return {
       ok: false,
       reason: [category, segment, measure]
-        .filter((entry) => !entry.ok)
-        .map((entry) => ('reason' in entry ? entry.reason : ''))
+        .flatMap((entry) => (entry && !entry.ok ? [entry.reason] : []))
         .join(' '),
     };
   }
@@ -226,17 +243,20 @@ export function captureRoundStackedBarBaseline(
   const seen = new Set<string>();
   for (const row of summary.rows) {
     const categoryValue = row[category.index];
-    const segmentValue = row[segment.index];
-    if (
-      categoryValue === null ||
-      categoryValue === undefined ||
-      segmentValue === null ||
-      segmentValue === undefined
-    ) {
-      return { ok: false, reason: 'Summary contains a null Category or Segment key.' };
+    if (categoryValue === null || categoryValue === undefined) {
+      return { ok: false, reason: 'Summary contains a null Category key.' };
     }
-    if (typeof categoryValue !== 'string' || typeof segmentValue !== 'string') {
-      return { ok: false, reason: 'Summary Category and Segment keys must be strings.' };
+    const normalizedCategory = scalarMemberText(categoryValue);
+    if (normalizedCategory === null) {
+      return { ok: false, reason: 'Summary Category keys must be finite scalar values.' };
+    }
+    const segmentValue = segment?.ok ? row[segment.index] : undefined;
+    if (segment && (segmentValue === null || segmentValue === undefined)) {
+      return { ok: false, reason: 'Summary contains a null Segment key.' };
+    }
+    const normalizedSegment = segment ? scalarMemberText(segmentValue) : null;
+    if (segment && normalizedSegment === null) {
+      return { ok: false, reason: 'Summary Segment keys must be finite scalar values.' };
     }
     const value = Number(row[measure.index]);
     if (!Number.isFinite(value)) {
@@ -245,23 +265,29 @@ export function captureRoundStackedBarBaseline(
     if (near(value, 0)) {
       return { ok: false, reason: 'Every visible group must have a nonzero SUM measure.' };
     }
-    const key = groupKey(categoryValue, segmentValue);
+    const key = groupKey(normalizedCategory, normalizedSegment ?? undefined);
     if (seen.has(key)) {
-      return { ok: false, reason: `Summary contains duplicate Category×Segment key ${key}.` };
+      return { ok: false, reason: `Summary contains duplicate bar group key ${key}.` };
     }
     seen.add(key);
-    groups.push({ category: categoryValue, segment: segmentValue, value });
+    groups.push({
+      category: normalizedCategory,
+      value,
+      ...(normalizedSegment !== null ? { segment: normalizedSegment } : {}),
+    });
   }
   if (groups.length === 0 || groups.length > MAX_GROUPS) {
     return {
       ok: false,
-      reason: `Rounded stacked bars require 1–${MAX_GROUPS} visible Category×Segment groups (found ${groups.length}).`,
+      reason: `Rounded bars require 1–${MAX_GROUPS} visible groups (found ${groups.length}).`,
     };
   }
 
-  const segmentOrderFromZero = [...new Set(groups.map((group) => group.segment))].sort(
-    (left, right) => naturalCompare(right, left),
-  );
+  const segmentOrderFromZero = contract.segment
+    ? [...new Set(groups.map((group) => group.segment!))].sort((left, right) =>
+        naturalCompare(right, left),
+      )
+    : [];
   return {
     ok: true,
     baseline: {
@@ -284,10 +310,9 @@ export function verifyRoundStackedBarSeedEvidence(
     underlying.columns,
     underlyingFieldAliases(contract, contract.category),
   );
-  const segment = resolveColumn(
-    underlying.columns,
-    underlyingFieldAliases(contract, contract.segment),
-  );
+  const segment = contract.segment
+    ? resolveColumn(underlying.columns, underlyingFieldAliases(contract, contract.segment))
+    : undefined;
   const measure = resolveColumn(
     underlying.columns,
     underlyingFieldAliases(contract, contract.measure),
@@ -301,11 +326,11 @@ export function verifyRoundStackedBarSeedEvidence(
         }),
       )
     : undefined;
-  if (!category.ok || !segment.ok || !measure.ok || (filter && !filter.ok)) {
+  if (!category.ok || (segment && !segment.ok) || !measure.ok || (filter && !filter.ok)) {
     addFinding(
       findings,
       'seed-evidence',
-      'Underlying data does not expose one unambiguous Category, Segment, measure, and optional filter column.',
+      `Underlying data does not expose one unambiguous Category, ${contract.segment ? 'Segment, ' : ''}measure, and optional filter column.`,
     );
     return result(findings);
   }
@@ -314,7 +339,7 @@ export function verifyRoundStackedBarSeedEvidence(
   const values = new Map<string, Set<number>>();
   for (const row of underlying.rows) {
     if (contract.filter && filter?.ok) {
-      const member = filterMemberText(row[filter.index]);
+      const member = scalarMemberText(row[filter.index]);
       if (member === null || member !== contract.filter.member) {
         addFinding(
           findings,
@@ -325,9 +350,13 @@ export function verifyRoundStackedBarSeedEvidence(
       }
     }
     const categoryValue = row[category.index];
-    const segmentValue = row[segment.index];
-    if (typeof categoryValue !== 'string' || typeof segmentValue !== 'string') continue;
-    const key = groupKey(categoryValue, segmentValue);
+    const segmentValue = segment?.ok ? row[segment.index] : undefined;
+    const normalizedCategory = scalarMemberText(categoryValue);
+    const normalizedSegment = segment ? scalarMemberText(segmentValue) : null;
+    if (normalizedCategory === null || (segment !== undefined && normalizedSegment === null)) {
+      continue;
+    }
+    const key = groupKey(normalizedCategory, normalizedSegment ?? undefined);
     if (!visible.has(key)) continue;
     const rawValue = row[measure.index];
     const value =
@@ -349,7 +378,7 @@ export function verifyRoundStackedBarSeedEvidence(
       addFinding(
         findings,
         'seed-evidence',
-        `${group.category} / ${group.segment} has ${count} distinct finite raw measure value(s); two are required.`,
+        `${groupLabel(group.category, group.segment)} has ${count} distinct finite raw measure value(s); two are required.`,
       );
     }
   }
@@ -367,7 +396,7 @@ function verifySummaryColumns(
   | {
       ok: true;
       category: number;
-      segment: number;
+      segment?: number;
       frame: number;
       path: number;
       x: number;
@@ -385,7 +414,9 @@ function verifySummaryColumns(
   }
   const resolved = {
     category: resolveColumn(summary.columns, fieldAliases(contract.category)),
-    segment: resolveColumn(summary.columns, fieldAliases(contract.segment)),
+    segment: contract.segment
+      ? resolveColumn(summary.columns, fieldAliases(contract.segment))
+      : undefined,
     frame: resolveColumn(summary.columns, [captions.bin ?? '']),
     path: resolveColumn(summary.columns, [captions.path ?? '']),
     x: resolveColumn(summary.columns, [captions.x ?? '']),
@@ -393,7 +424,7 @@ function verifySummaryColumns(
   };
   if (
     !resolved.category.ok ||
-    !resolved.segment.ok ||
+    (resolved.segment && !resolved.segment.ok) ||
     !resolved.frame.ok ||
     !resolved.path.ok ||
     !resolved.x.ok ||
@@ -402,15 +433,14 @@ function verifySummaryColumns(
     return {
       ok: false,
       reason: Object.values(resolved)
-        .filter((entry) => !entry.ok)
-        .map((entry) => ('reason' in entry ? entry.reason : ''))
+        .flatMap((entry) => (entry && !entry.ok ? [entry.reason] : []))
         .join(' '),
     };
   }
   return {
     ok: true,
     category: resolved.category.index,
-    segment: resolved.segment.index,
+    ...(resolved.segment?.ok ? { segment: resolved.segment.index } : {}),
     frame: resolved.frame.index,
     path: resolved.path.index,
     x: resolved.x.index,
@@ -418,24 +448,32 @@ function verifySummaryColumns(
   };
 }
 
-function isTopRounded(points: Map<number, ParsedPoint>, high: number): boolean {
-  const p2 = points.get(2)?.y ?? Number.NaN;
-  const p3 = points.get(3)?.y ?? Number.NaN;
-  return p2 < high - ABSOLUTE_TOLERANCE && p3 > p2 + ABSOLUTE_TOLERANCE;
+function isTopRounded(points: Map<number, ParsedPoint>, high: number, tolerance: number): boolean {
+  const p2 = points.get(2)?.value ?? Number.NaN;
+  const p3 = points.get(3)?.value ?? Number.NaN;
+  return p2 < high - tolerance && p3 > p2 + tolerance;
 }
 
-function isTopSquare(points: Map<number, ParsedPoint>, high: number): boolean {
-  return [2, 3, 4, 5, 6, 7].every((path) => near(points.get(path)?.y ?? Number.NaN, high));
+function isTopSquare(points: Map<number, ParsedPoint>, high: number, tolerance: number): boolean {
+  return [2, 3, 4, 5, 6, 7].every(
+    (path) => Math.abs((points.get(path)?.value ?? Number.NaN) - high) <= tolerance,
+  );
 }
 
-function isBottomRounded(points: Map<number, ParsedPoint>, low: number): boolean {
-  const p1 = points.get(1)?.y ?? Number.NaN;
-  const p9 = points.get(9)?.y ?? Number.NaN;
-  return p1 > low + ABSOLUTE_TOLERANCE && p9 > low + ABSOLUTE_TOLERANCE;
+function isBottomRounded(
+  points: Map<number, ParsedPoint>,
+  low: number,
+  tolerance: number,
+): boolean {
+  const p1 = points.get(1)?.value ?? Number.NaN;
+  const p9 = points.get(9)?.value ?? Number.NaN;
+  return p1 > low + tolerance && p9 > low + tolerance;
 }
 
-function isBottomSquare(points: Map<number, ParsedPoint>, low: number): boolean {
-  return [1, 8, 9, 10, 11, 12].every((path) => near(points.get(path)?.y ?? Number.NaN, low));
+function isBottomSquare(points: Map<number, ParsedPoint>, low: number, tolerance: number): boolean {
+  return [1, 8, 9, 10, 11, 12].every(
+    (path) => Math.abs((points.get(path)?.value ?? Number.NaN) - low) <= tolerance,
+  );
 }
 
 export function verifyRoundStackedBarPostSummary(
@@ -462,22 +500,24 @@ export function verifyRoundStackedBarPostSummary(
   );
   const rowsByKey = new Map<string, ParsedPoint[]>();
   for (const row of readback.rows) {
-    const category = row[indices.category];
-    const segment = row[indices.segment];
-    if (typeof category !== 'string' || typeof segment !== 'string') {
+    const category = scalarMemberText(row[indices.category]);
+    const segment = indices.segment === undefined ? null : scalarMemberText(row[indices.segment]);
+    if (category === null || (indices.segment !== undefined && segment === null)) {
       addFinding(
         findings,
         'summary-groups',
-        'Post-apply summary contains a null or non-string group key.',
+        'Post-apply summary contains a null or non-scalar bar group key.',
       );
       continue;
     }
-    const key = groupKey(category, segment);
+    const key = groupKey(category, segment ?? undefined);
+    const x = finiteNumericCell(row[indices.x]);
+    const y = finiteNumericCell(row[indices.y]);
     const point: ParsedPoint = {
-      frame: Number(row[indices.frame]),
-      path: Number(row[indices.path]),
-      x: Number(row[indices.x]),
-      y: Number(row[indices.y]),
+      frame: finiteNumericCell(row[indices.frame]),
+      path: finiteNumericCell(row[indices.path]),
+      band: contract.orientation === 'vertical' ? x : y,
+      value: contract.orientation === 'vertical' ? y : x,
     };
     const points = rowsByKey.get(key) ?? [];
     points.push(point);
@@ -490,7 +530,7 @@ export function verifyRoundStackedBarPostSummary(
     addFinding(
       findings,
       'summary-groups',
-      'Post-apply Category×Segment keys do not exactly match the baseline.',
+      'Post-apply bar group keys do not exactly match the baseline.',
     );
   }
   if (readback.rows.length !== baseline.expectedVertexRows || readback.rows.length > 996) {
@@ -516,49 +556,55 @@ export function verifyRoundStackedBarPostSummary(
       addFinding(
         findings,
         'frame-domain',
-        `${group.category} / ${group.segment} lacks frames 0–11 exactly once.`,
+        `${groupLabel(group.category, group.segment)} lacks frames 0–11 exactly once.`,
       );
     }
     if (!fullPaths || points.some((point) => point.path !== point.frame + 1)) {
       addFinding(
         findings,
         'path-domain',
-        `${group.category} / ${group.segment} lacks paths 1–12 paired to frames.`,
+        `${groupLabel(group.category, group.segment)} lacks paths 1–12 paired to frames.`,
       );
     }
     if (!fullFrames || !fullPaths) continue;
-    if (points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) {
+    if (points.some((point) => !Number.isFinite(point.band) || !Number.isFinite(point.value))) {
       addFinding(
         findings,
         'segment-value',
-        `${group.category} / ${group.segment} has non-finite polygon coordinates.`,
+        `${groupLabel(group.category, group.segment)} has non-finite polygon coordinates.`,
       );
       continue;
     }
     if (
       points.some(
-        (point) => point.x < -0.35 - ABSOLUTE_TOLERANCE || point.x > 0.35 + ABSOLUTE_TOLERANCE,
+        (point) =>
+          point.band < -0.35 - ABSOLUTE_TOLERANCE || point.band > 0.35 + ABSOLUTE_TOLERANCE,
       )
     ) {
       addFinding(
         findings,
         'segment-value',
-        `${group.category} / ${group.segment} exceeds the supported X domain.`,
+        `${groupLabel(group.category, group.segment)} exceeds the supported X domain.`,
       );
     }
 
     const byPath = new Map(points.map((point) => [point.path, point]));
-    const high = Math.max(byPath.get(4)?.y ?? Number.NaN, byPath.get(5)?.y ?? Number.NaN);
-    const low = Math.min(byPath.get(10)?.y ?? Number.NaN, byPath.get(11)?.y ?? Number.NaN);
+    const high = Math.max(byPath.get(4)?.value ?? Number.NaN, byPath.get(5)?.value ?? Number.NaN);
+    const low = Math.min(byPath.get(10)?.value ?? Number.NaN, byPath.get(11)?.value ?? Number.NaN);
     if (!near(high - low, Math.abs(group.value))) {
       addFinding(
         findings,
         'segment-value',
-        `${group.category} / ${group.segment} polygon span does not match its baseline value.`,
+        `${groupLabel(group.category, group.segment)} polygon span does not match its baseline value.`,
       );
     }
-    const topRounded = isTopRounded(byPath, high);
-    const bottomRounded = isBottomRounded(byPath, low);
+    const categorySpan = baseline.groups
+      .filter((candidate) => candidate.category === group.category)
+      .reduce((sum, candidate) => sum + Math.abs(candidate.value), 0);
+    const expectedRadius = Math.min(Math.abs(group.value) / 2, 0.02 * categorySpan);
+    const roundedTipTolerance = expectedRadius * ROUNDED_TIP_TOLERANCE_RATIO;
+    const topRounded = isTopRounded(byPath, high, roundedTipTolerance);
+    const bottomRounded = isBottomRounded(byPath, low, roundedTipTolerance);
     const topRadiusX = topRounded ? 0.06 : 0;
     const bottomRadiusX = bottomRounded ? 0.06 : 0;
     const expectedX = [
@@ -576,31 +622,31 @@ export function verifyRoundStackedBarPostSummary(
       -0.35 + 0.292893 * bottomRadiusX,
     ];
     if (
-      expectedX.some((expected, index) => !near(byPath.get(index + 1)?.x ?? Number.NaN, expected))
+      expectedX.some(
+        (expected, index) => !near(byPath.get(index + 1)?.band ?? Number.NaN, expected),
+      )
     ) {
       addFinding(
         findings,
         'segment-value',
-        `${group.category} / ${group.segment} does not use the exact subtle 12-point X geometry.`,
+        `${groupLabel(group.category, group.segment)} does not use the exact subtle 12-point band geometry.`,
       );
     }
-    const categorySpan = baseline.groups
-      .filter((candidate) => candidate.category === group.category)
-      .reduce((sum, candidate) => sum + Math.abs(candidate.value), 0);
-    const sameSignOrder = baseline.segmentOrderFromZero.filter((segment) =>
-      baseline.groups.some(
-        (candidate) =>
-          candidate.category === group.category &&
-          candidate.segment === segment &&
-          Math.sign(candidate.value) === Math.sign(group.value),
-      ),
-    );
+    const sameSignOrder = contract.segment
+      ? baseline.segmentOrderFromZero.filter((segment) =>
+          baseline.groups.some(
+            (candidate) =>
+              candidate.category === group.category &&
+              candidate.segment === segment &&
+              Math.sign(candidate.value) === Math.sign(group.value),
+          ),
+        )
+      : [];
     const outerSegment = sameSignOrder[sameSignOrder.length - 1];
-    const expectedRadius = Math.min(Math.abs(group.value) / 2, 0.02 * categorySpan);
     const expectedTopRadius =
-      group.value > 0 && group.segment === outerSegment ? expectedRadius : 0;
+      group.value > 0 && (!contract.segment || group.segment === outerSegment) ? expectedRadius : 0;
     const expectedBottomRadius =
-      group.value < 0 && group.segment === outerSegment ? expectedRadius : 0;
+      group.value < 0 && (!contract.segment || group.segment === outerSegment) ? expectedRadius : 0;
     const expectedY = [
       low + expectedBottomRadius,
       high - expectedTopRadius,
@@ -616,12 +662,14 @@ export function verifyRoundStackedBarPostSummary(
       low + 0.292893 * expectedBottomRadius,
     ];
     if (
-      expectedY.some((expected, index) => !near(byPath.get(index + 1)?.y ?? Number.NaN, expected))
+      expectedY.some(
+        (expected, index) => !near(byPath.get(index + 1)?.value ?? Number.NaN, expected),
+      )
     ) {
       addFinding(
         findings,
         'segment-value',
-        `${group.category} / ${group.segment} does not use the exact subtle 12-point Y geometry.`,
+        `${groupLabel(group.category, group.segment)} does not use the exact subtle 12-point measure geometry.`,
       );
     }
     intervals.push({
@@ -631,10 +679,37 @@ export function verifyRoundStackedBarPostSummary(
       low,
       high,
       topRounded,
-      topSquare: isTopSquare(byPath, high),
+      topSquare: isTopSquare(byPath, high, roundedTipTolerance),
       bottomRounded,
-      bottomSquare: isBottomSquare(byPath, low),
+      bottomSquare: isBottomSquare(byPath, low, roundedTipTolerance),
     });
+  }
+
+  if (!contract.segment) {
+    for (const group of baseline.groups) {
+      const interval = intervals.find((candidate) => candidate.category === group.category);
+      if (!interval) continue;
+      const beginsAtZero = near(group.value > 0 ? interval.low : interval.high, 0);
+      if (!beginsAtZero) {
+        addFinding(
+          findings,
+          'segment-value',
+          `${group.category} simple bar does not begin at zero.`,
+        );
+      }
+      const nonzeroTipRounded = group.value > 0 ? interval.topRounded : interval.bottomRounded;
+      const zeroTipSquare =
+        group.value > 0
+          ? interval.bottomSquare && !interval.bottomRounded
+          : interval.topSquare && !interval.topRounded;
+      if (!nonzeroTipRounded) {
+        addFinding(findings, 'outer-tip', `${group.category} nonzero tip is not rounded.`);
+      }
+      if (!zeroTipSquare) {
+        addFinding(findings, 'segment-value', `${group.category} zero tip is not square.`);
+      }
+    }
+    return result(findings);
   }
 
   for (const category of new Set(baseline.groups.map((group) => group.category))) {
@@ -885,6 +960,10 @@ function helperDefinitions(parent: Element, prefix: string): Map<string, Element
   return definitions;
 }
 
+function contractHelperNames(contract: RoundStackedBarSemanticContract): string[] {
+  return Object.values(contract.helpers).flatMap((helper) => (helper ? [helper.column] : []));
+}
+
 function verifyHelperScope(
   findings: RoundStackedBarFinding[],
   label: string,
@@ -900,15 +979,15 @@ function verifyHelperScope(
   const actualElements = helperDefinitionElements(scope, prefix);
   const actual = helperDefinitions(scope, prefix);
   if (
-    actualElements.length !== 18 ||
-    actual.size !== 18 ||
+    actualElements.length !== expectedNames.length ||
+    actual.size !== expectedNames.length ||
     expectedNames.some((name) => !actual.has(name)) ||
     [...actual.keys()].some((name) => !expectedNames.includes(name))
   ) {
     addFinding(
       findings,
       'helper-definition',
-      `${label} does not contain exactly the 18 deterministic helpers.`,
+      `${label} does not contain exactly the ${expectedNames.length} contract helpers.`,
     );
   }
   for (const name of expectedNames) {
@@ -984,7 +1063,7 @@ function canonicalUnrelatedWorkbookContent(
   if (owners.worksheets.length !== 1 || owners.datasources.length !== 1) return null;
   owners.worksheets[0].parentNode?.removeChild(owners.worksheets[0]);
   if (stripExpectedTargetHelpers) {
-    const expectedHelpers = new Set(Object.values(contract.helpers).map((helper) => helper.column));
+    const expectedHelpers = new Set(contractHelperNames(contract));
     for (const column of childElements(owners.datasources[0], 'column')) {
       if (expectedHelpers.has(column.getAttribute('name') ?? '')) {
         owners.datasources[0].removeChild(column);
@@ -1195,12 +1274,12 @@ export function verifyRoundStackedBarStructure(input: {
     );
   }
 
-  const expectedNames = Object.values(verificationContract.helpers).map(({ column }) => column);
-  if (expectedNames.length !== 18 || new Set(expectedNames).size !== 18) {
+  const expectedNames = contractHelperNames(verificationContract);
+  if (expectedNames.length === 0 || new Set(expectedNames).size !== expectedNames.length) {
     addFinding(
       findings,
       'helper-definition',
-      'The semantic contract does not name exactly 18 helpers.',
+      'The semantic contract must name a non-empty set of unique active helpers.',
     );
   }
   const intendedDependency = findDependency(intended, verificationContract.datasource.internalName);

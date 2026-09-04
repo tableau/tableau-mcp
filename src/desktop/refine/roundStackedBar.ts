@@ -16,14 +16,14 @@ interface FieldSemantics {
 export interface RoundStackedBarSemanticContract {
   worksheetId: string;
   datasource: { caption: string; internalName: string };
+  orientation: 'horizontal' | 'vertical';
   category: FieldSemantics;
-  segment: FieldSemantics;
+  segment?: FieldSemantics;
   measure: FieldSemantics & { aggregation: 'SUM' };
   filter?: { caption: string; column: string; columnInstance: string; member: string };
   helperPrefix: string;
-  helpers: Record<
-    RoundStackedBarHelperRole,
-    { caption: string; column: string; columnInstance?: string }
+  helpers: Partial<
+    Record<RoundStackedBarHelperRole, { caption: string; column: string; columnInstance?: string }>
   >;
   narration: {
     caption: { status: 'generated' | 'preserved'; text: string } | { status: 'source-suppressed' };
@@ -65,8 +65,9 @@ interface BaseShape {
   dependency: Element;
   filter?: { caption: string; column: string; columnInstance: string; member: string };
   measure: ColumnInstance;
+  orientation: 'horizontal' | 'vertical';
   pane: Element;
-  segment: ColumnInstance;
+  segment?: ColumnInstance;
   table: Element;
   view: Element;
   worksheet: Element;
@@ -105,6 +106,19 @@ const HELPER_SUFFIXES = [
 
 export type RoundStackedBarHelperRole = (typeof HELPER_SUFFIXES)[number];
 type HelperNames = Record<RoundStackedBarHelperRole, string>;
+
+const STACKED_ONLY_HELPER_ROLES = new Set<RoundStackedBarHelperRole>([
+  'pos',
+  'neg',
+  'pos_end',
+  'neg_end',
+]);
+
+function activeHelperRoles(shape: BaseShape): RoundStackedBarHelperRole[] {
+  return shape.segment
+    ? [...HELPER_SUFFIXES]
+    : HELPER_SUFFIXES.filter((role) => !STACKED_ONLY_HELPER_ROLES.has(role));
+}
 
 const refusal = (reason: string): RoundStackedBarRefusal => ({ ok: false, reason });
 
@@ -300,8 +314,9 @@ function semanticContract(
       caption: shape.datasourceCaption,
       internalName: shape.datasourceName,
     },
+    orientation: shape.orientation,
     category: fieldSemantics(shape.category, shape.columnDefinitions),
-    segment: fieldSemantics(shape.segment, shape.columnDefinitions),
+    ...(shape.segment ? { segment: fieldSemantics(shape.segment, shape.columnDefinitions) } : {}),
     measure: {
       ...fieldSemantics(shape.measure, shape.columnDefinitions),
       aggregation: 'SUM',
@@ -309,7 +324,7 @@ function semanticContract(
     ...(shape.filter ? { filter: shape.filter } : {}),
     helperPrefix: prefix,
     helpers: Object.fromEntries(
-      HELPER_SUFFIXES.map((role) => {
+      activeHelperRoles(shape).map((role) => {
         const column = names[role];
         const columnInstance = helperColumnInstance(role, column);
         return [
@@ -346,7 +361,7 @@ function inspectLayoutNarration(
 ): { ok: true; value: LayoutNarrationState } | RoundStackedBarRefusal {
   const layouts = elements(worksheet, 'layout-options');
   if (layouts.length > 1) {
-    return refusal('round_stacked_bar refuses duplicate worksheet layout-options.');
+    return refusal('round_bar refuses duplicate worksheet layout-options.');
   }
   const layoutOptions = layouts[0] ?? null;
   if (!layoutOptions) {
@@ -359,14 +374,14 @@ function inspectLayoutNarration(
   const worksheetChildren = elements(worksheet);
   const tableIndex = worksheetChildren.findIndex((child) => child.tagName === 'table');
   if (tableIndex < 0 || worksheetChildren.indexOf(layoutOptions) > tableIndex) {
-    return refusal('round_stacked_bar requires layout-options before the worksheet table.');
+    return refusal('round_bar requires layout-options before the worksheet table.');
   }
   const exportNoCaptionValue = layoutOptions.getAttribute('export-no-caption');
   if (
     exportNoCaptionValue !== null &&
     !['true', 'false', '1', '0'].includes(exportNoCaptionValue)
   ) {
-    return refusal('round_stacked_bar refuses an invalid export-no-caption value.');
+    return refusal('round_bar refuses an invalid export-no-caption value.');
   }
 
   const children = elements(layoutOptions);
@@ -378,17 +393,17 @@ function inspectLayoutNarration(
     positions.some((position, index) => index > 0 && position <= positions[index - 1])
   ) {
     return refusal(
-      'round_stacked_bar refuses malformed, duplicate, or out-of-order layout-options children.',
+      'round_bar refuses malformed, duplicate, or out-of-order layout-options children.',
     );
   }
 
   const caption = elements(layoutOptions, 'caption')[0] ?? null;
   const altText = elements(layoutOptions, 'alt-text')[0] ?? null;
   if (caption && !formattedTextOwnerIsWellFormed(caption)) {
-    return refusal('round_stacked_bar refuses malformed caption ownership.');
+    return refusal('round_bar refuses malformed caption ownership.');
   }
   if (altText && !formattedTextOwnerIsWellFormed(altText)) {
-    return refusal('round_stacked_bar refuses malformed alt-text ownership.');
+    return refusal('round_bar refuses malformed alt-text ownership.');
   }
   return {
     ok: true,
@@ -404,12 +419,13 @@ function inspectLayoutNarration(
 function semanticNarrationText(shape: BaseShape): string {
   const category =
     shape.columnDefinitions.get(shape.category.column)?.caption ?? unbracket(shape.category.column);
-  const segment =
-    shape.columnDefinitions.get(shape.segment.column)?.caption ?? unbracket(shape.segment.column);
   const measure =
     shape.columnDefinitions.get(shape.measure.column)?.caption ?? unbracket(shape.measure.column);
   const filter = shape.filter ? ` Filtered by ${shape.filter.caption}.` : '';
-  return `Sum of ${measure} for each ${category}. Color shows details about ${segment}.${filter} Rounded corners are visual styling; values are unchanged.`;
+  const color = shape.segment
+    ? ` Color shows details about ${shape.columnDefinitions.get(shape.segment.column)?.caption ?? unbracket(shape.segment.column)}.`
+    : '';
+  return `Sum of ${measure} for each ${category}.${color}${filter} Rounded corners are visual styling; values are unchanged.`;
 }
 
 function formattedNarration(
@@ -518,19 +534,17 @@ function readFilter(
   const slices = elements(view, 'slices');
   if (filters.length === 0) {
     if (slices.some((slice) => elements(slice, 'column').length > 0)) {
-      return refusal(
-        'round_stacked_bar does not support slices without its one categorical filter.',
-      );
+      return refusal('round_bar does not support slices without its one categorical filter.');
     }
     return { ok: true };
   }
   if (filters.length !== 1) {
-    return refusal('round_stacked_bar supports at most one categorical filter.');
+    return refusal('round_bar supports at most one categorical filter.');
   }
 
   const filter = filters[0];
   if (filter.getAttribute('class') !== 'categorical' || filter.hasAttribute('context')) {
-    return refusal('round_stacked_bar supports only one ordinary categorical filter.');
+    return refusal('round_bar supports only one ordinary categorical filter.');
   }
   const filterReference = filter.getAttribute('column') ?? '';
   const filterCiName = unqualify(filterReference, datasource);
@@ -543,7 +557,7 @@ function readFilter(
     !filterDefinition ||
     filterDefinition.element.getElementsByTagName('calculation').length > 0
   ) {
-    return refusal('round_stacked_bar requires a plain source filter field.');
+    return refusal('round_bar requires a plain source filter field.');
   }
 
   const unions = elements(filter, 'groupfilter');
@@ -620,23 +634,21 @@ function baseNodes(parsed: ParsedXml):
   const simpleId = oneChild(parsed.worksheet, 'simple-id');
   const worksheetId = simpleId?.getAttribute('uuid') ?? '';
   if (!helperPrefix(worksheetId)) {
-    return refusal('round_stacked_bar requires a stable worksheet id.');
+    return refusal('round_bar requires a stable worksheet id.');
   }
   const table = oneChild(parsed.worksheet, 'table');
   const view = table ? oneChild(table, 'view') : null;
-  if (!table || !view) return refusal('round_stacked_bar requires one worksheet table and view.');
+  if (!table || !view) return refusal('round_bar requires one worksheet table and view.');
 
   const datasources = oneChild(view, 'datasources');
   const datasourceRefs = datasources ? elements(datasources, 'datasource') : [];
   if (datasourceRefs.length !== 1) {
-    return refusal(
-      `round_stacked_bar requires exactly one datasource (found ${datasourceRefs.length}).`,
-    );
+    return refusal(`round_bar requires exactly one datasource (found ${datasourceRefs.length}).`);
   }
   const dependencies = elements(view, 'datasource-dependencies');
   if (dependencies.length !== 1) {
     return refusal(
-      `round_stacked_bar requires exactly one datasource-dependencies block (found ${dependencies.length}).`,
+      `round_bar requires exactly one datasource-dependencies block (found ${dependencies.length}).`,
     );
   }
   const datasourceName = dependencies[0].getAttribute('datasource');
@@ -658,12 +670,12 @@ function classifyOrdinary(
   base: Exclude<ReturnType<typeof baseNodes>, RoundStackedBarRefusal>,
 ): BaseShape | RoundStackedBarRefusal {
   if (base.dependency.getElementsByTagName('table-calc').length > 0) {
-    return refusal('round_stacked_bar does not support a source table calculation.');
+    return refusal('round_bar does not support a source table calculation.');
   }
   const panes = oneChild(base.table, 'panes');
   const paneList = panes ? elements(panes, 'pane') : [];
   if (paneList.length !== 1) {
-    return refusal(`round_stacked_bar requires exactly one pane (found ${paneList.length}).`);
+    return refusal(`round_bar requires exactly one pane (found ${paneList.length}).`);
   }
   const pane = paneList[0];
   const tableChildren = elements(base.table);
@@ -673,7 +685,7 @@ function classifyOrdinary(
   );
   if (unfamiliarTableChild) {
     return refusal(
-      `round_stacked_bar does not support a pre-existing <${unfamiliarTableChild.tagName}> table node.`,
+      `round_bar does not support a pre-existing <${unfamiliarTableChild.tagName}> table node.`,
     );
   }
   const unfamiliarPaneChild = elements(pane).find(
@@ -681,23 +693,33 @@ function classifyOrdinary(
   );
   if (unfamiliarPaneChild) {
     return refusal(
-      `round_stacked_bar does not support a pre-existing <${unfamiliarPaneChild.tagName}> pane node.`,
+      `round_bar does not support a pre-existing <${unfamiliarPaneChild.tagName}> pane node.`,
     );
   }
   const mark = oneChild(pane, 'mark');
-  if (!mark || mark.getAttribute('class') !== 'Bar') {
-    return refusal('round_stacked_bar requires a single Bar mark.');
+  if (!mark || !['Automatic', 'Bar'].includes(mark.getAttribute('class') ?? '')) {
+    return refusal('round_bar requires a single Bar or bar-shaped Automatic mark.');
   }
-  const encodings = oneChild(pane, 'encodings');
+  const encodingContainers = elements(pane, 'encodings');
+  if (encodingContainers.length > 1) {
+    return refusal('round_bar requires at most one encodings container.');
+  }
+  const encodings = encodingContainers[0] ?? null;
+  if (encodings && encodings.attributes.length > 0) {
+    return refusal('round_bar requires a plain encodings container.');
+  }
   const encodingList = encodings ? elements(encodings) : [];
   if (
     encodingList.some((encoding) => ['label', 'text', 'tooltip'].includes(encoding.tagName)) ||
     elements(pane, 'customized-tooltip').length > 0
   ) {
-    return refusal('round_stacked_bar does not support a custom label or tooltip.');
+    return refusal('round_bar does not support a custom label or tooltip.');
   }
-  if (encodingList.length !== 1 || encodingList[0].tagName !== 'color') {
-    return refusal('round_stacked_bar requires Segment as the sole Color encoding.');
+  if (
+    encodingList.length > 1 ||
+    (encodingList.length === 1 && encodingList[0].tagName !== 'color')
+  ) {
+    return refusal('round_bar supports no encoding or Segment as the sole Color encoding.');
   }
 
   const definitions = columnDefinitions(base.dependency);
@@ -706,54 +728,130 @@ function classifyOrdinary(
   const cols = shelfText(oneChild(base.table, 'cols'));
   const rowCiName = unqualify(rows, base.datasourceName);
   const colCiName = unqualify(cols, base.datasourceName);
-  const category = instances.find((instance) => instance.name === colCiName);
-  const measure = instances.find((instance) => instance.name === rowCiName);
-  if (
-    !category ||
-    category.type !== 'nominal' ||
-    category.derivation !== 'None' ||
-    !measure ||
-    measure.type !== 'quantitative'
-  ) {
-    return refusal(
-      'round_stacked_bar supports only a vertical Category-columns / SUM-measure-rows chart.',
-    );
+  const rowInstance = instances.find((instance) => instance.name === rowCiName);
+  const colInstance = instances.find((instance) => instance.name === colCiName);
+  const vertical =
+    colInstance?.type === 'nominal' &&
+    colInstance.derivation === 'None' &&
+    rowInstance?.type === 'quantitative';
+  const horizontal =
+    rowInstance?.type === 'nominal' &&
+    rowInstance.derivation === 'None' &&
+    colInstance?.type === 'quantitative';
+  if (!vertical && !horizontal) {
+    return refusal('round_bar supports only one Category and one SUM measure on opposite shelves.');
   }
+  const orientation = vertical ? 'vertical' : 'horizontal';
+  const category = (vertical ? colInstance : rowInstance) as ColumnInstance;
+  const measure = (vertical ? rowInstance : colInstance) as ColumnInstance;
   if (measure.derivation !== 'Sum') {
-    return refusal('round_stacked_bar requires a SUM measure.');
+    return refusal('round_bar requires a SUM measure.');
   }
   const sourceMeasureDefinitions = elements(base.dependency, 'column').filter(
     (definition) => definition.getAttribute('name') === measure.column,
   );
   if (sourceMeasureDefinitions.length !== 1) {
-    return refusal('round_stacked_bar refuses a duplicate or missing source measure definition.');
+    return refusal('round_bar refuses a duplicate or missing source measure definition.');
   }
-  const segmentRef = encodingList[0].getAttribute('column') ?? '';
-  const segmentCiName = unqualify(segmentRef, base.datasourceName);
-  const segment = instances.find((instance) => instance.name === segmentCiName);
-  if (!segment || segment.type !== 'nominal' || segment.derivation !== 'None') {
-    return refusal('round_stacked_bar requires one plain Segment field as Color.');
+  const colorEncoding = encodingList[0] ?? null;
+  let segment: ColumnInstance | undefined;
+  if (colorEncoding) {
+    const segmentRef = colorEncoding.getAttribute('column') ?? '';
+    const segmentCiName = unqualify(segmentRef, base.datasourceName);
+    const segmentCandidates = segmentCiName
+      ? instances.filter((instance) => instance.name === segmentCiName)
+      : [];
+    if (
+      !segmentRef ||
+      !hasOnlyAttributes(colorEncoding, { column: segmentRef }) ||
+      elements(colorEncoding).length > 0 ||
+      (colorEncoding.textContent?.trim() ?? '') !== '' ||
+      !segmentCiName ||
+      segmentCandidates.length !== 1 ||
+      segmentCandidates[0].type !== 'nominal' ||
+      segmentCandidates[0].derivation !== 'None'
+    ) {
+      return refusal(
+        'round_bar requires one plain Color encoding qualified to the selected datasource.',
+      );
+    }
+    segment = segmentCandidates[0];
   }
-  if (segment.name === category.name) {
+  if (segment?.name === category.name) {
     return refusal('Category and Segment must be different fields.');
   }
+  if (segment) {
+    const paneViews = elements(pane, 'view');
+    const paneView = paneViews.length === 1 ? paneViews[0] : null;
+    const breakdown = paneView ? oneChild(paneView, 'breakdown') : null;
+    const breakdownValue = breakdown?.getAttribute('value') ?? '';
+    if (
+      !paneView ||
+      paneView.attributes.length > 0 ||
+      elements(paneView).length !== 1 ||
+      (paneView.textContent?.trim() ?? '') !== '' ||
+      !breakdown ||
+      !hasOnlyAttributes(breakdown, { value: breakdownValue }) ||
+      elements(breakdown).length > 0 ||
+      (breakdown.textContent?.trim() ?? '') !== '' ||
+      !['auto', 'on', 'off'].includes(breakdownValue)
+    ) {
+      return refusal('round_bar requires one plain Stack Marks setting for a Color bar.');
+    }
+    if (breakdownValue === 'off') {
+      return refusal('round_bar does not support a Color bar when Stack Marks is off.');
+    }
+  }
   if (
-    [category, segment, measure].some(
-      (instance) =>
-        (definitions.get(instance.column)?.element.getElementsByTagName('calculation').length ??
-          0) > 0,
-    )
+    [category, segment, measure]
+      .filter((instance): instance is ColumnInstance => !!instance)
+      .some(
+        (instance) =>
+          (definitions.get(instance.column)?.element.getElementsByTagName('calculation').length ??
+            0) > 0,
+      )
   ) {
-    return refusal(
-      'round_stacked_bar does not support calculated Category, Segment, or Value fields.',
-    );
+    return refusal('round_bar does not support calculated Category, Segment, or Value fields.');
   }
 
   const filter = readFilter(base.view, base.datasourceName, instances, definitions);
   if (!filter.ok) return filter;
+  const acceptedInstanceNames = [
+    category.name,
+    measure.name,
+    ...(segment ? [segment.name] : []),
+    ...(filter.value ? [filter.value.columnInstance] : []),
+  ];
+  if (
+    acceptedInstanceNames.some(
+      (name) => instances.filter((instance) => instance.name === name).length !== 1,
+    )
+  ) {
+    return refusal(
+      'round_bar refuses duplicate Category, Segment, SUM, or filter column instances.',
+    );
+  }
+  const acceptedDefinitionNames = [
+    category.column,
+    measure.column,
+    ...(segment ? [segment.column] : []),
+    ...(filter.allowedColumn ? [filter.allowedColumn] : []),
+  ];
+  if (
+    acceptedDefinitionNames.some(
+      (name) =>
+        elements(base.dependency, 'column').filter(
+          (definition) => definition.getAttribute('name') === name,
+        ).length !== 1,
+    )
+  ) {
+    return refusal(
+      'round_bar refuses duplicate Category, Segment, SUM, or filter source definitions.',
+    );
+  }
   const allowedColumns = new Set([
     category.column,
-    segment.column,
+    ...(segment ? [segment.column] : []),
     measure.column,
     ...(filter.allowedColumn ? [filter.allowedColumn] : []),
   ]);
@@ -762,18 +860,16 @@ function classifyOrdinary(
   );
   const extraInstance = instances.find((instance) => !allowedColumns.has(instance.column));
   if (extraDefinition || extraInstance) {
-    return refusal(
-      'round_stacked_bar refuses an extra field outside Category, Segment, SUM, and filter.',
-    );
+    return refusal('round_bar refuses an extra field outside Category, Segment, SUM, and filter.');
   }
 
   const anySort = Array.from(base.view.getElementsByTagName('sort'));
   if (anySort.length > 0) {
-    return refusal('round_stacked_bar does not support a manual Segment order.');
+    return refusal('round_bar does not support a manual Segment order.');
   }
   const computedSorts = elements(base.view, 'computed-sort');
   if (computedSorts.length > 1) {
-    return refusal('round_stacked_bar supports at most one category computed sort.');
+    return refusal('round_bar supports at most one category computed sort.');
   }
   if (computedSorts.length === 1) {
     const sort = computedSorts[0];
@@ -783,13 +879,12 @@ function classifyOrdinary(
       !['ASC', 'DESC'].includes(sort.getAttribute('direction') ?? '') ||
       elements(sort).length > 0
     ) {
-      return refusal('round_stacked_bar supports only one simple category computed sort.');
+      return refusal('round_bar supports only one simple category computed sort.');
     }
   }
 
   const tableStyle = oneChild(base.table, 'style');
-  if (!tableStyle)
-    return refusal('round_stacked_bar requires one supported worksheet style block.');
+  if (!tableStyle) return refusal('round_bar requires one supported worksheet style block.');
   const supportedTableStyleRules = new Set([
     'axis',
     'cell',
@@ -800,71 +895,72 @@ function classifyOrdinary(
     'zeroline',
   ]);
   const sourceMeasure = qualified(base.datasourceName, measure.name);
+  const measureScope = orientation === 'vertical' ? 'rows' : 'cols';
   const sourceMeasureAxisFormats = new Set<string>();
   const sourceMeasureTitleFormats: Element[] = [];
   for (const styleRule of elements(tableStyle, 'style-rule')) {
     const element = styleRule.getAttribute('element') ?? '';
     if (!supportedTableStyleRules.has(element)) {
-      return refusal(`round_stacked_bar does not support the ${element || 'unnamed'} table style.`);
+      return refusal(`round_bar does not support the ${element || 'unnamed'} table style.`);
     }
     if (styleRule.getAttribute('element') !== 'axis') continue;
     if (styleRule.getElementsByTagName('encoding').length > 0) {
-      return refusal('round_stacked_bar does not support a source axis encoding.');
+      return refusal('round_bar does not support a source axis encoding.');
     }
     for (const format of Array.from(styleRule.getElementsByTagName('format'))) {
       if (format.getAttribute('attr') === 'title') {
         const field = format.getAttribute('field');
         const scope = format.getAttribute('scope') ?? '';
         if (field === sourceMeasure) {
-          if (scope !== 'rows') {
-            return refusal('round_stacked_bar requires the measure axis title on rows.');
+          if (scope !== measureScope) {
+            return refusal(`round_bar requires the measure axis title on ${measureScope}.`);
           }
           sourceMeasureTitleFormats.push(format);
-        } else if (scope === '' || scope === 'rows') {
-          return refusal('round_stacked_bar refuses an ambiguous row-axis title slot.');
+        } else if (scope === '' || scope === measureScope) {
+          return refusal('round_bar refuses an ambiguous measure-axis title slot.');
         }
       }
       if (format.getAttribute('field') === sourceMeasure) {
         const signature = axisFormatSlotSignature(format);
         if (sourceMeasureAxisFormats.has(signature)) {
-          return refusal('round_stacked_bar refuses a duplicate source-measure axis format.');
+          return refusal('round_bar refuses a duplicate source-measure axis format.');
         }
         sourceMeasureAxisFormats.add(signature);
       }
       const attr = format.getAttribute('attr') ?? '';
       const value = (format.getAttribute('value') ?? '').toLowerCase();
       if (attr.startsWith('fixed-') || (attr === 'type' && value !== 'linear')) {
-        return refusal('round_stacked_bar requires a linear auto axis.');
+        return refusal('round_bar requires a linear auto axis.');
       }
     }
   }
   if (sourceMeasureTitleFormats.length > 1) {
-    return refusal('round_stacked_bar refuses ambiguous duplicate measure axis title slots.');
+    return refusal('round_bar refuses ambiguous duplicate measure axis title slots.');
   }
 
   const paneStyles = elements(pane, 'style');
   if (paneStyles.length > 1) {
-    return refusal('round_stacked_bar supports at most one pane style block.');
+    return refusal('round_bar supports at most one pane style block.');
   }
   if (paneStyles.length === 1) {
     const supportedPaneFormats = new Set(['mark-color', 'mark-transparency', 'size']);
     for (const styleRule of elements(paneStyles[0], 'style-rule')) {
       if (styleRule.getAttribute('element') !== 'mark') {
-        return refusal('round_stacked_bar supports only mark styling inside the pane.');
+        return refusal('round_bar supports only mark styling inside the pane.');
       }
       if (
         Array.from(styleRule.getElementsByTagName('format')).some(
           (format) => !supportedPaneFormats.has(format.getAttribute('attr') ?? ''),
         )
       ) {
-        return refusal('round_stacked_bar does not support this pane mark style.');
+        return refusal('round_bar does not support this pane mark style.');
       }
     }
   }
 
   const aggregation = oneChild(base.view, 'aggregation');
   if (!aggregation || aggregation.getAttribute('value') !== 'true') {
-    return refusal('round_stacked_bar requires an aggregated worksheet.');
+    return refusal('round_bar requires an aggregated worksheet.');
   }
   return {
     ...base,
@@ -872,6 +968,7 @@ function classifyOrdinary(
     columnDefinitions: definitions,
     filter: filter.value,
     measure,
+    orientation,
     pane,
     segment,
     worksheet: parsed.worksheet,
@@ -887,16 +984,6 @@ function recognizeRounded(
   const definitions = columnDefinitions(base.dependency);
   const present = HELPER_SUFFIXES.filter((suffix) => definitions.has(names[suffix]));
   if (present.length === 0) return null;
-  if (
-    present.length !== HELPER_SUFFIXES.length ||
-    present.some(
-      (suffix) => definitions.get(names[suffix])?.element.getAttribute('hidden') !== 'true',
-    )
-  ) {
-    return refusal(
-      'the helper-bearing worksheet does not match the deterministic rounded signature.',
-    );
-  }
   const panes = oneChild(base.table, 'panes');
   const paneList = panes ? elements(panes, 'pane') : [];
   const pane = paneList.length === 1 ? paneList[0] : null;
@@ -914,15 +1001,27 @@ function recognizeRounded(
   const segmentName = color
     ? unqualify(color.getAttribute('column') ?? '', base.datasourceName)
     : null;
-  const segment = instances.find((instance) => instance.name === segmentName);
+  const segment = segmentName
+    ? instances.find((instance) => instance.name === segmentName)
+    : undefined;
+  const rows = shelfText(oneChild(base.table, 'rows'));
   const cols = shelfText(oneChild(base.table, 'cols'));
-  const categoryReference = cols.match(/^\((\[[^\n]+?\]\.\[[^\n]+?\])\s+\*\s+/)?.[1] ?? '';
+  const xField = qualified(base.datasourceName, helperColumnInstance('x', names.x)!);
+  const yField = qualified(base.datasourceName, helperColumnInstance('y', names.y)!);
+  const productShelf = (shelf: string, helperField: string): string => {
+    const match = shelf.match(/^\((\[[^\n]+?\]\.\[[^\n]+?\])\s+\*\s+(\[[^\n]+?\]\.\[[^\n]+?\])\)$/);
+    return match?.[2] === helperField ? match[1] : '';
+  };
+  const verticalCategory = rows === yField ? productShelf(cols, xField) : '';
+  const horizontalCategory = cols === xField ? productShelf(rows, yField) : '';
+  const orientation = verticalCategory ? 'vertical' : horizontalCategory ? 'horizontal' : null;
+  const categoryReference = verticalCategory || horizontalCategory;
   const categoryName = unqualify(categoryReference, base.datasourceName);
   const category = instances.find((instance) => instance.name === categoryName);
   const measureCandidates = instances.filter(
     (instance) => instance.derivation === 'Sum' && instance.type === 'quantitative',
   );
-  if (!category || !segment || measureCandidates.length !== 1) {
+  if (!orientation || !category || (segmentName && !segment) || measureCandidates.length !== 1) {
     return refusal(
       'the helper-bearing worksheet does not match the deterministic rounded signature.',
     );
@@ -935,10 +1034,22 @@ function recognizeRounded(
     columnDefinitions: definitions,
     filter: filter.value,
     measure: measureCandidates[0],
+    orientation,
     pane,
     segment,
     worksheet: parsed.worksheet,
   };
+  const activeRoles = activeHelperRoles(shape);
+  if (
+    present.length !== activeRoles.length ||
+    activeRoles.some(
+      (role) => definitions.get(names[role])?.element.getAttribute('hidden') !== 'true',
+    )
+  ) {
+    return refusal(
+      'the helper-bearing worksheet does not match the deterministic rounded signature.',
+    );
+  }
   if (!hasDeterministicRoundedSignature(shape, names)) {
     return refusal(
       'the helper-bearing worksheet does not match the deterministic rounded signature.',
@@ -986,7 +1097,7 @@ interface HelperCalculationSpec {
 
 function helperCalculationSpecs(shape: BaseShape, names: HelperNames): HelperCalculationSpec[] {
   const rawMeasure = shape.measure.column;
-  const fixedFields = [shape.category.column, shape.segment.column];
+  const fixedFields = [shape.category.column, ...(shape.segment ? [shape.segment.column] : [])];
   if (shape.filter) {
     const filterInstance = columnInstances(shape.dependency).find(
       (instance) => instance.name === shape.filter?.columnInstance,
@@ -994,6 +1105,46 @@ function helperCalculationSpecs(shape: BaseShape, names: HelperNames): HelperCal
     if (filterInstance) fixedFields.push(filterInstance.column);
   }
   const f = (suffix: RoundStackedBarHelperRole): string => names[suffix];
+  const stackedEndpoints: Array<
+    [Exclude<RoundStackedBarHelperRole, 'bin'>, string, 'integer' | 'real', boolean?]
+  > = shape.segment
+    ? [
+        ['pos_end', `WINDOW_SUM(${f('pos')})-RUNNING_SUM(${f('pos')})+${f('pos')}`, 'real'],
+        ['neg_end', `WINDOW_SUM(${f('neg')})-RUNNING_SUM(${f('neg')})+${f('neg')}`, 'real'],
+        [
+          'lo',
+          `IF ${f('dense')} >= 0 THEN ${f('pos_end')}-${f('pos')} ELSE ${f('neg_end')} END`,
+          'real',
+        ],
+        [
+          'hi',
+          `IF ${f('dense')} >= 0 THEN ${f('pos_end')} ELSE ${f('neg_end')}-${f('neg')} END`,
+          'real',
+        ],
+        ['span', `WINDOW_SUM(${f('pos')})-WINDOW_SUM(${f('neg')})`, 'real'],
+        [
+          'top_radius_y',
+          `IF ${f('pos')} > 0 AND ${f('pos_end')} = WINDOW_SUM(${f('pos')}) THEN ${f('radius_y')} ELSE 0 END`,
+          'real',
+        ],
+        [
+          'bottom_radius_y',
+          `IF ${f('neg')} < 0 AND ${f('neg_end')} = WINDOW_SUM(${f('neg')}) THEN ${f('radius_y')} ELSE 0 END`,
+          'real',
+        ],
+      ]
+    : [
+        ['pos_end', f('pos'), 'real'],
+        ['neg_end', f('neg'), 'real'],
+        ['lo', `IF ${f('dense')} >= 0 THEN 0 ELSE ${f('dense')} END`, 'real'],
+        ['hi', `IF ${f('dense')} >= 0 THEN ${f('dense')} ELSE 0 END`, 'real'],
+        ['span', `ABS(${f('dense')})`, 'real'],
+        ['top_radius_y', `IF ${f('dense')} > 0 THEN ${f('radius_y')} ELSE 0 END`, 'real'],
+        ['bottom_radius_y', `IF ${f('dense')} < 0 THEN ${f('radius_y')} ELSE 0 END`, 'real'],
+      ];
+  const endpointByRole = new Map(stackedEndpoints.map((spec) => [spec[0], spec]));
+  const categoryBand = `CASE INDEX() WHEN 1 THEN -0.35 WHEN 2 THEN -0.35 WHEN 3 THEN -0.35+0.292893*${f('top_radius_x')} WHEN 4 THEN -0.35+${f('top_radius_x')} WHEN 5 THEN 0.35-${f('top_radius_x')} WHEN 6 THEN 0.35-0.292893*${f('top_radius_x')} WHEN 7 THEN 0.35 WHEN 8 THEN 0.35 WHEN 9 THEN 0.35-0.292893*${f('bottom_radius_x')} WHEN 10 THEN 0.35-${f('bottom_radius_x')} WHEN 11 THEN -0.35+${f('bottom_radius_x')} WHEN 12 THEN -0.35+0.292893*${f('bottom_radius_x')} END`;
+  const measureExtent = `CASE INDEX() WHEN 1 THEN ${f('lo')}+${f('bottom_radius_y')} WHEN 2 THEN ${f('hi')}-${f('top_radius_y')} WHEN 3 THEN ${f('hi')}-0.292893*${f('top_radius_y')} WHEN 4 THEN ${f('hi')} WHEN 5 THEN ${f('hi')} WHEN 6 THEN ${f('hi')}-0.292893*${f('top_radius_y')} WHEN 7 THEN ${f('hi')}-${f('top_radius_y')} WHEN 8 THEN ${f('lo')}+${f('bottom_radius_y')} WHEN 9 THEN ${f('lo')}+0.292893*${f('bottom_radius_y')} WHEN 10 THEN ${f('lo')} WHEN 11 THEN ${f('lo')} WHEN 12 THEN ${f('lo')}+0.292893*${f('bottom_radius_y')} END`;
   const calculations: Array<
     [Exclude<RoundStackedBarHelperRole, 'bin'>, string, 'integer' | 'real', boolean?]
   > = [
@@ -1006,54 +1157,33 @@ function helperCalculationSpecs(shape: BaseShape, names: HelperNames): HelperCal
     ['dense', `WINDOW_SUM(SUM(${rawMeasure}))`, 'real'],
     ['pos', `IF ${f('dense')} > 0 THEN ${f('dense')} ELSE 0 END`, 'real'],
     ['neg', `IF ${f('dense')} < 0 THEN ${f('dense')} ELSE 0 END`, 'real'],
-    ['pos_end', `WINDOW_SUM(${f('pos')})-RUNNING_SUM(${f('pos')})+${f('pos')}`, 'real'],
-    ['neg_end', `WINDOW_SUM(${f('neg')})-RUNNING_SUM(${f('neg')})+${f('neg')}`, 'real'],
-    [
-      'lo',
-      `IF ${f('dense')} >= 0 THEN ${f('pos_end')}-${f('pos')} ELSE ${f('neg_end')} END`,
-      'real',
-    ],
-    [
-      'hi',
-      `IF ${f('dense')} >= 0 THEN ${f('pos_end')} ELSE ${f('neg_end')}-${f('neg')} END`,
-      'real',
-    ],
-    ['span', `WINDOW_SUM(${f('pos')})-WINDOW_SUM(${f('neg')})`, 'real'],
+    endpointByRole.get('pos_end')!,
+    endpointByRole.get('neg_end')!,
+    endpointByRole.get('lo')!,
+    endpointByRole.get('hi')!,
+    endpointByRole.get('span')!,
     [
       'radius_y',
       `IF ABS(${f('dense')})/2 < 0.02*${f('span')} THEN ABS(${f('dense')})/2 ELSE 0.02*${f('span')} END`,
       'real',
     ],
-    [
-      'top_radius_y',
-      `IF ${f('pos')} > 0 AND ${f('pos_end')} = WINDOW_SUM(${f('pos')}) THEN ${f('radius_y')} ELSE 0 END`,
-      'real',
-    ],
-    [
-      'bottom_radius_y',
-      `IF ${f('neg')} < 0 AND ${f('neg_end')} = WINDOW_SUM(${f('neg')}) THEN ${f('radius_y')} ELSE 0 END`,
-      'real',
-    ],
+    endpointByRole.get('top_radius_y')!,
+    endpointByRole.get('bottom_radius_y')!,
     ['top_radius_x', `IF ${f('top_radius_y')} > 0 THEN 0.06 ELSE 0 END`, 'real'],
     ['bottom_radius_x', `IF ${f('bottom_radius_y')} > 0 THEN 0.06 ELSE 0 END`, 'real'],
     ['path', 'INDEX()', 'integer'],
-    [
-      'x',
-      `CASE INDEX() WHEN 1 THEN -0.35 WHEN 2 THEN -0.35 WHEN 3 THEN -0.35+0.292893*${f('top_radius_x')} WHEN 4 THEN -0.35+${f('top_radius_x')} WHEN 5 THEN 0.35-${f('top_radius_x')} WHEN 6 THEN 0.35-0.292893*${f('top_radius_x')} WHEN 7 THEN 0.35 WHEN 8 THEN 0.35 WHEN 9 THEN 0.35-0.292893*${f('bottom_radius_x')} WHEN 10 THEN 0.35-${f('bottom_radius_x')} WHEN 11 THEN -0.35+${f('bottom_radius_x')} WHEN 12 THEN -0.35+0.292893*${f('bottom_radius_x')} END`,
-      'real',
-    ],
-    [
-      'y',
-      `CASE INDEX() WHEN 1 THEN ${f('lo')}+${f('bottom_radius_y')} WHEN 2 THEN ${f('hi')}-${f('top_radius_y')} WHEN 3 THEN ${f('hi')}-0.292893*${f('top_radius_y')} WHEN 4 THEN ${f('hi')} WHEN 5 THEN ${f('hi')} WHEN 6 THEN ${f('hi')}-0.292893*${f('top_radius_y')} WHEN 7 THEN ${f('hi')}-${f('top_radius_y')} WHEN 8 THEN ${f('lo')}+${f('bottom_radius_y')} WHEN 9 THEN ${f('lo')}+0.292893*${f('bottom_radius_y')} WHEN 10 THEN ${f('lo')} WHEN 11 THEN ${f('lo')} WHEN 12 THEN ${f('lo')}+0.292893*${f('bottom_radius_y')} END`,
-      'real',
-    ],
+    ['x', shape.orientation === 'vertical' ? categoryBand : measureExtent, 'real'],
+    ['y', shape.orientation === 'vertical' ? measureExtent : categoryBand, 'real'],
   ];
-  return calculations.map(([role, formula, datatype, tableCalculation = true]) => ({
-    datatype,
-    formula,
-    role,
-    tableCalculation,
-  }));
+  const activeRoles = new Set(activeHelperRoles(shape));
+  return calculations
+    .filter(([role]) => activeRoles.has(role))
+    .map(([role, formula, datatype, tableCalculation = true]) => ({
+      datatype,
+      formula,
+      role,
+      tableCalculation,
+    }));
 }
 
 function addHelpers(document: Document, shape: BaseShape, names: HelperNames): void {
@@ -1097,7 +1227,8 @@ function addHelpers(document: Document, shape: BaseShape, names: HelperNames): v
       tableCalculation,
     );
     const sourceMeasure = shape.columnDefinitions.get(shape.measure.column)?.element;
-    if (role === 'y' && sourceMeasure?.hasAttribute('default-format')) {
+    const measureRole = shape.orientation === 'vertical' ? 'y' : 'x';
+    if (role === measureRole && sourceMeasure?.hasAttribute('default-format')) {
       helper.setAttribute('default-format', sourceMeasure.getAttribute('default-format') ?? '');
     }
   }
@@ -1129,7 +1260,8 @@ function helperDefinitionsMatch(shape: BaseShape, names: HelperNames): boolean {
   const definitions = elements(shape.dependency, 'column').filter((column) =>
     (column.getAttribute('name') ?? '').startsWith(`[${shape.worksheetId ? '__tmcp_round_' : ''}`),
   );
-  const expectedNames = new Set(HELPER_SUFFIXES.map((role) => names[role]));
+  const activeRoles = activeHelperRoles(shape);
+  const expectedNames = new Set(activeRoles.map((role) => names[role]));
   const generatedDefinitions = definitions.filter((definition) =>
     expectedNames.has(definition.getAttribute('name') ?? ''),
   );
@@ -1139,14 +1271,14 @@ function helperDefinitionsMatch(shape: BaseShape, names: HelperNames): boolean {
     ),
   );
   if (
-    generatedDefinitions.length !== HELPER_SUFFIXES.length ||
-    allPrefixedDefinitions.length !== HELPER_SUFFIXES.length
+    generatedDefinitions.length !== activeRoles.length ||
+    allPrefixedDefinitions.length !== activeRoles.length
   ) {
     return false;
   }
 
   const specs = new Map(helperCalculationSpecs(shape, names).map((spec) => [spec.role, spec]));
-  for (const role of HELPER_SUFFIXES) {
+  for (const role of activeRoles) {
     const definition = shape.columnDefinitions.get(names[role])?.element;
     if (!definition) return false;
     const children = elements(definition);
@@ -1186,7 +1318,8 @@ function helperDefinitionsMatch(shape: BaseShape, names: HelperNames): boolean {
       role: 'measure',
       type: 'quantitative',
     };
-    if (role === 'y' && sourceMeasureDefinition.hasAttribute('default-format')) {
+    const measureRole = shape.orientation === 'vertical' ? 'y' : 'x';
+    if (role === measureRole && sourceMeasureDefinition.hasAttribute('default-format')) {
       expectedDefinitionAttributes['default-format'] =
         sourceMeasureDefinition.getAttribute('default-format') ?? '';
     }
@@ -1228,21 +1361,31 @@ const SEGMENT_ORDERED_GEOMETRY_ROLES = {
   y: ['pos_end', 'neg_end', 'lo', 'hi', 'span', 'radius_y', 'top_radius_y', 'bottom_radius_y'],
 } as const;
 
+function geometryDependencyRole(shape: BaseShape, role: 'x' | 'y'): 'x' | 'y' {
+  return shape.orientation === 'vertical' ? role : role === 'x' ? 'y' : 'x';
+}
+
 function expectedTableCalcSignatures(
   shape: BaseShape,
   names: HelperNames,
   role: 'x' | 'y',
 ): string[] {
   const binField = qualified(shape.datasourceName, names.bin);
-  const segmentField = qualified(shape.datasourceName, shape.segment.name);
+  const activeRoles = new Set(activeHelperRoles(shape));
+  const segmentField = shape.segment
+    ? qualified(shape.datasourceName, shape.segment.name)
+    : binField;
   return [
     `|${binField}|Field`,
-    ...BIN_ORDERED_GEOMETRY_ROLES.map(
+    ...BIN_ORDERED_GEOMETRY_ROLES.filter((helperRole) => activeRoles.has(helperRole)).map(
       (role) => `${qualified(shape.datasourceName, names[role])}|${binField}|Field`,
     ),
-    ...SEGMENT_ORDERED_GEOMETRY_ROLES[role].map(
-      (helperRole) => `${qualified(shape.datasourceName, names[helperRole])}|${segmentField}|Field`,
-    ),
+    ...SEGMENT_ORDERED_GEOMETRY_ROLES[geometryDependencyRole(shape, role)]
+      .filter((helperRole) => activeRoles.has(helperRole))
+      .map(
+        (helperRole) =>
+          `${qualified(shape.datasourceName, names[helperRole])}|${segmentField}|Field`,
+      ),
   ].sort();
 }
 
@@ -1332,9 +1475,9 @@ function roundedPaneMatches(shape: BaseShape, names: HelperNames): boolean {
   const encodings = oneChild(shape.pane, 'encodings');
   if (!encodings) return false;
   const encodingChildren = elements(encodings);
-  if (encodingChildren.length !== 3) return false;
+  if (encodingChildren.length !== (shape.segment ? 3 : 2)) return false;
   const expectedEncodings: Record<string, string> = {
-    color: qualified(shape.datasourceName, shape.segment.name),
+    ...(shape.segment ? { color: qualified(shape.datasourceName, shape.segment.name) } : {}),
     lod: qualified(shape.datasourceName, helperColumnInstance('bin', names.bin)!),
     path: qualified(shape.datasourceName, helperColumnInstance('path', names.path)!),
   };
@@ -1344,7 +1487,7 @@ function roundedPaneMatches(shape: BaseShape, names: HelperNames): boolean {
         !expectedEncodings[encoding.tagName] ||
         !hasOnlyAttributes(encoding, { column: expectedEncodings[encoding.tagName] }),
     ) ||
-    new Set(encodingChildren.map((encoding) => encoding.tagName)).size !== 3
+    new Set(encodingChildren.map((encoding) => encoding.tagName)).size !== (shape.segment ? 3 : 2)
   ) {
     return false;
   }
@@ -1360,10 +1503,15 @@ function roundedPaneMatches(shape: BaseShape, names: HelperNames): boolean {
         unbracket(shape.category.column),
       qualified(shape.datasourceName, shape.category.name),
     ],
-    [
-      shape.columnDefinitions.get(shape.segment.column)?.caption ?? unbracket(shape.segment.column),
-      qualified(shape.datasourceName, shape.segment.name),
-    ],
+    ...(shape.segment
+      ? [
+          [
+            shape.columnDefinitions.get(shape.segment.column)?.caption ??
+              unbracket(shape.segment.column),
+            qualified(shape.datasourceName, shape.segment.name),
+          ] as [string, string],
+        ]
+      : []),
     [
       shape.columnDefinitions.get(shape.measure.column)?.caption ?? unbracket(shape.measure.column),
       qualified(shape.datasourceName, shape.measure.name),
@@ -1397,33 +1545,43 @@ function roundedAxesMatch(shape: BaseShape, names: HelperNames): boolean {
 
   const formats = axisRules.flatMap((rule) => Array.from(rule.getElementsByTagName('format')));
   const sourceMeasure = qualified(shape.datasourceName, shape.measure.name);
-  const xField = qualified(shape.datasourceName, helperColumnInstance('x', names.x)!);
-  const yField = qualified(shape.datasourceName, helperColumnInstance('y', names.y)!);
+  const measureRole = shape.orientation === 'vertical' ? 'y' : 'x';
+  const bandRole = measureRole === 'y' ? 'x' : 'y';
+  const measureField = qualified(
+    shape.datasourceName,
+    helperColumnInstance(measureRole, names[measureRole])!,
+  );
+  const bandField = qualified(
+    shape.datasourceName,
+    helperColumnInstance(bandRole, names[bandRole])!,
+  );
+  const measureScope = shape.orientation === 'vertical' ? 'rows' : 'cols';
+  const bandScope = shape.orientation === 'vertical' ? 'cols' : 'rows';
   if (formats.some((format) => format.getAttribute('field') === sourceMeasure)) return false;
 
-  const xFormats = formats.filter((format) => format.getAttribute('field') === xField);
-  if (xFormats.length !== 1) return false;
-  const xFormat = xFormats[0];
-  const xRule = xFormat.parentNode;
+  const bandFormats = formats.filter((format) => format.getAttribute('field') === bandField);
+  if (bandFormats.length !== 1) return false;
+  const bandFormat = bandFormats[0];
+  const bandRule = bandFormat.parentNode;
   if (
-    !hasOnlyAttributes(xFormat, {
+    !hasOnlyAttributes(bandFormat, {
       attr: 'display',
       class: '0',
-      field: xField,
-      scope: 'cols',
+      field: bandField,
+      scope: bandScope,
       value: 'false',
     }) ||
-    !xRule ||
-    xRule.nodeType !== 1 ||
-    (xRule as Element).tagName !== 'style-rule' ||
-    xRule !== axisRules[0] ||
-    !hasOnlyAttributes(xRule as Element, { element: 'axis' })
+    !bandRule ||
+    bandRule.nodeType !== 1 ||
+    (bandRule as Element).tagName !== 'style-rule' ||
+    bandRule !== axisRules[0] ||
+    !hasOnlyAttributes(bandRule as Element, { element: 'axis' })
   ) {
     return false;
   }
 
   const helperAxisFields = new Set(
-    HELPER_SUFFIXES.flatMap((role) => {
+    activeHelperRoles(shape).flatMap((role) => {
       const instance = helperColumnInstance(role, names[role]);
       return instance ? [qualified(shape.datasourceName, instance)] : [];
     }),
@@ -1431,24 +1589,29 @@ function roundedAxesMatch(shape: BaseShape, names: HelperNames): boolean {
   if (
     formats.some((format) => {
       const field = format.getAttribute('field');
-      return field !== null && helperAxisFields.has(field) && field !== xField && field !== yField;
+      return (
+        field !== null &&
+        helperAxisFields.has(field) &&
+        field !== bandField &&
+        field !== measureField
+      );
     })
   ) {
     return false;
   }
 
-  const yFormats = formats.filter((format) => format.getAttribute('field') === yField);
-  const yFormatSignatures = yFormats.map(axisFormatSlotSignature);
-  const rowTitleFormats = formats.filter(
+  const measureFormats = formats.filter((format) => format.getAttribute('field') === measureField);
+  const measureFormatSignatures = measureFormats.map(axisFormatSlotSignature);
+  const measureTitleFormats = formats.filter(
     (format) =>
       format.getAttribute('attr') === 'title' &&
-      ['', 'rows'].includes(format.getAttribute('scope') ?? ''),
+      ['', measureScope].includes(format.getAttribute('scope') ?? ''),
   );
   return (
-    new Set(yFormatSignatures).size === yFormatSignatures.length &&
-    rowTitleFormats.length === 1 &&
-    rowTitleFormats[0].getAttribute('field') === yField &&
-    rowTitleFormats[0].getAttribute('scope') === 'rows'
+    new Set(measureFormatSignatures).size === measureFormatSignatures.length &&
+    measureTitleFormats.length === 1 &&
+    measureTitleFormats[0].getAttribute('field') === measureField &&
+    measureTitleFormats[0].getAttribute('scope') === measureScope
   );
 }
 
@@ -1457,13 +1620,15 @@ function hasDeterministicRoundedSignature(shape: BaseShape, names: HelperNames):
   const cols = oneChild(shape.table, 'cols');
   const fullRanges = elements(shape.table, 'show-full-range');
   const fullRangeColumn = fullRanges.length === 1 ? oneChild(fullRanges[0], 'column') : null;
+  const xField = qualified(shape.datasourceName, helperColumnInstance('x', names.x)!);
+  const yField = qualified(shape.datasourceName, helperColumnInstance('y', names.y)!);
+  const categoryField = qualified(shape.datasourceName, shape.category.name);
+  const shelvesMatch =
+    shape.orientation === 'vertical'
+      ? shelfText(rows) === yField && shelfText(cols) === `(${categoryField} * ${xField})`
+      : shelfText(rows) === `(${categoryField} * ${yField})` && shelfText(cols) === xField;
   return (
-    shelfText(rows) === qualified(shape.datasourceName, helperColumnInstance('y', names.y)!) &&
-    shelfText(cols) ===
-      `(${qualified(shape.datasourceName, shape.category.name)} * ${qualified(
-        shape.datasourceName,
-        helperColumnInstance('x', names.x)!,
-      )})` &&
+    shelvesMatch &&
     fullRanges.length === 1 &&
     fullRangeColumn !== null &&
     elements(fullRanges[0]).length === 1 &&
@@ -1532,7 +1697,10 @@ function addHelperInstances(
   addColumnInstance(document, shape.dependency, names.bin, bin, 'ordinal');
 
   const binField = qualified(shape.datasourceName, names.bin);
-  const segmentField = qualified(shape.datasourceName, shape.segment.name);
+  const segmentField = shape.segment
+    ? qualified(shape.datasourceName, shape.segment.name)
+    : binField;
+  const activeRoles = new Set(activeHelperRoles(shape));
   const pathInstance = addColumnInstance(
     document,
     shape.dependency,
@@ -1558,7 +1726,9 @@ function addHelperInstances(
     instance.appendChild(
       tableCalc(document, { 'ordering-field': binField, 'ordering-type': 'Field' }),
     );
-    for (const suffix of BIN_ORDERED_GEOMETRY_ROLES) {
+    for (const suffix of BIN_ORDERED_GEOMETRY_ROLES.filter((helperRole) =>
+      activeRoles.has(helperRole),
+    )) {
       instance.appendChild(
         tableCalc(document, {
           field: qualified(shape.datasourceName, names[suffix]),
@@ -1567,7 +1737,10 @@ function addHelperInstances(
         }),
       );
     }
-    for (const suffix of SEGMENT_ORDERED_GEOMETRY_ROLES[column === names.x ? 'x' : 'y']) {
+    const role = column === names.x ? 'x' : 'y';
+    for (const suffix of SEGMENT_ORDERED_GEOMETRY_ROLES[geometryDependencyRole(shape, role)].filter(
+      (helperRole) => activeRoles.has(helperRole),
+    )) {
       instance.appendChild(
         tableCalc(document, {
           field: qualified(shape.datasourceName, names[suffix]),
@@ -1595,14 +1768,22 @@ function customizePane(
 ): void {
   const mark = oneChild(shape.pane, 'mark');
   mark?.setAttribute('class', 'Polygon');
-  const encodings = oneChild(shape.pane, 'encodings');
-  if (!encodings) return;
+  let encodings = oneChild(shape.pane, 'encodings');
+  if (!encodings) {
+    encodings = document.createElement('encodings');
+    const paneChildren = elements(shape.pane);
+    const markIndex = mark ? paneChildren.indexOf(mark) : -1;
+    shape.pane.insertBefore(encodings, paneChildren[markIndex + 1] ?? null);
+  }
   while (encodings.firstChild) encodings.removeChild(encodings.firstChild);
-  for (const [tagName, column] of [
-    ['color', qualified(shape.datasourceName, shape.segment.name)],
+  const generatedEncodings: Array<[string, string]> = [
+    ...(shape.segment
+      ? [['color', qualified(shape.datasourceName, shape.segment.name)] as [string, string]]
+      : []),
     ['lod', qualified(shape.datasourceName, instances.bin)],
     ['path', qualified(shape.datasourceName, instances.path)],
-  ] as const) {
+  ];
+  for (const [tagName, column] of generatedEncodings) {
     const encoding = document.createElement(tagName);
     encoding.setAttribute('column', column);
     encodings.appendChild(encoding);
@@ -1616,10 +1797,15 @@ function customizePane(
         unbracket(shape.category.column),
       qualified(shape.datasourceName, shape.category.name),
     ],
-    [
-      shape.columnDefinitions.get(shape.segment.column)?.caption ?? unbracket(shape.segment.column),
-      qualified(shape.datasourceName, shape.segment.name),
-    ],
+    ...(shape.segment
+      ? [
+          [
+            shape.columnDefinitions.get(shape.segment.column)?.caption ??
+              unbracket(shape.segment.column),
+            qualified(shape.datasourceName, shape.segment.name),
+          ] as [string, string],
+        ]
+      : []),
     [
       shape.columnDefinitions.get(shape.measure.column)?.caption ?? unbracket(shape.measure.column),
       qualified(shape.datasourceName, shape.measure.name),
@@ -1636,14 +1822,31 @@ function customizePane(
   const rows = oneChild(shape.table, 'rows');
   const cols = oneChild(shape.table, 'cols');
   if (rows && cols) {
-    rows.textContent = qualified(shape.datasourceName, instances.y);
-    cols.textContent = `(${qualified(shape.datasourceName, shape.category.name)} * ${qualified(shape.datasourceName, instances.x)})`;
+    const category = qualified(shape.datasourceName, shape.category.name);
+    const x = qualified(shape.datasourceName, instances.x);
+    const y = qualified(shape.datasourceName, instances.y);
+    if (shape.orientation === 'vertical') {
+      rows.textContent = y;
+      cols.textContent = `(${category} * ${x})`;
+    } else {
+      rows.textContent = `(${category} * ${y})`;
+      cols.textContent = x;
+    }
   }
 
   const style = oneChild(shape.table, 'style');
   if (style) {
     const sourceMeasure = qualified(shape.datasourceName, shape.measure.name);
-    const yField = qualified(shape.datasourceName, instances.y);
+    const measureField = qualified(
+      shape.datasourceName,
+      shape.orientation === 'vertical' ? instances.y : instances.x,
+    );
+    const bandField = qualified(
+      shape.datasourceName,
+      shape.orientation === 'vertical' ? instances.x : instances.y,
+    );
+    const measureScope = shape.orientation === 'vertical' ? 'rows' : 'cols';
+    const bandScope = shape.orientation === 'vertical' ? 'cols' : 'rows';
     const axisRules = elements(style, 'style-rule').filter(
       (rule) => rule.getAttribute('element') === 'axis',
     );
@@ -1658,15 +1861,15 @@ function customizePane(
       for (const format of Array.from(rule.getElementsByTagName('format'))) {
         if (format.getAttribute('field') !== sourceMeasure) continue;
         if (format.getAttribute('attr') === 'title') sourceTitleSlots += 1;
-        format.setAttribute('field', yField);
+        format.setAttribute('field', measureField);
       }
     }
     if (sourceTitleSlots === 0) {
       const title = document.createElement('format');
       title.setAttribute('attr', 'title');
       title.setAttribute('class', '0');
-      title.setAttribute('field', yField);
-      title.setAttribute('scope', 'rows');
+      title.setAttribute('field', measureField);
+      title.setAttribute('scope', measureScope);
       title.setAttribute(
         'value',
         shape.columnDefinitions.get(shape.measure.column)?.caption ??
@@ -1677,8 +1880,8 @@ function customizePane(
     const format = document.createElement('format');
     format.setAttribute('attr', 'display');
     format.setAttribute('class', '0');
-    format.setAttribute('field', qualified(shape.datasourceName, instances.x));
-    format.setAttribute('scope', 'cols');
+    format.setAttribute('field', bandField);
+    format.setAttribute('scope', bandScope);
     format.setAttribute('value', 'false');
     primaryAxisRule.appendChild(format);
   }
@@ -1695,14 +1898,14 @@ export function planRoundStackedBar(
   options: { preset: RoundStackedBarPreset },
 ): RoundStackedBarPlan | RoundStackedBarRefusal {
   if ((options as { preset?: string } | undefined)?.preset !== 'subtle') {
-    return refusal('round_stacked_bar currently supports only the subtle preset.');
+    return refusal('round_bar currently supports only the subtle preset.');
   }
   const parsed = parseXml(xml);
-  if (!parsed) return refusal('round_stacked_bar requires well-formed worksheet XML.');
+  if (!parsed) return refusal('round_bar requires well-formed worksheet XML.');
   const base = baseNodes(parsed);
   if (!('table' in base)) return base;
   const prefix = helperPrefix(base.worksheetId);
-  if (!prefix) return refusal('round_stacked_bar requires a stable worksheet id.');
+  if (!prefix) return refusal('round_bar requires a stable worksheet id.');
   const names = helperNames(prefix);
   const layoutNarration = inspectLayoutNarration(parsed.worksheet);
   if (!layoutNarration.ok) return layoutNarration;

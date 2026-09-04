@@ -217,9 +217,12 @@ describe('refineWorksheetTool — instance', () => {
       markType: expect.any(Object),
       preset: expect.any(Object),
     });
+    expect(paramsSchema.operation.safeParse('round_bar').success).toBe(true);
     expect(paramsSchema.operation.safeParse('round_stacked_bar').success).toBe(true);
     expect(paramsSchema.preset.safeParse('subtle').success).toBe(true);
     expect(paramsSchema.preset.safeParse('strong').success).toBe(false);
+    expect(paramsSchema.preset.description).toContain('round_bar');
+    expect(paramsSchema.preset.description).toContain('round_stacked_bar');
     expect(paramsSchema.sortDirection.description).toContain('numeric DESC=largest');
     expect(paramsSchema.direction.description).toContain('numeric desc=largest');
     expect(tool.annotations).toMatchObject({
@@ -229,7 +232,7 @@ describe('refineWorksheetTool — instance', () => {
   });
 });
 
-describe('refineWorksheetTool — round_stacked_bar', () => {
+describe('refineWorksheetTool — rounded bars', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('refuses a missing subtle preset without reading or writing Tableau', async () => {
@@ -265,19 +268,68 @@ describe('refineWorksheetTool — round_stacked_bar', () => {
     expect(roundedApplyMock()).not.toHaveBeenCalled();
   });
 
-  it('refuses an unsupported chart shape before applying', async () => {
+  it('routes a simple horizontal bar through the shared rounded-bar wrapper', async () => {
     setupMocks({ source: SOURCE });
+    roundedApplyMock().mockResolvedValue({
+      state: 'applied',
+      mutation: 'sent',
+      retrySafe: false,
+      worksheet: {
+        id: '00000000-0000-0000-0000-000000000001',
+        name: 'Sales by Region',
+      },
+      baseline: {
+        worksheetId: '00000000-0000-0000-0000-000000000001',
+        groups: [{ category: 'West', value: 10 }],
+        segmentOrderFromZero: [],
+        expectedVertexRows: 12,
+        categoryVisualOrder: 'live-only',
+      },
+    });
 
     const result = await getToolResult({
       worksheetName: 'Sales by Region',
-      operation: 'round_stacked_bar',
+      operation: 'round_bar',
       preset: 'subtle',
     });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
-    expect(parsed.reason).toMatch(/stacked|segment|color/i);
+    expect(successSchema.parse(JSON.parse(result.content[0].text))).toMatchObject({
+      refined: true,
+      operation: 'round_bar',
+      verification: { helperFields: 14, summaryGroups: 1, summaryRows: 12 },
+    });
+    expect(roundedApplyMock()).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intendedWorksheetXml: expect.stringContaining("<mark class='Polygon' />"),
+        contract: expect.objectContaining({ orientation: 'horizontal' }),
+      }),
+    );
+    expect(roundedApplyMock().mock.calls[0]?.[0].contract).not.toHaveProperty('segment');
+  });
+
+  it('refuses a grouped bar before applying', async () => {
+    const grouped = SOURCE.replace(
+      "<column datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+      "<column datatype='real' name='[Sales]' role='measure' type='quantitative' />\n        <column datatype='string' name='[Segment]' role='dimension' type='nominal' />\n        <column-instance column='[Segment]' derivation='None' name='[none:Segment:nk]' pivot='key' type='nominal' />",
+    ).replace(
+      '<rows>[Superstore].[none:Region:nk]</rows>',
+      '<rows>[Superstore].[none:Region:nk] / [Superstore].[none:Segment:nk]</rows>',
+    );
+    setupMocks({ source: grouped });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'round_bar',
+      preset: 'subtle',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(refusalSchema.parse(JSON.parse(result.content[0].text)).reason).toMatch(
+      /one.*Category|grouped|shelf/i,
+    );
     expect(roundedApplyMock()).not.toHaveBeenCalled();
   });
 
@@ -324,7 +376,7 @@ describe('refineWorksheetTool — round_stacked_bar', () => {
     expect(parsed.message).toContain(
       'Programmatic readback confirmed the 18-field helper structure, 2 summary groups, 24 summary rows, the worksheet caption and alt text.',
     );
-    expect(parsed.message).toContain('Manually inspect rendered stack order.');
+    expect(parsed.message).toContain('Manually inspect rendered bar geometry.');
     expect(parsed.message).toContain(
       'Tableau Data Guide and View Data may show internal polygon helper fields.',
     );
@@ -335,6 +387,45 @@ describe('refineWorksheetTool — round_stacked_bar', () => {
         focus: { navigate: 'artifact', sheetName: 'Profit by Category' },
       }),
     );
+    expect(loadMock()).not.toHaveBeenCalled();
+  });
+
+  it('routes preferred round_bar through the same planner and wrapper', async () => {
+    setupMocks({ source: ROUND_STACKED_SOURCE });
+    roundedApplyMock().mockResolvedValue({
+      state: 'applied',
+      mutation: 'sent',
+      retrySafe: false,
+      worksheet: {
+        id: '{B157D4FA-12A0-495E-BEC4-3572B3567648}',
+        name: 'Profit by Category',
+      },
+      baseline: {
+        worksheetId: '{B157D4FA-12A0-495E-BEC4-3572B3567648}',
+        groups: [
+          { category: 'Furniture', segment: 'Consumer', value: 10 },
+          { category: 'Furniture', segment: 'Corporate', value: 5 },
+        ],
+        segmentOrderFromZero: ['Corporate', 'Consumer'],
+        expectedVertexRows: 24,
+        categoryVisualOrder: 'live-only',
+      },
+    });
+
+    const result = await getToolResult({
+      worksheetName: 'Profit by Category',
+      operation: 'round_bar',
+      preset: 'subtle',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(successSchema.parse(JSON.parse(result.content[0].text))).toMatchObject({
+      refined: true,
+      operation: 'round_bar',
+      worksheetName: 'Profit by Category',
+    });
+    expect(roundedApplyMock()).toHaveBeenCalledOnce();
     expect(loadMock()).not.toHaveBeenCalled();
   });
 
@@ -400,7 +491,7 @@ describe('refineWorksheetTool — round_stacked_bar', () => {
       'Programmatic readback confirmed the 18-field helper structure, 2 summary groups, 24 summary rows, preserved caption suppression state and alt text.',
     );
     expect(parsed.message).not.toContain('the worksheet caption');
-    expect(parsed.message).toContain('Manually inspect rendered stack order.');
+    expect(parsed.message).toContain('Manually inspect rendered bar geometry.');
     expect(parsed.message).toContain(
       'Tableau Data Guide and View Data may show internal polygon helper fields.',
     );
@@ -1176,7 +1267,14 @@ describe('refineWorksheetTool — refusals and errors', () => {
 
 const successSchema = z.object({
   refined: z.literal(true),
-  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type', 'round_stacked_bar']),
+  operation: z.enum([
+    'top_n',
+    'sort_direction',
+    'sort_by_field',
+    'mark_type',
+    'round_bar',
+    'round_stacked_bar',
+  ]),
   worksheetName: z.string(),
   message: z.string(),
   verification: z
@@ -1190,7 +1288,14 @@ const successSchema = z.object({
 
 const refusalSchema = z.object({
   refined: z.literal(false),
-  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type', 'round_stacked_bar']),
+  operation: z.enum([
+    'top_n',
+    'sort_direction',
+    'sort_by_field',
+    'mark_type',
+    'round_bar',
+    'round_stacked_bar',
+  ]),
   worksheetName: z.string(),
   reason: z.string(),
 });
@@ -1209,7 +1314,13 @@ async function getToolResult({
   executor = makeExecutorMock(),
 }: {
   worksheetName: string;
-  operation: 'top_n' | 'sort_direction' | 'sort_by_field' | 'mark_type' | 'round_stacked_bar';
+  operation:
+    | 'top_n'
+    | 'sort_direction'
+    | 'sort_by_field'
+    | 'mark_type'
+    | 'round_bar'
+    | 'round_stacked_bar';
   topN?: { n: number; end?: 'top' | 'bottom' };
   sortDirection?: { direction: 'ASC' | 'DESC' };
   targetField?: string;
