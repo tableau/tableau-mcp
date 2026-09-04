@@ -56,6 +56,33 @@ export type AuthorCalculationsResult = {
   authoredCalcs: AuthoredCalc[];
 };
 
+export type CalcRole = z.infer<typeof roleSchema>;
+export type CalcDatatype = z.infer<typeof datatypeSchema>;
+
+// One calculated field to author. No per-calc datasource: a batch is single-DS.
+export interface CalcSpec {
+  caption: string;
+  formula: string;
+  role: CalcRole;
+  datatype: CalcDatatype;
+}
+
+// The batch handed to the core. The whole batch shares one datasource.
+export interface AuthorCalcBatchRequest {
+  calcs: CalcSpec[];
+  datasource?: string;
+}
+
+export type CalcFailureKind =
+  | 'invalid-formula' // validator ran and reported errors for this formula
+  | 'dependency-failed' // an in-batch calc it references failed; never attempted
+  | 'cycle' // caught in a dependency cycle; never attempted
+  | 'validation-error'; // the validate command could not be executed (infra)
+
+export type AuthoredCalcOutcome =
+  | { status: 'created'; caption: string; calcName: string; datasource: string }
+  | { status: 'failed'; caption: string; failure: CalcFailureKind; message: string };
+
 type AuthorCalcError = ArgsValidationError | DesktopCommandExecutionError | XmlModificationError;
 
 export async function authorCalculationsInWorkbook({
@@ -106,6 +133,393 @@ export async function authorCalculationsInWorkbook({
   }
 
   return new Ok({ workbookXml: outcome.workbookXml, authoredCalcs: prepared.value.authoredCalcs });
+}
+
+export interface CalcDependencyLayering {
+  // Dependency layers, each a list of indices into the input `calcs`. A calc in layer k
+  // references only calcs in layers < k, so processing layers in order creates every
+  // dependency before the calc that references it.
+  layers: number[][];
+  // Indices caught in a dependency cycle: unresolvable, so never placed in a layer.
+  cycleIndices: number[];
+  // Per-calc set of the indices it references within the batch (its direct dependencies).
+  dependencies: Array<Set<number>>;
+}
+
+/**
+ * Topologically layers a batch of calcs by their in-batch `[Caption]` references.
+ * Only captions that name another calc in the same batch form edges; references to
+ * existing workbook fields or unknown names are ignored (the validator judges those).
+ * Uses Kahn's algorithm; any calcs still unresolved once no further layer can form are
+ * returned as `cycleIndices`.
+ */
+export function layerCalculationsByDependency(
+  calcs: ReadonlyArray<Pick<CalcSpec, 'caption' | 'formula'>>,
+): CalcDependencyLayering {
+  const captionToIndex = new Map<string, number>();
+  calcs.forEach((calc, index) => {
+    const caption = calc.caption.trim();
+    if (caption.length > 0 && !captionToIndex.has(caption)) {
+      captionToIndex.set(caption, index);
+    }
+  });
+
+  const dependencies = calcs.map((calc, index) => {
+    const deps = new Set<number>();
+    for (const token of captionTokens(calc.formula)) {
+      const dep = captionToIndex.get(token);
+      if (dep !== undefined && dep !== index) {
+        deps.add(dep);
+      }
+    }
+    return deps;
+  });
+
+  const layers: number[][] = [];
+  const resolved = new Set<number>();
+  let remaining = calcs.map((_, index) => index);
+
+  while (remaining.length > 0) {
+    const layer = remaining.filter((index) =>
+      [...dependencies[index]].every((dep) => resolved.has(dep)),
+    );
+    if (layer.length === 0) {
+      break; // everything left references (or is downstream of) a cycle
+    }
+    for (const index of layer) {
+      resolved.add(index);
+    }
+    remaining = remaining.filter((index) => !resolved.has(index));
+    layers.push(layer);
+  }
+
+  return { layers, cycleIndices: remaining, dependencies };
+}
+
+function captionTokens(formula: string): string[] {
+  const tokens: string[] = [];
+  rewriteUnquotedFieldReferences(formula, (whole, token) => {
+    tokens.push(token);
+    return whole;
+  });
+  return tokens;
+}
+
+/**
+ * Authors a batch of calculations with per-calc validation and dependency ordering.
+ * Resolves ONE target datasource for the whole batch, activates it once, then walks the
+ * dependency layers: within a layer it validates each formula (cascading a failure to any
+ * calc that depends on it), then creates the layer's valid calcs in a single whole-document
+ * apply. Returns a per-calc outcome; calcs created in earlier layers persist even when a
+ * later calc fails (partial success). An unresolvable/failed activation, a caption collision,
+ * an empty batch, or a duplicate caption aborts the whole batch with no partial state.
+ */
+export async function authorCalculationsWithValidation({
+  workbookXml,
+  calcs,
+  datasource,
+  executor,
+  signal,
+  resolveLooseReferences = false,
+}: {
+  workbookXml: string;
+  calcs: CalcSpec[];
+  datasource?: string;
+  resolveLooseReferences?: boolean;
+} & WithExecutorAndAbortSignal): Promise<Result<AuthoredCalcOutcome[], AuthorCalcError>> {
+  if (calcs.length === 0) {
+    return new ArgsValidationError('at least one calculation is required').toErr();
+  }
+
+  const specs = calcs.map((calc) => ({ ...calc, caption: calc.caption.trim() }));
+  for (const [index, calc] of specs.entries()) {
+    const label = `calc "${calc.caption || `#${index + 1}`}": `;
+    if (calc.caption.length === 0) {
+      return new ArgsValidationError(`calc #${index + 1}: caption empty`).toErr();
+    }
+    if (calc.formula.trim().length === 0) {
+      return new ArgsValidationError(`${label}formula empty`).toErr();
+    }
+    if (!roleSchema.safeParse(calc.role).success) {
+      return new ArgsValidationError(`${label}invalid role`).toErr();
+    }
+    if (!datatypeSchema.safeParse(calc.datatype).success) {
+      return new ArgsValidationError(`${label}invalid datatype`).toErr();
+    }
+  }
+
+  // Captions are the dependency key, so a duplicate is ambiguous — abort the batch.
+  const seenCaptions = new Set<string>();
+  for (const calc of specs) {
+    if (seenCaptions.has(calc.caption)) {
+      return new ArgsValidationError(`duplicate caption "${calc.caption}" in batch`).toErr();
+    }
+    seenCaptions.add(calc.caption);
+  }
+
+  // One datasource for the whole batch. An unresolvable datasource aborts before any write.
+  const targetResult = selectTargetDatasource(workbookXml, datasource);
+  if (targetResult.isErr()) {
+    return targetResult.error.toErr();
+  }
+  const datasourceName = targetResult.value.name;
+
+  // A collision with an existing field is detected before any apply, so the batch aborts with
+  // no partial state rather than silently shadowing a real field.
+  for (const calc of specs) {
+    if (findColumnByCaption(targetResult.value.xml, calc.caption) !== undefined) {
+      return new ArgsValidationError(
+        'caption collision — pick a new caption or use the existing field',
+      ).toErr();
+    }
+  }
+
+  const layering = layerCalculationsByDependency(specs);
+
+  // Activate the target datasource exactly once, by its internal <datasource name=...> id.
+  // A failed activation aborts: validating/creating against the wrong active datasource
+  // would be silently wrong.
+  const activation = await executor.executeCommand({
+    namespace: 'tabdoc',
+    command: 'set-active-datasource',
+    args: { datasource: datasourceName },
+    signal,
+  });
+  if (activation.isErr()) {
+    return new DesktopCommandExecutionError(activation.error).toErr();
+  }
+
+  const outcomes = new Array<AuthoredCalcOutcome | undefined>(specs.length).fill(undefined);
+  for (const index of layering.cycleIndices) {
+    outcomes[index] = {
+      status: 'failed',
+      caption: specs[index].caption,
+      failure: 'cycle',
+      message: 'calculation is part of a dependency cycle within the batch',
+    };
+  }
+
+  let liveXml = workbookXml;
+  for (const layer of layering.layers) {
+    const pending: number[] = [];
+    for (const index of layer) {
+      const failedDep = [...layering.dependencies[index]].find(
+        (dep) => outcomes[dep]?.status === 'failed',
+      );
+      if (failedDep !== undefined) {
+        outcomes[index] = {
+          status: 'failed',
+          caption: specs[index].caption,
+          failure: 'dependency-failed',
+          message: `depends on "${specs[failedDep].caption}", which was not created`,
+        };
+      } else {
+        pending.push(index);
+      }
+    }
+
+    const toCreate: Array<{ index: number; formula: string }> = [];
+    for (const index of pending) {
+      const calc = specs[index];
+      let formula = calc.formula;
+      if (resolveLooseReferences) {
+        const schema = summarizeSchema(liveXml);
+        const loose = resolveLooseFormulaReferences(
+          formula,
+          {
+            datasource: datasourceName,
+            fields: schema.fields.filter((field) => field.datasource === datasourceName),
+          },
+          '',
+        );
+        if (loose.isErr()) {
+          outcomes[index] = {
+            status: 'failed',
+            caption: calc.caption,
+            failure: 'invalid-formula',
+            message: loose.error.message,
+          };
+          continue;
+        }
+        formula = loose.value;
+      }
+
+      const validation = await validateCalcFormula({
+        formula,
+        caption: calc.caption,
+        executor,
+        signal,
+      });
+      if (validation.status === 'error') {
+        outcomes[index] = {
+          status: 'failed',
+          caption: calc.caption,
+          failure: 'validation-error',
+          message: validation.message,
+        };
+        continue;
+      }
+      if (validation.status === 'invalid') {
+        outcomes[index] = {
+          status: 'failed',
+          caption: calc.caption,
+          failure: 'invalid-formula',
+          message: validation.message,
+        };
+        continue;
+      }
+      toCreate.push({ index, formula });
+    }
+
+    if (toCreate.length === 0) {
+      continue;
+    }
+
+    // Re-resolve the target after every splice: each insertion shifts later offsets.
+    let editedXml = liveXml;
+    const created: Array<{ index: number; calcName: string; caption: string }> = [];
+    for (const item of toCreate) {
+      const calc = specs[item.index];
+      const target = selectTargetDatasource(editedXml, datasourceName);
+      if (target.isErr()) {
+        return target.error.toErr();
+      }
+      const resolvedFormula = resolveCaptionReferences(item.formula, target.value.xml, editedXml);
+      const calcName = nextCalculationName(editedXml, Date.now());
+      const columnXml = renderCalculationColumn({
+        caption: calc.caption,
+        formula: resolvedFormula,
+        role: calc.role,
+        datatype: calc.datatype,
+        calcName,
+      });
+      editedXml = spliceColumnIntoDatasource(editedXml, target.value, columnXml);
+      created.push({ index: item.index, calcName, caption: calc.caption });
+    }
+
+    const guard = validateWorkbookDocumentApply(editedXml, liveXml);
+    if (!guard.ok) {
+      return new ArgsValidationError(guard.message).toErr();
+    }
+
+    const applied = await applyAndVerify({
+      xml: editedXml,
+      baselineXml: liveXml,
+      settled: (xml) =>
+        created.every((calc) => hasColumnNameAndCaption(xml, calc.calcName, calc.caption)),
+      executor,
+      signal,
+    });
+    if (applied.status === 'failed') {
+      return applied.error.toErr();
+    }
+    if (applied.status === 'not-applied') {
+      return new XmlModificationError(
+        'load completed but did not apply: readback did not contain the new column name and caption',
+      ).toErr();
+    }
+
+    // The readback is the live base for the next layer, so its dependencies resolve against
+    // the internal names just created.
+    liveXml = applied.workbookXml;
+    for (const calc of created) {
+      outcomes[calc.index] = {
+        status: 'created',
+        caption: calc.caption,
+        calcName: calc.calcName,
+        datasource: datasourceName,
+      };
+    }
+  }
+
+  return new Ok(
+    outcomes.map(
+      (outcome, index) =>
+        outcome ?? {
+          status: 'failed',
+          caption: specs[index].caption,
+          failure: 'validation-error',
+          message: 'calculation was not processed',
+        },
+    ),
+  );
+}
+
+type CalcValidation =
+  | { status: 'valid' }
+  | { status: 'invalid'; message: string }
+  | { status: 'error'; message: string };
+
+async function validateCalcFormula({
+  formula,
+  caption,
+  executor,
+  signal,
+}: {
+  formula: string;
+  caption: string;
+} & WithExecutorAndAbortSignal): Promise<CalcValidation> {
+  const result = await executor.executeCommand({
+    namespace: 'tabdoc',
+    command: 'get-calc-details-pres-model-for-formula',
+    args: { formula, caption },
+    signal,
+  });
+  // A rejected command (transport error / non-completed envelope) is an infra failure, not a
+  // verdict on the formula. An invalid formula comes back as a completed command with errors.
+  if (result.isErr()) {
+    return {
+      status: 'error',
+      message: new DesktopCommandExecutionError(result.error).getErrorText(),
+    };
+  }
+  if (result.value.status !== 'completed') {
+    return {
+      status: 'error',
+      message: `formula validation did not complete (status: ${result.value.status})`,
+    };
+  }
+  const errors = calcErrorMessages(result.value.result);
+  if (errors !== undefined && errors.length > 0) {
+    return { status: 'invalid', message: errors[0] };
+  }
+  return { status: 'valid' };
+}
+
+/**
+ * Reads the calc validator's error list out of the command result.
+ *
+ * tabdoc:get-calc-details-pres-model-for-formula returns a completed (SUCCEEDED) command whose
+ * out-param is a UserCalculationDetailsPresModel; an invalid formula is DATA — a non-empty
+ * errorMsgs array — never a command failure. executeCommand hands back the command envelope, so
+ * the out-params live on `.result`. The External Client API surfaces the out-param
+ * `user-calculation-details` as a camelCase `userCalculationDetails` property carrying an
+ * `errorMsgs` string array (out-param names in codegen/doc/command-wrappers/analytics-assistant-cmd.data
+ * + the dashed->camelCase Compact serialization; corroborated by sibling tabdoc validate clients that
+ * read named camelCase out-params). No committed JSON fixture pins the literal bytes, so this walks the
+ * result for the first array under an errorMsg(s) key regardless of nesting or casing. `undefined` means
+ * no such key was present (treated as no errors); an empty array means the formula is valid.
+ */
+function calcErrorMessages(result: Record<string, unknown> | undefined): string[] | undefined {
+  return findErrorMessagesNode(result);
+}
+
+function findErrorMessagesNode(node: unknown): string[] | undefined {
+  if (node === null || typeof node !== 'object' || Array.isArray(node)) {
+    return undefined;
+  }
+  for (const [key, value] of Object.entries(node)) {
+    if (Array.isArray(value) && /^errormsgs?$/.test(key.replace(/[^a-z]/gi, '').toLowerCase())) {
+      return value.map((entry) => String(entry)).filter((entry) => entry.length > 0);
+    }
+  }
+  for (const value of Object.values(node)) {
+    const found = findErrorMessagesNode(value);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
 }
 
 /**
