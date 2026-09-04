@@ -169,6 +169,45 @@ describe('verifyWorksheetReadback', () => {
     );
   });
 
+  it('does not flag Tableau grouping parentheses around nested discrete shelf pills', () => {
+    const group = '[DS].[none:group:nk]';
+    const country = '[DS].[none:country:nk]';
+    const intended = encodedWorksheet().replace(
+      `<rows>${GEO_FIELD}</rows>`,
+      `<rows>${group} / ${country}</rows>`,
+    );
+    const readback = intended.replace(
+      `<rows>${group} / ${country}</rows>`,
+      `<rows>(${group} / ${country})</rows>`,
+    );
+
+    expect(verifyWorksheetReadback(intended, readback).filter((f) => f.kind === 'shelf')).toEqual(
+      [],
+    );
+  });
+
+  it('still flags a nested shelf pill that Tableau actually dropped', () => {
+    const group = '[DS].[none:group:nk]';
+    const country = '[DS].[none:country:nk]';
+    const intended = encodedWorksheet().replace(
+      `<rows>${GEO_FIELD}</rows>`,
+      `<rows>${group} / ${country}</rows>`,
+    );
+    const readback = intended.replace(
+      `<rows>${group} / ${country}</rows>`,
+      `<rows>${group}</rows>`,
+    );
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual({
+      kind: 'shelf',
+      node: 'rows',
+      column: country,
+      intended: country,
+      readback: 'changed',
+      severity: 'error',
+    });
+  });
+
   it('does not flag an authored Automatic mark that Tableau resolved to a concrete class', () => {
     const intended = encodedWorksheet().replace(
       '<mark class="Shape"/>',

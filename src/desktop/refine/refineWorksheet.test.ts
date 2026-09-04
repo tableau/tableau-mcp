@@ -614,6 +614,60 @@ describe('planSortByField', () => {
     expect(r.column).toBe('[Superstore].[none:line_item:nk]');
   });
 
+  const nestedGroupCountry = (rows: string): string =>
+    withDeps(
+      "<column caption='Group' datatype='string' name='[Group]' role='dimension' type='nominal' />" +
+        "<column caption='Country' datatype='string' name='[Country]' role='dimension' type='nominal' />" +
+        SALES_COL +
+        "<column-instance column='[Group]' derivation='None' name='[none:Group:nk]' pivot='key' type='nominal' />" +
+        "<column-instance column='[Country]' derivation='None' name='[none:Country:nk]' pivot='key' type='nominal' />" +
+        SALES_CI,
+    )
+      .replace(/<computed-sort[^>]*\/>/, '')
+      .replace('<rows>[Superstore].[none:Region:nk]</rows>', `<rows>${rows}</rows>`);
+
+  it('omitted targetField sorts the innermost pill on a nested same-shelf pair', () => {
+    const r = planSortByField(
+      nestedGroupCountry('[Superstore].[none:Group:nk] / [Superstore].[none:Country:nk]'),
+      { sortByField: 'Sales', direction: 'ASC' },
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.column).toBe('[Superstore].[none:Country:nk]');
+    expect(r.using).toBe('[Superstore].[sum:Sales:qk]');
+  });
+
+  it('omitted targetField still sorts innermost when Tableau wraps the nested shelf in grouping parens', () => {
+    const r = planSortByField(
+      nestedGroupCountry('([Superstore].[none:Group:nk] / [Superstore].[none:Country:nk])'),
+      { sortByField: 'Sales' },
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.column).toBe('[Superstore].[none:Country:nk]');
+  });
+
+  it('explicit targetField still sorts an outer nested pill', () => {
+    const r = planSortByField(
+      nestedGroupCountry('[Superstore].[none:Group:nk] / [Superstore].[none:Country:nk]'),
+      { targetField: 'Group', sortByField: 'Sales' },
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.column).toBe('[Superstore].[none:Group:nk]');
+  });
+
+  it('resolves sortByField from a datasource-qualified column-instance ref', () => {
+    const r = planSortByField(
+      nestedGroupCountry('[Superstore].[none:Group:nk] / [Superstore].[none:Country:nk]'),
+      { sortByField: '[Superstore].[sum:Sales:qk]' },
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.using).toBe('[Superstore].[sum:Sales:qk]');
+    expect(r.column).toBe('[Superstore].[none:Country:nk]');
+  });
+
   it('refuses (never throws) when targetField is omitted and no axis can be identified', () => {
     // Two categorical axes on shelves → the auto-detect is ambiguous; refuse cleanly.
     const twoAxis = withDeps(
@@ -633,6 +687,9 @@ describe('planSortByField', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toMatch(/more than one categorical axis/i);
+    expect(r.reason).toMatch(/Region/i);
+    expect(r.reason).toMatch(/Category/i);
+    expect(r.reason).toMatch(/targetField/i);
   });
 });
 
@@ -1025,5 +1082,8 @@ describe('planSortByFieldOnCategoricalAxis — anchor_category coexistence (wate
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toMatch(/more than one categorical axis/i);
+    expect(r.reason).toMatch(/Region/i);
+    expect(r.reason).toMatch(/Category/i);
+    expect(r.reason).toMatch(/targetField/i);
   });
 });

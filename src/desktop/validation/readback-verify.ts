@@ -6,6 +6,7 @@
  * structures that must survive for the rendered chart to match the authored
  * XML, while tolerating readback-only formatting/style noise.
  */
+import { parseShelfValue } from '../metadata/fields.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 
 export type ReadbackFindingKind = 'encoding' | 'shelf' | 'mark' | 'filter' | 'sort';
@@ -128,10 +129,32 @@ function walkElements(node: unknown, visit: (tag: string, element: XmlRecord) =>
   }
 }
 
+function unwrapGroupingParens(value: string): string {
+  let text = value.trim();
+  while (text.startsWith('(') && text.endsWith(')')) {
+    let depth = 0;
+    let wrapsAll = true;
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (char === '(') depth += 1;
+      else if (char === ')') {
+        depth -= 1;
+        if (depth === 0 && i !== text.length - 1) {
+          wrapsAll = false;
+          break;
+        }
+      }
+    }
+    if (!wrapsAll || depth !== 0) break;
+    text = text.slice(1, -1).trim();
+  }
+  return text;
+}
+
 function shelfValues(value: unknown): string[] {
   return normalizeArray(value)
-    .flatMap((item) => textValue(item).split('/'))
-    .map((item) => item.trim())
+    .flatMap((item) => parseShelfValue(unwrapGroupingParens(textValue(item))))
+    .map((item) => unwrapGroupingParens(item))
     .filter(Boolean);
 }
 
