@@ -37,7 +37,7 @@ import {
 } from './types.js';
 
 /**
- * Contract-intake harness: validates OUR zod schemas against the captured
+ * Contract-intake harness: validates OUR zod schemas against the checked-in
  * `/openapi.json` artifact. When the API owner ships a new spec, overwrite the
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
@@ -49,7 +49,9 @@ import {
  * `datasources/{id}:refreshData`/`:refreshExtract`, `workbook:exportAs`,
  * `storyboards/{id}/image`, `DatasourceItem.type`/`isExtract`/`hasDownloadFilePermission`,
  * required `index`/`type`/`StoryboardItem.storyPointCount`, `unsupported-target-version`).
- * No hand-edits.
+ * The worksheet `:refreshNow` path and `info.version` 0.2.11 were projected from
+ * monolith commit bf2dd5441de9c33dc51934f1b6f2209038486093 because no live 0.2.11
+ * capture was available; the rest of the fixture remains the live 0.2.9 capture.
  */
 
 type SpecSchema = {
@@ -60,6 +62,7 @@ type SpecSchema = {
 const spec = JSON.parse(
   readFileSync(path.join(__dirname, '__fixtures__', 'externalClientApi-openapi.json'), 'utf-8'),
 ) as {
+  info: { version: string };
   paths: Record<string, unknown>;
   components: { schemas: Record<string, SpecSchema> };
 };
@@ -123,7 +126,7 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
   ImageExport: ['width', 'height'],
 };
 
-describe('external client API contract (captured openapi fixture)', () => {
+describe('external client API contract (captured 0.2.9 plus projected 0.2.11 route)', () => {
   describe('Operation ↔ operationEnvelopeSchema', () => {
     const operation = specSchema('Operation');
 
@@ -343,6 +346,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.worksheetSort,
       EXTERNAL_API_ROUTES.worksheetPauseAutoUpdates,
       EXTERNAL_API_ROUTES.worksheetResumeAutoUpdates,
+      EXTERNAL_API_ROUTES.worksheetRefreshNow,
       EXTERNAL_API_ROUTES.dashboardDelete,
       EXTERNAL_API_ROUTES.dashboardRename,
       EXTERNAL_API_ROUTES.dashboardPauseAutoUpdates,
@@ -374,6 +378,34 @@ describe('external client API contract (captured openapi fixture)', () => {
 
     it('invokeCommand stays deliberately undocumented (hidden route, owned separately)', () => {
       expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
+    });
+
+    it('projects the 0.2.11 worksheet refresh-now Operation contract', () => {
+      expect(spec.info.version).toBe('0.2.11');
+
+      const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetRefreshNow] as {
+        post?: {
+          operationId?: string;
+          requestBody?: unknown;
+          responses?: Record<string, unknown>;
+        };
+      };
+      expect(Object.keys(pathItem)).toEqual(['post']);
+      expect(pathItem.post?.operationId).toBe('refreshWorksheetNow');
+      expect(pathItem.post).not.toHaveProperty('requestBody');
+      expect(pathItem.post?.responses).toHaveProperty(
+        '200.content.application/json.schema.$ref',
+        '#/components/schemas/Operation',
+      );
+      expect(pathItem.post?.responses).toHaveProperty(
+        '202.$ref',
+        '#/components/responses/Accepted',
+      );
+      expect(pathItem.post?.responses).toHaveProperty(
+        '404.$ref',
+        '#/components/responses/NotFound',
+      );
+      expect(spec.paths).not.toHaveProperty('/v0/workbook/dashboards/{id}:refreshNow');
     });
   });
 
