@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { AxiosError } from 'axios';
 
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -230,6 +231,21 @@ describe('getViewDataTool', () => {
         errorDetail: 'Sheet could not be rendered',
       },
     ]);
+  });
+
+  it.each([403, 404])('returns an allData %i error to the caller', async (status) => {
+    RestApi.version = '3.30';
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
+    const error = new AxiosError(`Request failed with status code ${status}`);
+    error.response = { status } as AxiosError['response'];
+    mocks.mockGetViewAllData.mockRejectedValue(error);
+
+    const result = await getToolResult({ viewId: mockView.id });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(`Request failed with status code ${status}`);
+    expect(mocks.mockQueryViewData).not.toHaveBeenCalled();
   });
 
   it('should handle API errors gracefully', async () => {
