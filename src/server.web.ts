@@ -18,7 +18,10 @@ import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { log } from './logging/logger.js';
 import { registerPrompts } from './prompts/index.js';
+import { RestApiArgs } from './restApiInstance';
+import { siteRoleMeetsMinimum } from './sdks/tableau/types/user.js';
 import { ClientInfo, Server } from './server.js';
 import {
   ClientCapabilitiesWithUiExtension,
@@ -28,6 +31,7 @@ import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
+import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { webToolFactories } from './tools/web/tools.js';
@@ -58,6 +62,15 @@ const ADMIN_INSTRUCTIONS =
   'When rendering admin/list results (users, admin-insights, etc.) to a chat or Slack surface, present ' +
   'them as Markdown tables.';
 
+// Appended to the initialize instructions when the caller's site role could not be fetched (after
+// retries) and that failure hid one or more role-gated tools. Signals that the incomplete tool set
+// is a transient error, not a permissions decision, so the user can reconnect to retry.
+const SITE_ROLE_UNAVAILABLE_WARNING =
+  "WARNING: Some tools were omitted from this session because the current user's Tableau site " +
+  'role could not be determined after multiple attempts. This is likely a transient error rather ' +
+  'than a permissions problem. Disconnect and reconnect to retry; if it persists, contact your ' +
+  'Tableau administrator.';
+
 /**
  * Single source of truth for the web server's `initialize` instructions string. Returns the base
  * guidance, with the admin/site-health guidance appended only when ADMIN_TOOLS_ENABLED is set.
@@ -78,6 +91,10 @@ export function buildWebInstructions(): string {
   const adminToolsEnabled = process.env.ADMIN_TOOLS_ENABLED === 'true';
   return adminToolsEnabled ? `${BASE_INSTRUCTIONS} ${ADMIN_INSTRUCTIONS}` : BASE_INSTRUCTIONS;
 }
+
+type RegistrationContext = {
+  siteRole?: string;
+};
 
 export class WebMcpServer extends Server {
   constructor({
@@ -186,12 +203,16 @@ export class WebMcpServer extends Server {
     tableauAuthInfo?: TableauAuthInfo,
   ): Promise<Array<WebTool<any>>> => {
     const config = getConfig();
+    // Constructing args for invoking REST APIs outside of tool context
+    const restApiArgs: RestApiArgs = {
+      server: this,
+      tableauAuthInfo,
+      config,
+      signal: AbortSignal.timeout(config.maxRequestTimeoutMs),
+      disableLogging: true, // MCP server is not connected yet so we can't send logging notifications
+    };
     const configOverrides = await getConfigWithOverrides({
-      restApiArgs: {
-        server: this,
-        tableauAuthInfo,
-        disableLogging: true, // MCP server is not connected yet so we can't send logging notifications
-      },
+      restApiArgs,
       requestOverrides: {}, // request overrides are not relevant when getting tools
     });
 
@@ -202,12 +223,62 @@ export class WebMcpServer extends Server {
     const allTools = await Promise.all(
       webToolFactories.map((toolFactory) => toolFactory(this, tableauServerInfo.productVersion)),
     );
+
+    // The registration-time role check is gated behind `enforce-role-requirements`. When it's off
+    // (the default), tools register regardless of the caller's site role and no /users call is made.
+    const enforceRoleRequirements = await getFeatureGate().isFeatureEnabled(
+      'enforce-role-requirements',
+    );
+
+    // Stores context that is used for determining if registration conditions have been met.
+    // Registration context is uninitialized, but then gets populated with each condition checked.
+    const registrationContext: RegistrationContext = {};
+
+    // Names of role-gated tools hidden specifically because the role fetch FAILED
+    // rather than because the caller's role was genuinely too low.
+    const toolsOmittedForRoleFetchFailure: string[] = [];
+
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
+      if (enforceRoleRequirements && tool.minRequiredRole) {
+        // Site role is fetched lazily when at least one candidate tool declares a `minRequiredRole`.
+        // Fail-closed: tools with role requirements are ommited during registration if a user's role
+        // is unable to be fetched. Using `Object.hasOwn` to check if site role context has been populated, as
+        // site role may be undefined as a result of failure to fetch. Retries are used when fetching site role,
+        // so there is no need to keep calling `getCurrentUserSiteRole` if it has already failed before.
+        if (!Object.hasOwn(registrationContext, 'siteRole')) {
+          registrationContext.siteRole = await getCurrentUserSiteRole(restApiArgs);
+        }
+        const siteRole = registrationContext.siteRole;
+        if (!siteRoleMeetsMinimum(siteRole, tool.minRequiredRole)) {
+          // An `undefined` role means the fetch failed
+          if (siteRole === undefined) {
+            toolsOmittedForRoleFetchFailure.push(tool.name);
+          }
+          continue;
+        }
+      }
       toolsToRegister.push(tool);
+    }
+
+    if (toolsOmittedForRoleFetchFailure.length > 0) {
+      // Telemetry: registration runs before the transport connects, so client notifications aren't
+      // available — the process logger (stderr/file, honors LOG_LEVEL) is the only sink here.
+      log({
+        level: 'warning',
+        logger: 'server',
+        message:
+          "Could not determine the current user's site role; " +
+          `${toolsOmittedForRoleFetchFailure.length} role-gated tool(s) were omitted from this ` +
+          `session: ${toolsOmittedForRoleFetchFailure.join(', ')}.`,
+      });
+
+      // Client-facing counterpart: surface the omission in the initialize instructions so the user
+      // knows the tool set is incomplete due to a fetch failure (not their permissions).
+      this.appendInstructions(SITE_ROLE_UNAVAILABLE_WARNING);
     }
 
     return toolsToRegister;

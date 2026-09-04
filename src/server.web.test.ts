@@ -1,6 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { MockedFunction } from 'vitest';
 
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
+import * as logger from './logging/logger.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
@@ -18,9 +20,12 @@ const mocks = vi.hoisted(() => ({
   mockRegisterAppTool: vi.fn(),
   mockRegisterAppResource: vi.fn(),
   mockFeatureGate: {
-    isFeatureEnabled: vi.fn(() => false),
+    // Typed to accept the feature name so tests can enable a specific flag via mockImplementation.
+    isFeatureEnabled: vi.fn((_featureName: string) => false),
   },
   mockReadFile: vi.fn(),
+  mockGetCurrentUserSiteRole: vi.fn(),
+  mockAssertAdmin: vi.fn(),
 }));
 
 const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
@@ -47,6 +52,14 @@ vi.mock('fs/promises', () => ({
   readFile: (...args: any[]) => mocks.mockReadFile(...args),
 }));
 
+vi.mock('./tools/web/adminGate.js', () => ({
+  getCurrentUserSiteRole: mocks.mockGetCurrentUserSiteRole,
+  assertAdmin: mocks.mockAssertAdmin,
+}));
+
+// Auto-mock the telemetry logger so the registration-time warning is captured as a spy call.
+vi.mock('./logging/logger.js');
+
 describe('server', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
@@ -55,6 +68,9 @@ describe('server', () => {
     mocks.mockRegisterAppResource.mockClear();
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
     mocks.mockReadFile.mockClear();
+    mocks.mockGetCurrentUserSiteRole.mockReset().mockResolvedValue('SiteAdministratorCreator');
+    mocks.mockAssertAdmin.mockReset();
+    (logger.log as MockedFunction<typeof logger.log>).mockClear();
   });
 
   afterEach(() => {
@@ -91,6 +107,7 @@ describe('server', () => {
       callback: vi.fn(),
       disabled: false,
       requiredApiScopes: [],
+      minRequiredRole: undefined,
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
       app: {
@@ -436,6 +453,190 @@ describe('server', () => {
         },
       },
     });
+  });
+
+  function createMockAdminTool(): WebTool<any> {
+    return {
+      name: 'mock-admin-tool' as WebToolName,
+      server: {} as any,
+      title: 'Mock Admin Tool',
+      description: 'Mock Admin Tool',
+      paramsSchema: {},
+      annotations: {
+        title: 'Mock Admin Tool',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      callback: vi.fn(),
+      disabled: false,
+      minRequiredRole: 'SiteAdministratorExplorer',
+      requiredApiScopes: [],
+      logAndExecute: vi.fn(),
+      notifyInvocation: vi.fn(),
+    } as unknown as WebTool<any>;
+  }
+
+  // The registration-time role check is gated behind the `enforce-role-requirements` flag. With the
+  // flag ON the tool's minRequiredRole is enforced; with it OFF the check is skipped entirely.
+  const enforceRoleRequirements = (name: string): boolean => name === 'enforce-role-requirements';
+
+  it('does not register a tool when the caller ranks below minRequiredRole', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('registers a tool when the caller ranks at or above minRequiredRole', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+  });
+
+  it('does not register a tool when the caller has no site role (fetch failed)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('registers a below-rank tool when enforce-role-requirements is off and never fetches the site role', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+    // The gate short-circuits before the role fetch, so no /users call is issued.
+    expect(mocks.mockGetCurrentUserSiteRole).not.toHaveBeenCalled();
+  });
+
+  // The SDK emits server-level instructions from `mcpServer.server._instructions` at initialize
+  // time; registration mutates that field, so read it directly to assert the handshake guidance.
+  function getInstructions(server: WebMcpServer): string {
+    return (server.mcpServer.server as unknown as { _instructions?: string })._instructions ?? '';
+  }
+
+  it('warns in the connect instructions when a role-gated tool is omitted because the role fetch failed', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    // undefined uniquely signals a failed fetch (a successful low-role fetch returns the role string).
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(getInstructions(server)).toContain('site role could not be determined');
+  });
+
+  it('does not warn when the role was fetched but ranks too low (legitimate omission)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(getInstructions(server)).not.toContain('site role could not be determined');
+  });
+
+  it('does not warn when enforce-role-requirements is off (no role check, nothing omitted)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(getInstructions(server)).not.toContain('site role could not be determined');
+  });
+
+  // Telemetry-side (server log) counterpart to the client-facing instructions warning above.
+  function getWarningLogs(): Array<Parameters<typeof logger.log>[0]> {
+    const log = logger.log as MockedFunction<typeof logger.log>;
+    return log.mock.calls.map((c) => c[0]).filter((e) => e.level === 'warning');
+  }
+
+  it('logs a telemetry warning when a role-gated tool is omitted because the role fetch failed', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    const warnings = getWarningLogs();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toContain('site role');
+    // Names the omitted tool so operators can see what was hidden.
+    expect(warnings[0].message).toContain('mock-admin-tool');
+  });
+
+  it('does not log a telemetry warning when the role was fetched but ranks too low', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(getWarningLogs()).toHaveLength(0);
   });
 
   it('should register as standard tool when mcp-apps feature flag is disabled', async () => {
