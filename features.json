@@ -1,6 +1,7 @@
 {
   "mcp-apps": false,
   "enforce-role-requirements": false,
+  "enforce-registration-conditions": false,
   "authoring-tools": false,
   "view-file-mode": false,
   "view-data-file-mode": false,

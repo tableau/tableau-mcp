@@ -108,6 +108,7 @@ describe('server', () => {
       disabled: false,
       requiredApiScopes: [],
       minRequiredRole: undefined,
+      registrationConditions: [],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
       app: {
@@ -472,6 +473,31 @@ describe('server', () => {
       callback: vi.fn(),
       disabled: false,
       minRequiredRole: 'SiteAdministratorExplorer',
+      registrationConditions: [],
+      requiredApiScopes: [],
+      logAndExecute: vi.fn(),
+      notifyInvocation: vi.fn(),
+    } as unknown as WebTool<any>;
+  }
+
+  function createMockConditionalTool(): WebTool<any> {
+    return {
+      name: 'mock-conditional-tool' as WebToolName,
+      server: {} as any,
+      title: 'Mock Conditional Tool',
+      description: 'Mock Conditional Tool',
+      paramsSchema: {},
+      annotations: {
+        title: 'Mock Conditional Tool',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      callback: vi.fn(),
+      disabled: false,
+      minRequiredRole: undefined,
+      registrationConditions: ['RequiresPulse'],
       requiredApiScopes: [],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
@@ -481,6 +507,11 @@ describe('server', () => {
   // The registration-time role check is gated behind the `enforce-role-requirements` flag. With the
   // flag ON the tool's minRequiredRole is enforced; with it OFF the check is skipped entirely.
   const enforceRoleRequirements = (name: string): boolean => name === 'enforce-role-requirements';
+
+  // Companion flag for the registration-conditions check (Pulse etc.). ON enforces a tool's
+  // declared `registrationConditions`; OFF skips the check entirely.
+  const enforceRegistrationConditions = (name: string): boolean =>
+    name === 'enforce-registration-conditions';
 
   it('does not register a tool when the caller ranks below minRequiredRole', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
@@ -636,6 +667,46 @@ describe('server', () => {
 
     await server.registerTools();
 
+    expect(getWarningLogs()).toHaveLength(0);
+  });
+
+  it('logs a telemetry warning naming the tools omitted for unmet conditions and the failing condition', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+
+    const server = getServer();
+    const mockConditionalTool = createMockConditionalTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockConditionalTool]);
+
+    await server.registerTools();
+
+    // The Pulse capability is not yet implemented, so `RequiresPulse` fails closed and the tool is hidden.
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-conditional-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+    const warnings = getWarningLogs();
+    expect(warnings).toHaveLength(1);
+    // Names the omitted tool and the condition it failed, so operators can see what was hidden and why.
+    expect(warnings[0].message).toContain('mock-conditional-tool');
+    expect(warnings[0].message).toContain('RequiresPulse');
+  });
+
+  it('does not check conditions or warn when enforce-registration-conditions is off', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+
+    const server = getServer();
+    const mockConditionalTool = createMockConditionalTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockConditionalTool]);
+
+    await server.registerTools();
+
+    // With the flag off, conditions are not evaluated: the tool registers and nothing is logged.
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-conditional-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
     expect(getWarningLogs()).toHaveLength(0);
   });
 

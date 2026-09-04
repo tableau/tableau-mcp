@@ -18,6 +18,7 @@ import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js'
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
+import { RegistrationCondition } from './registrationConditions.js';
 import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.js';
 import { WebToolName } from './toolName.js';
 
@@ -71,6 +72,7 @@ export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = To
    * {@link siteRoleMeetsMinimum}) or the tool is not registered for that caller.
    */
   minRequiredRole?: SiteRole;
+  registrationConditions?: ReadonlyArray<RegistrationCondition>;
 } & (
     | {
         app?: AppDetails;
@@ -120,6 +122,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
   minRequiredRole?: SiteRole;
+  registrationConditions: ReadonlyArray<RegistrationCondition>;
   app?: AppDetails;
   meta?: ToolMeta;
 
@@ -132,6 +135,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     callback,
     disabled,
     minRequiredRole,
+    registrationConditions,
     app,
     meta,
   }: WebToolParams<Args>) {
@@ -139,6 +143,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
     this.minRequiredRole = minRequiredRole;
+    this.registrationConditions = registrationConditions ?? [];
     this.app = app;
     this.meta = meta;
   }
