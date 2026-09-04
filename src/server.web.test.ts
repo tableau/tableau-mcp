@@ -155,6 +155,9 @@ describe('server', () => {
     // so a future edit that drops the rendering guidance can't silently pass.
     expect(instructions).toContain('present them as Markdown tables');
     expect(instructions).toContain('to a chat or Slack surface');
+    // Admin-invocation nudge: the model must not gate admin-tool use on the user restating admin
+    // status — the per-call assertAdmin gate authorizes each call and cleanly rejects non-admins.
+    expect(instructions).toContain('Do not require the user to state or re-confirm admin status');
 
     // The clause belongs to the admin block specifically: it must be appended after the base
     // guidance and after the admin lead-in, never spliced into the base sentence.
@@ -183,6 +186,10 @@ describe('server', () => {
     // stayed out of the base instructions).
     expect(instructions).not.toContain('present them as Markdown tables');
     expect(instructions).not.toContain('Markdown tables');
+    // The admin-invocation nudge is part of the admin-only block and must also be absent.
+    expect(instructions).not.toContain(
+      'Do not require the user to state or re-confirm admin status',
+    );
   });
 
   it('should not register disabled tools', async () => {
