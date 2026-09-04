@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * live `/openapi.json` (OpenAPI 3.1, `info.version` 0.2.9, captured 2026-08-20).
+ * live `/openapi.json` (OpenAPI 3.1, `info.version` 0.2.11, captured 2026-09-03).
  * Envelope fields the spec marks required are required here; everything else stays
  * permissive (`.passthrough()` / optional) because the spec is read-complete but
  * write-thin, and an older Desktop build may omit a field a newer spec marks required.
@@ -29,6 +29,7 @@ export const EXTERNAL_API_ROUTES = {
   workbookUndo: '/v0/workbook:undo',
   workbookRedo: '/v0/workbook:redo',
   workbookSave: '/v0/workbook:save',
+  workbookRunWorkbookOptimizer: '/v0/workbook:runWorkbookOptimizer',
   workbookExportAs: '/v0/workbook:exportAs',
   workbookPublish: '/v0/workbook:publish',
   workbookGoToSheet: '/v0/workbook:goToSheet',
@@ -383,7 +384,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.8). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.11). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -396,6 +397,7 @@ export const PROBLEM_CODES = [
   'missing-payload-version',
   'payload-version-unsupported',
   'not-found',
+  'datasource-not-found',
   'sheet-not-found',
   'logical-table-not-found',
   'operation-not-found',
@@ -571,6 +573,57 @@ export const workbookInventorySchema = z
   })
   .passthrough();
 export type WorkbookInventory = z.infer<typeof workbookInventorySchema>;
+
+/** A recursively nested affected workbook item returned by Workbook Optimizer. */
+export type WorkbookOptimizerAffectedItem = {
+  name: string;
+  value?: number;
+  items?: Array<WorkbookOptimizerAffectedItem>;
+} & Record<string, unknown>;
+
+/**
+ * Affected workbook item returned by `POST /v0/workbook:runWorkbookOptimizer`.
+ * The material fields are strict while passthrough keeps additive Desktop fields visible.
+ */
+export const workbookOptimizerAffectedItemSchema: z.ZodType<WorkbookOptimizerAffectedItem> = z.lazy(
+  () =>
+    z
+      .object({
+        name: z.string(),
+        value: z.number().min(0).optional(),
+        items: z.array(workbookOptimizerAffectedItemSchema).optional(),
+      })
+      .passthrough(),
+);
+
+/** A rule's affected-item summary returned by Workbook Optimizer. */
+export const workbookOptimizerAffectedSchema = z
+  .object({
+    count: z.number().int().min(0),
+    items: z.array(workbookOptimizerAffectedItemSchema),
+  })
+  .passthrough();
+export type WorkbookOptimizerAffected = z.infer<typeof workbookOptimizerAffectedSchema>;
+
+/** A single evaluated Workbook Optimizer rule. */
+export const workbookOptimizerSuggestionSchema = z
+  .object({
+    ruleId: z.number().int().min(1),
+    title: z.string(),
+    description: z.string(),
+    status: z.enum(['PASS', 'FAIL', 'NEEDS_REVIEW', 'IGNORED']),
+    affected: workbookOptimizerAffectedSchema,
+  })
+  .passthrough();
+export type WorkbookOptimizerSuggestion = z.infer<typeof workbookOptimizerSuggestionSchema>;
+
+/** Evaluated Workbook Optimizer suggestions returned by the bodyless POST endpoint. */
+export const workbookOptimizerResultSchema = z
+  .object({
+    suggestions: z.array(workbookOptimizerSuggestionSchema),
+  })
+  .passthrough();
+export type WorkbookOptimizerResult = z.infer<typeof workbookOptimizerResultSchema>;
 
 /** Workbook datasource item returned by `GET /v0/workbook/datasources`. */
 export const datasourceItemSchema = z

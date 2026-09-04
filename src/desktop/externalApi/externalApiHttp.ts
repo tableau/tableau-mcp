@@ -225,6 +225,17 @@ export class ExternalApiHttp {
     return this.parseEnvelope(response, signal);
   }
 
+  /** Bodyless POST whose response is a schema-validated JSON body, not an operation envelope. */
+  async postForBody<T extends z.ZodTypeAny>(
+    route: string,
+    schema: T,
+    signal?: AbortSignal,
+    options?: ExternalApiRequestOptions,
+  ): Promise<Result<z.infer<T>, ExternalApiError>> {
+    const response = await this.request('POST', route, { signal, timeoutMs: options?.timeoutMs });
+    return this.parseJson(response, schema, signal);
+  }
+
   /** POST of an XML body whose response is a schema-validated JSON body, not an operation. */
   async postXmlForBody<T extends z.ZodTypeAny>(
     route: string,

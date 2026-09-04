@@ -8,6 +8,7 @@ import {
   EXTERNAL_API_ROUTES,
   ExternalApiInstance,
   summaryDataSchema,
+  workbookOptimizerResultSchema,
   worksheetListSchema,
   worksheetSummaryDataRoute,
 } from './types.js';
@@ -336,6 +337,57 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
         expect.objectContaining({ id: 'sheet-sales', name: 'Sales by Region' }),
       ]);
       expect(server.requests.some((r) => r.path === '/v0/operations/op-read-2')).toBe(true);
+    });
+
+    it('polls a bodyless Workbook Optimizer POST to the same validated terminal result', async () => {
+      server.setOverride(
+        'POST /v0/workbook:runWorkbookOptimizer',
+        accepted202('op-workbook-optimizer'),
+      );
+      server.setOperation('op-workbook-optimizer', {
+        retryAfterSeconds: 0,
+        poll: [
+          { id: 'op-workbook-optimizer', kind: 'workbook.optimizer', state: 'RUNNING' },
+          {
+            id: 'op-workbook-optimizer',
+            kind: 'workbook.optimizer',
+            state: 'SUCCEEDED',
+            result: {
+              suggestions: [
+                {
+                  ruleId: 8,
+                  title: 'Review extracts',
+                  description: 'Extracts can grow stale.',
+                  status: 'NEEDS_REVIEW',
+                  affected: {
+                    count: 1,
+                    items: [{ name: 'Sample - Superstore', items: [{ name: 'Orders' }] }],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      const result = await http.postForBody(
+        EXTERNAL_API_ROUTES.workbookRunWorkbookOptimizer,
+        workbookOptimizerResultSchema,
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().suggestions[0].affected.items[0].items).toEqual([{ name: 'Orders' }]);
+      expect(server.requests).toContainEqual(
+        expect.objectContaining({
+          method: 'POST',
+          path: '/v0/workbook:runWorkbookOptimizer',
+          body: '',
+          contentType: undefined,
+        }),
+      );
+      expect(server.requests).toContainEqual(
+        expect.objectContaining({ path: '/v0/operations/op-workbook-optimizer' }),
+      );
     });
 
     // A polled document read can settle FAILED (e.g. Desktop's own content-model serialization

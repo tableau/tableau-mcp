@@ -28,6 +28,7 @@ export function makeExecutorMock(
     listSiteWorkbooks: vi.fn(),
     listSiteDatasources: vi.fn(),
     getWorkbook: vi.fn(),
+    runWorkbookOptimizer: vi.fn(),
     listWorksheets: vi.fn(),
     listDashboards: vi.fn(),
     listStoryboards: vi.fn(),
