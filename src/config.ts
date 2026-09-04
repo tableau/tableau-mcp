@@ -7,6 +7,11 @@ import {
   isFeatureGateProvider,
   providerConfigSchema as featureGateProviderConfigSchema,
 } from './features/types.js';
+import {
+  isSessionStoreProvider,
+  providerConfigSchema as sessionStoreProviderConfigSchema,
+  SessionStoreConfig,
+} from './sessionStore/types.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
@@ -73,6 +78,7 @@ export class Config extends BaseConfig {
   productTelemetryEnabled: boolean;
   isHyperforce: boolean;
   featureGate: FeatureGateConfig;
+  sessionStore: SessionStoreConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   flowToolsEnabled: boolean;
@@ -143,6 +149,8 @@ export class Config extends BaseConfig {
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       FEATURE_GATE_PROVIDER: featureGateProvider,
       FEATURE_GATE_PROVIDER_CONFIG: featureGateProviderConfig,
+      SESSION_STORE_PROVIDER: sessionStoreProvider,
+      SESSION_STORE_PROVIDER_CONFIG: sessionStoreProviderConfig,
       LATENCY_METRIC_NAME: latencyMetricName,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
@@ -309,6 +317,25 @@ export class Config extends BaseConfig {
     } else {
       this.featureGate = {
         provider: 'server',
+      };
+    }
+
+    // Session store provider configuration (similar to feature gate provider)
+    if (isSessionStoreProvider(sessionStoreProvider) && sessionStoreProvider === 'custom') {
+      if (!sessionStoreProviderConfig) {
+        throw new Error(
+          'SESSION_STORE_PROVIDER_CONFIG is required when SESSION_STORE_PROVIDER is "custom"',
+        );
+      }
+      this.sessionStore = {
+        provider: 'custom',
+        providerConfig: sessionStoreProviderConfigSchema.parse(
+          JSON.parse(sessionStoreProviderConfig),
+        ),
+      };
+    } else {
+      this.sessionStore = {
+        provider: 'memory',
       };
     }
 
