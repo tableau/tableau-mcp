@@ -16,6 +16,7 @@ import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
@@ -92,7 +93,9 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
       openWorldHint: true,
     },
     disabled: new Provider(
-      async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
+      async () =>
+        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
+        isSlackClient(server.clientId),
     ),
     callback: async (
       { workbookUploadId, workbookFilePath, name, projectId, overwrite = false },
