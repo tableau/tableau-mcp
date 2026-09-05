@@ -34,6 +34,7 @@ import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
 import { escapeXml } from '../binder/escape.js';
+import { decodeXmlEntities } from '../xmlElement.js';
 
 export type TopNEnd = 'top' | 'bottom';
 export type SortDirection = 'ASC' | 'DESC';
@@ -240,6 +241,19 @@ function isDimensionCi(ci: ColumnInstance): boolean {
   return !isPseudoFieldCi(ci) && ci.type === 'nominal' && ci.derivation === 'None';
 }
 
+/**
+ * Discrete shelf sort target — Tableau Field::IsDiscrete() (Nominal|Ordinal), minus
+ * measure aggregations (a discrete SUM is ordinal but is a key, not an axis) and
+ * pseudo-fields. YEAR/MONTH date parts are ordinal + Year/Month, so they count.
+ */
+function isDiscreteSortCi(ci: ColumnInstance): boolean {
+  return (
+    !isPseudoFieldCi(ci) &&
+    (ci.type === 'nominal' || ci.type === 'ordinal') &&
+    !Object.prototype.hasOwnProperty.call(AGG_DERIVATIONS, ci.derivation)
+  );
+}
+
 /** A measure CI: quantitative with a canonical aggregation derivation (e.g. [sum:Sales:qk]). */
 function isMeasureCi(ci: ColumnInstance): boolean {
   return (
@@ -255,7 +269,12 @@ function unbracket(value: string): string {
 }
 
 function normalizeCaption(value: string | undefined): string {
-  return (value ?? '').trim().toLocaleLowerCase();
+  return decodeXmlEntities((value ?? '').trim()).toLocaleLowerCase();
+}
+
+/** Logical `[ds].[ci]` from regex-captured XML (which may still contain `&amp;`). */
+function qualifiedCiRef(ds: string, ciName: string): string {
+  return `[${decodeXmlEntities(ds)}].${decodeXmlEntities(ciName)}`;
 }
 
 function fieldCaptionCandidates(
@@ -606,7 +625,10 @@ function planComputedSortByRefs(
   opts: { targetField: string; column: string; using: string; direction: SortDirection },
 ): SortByFieldPlan | RefineRefusal {
   const node = `<computed-sort column='${escapeXml(opts.column)}' direction='${opts.direction}' using='${escapeXml(opts.using)}' />`;
-  const targetSorts = computedSortTargets(xml).filter((sort) => sort.column === opts.column);
+  const targetColumn = decodeXmlEntities(opts.column);
+  const targetSorts = computedSortTargets(xml).filter(
+    (sort) => decodeXmlEntities(sort.column) === targetColumn,
+  );
   if (targetSorts.length > 1) {
     return refuse(`more than one <computed-sort> present for target field "${opts.targetField}".`);
   }
@@ -710,7 +732,7 @@ export function planSortByField(
     columns,
     opts.targetField,
     'target field',
-    isDimensionCi,
+    isDiscreteSortCi,
     ds,
   );
   if (!('name' in target)) return target;
@@ -724,8 +746,8 @@ export function planSortByField(
   );
   if (!('name' in sortBy)) return sortBy;
 
-  const column = `[${ds}].${target.name}`;
-  const using = `[${ds}].${sortBy.name}`;
+  const column = qualifiedCiRef(ds, target.name);
+  const using = qualifiedCiRef(ds, sortBy.name);
   return planComputedSortByRefs(xml, { targetField: opts.targetField, column, using, direction });
 }
 
@@ -765,7 +787,7 @@ export function planSortByFieldOnCategoricalAxis(
   // DS name (e.g. `P&amp;L Data`) is identical on both sides of the comparison.
   const rows = shelfText(xml, 'rows');
   const cols = shelfText(xml, 'cols');
-  const dims = cis.filter(isDimensionCi);
+  const dims = cis.filter(isDiscreteSortCi);
   const rowDims = orderedShelfDims(rows, ds, dims);
   const colDims = orderedShelfDims(cols, ds, dims);
   const columns = parseColumns(xml);
@@ -790,14 +812,14 @@ export function planSortByFieldOnCategoricalAxis(
     ds,
   );
   if (!('name' in sortBy) && !opts.sortByColumnRef) return sortBy;
-  const using = 'name' in sortBy ? `[${ds}].${sortBy.name}` : opts.sortByColumnRef!;
+  const using = 'name' in sortBy ? qualifiedCiRef(ds, sortBy.name) : opts.sortByColumnRef!;
 
   const axisDims = rowDims.length > 0 ? rowDims : colDims;
   const target = axisDims[axisDims.length - 1];
   const targetField = fieldCaptionCandidates(target, columns)[0] ?? target.column;
   return planComputedSortByRefs(xml, {
     targetField,
-    column: `[${ds}].${target.name}`,
+    column: qualifiedCiRef(ds, target.name),
     using,
     direction,
   });

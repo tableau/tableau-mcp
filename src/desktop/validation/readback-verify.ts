@@ -134,8 +134,21 @@ function unwrapGroupingParens(value: string): string {
   while (text.startsWith('(') && text.endsWith(')')) {
     let depth = 0;
     let wrapsAll = true;
+    let inBracketedName = false;
     for (let i = 0; i < text.length; i++) {
       const char = text[i];
+      if (inBracketedName) {
+        if (char === ']' && text[i + 1] === ']') {
+          i++;
+          continue;
+        }
+        if (char === ']') inBracketedName = false;
+        continue;
+      }
+      if (char === '[') {
+        inBracketedName = true;
+        continue;
+      }
       if (char === '(') depth += 1;
       else if (char === ')') {
         depth -= 1;
@@ -419,14 +432,20 @@ export function verifyWorksheetReadback(
   }
 
   for (const shelf of ['rows', 'cols'] as const) {
-    for (const value of intended.shelves[shelf]) {
-      if (readback.shelves[shelf].includes(value)) continue;
+    const intendedPills = intended.shelves[shelf];
+    const readbackPills = readback.shelves[shelf];
+    const length = Math.max(intendedPills.length, readbackPills.length);
+    for (let i = 0; i < length; i++) {
+      const intendedValue = intendedPills[i];
+      const readbackValue = readbackPills[i];
+      if (intendedValue === readbackValue) continue;
+      const value = intendedValue || readbackValue;
       findings.push({
         kind: 'shelf',
         node: shelf,
         column: value,
         intended: value,
-        readback: readback.shelves[shelf].length > 0 ? 'changed' : 'missing',
+        readback: readbackPills.length > 0 ? 'changed' : 'missing',
         severity: 'error',
       });
     }
