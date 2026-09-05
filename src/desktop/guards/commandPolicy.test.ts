@@ -9,8 +9,10 @@ describe('commandPolicy', () => {
       reason: 'known-live-failure',
     });
     expect(policy?.fix).toContain('known to fail');
-    expect(policy?.fix).toContain('do not retry');
-    expect(policy?.fix).toContain('cached-document round-trip');
+    expect(policy?.fix).toMatch(/do not retry/i);
+    expect(policy?.fix).toContain('refine-worksheet');
+    expect(policy?.fix).toContain('sort_by_field');
+    expect(policy?.fix).not.toContain('cached-document');
     expect(policy?.params?.required).toEqual(
       new Set(['DimensionToSort', 'Worksheet', 'MeasureName', 'ShelfType']),
     );

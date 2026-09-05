@@ -5,6 +5,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import * as discoveryModule from '../../../desktop/externalApi/discovery.js';
 import { _resetExternalApiCommandRegistryForTest } from '../../../desktop/externalApi/paramWireRegistry.js';
+import { knownLiveFailureFixFor } from '../../../desktop/guards/commandPolicy.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -16,8 +17,7 @@ import { getExecuteTableauCommandTool } from './executeTableauCommand.js';
 vi.mock('../../../desktop/externalApi/discovery.js');
 
 const SESSION = 'session-1';
-const SORT_NESTED_LIVE_500_FIX =
-  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the cached-document round-trip (get-worksheet-xml → read-cached-xml/write-cached-xml to edit the computed-sort → apply-worksheet).';
+const SORT_NESTED_LIVE_500_FIX = knownLiveFailureFixFor('tabdoc:sort-nested')!;
 const TEST_REGISTRY_DIRS: string[] = [];
 
 function makeExtra(
@@ -680,7 +680,7 @@ describe('executeTableauCommandTool', () => {
         'tabdoc:sort drives a UI dialog and blocks the screen',
       );
       expect(result.content[0].text).toContain('refine-worksheet with operation sort_by_field');
-      expect(result.content[0].text).toContain('cached-document round-trip');
+      expect(result.content[0].text).not.toContain('cached-document');
       expect(extra.getExecutor).not.toHaveBeenCalled();
     });
 

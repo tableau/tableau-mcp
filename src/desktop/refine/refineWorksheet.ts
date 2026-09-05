@@ -34,6 +34,7 @@ import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
 import { escapeXml } from '../binder/escape.js';
+import { decodeXmlEntities } from '../xmlElement.js';
 
 export type TopNEnd = 'top' | 'bottom';
 export type SortDirection = 'ASC' | 'DESC';
@@ -240,6 +241,19 @@ function isDimensionCi(ci: ColumnInstance): boolean {
   return !isPseudoFieldCi(ci) && ci.type === 'nominal' && ci.derivation === 'None';
 }
 
+/**
+ * Discrete shelf sort target — Tableau Field::IsDiscrete() (Nominal|Ordinal), minus
+ * measure aggregations (a discrete SUM is ordinal but is a key, not an axis) and
+ * pseudo-fields. YEAR/MONTH date parts are ordinal + Year/Month, so they count.
+ */
+function isDiscreteSortCi(ci: ColumnInstance): boolean {
+  return (
+    !isPseudoFieldCi(ci) &&
+    (ci.type === 'nominal' || ci.type === 'ordinal') &&
+    !Object.prototype.hasOwnProperty.call(AGG_DERIVATIONS, ci.derivation)
+  );
+}
+
 /** A measure CI: quantitative with a canonical aggregation derivation (e.g. [sum:Sales:qk]). */
 function isMeasureCi(ci: ColumnInstance): boolean {
   return (
@@ -255,7 +269,12 @@ function unbracket(value: string): string {
 }
 
 function normalizeCaption(value: string | undefined): string {
-  return (value ?? '').trim().toLocaleLowerCase();
+  return decodeXmlEntities((value ?? '').trim()).toLocaleLowerCase();
+}
+
+/** Logical `[ds].[ci]` from regex-captured XML (which may still contain `&amp;`). */
+function qualifiedCiRef(ds: string, ciName: string): string {
+  return `[${decodeXmlEntities(ds)}].${decodeXmlEntities(ciName)}`;
 }
 
 function fieldCaptionCandidates(
@@ -278,13 +297,16 @@ function resolveCiByCaption(
   caption: string | undefined,
   kind: 'target field' | 'sort-by field',
   predicate: (ci: ColumnInstance) => boolean,
+  ds?: string,
 ): ColumnInstance | RefineRefusal {
   const wanted = normalizeCaption(caption);
   if (!wanted) return refuse(`${kind} caption is required.`);
 
   const candidates = cis.filter(predicate);
   const matches = candidates.filter((ci) =>
-    fieldCaptionCandidates(ci, columns).some((value) => normalizeCaption(value) === wanted),
+    [...fieldCaptionCandidates(ci, columns), ci.name, ds ? `[${ds}].${ci.name}` : '']
+      .filter(Boolean)
+      .some((value) => normalizeCaption(value) === wanted),
   );
   if (matches.length === 1) return matches[0];
 
@@ -451,6 +473,14 @@ function shelfText(xml: string, shelf: 'rows' | 'cols'): string {
   return xml.match(new RegExp(`<${shelf}\\b[^>]*>([\\s\\S]*?)</${shelf}>`))?.[1] ?? '';
 }
 
+function orderedShelfDims(shelf: string, ds: string, dims: ColumnInstance[]): ColumnInstance[] {
+  return dims
+    .map((ci) => ({ ci, idx: shelf.indexOf(`[${ds}].${ci.name}`) }))
+    .filter((entry) => entry.idx >= 0)
+    .sort((a, b) => a.idx - b.idx)
+    .map((entry) => entry.ci);
+}
+
 /** True if a value carries any XML-special char that would break a single-quoted attribute. */
 function hasXmlSpecialChars(value: string): boolean {
   return /['"<>&]/.test(value);
@@ -595,7 +625,10 @@ function planComputedSortByRefs(
   opts: { targetField: string; column: string; using: string; direction: SortDirection },
 ): SortByFieldPlan | RefineRefusal {
   const node = `<computed-sort column='${escapeXml(opts.column)}' direction='${opts.direction}' using='${escapeXml(opts.using)}' />`;
-  const targetSorts = computedSortTargets(xml).filter((sort) => sort.column === opts.column);
+  const targetColumn = decodeXmlEntities(opts.column);
+  const targetSorts = computedSortTargets(xml).filter(
+    (sort) => decodeXmlEntities(sort.column) === targetColumn,
+  );
   if (targetSorts.length > 1) {
     return refuse(`more than one <computed-sort> present for target field "${opts.targetField}".`);
   }
@@ -661,14 +694,12 @@ export function planSortDirection(
 }
 
 /**
- * Plan a computed sort for one caption-addressed dimension by one caption-addressed
- * measure. This is the explicit sort primitive for sheets where "flip direction" is not
- * enough: callers name the displayed fields, never Tableau's internal CI refs.
+ * Plan a computed sort for one dimension by one measure. Callers may pass captions,
+ * CI instance names, or datasource-qualified CI refs.
  *
  * `targetField` (the dimension whose axis gets sorted) is optional: when omitted, the
- * dimension is auto-detected from the sheet's single categorical shelf axis via
- * planSortByFieldOnCategoricalAxis — the common case where only the sort-by measure is
- * named. It refuses (never throws) if the axis is absent or ambiguous.
+ * dimension is taken from planSortByFieldOnCategoricalAxis (innermost pill on one
+ * discrete shelf). It refuses (never throws) if the axis is absent or a crosstab.
  */
 export function planSortByField(
   xml: string,
@@ -696,18 +727,33 @@ export function planSortByField(
 
   const cis = parseColumnInstances(xml);
   const columns = parseColumns(xml);
-  const target = resolveCiByCaption(cis, columns, opts.targetField, 'target field', isDimensionCi);
+  const target = resolveCiByCaption(
+    cis,
+    columns,
+    opts.targetField,
+    'target field',
+    isDiscreteSortCi,
+    ds,
+  );
   if (!('name' in target)) return target;
-  const sortBy = resolveCiByCaption(cis, columns, opts.sortByField, 'sort-by field', isMeasureCi);
+  const sortBy = resolveCiByCaption(
+    cis,
+    columns,
+    opts.sortByField,
+    'sort-by field',
+    isMeasureCi,
+    ds,
+  );
   if (!('name' in sortBy)) return sortBy;
 
-  const column = `[${ds}].${target.name}`;
-  const using = `[${ds}].${sortBy.name}`;
+  const column = qualifiedCiRef(ds, target.name);
+  const using = qualifiedCiRef(ds, sortBy.name);
   return planComputedSortByRefs(xml, { targetField: opts.targetField, column, using, direction });
 }
 
 /**
- * Bind-template shorthand: sort the sheet's single categorical axis by a schema field.
+ * Bind-template / omit-targetField sort: nested pills on one discrete shelf sort innermost
+ * (Tableau axis-sort default). Dims on both rows and cols still refuse.
  * If the sort field is not already a worksheet CI, callers may pass its schema column_ref.
  */
 export function planSortByFieldOnCategoricalAxis(
@@ -741,23 +787,39 @@ export function planSortByFieldOnCategoricalAxis(
   // DS name (e.g. `P&amp;L Data`) is identical on both sides of the comparison.
   const rows = shelfText(xml, 'rows');
   const cols = shelfText(xml, 'cols');
-  const dims = cis
-    .filter(isDimensionCi)
-    .filter((ci) => rows.includes(`[${ds}].${ci.name}`) || cols.includes(`[${ds}].${ci.name}`));
-  if (dims.length === 0) return refuse('could not identify a single categorical axis to sort.');
-  if (dims.length > 1)
-    return refuse('more than one categorical axis is present; sort is ambiguous.');
-
+  const dims = cis.filter(isDiscreteSortCi);
+  const rowDims = orderedShelfDims(rows, ds, dims);
+  const colDims = orderedShelfDims(cols, ds, dims);
   const columns = parseColumns(xml);
-  const sortBy = resolveCiByCaption(cis, columns, opts.sortByField, 'sort-by field', isMeasureCi);
-  if (!('name' in sortBy) && !opts.sortByColumnRef) return sortBy;
-  const using = 'name' in sortBy ? `[${ds}].${sortBy.name}` : opts.sortByColumnRef!;
+  if (rowDims.length === 0 && colDims.length === 0) {
+    return refuse('could not identify a single categorical axis to sort.');
+  }
+  if (rowDims.length > 0 && colDims.length > 0) {
+    const names = [...rowDims, ...colDims]
+      .map((ci) => fieldCaptionCandidates(ci, columns)[0] ?? unbracket(ci.column))
+      .join(', ');
+    return refuse(
+      `more than one categorical axis is present (${names}); pass targetField to choose one.`,
+    );
+  }
 
-  const target = dims[0];
+  const sortBy = resolveCiByCaption(
+    cis,
+    columns,
+    opts.sortByField,
+    'sort-by field',
+    isMeasureCi,
+    ds,
+  );
+  if (!('name' in sortBy) && !opts.sortByColumnRef) return sortBy;
+  const using = 'name' in sortBy ? qualifiedCiRef(ds, sortBy.name) : opts.sortByColumnRef!;
+
+  const axisDims = rowDims.length > 0 ? rowDims : colDims;
+  const target = axisDims[axisDims.length - 1];
   const targetField = fieldCaptionCandidates(target, columns)[0] ?? target.column;
   return planComputedSortByRefs(xml, {
     targetField,
-    column: `[${ds}].${target.name}`,
+    column: qualifiedCiRef(ds, target.name),
     using,
     direction,
   });

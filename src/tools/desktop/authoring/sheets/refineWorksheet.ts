@@ -101,7 +101,7 @@ function formatValidationErrors(issues: ValidationIssue[]): string {
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe('Desktop session; omit if one.'),
+  session: z.string().optional().describe('Session; omit if one.'),
   worksheetName: z.string().min(1).describe('Sheet name.'),
   operation: z
     .enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type', 'round_stacked_bar'])
@@ -119,7 +119,7 @@ const paramsSchema = {
     })
     .optional()
     .describe('sort_direction; numeric DESC=largest.'),
-  targetField: z.string().min(1).optional().describe('Axis; omit to detect.'),
+  targetField: z.string().min(1).optional().describe('Omit=innermost nested dim.'),
   sortByField: z.string().min(1).optional().describe('Sort measure.'),
   direction: z.enum(['asc', 'desc']).optional().describe('sort_by_field; numeric desc=largest.'),
   markType: z.enum(TABLEAU_MARK_TYPES).optional().describe('mark_type target.'),
