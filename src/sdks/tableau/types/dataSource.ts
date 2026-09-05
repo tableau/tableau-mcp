@@ -8,6 +8,14 @@ export const dataSourceSchema = z.object({
   name: z.string(),
   contentUrl: z.string().optional(),
   description: z.string().optional(),
+  // `createdAt` and `isCertified` are returned by the Query Data Sources REST endpoint but were
+  // historically not parsed here. The Admin Insights resolver uses them to disambiguate duplicate
+  // datasources on sites with cloned Admin Insights content (W-24106279): the system-provisioned
+  // datasource is certified and older than any user clone. Coerce mirrors `topLevelProject` in
+  // `project.ts`; Tableau's JSON responses return `isCertified` as a real boolean, so the classic
+  // `Boolean("false") === true` coercion footgun does not apply here.
+  createdAt: z.string().optional(),
+  isCertified: z.coerce.boolean().optional(),
   project: projectSchema,
   owner: z
     .object({

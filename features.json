@@ -3,5 +3,6 @@
   "authoring-tools": false,
   "view-file-mode": false,
   "view-data-file-mode": false,
-  "workbook-file-mode": false
+  "workbook-file-mode": false,
+  "admin-insights-robust-resolver": true
 }

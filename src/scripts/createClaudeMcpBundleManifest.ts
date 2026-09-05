@@ -684,6 +684,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  ADMIN_INSIGHTS_DATASET_LUIDS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Admin Insights dataset LUID overrides',
+    description:
+      'Optional JSON map pinning an Admin Insights dataset display name to a specific datasource LUID (e.g. {"Site Content":"5e516f40-..."}). Bypasses automatic resolution on sites with duplicate/broken Admin Insights datasources. Invalid JSON is ignored.',
+    required: false,
+    sensitive: false,
+  },
 } satisfies EnvVars;
 
 const userConfig = Object.entries(envVars).reduce<Record<string, McpbUserConfigurationOption>>(
