@@ -156,7 +156,9 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
-    it('combines published (metadata) and embedded entries, tagging each type', async () => {
+    it('surfaces a published datasource with no matching connection as its own entry', async () => {
+      // Fallback path: the published datasource's name matches no /connections entry (e.g. the
+      // names diverge), so it is appended with its Metadata LUID rather than collapsed onto one.
       mocks.mockGraphql.mockResolvedValue({
         data: {
           workbooksConnection: {
@@ -176,8 +178,51 @@ describe('getWorkbookTool', () => {
       const response = await getResponseData({ workbookId });
 
       expect(response.data.upstreamDatasources).toEqual([
-        { luid: 'pub-luid-1', name: 'Published DS', datasourceType: 'published' },
         { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+        { luid: 'pub-luid-1', name: 'Published DS', datasourceType: 'published' },
+      ]);
+    });
+
+    it('reclassifies a live-to-published connection as published without duplicating it', async () => {
+      // Real-world repro: Workbook.upstreamDatasources is [] but an embedded sqlproxy datasource is
+      // live-connected to a published datasource, surfaced via embeddedDatasources. The sqlproxy
+      // connection (emb-superstore) and the published datasource (pub-superstore) are the same
+      // logical datasource, so we emit a single entry keyed on the connection LUID, tagged
+      // published; the Metadata published LUID (pub-superstore) is not surfaced separately.
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                upstreamDatasources: [],
+                embeddedDatasources: [
+                  {
+                    upstreamDatasources: [
+                      { luid: 'pub-superstore', name: 'Superstore Datasource' },
+                    ],
+                  },
+                  { upstreamDatasources: [] },
+                ],
+              },
+            ],
+          },
+        },
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        {
+          id: 'conn-1',
+          type: 'sqlproxy',
+          datasource: { id: 'emb-superstore', name: 'Superstore Datasource' },
+        },
+        { id: 'conn-2', type: 'textscan', datasource: { id: 'emb-logbk', name: 'log_bk' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        { luid: 'emb-superstore', name: 'Superstore Datasource', datasourceType: 'published' },
+        { luid: 'emb-logbk', name: 'log_bk', datasourceType: 'embedded' },
       ]);
     });
 
