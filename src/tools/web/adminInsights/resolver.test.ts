@@ -1,9 +1,21 @@
+import { AxiosError } from 'axios';
+
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import {
   ADMIN_INSIGHTS_DATASETS,
   AdminInsightsDatasetNotFoundError,
   adminInsightsResolver,
 } from './resolver.js';
+
+// Builds an AxiosError carrying a real HTTP status so the resolver's owner-lookup error handling
+// (which now inspects the HTTP status via getHttpStatus) sees a genuine 404/5xx rather than a bare
+// Error. A 404 is the non-enumerable-system signal; a 5xx is a transient failure that must NOT be
+// scored as that signal.
+function httpError(status: number): AxiosError {
+  const error = new AxiosError(`Request failed with status code ${status}`);
+  error.response = { status } as AxiosError['response'];
+  return error;
+}
 
 type TestDatasource = {
   id: string;
@@ -65,7 +77,7 @@ describe('adminInsightsResolver', () => {
       vi.fn().mockImplementation(async ({ userId }: { userId: string }) => {
         const entry = users[userId];
         if (!entry || entry === 'reject') {
-          throw new Error('404 not found');
+          throw httpError(404);
         }
         return entry;
       });
@@ -321,7 +333,7 @@ describe('adminInsightsResolver', () => {
       // matches the canonical slug), forcing the owner lookup.
       const usersSpy = vi.fn().mockImplementation(async ({ userId }: { userId: string }) => {
         if (userId === 'owner-system') {
-          throw new Error('404 not found'); // non-enumerable system account
+          throw httpError(404); // non-enumerable system account (owner not found)
         }
         return { id: userId, fullName: 'Regular User', email: 'user@example.com' };
       });
@@ -435,6 +447,58 @@ describe('adminInsightsResolver', () => {
       });
 
       expect(resolution.luid).toBe('luid-canonical');
+    });
+
+    it('does NOT treat a transient (5xx) owner-lookup failure as the non-enumerable signal', async () => {
+      // Both candidates tie on free signals (both certified, neither canonical, no timestamp
+      // suffix), forcing the owner lookup. The transient candidate's owner lookup fails with a 5xx.
+      // Under the old blanket `catch {}` that 5xx would have been mis-scored as +100
+      // "owner-non-enumerable", electing the flaky candidate. It must not: the transient failure
+      // scores nothing, so the tie falls through to createdAt (oldest first) and luid-regular wins.
+      const usersSpy = vi.fn().mockImplementation(async ({ userId }: { userId: string }) => {
+        if (userId === 'owner-transient') {
+          throw httpError(500); // transient server error — NOT a non-enumerable signal
+        }
+        return { id: userId, fullName: 'Regular User', email: 'user@example.com' };
+      });
+      const restApi = makeRestApi({
+        siteId: 'site-transient',
+        datasources: [
+          {
+            id: 'luid-transient',
+            name: 'Site Content',
+            contentUrl: 'SiteContentA',
+            isCertified: true,
+            createdAt: '2023-01-01T00:00:00Z',
+            project: { id: 'proj-top', name: 'Admin Insights' },
+            owner: { id: 'owner-transient' },
+          },
+          {
+            id: 'luid-regular',
+            name: 'Site Content',
+            contentUrl: 'SiteContentB',
+            isCertified: true,
+            createdAt: '2020-01-01T00:00:00Z',
+            project: { id: 'proj-top', name: 'Admin Insights' },
+            owner: { id: 'owner-regular' },
+          },
+        ],
+        projects: [{ id: 'proj-top', name: 'Admin Insights', topLevelProject: true }],
+        usersSpy,
+      });
+
+      const resolution = await adminInsightsResolver.resolveDatasetLuid({
+        restApi,
+        datasetName: ADMIN_INSIGHTS_DATASETS.SITE_CONTENT,
+      });
+
+      expect(usersSpy).toHaveBeenCalled();
+      // The transient failure was not scored as the positive signal on any candidate.
+      expect(resolution.candidates.every((c) => !c.reasons.includes('owner-non-enumerable'))).toBe(
+        true,
+      );
+      // With no phantom bump, the tie breaks on createdAt (oldest first).
+      expect(resolution.luid).toBe('luid-regular');
     });
   });
 

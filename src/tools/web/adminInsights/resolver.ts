@@ -1,6 +1,7 @@
 import { log } from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ExpiringMap } from '../../../utils/expiringMap.js';
+import { getHttpStatus } from '../../../utils/getHttpStatus.js';
 import { milliseconds } from '../../../utils/milliseconds.js';
 import { paginate } from '../../../utils/paginate.js';
 import { parseNumber } from '../../../utils/parseNumber.js';
@@ -265,8 +266,8 @@ function scoreFreeSignals(candidate: ResolverCandidate, datasetName: string): vo
 }
 
 // Owner discriminator — only spent on a residual score tie (design §7c). The by-id lookup can
-// succeed even when the id is not enumerable via a list filter; a 404/empty response is itself the
-// positive "system account" signal.
+// succeed even when the id is not enumerable via a list filter; a 404 (owner not found) is itself
+// the positive "system account" signal.
 async function scoreOwner(candidate: ResolverCandidate, restApi: RestApi): Promise<void> {
   if (!candidate.ownerId) {
     return;
@@ -286,12 +287,25 @@ async function scoreOwner(candidate: ResolverCandidate, restApi: RestApi): Promi
       candidate.reasons.push('owner-service-account-email');
       candidate.ownerNote = 'service-account-email';
     }
-  } catch {
-    // A by-id lookup that 404s/errors means the owner is not enumerable — the hallmark of the
-    // non-enumerable Tableau System Account. Language-independent, so it corroborates strongly.
-    candidate.score += SCORE_OWNER_NON_ENUMERABLE;
-    candidate.reasons.push('owner-non-enumerable');
-    candidate.ownerNote = 'non-enumerable-system';
+  } catch (error) {
+    // Only a definitive "owner not found" (HTTP 404) is the non-enumerable-system signal: a by-id
+    // lookup that 404s is the hallmark of the non-enumerable Tableau System Account, and it is
+    // language-independent so it corroborates strongly. A transient failure (5xx / network /
+    // timeout, which surfaces with no HTTP status) must NOT be scored as the positive signal —
+    // otherwise a flaky users call would silently mis-elect this candidate. Log and skip (score 0).
+    const status = getHttpStatus(error instanceof Error ? error : new Error(String(error)));
+    if (status === '404') {
+      candidate.score += SCORE_OWNER_NON_ENUMERABLE;
+      candidate.reasons.push('owner-non-enumerable');
+      candidate.ownerNote = 'non-enumerable-system';
+    } else {
+      log({
+        message: `${RESOLVER_LOGGER}: owner lookup failed for candidate ${candidate.luid} (status ${status || 'unknown'}); not scoring owner signal`,
+        level: 'warning',
+        logger: RESOLVER_LOGGER,
+        data: { luid: candidate.luid, ownerId: candidate.ownerId, status },
+      });
+    }
   }
 }
 

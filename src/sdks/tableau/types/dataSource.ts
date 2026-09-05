@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { projectSchema } from './project.js';
+import { tableauBooleanSchema } from './tableauBoolean.js';
 import { tagsSchema } from './tags.js';
 
 export const dataSourceSchema = z.object({
@@ -11,11 +12,11 @@ export const dataSourceSchema = z.object({
   // `createdAt` and `isCertified` are returned by the Query Data Sources REST endpoint but were
   // historically not parsed here. The Admin Insights resolver uses them to disambiguate duplicate
   // datasources on sites with cloned Admin Insights content (W-24106279): the system-provisioned
-  // datasource is certified and older than any user clone. Coerce mirrors `topLevelProject` in
-  // `project.ts`; Tableau's JSON responses return `isCertified` as a real boolean, so the classic
-  // `Boolean("false") === true` coercion footgun does not apply here.
+  // datasource is certified and older than any user clone. `isCertified` uses `tableauBooleanSchema`
+  // (mirroring `topLevelProject` in `project.ts`) rather than `z.coerce.boolean()` so a stringified
+  // `"false"` cannot mis-credit a clone via the `Boolean("false") === true` footgun.
   createdAt: z.string().optional(),
-  isCertified: z.coerce.boolean().optional(),
+  isCertified: tableauBooleanSchema.optional(),
   project: projectSchema,
   owner: z
     .object({

@@ -1207,4 +1207,74 @@ describe('OverridableConfig', () => {
       });
     });
   });
+
+  describe('ADMIN_INSIGHTS_DATASET_LUIDS', () => {
+    it('defaults to an empty object when unset', () => {
+      const config = new OverridableConfig({});
+      expect(config.adminInsightsDatasetLuids).toEqual({});
+    });
+
+    it('parses a valid JSON object from the environment', () => {
+      vi.stubEnv(
+        'ADMIN_INSIGHTS_DATASET_LUIDS',
+        JSON.stringify({ 'Site Content': 'luid-sc', 'TS Events': 'luid-tse' }),
+      );
+      const config = new OverridableConfig({});
+      expect(config.adminInsightsDatasetLuids).toEqual({
+        'Site Content': 'luid-sc',
+        'TS Events': 'luid-tse',
+      });
+    });
+
+    it('ignores invalid JSON and falls back to the default (empty object)', () => {
+      vi.stubEnv('ADMIN_INSIGHTS_DATASET_LUIDS', '{not valid json');
+      const config = new OverridableConfig({});
+      expect(config.adminInsightsDatasetLuids).toEqual({});
+    });
+
+    it('ignores a non-object JSON value (array) and falls back to the default', () => {
+      vi.stubEnv('ADMIN_INSIGHTS_DATASET_LUIDS', JSON.stringify(['luid-sc']));
+      const config = new OverridableConfig({});
+      expect(config.adminInsightsDatasetLuids).toEqual({});
+    });
+
+    it('drops blank and non-string entries, keeping only valid string mappings', () => {
+      vi.stubEnv(
+        'ADMIN_INSIGHTS_DATASET_LUIDS',
+        JSON.stringify({
+          'Site Content': '  luid-sc  ',
+          Blank: '   ',
+          Empty: '',
+          Numeric: 123,
+          Nullish: null,
+          Nested: { luid: 'x' },
+        }),
+      );
+      const config = new OverridableConfig({});
+      // Valid values are trimmed; blank/empty/non-string entries are dropped.
+      expect(config.adminInsightsDatasetLuids).toEqual({ 'Site Content': 'luid-sc' });
+    });
+
+    describe('site overrides', () => {
+      it('replaces the base env value with a valid site override', () => {
+        vi.stubEnv('ADMIN_INSIGHTS_DATASET_LUIDS', JSON.stringify({ 'Site Content': 'luid-env' }));
+        const config = new OverridableConfig({
+          ADMIN_INSIGHTS_DATASET_LUIDS: JSON.stringify({ 'TS Users': 'luid-site' }),
+        });
+        expect(config.adminInsightsDatasetLuids).toEqual({ 'TS Users': 'luid-site' });
+      });
+
+      it('clears the mapping when the site override is an empty string', () => {
+        vi.stubEnv('ADMIN_INSIGHTS_DATASET_LUIDS', JSON.stringify({ 'Site Content': 'luid-env' }));
+        const config = new OverridableConfig({ ADMIN_INSIGHTS_DATASET_LUIDS: '' });
+        expect(config.adminInsightsDatasetLuids).toEqual({});
+      });
+
+      it('keeps the env value when the site override is invalid JSON', () => {
+        vi.stubEnv('ADMIN_INSIGHTS_DATASET_LUIDS', JSON.stringify({ 'Site Content': 'luid-env' }));
+        const config = new OverridableConfig({ ADMIN_INSIGHTS_DATASET_LUIDS: '{bad json' });
+        expect(config.adminInsightsDatasetLuids).toEqual({ 'Site Content': 'luid-env' });
+      });
+    });
+  });
 });
