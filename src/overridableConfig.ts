@@ -22,6 +22,7 @@ export const overridableVariables = [
   'DISABLE_METADATA_API_REQUESTS',
   'STALE_CONTENT_MIN_AGE_DAYS',
   'STALE_CONTENT_MAX_ROWS',
+  'ADMIN_INSIGHTS_DATASET_LUIDS',
 ] as const satisfies ReadonlyArray<keyof ProcessEnvWeb>;
 
 export const STALE_CONTENT_MIN_AGE_DAYS_DEFAULT = 90;
@@ -33,7 +34,13 @@ const STALE_CONTENT_MAX_ROWS_MIN = 1;
 const STALE_CONTENT_MAX_ROWS_MAX = 10000;
 
 export const requestOverridableVariables = overridableVariables.filter(
-  (v) => v !== 'ALLOWED_REQUEST_OVERRIDES' && v !== 'INCLUDE_TOOLS' && v !== 'EXCLUDE_TOOLS',
+  (v) =>
+    v !== 'ALLOWED_REQUEST_OVERRIDES' &&
+    v !== 'INCLUDE_TOOLS' &&
+    v !== 'EXCLUDE_TOOLS' &&
+    // Admin Insights LUID pinning is a site-admin escape hatch, not a per-request knob — it must
+    // not be overridable per request.
+    v !== 'ADMIN_INSIGHTS_DATASET_LUIDS',
 );
 
 type OverridableVariable = (typeof overridableVariables)[number];
@@ -74,6 +81,12 @@ export class OverridableConfig {
 
   staleContentMinAgeDays: number;
   staleContentMaxRows: number;
+
+  // Per-site override map pinning an Admin Insights dataset display name → datasource LUID
+  // (W-24106279). Lets a site with duplicate/broken Admin Insights datasources bypass automatic
+  // resolution without changing the LLM-facing tool schema. Keyed by the dataset display name
+  // (e.g. "Site Content"). Empty when unset.
+  adminInsightsDatasetLuids: Record<string, string>;
 
   /**
    * General pattern for overriding variables:
@@ -150,6 +163,12 @@ export class OverridableConfig {
       envVariables,
       siteOverrides,
       requestOverrides,
+    );
+
+    // ADMIN_INSIGHTS_DATASET_LUIDS
+    this.adminInsightsDatasetLuids = this.getAdminInsightsDatasetLuidsWithOverrides(
+      envVariables,
+      siteOverrides,
     );
 
     // MAX_RESULT_LIMIT
@@ -538,6 +557,52 @@ export class OverridableConfig {
           throw new Error('STALE_CONTENT_MAX_ROWS was provided an invalid request override value');
         }
         value = parsed;
+      }
+    }
+
+    return value;
+  }
+
+  // Parses the ADMIN_INSIGHTS_DATASET_LUIDS override from the environment and site overrides. The
+  // value is a JSON object mapping dataset display name -> datasource LUID, e.g.
+  // {"Site Content":"5e516f40-...","TS Events":"..."}. Invalid JSON or non-string/blank entries are
+  // ignored (never throws) so a malformed override degrades to automatic resolution. Not
+  // request-overridable — LUID pinning is a site-admin configuration decision.
+  getAdminInsightsDatasetLuidsWithOverrides(
+    envVariables: Record<string, string | undefined>,
+    siteOverrides: Record<string, string> = {},
+  ): Record<string, string> {
+    const parse = (raw: string | undefined): Record<string, string> | null => {
+      if (raw === undefined || raw.trim() === '') {
+        return null;
+      }
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          return null;
+        }
+        const result: Record<string, string> = {};
+        for (const [key, value] of Object.entries(parsed)) {
+          if (typeof value === 'string' && value.trim() !== '') {
+            result[key] = value.trim();
+          }
+        }
+        return result;
+      } catch {
+        return null;
+      }
+    };
+
+    let value = parse(envVariables.ADMIN_INSIGHTS_DATASET_LUIDS) ?? {};
+
+    if (Object.hasOwn(siteOverrides, 'ADMIN_INSIGHTS_DATASET_LUIDS')) {
+      if (siteOverrides.ADMIN_INSIGHTS_DATASET_LUIDS === '') {
+        value = {};
+      } else {
+        const parsed = parse(siteOverrides.ADMIN_INSIGHTS_DATASET_LUIDS);
+        if (parsed !== null) {
+          value = parsed;
+        }
       }
     }
 

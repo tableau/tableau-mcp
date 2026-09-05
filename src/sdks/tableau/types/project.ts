@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { tableauBooleanSchema } from './tableauBoolean.js';
+
 export const contentPermissionsSchema = z.enum([
   'LockedToProject',
   'ManagedByOwner',
@@ -17,7 +19,11 @@ export const projectSchema = z.object({
   parentProjectId: z.string().optional(),
   contentPermissions: contentPermissionsSchema.optional(),
   controllingPermissionsProjectId: z.string().optional(),
-  topLevelProject: z.coerce.boolean().optional(),
+  // `tableauBooleanSchema` (not `z.coerce.boolean()`): the Admin Insights resolver keys on
+  // `topLevelProject === true`, and a stringified `"false"` under `z.coerce.boolean()` would coerce
+  // to `true` (the `Boolean("false") === true` footgun) and mis-classify a nested project as
+  // top-level.
+  topLevelProject: tableauBooleanSchema.optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
   owner: z

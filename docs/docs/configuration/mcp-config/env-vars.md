@@ -565,6 +565,29 @@ Overridable per-site via [Site Settings](site-settings.md) and per-request via
 
 <hr />
 
+## `ADMIN_INSIGHTS_DATASET_LUIDS`
+
+Optional escape hatch for the
+[`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md) tool's automatic
+datasource resolution. A JSON object mapping an Admin Insights dataset **name** to the **LUID** of
+the datasource to use for it, e.g.:
+
+```json
+{ "Site Content": "9c8f1e2a-4b3d-4c5e-8f6a-1b2c3d4e5f6a" }
+```
+
+Normally the tool discovers the canonical Admin Insights datasource for each dataset and, on sites
+with cloned/duplicate content, disambiguates automatically. Pin a LUID here only when that
+resolution picks the wrong datasource. A pinned LUID is used verbatim — it skips both discovery and
+the runtime health-check fallback, so a stale or incorrect LUID will cause queries for that dataset
+to fail until it is corrected. Invalid JSON, blank entries, and non-string values are ignored.
+
+- Default: unset (fully automatic resolution)
+
+Overridable per-site via [Site Settings](site-settings.md); not request-overridable.
+
+<hr />
+
 ## `LICENSE_RECLAIM_INACTIVE_DAYS`
 
 Default minimum days of inactivity before a user is considered a license reclamation candidate by
