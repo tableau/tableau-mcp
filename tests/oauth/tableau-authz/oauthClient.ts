@@ -188,16 +188,20 @@ export class OAuthClient {
     {
       schema,
       contentType,
+      textFormat,
       toolArgs,
     }: {
       schema: Z;
       contentType?: 'text' | 'image';
+      /** Text tool responses are JSON unless the tool intentionally returns raw text, such as CSV. */
+      textFormat?: 'json' | 'raw';
       toolArgs?: Record<string, unknown>;
     },
   ): Promise<z.infer<Z>> {
     console.log('[OAuthClient] Calling tool:', toolName);
     console.log('[OAuthClient] Tool arguments:', JSON.stringify(toolArgs, null, 2));
     contentType = contentType ?? 'text';
+    textFormat = textFormat ?? 'json';
     toolArgs = toolArgs ?? {};
 
     const request: CallToolRequest = {
@@ -233,7 +237,8 @@ export class OAuthClient {
     if (content.type === 'text') {
       const text = content.text;
       invariant(typeof text === 'string');
-      const result = schema.safeParse(JSON.parse(text));
+      const value = textFormat === 'json' ? JSON.parse(text) : text;
+      const result = schema.safeParse(value);
       if (!result.success) {
         throw new Error(`Failed to parse tool result in the expected format: ${text}`);
       }

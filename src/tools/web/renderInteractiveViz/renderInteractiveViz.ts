@@ -41,7 +41,7 @@ export const getRenderInteractiveVizTool = (server: WebMcpServer): WebTool<typeo
       idempotentHint: true,
       openWorldHint: false,
     },
-    app: getAppConfig('render-interactive-viz'),
+    app: { ...getAppConfig('render-interactive-viz'), hideWhenUnsupported: true },
     disabled: new Provider(
       async () =>
         !(await getFeatureGate().isFeatureEnabled('mcp-apps')) ||

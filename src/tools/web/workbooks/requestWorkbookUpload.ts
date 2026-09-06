@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import {
@@ -36,7 +37,9 @@ export const getRequestWorkbookUploadTool = (
       openWorldHint: true,
     },
     disabled: new Provider(
-      async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
+      async () =>
+        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
+        isSlackClient(server.clientId),
     ),
     callback: async ({ fileName }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<RequestWorkbookUploadResult>({

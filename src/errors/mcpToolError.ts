@@ -167,6 +167,12 @@ export class ViewNotAllowedError extends McpToolError {
   }
 }
 
+export class ViewSheetNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'view-sheet-not-found', message, statusCode: 404 });
+  }
+}
+
 export class CustomViewNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'custom-view-not-allowed', message, statusCode: 403 });

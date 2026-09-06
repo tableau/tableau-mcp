@@ -1,6 +1,7 @@
 import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
+import { log } from '../../../logging/logger.js';
 import { AxiosRequestConfig, getStringResponseHeader, isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { viewsApis } from '../apis/viewsApi.js';
@@ -234,11 +235,15 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       }
     }
 
-    return await this._apiClient.queryViewData({
-      params: { siteId, viewId },
-      queries,
-      ...this.authHeader,
-    });
+    const response = await this._apiClient.axios.get<string>(
+      `/sites/${siteId}/views/${viewId}/data`,
+      {
+        ...this.authHeader,
+        params: queries,
+        responseType: 'text',
+      },
+    );
+    return response.data;
   };
 
   /**
@@ -276,9 +281,21 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       },
     );
 
+    const contentType = getStringResponseHeader(response.headers, 'content-type');
+    log({
+      message: 'Received view all-data response',
+      level: 'debug',
+      logger: 'rest-api',
+      data: {
+        status: response.status,
+        contentType,
+        bodyBytes: response.data.byteLength,
+      },
+    });
+
     return {
       body: response.data,
-      contentType: getStringResponseHeader(response.headers, 'content-type'),
+      contentType,
     };
   };
 

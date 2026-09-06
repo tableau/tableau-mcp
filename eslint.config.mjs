@@ -46,6 +46,15 @@ export default [
     },
   },
   {
+    // Standalone Node CLI scripts (plain JS): the TS return-type rule is
+    // inapplicable to .mjs, and a CLI legitimately writes to stdout.
+    files: ['docs/scripts/**/*.mjs'],
+    rules: {
+      'no-console': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+    },
+  },
+  {
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -55,7 +64,14 @@ export default [
     },
   },
   {
-    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**', 'docs/build/**'],
+    ignores: [
+      'node_modules/**',
+      'build/**',
+      'docs/.docusaurus/**',
+      'docs/build/**',
+      '.claude/**',
+      '.worktrees/**',
+    ],
   },
   {
     plugins: {

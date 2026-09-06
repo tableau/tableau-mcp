@@ -330,6 +330,10 @@ information about the client's identity, capabilities, and protocol version comp
   clients to provide that session ID in the `mcp-session-id` header for subsequent requests.
 - Set this to `true` if you are using the HTTP transport and your client does not support or need
   session management.
+- MCP-Apps interactive tool rendering requires session management to detect client capabilities.
+  When `true`, app tools fall back to plain tool registration, regardless of what the connecting
+  client supports — except tools that opt out of the plain-tool fallback entirely (via
+  `hideWhenUnsupported`), which are omitted from registration altogether in this mode.
 
 <hr />
 
@@ -497,7 +501,7 @@ TTL (in minutes) for caches used by admin-only tools. Affects:
 
 - Admin role lookups (`assertAdmin`)
 - Admin Insights dataset LUID resolution
-- Project ID → name resolution used by `get-stale-content-report`
+- Project ID → name resolution used by `query-admin-insights` (`kind: "stale-content"`)
 
 - Default: `5`
 - Minimum: `1`

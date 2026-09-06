@@ -71,6 +71,8 @@ describe('renderInteractiveVizTool', () => {
       objectType: expect.any(Object),
     });
     expect(tool.app?.resourceUri).toBe('ui://render-interactive-viz/mcp-app.html');
+    // Opts out of the plain-tool fallback so the tool is hidden from clients that can't render it.
+    expect(tool.app?.hideWhenUnsupported).toBe(true);
   });
 
   describe('disabled property', () => {

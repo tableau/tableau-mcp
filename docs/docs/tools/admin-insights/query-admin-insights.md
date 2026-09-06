@@ -270,6 +270,23 @@ Example result:
 }
 ```
 
+## Output formatting
+
+This tool returns raw JSON. Any table rendering (Markdown, Slack) is performed by the AI
+client, not the server, so it lives only in the current conversation. When
+`ADMIN_TOOLS_ENABLED` is set, the server's `initialize` instructions nudge clients to present
+admin/list results as Markdown tables by default — but this is best-effort (hosts that ignore
+`initialize.instructions` get no nudge) and does not pin a specific column set or style.
+
+For a **durable, exact** output style that survives across sessions, set it in your MCP client's
+own memory (e.g. a line in Claude Code / Claude Desktop `CLAUDE.md`), for example:
+
+> When showing Tableau admin/list results, render a Markdown table with columns
+> Full Name · Site Role · Email · Last Login; wrap emails in backticks; show "never" for a
+> missing last login.
+
+The server has no per-user preference store, so this persistence is necessarily a client concern.
+
 ## Related
 
 - [`delete-content`](../content/delete-content.md) — destructive-delete tool

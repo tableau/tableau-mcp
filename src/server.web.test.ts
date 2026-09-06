@@ -4,6 +4,7 @@ import type { MockedFunction } from 'vitest';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import * as logger from './logging/logger.js';
 import { serverName, WebMcpServer } from './server.web.js';
+import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
@@ -27,11 +28,21 @@ const mocks = vi.hoisted(() => ({
   mockAssertAdmin: vi.fn(),
 }));
 
+const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
+
 vi.mock('@modelcontextprotocol/ext-apps/server', () => ({
   registerAppTool: mocks.mockRegisterAppTool,
   registerAppResource: mocks.mockRegisterAppResource,
   RESOURCE_MIME_TYPE: 'text/html',
+  // Mirror ext-apps' real getUiCapability: return the SEP-1724 UI extension object, if present.
+  getUiCapability: (capabilities: { extensions?: Record<string, unknown> } | undefined) =>
+    capabilities?.extensions?.[UI_EXTENSION_ID],
 }));
+
+// Client capabilities advertising MCP-Apps rendering support (uses the mocked RESOURCE_MIME_TYPE).
+const uiCapableClientCapabilities: ClientCapabilitiesWithUiExtension = {
+  extensions: { [UI_EXTENSION_ID]: { mimeTypes: ['text/html'] } },
+};
 
 vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
@@ -67,13 +78,19 @@ describe('server', () => {
   });
 
   // Helper functions
-  function getServer(): WebMcpServer {
-    const server = new WebMcpServer();
+  function getServer(opts?: {
+    capabilities?: ClientCapabilitiesWithUiExtension;
+    clientId?: string;
+  }): WebMcpServer {
+    const server = new WebMcpServer({
+      capabilities: opts?.capabilities,
+      clientId: opts?.clientId,
+    });
     server.mcpServer.registerTool = vi.fn();
     return server;
   }
 
-  function createMockAppTool(): WebTool<any> {
+  function createMockAppTool(opts?: { hideWhenUnsupported?: boolean }): WebTool<any> {
     return {
       name: 'mock-app-tool' as WebToolName,
       server: {} as any,
@@ -98,6 +115,7 @@ describe('server', () => {
         name: 'test-app',
         resourceUri: 'tableau://app/test',
         htmlPath: '<html><body>Test App UI</body></html>',
+        ...(opts?.hideWhenUnsupported ? { hideWhenUnsupported: true } : {}),
       },
     };
   }
@@ -150,6 +168,22 @@ describe('server', () => {
     expect(instructions).toContain('general admin/site-health');
     expect(instructions).toContain('user-license reclamation');
     expect(instructions).toContain('query-admin-insights');
+    // Output-formatting nudge so chat/Slack surfaces render admin/list results as tables.
+    // Assert on a distinctive slice of the actual clause, not the bare words "Markdown tables",
+    // so a future edit that drops the rendering guidance can't silently pass.
+    expect(instructions).toContain('present them as Markdown tables');
+    expect(instructions).toContain('to a chat or Slack surface');
+    // Admin-invocation nudge: the model must not gate admin-tool use on the user restating admin
+    // status — the per-call assertAdmin gate authorizes each call and cleanly rejects non-admins.
+    expect(instructions).toContain('Do not require the user to state or re-confirm admin status');
+
+    // The clause belongs to the admin block specifically: it must be appended after the base
+    // guidance and after the admin lead-in, never spliced into the base sentence.
+    expect(instructions!.startsWith('Tableau MCP exposes tools')).toBe(true);
+    const adminStart = instructions!.indexOf('site-administration capabilities');
+    const clauseStart = instructions!.indexOf('present them as Markdown tables');
+    expect(adminStart).toBeGreaterThan(-1);
+    expect(clauseStart).toBeGreaterThan(adminStart);
   });
 
   it('should omit admin guidance from instructions when ADMIN_TOOLS_ENABLED is unset', () => {
@@ -165,6 +199,15 @@ describe('server', () => {
     expect(instructions).not.toContain('site-administration capabilities');
     expect(instructions).not.toContain('general admin/site-health');
     expect(instructions).not.toContain('query-admin-insights');
+    // The admin-only output-formatting nudge is also absent (assert on the distinctive clause
+    // slice, not the bare words, so we're certain the whole admin block — not just a keyword —
+    // stayed out of the base instructions).
+    expect(instructions).not.toContain('present them as Markdown tables');
+    expect(instructions).not.toContain('Markdown tables');
+    // The admin-invocation nudge is part of the admin-only block and must also be absent.
+    expect(instructions).not.toContain(
+      'Do not require the user to state or re-confirm admin status',
+    );
   });
 
   it('should not register disabled tools', async () => {
@@ -341,7 +384,8 @@ describe('server', () => {
 
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
 
-    const server = getServer();
+    // Flag on + client advertises the UI capability + a non-Claude clientId → app tool registers.
+    const server = getServer({ capabilities: uiCapableClientCapabilities });
     const mockAppTool = createMockAppTool();
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
 
@@ -703,5 +747,151 @@ describe('server', () => {
     // Should NOT register as app tool
     expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
     expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register as standard tool when client capabilities lack the UI extension', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // Flag on, but no client capabilities advertised → falls back to plain tool.
+    const server = getServer();
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register as standard tool when flag is off even if client is UI-capable', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+
+    const server = getServer({ capabilities: uiCapableClientCapabilities });
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register as standard tool for a known-incompatible client (claude.ai) despite UI support', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // Flag on + UI-capable, but clientId resolves to 'Claude' via getClientDisplayName → plain tool.
+    const server = getServer({
+      capabilities: uiCapableClientCapabilities,
+      clientId: 'https://claude.ai/some/cimd',
+    });
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register app tool for a non-Claude known client (Cursor) that is UI-capable', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    const server = getServer({
+      capabilities: uiCapableClientCapabilities,
+      clientId: 'https://cursor.com/some/cimd',
+    });
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
+      server.mcpServer,
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppResource).toHaveBeenCalled();
+  });
+
+  it('should not register a hideWhenUnsupported app tool at all when the client lacks MCP-Apps support', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // Flag on, but no UI capability advertised. A hideWhenUnsupported tool skips the plain-tool
+    // fallback entirely, so it must be absent from registration (neither app nor plain).
+    const server = getServer();
+    const mockAppTool = createMockAppTool({ hideWhenUnsupported: true });
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should not register a hideWhenUnsupported app tool for the known-incompatible client (claude.ai)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // UI-capable but claude.ai → app path is blocked; hideWhenUnsupported means no plain fallback either.
+    const server = getServer({
+      capabilities: uiCapableClientCapabilities,
+      clientId: 'https://claude.ai/some/cimd',
+    });
+    const mockAppTool = createMockAppTool({ hideWhenUnsupported: true });
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should still register a hideWhenUnsupported app tool as an app tool when the client supports MCP Apps', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // hideWhenUnsupported only changes the fallback; the happy path still registers it as an app tool.
+    const server = getServer({ capabilities: uiCapableClientCapabilities });
+    const mockAppTool = createMockAppTool({ hideWhenUnsupported: true });
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
+      server.mcpServer,
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppResource).toHaveBeenCalled();
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });

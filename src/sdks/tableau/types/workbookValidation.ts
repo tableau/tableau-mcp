@@ -3,8 +3,10 @@ import { z } from 'zod';
 export const validationIssueSchema = z.object({
   severity: z.string(),
   message: z.string(),
-  line: z.number(),
-  column: z.number(),
+  // Tableau omits line/column for structural XML errors (e.g. an unclosed tag) that the
+  // parser can't map to a specific location, unlike content-validation errors which include them.
+  line: z.number().optional(),
+  column: z.number().optional(),
   elementName: z.string(),
 });
 
