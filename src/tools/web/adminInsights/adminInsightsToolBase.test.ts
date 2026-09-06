@@ -146,21 +146,4 @@ describe('executeAdminInsightsQuery health fallback', () => {
     expect(result.unwrapErr()).toBeInstanceOf(AdminInsightsUnavailableError);
     expect(queryDatasource).toHaveBeenCalledTimes(1);
   });
-
-  it('does NOT fall back when a pinned override LUID has a dead extract', async () => {
-    const queryDatasource = vi.fn().mockResolvedValue(Err(HYPER_ERROR));
-    const restApi = makeRestApi(queryDatasource);
-
-    const result = await executeAdminInsightsQuery({
-      restApi,
-      datasetName: ADMIN_INSIGHTS_DATASETS.SITE_CONTENT,
-      query: { fields: [] },
-      datasetLuidOverride: 'pinned-luid',
-    });
-
-    expect(result.isErr()).toBe(true);
-    expect(result.unwrapErr()).toBeInstanceOf(AdminInsightsUnavailableError);
-    expect(queryDatasource).toHaveBeenCalledTimes(1);
-    expect(queryDatasource.mock.calls[0][0].datasource.datasourceLuid).toBe('pinned-luid');
-  });
 });

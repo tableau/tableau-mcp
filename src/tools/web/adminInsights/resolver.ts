@@ -380,48 +380,20 @@ export const adminInsightsResolver = {
    * Resolves an Admin Insights dataset NAME to the LUID of the canonical, system-provisioned
    * datasource, disambiguating duplicates on sites with cloned Admin Insights content (W-24106279).
    *
-   * @param overrideLuid - Optional per-site pinned LUID (from the `adminInsightsDatasetLuids`
-   *   overridable config). When set it is returned directly (still health-checked by the caller).
-   * @param robustResolverEnabled - When false, reverts to the legacy single-filter behavior (the
-   *   cache-poisoning fix still applies unconditionally). Defaults to true.
+   * Detection is entirely fact-based (project, certification, contentUrl slug, owner, createdAt) —
+   * no hardcoded LUIDs — so it identifies the original datasource for every Admin Insights dataset
+   * name uniformly.
    */
   async resolveDatasetLuid({
     restApi,
     datasetName,
-    overrideLuid,
-    robustResolverEnabled = true,
   }: {
     restApi: RestApi;
     datasetName: AdminInsightsDataset;
-    overrideLuid?: string;
-    robustResolverEnabled?: boolean;
   }): Promise<AdminInsightsResolution> {
     const siteId = restApi.siteId;
     const cacheKey = `${siteId}:${datasetName}`;
     const resolverCache = getCache();
-
-    if (overrideLuid) {
-      log({
-        message: `${RESOLVER_LOGGER}: using pinned override LUID for "${datasetName}"`,
-        level: 'debug',
-        logger: RESOLVER_LOGGER,
-        data: { datasetName },
-      });
-      return {
-        luid: overrideLuid,
-        candidates: [
-          {
-            luid: overrideLuid,
-            projectId: '',
-            projectName: ADMIN_INSIGHTS_PROJECT_NAME,
-            score: 0,
-            reasons: ['override'],
-          },
-        ],
-        warnings: [],
-        reason: 'override',
-      };
-    }
 
     const cached = resolverCache.get(cacheKey);
     if (cached && !this._isLuidDead(siteId, cached)) {
@@ -484,13 +456,6 @@ export const adminInsightsResolver = {
     // candidate has been negative-cached (the caller will then surface an unavailable error).
     const live = rawMatches.filter((c) => !this._isLuidDead(siteId, c.luid));
     const working = live.length > 0 ? live : rawMatches;
-
-    // Legacy behavior (flag off): last-writer-wins, minus the cache poisoning. Kept as a revert path.
-    if (!robustResolverEnabled) {
-      const chosen = working[working.length - 1];
-      resolverCache.set(cacheKey, chosen.luid);
-      return { luid: chosen.luid, candidates: [chosen], warnings: [], reason: 'legacy' };
-    }
 
     // FAST PATH — the overwhelming majority of sites: exactly one candidate, no project/user calls.
     if (working.length === 1) {

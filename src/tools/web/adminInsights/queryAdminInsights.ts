@@ -4,14 +4,12 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
 import {
-  ADMIN_INSIGHTS_ROBUST_RESOLVER_FLAG,
   AdminInsightsQueryResult,
   executeAdminInsightsQuery,
   runAdminInsightsQuery,
@@ -196,18 +194,10 @@ Consider this for general admin/site-health, governance, cleanup, and cost/licen
                   });
                 }
 
-                const robustResolverEnabled = await getFeatureGate().isFeatureEnabled(
-                  ADMIN_INSIGHTS_ROBUST_RESOLVER_FLAG,
-                );
                 const siteContentResult = await executeAdminInsightsQuery({
                   restApi,
                   datasetName: ADMIN_INSIGHTS_DATASETS.SITE_CONTENT,
                   query: _buildSiteContentQuery(types, projectNameScope),
-                  robustResolverEnabled,
-                  datasetLuidOverride:
-                    configWithOverrides.adminInsightsDatasetLuids[
-                      ADMIN_INSIGHTS_DATASETS.SITE_CONTENT
-                    ],
                 });
                 if (siteContentResult.isErr()) {
                   return siteContentResult;
@@ -287,7 +277,6 @@ Consider this for general admin/site-health, governance, cleanup, and cost/licen
             datasetName,
             query,
             rowLimit,
-            datasetLuidOverride: configWithOverrides.adminInsightsDatasetLuids[datasetName],
           });
         },
         constrainSuccessResult: (queryOutput) => ({ type: 'success', result: queryOutput }),

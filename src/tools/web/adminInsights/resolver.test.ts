@@ -502,33 +502,6 @@ describe('adminInsightsResolver', () => {
     });
   });
 
-  describe('override map', () => {
-    it('returns the pinned LUID with no list/project/user calls', async () => {
-      const listSpy = vi.fn();
-      const projectsSpy = vi.fn();
-      const usersSpy = vi.fn();
-      const restApi = makeRestApi({
-        siteId: 'site-override',
-        datasources: [],
-        listSpy,
-        projectsSpy,
-        usersSpy,
-      });
-
-      const resolution = await adminInsightsResolver.resolveDatasetLuid({
-        restApi,
-        datasetName: ADMIN_INSIGHTS_DATASETS.SITE_CONTENT,
-        overrideLuid: 'pinned-luid',
-      });
-
-      expect(resolution.luid).toBe('pinned-luid');
-      expect(resolution.reason).toBe('override');
-      expect(listSpy).not.toHaveBeenCalled();
-      expect(projectsSpy).not.toHaveBeenCalled();
-      expect(usersSpy).not.toHaveBeenCalled();
-    });
-  });
-
   describe('dead-LUID handling', () => {
     it('skips a negative-cached dead LUID and resolves the surviving candidate', async () => {
       const restApi = makeRestApi({
@@ -565,35 +538,6 @@ describe('adminInsightsResolver', () => {
       });
 
       expect(resolution.luid).toBe('luid-alive');
-    });
-  });
-
-  describe('feature flag off (legacy path)', () => {
-    it('reverts to last-writer-wins but still avoids cache poisoning', async () => {
-      const listSpy = vi.fn().mockResolvedValue({
-        pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 2 },
-        datasources: [
-          { id: 'luid-first', name: 'Site Content', project: { id: 'p', name: 'Admin Insights' } },
-          { id: 'luid-last', name: 'Site Content', project: { id: 'p', name: 'Admin Insights' } },
-        ],
-      });
-      const restApi = makeRestApi({
-        siteId: 'site-legacy',
-        datasources: [
-          { id: 'luid-first', name: 'Site Content' },
-          { id: 'luid-last', name: 'Site Content' },
-        ],
-        listSpy,
-      });
-
-      const resolution = await adminInsightsResolver.resolveDatasetLuid({
-        restApi,
-        datasetName: ADMIN_INSIGHTS_DATASETS.SITE_CONTENT,
-        robustResolverEnabled: false,
-      });
-
-      expect(resolution.luid).toBe('luid-last');
-      expect(resolution.reason).toBe('legacy');
     });
   });
 });

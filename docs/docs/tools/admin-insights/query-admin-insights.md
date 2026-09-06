@@ -51,12 +51,6 @@ When more than one candidate exists, the result carries a diagnostic warning und
 forced a fallback) naming the duplicates and which was chosen, so an admin can delete the
 non-canonical copy to remove the ambiguity.
 
-If automatic resolution ever picks the wrong datasource, a site administrator can pin the LUID per
-dataset name via the [`ADMIN_INSIGHTS_DATASET_LUIDS`](../../configuration/mcp-config/env-vars.md)
-config — a JSON object keyed by dataset name, e.g.
-`{"Site Content": "9c8f1e2a-4b3d-4c5e-8f6a-1b2c3d4e5f6a"}`. A pinned LUID is used verbatim and skips
-both discovery and the health-check fallback.
-
 ## APIs called
 
 - [Query Datasource (VDS)](https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/QueryDatasource)

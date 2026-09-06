@@ -7,7 +7,6 @@ import {
   McpToolError,
   ZodiosValidationError,
 } from '../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   Datasource,
@@ -29,11 +28,6 @@ import {
   AdminInsightsResolverWarning,
   ResolverCandidate,
 } from './resolver.js';
-
-// Feature flag name for the robust (detect-then-disambiguate) resolver + health-check fallback
-// (W-24106279). Default-on in features.json; when off, the resolver reverts to the legacy
-// single-filter behavior and no health fallback runs.
-export const ADMIN_INSIGHTS_ROBUST_RESOLVER_FLAG = 'admin-insights-robust-resolver';
 
 // Result of a raw Admin Insights VDS query, extended with resolver diagnostics. Warnings are
 // attached only when resolution was ambiguous or a dead-extract fallback occurred.
@@ -90,24 +84,20 @@ function unavailableError(
  * Executes a single VDS query against an Admin Insights dataset using an already-authenticated
  * RestApi instance. Used by tools that issue multiple queries within one auth session.
  *
- * Resolves the dataset name → LUID via {@link adminInsightsResolver} (cached per site) and, when
- * the robust resolver is enabled, retries the next-ranked candidate if the chosen datasource has a
- * dead Hyper extract (W-24106279). Does NOT run the admin-gate — caller is responsible.
+ * Resolves the dataset name → LUID via {@link adminInsightsResolver} (cached per site) and retries
+ * the next-ranked candidate if the chosen datasource has a dead Hyper extract (W-24106279). Does
+ * NOT run the admin-gate — caller is responsible.
  */
 export async function executeAdminInsightsQuery({
   restApi,
   datasetName,
   query,
   rowLimit,
-  robustResolverEnabled = true,
-  datasetLuidOverride,
 }: {
   restApi: RestApi;
   datasetName: AdminInsightsDataset;
   query: Query;
   rowLimit?: number;
-  robustResolverEnabled?: boolean;
-  datasetLuidOverride?: string;
 }): Promise<Result<AdminInsightsQueryResult, McpToolError>> {
   const warnings: AdminInsightsResolverWarning[] = [];
   const triedLuids: string[] = [];
@@ -125,8 +115,6 @@ export async function executeAdminInsightsQuery({
       const resolution = await adminInsightsResolver.resolveDatasetLuid({
         restApi,
         datasetName,
-        overrideLuid: datasetLuidOverride,
-        robustResolverEnabled,
       });
       luid = resolution.luid;
       candidates = resolution.candidates;
@@ -171,14 +159,10 @@ export async function executeAdminInsightsQuery({
 
       lastErrorMessage = vdsError.message;
 
-      // Only a Hyper connection/extract failure triggers fallback, and only when the robust
-      // resolver is enabled. Any other api-error is surfaced as-is (never retried).
+      // Only a Hyper connection/extract failure triggers fallback. Any other api-error is surfaced
+      // as-is (never retried).
       const nextCandidate = candidates.find((c) => c.luid !== luid);
-      if (
-        robustResolverEnabled &&
-        !datasetLuidOverride &&
-        isHyperConnectionError(vdsError.message)
-      ) {
+      if (isHyperConnectionError(vdsError.message)) {
         adminInsightsResolver.markDatasetLuidDead({ siteId: restApi.siteId, datasetName, luid });
         if (nextCandidate) {
           warnings.push(buildUnhealthyWarning(datasetName, luid, nextCandidate.luid));
@@ -220,18 +204,13 @@ export async function runAdminInsightsQuery({
   datasetName,
   query,
   rowLimit,
-  datasetLuidOverride,
 }: {
   extra: TableauWebRequestHandlerExtra;
   jwtScopes: ReadonlyArray<TableauApiScope>;
   datasetName: AdminInsightsDataset;
   query: Query;
   rowLimit?: number;
-  datasetLuidOverride?: string;
 }): Promise<Result<AdminInsightsQueryResult, McpToolError>> {
-  const robustResolverEnabled = await getFeatureGate().isFeatureEnabled(
-    ADMIN_INSIGHTS_ROBUST_RESOLVER_FLAG,
-  );
   return await useRestApi({
     ...extra,
     jwtScopes,
@@ -246,8 +225,6 @@ export async function runAdminInsightsQuery({
         datasetName,
         query,
         rowLimit,
-        robustResolverEnabled,
-        datasetLuidOverride,
       });
     },
   });
