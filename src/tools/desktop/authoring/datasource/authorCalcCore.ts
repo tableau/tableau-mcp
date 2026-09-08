@@ -77,8 +77,10 @@ export interface AuthorCalcBatchRequest {
 export type CalcFailureKind =
   | 'invalid-formula' // validator ran and reported errors for this formula
   | 'dependency-failed' // an in-batch calc it references failed; never attempted
-  | 'cycle' // caught in a dependency cycle; never attempted
-  | 'validation-error'; // the validate command could not be executed (infra)
+  | 'cycle'; // caught in a dependency cycle; never attempted
+// An infra failure of the validate command (transport / non-completed envelope) is NOT a per-calc
+// verdict — it aborts the whole batch with a DesktopCommandExecutionError, so callers never mistake
+// it for a bad formula. See authorCalculationsWithValidation.
 
 export type AuthoredCalcOutcome =
   | { status: 'created'; caption: string; calcName: string; datasource: string }
@@ -265,14 +267,56 @@ export async function authorCalculationsWithValidation({
   }
   const datasourceName = targetResult.value.name;
 
-  // A collision with an existing field is detected before any apply, so the batch aborts with
-  // no partial state rather than silently shadowing a real field.
-  for (const calc of specs) {
-    if (findColumnByCaption(targetResult.value.xml, calc.caption) !== undefined) {
-      return new ArgsValidationError(
-        'caption collision — pick a new caption or use the existing field',
-      ).toErr();
+  // A pre-existing caption is either an idempotent retry (identical resolved definition -> reuse the
+  // existing calc and author nothing) or a real collision (abort with no partial state rather than
+  // silently shadowing a real field). Decided before any apply. The resolved-formula comparison
+  // mirrors prepareCalculationBatch so an author-calc retry with identical args succeeds on its own
+  // prior output instead of erroring. No write has happened yet, so the initial workbook is the
+  // basis for both loose- and caption-reference resolution.
+  const looseFields = resolveLooseReferences
+    ? summarizeSchema(workbookXml).fields.filter((field) => field.datasource === datasourceName)
+    : undefined;
+  const idempotentOutcomes = new Map<number, AuthoredCalcOutcome>();
+  for (const [index, calc] of specs.entries()) {
+    const existingColumn = findColumnByCaption(targetResult.value.xml, calc.caption);
+    if (existingColumn === undefined) {
+      continue;
     }
+    let comparisonFormula = calc.formula;
+    if (looseFields !== undefined) {
+      const loose = resolveLooseFormulaReferences(
+        comparisonFormula,
+        { datasource: datasourceName, fields: looseFields },
+        '',
+      );
+      // An unresolvable loose reference can't be an identical retry; fall through to collision.
+      if (loose.isOk()) {
+        comparisonFormula = loose.value;
+      }
+    }
+    const resolvedFormula = resolveCaptionReferences(
+      comparisonFormula,
+      targetResult.value.xml,
+      workbookXml,
+    );
+    if (existingCalcMatches(existingColumn, resolvedFormula, calc)) {
+      idempotentOutcomes.set(index, {
+        status: 'created',
+        caption: calc.caption,
+        calcName: unescapeXml(getAttr(existingColumn, 'name') ?? ''),
+        datasource: datasourceName,
+      });
+      continue;
+    }
+    return new ArgsValidationError(
+      'caption collision — pick a new caption or use the existing field',
+    ).toErr();
+  }
+
+  // Every requested calc already exists identically: report reuse without activating the
+  // datasource or applying anything.
+  if (idempotentOutcomes.size === specs.length) {
+    return new Ok(specs.map((_, index) => idempotentOutcomes.get(index)!));
   }
 
   const layering = layerCalculationsByDependency(specs);
@@ -291,6 +335,9 @@ export async function authorCalculationsWithValidation({
   }
 
   const outcomes = new Array<AuthoredCalcOutcome | undefined>(specs.length).fill(undefined);
+  for (const [index, outcome] of idempotentOutcomes) {
+    outcomes[index] = outcome;
+  }
   for (const index of layering.cycleIndices) {
     outcomes[index] = {
       status: 'failed',
@@ -304,6 +351,10 @@ export async function authorCalculationsWithValidation({
   for (const layer of layering.layers) {
     const pending: number[] = [];
     for (const index of layer) {
+      if (outcomes[index] !== undefined) {
+        // Idempotent reuse already recorded in the pre-check; nothing to validate or create.
+        continue;
+      }
       const failedDep = [...layering.dependencies[index]].find(
         (dep) => outcomes[dep]?.status === 'failed',
       );
@@ -352,13 +403,11 @@ export async function authorCalculationsWithValidation({
         signal,
       });
       if (validation.status === 'error') {
-        outcomes[index] = {
-          status: 'failed',
-          caption: calc.caption,
-          failure: 'validation-error',
-          message: validation.message,
-        };
-        continue;
+        // The validate command could not run (transport / non-completed envelope) — an infra
+        // failure, not a verdict on this formula. Abort with the typed execution error rather than
+        // reporting invalid-formula, so the agent is never told to "fix" a correct formula. Matches
+        // the set-active-datasource activation abort above.
+        return validation.error.toErr();
       }
       if (validation.status === 'invalid') {
         outcomes[index] = {
@@ -433,23 +482,26 @@ export async function authorCalculationsWithValidation({
     }
   }
 
-  return new Ok(
-    outcomes.map(
-      (outcome, index) =>
-        outcome ?? {
-          status: 'failed',
-          caption: specs[index].caption,
-          failure: 'validation-error',
-          message: 'calculation was not processed',
-        },
-    ),
-  );
+  // Every calc is created, reused, cycled, dependency-failed, or invalid above. An undefined
+  // outcome means the layering/loop missed an index — an internal bug, not a formula problem.
+  const finalized: AuthoredCalcOutcome[] = [];
+  for (const [index, outcome] of outcomes.entries()) {
+    if (outcome === undefined) {
+      return new ArgsValidationError(
+        `internal error: calculation "${specs[index].caption}" was not processed`,
+      ).toErr();
+    }
+    finalized.push(outcome);
+  }
+  return new Ok(finalized);
 }
 
 type CalcValidation =
   | { status: 'valid' }
   | { status: 'invalid'; message: string }
-  | { status: 'error'; message: string };
+  // Infra failure: carries the typed error so the caller aborts with a DesktopCommandExecutionError
+  // instead of misreporting the formula as invalid.
+  | { status: 'error'; error: DesktopCommandExecutionError };
 
 async function validateCalcFormula({
   formula,
@@ -469,19 +521,33 @@ async function validateCalcFormula({
   // A rejected command (transport error / non-completed envelope) is an infra failure, not a
   // verdict on the formula. An invalid formula comes back as a completed command with errors.
   if (result.isErr()) {
-    return {
-      status: 'error',
-      message: new DesktopCommandExecutionError(result.error).getErrorText(),
-    };
+    return { status: 'error', error: new DesktopCommandExecutionError(result.error) };
   }
   if (result.value.status !== 'completed') {
+    // A non-completed envelope carries Desktop's own error for a 'failed' command; surface it as an
+    // execution error and note the terminal status so the failure is diagnosable.
     return {
       status: 'error',
-      message: `formula validation did not complete (status: ${result.value.status})`,
+      error: new DesktopCommandExecutionError(
+        { type: 'command-failed', error: result.value.error },
+        `formula validation did not complete (status: ${result.value.status})`,
+      ),
     };
   }
   const errors = calcErrorMessages(result.value.result);
-  if (errors !== undefined && errors.length > 0) {
+  if (errors === undefined) {
+    // errorMsgs is always present in a well-formed response (empty for a valid formula). Its absence
+    // means the command's result shape changed, so "no errors" is not trustworthy — fail closed and
+    // author nothing rather than silently create an unvalidated calc (the W-24061123 false-success bug).
+    return {
+      status: 'error',
+      error: new DesktopCommandExecutionError(
+        { type: 'invalid-response', error: result.value.result },
+        'formula validation succeeded but its result did not contain the expected errorMsgs field',
+      ),
+    };
+  }
+  if (errors.length > 0) {
     return { status: 'invalid', message: formatValidatorErrors(errors) };
   }
   return { status: 'valid' };
@@ -504,20 +570,34 @@ function formatValidatorErrors(errors: string[]): string {
  * tabdoc:get-calc-details-pres-model-for-formula returns a completed (SUCCEEDED) command whose
  * out-param is a UserCalculationDetailsPresModel; an invalid formula is DATA — a non-empty
  * errorMsgs array — never a command failure. executeCommand hands back the command envelope, so
- * the out-params live on `.result`. The External Client API surfaces the out-param
- * `user-calculation-details` as a camelCase `userCalculationDetails` property carrying an
- * `errorMsgs` string array (out-param names in codegen/doc/command-wrappers/analytics-assistant-cmd.data
- * + the dashed->camelCase Compact serialization; corroborated by sibling tabdoc validate clients that
- * read named camelCase out-params). No committed JSON fixture pins the literal bytes, so this walks the
- * result for the first array under an errorMsg(s) key regardless of nesting or casing. `undefined` means
- * no such key was present (treated as no errors); an empty array means the formula is valid.
+ * the out-params live on `.result`. Captured live payloads (the __fixtures__ pair) pin the shape:
+ * `result.userCalculationDetails.errorMsgs: string[]`, present-and-empty for a valid formula and
+ * non-empty for an invalid one.
+ *
+ * Returns `undefined` ONLY when no errorMsgs array exists anywhere in the result. Because errorMsgs
+ * is always present in a well-formed response, that absence means the command contract changed, so
+ * the caller must fail CLOSED (author nothing) rather than treat it as "no errors" — treating an
+ * unparseable response as valid is the W-24061123 false-success bug. An empty array means valid.
+ * The walk descends objects AND arrays and matches the errorMsg(s) key case-insensitively so a
+ * nesting/casing drift still finds the array rather than silently missing it.
  */
-function calcErrorMessages(result: Record<string, unknown> | undefined): string[] | undefined {
+export function calcErrorMessages(
+  result: Record<string, unknown> | undefined,
+): string[] | undefined {
   return findErrorMessagesNode(result);
 }
 
 function findErrorMessagesNode(node: unknown): string[] | undefined {
-  if (node === null || typeof node !== 'object' || Array.isArray(node)) {
+  if (Array.isArray(node)) {
+    for (const entry of node) {
+      const found = findErrorMessagesNode(entry);
+      if (found !== undefined) {
+        return found;
+      }
+    }
+    return undefined;
+  }
+  if (node === null || typeof node !== 'object') {
     return undefined;
   }
   for (const [key, value] of Object.entries(node)) {
@@ -679,6 +759,30 @@ function calculationDatatypesMatch(existing: string, requested: Datatype, role: 
   // to the same numeric measure and are safe to reuse on an idempotent retry.
   const numericDatatypes = new Set<string>(['integer', 'real']);
   return numericDatatypes.has(existing) && numericDatatypes.has(requested);
+}
+
+// An existing column is an idempotent match for a requested calc when its stored definition is
+// identical: same normalized formula, same role, a compatible numeric datatype, and no extra
+// default format (the validation path never sets one). Mirrors prepareCalculationBatch's check so
+// author-calc retries behave the same on both authoring paths.
+function existingCalcMatches(
+  existingColumn: string,
+  resolvedFormula: string,
+  calc: Pick<CalcSpec, 'role' | 'datatype'>,
+): boolean {
+  const existingFormula = getAttr(existingColumn, 'formula');
+  if (existingFormula === undefined) {
+    return false;
+  }
+  const existingRole = unescapeXml(getAttr(existingColumn, 'role') ?? '');
+  const existingDatatype = unescapeXml(getAttr(existingColumn, 'datatype') ?? '');
+  const existingDefaultFormat = unescapeXml(getAttr(existingColumn, 'default-format') ?? '');
+  return (
+    normalizeFormula(unescapeXml(existingFormula)) === normalizeFormula(resolvedFormula) &&
+    existingRole === calc.role &&
+    calculationDatatypesMatch(existingDatatype, calc.datatype, calc.role) &&
+    existingDefaultFormat === ''
+  );
 }
 
 function resolveLooseFormulaReferences(

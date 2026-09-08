@@ -4,12 +4,25 @@ import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.js';
+import {
+  ExecuteCommandArgs,
+  ExternalApiToolExecutor,
+} from '../../../../desktop/externalApi/executorTypes.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
+import invalidValidatorEnvelope from './__fixtures__/calc-validation-invalid.json';
+import validValidatorEnvelope from './__fixtures__/calc-validation-valid.json';
 import { getAuthorCalcTool } from './authorCalc.js';
-import { authorCalculationsInWorkbook, prepareCalculationsInWorkbook } from './authorCalcCore.js';
+import {
+  authorCalculationsInWorkbook,
+  authorCalculationsWithValidation,
+  calcErrorMessages,
+  type CalcSpec,
+  layerCalculationsByDependency,
+  prepareCalculationsInWorkbook,
+} from './authorCalcCore.js';
 
 const BASE_XML = [
   "<?xml version='1.0' encoding='utf-8'?>",
@@ -452,9 +465,18 @@ async function getToolResult({
 }> {
   const documents = [initialXml, initialXml, readbackXml ?? withColumn(initialXml, '')];
   let readCount = 0;
-  const executeCommand = vi
-    .fn()
-    .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null }));
+  // The validate command must return a well-formed (empty errorMsgs) envelope: validateCalcFormula now
+  // fails CLOSED on a missing errorMsgs field, so a blanket `result: null` would abort every calc.
+  const executeCommand = vi.fn(async ({ command }: ExecuteCommandArgs) => {
+    if (command === 'get-calc-details-pres-model-for-formula') {
+      return new Ok({
+        command_id: 'validate-1',
+        status: 'completed',
+        result: { userCalculationDetails: { errorMsgs: [], errorInds: [] } },
+      });
+    }
+    return new Ok({ command_id: 'command-1', status: 'completed', result: null });
+  });
   const getWorkbookDocument = vi.fn(async () => {
     return new Ok({
       xml: documents[Math.min(readCount++, documents.length - 1)],
@@ -740,5 +762,221 @@ describe('prepareCalculationsInWorkbook idempotency', () => {
     expect(result.isErr()).toBe(true);
     if (result.isOk()) return;
     expect(result.error.message).toContain('caption collision');
+  });
+});
+
+describe('layerCalculationsByDependency', () => {
+  it('orders a linear A -> B -> C chain one calc per layer', () => {
+    const { layers, cycleIndices } = layerCalculationsByDependency([
+      { caption: 'A', formula: '[Sales]' },
+      { caption: 'B', formula: '[A] + 1' },
+      { caption: 'C', formula: '[B] + 1' },
+    ]);
+
+    expect(layers).toEqual([[0], [1], [2]]);
+    expect(cycleIndices).toEqual([]);
+  });
+
+  it('places independent calcs in the same layer', () => {
+    const { layers } = layerCalculationsByDependency([
+      { caption: 'A', formula: '[Sales]' },
+      { caption: 'B', formula: '[Region]' },
+    ]);
+
+    expect(layers).toEqual([[0, 1]]);
+  });
+
+  it('ignores a self-reference rather than treating it as a cycle', () => {
+    const { layers, cycleIndices, dependencies } = layerCalculationsByDependency([
+      { caption: 'A', formula: '[A] + 1' },
+    ]);
+
+    expect(dependencies[0].size).toBe(0);
+    expect(layers).toEqual([[0]]);
+    expect(cycleIndices).toEqual([]);
+  });
+
+  it('returns mutually-referencing calcs as cycle indices, not a layer', () => {
+    const { layers, cycleIndices } = layerCalculationsByDependency([
+      { caption: 'A', formula: '[B] + 1' },
+      { caption: 'B', formula: '[A] + 1' },
+    ]);
+
+    expect(layers).toEqual([]);
+    expect(cycleIndices).toEqual([0, 1]);
+  });
+});
+
+describe('authorCalculationsWithValidation', () => {
+  const existingMargin =
+    "<column caption='Margin' datatype='real' name='[Calculation_900]' role='measure' type='quantitative'>" +
+    "<calculation class='tableau' formula='[Sales] * 0.2' /></column>";
+
+  // Validate returns the caller's envelope; every other command (set-active-datasource) succeeds.
+  // These cases all resolve to a pre-apply verdict, so no getWorkbookDocument/apply mock is needed.
+  function validationExecutor(validateResult: unknown): ExternalApiToolExecutor {
+    return makeExecutorMock({
+      executeCommand: vi.fn().mockImplementation(async ({ command }: ExecuteCommandArgs) => {
+        if (command === 'get-calc-details-pres-model-for-formula') {
+          return validateResult;
+        }
+        return new Ok({ command_id: 'activate-1', status: 'completed', result: null });
+      }),
+    });
+  }
+
+  const spec = (caption: string, formula: string): CalcSpec => ({
+    caption,
+    formula,
+    role: 'measure',
+    datatype: 'real',
+  });
+
+  it('reuses an identical existing calc and authors nothing (no activation, no validate)', async () => {
+    const executor = validationExecutor(undefined);
+    const result = await authorCalculationsWithValidation({
+      workbookXml: withColumn(BASE_XML, existingMargin),
+      calcs: [spec('Margin', '[Sales]  *  0.2')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) throw new Error('expected idempotent reuse to succeed');
+    expect(result.value).toEqual([
+      {
+        status: 'created',
+        caption: 'Margin',
+        calcName: '[Calculation_900]',
+        datasource: 'Superstore',
+      },
+    ]);
+    expect(vi.mocked(executor.executeCommand)).not.toHaveBeenCalled();
+  });
+
+  it('rejects a caption collision when the existing formula differs, before any command', async () => {
+    const executor = validationExecutor(undefined);
+    const result = await authorCalculationsWithValidation({
+      workbookXml: withColumn(BASE_XML, existingMargin),
+      calcs: [spec('Margin', '[Sales] * 0.3')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected caption collision');
+    expect(result.error.message).toContain('caption collision');
+    expect(vi.mocked(executor.executeCommand)).not.toHaveBeenCalled();
+  });
+
+  it('aborts the batch when the validate command cannot complete (infra failure, not a verdict)', async () => {
+    const executor = validationExecutor(
+      new Ok({
+        command_id: 'validate-1',
+        status: 'failed',
+        error: {
+          code: 'awaiting-user',
+          message: 'Tableau Desktop is showing a dialog',
+          recoverable: true,
+        },
+      }),
+    );
+    const result = await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('New Calc', '[Sales] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected an infra abort');
+    expect(result.error.type).toBe('desktop-command-execution-error');
+    expect(result.error.message).toContain('formula validation did not complete (status: failed)');
+    expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
+  });
+
+  it('reports invalid-formula from the captured validator payload without authoring', async () => {
+    const executor = validationExecutor(
+      new Ok({
+        command_id: 'validate-1',
+        status: 'completed',
+        result: invalidValidatorEnvelope.result,
+      }),
+    );
+    const result = await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('depend', '[Sales] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr())
+      throw new Error('an invalid formula is a per-calc verdict, not a batch error');
+    const [outcome] = result.value;
+    expect(outcome.status).toBe('failed');
+    invariant(outcome.status === 'failed');
+    expect(outcome.failure).toBe('invalid-formula');
+    expect(outcome.message).toContain('Formula validation reported 6 error(s)');
+    expect(outcome.message).toContain(
+      'Cannot mix aggregate and non-aggregate arguments with this function.',
+    );
+    expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
+  });
+
+  it('cascades a failed calc to an in-batch dependent (never validates the dependent)', async () => {
+    const executor = validationExecutor(
+      new Ok({
+        command_id: 'validate-1',
+        status: 'completed',
+        result: invalidValidatorEnvelope.result,
+      }),
+    );
+    const result = await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('Base', '[Sales] + 1'), spec('Derived', '[Base] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) throw new Error('per-calc failures stay in the outcome list');
+    const [base, derived] = result.value;
+    invariant(base.status === 'failed' && derived.status === 'failed');
+    expect(base.failure).toBe('invalid-formula');
+    expect(derived.failure).toBe('dependency-failed');
+    expect(derived.message).toContain('depends on "Base"');
+    // The dependent is short-circuited before its own validate call: Base is the only validation.
+    expect(
+      vi
+        .mocked(executor.executeCommand)
+        .mock.calls.filter(([arg]) => arg.command === 'get-calc-details-pres-model-for-formula'),
+    ).toHaveLength(1);
+  });
+});
+
+describe('calcErrorMessages (captured validator payloads)', () => {
+  it('extracts every errorMsg from the real invalid-formula envelope', () => {
+    const errors = calcErrorMessages(invalidValidatorEnvelope.result as Record<string, unknown>);
+    expect(errors).toHaveLength(6);
+    expect(errors).toContain(
+      'Cannot mix aggregate and non-aggregate arguments with this function.',
+    );
+  });
+
+  it('returns an empty list for the real valid-formula envelope', () => {
+    expect(calcErrorMessages(validValidatorEnvelope.result as Record<string, unknown>)).toEqual([]);
+  });
+
+  it('returns undefined when no errorMsgs key exists so the caller fails closed', () => {
+    expect(
+      calcErrorMessages({ userCalculationDetails: { calculationCaption: 'x' } }),
+    ).toBeUndefined();
+  });
+
+  it('descends arrays to find an errorMsgs array nested under one', () => {
+    expect(
+      calcErrorMessages({ items: [{ userCalculationDetails: { errorMsgs: ['boom'] } }] }),
+    ).toEqual(['boom']);
   });
 });
