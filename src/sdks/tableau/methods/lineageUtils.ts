@@ -15,10 +15,14 @@ const metadataLineageContentSchema = z.object({
 });
 
 // Published datasources connected via an embedded datasource are only reliably reachable by
-// traversing embeddedDatasources -> upstreamDatasources. The content-level upstreamDatasources
-// rollup (on Workbook/Sheet) is a Catalog-computed field that can be empty even when the embedded
-// -> published lineage edge is indexed, so we query both and union them. Embedded datasources
-// themselves carry no luid, so only their upstream (published) datasources survive normalization.
+// traversing embeddedDatasources -> upstreamDatasources. The Workbook.upstreamDatasources
+// rollup is a Catalog-computed field that can be empty even when the embedded -> published lineage edge is indexed,
+// so we query both and union them.
+// Embedded datasources themselves carry no luid, so only their upstream (published) datasources survive normalization.
+//
+// This traversal is workbook-scoped ONLY. See getViewLineageConnectionQuery for views.
+// A sheet/view must report just the datasources it uses, and Workbook.embeddedDatasources is workbook-wide,
+// so unioning it into view lineage would over-attribute every published datasource in the workbook to every sheet.
 const metadataEmbeddedDatasourceSchema = z.object({
   upstreamDatasources: z.array(metadataLineageContentSchema).nullish(),
 });
@@ -53,7 +57,6 @@ const viewLineageNodeSchema = z.object({
           username: z.string().nullable().optional(),
         })
         .nullish(),
-      embeddedDatasources: z.array(metadataEmbeddedDatasourceSchema).nullish(),
     })
     .nullish(),
 });
@@ -113,7 +116,6 @@ function getViewLineageConnectionQuery(connectionName: string, viewLuids: Array<
               name
               username
             }
-            ${embeddedUpstreamSelection}
           }
         }
       }`;
@@ -185,10 +187,9 @@ export function getViewLineageByLuid(response: unknown): Map<string, ViewLineage
     nodes.map((node) => [
       node.luid,
       {
-        upstreamDatasources: collectPublishedLineage(
-          node.upstreamDatasources,
-          node.workbook?.embeddedDatasources,
-        ),
+        // View lineage stays sheet-scoped: only the sheet's own upstream (published) datasources,
+        // never the parent workbook's full embeddedDatasources set (see metadataEmbeddedDatasourceSchema).
+        upstreamDatasources: collectPublishedLineage(node.upstreamDatasources),
         workbook: node.workbook?.name
           ? { luid: node.workbook.luid, name: node.workbook.name }
           : undefined,
@@ -379,7 +380,7 @@ export function toEmbeddedLineageContents(
 // upstreamDatasources rollup omits (see metadataEmbeddedDatasourceSchema).
 function collectPublishedLineage(
   upstreamDatasources: Array<z.infer<typeof metadataLineageContentSchema>> | null | undefined,
-  embeddedDatasources: Array<z.infer<typeof metadataEmbeddedDatasourceSchema>> | null | undefined,
+  embeddedDatasources?: Array<z.infer<typeof metadataEmbeddedDatasourceSchema>> | null | undefined,
 ): Array<LineageContent> {
   const combined = [
     ...(upstreamDatasources ?? []),

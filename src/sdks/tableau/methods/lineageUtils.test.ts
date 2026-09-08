@@ -149,39 +149,22 @@ describe('lineageUtils', () => {
     ]);
   });
 
-  it('surfaces published datasources for a view via its workbook embeddedDatasources', () => {
-    const lineageByLuid = getViewLineageByLuid({
-      data: {
-        sheetsConnection: {
-          nodes: [
-            {
-              luid: 'view-1',
-              upstreamDatasources: [], // sheet-level rollup empty (same Catalog gap as workbooks)
-              workbook: {
-                luid: 'workbook-1',
-                name: 'Executive Dashboard',
-                embeddedDatasources: [
-                  { upstreamDatasources: [{ luid: 'pub-1', name: 'Superstore Datasource' }] },
-                ],
-              },
-            },
-          ],
-        },
-      },
-    });
+  it('keeps view lineage sheet-scoped and does not traverse workbook-wide embeddedDatasources', () => {
+    // Regression guard for over-attribution: a view must report only the datasources its own sheet
+    // uses. Traversing the parent workbook's embeddedDatasources would attribute every published
+    // datasource in the workbook to every sheet, so the view/search queries must not request it.
+    expect(getViewLineageQuery(['view-1'])).not.toContain('embeddedDatasources');
+    expect(
+      getSearchContentLineageQuery({ workbookLuids: [], viewLuids: ['view-1'] }),
+    ).not.toContain('embeddedDatasources');
+  });
 
-    const result = mergeViewLineage(
-      [{ id: 'view-1', workbook: { id: 'workbook-1' } }],
-      lineageByLuid,
-    );
-
-    expect(result).toEqual([
-      {
-        id: 'view-1',
-        workbook: { id: 'workbook-1', name: 'Executive Dashboard' },
-        upstreamDatasources: [{ luid: 'pub-1', name: 'Superstore Datasource' }],
-      },
-    ]);
+  it('includes embeddedDatasources traversal for workbooks in the search content query', () => {
+    // The workbook path IS workbook-scoped, so surfacing published datasources via embedded
+    // datasources is correct there (unlike the view path above).
+    expect(
+      getSearchContentLineageQuery({ workbookLuids: ['workbook-1'], viewLuids: [] }),
+    ).toContain('embeddedDatasources');
   });
 
   it('queries both sheetsConnection and dashboardsConnection for view lineage', () => {
