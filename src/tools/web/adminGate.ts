@@ -61,21 +61,15 @@ class CurrentSessionFetchError extends Error {
  *
  * Used at tool-registration time to gate tools by role.
  *
- * Resolves the role from the authenticated session itself (`GET /sessions/current`) rather than
- * from `GET /sites/:siteId/users/:userId`. `/sessions/current` needs neither a userId nor the
- * `tableau:users:read` scope, so it works uniformly across every auth type: pat/uat/direct-trust
- * (sign-in), passthrough/embedded (X-Tableau-Auth), and OAuth Bearer — including Bearer tokens
- * that omit the `https://tableau.com/userId` claim (users without MFA), where `restApi.userId`
- * would otherwise be empty and produce a malformed `/users/` request.
+ * Resolves the role from the authenticated session itself `GET /sessions/current`.
+ * `/sessions/current` does not need userId ands works uniformly across every auth type.
  *
  * Retries a failing fetch (up to {@link MAX_SITE_ROLE_FETCH_ATTEMPTS} total attempts) via the shared
  * {@link retry} helper. A deterministic failure is *not* retried: an `unauthorized` session, or a
  * 4xx thrown by the sign-in step on the pat/uat/direct-trust path (e.g. 401/403), can't be changed
  * by retrying, so we fail fast rather than delaying registration for every unauthorized caller.
  *
- * Fail-closed: once retries are exhausted (or a non-retryable error is thrown), returns `undefined`
- * (as does any missing-auth case, since the sign-in path throws) so a failure never grants access
- * via a falsy role predicate.
+ * returns `undefined` if retries are exhausted or a non-retryable error is thrown.
  */
 export async function getCurrentUserSiteRole(
   restApiArgs: RestApiArgs,
@@ -85,10 +79,8 @@ export async function getCurrentUserSiteRole(
       async () =>
         await useRestApi({
           ...restApiArgs,
-          // `/sessions/current` requires no scopes; this scope is retained only so the Connected App
-          // sign-in used by the pat/uat/direct-trust paths keeps a valid, non-empty scope set. It is
-          // ignored on the OAuth path, where the pre-issued bearer token is passed through as-is.
-          jwtScopes: ['tableau:users:read'],
+          // `/sessions/current` has no scope requirements
+          jwtScopes: [],
           callback: async (restApi) => {
             const sessionResult =
               await restApi.authenticatedServerMethods.getCurrentServerSession();

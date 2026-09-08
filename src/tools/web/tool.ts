@@ -66,8 +66,8 @@ export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = To
   Args
 > & {
   /**
-   * Lowest site role allowed to see this tool at registration time. Omitted means everyone. When
-   * set, the caller's site role must rank at or above it in {@link SITE_ROLE_HIERARCHY} (see
+   * Lowest site role allowed to see this tool at registration time. OMITTED MEANS THE TOOL IS AVAILABLE FOR ALL USERS.
+   * When set, the caller's site role must rank at or above it in {@link SITE_ROLE_HIERARCHY} (see
    * {@link siteRoleMeetsMinimum}) or the tool is not registered for that caller.
    */
   minRequiredRole?: SiteRole;
