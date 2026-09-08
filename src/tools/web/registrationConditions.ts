@@ -93,22 +93,24 @@ export async function checkRegistrationConditions(
  * a compile error rather than a silent omission.
  */
 const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
+  // Kept generic: Pulse can be unavailable for several reasons (Tableau Server, site setting
+  // off, or a user-level preference), and the probe cannot distinguish them cleanly enough to
+  // name a single cause here.
   RequiresPulse:
-    'NOTE: Tableau Pulse tools were omitted from this session because Pulse is not enabled for ' +
-    'this site. Pulse is available on Tableau Cloud and must be turned on by a site ' +
-    'administrator — see https://help.tableau.com/current/online/en-us/pulse_set_up.htm. Do not ' +
-    'offer Pulse metrics or insights; if the user asks for them, explain that Pulse is not ' +
-    'enabled and suggest they contact their Tableau administrator.',
+    'NOTE: Tableau Pulse tools were omitted from this session because Pulse is not available. ' +
+    'Do not offer Pulse metrics or insights; if the user asks for them, explain that Pulse is ' +
+    'not available and suggest they contact their Tableau administrator. For setup guidance ' +
+    'on Tableau Cloud, see https://help.tableau.com/current/online/en-us/pulse_set_up.htm.',
   RequiresPulsePremium:
     'NOTE: AI-powered Tableau Pulse insight tools were omitted from this session because this ' +
     'site does not have the Tableau+ entitlement those insights require. Basic Pulse metric ' +
     'tools may still be available. Do not offer AI-generated Pulse insights or briefs; if the ' +
     'user asks for them, explain that the feature requires Tableau+.',
+  // Developer-facing only: reached when a RegistrationCondition is declared on a tool but has
+  // no corresponding case in checkRegistrationConditions. Reconnecting cannot help.
   MissingConditionCheck:
-    'WARNING: Some tools were omitted from this session because a required capability check ' +
-    'could not be evaluated. This is a server-side defect rather than a permissions or licensing ' +
-    'problem. Disconnect and reconnect to retry; if it persists, report it to your Tableau ' +
-    'administrator.',
+    'WARNING: Some tools were omitted from this session because a required registration ' +
+    'condition check is not implemented.',
 };
 
 /** The client-facing explanation to surface when `condition` hid one or more tools. */

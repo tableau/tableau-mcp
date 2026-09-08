@@ -406,12 +406,12 @@ describe('checkRegistrationConditions', () => {
 });
 
 describe('getUnmetConditionInstructions', () => {
-  it('explains that Pulse is not enabled and how to enable it', async () => {
+  it('explains that Pulse is not available and points at Cloud setup guidance', async () => {
     const message = getUnmetConditionInstructions('RequiresPulse');
 
-    expect(message).toContain('Pulse');
-    expect(message).toContain('not enabled');
-    // The client-facing copy must point somewhere actionable rather than just stating the failure.
+    // Kept generic — Pulse can be unavailable for site, user, or Server reasons.
+    expect(message).toContain('Pulse is not available');
+    expect(message).not.toContain('not enabled for this site');
     expect(message).toContain('https://help.tableau.com/current/online/en-us/pulse_set_up.htm');
   });
 
@@ -422,10 +422,11 @@ describe('getUnmetConditionInstructions', () => {
     expect(message).toContain('insight');
   });
 
-  it('describes a missing condition check as a server-side defect, not a permissions problem', async () => {
+  it('describes a missing condition check as an unimplemented check, without a reconnect suggestion', async () => {
     const message = getUnmetConditionInstructions('MissingConditionCheck');
 
-    expect(message).toContain('server-side defect');
+    expect(message).toContain('not implemented');
+    expect(message).not.toContain('Disconnect and reconnect');
     expect(message).not.toContain('Tableau+');
   });
 });

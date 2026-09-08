@@ -723,7 +723,7 @@ describe('server', () => {
 
     // Without this the caller just sees a short tool list and no reason for it.
     const instructions = getInstructions(server);
-    expect(instructions).toContain('Pulse is not enabled');
+    expect(instructions).toContain('Pulse is not available');
     expect(instructions).toContain(
       'https://help.tableau.com/current/online/en-us/pulse_set_up.htm',
     );
@@ -738,7 +738,7 @@ describe('server', () => {
 
     await server.registerTools();
 
-    expect(getInstructions(server)).not.toContain('Pulse is not enabled');
+    expect(getInstructions(server)).not.toContain('Pulse is not available');
   });
 
   it('should register as standard tool when mcp-apps feature flag is disabled', async () => {
