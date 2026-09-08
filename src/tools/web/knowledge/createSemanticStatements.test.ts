@@ -46,7 +46,6 @@ describe('createSemanticStatementsTool', () => {
     )(
       {
         graphId: 'graph-1',
-        targetNodeId: 'field:Revenue',
         statements: [{ statement: 'Revenue excludes tax.' }],
       },
       getMockRequestHandlerExtra(),
@@ -87,33 +86,18 @@ describe('createSemanticStatementsTool', () => {
     expect(schema.statements.safeParse([{ statement: 'x'.repeat(1001) }]).success).toBe(false);
   });
 
-  it('requires exactly one attached target or global true', async () => {
-    const tool = getTool();
-    await expectResultError(tool, {
-      graphId: 'graph-1',
-      statements: [{ statement: 'valid rule' }],
-    });
-    await expectResultError(tool, {
-      graphId: 'graph-1',
-      statements: [{ statement: 'valid rule' }],
-      targetNodeId: 'field:Revenue',
-      isGlobal: true,
-    });
-  });
-
-  it('forwards validated input and exact write scope', async () => {
+  it('always creates global context with trimmed statements and exact write scope', async () => {
     mocks.createSemanticStatements.mockResolvedValue({ id: 'semctx:1' });
     await getToolResult({
       graphId: 'graph-1',
       statements: [{ statement: ' Revenue excludes refunds. ' }],
-      targetNodeId: 'field:Revenue',
       name: 'Revenue rules',
     });
     expect(mocks.createSemanticStatements).toHaveBeenCalledWith({
       graphId: 'graph-1',
       statements: [{ statement: 'Revenue excludes refunds.' }],
-      targetNodeId: 'field:Revenue',
       name: 'Revenue rules',
+      isGlobal: true,
     });
     expect(vi.mocked(useRestApi)).toHaveBeenCalledWith(
       expect.objectContaining({ jwtScopes: ['tableau:knowledge:write'] }),
@@ -132,10 +116,4 @@ function getTool(): any {
 async function getToolResult(args: any): Promise<CallToolResult> {
   const tool = getTool();
   return (await Provider.from(tool.callback))(args, getMockRequestHandlerExtra());
-}
-
-async function expectResultError(tool: any, args: any): Promise<void> {
-  const callback = await Provider.from(tool.callback);
-  const result = await callback(args, getMockRequestHandlerExtra());
-  expect(result.isError).toBe(true);
 }

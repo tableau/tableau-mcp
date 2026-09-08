@@ -82,25 +82,6 @@ describe('updateSemanticStatementsTool', () => {
   });
 
   it.each([
-    [{ isGlobal: true }, false],
-    [{ isGlobal: false }, false],
-    [{ targetNodeId: null }, false],
-    [{ isGlobal: true, targetNodeId: 'field:Revenue' }, false],
-    [{ isGlobal: false, targetNodeId: null }, false],
-    [{ isGlobal: true, targetNodeId: null }, true],
-    [{ isGlobal: false, targetNodeId: 'field:Revenue' }, true],
-    [{ targetNodeId: 'field:Profit' }, false],
-  ])('enforces attachment transition combination %j', async (transition, valid) => {
-    mocks.updateSemanticStatements.mockResolvedValue({ id: 'semctx:1' });
-    const result = await getToolResult({
-      graphId: 'graph-1',
-      contextId: 'semctx:1',
-      ...transition,
-    });
-    expect(result.isError).toBe(!valid);
-  });
-
-  it.each([
     { statements: [{ statement: 'Revenue includes services.' }] },
     { name: 'Revenue rules' },
   ])('accepts a content-only update %j', async (update) => {
@@ -113,21 +94,17 @@ describe('updateSemanticStatementsTool', () => {
     expect(result.isError).not.toBe(true);
   });
 
-  it('forwards explicit null, replacement statements, and write scope', async () => {
+  it('forwards replacement statements and write scope', async () => {
     mocks.updateSemanticStatements.mockResolvedValue({ id: 'semctx:1' });
     await getToolResult({
       graphId: 'graph-1',
       contextId: 'semctx:1',
       statements: [{ id: 'stmt:1', statement: ' Updated revenue rule. ' }],
-      isGlobal: true,
-      targetNodeId: null,
     });
     expect(mocks.updateSemanticStatements).toHaveBeenCalledWith({
       graphId: 'graph-1',
       contextId: 'semctx:1',
       statements: [{ id: 'stmt:1', statement: 'Updated revenue rule.' }],
-      isGlobal: true,
-      targetNodeId: null,
     });
     expect(vi.mocked(useRestApi)).toHaveBeenCalledWith(
       expect.objectContaining({ jwtScopes: ['tableau:knowledge:write'] }),
