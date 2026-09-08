@@ -35,6 +35,12 @@ export function inferFieldTypeFromType(localType: string | undefined): string {
   }
 }
 
+function normalizeLogicalTableId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().replace(/^\[|\]$/g, '');
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 /**
  * Visit every `<column>` under a relation tree, outermost relation first.
  * Relations nest to any depth — a join of joins puts the leaf
@@ -310,7 +316,18 @@ export function listAvailableFields(
     >();
     const tableByColumn = new Map<string, string>();
     const ambiguousTableColumns = new Set<string>();
+    const logicalTableIdByColumn = new Map<string, string>();
+    const ambiguousLogicalTableColumns = new Set<string>();
     const approxCountByName = new Map<string, number>();
+
+    // In federated datasources, metadata-record parent-name may only identify the
+    // repeated physical relation (for example `[sqlproxy]`). `object-id` is the
+    // field's logical-table identity. Only trust ids declared by object-graph.
+    const logicalTableIds = new Set(
+      normalizeArray(datasource['object-graph']?.objects?.object)
+        .map((object) => normalizeLogicalTableId(object?.['@_id']))
+        .filter((id): id is string => id !== undefined),
+    );
 
     if (datasource.connection?.['metadata-records']) {
       const records = normalizeArray(datasource.connection['metadata-records']['metadata-record']);
@@ -368,10 +385,27 @@ export function listAvailableFields(
       if (metadataRecords) {
         const records = normalizeArray(metadataRecords['metadata-record']);
         for (const record of records) {
-          if (record['@_class'] !== 'column') continue;
+          const recordClass = record['@_class'];
+          if (recordClass !== 'column' && recordClass !== 'measure') continue;
           const localName = record['local-name'];
           if (!localName) continue;
           const bracketedName = localName.startsWith('[') ? localName : `[${localName}]`;
+
+          const logicalTableId = normalizeLogicalTableId(record['object-id']);
+          if (logicalTableId && logicalTableIds.has(logicalTableId)) {
+            const previous = logicalTableIdByColumn.get(bracketedName);
+            if (previous !== undefined && previous !== logicalTableId) {
+              ambiguousLogicalTableColumns.add(bracketedName);
+              logicalTableIdByColumn.delete(bracketedName);
+            } else if (!ambiguousLogicalTableColumns.has(bracketedName)) {
+              logicalTableIdByColumn.set(bracketedName, logicalTableId);
+            }
+          }
+
+          // Keep legacy physical-table projection behavior limited to column records.
+          // Measure records are visited here only to capture logical-table identity.
+          if (recordClass !== 'column') continue;
+
           const parentName = record['parent-name'];
           if (typeof parentName === 'string' && parentName.length > 0) {
             const previous = tableByColumn.get(bracketedName);
@@ -382,6 +416,7 @@ export function listAvailableFields(
               tableByColumn.set(bracketedName, parentName);
             }
           }
+
           if (!columnMap.has(bracketedName)) {
             columnMap.set(bracketedName, {
               column: {
@@ -486,6 +521,9 @@ export function listAvailableFields(
       const fieldRef: FieldReference = {
         datasource: datasourceName,
         ...(tableByColumn.has(columnName) ? { table: tableByColumn.get(columnName) } : {}),
+        ...(logicalTableIdByColumn.has(columnName)
+          ? { logicalTableId: logicalTableIdByColumn.get(columnName) }
+          : {}),
         contentUrl: contentUrl,
         columnName: columnName,
         columnInstanceName: constructedInstance,

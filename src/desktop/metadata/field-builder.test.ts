@@ -304,6 +304,60 @@ describe('listAvailableFields', () => {
     expect(availableFields.find((f) => f.columnName === '[goals]')?.table).toBe('[players.csv]');
   });
 
+  it('projects authoritative logical-table ids from object-graph metadata', () => {
+    const xml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Federated DS'>
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Order Date]' role='dimension' type='ordinal' datatype='date' />
+      <column name='[Customer Since]' role='dimension' type='ordinal' datatype='date' />
+      <column name='[Unknown Date]' role='dimension' type='ordinal' datatype='date' />
+      <connection>
+        <metadata-records>
+          <metadata-record class='measure'>
+            <local-name>[Sales]</local-name><parent-name>[sqlproxy]</parent-name>
+            <object-id>[lt-orders]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <local-name>[Order Date]</local-name><parent-name>[sqlproxy]</parent-name>
+            <object-id>[lt-orders]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <local-name>[Customer Since]</local-name><parent-name>[sqlproxy]</parent-name>
+            <object-id>[lt-customers]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <local-name>[Unknown Date]</local-name><parent-name>[sqlproxy]</parent-name>
+            <object-id>[lt-missing]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <object-graph>
+        <objects>
+          <object id='lt-orders' caption='Orders' />
+          <object id='lt-customers' caption='Customers' />
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+    const fields = listAvailableFields(xml);
+    expect(fields.find((field) => field.columnName === '[Sales]')?.logicalTableId).toBe(
+      'lt-orders',
+    );
+    expect(fields.find((field) => field.columnName === '[Order Date]')?.logicalTableId).toBe(
+      'lt-orders',
+    );
+    expect(fields.find((field) => field.columnName === '[Customer Since]')?.logicalTableId).toBe(
+      'lt-customers',
+    );
+    expect(fields.find((field) => field.columnName === '[Unknown Date]')?.logicalTableId).toBe(
+      undefined,
+    );
+  });
+
   it('leaves table undefined when metadata-record parent-name is absent', () => {
     const fields = listAvailableFields(WORKBOOK_XML);
     expect(fields.every((field) => field.table === undefined)).toBe(true);
