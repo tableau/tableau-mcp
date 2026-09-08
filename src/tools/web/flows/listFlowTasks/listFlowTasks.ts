@@ -3,10 +3,12 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
+import { getFeatureGate } from '../../../../features/init.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { FlowRunTask } from '../../../../sdks/tableau/types/flowRunTask.js';
 import { WebMcpServer } from '../../../../server.web.js';
+import { Provider } from '../../../../utils/provider.js';
 import { ConstrainedResult, WebTool } from '../../tool.js';
 import { buildTruncationInfo, ListFlowsTruncationReason } from '../listFlows/listFlows.js';
 import {
@@ -50,7 +52,10 @@ export const getListFlowTasksTool = (server: WebMcpServer): WebTool<typeof param
   const listFlowTasksTool = new WebTool({
     server,
     name: 'list-flow-tasks',
-    disabled: !config.flowToolsEnabled,
+    disabled: new Provider(
+      async () =>
+        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+    ),
     description: `
   Retrieves the scheduled flow run tasks on a Tableau site. A flow run task is the **schedule** for a Tableau Prep flow — when and how often it is configured to run — NOT a record of past executions (for run history use the \`list-flow-runs\` tool). Each task includes the target flow (\`flow.id\`, \`flow.name\`), the schedule (frequency, next run time, state), and the task \`id\` used to trigger an on-demand run.
 

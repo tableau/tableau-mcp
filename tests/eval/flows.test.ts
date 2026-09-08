@@ -54,8 +54,16 @@ describe('flows tool descriptions (eval)', () => {
   });
 
   beforeEach(async () => {
-    // Flow tools are gated off by default (FLOW_TOOLS_ENABLED); opt in for this eval.
-    mcpServer = await getMcpServer({ ...getDefaultEnv(), FLOW_TOOLS_ENABLED: 'true' });
+    // Flow tools are gated off by default behind both FLOW_TOOLS_ENABLED and the flow-tools
+    // feature flag; opt in to both for this eval.
+    mcpServer = await getMcpServer({
+      ...getDefaultEnv(),
+      FLOW_TOOLS_ENABLED: 'true',
+      FEATURE_GATE_PROVIDER: 'custom',
+      FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
+        module: './tests/e2e/fixtures/flowToolsFeatureGate.cjs',
+      }),
+    });
   });
 
   afterEach(async () => {
