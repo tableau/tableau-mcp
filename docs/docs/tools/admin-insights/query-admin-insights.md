@@ -163,6 +163,12 @@ This is a **successful** result, not an error — only the row payload is withhe
   count and a `ROW_CAP_EXCEEDED` warning is attached — see [Row cap](#row-cap-stale-content).
 - This tool intentionally bypasses the standard datasource access checker because Admin Insights
   datasources are internal/known and admin-gated independently.
+- **A `401` or a "not found in the Admin Insights project" error does not necessarily mean Admin
+  Insights is missing.** When multiple MCP servers are configured, the request may have reached the
+  wrong or unauthenticated server. An `Authentication failed (401): ...` message is an
+  authentication failure; the "not provisioned on the targeted Tableau Cloud site" message means
+  Admin Insights is genuinely absent on the targeted site. See
+  [Running Multiple Servers & Diagnosing Auth Errors](../../configuration/mcp-config/multiple-servers.md).
 
 ## Example results
 

@@ -1,3 +1,5 @@
+import { AxiosError } from 'axios';
+
 import { WebMcpServer } from '../server.web';
 import { stubDefaultEnvVars } from '../testShared';
 import { getConfigWithOverrides } from './mcpSiteSettings';
@@ -120,5 +122,56 @@ describe('mcpSiteSettings', () => {
     expect(config.disableMetadataApiRequests).toEqual(true);
 
     expect(mocks.mockGetMcpSiteSettings).toHaveBeenCalledTimes(1);
+  });
+
+  // W-23757363: a bad/expired PAT made the startup site-settings fetch 401, which used to throw and
+  // take the whole server down before any tools registered — so an auth failure looked like a
+  // connection failure. It must now degrade gracefully: resolve with default (empty) overrides so
+  // the base tools still register and the server connects.
+  it('should not throw and should continue with defaults when site-settings fetch returns 401', async () => {
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'true');
+    // Unique site name so this test does not read/populate the shared module-level cache.
+    vi.stubEnv('SITE_NAME', 'auth-401-site');
+
+    mocks.mockGetMcpSiteSettings.mockClear();
+    const axios401 = new AxiosError('Request failed with status code 401');
+    axios401.response = { status: 401 } as AxiosError['response'];
+    mocks.mockGetMcpSiteSettings.mockRejectedValue(axios401);
+
+    const config = await getConfigWithOverrides({
+      restApiArgs: {
+        server: new WebMcpServer(),
+        tableauAuthInfo: undefined,
+        disableLogging: true,
+      },
+      requestOverrides: undefined,
+    });
+
+    // Degraded gracefully: default (empty) overrides, no throw.
+    expect(config.includeTools).toEqual([]);
+    expect(config.excludeTools).toEqual([]);
+    expect(config.getMaxResultLimit('query-datasource')).toEqual(null);
+    expect(mocks.mockGetMcpSiteSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('should still throw on an unexpected (non-401/403/500) site-settings error', async () => {
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'true');
+    vi.stubEnv('SITE_NAME', 'auth-502-site');
+
+    mocks.mockGetMcpSiteSettings.mockClear();
+    const axios502 = new AxiosError('Bad Gateway');
+    axios502.response = { status: 502 } as AxiosError['response'];
+    mocks.mockGetMcpSiteSettings.mockRejectedValue(axios502);
+
+    await expect(
+      getConfigWithOverrides({
+        restApiArgs: {
+          server: new WebMcpServer(),
+          tableauAuthInfo: undefined,
+          disableLogging: true,
+        },
+        requestOverrides: undefined,
+      }),
+    ).rejects.toThrow('An unexpected error occurred while getting MCP settings for site');
   });
 });
