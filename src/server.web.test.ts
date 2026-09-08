@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
   mockGetCurrentUserSiteRole: vi.fn(),
   mockAssertAdmin: vi.fn(),
+  mockCheckRegistrationConditions: vi.fn(),
 }));
 
 const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
@@ -57,6 +58,16 @@ vi.mock('./tools/web/adminGate.js', () => ({
   assertAdmin: mocks.mockAssertAdmin,
 }));
 
+// Only the capability probe is stubbed — the real `getUnmetConditionInstructions` is kept so the
+// instructions assertions below verify the copy users actually receive.
+vi.mock('./tools/web/registrationConditions.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./tools/web/registrationConditions.js')>();
+  return {
+    ...actual,
+    checkRegistrationConditions: mocks.mockCheckRegistrationConditions,
+  };
+});
+
 // Auto-mock the telemetry logger so the registration-time warning is captured as a spy call.
 vi.mock('./logging/logger.js');
 
@@ -70,6 +81,9 @@ describe('server', () => {
     mocks.mockReadFile.mockClear();
     mocks.mockGetCurrentUserSiteRole.mockReset().mockResolvedValue('SiteAdministratorCreator');
     mocks.mockAssertAdmin.mockReset();
+    mocks.mockCheckRegistrationConditions
+      .mockReset()
+      .mockResolvedValue({ registrationConditionsMet: true });
     (logger.log as MockedFunction<typeof logger.log>).mockClear();
   });
 
@@ -679,6 +693,10 @@ describe('server', () => {
 
   it('logs a telemetry warning naming the tools omitted for unmet conditions and the failing condition', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({
+      registrationConditionsMet: false,
+      failingCondition: 'RequiresPulse',
+    });
 
     const server = getServer();
     const mockConditionalTool = createMockConditionalTool();
@@ -686,7 +704,6 @@ describe('server', () => {
 
     await server.registerTools();
 
-    // The Pulse capability is not yet implemented, so `RequiresPulse` fails closed and the tool is hidden.
     expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
       'mock-conditional-tool',
       expect.anything(),
@@ -697,6 +714,24 @@ describe('server', () => {
     // Names the omitted tool and the condition it failed, so operators can see what was hidden and why.
     expect(warnings[0].message).toContain('mock-conditional-tool');
     expect(warnings[0].message).toContain('RequiresPulse');
+  });
+
+  it('registers a conditional tool when its conditions are met', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    const mockConditionalTool = createMockConditionalTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockConditionalTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-conditional-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(getWarningLogs()).toHaveLength(0);
   });
 
   it('does not check conditions or warn when enforce-registration-conditions is off', async () => {
@@ -714,7 +749,40 @@ describe('server', () => {
       expect.anything(),
       expect.any(Function),
     );
+    expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
     expect(getWarningLogs()).toHaveLength(0);
+  });
+
+  it('explains in the connect instructions why Pulse tools were omitted', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({
+      registrationConditionsMet: false,
+      failingCondition: 'RequiresPulse',
+    });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
+
+    await server.registerTools();
+
+    // Without this the caller just sees a short tool list and no reason for it.
+    const instructions = getInstructions(server);
+    expect(instructions).toContain('Pulse is not available');
+    expect(instructions).toContain(
+      'https://help.tableau.com/current/online/en-us/pulse_set_up.htm',
+    );
+  });
+
+  it('does not mention Pulse in the connect instructions when conditions are met', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
+
+    await server.registerTools();
+
+    expect(getInstructions(server)).not.toContain('Pulse is not available');
   });
 
   it('should register as standard tool when mcp-apps feature flag is disabled', async () => {

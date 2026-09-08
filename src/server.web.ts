@@ -34,6 +34,7 @@ import { getClientDisplayName } from './telemetry/clientDisplayName.js';
 import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
 import {
   checkRegistrationConditions,
+  getUnmetConditionInstructions,
   RegistrationCondition,
   RegistrationContext,
 } from './tools/web/registrationConditions.js';
@@ -311,6 +312,8 @@ export class WebMcpServer extends Server {
         (total, toolNames) => total + toolNames.length,
         0,
       );
+      // Telemetry: registration runs before the transport connects, so client notifications aren't
+      // available — the process logger (stderr/file, honors LOG_LEVEL) is the only sink here.
       log({
         level: 'warning',
         logger: 'server',
@@ -319,7 +322,11 @@ export class WebMcpServer extends Server {
           `conditions were not met — ${omittedByCondition}.`,
       });
 
-      // TODO: for each condition append intialization message that explains that some features are unavailable.
+      // Client-facing counterpart: one explanation per distinct unmet condition, so a Pulse-less
+      // site is told that Pulse is off and why, rather than silently receiving a shorter tool list.
+      for (const condition of toolsOmittedFromUnmetConditions.keys()) {
+        this.appendInstructions(getUnmetConditionInstructions(condition));
+      }
     }
 
     return toolsToRegister;
