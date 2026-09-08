@@ -11,17 +11,11 @@ import {
   knowledgeGraphIdSchema,
   redactSemanticStatements,
   semanticStatementsSchema,
-  validateCreateAttachment,
 } from './semanticStatementSchemas.js';
 
 const paramsSchema = {
   graphId: knowledgeGraphIdSchema,
   statements: semanticStatementsSchema.describe('One or more statements, each 5–1000 characters.'),
-  targetNodeId: z.string().trim().min(1).optional().describe('Node to attach the statements to.'),
-  isGlobal: z
-    .literal(true)
-    .optional()
-    .describe('Set true instead of targetNodeId for graph-wide statements.'),
   name: z.string().trim().min(1).optional(),
 };
 
@@ -32,7 +26,7 @@ export const getCreateSemanticStatementsTool = (
     server,
     name: 'create-knowledge-semantic-contexts',
     description:
-      'Creates one semantic context containing business-rule statements in an explicit Tableau Knowledge graph. Attach it to exactly one node, or set isGlobal true.',
+      'Creates one global semantic context of business-rule statements in a Tableau Knowledge graph; it applies to the whole graph. Node-scoped context is Tableau-managed and cannot be created here.',
     paramsSchema,
     annotations: {
       title: 'Create Semantic Statements',
@@ -49,14 +43,17 @@ export const getCreateSemanticStatementsTool = (
         extra,
         args: redactSemanticStatements(args),
         callback: async () => {
-          validateCreateAttachment(args);
           const statements = semanticStatementsSchema.parse(args.statements);
           return new Ok(
             await useRestApi({
               ...extra,
               jwtScopes: tool.requiredApiScopes,
               callback: (restApi) =>
-                restApi.knowledgeMethods.createSemanticStatements({ ...args, statements }),
+                restApi.knowledgeMethods.createSemanticStatements({
+                  ...args,
+                  statements,
+                  isGlobal: true,
+                }),
             }),
           );
         },

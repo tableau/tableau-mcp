@@ -19,8 +19,6 @@ const paramsSchema = {
   graphId: knowledgeGraphIdSchema,
   contextId: knowledgePathIdSchema.describe('Semantic context ID returned by create or list.'),
   statements: semanticStatementsSchema.optional().describe('Replacement statement array.'),
-  targetNodeId: z.string().trim().min(1).nullable().optional(),
-  isGlobal: z.boolean().optional(),
   name: z
     .string()
     .trim()
@@ -35,7 +33,7 @@ export const getUpdateSemanticStatementsTool = (
     server,
     name: 'update-knowledge-semantic-contexts',
     description:
-      'Directly replaces semantic statements or changes their attachment. Attached-to-global requires isGlobal true and targetNodeId null; global-to-attached requires isGlobal false and a targetNodeId.',
+      'Replaces the statements and/or name of an existing global semantic context in a Tableau Knowledge graph.',
     paramsSchema,
     annotations: {
       title: 'Update Semantic Statements',

@@ -24,32 +24,8 @@ export function redactSemanticStatements<T extends { statements?: unknown }>(arg
   return args.statements === undefined ? args : { ...args, statements: '[REDACTED]' };
 }
 
-export function validateCreateAttachment(args: {
-  targetNodeId?: string;
-  isGlobal?: boolean;
-}): void {
-  if ((args.targetNodeId !== undefined) === (args.isGlobal === true)) {
-    throw new Error('Provide exactly one targetNodeId or isGlobal: true.');
-  }
-}
-
-export function validateUpdate(args: {
-  statements?: unknown;
-  targetNodeId?: string | null;
-  isGlobal?: boolean;
-  name?: string;
-}): void {
-  const hasTarget = Object.prototype.hasOwnProperty.call(args, 'targetNodeId');
-  const hasGlobal = Object.prototype.hasOwnProperty.call(args, 'isGlobal');
-  if (args.statements === undefined && !hasTarget && !hasGlobal && args.name === undefined) {
-    throw new Error('Provide at least one field to update.');
-  }
-  if (
-    hasGlobal !== hasTarget ||
-    (hasGlobal && (args.isGlobal === true) !== (args.targetNodeId === null))
-  ) {
-    throw new Error(
-      'Changing global state requires isGlobal: true with targetNodeId: null, or isGlobal: false with a non-null targetNodeId.',
-    );
+export function validateUpdate(args: { statements?: unknown; name?: string }): void {
+  if (args.statements === undefined && args.name === undefined) {
+    throw new Error('Provide at least one field to update: statements or name.');
   }
 }
