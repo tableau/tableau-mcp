@@ -32,7 +32,7 @@ const paramsSchema = {
     .enum(['slim', 'full'])
     .optional()
     .describe(
-      'full (default): table + fields. slim: candidate tuples and fieldTables logical-table IDs by datasource.',
+      'full (default): table + fields. slim: candidate tuples and fieldTables logical table IDs by datasource.',
     ),
   hasLuid: z.boolean().optional().describe('Slim: LUID-backed only; live required.'),
   luids: z.array(z.string().min(1)).optional().describe('Slim: LUIDs; [] all; any miss errors.'),
@@ -141,7 +141,7 @@ export const getListAvailableFieldsTool = (
     description: [
       'List datasource fields available for authoring from a live or cached workbook.',
       'Does not report worksheet placements.',
-      'Full gives column_ref; slim gives insight candidates plus authoritative logical-table IDs.',
+      'Full gives column_ref; slim gives insight candidates plus authoritative logical table IDs.',
     ].join(' '),
     paramsSchema,
     annotations: {
