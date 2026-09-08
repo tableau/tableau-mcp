@@ -11,7 +11,6 @@ import {
   getWorkbookLineageQuery,
   LineageContent,
   mergeWorkbookLineage,
-  reconcileWorkbookDatasources,
   toEmbeddedLineageContents,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
@@ -101,13 +100,15 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                 );
               }
 
-              let publishedUpstream: Array<LineageContent> = [];
+              let published: Array<LineageContent> = [];
               if (!configWithOverrides.disableMetadataApiRequests) {
                 try {
                   const response = await restApi.metadataMethods.graphql(
                     getWorkbookLineageQuery([workbook.id]),
                   );
-                  publishedUpstream = getWorkbookLineageByLuid(response).get(workbook.id) ?? [];
+                  published = (getWorkbookLineageByLuid(response).get(workbook.id) ?? []).map(
+                    (ds) => ({ ...ds, datasourceType: 'published' as const }),
+                  );
                 } catch (error) {
                   log(
                     {
@@ -121,12 +122,11 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                 }
               }
 
-              // A live connection to a published datasource appears both as an embedded sqlproxy
-              // stub (REST) and as the published datasource (Metadata). reconcileWorkbookDatasources
-              // collapses those into a single entry keyed on the connection's LUID.
+              // Published and embedded LUIDs are distinct (globally-unique GUIDs), so no
+              // cross-list dedup is needed; toEmbeddedLineageContents already dedupes embedded.
               return mergeWorkbookLineage(
                 [workbook],
-                new Map([[workbook.id, reconcileWorkbookDatasources(embedded, publishedUpstream)]]),
+                new Map([[workbook.id, [...published, ...embedded]]]),
                 configWithOverrides.boundedContext.datasourceIds,
               )[0];
             },

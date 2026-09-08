@@ -373,35 +373,6 @@ export function toEmbeddedLineageContents(
   return [...byLuid.values()];
 }
 
-// A workbook's live connection to a published datasource surfaces twice: once as the embedded
-// "sqlproxy" stub in REST /connections (whose datasource.id is the workbook's internal,
-// VDS-queryable LUID) and once as the published datasource reached via the Metadata API. They are
-// the same logical datasource, so we emit a single entry keyed on the connection's LUID and
-// reclassify it as 'published' when a Metadata published upstream shares its name. The two LUIDs
-// cannot be joined directly (the Metadata node id != the REST datasource.id), so name is the only
-// available bridge. Published upstreams that no connection accounts for (e.g. the /connections call
-// failed, or the names diverge) are appended with their Metadata LUID so they are not lost.
-export function reconcileWorkbookDatasources(
-  connectionDatasources: Array<LineageContent>,
-  publishedUpstream: Array<LineageContent>,
-): Array<LineageContent> {
-  const publishedNames = new Set(publishedUpstream.map((ds) => ds.name));
-  const connectionNames = new Set(connectionDatasources.map((ds) => ds.name));
-
-  const reconciled: Array<LineageContent> = connectionDatasources.map((ds) => ({
-    ...ds,
-    datasourceType: publishedNames.has(ds.name) ? ('published' as const) : ('embedded' as const),
-  }));
-
-  for (const pub of publishedUpstream) {
-    if (!connectionNames.has(pub.name)) {
-      reconciled.push({ ...pub, datasourceType: 'published' as const });
-    }
-  }
-
-  return reconciled;
-}
-
 // Unions the content-level upstream datasources with those reached via embedded datasources,
 // drops entries without a luid (embedded datasources carry no luid), and dedupes by luid while
 // preserving first-seen order. This is what recovers published datasources that the content-level

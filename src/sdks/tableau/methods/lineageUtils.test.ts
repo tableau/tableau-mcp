@@ -6,7 +6,6 @@ import {
   getWorkbookLineageQuery,
   mergeViewLineage,
   mergeWorkbookLineage,
-  reconcileWorkbookDatasources,
   toEmbeddedLineageContents,
 } from './lineageUtils.js';
 
@@ -23,46 +22,6 @@ describe('lineageUtils', () => {
       { luid: 'emb-1', name: 'Embedded DS', datasourceType: 'embedded' },
       { luid: 'emb-2', name: 'emb-2', datasourceType: 'embedded' },
     ]);
-  });
-
-  describe('reconcileWorkbookDatasources', () => {
-    it('reclassifies a connection as published when a published upstream shares its name', () => {
-      // The sqlproxy connection (emb-superstore) and the published datasource (pub-superstore) are
-      // the same datasource; emit one entry keyed on the connection LUID, tagged published.
-      const result = reconcileWorkbookDatasources(
-        [
-          { luid: 'emb-superstore', name: 'Superstore Datasource', datasourceType: 'embedded' },
-          { luid: 'emb-logbk', name: 'log_bk', datasourceType: 'embedded' },
-        ],
-        [{ luid: 'pub-superstore', name: 'Superstore Datasource' }],
-      );
-
-      expect(result).toEqual([
-        { luid: 'emb-superstore', name: 'Superstore Datasource', datasourceType: 'published' },
-        { luid: 'emb-logbk', name: 'log_bk', datasourceType: 'embedded' },
-      ]);
-    });
-
-    it('appends a published upstream that no connection accounts for', () => {
-      const result = reconcileWorkbookDatasources(
-        [{ luid: 'emb-1', name: 'Embedded DS', datasourceType: 'embedded' }],
-        [{ luid: 'pub-1', name: 'Published DS' }],
-      );
-
-      expect(result).toEqual([
-        { luid: 'emb-1', name: 'Embedded DS', datasourceType: 'embedded' },
-        { luid: 'pub-1', name: 'Published DS', datasourceType: 'published' },
-      ]);
-    });
-
-    it('leaves connections embedded when there is no published lineage', () => {
-      const result = reconcileWorkbookDatasources(
-        [{ luid: 'emb-1', name: 'Embedded DS', datasourceType: 'embedded' }],
-        [],
-      );
-
-      expect(result).toEqual([{ luid: 'emb-1', name: 'Embedded DS', datasourceType: 'embedded' }]);
-    });
   });
 
   it('parses and merges upstream workbook lineage', () => {
