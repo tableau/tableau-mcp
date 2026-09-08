@@ -58,6 +58,40 @@ describe('formatFormula - layout rules', () => {
   });
 });
 
+describe('formatFormula - conditionals inside a larger expression', () => {
+  it('breaks an IF whose flat form fits the width when it is embedded in a larger expression', () => {
+    // The IF alone is under 60 chars, but it sits inside a longer concatenation.
+    // The compact one-line rendering hides the THEN/ELSE branches -- break them.
+    const out = formatFormula(
+      'IF [Margin YTD Δpp] >= 0 THEN "▲ " ELSE "▼ " END + STR(ROUND(ABS([Margin YTD Δpp]) * 100, 1)) + " pp vs LY"',
+    );
+    const lines = out.split('\n');
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^IF \[Margin YTD Δpp\] >= 0$/),
+        expect.stringMatching(/^THEN "▲ "$/),
+        expect.stringMatching(/^ELSE "▼ "$/),
+        expect.stringMatching(/^END/),
+      ]),
+    );
+  });
+
+  it('still leaves a standalone one-line IF flat when it is the whole formula', () => {
+    expect(formatFormula('IF [x] > 0 THEN 1 ELSE 0 END')).toBe('IF [x] > 0 THEN 1 ELSE 0 END');
+  });
+
+  it('starts the trailing operator on a new line after a broken IF ends', () => {
+    const out = formatFormula(
+      'IF [Margin YTD Δpp] >= 0 THEN "▲ " ELSE "▼ " END + STR(ROUND(ABS([Margin YTD Δpp]) * 100, 1)) + " pp vs LY"',
+    );
+    const lines = out.split('\n');
+    const endIndex = lines.findIndex((line) => /^END\s*$/.test(line));
+    expect(endIndex).toBeGreaterThanOrEqual(0);
+    // Nothing may share END's line; the '+' that consumes the IF must start a fresh line.
+    expect(lines[endIndex]).toBe('END');
+  });
+});
+
 describe('formatFormula - never splits a token', () => {
   it('keeps every [field ref] and string literal intact (no newline inside a token)', () => {
     const out = formatFormula(

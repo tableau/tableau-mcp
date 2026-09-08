@@ -15,6 +15,7 @@ import {
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
 import { applyAndVerify } from './applyAndVerify.js';
+import { prettyPrintFormula } from './prettyPrintFormula.js';
 
 export const roleSchema = z.enum(['measure', 'dimension']);
 export const datatypeSchema = z.enum(['real', 'integer', 'string', 'boolean', 'date', 'datetime']);
@@ -462,7 +463,7 @@ async function validateCalcFormula({
   const result = await executor.executeCommand({
     namespace: 'tabdoc',
     command: 'get-calc-details-pres-model-for-formula',
-    args: { formula, caption },
+    args: { 'calculation-formula': formula, 'calculation-caption': caption },
     signal,
   });
   // A rejected command (transport error / non-completed envelope) is an infra failure, not a
@@ -481,9 +482,20 @@ async function validateCalcFormula({
   }
   const errors = calcErrorMessages(result.value.result);
   if (errors !== undefined && errors.length > 0) {
-    return { status: 'invalid', message: errors[0] };
+    return { status: 'invalid', message: formatValidatorErrors(errors) };
   }
   return { status: 'valid' };
+}
+
+// Mirrors the numbered-list format used by XmlValidationError in mcpToolError.ts:447 so agents
+// see a consistent multi-error shape across the tool surface. A single error stays inline for
+// terseness; multiple errors get the numbered list with a leading count.
+function formatValidatorErrors(errors: string[]): string {
+  if (errors.length === 1) {
+    return errors[0];
+  }
+  const list = errors.map((error, index) => `${index + 1}. ${error}`).join('\n');
+  return `Formula validation reported ${errors.length} error(s):\n${list}`;
 }
 
 /**
@@ -1088,7 +1100,7 @@ function renderCalculationColumn({
       ? 'quantitative'
       : 'nominal';
   const formatAttr = defaultFormat ? ` default-format='${defaultFormat}'` : '';
-  return `<column caption='${escapeXml(caption)}' datatype='${datatype}'${formatAttr} name='${escapeXml(calcName)}' role='${role}' type='${type}'><calculation class='tableau' formula='${escapeXml(formula)}' /></column>`;
+  return `<column caption='${escapeXml(caption)}' datatype='${datatype}'${formatAttr} name='${escapeXml(calcName)}' role='${role}' type='${type}'><calculation class='tableau' formula='${prettyPrintFormula(formula)}' /></column>`;
 }
 
 function spliceColumnIntoDatasource(

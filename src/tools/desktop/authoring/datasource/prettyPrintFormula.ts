@@ -421,14 +421,25 @@ function render(
       const cost = spaceBefore ? 1 : 0;
       const hasComment = containsLineComment(tokens, index, close);
       const continuation = (level + 1) * INDENT.length;
-      if (!hasComment && column + cost + flat.length <= WIDTH) {
+      // A conditional (IF/CASE) embedded in a larger expression is force-broken so
+      // its THEN/ELSE clauses land on their own lines even when the IF alone fits
+      // the width budget -- an inline IF next to more code makes the combined line
+      // hard to read, and the calc editor renders the vertical form cleanly.
+      const forceBreak =
+        isConditionalOpener(tokens[index]) && !(index === start && close === end - 1);
+      if (!forceBreak && !hasComment && column + cost + flat.length <= WIDTH) {
         if (spaceBefore) {
           text += ' ';
           column += 1;
         }
         text += flat;
         column += flat.length;
-      } else if (!hasComment && spaceBefore && continuation + flat.length <= WIDTH) {
+      } else if (
+        !forceBreak &&
+        !hasComment &&
+        spaceBefore &&
+        continuation + flat.length <= WIDTH
+      ) {
         // Prefer moving the whole group to a fresh continuation line over splitting
         // it -- keeps calls like DATEPART('dayofyear',[Order Date]) intact.
         text += '\n' + indentOf(level + 1);
@@ -442,6 +453,14 @@ function render(
         const broken = renderBrokenGroup(tokens, index, close, level);
         text += broken.text;
         column = broken.endColumn;
+        // A broken IF/CASE ends with END on its own line; if any code follows,
+        // start it on a fresh line so operators consuming the result don't
+        // trail after END and re-merge the block back into a wide line.
+        if (isConditionalOpener(tokens[index]) && close + 1 < end) {
+          text += '\n' + indentOf(level);
+          column = level * INDENT.length;
+          suppressSpace = true;
+        }
       }
       index = close + 1;
       continue;
