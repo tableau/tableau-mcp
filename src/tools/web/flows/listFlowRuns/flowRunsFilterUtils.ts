@@ -9,12 +9,9 @@ import {
 } from '../../../../utils/parseAndValidateFilterString.js';
 
 // The Tableau "Get Flow Runs" endpoint (GET /sites/:siteId/flows/runs) supports
-// server-side filtering on the fields below. `status` is the ONE exception: it
-// is NOT a server-side filter field (live-verified against REST 3.30 — passing
-// `status:eq:Failed` is ignored by the server), so this tool fetches runs with
-// the server-side fields applied and filters `status` client-side. We still
-// validate `status` here (fields + values) so a typo surfaces as a clear error
-// rather than a silent no-op.
+// server-side filtering on the fields below. REST API 3.30+ also supports
+// `status`; older servers apply `status` client-side. We validate `status` here
+// (fields + values) so a typo surfaces as a clear error rather than a silent no-op.
 //
 // Field/operator allow-lists mirror the official spec at
 // https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_filtering_and_sorting.htm
