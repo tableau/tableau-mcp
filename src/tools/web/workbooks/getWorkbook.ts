@@ -7,13 +7,15 @@ import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
-  getWorkbookLineageByLuid,
   getWorkbookLineageQuery,
+  getWorkbookLineageWithParentsByLuid,
   LineageContent,
+  mergeWorkbookDatasources,
   mergeWorkbookLineage,
+  PublishedParent,
   toEmbeddedLineageContents,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
-import { Workbook } from '../../../sdks/tableau/types/workbook.js';
+import { Workbook, WorkbookConnection } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -81,13 +83,12 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
               // Embedded datasource discovery via REST /connections. Runs regardless of
               // disableMetadataApiRequests since it does not use the Metadata API. The
               // connection's datasource.id is the VDS-queryable embedded LUID.
-              let embedded: Array<LineageContent> = [];
+              let connections: Array<WorkbookConnection> = [];
               try {
-                const connections = await restApi.workbooksMethods.queryWorkbookConnections({
+                connections = await restApi.workbooksMethods.queryWorkbookConnections({
                   workbookId: workbook.id,
                   siteId: restApi.siteId,
                 });
-                embedded = toEmbeddedLineageContents(connections);
               } catch (error) {
                 log(
                   {
@@ -100,15 +101,20 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                 );
               }
 
+              // Published lineage plus the embedded->published-parent linkage, from one response.
               let published: Array<LineageContent> = [];
+              let embeddedParents: Map<string, PublishedParent> = new Map();
               if (!configWithOverrides.disableMetadataApiRequests) {
                 try {
                   const response = await restApi.metadataMethods.graphql(
-                    getWorkbookLineageQuery([workbook.id]),
+                    getWorkbookLineageQuery([workbook.id], { includeEmbeddedParents: true }),
                   );
-                  published = (getWorkbookLineageByLuid(response).get(workbook.id) ?? []).map(
-                    (ds) => ({ ...ds, datasourceType: 'published' as const }),
-                  );
+                  const lineage = getWorkbookLineageWithParentsByLuid(response).get(workbook.id);
+                  published = (lineage?.upstreamDatasources ?? []).map((ds) => ({
+                    ...ds,
+                    datasourceType: 'published' as const,
+                  }));
+                  embeddedParents = lineage?.embeddedParents ?? new Map();
                 } catch (error) {
                   log(
                     {
@@ -122,11 +128,12 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                 }
               }
 
-              // Published and embedded LUIDs are distinct (globally-unique GUIDs), so no
-              // cross-list dedup is needed; toEmbeddedLineageContents already dedupes embedded.
+              // Embedded stubs get a publishedParent pointer; mergeWorkbookDatasources then drops the
+              // redundant standalone published entry reachable via that pointer.
+              const embedded = toEmbeddedLineageContents(connections, embeddedParents);
               return mergeWorkbookLineage(
                 [workbook],
-                new Map([[workbook.id, [...published, ...embedded]]]),
+                new Map([[workbook.id, mergeWorkbookDatasources(published, embedded)]]),
                 configWithOverrides.boundedContext.datasourceIds,
               )[0];
             },
