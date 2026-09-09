@@ -334,6 +334,7 @@ describe('listAvailableFieldsTool', () => {
         datasource: z.string(),
         name: z.string().optional(),
         luid: z.string().optional(),
+        fieldTables: z.record(z.string(), z.string()),
         measures: z.array(
           z.tuple([z.string(), z.string(), z.string(), z.enum(['base', 'aggregatedCalc'])]),
         ),
@@ -362,6 +363,7 @@ describe('listAvailableFieldsTool', () => {
     expect(body.datasources).toHaveLength(1);
     expect(body.datasources[0]).toEqual({
       datasource: 'Sample - Superstore',
+      fieldTables: {},
       measures: [['Profit', 'Profit', 'Sum', 'base']],
       timeDimensions: [],
       breakdownDimensions: [['Category', 'Category', 'nominal']],
@@ -466,6 +468,7 @@ describe('listAvailableFieldsTool', () => {
     expect(body.datasources).toEqual([
       {
         datasource: 'Fresh DS',
+        fieldTables: {},
         measures: [['Sales', 'Sales', 'Sum', 'base']],
         timeDimensions: [],
         breakdownDimensions: [],
