@@ -358,6 +358,84 @@ describe('listAvailableFields', () => {
     );
   });
 
+  it('inherits ownership for unmapped fields when the graph confirms one logical table', () => {
+    const xml = `<workbook><datasources><datasource name='Legacy DS'>
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Order Date]' role='dimension' type='ordinal' datatype='date' />
+      <column name='[Profit Ratio]' role='measure' type='quantitative' datatype='real'>
+        <calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' />
+      </column>
+      <column name='[Foreign Date]' role='dimension' type='ordinal' datatype='date' />
+      <connection><metadata-records>
+        <metadata-record class='column'>
+          <local-name>[Sales]</local-name><object-id>[Migrated Data]</object-id>
+        </metadata-record>
+        <metadata-record class='column'><local-name>[Order Date]</local-name></metadata-record>
+        <metadata-record class='column'>
+          <local-name>[Foreign Date]</local-name><object-id>[Not In Graph]</object-id>
+        </metadata-record>
+        <metadata-record class='column'>
+          <local-name>[Foreign Date]</local-name><object-id>[Migrated Data]</object-id>
+        </metadata-record>
+      </metadata-records></connection>
+      <object-graph is-legacy='true'><objects><object id='Migrated Data' /></objects></object-graph>
+    </datasource></datasources></workbook>`;
+
+    const fields = listAvailableFields(xml);
+
+    expect(
+      fields.map(({ columnName, logicalTableId }) => ({ columnName, logicalTableId })),
+    ).toEqual([
+      { columnName: '[Sales]', logicalTableId: 'Migrated Data' },
+      { columnName: '[Order Date]', logicalTableId: 'Migrated Data' },
+      { columnName: '[Profit Ratio]', logicalTableId: 'Migrated Data' },
+      { columnName: '[Foreign Date]', logicalTableId: undefined },
+    ]);
+  });
+
+  it('reads enabled feature-controlled legacy ownership elements', () => {
+    const xml = `<workbook><datasources><datasource name='Legacy DS'>
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <connection><metadata-records><metadata-record class='measure'>
+        <local-name>[Sales]</local-name>
+        <_.fcp.ObjectModelEncapsulateLegacy.true...object-id>[Migrated Data]</_.fcp.ObjectModelEncapsulateLegacy.true...object-id>
+      </metadata-record></metadata-records></connection>
+      <_.fcp.ObjectModelEncapsulateLegacy.true...object-graph is-legacy='true'>
+        <objects><object id='Migrated Data' /></objects>
+      </_.fcp.ObjectModelEncapsulateLegacy.true...object-graph>
+    </datasource></datasources></workbook>`;
+
+    expect(listAvailableFields(xml)[0]?.logicalTableId).toBe('Migrated Data');
+  });
+
+  it('does not infer ownership for an unmapped field in a multi-object graph', () => {
+    const xml = `<workbook><datasources><datasource name='Related DS'>
+      <column name='[Unmapped Calculation]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Conflicting Field]' role='measure' type='quantitative' datatype='real' />
+      <connection><metadata-records>
+        <metadata-record class='measure'>
+          <local-name>[Conflicting Field]</local-name><object-id>[Orders]</object-id>
+        </metadata-record>
+        <metadata-record class='measure'>
+          <local-name>[Conflicting Field]</local-name><object-id>[Customers]</object-id>
+        </metadata-record>
+      </metadata-records></connection>
+      <object-graph><objects>
+        <object id='Orders' />
+        <object id='Customers' />
+      </objects></object-graph>
+    </datasource></datasources></workbook>`;
+
+    expect(listAvailableFields(xml).every((field) => field.logicalTableId === undefined)).toBe(
+      true,
+    );
+  });
+
+  it('does not infer ownership when the datasource has no object graph', () => {
+    const fields = listAvailableFields(WORKBOOK_XML);
+    expect(fields.every((field) => field.logicalTableId === undefined)).toBe(true);
+  });
+
   it('leaves table undefined when metadata-record parent-name is absent', () => {
     const fields = listAvailableFields(WORKBOOK_XML);
     expect(fields.every((field) => field.table === undefined)).toBe(true);

@@ -1,3 +1,4 @@
+import { listAvailableFields } from '../../../../desktop/metadata/field-builder.js';
 import {
   filterListAvailableFieldsSlimByLuid,
   projectListAvailableFieldsSlim,
@@ -117,6 +118,21 @@ describe('listAvailableFieldsSlim', () => {
       'Customer Since': 'lt-customers',
     });
     expect(group.fieldTables['Unknown Date']).toBeUndefined();
+  });
+
+  it('projects inherited single-object ownership into fieldTables', () => {
+    const xml = `<workbook><datasources><datasource name='Legacy DS'>
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Order Date]' role='dimension' type='ordinal' datatype='date' />
+      <object-graph is-legacy='true'><objects><object id='Migrated Data' /></objects></object-graph>
+    </datasource></datasources></workbook>`;
+
+    const group = projectListAvailableFieldsSlim(listAvailableFields(xml)).datasources[0];
+
+    expect(group.fieldTables).toEqual({
+      Sales: 'Migrated Data',
+      'Order Date': 'Migrated Data',
+    });
   });
 
   it('resolves modern workbook datasource IDs before friendly-name fallback', () => {
