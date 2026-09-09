@@ -163,6 +163,10 @@ describe('flows tool descriptions (eval)', () => {
       // the eval's product configuration matches the supported runtime state.
       FLOW_TOOLS_ENABLED: 'true',
       FLOW_WRITE_TOOLS_ENABLED: process.env.FLOW_WRITE_TOOLS_ENABLED,
+      FEATURE_GATE_PROVIDER: 'custom',
+      FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
+        module: './tests/e2e/fixtures/flowToolsFeatureGate.cjs',
+      }),
     });
     try {
       const stream = await runAgentWithTools(writeServer, getModel(), prompt);
@@ -204,6 +208,21 @@ describe('flows tool descriptions (eval)', () => {
         (toolExecution) => toolExecution.name === 'run_flow_task',
       );
       invariant(runFlowTask, 'run_flow_task tool execution not found');
+    },
+  );
+
+  mutatingFlowEvalIt(
+    'cancel-flow-run: selects cancel-flow-run for a request to stop an active run',
+    async () => {
+      const flowRunId = '1bff10bb-57ae-43df-8774-a86d14aef432';
+      const prompt = `Cancel the active Tableau Prep flow run ${flowRunId}.`;
+
+      const toolExecutions = await getToolExecutionsWithWriteTools(prompt);
+
+      const cancelFlowRun = toolExecutions.find(
+        (toolExecution) => toolExecution.name === 'cancel_flow_run',
+      );
+      invariant(cancelFlowRun, 'cancel_flow_run tool execution not found');
     },
   );
 });
