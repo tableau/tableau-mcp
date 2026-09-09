@@ -243,6 +243,11 @@ export class WebMcpServer extends Server {
     // Registration context is uninitialized, but then gets populated with each condition checked.
     const registrationContext: RegistrationContext = {};
 
+    // Fetching site role for user
+    if (enforceRoleRequirements) {
+      registrationContext.siteRole = await getCurrentUserSiteRole(restApiArgs);
+    }
+
     // Names of role-gated tools hidden specifically because the role fetch FAILED
     // rather than because the caller's role was genuinely too low.
     const toolsOmittedForRoleFetchFailure: string[] = [];
@@ -254,17 +259,11 @@ export class WebMcpServer extends Server {
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
       if (enforceRoleRequirements && tool.minRequiredRole) {
-        // Site role is fetched lazily when at least one candidate tool declares a `minRequiredRole`.
-        // Fail-closed: tools with role requirements are ommited during registration if a user's role
-        // is unable to be fetched. Using `Object.hasOwn` to check if site role context has been populated, as
-        // site role may be undefined as a result of failure to fetch. Retries are used when fetching site role,
-        // so there is no need to keep calling `getCurrentUserSiteRole` if it has already failed before.
-        if (!Object.hasOwn(registrationContext, 'siteRole')) {
-          registrationContext.siteRole = await getCurrentUserSiteRole(restApiArgs);
-        }
         const siteRole = registrationContext.siteRole;
         if (!siteRoleMeetsMinimum(siteRole, tool.minRequiredRole)) {
-          // An `undefined` role means the fetch failed
+          // When the enforce-role-requirements feature flag is enabled, tools with role requirements are ommited during
+          // registration if a user does not have the minimum role or if their role is unable to be fetched.
+          // An `undefined` role means the fetch failed.
           if (siteRole === undefined) {
             toolsOmittedForRoleFetchFailure.push(tool.name);
           }

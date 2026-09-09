@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// Tableau REST can deliver booleans as the strings "true"/"false"; `z.coerce.boolean()` would map
+// "false" -> true (the `Boolean("false") === true` footgun) and mis-classify a nested project as
+// top-level. Parse explicitly instead.
+const tableauBoolean = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim().toLowerCase() === 'true' : value === true),
+  z.boolean(),
+);
+
 export const contentPermissionsSchema = z.enum([
   'LockedToProject',
   'ManagedByOwner',
@@ -17,7 +25,9 @@ export const projectSchema = z.object({
   parentProjectId: z.string().optional(),
   contentPermissions: contentPermissionsSchema.optional(),
   controllingPermissionsProjectId: z.string().optional(),
-  topLevelProject: z.coerce.boolean().optional(),
+  // The Admin Insights resolver keys on `topLevelProject === true` when disambiguating duplicate
+  // datasources (W-24106279).
+  topLevelProject: tableauBoolean.optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
   owner: z
