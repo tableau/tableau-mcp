@@ -189,10 +189,24 @@ const getFlowRunsEndpoint = makeEndpoint({
  * Response shape note: a successful cancel returns HTTP 200 with a JSON body of
  * `{}` (not an empty/void body). Some domain failures (e.g. "flow run already
  * complete", code 403135) are also returned as HTTP 200 with an
- * `{ error: { code, summary, detail } }` envelope rather than a non-2xx status,
- * so the response is typed as unknown and the method inspects the body.
+ * `{ error: { code, summary, detail } }` envelope rather than a non-2xx status.
  * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#cancel_flow_run
  */
+const cancelFlowRunResponseSchema = z.union([
+  z.object({ error: z.undefined().optional() }).passthrough(),
+  z
+    .object({
+      error: z
+        .object({
+          code: z.string().optional(),
+          summary: z.string().optional(),
+          detail: z.string().optional(),
+        })
+        .passthrough(),
+    })
+    .passthrough(),
+]);
+
 const cancelFlowRunEndpoint = makeEndpoint({
   method: 'put',
   path: '/sites/:siteId/flows/runs/:flowRunId',
@@ -211,7 +225,7 @@ const cancelFlowRunEndpoint = makeEndpoint({
       schema: z.string(),
     },
   ],
-  response: z.unknown(),
+  response: cancelFlowRunResponseSchema,
 });
 
 const flowsApi = makeApi([

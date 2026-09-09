@@ -204,9 +204,10 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
    *
    * Some domain failures (e.g. "flow run already complete", code 403135) are
    * returned by Tableau as HTTP 200 with an `{ error: { code, summary, detail } }`
-   * envelope rather than a non-2xx status, so axios does not throw. This method
-   * detects that envelope and throws a {@link TableauRestError} so those cases
-   * flow through the same error-mapping path as real non-2xx responses.
+   * envelope rather than a non-2xx status, so axios does not throw. The SDK
+   * validates that response union, then this method turns the error envelope
+   * into a {@link TableauRestError} so those cases flow through the same
+   * error-mapping path as real non-2xx responses.
    *
    * Cancellation is asynchronous: the server may reconcile the run's terminal
    * status after the request. If the run is already in its final
@@ -230,8 +231,7 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
       params: { siteId, flowRunId },
       ...this.authHeader,
     });
-    const tableauError = (body as { error?: { code?: string; summary?: string; detail?: string } })
-      ?.error;
+    const tableauError = body.error;
     if (tableauError && (tableauError.code || tableauError.summary || tableauError.detail)) {
       throw new TableauRestError(tableauError);
     }
