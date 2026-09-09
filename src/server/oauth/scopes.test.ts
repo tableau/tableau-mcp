@@ -129,13 +129,25 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:mcp:content:delete');
     });
 
-    it('should include tableau:mcp:flow:read when flowToolsEnabled is true', async () => {
+    it('should include tableau:mcp:flow:read when flowToolsEnabled and flow-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'flow-tools',
+      );
       mockGetConfig.mockReturnValue({
         flowToolsEnabled: true,
       } as any);
 
       const scopes = await getSupportedMcpScopes();
       expect(scopes).toContain('tableau:mcp:flow:read');
+    });
+
+    it('should exclude tableau:mcp:flow:read when flowToolsEnabled is true but flow-tools is disabled', async () => {
+      mockGetConfig.mockReturnValue({
+        flowToolsEnabled: true,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).not.toContain('tableau:mcp:flow:read');
     });
 
     it('should exclude tableau:mcp:flow:read when flowToolsEnabled is false', async () => {
@@ -314,13 +326,25 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:users:read');
     });
 
-    it('should include tableau:flows:read when flowToolsEnabled is true', async () => {
+    it('should include tableau:flows:read when flowToolsEnabled and flow-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'flow-tools',
+      );
       mockGetConfig.mockReturnValue({
         flowToolsEnabled: true,
       } as any);
 
       const scopes = await getSupportedApiScopes();
       expect(scopes).toContain('tableau:flows:read');
+    });
+
+    it('should exclude tableau:flows:read when flowToolsEnabled is true but flow-tools is disabled', async () => {
+      mockGetConfig.mockReturnValue({
+        flowToolsEnabled: true,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).not.toContain('tableau:flows:read');
     });
 
     it('should exclude tableau:flows:read when flowToolsEnabled is false', async () => {
@@ -415,6 +439,14 @@ describe('scopes', () => {
 
       expect(scopes).toEqual(['tableau:workbooks:create', 'tableau:file_uploads:create']);
       expect(scopes).not.toContain('tableau:content:read');
+    });
+
+    it('should require all view-data API scopes for get-view-data', () => {
+      expect(getRequiredApiScopesForTool('get-view-data')).toEqual([
+        'tableau:views:download',
+        'tableau:content:read',
+        'tableau:mcp_site_settings:read',
+      ]);
     });
 
     it('should include tableau:users:update when adminToolsEnabled is true', async () => {

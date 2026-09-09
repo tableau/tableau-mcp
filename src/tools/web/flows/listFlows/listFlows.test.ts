@@ -12,6 +12,11 @@ import { mockFlows } from './mockFlows.js';
 
 const mocks = vi.hoisted(() => ({
   mockQueryFlowsForSite: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../../restApiInstance.js', () => ({
@@ -37,6 +42,7 @@ vi.mock('../../../../config.js', () => ({
 describe('listFlowsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -58,6 +64,13 @@ describe('listFlowsTool', () => {
     } as ReturnType<typeof getConfig>);
     const listFlowsTool = getListFlowsTool(new WebMcpServer());
     expect(await Provider.from(listFlowsTool.disabled)).toBe(true);
+  });
+
+  it('should be disabled when the flow-tools feature flag is OFF', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    const listFlowsTool = getListFlowsTool(new WebMcpServer());
+    expect(await Provider.from(listFlowsTool.disabled)).toBe(true);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('flow-tools');
   });
 
   it('should successfully list flows', async () => {

@@ -1,8 +1,9 @@
 {
   "mcp-apps": false,
   "enforce-role-requirements": false,
-  "authoring-tools": false,
+  "authoring-tools": true,
+  "flow-tools": false,
   "view-file-mode": false,
   "view-data-file-mode": false,
-  "workbook-file-mode": false
+  "workbook-file-mode": true
 }
