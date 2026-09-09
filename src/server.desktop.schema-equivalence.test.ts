@@ -57,9 +57,9 @@ describe('getDesktopToolListEntry SDK schema equivalence', () => {
       for (const tool of tools) {
         const sdkTool = sdkTools.find((candidate) => candidate.name === tool.name);
         expect(sdkTool).toBeDefined();
-        expect(await getDesktopToolListEntry(tool as DesktopTool<any>)).toEqual(
-          normalizeSdkTool(sdkTool!),
-        );
+        const listed = await getDesktopToolListEntry(tool as DesktopTool<any>);
+        delete listed._meta;
+        expect(listed).toEqual(normalizeSdkTool(sdkTool!));
       }
     } finally {
       await client.close();

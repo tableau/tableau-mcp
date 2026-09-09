@@ -15,6 +15,11 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import {
+  RESULT_TABLE_TOOL_META,
+  utteranceFromWire,
+  utteranceToolMetaToWire,
+} from '../utterance.js';
 import { getSummaryDataTool } from './getSummaryData.js';
 import { fetchWorksheetSummaryData, type SummaryDataRead } from './summaryDataCore.js';
 
@@ -259,6 +264,9 @@ describe('getSummaryDataTool', () => {
       readOnlyHint: true,
       openWorldHint: false,
     });
+    expect(tool.meta).toEqual({
+      utterance: utteranceToolMetaToWire(RESULT_TABLE_TOOL_META),
+    });
   });
 
   it('resolves an exact worksheet name to id and returns summary data', async () => {
@@ -288,6 +296,22 @@ describe('getSummaryDataTool', () => {
         ['West', 1200],
         ['East', 900],
       ]);
+      expect(
+        utteranceFromWire(
+          (result.structuredContent as { utterance?: unknown } | undefined)?.utterance,
+        ),
+      ).toEqual({
+        kind: 'result',
+        body: {
+          type: 'table',
+          caption: 'Sales by Region',
+          columns: ['Region', 'Sales'],
+          rows: [
+            ['West', '1200'],
+            ['East', '900'],
+          ],
+        },
+      });
 
       const summaryRequest = harness.server.requests.at(-1) as any;
       expect(summaryRequest?.path).toBe('/v0/workbook/worksheets/sheet-sales/summaryData');

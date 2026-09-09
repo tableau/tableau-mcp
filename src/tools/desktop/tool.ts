@@ -36,7 +36,10 @@ export type DesktopToolParams<Args extends ZodRawShape | undefined = undefined> 
   TableauDesktopRequestHandlerExtra,
   TableauDesktopToolCallback<Args>,
   Args
-> & { minApiVersion?: ApiVersionFloor };
+> & {
+  minApiVersion?: ApiVersionFloor;
+  meta?: { utterance: Record<string, unknown> };
+};
 
 export class DesktopTool<Args extends ZodRawShape | undefined = undefined> extends Tool<
   DesktopMcpServer,
@@ -50,10 +53,12 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
    * drives; unset means no floor.
    */
   readonly minApiVersion?: ApiVersionFloor;
+  readonly meta?: { utterance: Record<string, unknown> };
 
   constructor(params: DesktopToolParams<Args>) {
     super(params);
     this.minApiVersion = params.minApiVersion;
+    this.meta = params.meta;
   }
 
   async logAndExecute<T>({

@@ -54,6 +54,7 @@ describe('DesktopMcpServer', () => {
           description: await Provider.from(tool.description),
           inputSchema: await Provider.from(tool.paramsSchema),
           annotations: await Provider.from(tool.annotations),
+          ...(tool.meta ? { _meta: tool.meta } : {}),
         },
         expect.any(Function),
       );

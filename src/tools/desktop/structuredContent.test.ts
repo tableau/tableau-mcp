@@ -5,7 +5,9 @@ import {
   receipt,
   textToolResult,
   withNextAction,
+  withUtterance,
 } from './structuredContent.js';
+import { utteranceFromWire } from './utterance.js';
 
 const boundReceipt = receipt({
   did: ['applied template "bar" as sheet "Sales by Region"'],
@@ -74,6 +76,33 @@ describe('structuredContent helpers', () => {
 
     expect(result.content).toEqual([{ type: 'text', text: '{"status":"bound"}' }]);
     expect(result.structuredContent).toBeUndefined();
+  });
+
+  it('folds the result body into structuredContent.utterance without dropping nextAction', () => {
+    const body = { summaryData: { columns: ['Region'], rows: [['West']] } };
+    const utterance = {
+      kind: 'result' as const,
+      body: { type: 'table' as const, columns: ['Region'], rows: [['West']] },
+    };
+    const result = jsonToolResult(
+      withUtterance(withNextAction(body, prefillNextAction('Inspect the table')), utterance),
+      { isError: false },
+    );
+
+    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(body) }]);
+    expect(result.structuredContent).toEqual({
+      ...body,
+      nextAction: { label: 'Inspect the table', kind: 'prefill' },
+      utterance: {
+        kind: 'result',
+        body: { type: 'table', columns: ['Region'], rows: [['West']] },
+      },
+    });
+    expect(
+      utteranceFromWire(
+        (result.structuredContent as { utterance?: unknown } | undefined)?.utterance,
+      ),
+    ).toEqual(utterance);
   });
 
   it('folds the message into the structured block of a text result', () => {

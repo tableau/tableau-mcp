@@ -3,7 +3,10 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { jsonToolResult, withUtterance } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
+import { ASK_TOOL_META, utteranceToolMetaToWire } from '../utterance.js';
+import { askUtteranceFromInput } from '../utteranceMark.js';
 
 const urgencySchema = z.enum(['blocking', 'soft']);
 
@@ -31,35 +34,23 @@ export const getAskUserTool = (server: DesktopMcpServer): DesktopTool<typeof par
       idempotentHint: true,
       openWorldHint: false,
     },
+    meta: { utterance: utteranceToolMetaToWire(ASK_TOOL_META) },
     callback: async ({ question, urgency, options }, extra): Promise<CallToolResult> => {
-      return await askUserTool.logAndExecute<string>({
+      return await askUserTool.logAndExecute({
         extra,
         args: { question, urgency, options },
-        callback: async () => new Ok(renderAskUser({ question, urgency, options })),
-        getSuccessResult: (text) => ({
-          isError: false,
-          content: [{ type: 'text', text }],
-        }),
+        callback: async () => {
+          const payload =
+            options === undefined ? { question, urgency } : { question, urgency, options };
+          return new Ok(payload);
+        },
+        getSuccessResult: (payload) =>
+          jsonToolResult(withUtterance(payload, askUtteranceFromInput(payload)), {
+            isError: false,
+          }),
       });
     },
   });
 
   return askUserTool;
 };
-
-function renderAskUser({
-  question,
-  urgency,
-  options,
-}: {
-  question: string;
-  urgency?: z.infer<typeof urgencySchema>;
-  options?: string[];
-}): string {
-  const prefix = `[${(urgency ?? 'blocking').toUpperCase()}]`;
-  const optionsBlock =
-    options && options.length > 0
-      ? `\n\nOptions:\n${options.map((option, index) => `${index + 1}. ${option}`).join('\n')}`
-      : '';
-  return `${prefix} ${question}${optionsBlock}`;
-}

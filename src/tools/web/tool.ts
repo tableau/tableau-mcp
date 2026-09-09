@@ -51,6 +51,7 @@ export type ToolMeta = {
   ui?: {
     visibility?: Array<'model' | 'app'>;
   };
+  utterance?: Record<string, unknown>;
 };
 
 export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = ToolParams<
@@ -59,17 +60,10 @@ export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = To
   TableauWebRequestHandlerExtra,
   TableauWebToolCallback<Args>,
   Args
-> &
-  (
-    | {
-        app?: AppDetails;
-        meta?: never;
-      }
-    | {
-        app?: never;
-        meta?: ToolMeta;
-      }
-  );
+> & {
+  app?: AppDetails;
+  meta?: ToolMeta;
+};
 
 export type ConstrainedResult<T> =
   | {

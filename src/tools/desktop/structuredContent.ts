@@ -1,5 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { requireToolAllowlistedKind, type Utterance, utteranceToWire } from './utterance.js';
+
 const MAX_NEXT_ACTION_LABEL_LENGTH = 60;
 
 declare const nextActionLabelBrand: unique symbol;
@@ -40,7 +42,8 @@ export type NextAction =
     };
 
 export type StructuredContent = {
-  readonly nextAction: NextAction;
+  readonly nextAction?: NextAction;
+  readonly utterance?: Record<string, unknown>;
 };
 
 /**
@@ -121,6 +124,20 @@ export function withNextAction<T extends object>(
   nextAction: NextAction,
 ): StructuredResult<T> {
   return { ...result, structuredContent: { nextAction } };
+}
+
+export function withUtterance<T extends object>(
+  result: StructuredResult<T>,
+  utterance: Utterance,
+): StructuredResult<T> {
+  requireToolAllowlistedKind(utterance.kind);
+  return {
+    ...result,
+    structuredContent: {
+      ...result.structuredContent,
+      utterance: utteranceToWire(utterance),
+    },
+  };
 }
 
 export function attachNextAction<T extends object>(

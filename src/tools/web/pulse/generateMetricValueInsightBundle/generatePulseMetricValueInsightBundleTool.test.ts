@@ -12,6 +12,12 @@ import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import {
+  DELIVERY_ARTIFACT_TOOL_META,
+  INSIGHT_BUNDLE_ARTIFACT_TYPE,
+  utteranceFromWire,
+  utteranceToolMetaToWire,
+} from '../../../desktop/utterance.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMetricValueInsightBundleTool.js';
@@ -185,6 +191,18 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     invariant(result.content[0].type === 'text');
     const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockBundleRequestResponse);
+    expect(
+      utteranceFromWire(
+        (result.structuredContent as { utterance?: unknown } | undefined)?.utterance,
+      ),
+    ).toEqual({
+      kind: 'delivery',
+      body: {
+        type: 'artifact',
+        artifactType: INSIGHT_BUNDLE_ARTIFACT_TYPE,
+        payload: mockBundleRequestResponse,
+      },
+    });
   });
 
   it('should call generatePulseMetricValueInsightBundle with bundleType and return Ok result', async () => {
@@ -239,6 +257,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(paramsSchema.verbosity.safeParse('slim').success).toBe(true);
     expect(paramsSchema.verbosity.safeParse('full').success).toBe(true);
     expect(paramsSchema.verbosity.safeParse('verbose').success).toBe(false);
+    expect(tool.meta).toEqual({
+      utterance: utteranceToolMetaToWire(DELIVERY_ARTIFACT_TOOL_META),
+    });
   });
 
   it('should handle API errors gracefully', async () => {

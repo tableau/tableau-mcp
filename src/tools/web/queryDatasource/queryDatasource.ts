@@ -21,6 +21,9 @@ import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../utils/provider.js';
+import { jsonToolResult, withUtterance } from '../../desktop/structuredContent.js';
+import { RESULT_TABLE_TOOL_META, utteranceToolMetaToWire } from '../../desktop/utterance.js';
+import { queryDataUtterance } from '../../desktop/utteranceMark.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ToolRules, WebTool } from '../tool.js';
@@ -75,6 +78,7 @@ export const getQueryDatasourceTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
+    meta: { utterance: utteranceToolMetaToWire(RESULT_TABLE_TOOL_META) },
     callback: async ({ datasourceLuid, query, limit }, extra): Promise<CallToolResult> => {
       const { getConfigWithOverrides } = extra;
       return await queryDatasourceTool.logAndExecute<QueryDatasourceResult>({
@@ -191,6 +195,10 @@ export const getQueryDatasourceTool = (
             },
           });
         },
+        getSuccessResult: (queryOutput) =>
+          jsonToolResult(withUtterance(queryOutput, queryDataUtterance(queryOutput.data)), {
+            isError: false,
+          }),
         constrainSuccessResult: (queryOutput) => {
           return {
             type: 'success',

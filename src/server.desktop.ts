@@ -324,7 +324,8 @@ export class DesktopMcpServer extends Server {
       logger: 'DesktopMcpServer',
     });
 
-    for (const { name, title, description, paramsSchema, annotations, callback } of tools) {
+    for (const tool of tools) {
+      const { name, title, description, paramsSchema, annotations, callback, meta } = tool;
       const toolCallback: ToolCallback<typeof paramsSchema> = async (
         args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
@@ -361,6 +362,7 @@ export class DesktopMcpServer extends Server {
           description: await Provider.from(description),
           inputSchema: await Provider.from(paramsSchema),
           annotations: await Provider.from(annotations),
+          ...(meta ? { _meta: meta } : {}),
         },
         toolCallback,
       );
@@ -494,5 +496,6 @@ export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<M
     description: await Provider.from(tool.description),
     inputSchema,
     annotations: await Provider.from(tool.annotations),
+    ...(tool.meta ? { _meta: tool.meta } : {}),
   };
 }

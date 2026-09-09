@@ -99,6 +99,7 @@ describe('server', () => {
           description: await Provider.from(tool.description),
           inputSchema: await Provider.from(tool.paramsSchema),
           annotations: await Provider.from(tool.annotations),
+          ...(tool.meta ? { _meta: tool.meta } : {}),
         },
         expect.any(Function),
       );
@@ -200,6 +201,7 @@ describe('server', () => {
         description: await Provider.from(tool.description),
         inputSchema: await Provider.from(tool.paramsSchema),
         annotations: await Provider.from(tool.annotations),
+        ...(tool.meta ? { _meta: tool.meta } : {}),
       },
       expect.any(Function),
     );
@@ -231,6 +233,7 @@ describe('server', () => {
             description: await Provider.from(tool.description),
             inputSchema: await Provider.from(tool.paramsSchema),
             annotations: await Provider.from(tool.annotations),
+            ...(tool.meta ? { _meta: tool.meta } : {}),
           },
           expect.any(Function),
         );
@@ -387,5 +390,32 @@ describe('server', () => {
     // Should NOT register as app tool
     expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
     expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('keeps utterance meta beside ui.resourceUri on app tools', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    const server = getServer();
+    const mockAppTool = createMockAppTool();
+    mockAppTool.meta = {
+      utterance: { defaultKind: 'delivery', bodyTypes: ['artifact'] },
+    };
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
+      server.mcpServer,
+      'get-workbook',
+      expect.objectContaining({
+        _meta: {
+          utterance: { defaultKind: 'delivery', bodyTypes: ['artifact'] },
+          ui: {
+            resourceUri: 'tableau://app/test',
+          },
+        },
+      }),
+      expect.any(Function),
+    );
   });
 });

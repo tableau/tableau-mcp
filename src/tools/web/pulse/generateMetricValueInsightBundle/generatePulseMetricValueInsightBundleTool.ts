@@ -9,6 +9,12 @@ import {
   pulseInsightBundleTypeEnum,
 } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
+import { jsonToolResult, withUtterance } from '../../../desktop/structuredContent.js';
+import {
+  DELIVERY_ARTIFACT_TOOL_META,
+  utteranceToolMetaToWire,
+} from '../../../desktop/utterance.js';
+import { insightBundleUtterance } from '../../../desktop/utteranceMark.js';
 import { WebTool } from '../../tool.js';
 import { validateBundleRequest } from '../validatePulsePayload.js';
 import { slimBundle } from './slimBundle.js';
@@ -165,6 +171,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       idempotentHint: true,
       openWorldHint: false,
     },
+    meta: { utterance: utteranceToolMetaToWire(DELIVERY_ARTIFACT_TOOL_META) },
     callback: async (
       { bundleRequest, bundleType, verbosity, slim },
       extra,
@@ -205,6 +212,10 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
 
           return result;
         },
+        getSuccessResult: (insightBundle) =>
+          jsonToolResult(withUtterance(insightBundle, insightBundleUtterance(insightBundle)), {
+            isError: false,
+          }),
         constrainSuccessResult: (insightBundle) => {
           return {
             type: 'success',

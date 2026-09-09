@@ -25,7 +25,7 @@ import { ClientInfo, Server } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
-import { WebTool } from './tools/web/tool.js';
+import { type ToolMeta, WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import {
   WebToolGroupName,
@@ -277,6 +277,7 @@ export class WebMcpServer extends Server {
     tool: WebTool<any>,
     toolCallback: ToolCallback<typeof tool.paramsSchema>,
   ): Promise<void> => {
+    const meta = await Provider.from(tool.meta);
     this.mcpServer.registerTool(
       tool.name,
       {
@@ -284,7 +285,7 @@ export class WebMcpServer extends Server {
         description: await Provider.from(tool.description),
         inputSchema: await Provider.from(tool.paramsSchema),
         annotations: await Provider.from(tool.annotations),
-        _meta: await Provider.from(tool.meta),
+        ...(meta ? { _meta: meta } : {}),
       },
       toolCallback,
     );
@@ -301,6 +302,7 @@ export class WebMcpServer extends Server {
     // Register a tool with UI metadata. When the host calls this tool, it reads
     // `_meta.ui.resourceUri` to know which resource to fetch and render as an
     // interactive UI.
+    const extraMeta: ToolMeta = (await Provider.from(tool.meta)) ?? {};
     registerAppTool(
       this.mcpServer,
       tool.name,
@@ -310,7 +312,9 @@ export class WebMcpServer extends Server {
         inputSchema: await Provider.from(tool.paramsSchema),
         annotations: await Provider.from(tool.annotations),
         _meta: {
+          ...extraMeta,
           ui: {
+            ...(extraMeta.ui ?? {}),
             resourceUri,
           },
         },

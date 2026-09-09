@@ -13,6 +13,11 @@ import {
 } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import {
+  RESULT_TABLE_TOOL_META,
+  utteranceFromWire,
+  utteranceToolMetaToWire,
+} from '../../desktop/utterance.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -85,6 +90,9 @@ describe('queryDatasourceTool', () => {
     expect(queryDatasourceTool.name).toBe('query-datasource');
     expect(queryDatasourceTool.description).toBeInstanceOf(Provider);
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
+    expect(queryDatasourceTool.meta).toEqual({
+      utterance: utteranceToolMetaToWire(RESULT_TABLE_TOOL_META),
+    });
   });
 
   it('should return error when query args fail validation', async () => {
@@ -114,6 +122,22 @@ describe('queryDatasourceTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual(mockVdsResponses.success);
+    expect(
+      utteranceFromWire(
+        (result.structuredContent as { utterance?: unknown } | undefined)?.utterance,
+      ),
+    ).toEqual({
+      kind: 'result',
+      body: {
+        type: 'table',
+        columns: ['Category', 'SUM(Profit)'],
+        rows: [
+          ['Technology', '146543.37559999965'],
+          ['Furniture', '19729.995600000024'],
+          ['Office Supplies', '126023.44340000013'],
+        ],
+      },
+    });
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',

@@ -2873,7 +2873,7 @@ function recordBoundRecoveryAfterFinalResult({
   reservationId?: number;
   result: StructuredBindTemplateToolResult;
 }): void {
-  const terminal = result.structuredContent?.nextAction.kind === 'done';
+  const terminal = result.structuredContent?.nextAction?.kind === 'done';
   recordBindRecoveryAttemptFailOpen({
     session,
     askKey,
@@ -3548,7 +3548,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           const correctionDidNotFinish =
             isStructuredCorrectionCall &&
-            appliedResult.structuredContent?.nextAction.kind !== 'done';
+            appliedResult.structuredContent?.nextAction?.kind !== 'done';
           if (correctionDidNotFinish) {
             recordBindRecoveryAttemptFailOpen({
               session: resolvedSession,

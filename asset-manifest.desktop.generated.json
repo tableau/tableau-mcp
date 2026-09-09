@@ -1,0 +1,1058 @@
+{
+  "desktop/data/corpus.json": {
+    "sha256": "bf7f3fa5e72464c59edf239c9e18730d17affff0c13adc5f57ee540b7ecbdfcb",
+    "bytes": 177777
+  },
+  "desktop/data/examples/calculated-field.json": {
+    "sha256": "7b6c4094dbfdce0b6d175ac29174fc278c25a1a86f042e938ed7a6201516cc07",
+    "bytes": 1168
+  },
+  "desktop/data/examples/column-instance-naming.json": {
+    "sha256": "507a8d02ff51d2eac33795d080e5b6c86cacfd721e24e4669f7619649bc7ba31",
+    "bytes": 2198
+  },
+  "desktop/data/examples/dashboard-tiled.json": {
+    "sha256": "d5f3fc60900eadddd6e72c5dd18c4f3981955498cb10296edc268e40cb2c4551",
+    "bytes": 3152
+  },
+  "desktop/data/examples/dashboard-validation-grid.json": {
+    "sha256": "5a300bc8b7f4c5fc83ee0eb50e65a80a16c3c543b360d5253a4579e7edcabbbe",
+    "bytes": 5655
+  },
+  "desktop/data/examples/dual-axis.json": {
+    "sha256": "226219d2706ed7deeceb482fc110fa439bc162cda7c5dc8359397398fbc5acfe",
+    "bytes": 2334
+  },
+  "desktop/data/examples/encoding-pane-level.json": {
+    "sha256": "3cffcc48962c428cd42896ca2898f3a94c664fff9090b31f3018f4700843a66a",
+    "bytes": 1638
+  },
+  "desktop/data/examples/filter-categorical.json": {
+    "sha256": "0fde5456d12808c6e89586da7823e9454d09d228405d636bf9531d399ca2f109",
+    "bytes": 1460
+  },
+  "desktop/data/examples/filter-relative-date.json": {
+    "sha256": "314bc9490cbdf22db69b10ffbe9956240f1d8563639de8a75d7a1a57ca09d1e4",
+    "bytes": 2655
+  },
+  "desktop/data/examples/lod-fixed.json": {
+    "sha256": "2f5919c25825ef62ac55e4817c5cf3c42d1778699805be5bc5d09f897755df6c",
+    "bytes": 1995
+  },
+  "desktop/data/examples/mark-encoding.json": {
+    "sha256": "52ead607ee562e00c0aa8c66afb57cc04bef0607d0756d0c04f775861a9490ea",
+    "bytes": 2134
+  },
+  "desktop/data/examples/parameter.json": {
+    "sha256": "6ac287f18510861a4c73334a1ee4bba1c04ac14c729a92e5e254e39266cc81b2",
+    "bytes": 2752
+  },
+  "desktop/data/examples/reference-line.json": {
+    "sha256": "e7a84d40bf6aeaea1588a7a0fb0d0660aac96de935b79529d6d6d71ee57442f8",
+    "bytes": 1868
+  },
+  "desktop/data/examples/sort.json": {
+    "sha256": "e3a79f489d552a3b68ab306e6d3c4f2a28d66164cdbe7360e775bfad30290915",
+    "bytes": 1127
+  },
+  "desktop/data/examples/table-calc.json": {
+    "sha256": "037d3fbeffebb4e3403dc617a07b7e0ce4047470445af3beec9a198f83c4130f",
+    "bytes": 2222
+  },
+  "desktop/data/examples/topn-table-calc-filter.json": {
+    "sha256": "d5aca4a6f24336cbe622ace5183bb5427f6e30637b47ba030f7afc0fb101343d",
+    "bytes": 4302
+  },
+  "desktop/data/examples/worksheet-bar-chart.json": {
+    "sha256": "744d327dcbfb29caf8050257f431951e087a1c90b28ab770febccf4fc763712e",
+    "bytes": 2745
+  },
+  "desktop/data/templates/box-plot-chart.tbm": {
+    "sha256": "ff857d1b1dc998b5abb052ad37b366070b28258ad9cf2e7e110eef35d2feb177",
+    "bytes": 2767
+  },
+  "desktop/data/templates/bullet-variance-chart.tbm": {
+    "sha256": "110108cadf3d0a94fd47cbaa642abe3f892dc1247fe2c2092b9fa63dc53fbe19",
+    "bytes": 2577
+  },
+  "desktop/data/templates/change-over-time-area-chart.tbm": {
+    "sha256": "4586e8265f3030633d19925f0fd9716296069cab5f9afdf4a25c77218012ec8b",
+    "bytes": 2273
+  },
+  "desktop/data/templates/change-over-time-calendar-heatmap.tbm": {
+    "sha256": "e27d67feff12c12cee6fd9a9550e744e17f163a7b04cbacb631ad7840877299a",
+    "bytes": 2656
+  },
+  "desktop/data/templates/change-over-time-stacked-area-chart.tbm": {
+    "sha256": "bb3dcbeb826bc764ec6b209583af0e30430f66d254d544fb3c1007c1f2dc4fde",
+    "bytes": 2282
+  },
+  "desktop/data/templates/change-over-time__area__emphasize-total-change-more-than-parts.tbm": {
+    "sha256": "dfac800e3b0b273111025e90c5c82d24f681a71709c1c7873190def35aa7d6f4",
+    "bytes": 269906
+  },
+  "desktop/data/templates/change-over-time__calendar-heatmap__reveal-daily-weekly-seasonal-patterns.tbm": {
+    "sha256": "23c98217f75c4a310dfb49ff966023e452a90141d11e7173663bdef3c3daede8",
+    "bytes": 271582
+  },
+  "desktop/data/templates/change-over-time__candlestick__show-open-high-low-close-activity.tbm": {
+    "sha256": "334ce7cde0d61a0c0670b9ac4e8bd5e65f4c9fe8f852fd178ec44c3f16e1e9a2",
+    "bytes": 32985
+  },
+  "desktop/data/templates/change-over-time__circle-timeline__show-sized-events-across-time-and-categories.tbm": {
+    "sha256": "eaeded9c5d96d55d1be24bf9247be5e771016a5a9e0c01cd883aed94277013d9",
+    "bytes": 275918
+  },
+  "desktop/data/templates/change-over-time__column__show-one-series-changing-across-periods.tbm": {
+    "sha256": "cb946f3e4157db4a2a78866ec6ada99f8b3784d330587ae72051c69ca3836d08",
+    "bytes": 72770
+  },
+  "desktop/data/templates/change-over-time__connected-scatter__trace-two-metrics-evolving-together.tbm": {
+    "sha256": "59b48a8d426d7d8d29757147249aa9627a089f2f143836e3f2272218ac4cac53",
+    "bytes": 58123
+  },
+  "desktop/data/templates/change-over-time__dual-line__compare-two-time-series-directly.tbm": {
+    "sha256": "f5b372f042b9aec28b849fa82f712b236bd8e9326bc04f57c2a8c71f6ed84ac4",
+    "bytes": 275949
+  },
+  "desktop/data/templates/change-over-time__fan__show-forecast-uncertainty-widening-over-time.tbm": {
+    "sha256": "daee5c2f3e501ce8ce666122916aa00dc98b836d8e7514e259811e055c582d1b",
+    "bytes": 270278
+  },
+  "desktop/data/templates/change-over-time__gantt__show-start-duration-and-overlap-of-tasks.tbm": {
+    "sha256": "583db2bb90178373f9da0a85f283b8a81267455b76ec43eb9dc9a2f8744b0f42",
+    "bytes": 275291
+  },
+  "desktop/data/templates/change-over-time__line-plus-area__combine-trend-line-with-filled-volume.tbm": {
+    "sha256": "10294672139c42b8a27c6c99e9f9e0d9074c7da5763d92902c0d15bda0140641",
+    "bytes": 275244
+  },
+  "desktop/data/templates/change-over-time__line-plus-column__pair-volume-columns-with-a-rate-line.tbm": {
+    "sha256": "1065db026eaf454f20f93eee2f81a4f9686eb731befd9e836ad25af0a3598de1",
+    "bytes": 64245
+  },
+  "desktop/data/templates/change-over-time__line__default-time-series-trend.tbm": {
+    "sha256": "f55d8285a965932dff83b77b07bfd5cd1e7ddbbe1c7b8cc216e848b7e89d517e",
+    "bytes": 269174
+  },
+  "desktop/data/templates/change-over-time__multi-line__compare-many-series-with-optional-highlight.tbm": {
+    "sha256": "0651ba09d19615d7e8de9debf020cd1388095f98650f6543b23357903161f435",
+    "bytes": 270571
+  },
+  "desktop/data/templates/change-over-time__ohlc__show-open-close-and-high-low-ranges.tbm": {
+    "sha256": "b4144db98c53a80b75afe64c22181e007e11f6ee3eadff0fb85e4b5987f68720",
+    "bytes": 21779
+  },
+  "desktop/data/templates/change-over-time__priestley-timeline__show-date-and-duration-of-intervals.tbm": {
+    "sha256": "97bf5c25a73df6037115f5a3ea0d1ebb183771c54228ed359aa2b977c6ce2210",
+    "bytes": 15412
+  },
+  "desktop/data/templates/change-over-time__seismogram__show-high-variance-series-as-mirrored-spikes.tbm": {
+    "sha256": "3b20790e034f014e82194e8083455b76b01e56954e934abd04b5cf259c1125d3",
+    "bytes": 273320
+  },
+  "desktop/data/templates/change-over-time__stacked-area__show-composition-changing-over-time.tbm": {
+    "sha256": "a4025a06aa21c93bd9337424c68271fb5e4772006427348281cb2fb8888dbd4e",
+    "bytes": 267878
+  },
+  "desktop/data/templates/change-over-time__steamgraph__show-organic-stacked-flows-over-time.tbm": {
+    "sha256": "251b9fe0eb799806aa8e555b85efe12a20f725c5d3392220dea2328b88300914",
+    "bytes": 273185
+  },
+  "desktop/data/templates/connected-scatterplot.tbm": {
+    "sha256": "93c57345e8785bcc6d03dffb9782ddd01caa4927ef47b0f0e65569b14bfe5d12",
+    "bytes": 2836
+  },
+  "desktop/data/templates/control-chart-xmr.tbm": {
+    "sha256": "bb85416c0711091f6a578203e5fea37582b4a1dc562dce17277105af12b7e0c5",
+    "bytes": 4547
+  },
+  "desktop/data/templates/correlation-bubble-chart.tbm": {
+    "sha256": "266f05de3a5edd7dbf117252762212c9c82a496c727d477c997236340c3dc604",
+    "bytes": 3158
+  },
+  "desktop/data/templates/correlation-dual-axis-chart.tbm": {
+    "sha256": "492942f58909796d15ecbdfc65ce4244fdf82ef768bf4ddca6b940683dcb78cc",
+    "bytes": 3489
+  },
+  "desktop/data/templates/correlation-highlight-table.tbm": {
+    "sha256": "755d88a393feee28f2e4064f0bcebeef4457efb3de200324ce1fcf52eb5c0eec",
+    "bytes": 2921
+  },
+  "desktop/data/templates/correlation-scatter-plot-chart.tbm": {
+    "sha256": "03315cd243b2602005a1f1cc5fb30e4c4174de3c4c7da3c22e9115f641172a9d",
+    "bytes": 2753
+  },
+  "desktop/data/templates/correlation-scatter-trendline-chart.tbm": {
+    "sha256": "4fe7ab10729744430c13592e967bada3d8244d46379dc5b3e6f69b3d53fc04c6",
+    "bytes": 2920
+  },
+  "desktop/data/templates/correlation__bubble-scatter__relate-two-measures-and-encode-a-third-by-size.tbm": {
+    "sha256": "96305e4b8d100358750e759ea7ad8b619fca7332bca458dde77e9700debc18c7",
+    "bytes": 60179
+  },
+  "desktop/data/templates/correlation__category-heatmap__show-patterns-across-two-categorical-axes.tbm": {
+    "sha256": "4e4df7d10c198e4e2969de76c3b394cdf68142919f37edf578c61397c3f36f57",
+    "bytes": 17005
+  },
+  "desktop/data/templates/correlation__connected-scatter__show-how-two-metrics-move-together-over-time.tbm": {
+    "sha256": "70f9b5b20e8ab567f1e821e9c635d0e9c72683dee69dab3a203a5f888c8d60af",
+    "bytes": 36522
+  },
+  "desktop/data/templates/correlation__line-plus-column__relate-an-amount-series-to-a-rate-series.tbm": {
+    "sha256": "28dbb15c50beb316a30d514416d29becc39f688ebd2cc78763db3e004ded3c16",
+    "bytes": 73802
+  },
+  "desktop/data/templates/correlation__radar-profile__compare-multivariate-profiles.tbm": {
+    "sha256": "8e927dd65fe41ccf165e913223e4363b6d1ba50c1bee315e3dea80cbb62cd54e",
+    "bytes": 41761
+  },
+  "desktop/data/templates/correlation__scatter__relate-two-continuous-measures.tbm": {
+    "sha256": "1c31b6f5a06833979bb2262e069cd48a7a5900cbf5d1d9bef3152ce8c6ffa430",
+    "bytes": 59319
+  },
+  "desktop/data/templates/correlation__xy-heatmap__show-patterns-between-two-category-dimensions.tbm": {
+    "sha256": "77c7d39de7fadc51d08556bbfa20ec5eec88f5afbe78bc35318ac951df839a1b",
+    "bytes": 16180
+  },
+  "desktop/data/templates/deviation-arrow.tbm": {
+    "sha256": "fb3bc90ea9fd706ed831c2f2102101e487632157c8fba117c70fc4753fdce2c9",
+    "bytes": 4385
+  },
+  "desktop/data/templates/deviation-diverging-bar.tbm": {
+    "sha256": "459aca609b06a598c530d8b9570a5790ae023cd3b4934b48ed1271b546b9c547",
+    "bytes": 3316
+  },
+  "desktop/data/templates/deviation-gain-loss-chart.tbm": {
+    "sha256": "a681dbe8905d303c24aa3feec78f45a5e9516382223e325c0f3976bf1874e15c",
+    "bytes": 9856
+  },
+  "desktop/data/templates/deviation-spine-chart.tbm": {
+    "sha256": "842a49705c35ac268e6ff8be45ed5312a091182f0343cdc8e875ce0d50bb4851",
+    "bytes": 6114
+  },
+  "desktop/data/templates/deviation__barbell__compare-two-values-per-category.tbm": {
+    "sha256": "4da70b340fda323ab0540cca806c988c289100fba18e88115ab015b42b820ae7",
+    "bytes": 274663
+  },
+  "desktop/data/templates/deviation__bullet__track-actual-vs-target-and-performance-bands.tbm": {
+    "sha256": "819f04fb7f7204ddc803249185ddb76ec23489301a6c82eede22f793e14f82ea",
+    "bytes": 274700
+  },
+  "desktop/data/templates/deviation__diverging-bar__show-positive-and-negative-vs-baseline.tbm": {
+    "sha256": "b56aa1ff2027894fb73bf10de6e37756ef2b2ca7b8e88594058e61af579d2635",
+    "bytes": 275525
+  },
+  "desktop/data/templates/deviation__diverging-stacked-bar__show-sentiment-or-likert-breakdown.tbm": {
+    "sha256": "c1bd2cc8ab303f8f43836bbacbda1c5769cf8aff72909aceadaf61000cbdf63e",
+    "bytes": 36042
+  },
+  "desktop/data/templates/deviation__spine__split-one-measure-into-two-opposing-parts.tbm": {
+    "sha256": "b905be2cfb2914cad46ddc89db9b4f9e5c41845bbbd5ad30637372fa6d6dd9e7",
+    "bytes": 42570
+  },
+  "desktop/data/templates/deviation__surplus-deficit-area__show-above-below-baseline-over-time.tbm": {
+    "sha256": "93c5b88cfec31e378b3b4e76665716370559325585aa289a7bc1b63466e5bd3b",
+    "bytes": 273677
+  },
+  "desktop/data/templates/distribution-bar-code-chart.tbm": {
+    "sha256": "fc81c4f138da9f9e5a5118dc10cd7ee676d853f1b030361b49a055f53fe37bb0",
+    "bytes": 2928
+  },
+  "desktop/data/templates/distribution-histogram.tbm": {
+    "sha256": "140645ec718286b6c190faf46e4ce6f6257056024e691da4a84642f94432bd8a",
+    "bytes": 2324
+  },
+  "desktop/data/templates/distribution__barcode__show-all-values-as-marks-on-a-strip.tbm": {
+    "sha256": "5fb5b23d191ad62c0cbbab1387b3d3cc1368c3f709a57853279089940e704f95",
+    "bytes": 270381
+  },
+  "desktop/data/templates/distribution__beeswarm__show-each-point-without-overlap-hiding-density.tbm": {
+    "sha256": "48d54aa8582af6857655cc3748e91b36db423f8b059c9665b7493604f9911f4b",
+    "bytes": 37036
+  },
+  "desktop/data/templates/distribution__boxplot__summarize-median-spread-and-outliers-by-category.tbm": {
+    "sha256": "3bbdc93d1af5dfe81456b64613754d7e8facd47c5cec1d4e1f90663f2197ac81",
+    "bytes": 271287
+  },
+  "desktop/data/templates/distribution__cumulative-curve__show-inequality-or-cumulative-share.tbm": {
+    "sha256": "5bd36fe61bdf9812cf36356b1a7dbd1b8e53b6cb5ec8e7b7db714d42b9136fa9",
+    "bytes": 277155
+  },
+  "desktop/data/templates/distribution__dot-plot__show-min-max-or-range-across-categories.tbm": {
+    "sha256": "c7fe1b0546ec6270d183eec396144eda750a6ad5ee035c8d486b7fa62f757c65",
+    "bytes": 272643
+  },
+  "desktop/data/templates/distribution__histogram__show-shape-and-frequency-of-a-measure.tbm": {
+    "sha256": "335fab1e52817a9066ccb648ddabc8a9c2ee47374a1738f8bd3dcc13aba3d66c",
+    "bytes": 19030
+  },
+  "desktop/data/templates/distribution__population-pyramid__compare-mirrored-group-distributions.tbm": {
+    "sha256": "417063745baafcf29eace90fc85a33db8ef93e75b4b77453d9fd2304dd92db00",
+    "bytes": 20413
+  },
+  "desktop/data/templates/distribution__violin__show-full-density-shape-beyond-simple-summary.tbm": {
+    "sha256": "e028958aa4ba8331070fd4cbe449d081671683bb8d46307ddee5e83344b03800",
+    "bytes": 34826
+  },
+  "desktop/data/templates/flow__chord__show-two-way-flows-in-a-matrix.tbm": {
+    "sha256": "9e7d01ea0dc44cc569875758c24e06fd710bba7fafcf198559a8bb1e1c8e0fe5",
+    "bytes": 34592
+  },
+  "desktop/data/templates/flow__network__show-relationship-strength-among-nodes.tbm": {
+    "sha256": "ff702edd47cb7b3a9d93f0de3902551a7b1716261313e49c360c3e7e852ffc6f",
+    "bytes": 28540
+  },
+  "desktop/data/templates/flow__sankey__trace-volume-through-multi-stage-paths.tbm": {
+    "sha256": "c8f4314015d9e7bd4a5f4e61673df90f4230416f3d8876cadb427a2761a09d39",
+    "bytes": 278172
+  },
+  "desktop/data/templates/flow__waterfall__sequence-budget-or-process-steps-with-plus-minus.tbm": {
+    "sha256": "981427a848a424cb2e4b4a12ff9efe0ca8daceab0fcf5f39d1125dfe5057c5b0",
+    "bytes": 16005
+  },
+  "desktop/data/templates/funnel-chart.tbm": {
+    "sha256": "20da572ff84b24becc2c4c58a55be9735d40f47c176695a8c41ab45f1ccee08b",
+    "bytes": 2135
+  },
+  "desktop/data/templates/gantt-chart.tbm": {
+    "sha256": "7f579a09bc81c5c77d5538ff7fd487181e20217d5504523dc6a8cd3d9c79d524",
+    "bytes": 6328
+  },
+  "desktop/data/templates/gantt-task-rollup-chart.tbm": {
+    "sha256": "1776bc22c18cf994774bf6c812b10a90d342cb476353fae0b8922edc22f8cbef",
+    "bytes": 2352
+  },
+  "desktop/data/templates/gantt-timeline-chart.tbm": {
+    "sha256": "700770bc808e09cf62e73a5376aba273a1e9cbe6ab49ec6ca2b6e1ba60a2995f",
+    "bytes": 2522
+  },
+  "desktop/data/templates/insights__bar_chart.tbm": {
+    "sha256": "e99af3fd24c37cc086adcecd5b1a54ac7c3f90c7787c854787a462faad9dcf91",
+    "bytes": 3833
+  },
+  "desktop/data/templates/insights__kpi.tbm": {
+    "sha256": "2b5c9bb32435d133ec938fa12707f017e50999f68f3f5b91ed3c1c4157955115",
+    "bytes": 5832
+  },
+  "desktop/data/templates/insights__line_chart.tbm": {
+    "sha256": "2e223555446c9f940e3ac5f869114d42b3f2a25f5526e9f6af3188d2b19aaf71",
+    "bytes": 3394
+  },
+  "desktop/data/templates/kpi-text.tbm": {
+    "sha256": "92d678194d453b232d19cad175ebc19ce3935cf62d2657e429d282d5815035ba",
+    "bytes": 2526
+  },
+  "desktop/data/templates/magnitude-paired-bar.tbm": {
+    "sha256": "e326a470bbdbd13da21de2c57a9ce300e29e5389c8cf666a6ec024a6802f132e",
+    "bytes": 2220
+  },
+  "desktop/data/templates/magnitude-paired-column-chart.tbm": {
+    "sha256": "3730d01a636736403cfed4bcddc0a9db03f03c118758a5e123474ee39ae2ede0",
+    "bytes": 2968
+  },
+  "desktop/data/templates/magnitude-simple-bar.tbm": {
+    "sha256": "dfbe60000d487c567100a9afe4bca3e2b3795775abe401a59e867c63064cd60f",
+    "bytes": 2538
+  },
+  "desktop/data/templates/magnitude__bubble-pack__compare-part-sizes-without-axes.tbm": {
+    "sha256": "5517425c0758dd9317233423685940a32f7a674e5d2b343357c3a3f835b3b145",
+    "bytes": 270635
+  },
+  "desktop/data/templates/magnitude__column__compare-sizes-from-zero.tbm": {
+    "sha256": "9369a87b49a9cf8be3da2adbfbd45e2d626ff6719843249c294cda50e41b1bb0",
+    "bytes": 273216
+  },
+  "desktop/data/templates/magnitude__horizontal-bar__compare-discrete-categories-from-zero.tbm": {
+    "sha256": "0abb65613ed1e504b5eb644e90d85e7107713ec8a48c775c8d04480c32bb8cf7",
+    "bytes": 273600
+  },
+  "desktop/data/templates/magnitude__lollipop__emphasize-values-over-bar-ink.tbm": {
+    "sha256": "94aca3663743c3a706d57de3ca3562dbd03110eea30de024f40a2a1ec81c43c9",
+    "bytes": 272900
+  },
+  "desktop/data/templates/magnitude__paired-bar__compare-two-series-across-categories.tbm": {
+    "sha256": "c9bf8dfacfafb5cfd8b97320b33bf71fd2ce92070f7af41be5b4d34e92a26fa9",
+    "bytes": 272886
+  },
+  "desktop/data/templates/magnitude__paired-column__compare-two-series-across-categories.tbm": {
+    "sha256": "cf2f54988cd53d7310d4ef142e10dc8a12681329faed43965e432724282205c2",
+    "bytes": 272745
+  },
+  "desktop/data/templates/magnitude__parallel-coordinates__compare-entities-across-many-variables.tbm": {
+    "sha256": "0ab5e1ec63a351f0780533f9369eacfa04b003358ca75093db357587c0d404ed",
+    "bytes": 53549
+  },
+  "desktop/data/templates/magnitude__pictogram__count-with-repeated-icons-whole-numbers-only.tbm": {
+    "sha256": "fc01e2922745fba4c7cd30afb16aba7815e66ac2c646027f12a1a8fc42e739d5",
+    "bytes": 32029
+  },
+  "desktop/data/templates/magnitude__proportional-symbol__show-size-when-fine-differences-do-not-matter.tbm": {
+    "sha256": "4a1dd0499ee9b99d876be06a135a796f0a29c02e057cb51b329907de77369278",
+    "bytes": 60602
+  },
+  "desktop/data/templates/magnitude__radar__compare-many-variables-for-one-or-few-entities.tbm": {
+    "sha256": "bec17cdb77aacefa1af0e3c2c63e49a37e2e4be23337ae00903d5527504bd595",
+    "bytes": 48996
+  },
+  "desktop/data/templates/magnitude__radial-bar__show-circular-relative-bars-or-progress.tbm": {
+    "sha256": "1fc2c83abbd6abeaa4911b2847aad02c34f3c19fe22cd7468b5da8dcadb8b916",
+    "bytes": 34241
+  },
+  "desktop/data/templates/pareto-chart.tbm": {
+    "sha256": "0009484326f1fa0f62aad910cfd28852e6d8de51ecea4c933f78c3896591a418",
+    "bytes": 5567
+  },
+  "desktop/data/templates/part-to-whole-pie-chart.tbm": {
+    "sha256": "b41e7f1d994003d07d9ca6f91d6f16630a17008d96acbe92fa7293324d4396ef",
+    "bytes": 3141
+  },
+  "desktop/data/templates/part-to-whole-proportional-stacked-bar.tbm": {
+    "sha256": "5d53f5106e224f76da537f2b91269d61c1d824f085660a5491becbb952dae9c8",
+    "bytes": 3600
+  },
+  "desktop/data/templates/part-to-whole-stacked-bar-chart.tbm": {
+    "sha256": "87e4f48c72393923d5b16c74f9f77b7897ef4dec7344fc8a34a7fe9ff7797675",
+    "bytes": 2896
+  },
+  "desktop/data/templates/part-to-whole-treemap-chart.tbm": {
+    "sha256": "a8a7cc64668c218f4d2cc3ba9bf1b090bc3dd386966aab2b09fbd9346b24fc8c",
+    "bytes": 2441
+  },
+  "desktop/data/templates/part-to-whole-waterfall.tbm": {
+    "sha256": "0c8aed7b522756f1b0384094d3a686c13bacc54bbd0993191e0259528419603a",
+    "bytes": 5878
+  },
+  "desktop/data/templates/part-to-whole__arc__schematic-hierarchical-breakdown-use-sparingly.tbm": {
+    "sha256": "da7a49a05101131cddcd3ae58242536b774f1c5ff26cf996c748a65aa66514d7",
+    "bytes": 278656
+  },
+  "desktop/data/templates/part-to-whole__donut__show-parts-with-center-space-for-total.tbm": {
+    "sha256": "96065ab4ef6b127d43c6c96f27b398e898ad856a365596bb52b340be80eea59e",
+    "bytes": 274616
+  },
+  "desktop/data/templates/part-to-whole__funnel__show-stage-dropoff-through-a-process.tbm": {
+    "sha256": "47adb35a62391d4890e21336bebe8ce60f9a191a7a09b87f15a5fa1e4b9d335a",
+    "bytes": 18626
+  },
+  "desktop/data/templates/part-to-whole__marimekko__encode-share-with-both-width-and-height.tbm": {
+    "sha256": "c4a288391451e5c2bdb9b18cb0c3852d20bf279cd593dfb0265fdefd693a795c",
+    "bytes": 273415
+  },
+  "desktop/data/templates/part-to-whole__pie__simple-few-part-composition.tbm": {
+    "sha256": "f78c748fc79c4ce941d69ba2a4370b898aab5cc63f4e00da1eb8c8acb96d50b4",
+    "bytes": 270850
+  },
+  "desktop/data/templates/part-to-whole__polar-area__compare-parts-on-a-radial-axis.tbm": {
+    "sha256": "3fbfbbc75288dc4292de23ec87b7d12f1b72af736b2ef3ed0fb74c2f2da43cd8",
+    "bytes": 37687
+  },
+  "desktop/data/templates/part-to-whole__proportional-stacked-bar__show-size-and-share-together.tbm": {
+    "sha256": "8ef9cb182482510d35e931ad1e3055897ca0d7a48be4cc837ef24adfb1c6ab6a",
+    "bytes": 73862
+  },
+  "desktop/data/templates/part-to-whole__stacked-column__compare-composition-across-categories.tbm": {
+    "sha256": "43e4eaf89d9adf31be20a94bc7a2f1bcb66bf90c968c8d7f526536a46bab3bd0",
+    "bytes": 271176
+  },
+  "desktop/data/templates/part-to-whole__sunburst__show-nested-hierarchy-as-rings.tbm": {
+    "sha256": "b54f27eb06eace4a8e7bece2425230d10258242f21f9973e6f97135633822a05",
+    "bytes": 277750
+  },
+  "desktop/data/templates/part-to-whole__treemap__show-hierarchical-sizes-in-nested-rectangles.tbm": {
+    "sha256": "e5e5d6775e61ebddd2fed3ce694fd308ff327f81204dc08e4d4af8e32a6280a4",
+    "bytes": 270537
+  },
+  "desktop/data/templates/part-to-whole__unit-grid__show-percentages-as-filled-cells.tbm": {
+    "sha256": "b19d685524e543e8d9059022b6368e323074f1c888c1091846a9c953f12d27ef",
+    "bytes": 282927
+  },
+  "desktop/data/templates/part-to-whole__venn__schematic-overlap-between-sets.tbm": {
+    "sha256": "fa00953cc52e114c5f93f2bf1fcd97c14cc24eaec68726815e25695051044e79",
+    "bytes": 278593
+  },
+  "desktop/data/templates/part-to-whole__waterfall__bridge-start-to-end-with-plus-minus-steps.tbm": {
+    "sha256": "06fb5d7e92df2b9e316833419c4cdffe2567cd5f192dd0c3477f66934768bc3c",
+    "bytes": 21868
+  },
+  "desktop/data/templates/quota-attainment-bullet.tbm": {
+    "sha256": "35c8ad2affdff1cc328646dd8d4975fcc074bb1f93245a96b28a2d7171dbefbd",
+    "bytes": 2509
+  },
+  "desktop/data/templates/ranking-bump-chart.tbm": {
+    "sha256": "0c9dff2a374eebb5471bdac151c76003b7eed5f6360c5bd41bb8ae0d7f9af054",
+    "bytes": 8613
+  },
+  "desktop/data/templates/ranking-dot-strip-plot.tbm": {
+    "sha256": "b90326968bd8032cb1d4efd602e0812f4e5e3ca2ce0a159121af764cdd38d97d",
+    "bytes": 4381
+  },
+  "desktop/data/templates/ranking-ordered-bar.tbm": {
+    "sha256": "28b8e31db209defd0b390dfced9f18627b5aa95c76beef38537e67fb71dbe4e6",
+    "bytes": 2524
+  },
+  "desktop/data/templates/ranking-ordered-column.tbm": {
+    "sha256": "c3b7160b2e31994e42b0fe54b2ec4176191482067dcc42507f006ae522c778f8",
+    "bytes": 2546
+  },
+  "desktop/data/templates/ranking__bump__track-rank-changes-across-many-periods.tbm": {
+    "sha256": "7a14f97086632bfdc2c9d37d06fd46fda13366a2067ec24b5c91d47ee7d9cdeb",
+    "bytes": 277597
+  },
+  "desktop/data/templates/ranking__dot-strip__space-efficient-ranks-across-many-categories.tbm": {
+    "sha256": "7ffb45dca848f37cb53ef29c1e7b579d3ce265a5c98fe1518b6a93b7603c5338",
+    "bytes": 74892
+  },
+  "desktop/data/templates/ranking__lollipop__rank-and-highlight-values-with-less-ink.tbm": {
+    "sha256": "767be72515338ead326d9f3d8786b9edf0d29f05521f95eb7b763d4391d30ead",
+    "bytes": 273623
+  },
+  "desktop/data/templates/ranking__ordered-bar__show-order-when-rank-matters-more-than-value.tbm": {
+    "sha256": "bf043b0b6f99792e010ff6b28905e46d38367dbf3efa60425a347c490afc2f9b",
+    "bytes": 273527
+  },
+  "desktop/data/templates/ranking__ordered-column__show-order-when-rank-matters-more-than-value.tbm": {
+    "sha256": "be26565224d46a85f5bad347c8ed4245abf8d5cd795fe418800d1f05a11ad350",
+    "bytes": 273590
+  },
+  "desktop/data/templates/ranking__ordered-proportional-symbol__rank-with-large-value-spreads.tbm": {
+    "sha256": "fdf3cdef25ae8222f248bfcf7ced656f67eddd6dce1ad847112aa034af584545",
+    "bytes": 272034
+  },
+  "desktop/data/templates/ranking__slope-rank__show-rank-swaps-between-two-periods.tbm": {
+    "sha256": "68c41e202d0713546d23676911267effea82085ee9a395de9d662cf91cd19760",
+    "bytes": 279531
+  },
+  "desktop/data/templates/ranking__slope__compare-rank-or-value-change-between-two-points.tbm": {
+    "sha256": "9f767cadfc9f466fd2e5e6ac90998200123bedf5f30297ea81c951669c5e02b7",
+    "bytes": 278713
+  },
+  "desktop/data/templates/sankey-viz-extension.tbm": {
+    "sha256": "e8bdd0dd6c2285e4a7812a867a6f257c2d0e33931586b3475b584a749371d414",
+    "bytes": 18166
+  },
+  "desktop/data/templates/slope-chart.tbm": {
+    "sha256": "4f57a0a633188bade4e20c63590c891e990c7309ff63c14e57531b1f398e8081",
+    "bytes": 3623
+  },
+  "desktop/data/templates/spatial-choropleth-map.tbm": {
+    "sha256": "a022caea39565521e4b8c1b1dcd82753bd6fafb02b93e38489736e3186a31d6f",
+    "bytes": 5589
+  },
+  "desktop/data/templates/spatial-symbol-map-latlon.tbm": {
+    "sha256": "426961126af0ebd3ebc788bf977b6bae456d8ed4cedc30fab91094c01b9ecba3",
+    "bytes": 3671
+  },
+  "desktop/data/templates/spatial-symbol-map.tbm": {
+    "sha256": "63dbfb0bc41eeeee5da08b6e44e1947641d1b2020f287411b50ab5a28d0f07b3",
+    "bytes": 2730
+  },
+  "desktop/data/templates/spatial__cartogram__resize-regions-by-a-value.tbm": {
+    "sha256": "d2a6c72655fcb44c294a774072a902e5a906770926640ae3328b3bf2939d4ce5",
+    "bytes": 33935
+  },
+  "desktop/data/templates/spatial__choropleth__map-rates-or-ratios-by-region.tbm": {
+    "sha256": "8f245fc90169f7038d5b76b81056a6ace5d142ba85be341a8e4f559fa98a5e00",
+    "bytes": 274568
+  },
+  "desktop/data/templates/spatial__contour__show-equal-value-bands-across-geography.tbm": {
+    "sha256": "579ebef64ba7bbabf02262deb6dfaf3b0fa23a38557d391eeb91e5ab8542ba7c",
+    "bytes": 18522
+  },
+  "desktop/data/templates/spatial__density-map__show-intensity-hotspots-not-tied-to-admin-units.tbm": {
+    "sha256": "30d27f05b71317d40155690b395eaa3ada99b2f1494dc64bc0aa68719e5e1985",
+    "bytes": 43142
+  },
+  "desktop/data/templates/spatial__dot-density__plot-individual-locations-or-events.tbm": {
+    "sha256": "66eaa62089393e033a9345f1ae26e2ad45e43d14fe9f65e3e1bd7d9022066f7c",
+    "bytes": 43313
+  },
+  "desktop/data/templates/spatial__equalized-cartogram__give-each-region-equal-shape-weight.tbm": {
+    "sha256": "8cf5b9b413de7c25df0ad66af9c051f393a3c955f0bac4b7bf81d4def43a41ab",
+    "bytes": 22519
+  },
+  "desktop/data/templates/spatial__flow-map__show-movement-between-places.tbm": {
+    "sha256": "02d854ad8bf81929174e1af5fca380803440b7f2a244912b2782f0c2a7a20cea",
+    "bytes": 37351
+  },
+  "desktop/data/templates/spatial__grid-heatmap__map-intensity-on-a-grid-not-admin-boundaries.tbm": {
+    "sha256": "2f651e51f0d8a83b0335a4082112e365bedab0b502cd989b3e7b38279101a148",
+    "bytes": 14531
+  },
+  "desktop/data/templates/spatial__hexbin-map__aggregate-geography-into-equal-hex-cells.tbm": {
+    "sha256": "922cfd064c6a8bca390765edcb5181301534bef331b4228e7a4deb63873dcce1",
+    "bytes": 16794
+  },
+  "desktop/data/templates/spatial__proportional-symbol-map__map-totals-with-sized-marks-not-rates.tbm": {
+    "sha256": "2b58670253a03d3ca0243c4a921d43e63762ba45978c4c2027454dd8ddec768a",
+    "bytes": 56406
+  },
+  "desktop/data/templates/spatial__scaled-cartogram__distort-geography-so-area-encodes-value.tbm": {
+    "sha256": "c6865ea619fec2e9002d6a9752a26db9b1df292cd94f9d3b428629c0337577f3",
+    "bytes": 21773
+  },
+  "desktop/data/templates/spatial__spike-map__show-magnitude-at-locations-with-height.tbm": {
+    "sha256": "0d11f4e4d02f239e32df8b2d24d8d21582d78084adc227e9d4c9b9d8324105b5",
+    "bytes": 57495
+  },
+  "desktop/data/templates/spatial__symbol-map__place-sized-marks-at-coordinates.tbm": {
+    "sha256": "0cf05fe3a0bf74ea7f28bfadf793084f7c0421915ac31fcfd8861122dab93da4",
+    "bytes": 273978
+  },
+  "desktop/data/templates/trend-line-chart.tbm": {
+    "sha256": "583b07bd53d1d748e4c666909e4828d7b8d1c4e3e676defed4b725db18bc80d6",
+    "bytes": 2844
+  },
+  "desktop/data/templates/ww-floating-bars.tbm": {
+    "sha256": "84f6bc8dd08da082fe74beb5bbb660e252b73f841483a2c525867fdc4cb38519",
+    "bytes": 3971
+  },
+  "desktop/data/templates/ww-ou-arrow.tbm": {
+    "sha256": "dae3dee74ad14ab81a889e5dde20c137614e147d69a06309b30f2b5c638ede07",
+    "bytes": 20411
+  },
+  "desktop/data/templates/ww-ou-diff.tbm": {
+    "sha256": "a831d3228f137d9182008123fed389e11c9cfba17222a52a443eb90792dfd936",
+    "bytes": 17071
+  },
+  "desktop/data/twb-example-index.json": {
+    "sha256": "1d17348d9d8ad3bc1b42ba0a0d964e168e6495528cf60b9abcc55c902a8e6cfe",
+    "bytes": 941891
+  },
+  "desktop/data/twb_2026.2.0.xsd": {
+    "sha256": "ff330e7df790e1479c75fe364a610202aafa2d691872f77bc7c991aed0b3a733",
+    "bytes": 306943
+  },
+  "features.json": {
+    "sha256": "987b1f5732f4bfd91b613f5c947026c4a067500549099d18233a4baf08e85860",
+    "bytes": 24
+  },
+  "resources/desktop/dashboard-xml-guide.md": {
+    "sha256": "f353e704eaa581b6d8de27eadb8d4342a7c53f63137d391eb1653b56acfb3440",
+    "bytes": 9787
+  },
+  "resources/desktop/knowledge/_index.md": {
+    "sha256": "e101a62583b39290cc3ca3fce71a304b64fa5a6ec18f6241971d2ef8be23a317",
+    "bytes": 10317
+  },
+  "resources/desktop/knowledge/personalization/choosing-a-custom-viz-solution.md": {
+    "sha256": "36588485dcd99e0b702ad575fb120534c90b64e99f2361145e826f3fe1fea753",
+    "bytes": 9084
+  },
+  "resources/desktop/knowledge/personalization/discovery-first-authoring.md": {
+    "sha256": "5864491c2be39d9fe73a2df69fb51ae061fcba45c251c8e290fbd79bc620b7a3",
+    "bytes": 9166
+  },
+  "resources/desktop/knowledge/personalization/frame-the-question-before-building.md": {
+    "sha256": "da76e5fd38534171e2ecd6d9cd16d20da65365e9d640979f0fcce1febae44047",
+    "bytes": 15077
+  },
+  "resources/desktop/knowledge/personalization/validate-data-before-building.md": {
+    "sha256": "536761b3f95065b8dc19c4ba43ada3b5e2e50be228c6fc1fa83dff97241e00b2",
+    "bytes": 8632
+  },
+  "resources/desktop/knowledge/personalization/workbook-viz-templates.md": {
+    "sha256": "29b53f2057b5a29ae4331e8f0c50faa79ea749bbe6653f507dbeccb817f22149",
+    "bytes": 13261
+  },
+  "resources/desktop/knowledge/strategy/analytics/calc-authoring-best-practices.md": {
+    "sha256": "31b0eccbd61bef3e7f825ee712828c5e0922d54ae610ac9a551df7105add5957",
+    "bytes": 8218
+  },
+  "resources/desktop/knowledge/strategy/analytics/calc-fields-strategy.md": {
+    "sha256": "09cd1ced97650d235ed82ebfbff4d73a08811a528d3c9870651fc2e04990526a",
+    "bytes": 14863
+  },
+  "resources/desktop/knowledge/strategy/analytics/field-types-reference.md": {
+    "sha256": "ed528ff951c2f3de97f62ee94204a1b917f04b41afd05c2190f40da95619af13",
+    "bytes": 6533
+  },
+  "resources/desktop/knowledge/strategy/analytics/profitability-margin-definitions.md": {
+    "sha256": "0b5d4021f7b6859dd9f33b71ea72cc17dc0a66b2e838548960d4c04a4058823f",
+    "bytes": 6314
+  },
+  "resources/desktop/knowledge/strategy/analytics/sql-translation-strategy.md": {
+    "sha256": "8b01ccdf4534e82311222163facd00f81717d8b83a40d55d6e5ba83bebeca70a",
+    "bytes": 8469
+  },
+  "resources/desktop/knowledge/strategy/dashboard-design/audience-budget-and-question-priority.md": {
+    "sha256": "f457385c10e7c94e12c822b11fec592bff0db9fb332e50c3bb72693e12eb85ac",
+    "bytes": 11025
+  },
+  "resources/desktop/knowledge/strategy/dashboard-design/dashboard-archetypes.md": {
+    "sha256": "8907142f980db162dd76af0e2b1ef5b9e5427afb29a74241a55d036db5231bf7",
+    "bytes": 14770
+  },
+  "resources/desktop/knowledge/strategy/dashboard-design/dashboard-content-placement-strategy.md": {
+    "sha256": "68561da3fdbb62211b4b464e84624a6c125fb652d4fb9405d4d257e088b0e79f",
+    "bytes": 13024
+  },
+  "resources/desktop/knowledge/strategy/dashboard-design/dashboard-layout-and-actions.md": {
+    "sha256": "bdf2b4dd80ce4cf2f8ef4906b0ef78ac5cab13afe9975913a1a289ac3872f282",
+    "bytes": 12508
+  },
+  "resources/desktop/knowledge/strategy/dashboard-design/dashboard-layout-patterns.md": {
+    "sha256": "3129422c87f4ccdcb72a858467ad9263a9816a64451057fdc0989e8faa800e85",
+    "bytes": 10889
+  },
+  "resources/desktop/knowledge/strategy/dashboard-design/dashboard-overload.md": {
+    "sha256": "1d9cb567b1df39611c72767ed5aac80922e317c1360522b436389b04d0f181fd",
+    "bytes": 7494
+  },
+  "resources/desktop/knowledge/strategy/dashboard-design/dashboard-peer-review-checklist.md": {
+    "sha256": "0e32e848c0d93142642a601a57ef6fca7a074467dea285baeb39c18367cc984b",
+    "bytes": 10734
+  },
+  "resources/desktop/knowledge/strategy/dashboard-design/dashboard-template-anatomy.md": {
+    "sha256": "d12f0bae4907cd7a8f1a31f2a1f7c237f0708ac92ef64961e9c5ab0ea75d27ec",
+    "bytes": 8750
+  },
+  "resources/desktop/knowledge/strategy/dashboard-design/kpi-tile-construction.md": {
+    "sha256": "dd9a066d0fab2c61ec705fffe8fc10f5e9c4ffb3071af409e0c5363a1cce59b7",
+    "bytes": 6792
+  },
+  "resources/desktop/knowledge/strategy/dashboard-design/layout-patterns.md": {
+    "sha256": "24610d114aded352d4b9bc5ac2fe8c67821540cc9ca276391e0a37fe695f7741",
+    "bytes": 30728
+  },
+  "resources/desktop/knowledge/strategy/dashboard-design/operational-pipeline-dashboard-pattern.md": {
+    "sha256": "ebbd5ffdff2c9f10f52e85e3abb7af60e1f1dcf65d21f1c971274484c7acb667",
+    "bytes": 8401
+  },
+  "resources/desktop/knowledge/strategy/data-modeling/datasource-strategy.md": {
+    "sha256": "b5ac3c832de1f6021cc3ea6913f177e96228aaa533d2eca1963f3e9743976b90",
+    "bytes": 13685
+  },
+  "resources/desktop/knowledge/strategy/data-modeling/field-hygiene-and-naming.md": {
+    "sha256": "83ba548d386c8f3ac63ccf4c4c9dc8113191b7972d01a93c84d788e8f1eef04d",
+    "bytes": 10705
+  },
+  "resources/desktop/knowledge/strategy/data-modeling/workbook-anatomy.md": {
+    "sha256": "08bb59e13fb05abd7681d786ae627f3b2d1a747fbe58024645fdb83c170bc95d",
+    "bytes": 8054
+  },
+  "resources/desktop/knowledge/strategy/viz-design/advanced-chart-builds.md": {
+    "sha256": "f0164e846202f9b0db863d05bf4e0b063d12b0beafc4bdbaf552381b5e0697a3",
+    "bytes": 14252
+  },
+  "resources/desktop/knowledge/strategy/viz-design/chart-best-practices.md": {
+    "sha256": "6dc732ce9d8243a95f09f5aa8e2960cde95e7a5d2d5e57ec6de8d205ccca1408",
+    "bytes": 10258
+  },
+  "resources/desktop/knowledge/strategy/viz-design/chart-selection.md": {
+    "sha256": "ff4aaf5c396439c771573c9ce65047803c28cb53541303989d9e9ddd0e88713f",
+    "bytes": 32120
+  },
+  "resources/desktop/knowledge/strategy/viz-design/color-strategy.md": {
+    "sha256": "96d197c102ce838095c1906e34c920e38f2332e5b8a8495c972944551063f4a0",
+    "bytes": 17269
+  },
+  "resources/desktop/knowledge/strategy/viz-design/design-principles.md": {
+    "sha256": "8c2074a29ab9bccd158af245203ae429503bbd7025607741a9c6f6d8f2bea623",
+    "bytes": 12145
+  },
+  "resources/desktop/knowledge/strategy/viz-design/discrete-groups-vs-gradient.md": {
+    "sha256": "5c58593f54264a24c9dc0806b4137208c81ebc4fc437d1dd7d22c3e074534619",
+    "bytes": 6260
+  },
+  "resources/desktop/knowledge/strategy/viz-design/encoding-strategy.md": {
+    "sha256": "e1ac118bca2077d6d43d2bf05ee677630d0ff3a5743af7f1b3600f824bb580f9",
+    "bytes": 12822
+  },
+  "resources/desktop/knowledge/strategy/viz-design/filter-strategy.md": {
+    "sha256": "fc1a8a20badd02d55d3f2417c61b35f153e033fbed2c7a9d07dd8813ba774edf",
+    "bytes": 9734
+  },
+  "resources/desktop/knowledge/strategy/viz-design/flow-and-sankey.md": {
+    "sha256": "9a54083c09dd91e1dc6b3d109334818ce4b228f105a8496da165a00eb46249f3",
+    "bytes": 9710
+  },
+  "resources/desktop/knowledge/strategy/viz-design/overlaid-and-stacked-pie-readability.md": {
+    "sha256": "78f68f08c8188dcefbb7023e707418ea2231af6e09e21e5e5248d317a68aa61d",
+    "bytes": 6915
+  },
+  "resources/desktop/knowledge/strategy/viz-design/storytelling.md": {
+    "sha256": "fe9b08b7c806a9ea66e8736faa057d285752851da2d14c005a3c3248d6dedd73",
+    "bytes": 9867
+  },
+  "resources/desktop/knowledge/strategy/viz-design/typography-and-polish.md": {
+    "sha256": "3b48043af7c3d7efeae80944a19a9595a7a24d45a256ce0b6616e45d979a66b1",
+    "bytes": 21994
+  },
+  "resources/desktop/knowledge/strategy/viz-design/viz-evaluation-framework.md": {
+    "sha256": "2bd45569d03bd6cf636e01efc4f3f5aa936e08f7ccc8220bdc92265c4510c569",
+    "bytes": 11938
+  },
+  "resources/desktop/knowledge/strategy/viz-design/worksheet-strategy.md": {
+    "sha256": "bf7fce089022924ff42bea098eb95a4544c6f650387d5318c3988a60c04b1167",
+    "bytes": 9732
+  },
+  "resources/desktop/knowledge/strategy/workflow/automation-tool-selection.md": {
+    "sha256": "d75c1099c0f3299d715939a95520362361cf1f7bd149e1d12048776f622edc98",
+    "bytes": 9433
+  },
+  "resources/desktop/knowledge/strategy/workflow/diagnostic-view-loop.md": {
+    "sha256": "af7993d24bc2b6e029cb842d4eeab106632827057b9aa9a99d71ffc0ffc057a3",
+    "bytes": 8986
+  },
+  "resources/desktop/knowledge/strategy/workflow/interim-report-pattern.md": {
+    "sha256": "4017f0cdcf14096b546738af8df7929835c8c8073572e0f6efc91ffd8acbc65b",
+    "bytes": 12183
+  },
+  "resources/desktop/knowledge/strategy/workflow/scoped-data-not-a-refusal.md": {
+    "sha256": "3ce09ddb0472a959ad30f68cc0d7d8a95e50a882124c62af8ea6f97e85463b1d",
+    "bytes": 4332
+  },
+  "resources/desktop/knowledge/strategy/workflow/troubleshooting-workbooks.md": {
+    "sha256": "71a80252f445458a21f54fc4bd475a1a0015f278c386e2d18bed6249271ea7c6",
+    "bytes": 12240
+  },
+  "resources/desktop/knowledge/tactics/dashboard/dashboard-layout-structure.md": {
+    "sha256": "d8c1877db05a065798fdd48a46ba23b34ab62b88afb26c2a2e810f60084db313",
+    "bytes": 10598
+  },
+  "resources/desktop/knowledge/tactics/dashboard/parameter-actions.md": {
+    "sha256": "fd0628a835fe7a2b715f966b7439e0e85434532bc324c5612d66419079d0c941",
+    "bytes": 9023
+  },
+  "resources/desktop/knowledge/tactics/dashboard/parameter-driven-views.md": {
+    "sha256": "f8029d38ce307686a9b842316c3952a2ba95d03d4c23d73c72ae2990afbab48e",
+    "bytes": 6717
+  },
+  "resources/desktop/knowledge/tactics/dashboard/zones.md": {
+    "sha256": "a26686b2a06d2bc0e521867dd25a6620af0afc96beabc7eb39a294f5a1c358ec",
+    "bytes": 27500
+  },
+  "resources/desktop/knowledge/tactics/data/aggregate-ratio-window-total-semantics.md": {
+    "sha256": "ba947c066c4956dc37c092371993e43be927de98f5371e11603b090f75b1281f",
+    "bytes": 7837
+  },
+  "resources/desktop/knowledge/tactics/data/blend-filter-propagation.md": {
+    "sha256": "2d4c2262ede5bbe5f7e9d6fc492d3fe39e9f34f481623305f7a4f739b620ab0a",
+    "bytes": 8010
+  },
+  "resources/desktop/knowledge/tactics/data/calc-caption-follows-formula-rebind.md": {
+    "sha256": "b596aa874b649a26cd30531d9b6f04dc4382e15f515e0ddbc19b5ae416b01c31",
+    "bytes": 8038
+  },
+  "resources/desktop/knowledge/tactics/data/calc-fields.md": {
+    "sha256": "0dfa03dbc46969810a8379a48376a10c97ef14ebc1628df8f2939e6826f40158",
+    "bytes": 33543
+  },
+  "resources/desktop/knowledge/tactics/data/calc-formula-shadowed-by-stale-datasource-calc.md": {
+    "sha256": "8d1994bc6ee3a9d8090f7fe1f3ff548c0ec5f9fb994b67331854d1092c286828",
+    "bytes": 7668
+  },
+  "resources/desktop/knowledge/tactics/data/calc-function-reference.md": {
+    "sha256": "fa719af44d735d7481e5d63b082d93b02384dff3cc4b68f5cec4c9d770b82b7a",
+    "bytes": 8490
+  },
+  "resources/desktop/knowledge/tactics/data/calc-name-collides-with-field.md": {
+    "sha256": "bdd66df5a8799af9b3507e593b8494b3016e815922b23e07f98709cdd04f2355",
+    "bytes": 5156
+  },
+  "resources/desktop/knowledge/tactics/data/calc-null-and-evaluation-semantics.md": {
+    "sha256": "fdc1c57d64ec6b73fb8010f941e4adacd56a99cfdcd2ec006d040f624376e4f8",
+    "bytes": 5710
+  },
+  "resources/desktop/knowledge/tactics/data/connection-schema-override-limits.md": {
+    "sha256": "8b491fa1efb9645b303ae63f07b4b53cf42eb16669814c6952ae15c96f468962",
+    "bytes": 9377
+  },
+  "resources/desktop/knowledge/tactics/data/dashboard-performance-efficient-workbooks.md": {
+    "sha256": "31b4b0f4d1ea56a8904d0115505259a04f45f8662333bbcbc215e75f79870e40",
+    "bytes": 17534
+  },
+  "resources/desktop/knowledge/tactics/data/datasources.md": {
+    "sha256": "8ac3b3c5a7a5077040b5c3db62a9c16262c7af387e9ecbc99596febaec4d1ef5",
+    "bytes": 30570
+  },
+  "resources/desktop/knowledge/tactics/data/dialog-command-misclassification.md": {
+    "sha256": "66830feee96ad8adc0e3965a725ba094c9c1044359e0b8aad1036d4d2bab794c",
+    "bytes": 5778
+  },
+  "resources/desktop/knowledge/tactics/data/dynamic-dashboard-authoring.md": {
+    "sha256": "f12dde3cbd795eee67b79a172c40c68cdcd05f56fca1a8b0182b0cabe1e2cbb6",
+    "bytes": 9415
+  },
+  "resources/desktop/knowledge/tactics/data/lod-across-relationships-and-conditional-aggregation.md": {
+    "sha256": "40e1cfdcead6bfd87131ef95642d017fa4f84ca691ea3f460ec06771976a5e13",
+    "bytes": 9045
+  },
+  "resources/desktop/knowledge/tactics/data/lod-and-table-calc-patterns.md": {
+    "sha256": "291b24e4c4188f79b3058a4e23e875571106425afda1341dd1b242dec4a0cd45",
+    "bytes": 20486
+  },
+  "resources/desktop/knowledge/tactics/data/lod-membership-tier-calc.md": {
+    "sha256": "a066469677676e1a68179e5d1c837e26207703d2f7f4b0dff342158040186e43",
+    "bytes": 11283
+  },
+  "resources/desktop/knowledge/tactics/data/parameters-and-scenario-bands.md": {
+    "sha256": "e54f852129f149f1ff5db51c051fc1dd7cf89397435c038274ac63a91bb24b93",
+    "bytes": 12861
+  },
+  "resources/desktop/knowledge/tactics/data/parse-number-from-compound-string.md": {
+    "sha256": "e9f8a6be0f000373166d494f222e327c72d41a2d06d21e46af1fe456ddc2a6b3",
+    "bytes": 4418
+  },
+  "resources/desktop/knowledge/tactics/data/period-over-period-calcs.md": {
+    "sha256": "cca4b08a67fec51f329f992217d0411e71bf54c85fbd3310ad190434ddf1b810",
+    "bytes": 7343
+  },
+  "resources/desktop/knowledge/tactics/data/rolling-period-and-prior-value-table-calcs.md": {
+    "sha256": "da8d413fd0c8b5b9152c706f45adb96f9fcd00f093b2b797cabd65a1eb101e5e",
+    "bytes": 9235
+  },
+  "resources/desktop/knowledge/tactics/data/round-trip-normalization.md": {
+    "sha256": "0eb316e261a2873c2a414dbfb4238e551bd7c6dcea3e3376cdd9e74a01883bb6",
+    "bytes": 13347
+  },
+  "resources/desktop/knowledge/tactics/data/set-action-drilldown.md": {
+    "sha256": "0c385147bbb73681e0496b17c6168f3d1b3eb19b0bff94a0d28c621c958242ad",
+    "bytes": 8230
+  },
+  "resources/desktop/knowledge/tactics/data/sets-usage-and-creation.md": {
+    "sha256": "4f9b799462c81c5fd201a01ca0330bf80fca0b1a13ad3722121278173f2d3bbf",
+    "bytes": 21048
+  },
+  "resources/desktop/knowledge/tactics/data/sql-translation.md": {
+    "sha256": "c0c747708234db578b20634c08d460df074e68c33dd16ad02200e9efa306f3de",
+    "bytes": 12258
+  },
+  "resources/desktop/knowledge/tactics/data/table-calcs.md": {
+    "sha256": "b62b4200f91490f945a2741319a4832e6364db28107fe3f288c5dcdd98342dcd",
+    "bytes": 16857
+  },
+  "resources/desktop/knowledge/tactics/data/tableau-date-handling.md": {
+    "sha256": "ef8e50253174219c032e6b5d9563a678c2de234ef059b581f2b295020ddce145",
+    "bytes": 10805
+  },
+  "resources/desktop/knowledge/tactics/data/year-over-year-date-filter-calc.md": {
+    "sha256": "589d828bfe9954cbfbd2416fa38a82e30fe73c5b1a472a8bf6d16bb88aa6b154",
+    "bytes": 7788
+  },
+  "resources/desktop/knowledge/tactics/governance/.gitkeep": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "resources/desktop/knowledge/tactics/governance/hidden-filter-not-security.md": {
+    "sha256": "b5d37786dea843a0ef3ff50c868005f1c579b371d861b58c1931aac63ac7a072",
+    "bytes": 6019
+  },
+  "resources/desktop/knowledge/tactics/governance/pii-and-fair-lending-exclusions.md": {
+    "sha256": "403a1c3195df7c0318bb668064e030fd985dfd3441c9a5284774395597c9e284",
+    "bytes": 7406
+  },
+  "resources/desktop/knowledge/tactics/tree/column-instance-prefixes.md": {
+    "sha256": "53b0fa3010bde4b2d365b8c5f4015691268155d07035dc82817512d8c18e1388",
+    "bytes": 11454
+  },
+  "resources/desktop/knowledge/tactics/tree/enums.md": {
+    "sha256": "16316d2709565bbea4ddbefc32191970e2b9895df4e63fe6457d5efab08956ad",
+    "bytes": 2660
+  },
+  "resources/desktop/knowledge/tactics/tree/twb-authoring-form.md": {
+    "sha256": "910efa72513735257711ad50f9221e6f7d1beab2313fbed031f4d7ac56982b8b",
+    "bytes": 16362
+  },
+  "resources/desktop/knowledge/tactics/tree/twb-xml-grammar.md": {
+    "sha256": "fedad3d8352c9012b312e46d326240b83bf8a6dc8a89fa29deae51be091c50db",
+    "bytes": 12230
+  },
+  "resources/desktop/knowledge/tactics/tree/workbook-structure.md": {
+    "sha256": "8b0ddb0ef1dbc57b3dac69852843fb7be1187e65a676eed3a0ca9d1506408331",
+    "bytes": 16028
+  },
+  "resources/desktop/knowledge/tactics/viz/analytics-pane-reference.md": {
+    "sha256": "d1a79bb49a2a7ae21d1fc6984ee4a4d63f9b2022c4ba4b3fc377dcdf49254fb9",
+    "bytes": 11785
+  },
+  "resources/desktop/knowledge/tactics/viz/building-viz-extensions.md": {
+    "sha256": "a26e8e77610a0cfeaf3767dc0723997f6cfdbdb294fb1a3544199ab9b92311f1",
+    "bytes": 12342
+  },
+  "resources/desktop/knowledge/tactics/viz/cross-sheet-filter-authoring.md": {
+    "sha256": "a2dc23d0e79a7f5eacbaa92fdf19ef735442b81cde1dd6013daf77146a8d7be9",
+    "bytes": 8818
+  },
+  "resources/desktop/knowledge/tactics/viz/encoding-inference-patterns.md": {
+    "sha256": "2858419daea28ab5115bf272d5403d892b0bde2b683b33e733fe27827ea8a773",
+    "bytes": 7893
+  },
+  "resources/desktop/knowledge/tactics/viz/extension-vibe-coding-workflow.md": {
+    "sha256": "103098e4d7ff11984c6bbbe0bc969f7ad35340591d9400d3d767fabd3c6dfb4d",
+    "bytes": 13369
+  },
+  "resources/desktop/knowledge/tactics/viz/filters.md": {
+    "sha256": "cca32f9b93eb9eb9597e419aae2b60308b27efc26ec69695975a3033919c5f1f",
+    "bytes": 20592
+  },
+  "resources/desktop/knowledge/tactics/viz/mark-type-signatures.md": {
+    "sha256": "4ec8a64ea3f1a77d03ed9bf32207c94cc26378a228187bdfbcc3f508e665f455",
+    "bytes": 9182
+  },
+  "resources/desktop/knowledge/tactics/viz/marks-and-encodings.md": {
+    "sha256": "acb2ab8034872ce8c02e0c5b218efa4ac8010af5631f616f15aef5215ab1d9d8",
+    "bytes": 33029
+  },
+  "resources/desktop/knowledge/tactics/viz/pane-structure.md": {
+    "sha256": "5fb59ecc57a68a067ae06c0ecef9c98da987e77a9e301e137dad08e3d8f512db",
+    "bytes": 10817
+  },
+  "resources/desktop/knowledge/tactics/viz/tooltip.md": {
+    "sha256": "b05a313a4d85edb4a72bedf3bf181ed39a9ede50fba705e88652fc3dfe1a7a1b",
+    "bytes": 3953
+  },
+  "resources/desktop/knowledge/tactics/viz/tpkg-bundle-anatomy.md": {
+    "sha256": "8e0fcb6d57cfce5204c83a071a47046af64f6f21fef3e5ca10d3b02a14711b30",
+    "bytes": 11736
+  },
+  "resources/desktop/knowledge/tactics/viz/workbook-date-yoy-comparison.md": {
+    "sha256": "ecf3dbee4b414a63fa4d274246e1655d86d503af70416fd60b58820f098f2750",
+    "bytes": 9466
+  },
+  "resources/desktop/knowledge/tactics/viz/worksheets.md": {
+    "sha256": "31f1579bc61e93442a957896c10690e1a4a89a30d77e5b536e6b7afdab2e32d2",
+    "bytes": 20880
+  },
+  "resources/desktop/knowledge/tactics/workflow/errors-as-modals.md": {
+    "sha256": "5dc7553c33d2315e530512ea615d37b264da0e85e2b11c95d15618f80b8e0464",
+    "bytes": 7860
+  },
+  "resources/desktop/knowledge/tactics/workflow/execute-command-crash-risk.md": {
+    "sha256": "64396a91a0a6840a49a0c78e0eb861e38bc64675edd3ea40f130ee57e0a97844",
+    "bytes": 2261
+  },
+  "resources/desktop/knowledge/tactics/workflow/export-dashboard-image.md": {
+    "sha256": "70186be768496c83e5e1cbcd1ac071982feed2f60c3c20b04b58fafa47294bde",
+    "bytes": 4873
+  },
+  "resources/desktop/knowledge/tactics/workflow/export-worksheet-image-full-canvas.md": {
+    "sha256": "3756defe1ab22d568ea252535b64dacc7a46fc64521fbbbe42a896be9a1b5510",
+    "bytes": 5015
+  },
+  "resources/desktop/knowledge/tactics/workflow/failure-recovery-honesty.md": {
+    "sha256": "be3b1ad55390993ca48938a590c74ecdb7c0559a313d60e243bb2fe6e8db1ffc",
+    "bytes": 8446
+  },
+  "resources/desktop/knowledge/tactics/workflow/python-helpers.md": {
+    "sha256": "766eeb86415c4646010589e14e692211bf54c7301b114df2280a3e1031ce7fc6",
+    "bytes": 17611
+  },
+  "resources/desktop/knowledge/tactics/workflow/recovery.md": {
+    "sha256": "ab8cf7a7a8b93bf7599ad38f38fe40cc5eebc609ea6cf763b670a423dbd32ac7",
+    "bytes": 10695
+  },
+  "resources/desktop/knowledge/tactics/workflow/tableau-vocabulary.md": {
+    "sha256": "adf9dce9c4ae5e92a183cf62ff1e3e202c76353657994dd4e6d547c2291e05ba",
+    "bytes": 4819
+  },
+  "resources/desktop/knowledge/tactics/workflow/templates.md": {
+    "sha256": "4a7cfed302a6467cf5bc276e45660d9a93e59bf3f4baf2eef0637a6ba26632d7",
+    "bytes": 3079
+  },
+  "resources/desktop/knowledge/tactics/workflow/ui-translation-bulk-text-edit.md": {
+    "sha256": "343077bec103ed2082414848eb1c43f55b91f12939d68a48e3d02e6911dd3373",
+    "bytes": 8862
+  }
+}

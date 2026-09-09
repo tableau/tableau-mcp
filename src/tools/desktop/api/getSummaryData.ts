@@ -5,8 +5,10 @@ import { z } from 'zod';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { deprecatedArtifactAliasParam, resolveArtifactNameArg } from '../params.js';
-import { jsonToolResult } from '../structuredContent.js';
+import { jsonToolResult, withUtterance } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
+import { RESULT_TABLE_TOOL_META, utteranceToolMetaToWire } from '../utterance.js';
+import { summaryDataUtterance } from '../utteranceMark.js';
 import { fetchWorksheetSummaryData, type SummaryRowOrder } from './summaryDataCore.js';
 
 const DEFAULT_MAX_ROWS = 200;
@@ -46,6 +48,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
       idempotentHint: true,
       openWorldHint: false,
     },
+    meta: { utterance: utteranceToolMetaToWire(RESULT_TABLE_TOOL_META) },
     callback: async (
       { session, worksheetName, worksheet, maxRows, columns },
       extra,
@@ -90,7 +93,18 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
             },
           });
         },
-        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
+        getSuccessResult: (result) =>
+          jsonToolResult(
+            withUtterance(
+              result,
+              summaryDataUtterance({
+                caption: result.worksheet.name,
+                columns: result.summaryData.columns,
+                rows: result.summaryData.rows,
+              }),
+            ),
+            { isError: false },
+          ),
       });
     },
   });

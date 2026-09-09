@@ -5,6 +5,13 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import {
+  ASK_TOOL_META,
+  utteranceToolMetaFromWire,
+  utteranceToolMetaToWire,
+  utteranceToWire,
+} from '../utterance.js';
+import { askUtteranceFromInput } from '../utteranceMark.js';
 import { getAskUserTool } from './askUser.js';
 
 describe('askUserTool', () => {
@@ -24,28 +31,40 @@ describe('askUserTool', () => {
       idempotentHint: true,
       openWorldHint: false,
     });
+    expect(tool.meta).toEqual({ utterance: utteranceToolMetaToWire(ASK_TOOL_META) });
+    expect(utteranceToolMetaFromWire(tool.meta!.utterance).defaultKind).not.toBe('answer');
   });
 
-  it('defaults to blocking urgency', async () => {
-    const text = await getToolText({ question: 'Which Sales field should I use?' });
-    expect(text).toBe('[BLOCKING] Which Sales field should I use?');
+  it('marks a blocking ask on the input rather than flattening markdown', async () => {
+    const question = 'Which Sales field should I use?';
+    const result = await getToolResult({ question });
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(toolText(result))).toEqual({ question, urgency: 'blocking' });
+    expect(utteranceOf(result)).toEqual(
+      utteranceToWire(askUtteranceFromInput({ question, urgency: 'blocking' })),
+    );
   });
 
-  it('renders soft urgency', async () => {
-    const text = await getToolText({
-      question: 'Should I use monthly grain?',
-      urgency: 'soft',
+  it('marks a soft ask as a proposal', async () => {
+    const question = 'Should I use monthly grain?';
+    const result = await getToolResult({ question, urgency: 'soft' });
+    expect(utteranceOf(result)).toEqual(
+      utteranceToWire(askUtteranceFromInput({ question, urgency: 'soft' })),
+    );
+  });
+
+  it('puts options on the ask body instead of a numbered list', async () => {
+    const question = 'Which field should I use?';
+    const options = ['Sales', 'Profit', 'Revenue'];
+    const result = await getToolResult({ question, options });
+    expect(JSON.parse(toolText(result))).toEqual({
+      question,
+      urgency: 'blocking',
+      options,
     });
-    expect(text).toBe('[SOFT] Should I use monthly grain?');
-  });
-
-  it('renders options as a numbered list', async () => {
-    const text = await getToolText({
-      question: 'Which field should I use?',
-      options: ['Sales', 'Profit', 'Revenue'],
-    });
-    expect(text).toBe(
-      '[BLOCKING] Which field should I use?\n\nOptions:\n1. Sales\n2. Profit\n3. Revenue',
+    expect(toolText(result)).not.toContain('1. Sales');
+    expect(utteranceOf(result)).toEqual(
+      utteranceToWire(askUtteranceFromInput({ question, urgency: 'blocking', options })),
     );
   });
 
@@ -58,13 +77,11 @@ describe('askUserTool', () => {
   });
 });
 
-async function getToolText(args: {
-  question: string;
-  urgency?: 'blocking' | 'soft';
-  options?: string[];
-}): Promise<string> {
-  const result = await getToolResult(args);
-  expect(result.isError).toBe(false);
+function utteranceOf(result: CallToolResult): unknown {
+  return (result.structuredContent as { utterance?: unknown } | undefined)?.utterance;
+}
+
+function toolText(result: CallToolResult): string {
   invariant(result.content[0].type === 'text');
   return result.content[0].text;
 }
