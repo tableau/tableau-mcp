@@ -18,10 +18,6 @@ const paramsSchema = {
   flowRunId: z.string().nonempty(),
 };
 
-/**
- * Wrapped result: an `mcp.cancelStatus` note so the model reports the request as
- * *requested* (asynchronous) rather than claiming a guaranteed final state.
- */
 export type CancelFlowRunResult = {
   mcp: {
     cancelStatus: string;
@@ -33,8 +29,7 @@ export const getCancelFlowRunTool = (server: WebMcpServer): WebTool<typeof param
   const cancelFlowRunTool = new WebTool({
     server,
     name: 'cancel-flow-run',
-    // Write tools require the base flow tool gate as well as their own
-    // explicit opt-in, so write cannot be enabled without read-only flow tools.
+    // Requires the base flow gate, write opt-in, and flow-tools feature flag.
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled ||
@@ -54,7 +49,7 @@ export const getCancelFlowRunTool = (server: WebMcpServer): WebTool<typeof param
   **Parameters:**
   - \`flowRunId\` (required) – The id of the flow run to cancel.
 
-  **Response:** \`{ mcp: { cancelStatus } }\`. Report the cancel as *requested*, then confirm the final state with \`list-flow-runs\` (filter \`flowId:eq:<id>\`) or \`get-flow\`.
+  **Response:** \`{ mcp: { cancelStatus } }\`. Report the cancel as *requested*. Use \`list-flow-runs\` to confirm the final status; retain the associated flow id when narrowing the query.
 
   **Requirements & limits:**
   - **Caller-role:** in addition to site/server administrators, you can cancel a flow run only if you **initiated the run** (or created its scheduled task) **and** have Run Flow permission on the flow. Non-permitted callers get a clear permission error.
@@ -66,13 +61,8 @@ export const getCancelFlowRunTool = (server: WebMcpServer): WebTool<typeof param
     annotations: {
       title: 'Cancel Flow Run',
       readOnlyHint: false,
-      // Cancelling does not delete the flow, its schedule, or its definition,
-      // but a cancellation request during final output writes can still leave
-      // those writes applied, so we flag it as destructive to be honest with
-      // clients.
+      // Cancellation can leave final output writes applied.
       destructiveHint: true,
-      // Not idempotent: cancelling an already-finished run returns a distinct
-      // "already complete" error rather than silently succeeding.
       idempotentHint: false,
       openWorldHint: false,
     },
@@ -89,10 +79,7 @@ export const getCancelFlowRunTool = (server: WebMcpServer): WebTool<typeof param
             }).toErr();
           }
 
-          // Fail closed under a bounded context. A flow run is addressed only by
-          // run id and carries no project or tag, so (exactly like
-          // run-flow-task) we cannot prove the underlying flow belongs to the
-          // allowed set. Refuse rather than risk cancelling a run outside scope.
+          // A flow run has no project/tag, so bounded contexts cannot prove it is in scope.
           const { boundedContext } = await extra.getConfigWithOverrides();
           if (boundedContext.projectIds || boundedContext.tags) {
             return new McpToolError({

@@ -57,11 +57,7 @@ export const getGetFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
         extra,
         args: { taskId },
         callback: async () => {
-          // Fail closed under a PROJECT_IDS / TAGS bounded context (mirrors
-          // list-flow-tasks): a flow run task has no project or tag and is
-          // addressed only by task id, so we cannot prove the underlying flow
-          // belongs to the allowed set. Refuse rather than risk leaking a
-          // schedule for a flow outside the allow-list.
+          // A flow run task has no project/tag, so bounded contexts cannot prove it is in scope.
           const { boundedContext } = await extra.getConfigWithOverrides();
           if (boundedContext.projectIds || boundedContext.tags) {
             return new McpToolError({

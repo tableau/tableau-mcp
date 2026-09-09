@@ -15,7 +15,6 @@ export function getHttpStatus(error: Error): string {
   if (error instanceof McpToolError) {
     return String(error.statusCode);
   }
-  // Tableau error returned inside a 2xx body (status derived from the code).
   if (error instanceof TableauRestError) {
     return error.statusCode;
   }

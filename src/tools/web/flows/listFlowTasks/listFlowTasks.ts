@@ -131,9 +131,7 @@ export const getListFlowTasksTool = (server: WebMcpServer): WebTool<typeof param
         callback: async () => {
           const configWithOverrides = await extra.getConfigWithOverrides();
 
-          // Validate the filter string inside logAndExecute so malformed filters
-          // return a friendly MCP tool error instead of throwing past the tool
-          // harness.
+          // Return malformed filters as MCP errors.
           if (args.filter) {
             try {
               parseAndValidateFlowTasksFilterString(args.filter);

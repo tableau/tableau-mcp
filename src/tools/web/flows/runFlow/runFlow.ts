@@ -33,10 +33,6 @@ const paramsSchema = {
     .optional(),
 };
 
-/**
- * Wrapped result: the async `job` Tableau enqueued, plus an `mcp.runStatus`
- * note so the model never reports the run as finished.
- */
 export type RunFlowResult = {
   job: RunFlowJob;
   mcp: {
@@ -49,10 +45,7 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   const runFlowTool = new WebTool({
     server,
     name: 'run-flow',
-    // First-class content mutation: opt-in via FLOW_WRITE_TOOLS_ENABLED.
-    // Write tools are only available when the base flow tool gate is on too.
-    // This prevents the invalid "read-only flow tools off, write tools on"
-    // configuration from exposing state-changing operations by themselves.
+    // Requires the base flow gate, write opt-in, and flow-tools feature flag.
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled ||
@@ -84,9 +77,7 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     annotations: {
       title: 'Run Flow',
       readOnlyHint: false,
-      // A run overwrites the flow's configured outputs, so clients should treat
-      // it as destructive even though it does not alter the flow definition or
-      // its schedule.
+      // A run can overwrite configured outputs.
       destructiveHint: true,
       idempotentHint: false,
       openWorldHint: false,
@@ -97,9 +88,7 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     ): Promise<CallToolResult> => {
       return await runFlowTool.logAndExecute<RunFlowResult>({
         extra,
-        // Keep free-form flow parameter values out of debug logs and MCP
-        // invocation notifications. The callback below still closes over and
-        // sends the original values to Tableau.
+        // Redact free-form parameter values from logs; send the originals to Tableau.
         args: {
           flowId,
           runMode,
@@ -118,10 +107,7 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
             }).toErr();
           }
 
-          // Bounded-context gate (mirrors get-flow): when the instance is
-          // restricted via PROJECT_IDS / TAGS, refuse to run a flow outside the
-          // allowed set BEFORE enqueuing anything. Running a flow we cannot
-          // prove is in-scope is strictly worse than merely listing it.
+          // Verify the target before mutating under a bounded context.
           const isFlowAllowedResult = await resourceAccessChecker.isFlowAllowed({
             flowId,
             extra,

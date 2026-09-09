@@ -28,8 +28,7 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
   const runFlowTaskTool = new WebTool({
     server,
     name: 'run-flow-task',
-    // Write tools require the base flow tool gate as well as their own
-    // explicit opt-in, so write cannot be enabled without read-only flow tools.
+    // Requires the base flow gate, write opt-in, and flow-tools feature flag.
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled ||
@@ -58,8 +57,7 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
     annotations: {
       title: 'Run Flow Task',
       readOnlyHint: false,
-      // Running the task overwrites the flow's configured outputs, so clients
-      // should treat this state-changing operation as destructive.
+      // Running a task can overwrite configured outputs.
       destructiveHint: true,
       idempotentHint: false,
       openWorldHint: false,
@@ -69,10 +67,7 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
         extra,
         args: { taskId },
         callback: async () => {
-          // Fail closed under a bounded context. A flow run task has no project
-          // or tag and is addressed only by task id, so (exactly like
-          // list-flow-tasks) we cannot prove the underlying flow belongs to the
-          // allowed set. Refuse rather than risk running a flow outside scope.
+          // A flow run task has no project/tag, so bounded contexts cannot prove it is in scope.
           const { boundedContext } = await extra.getConfigWithOverrides();
           if (boundedContext.projectIds || boundedContext.tags) {
             return new McpToolError({

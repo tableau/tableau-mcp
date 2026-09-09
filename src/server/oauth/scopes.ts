@@ -237,30 +237,20 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
   },
-  // Read a single flow run task by id (not gated by FLOW_WRITE_TOOLS_ENABLED).
   'get-flow-task': {
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
   },
-  // Mutating flow tools (gated by FLOW_WRITE_TOOLS_ENABLED). `flows:read` is
-  // included alongside the write scope so the bounded-context flow check
-  // (resourceAccessChecker.isFlowAllowed) can fetch the flow when a PROJECT_IDS
-  // / TAGS context is active.
   'run-flow': {
+    // Needed for resourceAccessChecker.isFlowAllowed under bounded contexts.
     mcp: ['tableau:mcp:flow:run'],
     api: new Set(['tableau:flows:run', 'tableau:flows:read', 'tableau:mcp_site_settings:read']),
   },
   'run-flow-task': {
-    // Task-id only — no flow fetch, so no flows:read. Fails closed under a
-    // bounded context (cannot prove the task's flow is in the allowed set).
     mcp: ['tableau:mcp:flow:run'],
     api: new Set(['tableau:flow_tasks:run', 'tableau:mcp_site_settings:read']),
   },
   'cancel-flow-run': {
-    // Dedicated cancel scope (not flow:run): cancel is the destructive member of
-    // the flow-run lifecycle, so it is granted separately. Run-id only — no flow
-    // fetch, so no flows:read. Fails closed under a bounded context (cannot
-    // prove the run's flow is in the allowed set).
     mcp: ['tableau:mcp:flow:cancel'],
     api: new Set(['tableau:flow_runs:update', 'tableau:mcp_site_settings:read']),
   },
@@ -466,10 +456,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('get-flow-task');
   }
 
-  // The content-mutating flow tools need both gates: FLOW_TOOLS_ENABLED keeps
-  // the base flow family on, while FLOW_WRITE_TOOLS_ENABLED is the explicit
-  // second opt-in. This keeps the invalid "write on, read-only off" state from
-  // advertising or enforcing mutation scopes.
+  // Requires the base flow gate (static + dynamic) and the write opt-in.
   if (!flowToolsEnabled || !config.flowWriteToolsEnabled) {
     enabledTools.delete('run-flow');
     enabledTools.delete('run-flow-task');

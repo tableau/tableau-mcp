@@ -140,20 +140,7 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
     return response.flowRuns.flowRuns ?? [];
   };
 
-  /**
-   * Runs the specified flow on demand ("Run Flow Now") and returns the async
-   * background job. By default every output step runs; pass `outputStepIds` to
-   * run a subset. `runMode` defaults to `full` server-side.
-   *
-   * Required scopes: `tableau:flows:run`
-   * Requires Data Management + Tableau Prep Conductor; Run Now must be enabled
-   * on the site.
-   *
-   * @param siteId - The Tableau site ID
-   * @param flowId - The ID of the flow to run (sent in BOTH the URI and the body)
-   * @param runMode - Optional `full` | `incremental`
-   * @param outputStepIds - Optional subset of output step IDs to run
-   * @param parameterSpecs - Optional flow parameter overrides
+  /** Enqueues a flow run. `flowId` is required in both the route and body.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#run_flow_now
    */
   runFlowNow = async ({
@@ -178,7 +165,6 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
     const raw = await this._apiClient.runFlowNow(
       {
         flowRunSpec: {
-          // flowId is required in the body in addition to the URI path.
           flowId,
           ...(runMode && { runMode }),
           ...(parameterSpecs && parameterSpecs.length > 0
@@ -197,27 +183,7 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
     return raw.job;
   };
 
-  /**
-   * Requests cancellation of a queued or in-progress flow run, addressed by
-   * its flow *run* id. No request body; a successful call returns HTTP 200 with a
-   * `{}` body.
-   *
-   * Some domain failures (e.g. "flow run already complete", code 403135) are
-   * returned by Tableau as HTTP 200 with an `{ error: { code, summary, detail } }`
-   * envelope rather than a non-2xx status, so axios does not throw. The SDK
-   * validates that response union, then this method turns the error envelope
-   * into a {@link TableauRestError} so those cases flow through the same
-   * error-mapping path as real non-2xx responses.
-   *
-   * Cancellation is asynchronous: the server may reconcile the run's terminal
-   * status after the request. If the run is already in its final
-   * output-write phase, that write may complete and the final status may be
-   * Completed or Failed rather than Cancelled.
-   *
-   * Required scopes: `tableau:flow_runs:update`
-   *
-   * @param siteId - The Tableau site ID
-   * @param flowRunId - The ID of the flow run to cancel
+  /** Converts a 2xx Cancel Flow Run error envelope into a {@link TableauRestError}.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#cancel_flow_run
    */
   cancelFlowRun = async ({

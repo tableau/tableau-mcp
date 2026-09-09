@@ -177,15 +177,6 @@ const updateCloudExtractRefreshTaskEndpoint = makeEndpoint({
   response: updateCloudExtractRefreshTaskResponseSchema,
 });
 
-/**
- * Get Flow Run Task
- * GET /api/api-version/sites/site-id/tasks/runFlow/task-id
- * Returns a single scheduled flow run task by id (the schedule for a flow). A
- * direct, cheap fetch — unlike "Get Flow Run Tasks" which has no server-side
- * filtering and returns every task.
- * Tableau Cloud scope: tableau:flow_tasks:read
- * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_run_task
- */
 const getFlowRunTaskEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/tasks/runFlow/:taskId',
@@ -210,14 +201,6 @@ const getFlowRunTaskEndpoint = makeEndpoint({
   }),
 });
 
-/**
- * Run Flow Task
- * POST /api/api-version/sites/site-id/tasks/runFlow/task-id/runNow
- * Runs an EXISTING scheduled flow run task now (using the task's configured
- * output steps / parameters), resuming it if suspended. Returns the async job.
- * Tableau Cloud scope: tableau:flow_tasks:run
- * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#run_flow_task
- */
 const runFlowTaskEndpoint = makeEndpoint({
   method: 'post',
   path: '/sites/:siteId/tasks/runFlow/:taskId/runNow',
