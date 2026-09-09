@@ -253,8 +253,9 @@ export class WebMcpServer extends Server {
       if (enforceRoleRequirements && tool.minRequiredRole) {
         const siteRole = registrationContext.siteRole;
         if (!siteRoleMeetsMinimum(siteRole, tool.minRequiredRole)) {
-          // Tools with role requirements are ommited during registration if a user's role
-          // is unable to be fetched. An `undefined` role means the fetch failed.
+          // When the enforce-role-requirements feature flag is enabled, tools with role requirements are ommited during
+          // registration if a user does not have the minimum role or if their role is unable to be fetched.
+          // An `undefined` role means the fetch failed.
           if (siteRole === undefined) {
             toolsOmittedForRoleFetchFailure.push(tool.name);
           }
