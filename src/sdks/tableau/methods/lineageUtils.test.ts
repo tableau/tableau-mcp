@@ -3,6 +3,7 @@ import {
   getViewLineageByLuid,
   getViewLineageQuery,
   getWorkbookLineageByLuid,
+  getWorkbookLineageQuery,
   mergeViewLineage,
   mergeWorkbookLineage,
   toEmbeddedLineageContents,
@@ -55,6 +56,104 @@ describe('lineageUtils', () => {
     ]);
   });
 
+  it('surfaces published datasources via embeddedDatasources when the workbook rollup is empty', () => {
+    // Reproduces the real-world case: Workbook.upstreamDatasources returns [] even though the
+    // embedded datasource is live-connected to a published datasource that Catalog has indexed.
+    const lineageByLuid = getWorkbookLineageByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              upstreamDatasources: [],
+              embeddedDatasources: [
+                { upstreamDatasources: [{ luid: 'pub-1', name: 'Superstore Datasource' }] },
+                { upstreamDatasources: [] }, // pure embedded (e.g. a text file) -> nothing upstream
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')).toEqual([
+      { luid: 'pub-1', name: 'Superstore Datasource' },
+    ]);
+  });
+
+  it('dedupes published datasources surfaced by both the rollup and embeddedDatasources', () => {
+    const lineageByLuid = getWorkbookLineageByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              upstreamDatasources: [{ luid: 'pub-1', name: 'Sales' }],
+              embeddedDatasources: [
+                { upstreamDatasources: [{ luid: 'pub-1', name: 'Sales' }] }, // duplicate
+                { upstreamDatasources: [{ luid: 'pub-2', name: 'Finance' }] },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')).toEqual([
+      { luid: 'pub-1', name: 'Sales' },
+      { luid: 'pub-2', name: 'Finance' },
+    ]);
+  });
+
+  it('prefers a real datasource name over a luid fallback when the same luid appears in both sources', () => {
+    // The content-level rollup can report a null name for a datasource that the embedded
+    // traversal names properly. Dedupe must keep the real name, not the luid fallback.
+    const lineageByLuid = getWorkbookLineageByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              upstreamDatasources: [{ luid: 'pub-1', name: null }], // rollup: no name
+              embeddedDatasources: [
+                { upstreamDatasources: [{ luid: 'pub-1', name: 'Superstore Datasource' }] },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')).toEqual([
+      { luid: 'pub-1', name: 'Superstore Datasource' },
+    ]);
+  });
+
+  it('tolerates embedded datasources with missing or null upstreamDatasources', () => {
+    const lineageByLuid = getWorkbookLineageByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              upstreamDatasources: [{ luid: 'pub-1', name: 'Sales' }],
+              embeddedDatasources: [
+                {}, // no upstreamDatasources field at all -> nullish
+                { upstreamDatasources: null }, // explicit null
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')).toEqual([{ luid: 'pub-1', name: 'Sales' }]);
+  });
+
+  it('includes embeddedDatasources traversal in the workbook lineage query', () => {
+    expect(getWorkbookLineageQuery(['workbook-1'])).toContain('embeddedDatasources');
+  });
+
   it('parses and merges view lineage with workbook name', () => {
     const lineageByLuid = getViewLineageByLuid({
       data: {
@@ -93,6 +192,24 @@ describe('lineageUtils', () => {
         upstreamDatasources: [{ luid: 'datasource-1', name: 'Sales' }],
       },
     ]);
+  });
+
+  it('keeps view lineage sheet-scoped and does not traverse workbook-wide embeddedDatasources', () => {
+    // Regression guard for over-attribution: a view must report only the datasources its own sheet
+    // uses. Traversing the parent workbook's embeddedDatasources would attribute every published
+    // datasource in the workbook to every sheet, so the view/search queries must not request it.
+    expect(getViewLineageQuery(['view-1'])).not.toContain('embeddedDatasources');
+    expect(
+      getSearchContentLineageQuery({ workbookLuids: [], viewLuids: ['view-1'] }),
+    ).not.toContain('embeddedDatasources');
+  });
+
+  it('includes embeddedDatasources traversal for workbooks in the search content query', () => {
+    // The workbook path IS workbook-scoped, so surfacing published datasources via embedded
+    // datasources is correct there (unlike the view path above).
+    expect(
+      getSearchContentLineageQuery({ workbookLuids: ['workbook-1'], viewLuids: [] }),
+    ).toContain('embeddedDatasources');
   });
 
   it('queries both sheetsConnection and dashboardsConnection for view lineage', () => {
