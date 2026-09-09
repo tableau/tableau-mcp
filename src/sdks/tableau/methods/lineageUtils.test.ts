@@ -105,6 +105,51 @@ describe('lineageUtils', () => {
     ]);
   });
 
+  it('prefers a real datasource name over a luid fallback when the same luid appears in both sources', () => {
+    // The content-level rollup can report a null name for a datasource that the embedded
+    // traversal names properly. Dedupe must keep the real name, not the luid fallback.
+    const lineageByLuid = getWorkbookLineageByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              upstreamDatasources: [{ luid: 'pub-1', name: null }], // rollup: no name
+              embeddedDatasources: [
+                { upstreamDatasources: [{ luid: 'pub-1', name: 'Superstore Datasource' }] },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')).toEqual([
+      { luid: 'pub-1', name: 'Superstore Datasource' },
+    ]);
+  });
+
+  it('tolerates embedded datasources with missing or null upstreamDatasources', () => {
+    const lineageByLuid = getWorkbookLineageByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              upstreamDatasources: [{ luid: 'pub-1', name: 'Sales' }],
+              embeddedDatasources: [
+                {}, // no upstreamDatasources field at all -> nullish
+                { upstreamDatasources: null }, // explicit null
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')).toEqual([{ luid: 'pub-1', name: 'Sales' }]);
+  });
+
   it('includes embeddedDatasources traversal in the workbook lineage query', () => {
     expect(getWorkbookLineageQuery(['workbook-1'])).toContain('embeddedDatasources');
   });

@@ -376,8 +376,10 @@ export function toEmbeddedLineageContents(
 
 // Unions the content-level upstream datasources with those reached via embedded datasources,
 // drops entries without a luid (embedded datasources carry no luid), and dedupes by luid while
-// preserving first-seen order. This is what recovers published datasources that the content-level
-// upstreamDatasources rollup omits (see metadataEmbeddedDatasourceSchema).
+// preserving first-seen order. When the same luid appears more than once (e.g. the content rollup
+// reports a null name but the embedded traversal names it), the first non-null name wins so a luid
+// fallback never masks a real name. This is what recovers published datasources that the
+// content-level upstreamDatasources rollup omits (see metadataEmbeddedDatasourceSchema).
 function collectPublishedLineage(
   upstreamDatasources: Array<z.infer<typeof metadataLineageContentSchema>> | null | undefined,
   embeddedDatasources?: Array<z.infer<typeof metadataEmbeddedDatasourceSchema>> | null | undefined,
@@ -387,14 +389,20 @@ function collectPublishedLineage(
     ...(embeddedDatasources ?? []).flatMap((ds) => ds.upstreamDatasources ?? []),
   ];
 
-  const byLuid = new Map<string, LineageContent>();
+  const byLuid = new Map<string, { luid: string; name?: string }>();
   for (const content of combined) {
-    if (content.luid && !byLuid.has(content.luid)) {
-      byLuid.set(content.luid, { luid: content.luid, name: content.name ?? content.luid });
+    if (!content.luid) {
+      continue;
+    }
+    const existing = byLuid.get(content.luid);
+    if (!existing) {
+      byLuid.set(content.luid, { luid: content.luid, name: content.name ?? undefined });
+    } else if (existing.name == null && content.name != null) {
+      existing.name = content.name;
     }
   }
 
-  return [...byLuid.values()];
+  return [...byLuid.values()].map(({ luid, name }) => ({ luid, name: name ?? luid }));
 }
 
 export function filterLineageContentsByAllowedIds(
