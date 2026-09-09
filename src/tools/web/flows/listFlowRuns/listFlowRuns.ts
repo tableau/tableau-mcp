@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../../features/init.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
@@ -184,16 +185,31 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
       const configWithOverrides = await extra.getConfigWithOverrides();
       const statusFilterSupported = RestApi.versionIsAtLeast(STATUS_FILTER_SORT_MIN_REST_VERSION);
       const statusSortSupported = statusFilterSupported;
-      const validated = filter
-        ? parseAndValidateFlowRunsFilterString(filter, { statusFilterSupported })
-        : undefined;
-      const serverFilter = validated?.serverFilter ?? '';
-      const matchesStatus = validated?.matchesStatus ?? ((): boolean => true);
+      let validated: ReturnType<typeof parseAndValidateFlowRunsFilterString> | undefined;
 
       return await listFlowRunsTool.logAndExecute<ListFlowRunsResult>({
         extra,
         args: { filter, sort, limit },
         callback: async () => {
+          try {
+            validated = filter
+              ? parseAndValidateFlowRunsFilterString(filter, { statusFilterSupported })
+              : undefined;
+          } catch (error) {
+            return new ArgsValidationError(
+              error instanceof Error ? error.message : String(error),
+            ).toErr();
+          }
+
+          if (getStatusSort(sort) !== undefined && !statusSortSupported) {
+            return new ArgsValidationError(
+              `Sorting flow runs by status requires Tableau REST API version ${STATUS_FILTER_SORT_MIN_REST_VERSION} or later. Use startedAt, completedAt, or progress sorting on older servers.`,
+            ).toErr();
+          }
+
+          const serverFilter = validated?.serverFilter ?? '';
+          const matchesStatus = validated?.matchesStatus ?? ((): boolean => true);
+
           return new Ok(
             await useRestApi({
               ...extra,
@@ -216,12 +232,6 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                     ? Math.min(maxResultLimit, limit)
                     : limit
                   : (maxResultLimit ?? DEFAULT_FLOW_RUNS_LIMIT);
-
-                if (getStatusSort(sort) !== undefined && !statusSortSupported) {
-                  throw new Error(
-                    `Sorting flow runs by status requires Tableau REST API version ${STATUS_FILTER_SORT_MIN_REST_VERSION} or later. Use startedAt, completedAt, or progress sorting on older servers.`,
-                  );
-                }
 
                 const sortForApi = sort ?? 'completedAt:desc';
                 let collected: { items: FlowRun[]; truncatedByLimit: boolean };

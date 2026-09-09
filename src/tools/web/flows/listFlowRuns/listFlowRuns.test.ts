@@ -309,12 +309,16 @@ describe('listFlowRunsTool', () => {
     expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(expect.objectContaining({ filter: '' }));
   });
 
-  it('rejects an unknown status value with the allowed list', async () => {
-    await expect(getToolResult({ filter: 'status:eq:Borked' })).rejects.toThrow(/Allowed flow-run/);
+  it('returns an args-validation error for an unknown status value', async () => {
+    const result = await getToolResult({ filter: 'status:eq:Borked' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Allowed flow-run');
   });
 
-  it('rejects an unsupported filter field', async () => {
-    await expect(getToolResult({ filter: 'bogusField:eq:x' })).rejects.toThrow();
+  it('returns an args-validation error for an unsupported filter field', async () => {
+    const result = await getToolResult({ filter: 'bogusField:eq:x' });
+    expect(result.isError).toBe(true);
   });
 
   it('reports requested-limit truncation when the caller limit cuts the result', async () => {
