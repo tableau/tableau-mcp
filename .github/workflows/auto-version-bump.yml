@@ -1,7 +1,12 @@
 name: Auto Version Bump
 
 on:
-  push:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - closed
     branches:
       - main
 
@@ -10,50 +15,80 @@ permissions:
 
 jobs:
   bump-version:
-    if: "!contains(github.event.head_commit.message, 'chore: bump version')"
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine bump type
         id: bump
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          SUBJECT=$(git log -1 --format=%s)
-          PR_NUMBER=$(echo "$SUBJECT" | grep -oP '\(#\K[0-9]+(?=\)$)' || true)
-
           BUMP="patch"
-          if [ -n "$PR_NUMBER" ]; then
-            BODY=$(gh pr view "$PR_NUMBER" --json body -q .body)
-            if echo "$BODY" | grep -qiE '^\s*-\s*\[[xX]\]\s*Major'; then
-              BUMP="major"
-            elif echo "$BODY" | grep -qiE '^\s*-\s*\[[xX]\]\s*Minor'; then
-              BUMP="minor"
-            fi
+          if echo "$PR_BODY" | grep -qiE '^\s*-\s*\[[xX]\]\s*Major'; then
+            BUMP="major"
+          elif echo "$PR_BODY" | grep -qiE '^\s*-\s*\[[xX]\]\s*Minor'; then
+            BUMP="minor"
           fi
 
-          echo "Resolved bump type: $BUMP (PR #$PR_NUMBER)"
+          echo "Resolved bump type: $BUMP"
           echo "type=$BUMP" >> "$GITHUB_OUTPUT"
 
-      - name: Bump version
-        run: npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
-
-      - name: Commit, tag, and push
+      - name: Compute version relative to latest main
+        id: apply
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          git fetch origin main
+          BASE_VERSION=$(git show origin/main:package.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).version)")
+
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            p.version = '$BASE_VERSION';
+            fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          "
+
+          npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push if version changed
+        env:
+          VERSION: ${{ steps.apply.outputs.version }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "package.json already at the correct version, nothing to push"
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json
-          git commit -m "chore: bump version to $VERSION [skip ci]"
-          git push origin main
+          git commit -m "chore: bump version to $VERSION"
+          git push origin "HEAD:$HEAD_REF"
 
+  tag-release:
+    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag the merged version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
           if git rev-parse "v$VERSION" >/dev/null 2>&1; then
             echo "Tag v$VERSION already exists, skipping tag creation"
           else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
             git tag "v$VERSION"
             git push origin "v$VERSION"
           fi

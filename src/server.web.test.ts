@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   mockRegisterAppTool: vi.fn(),
   mockRegisterAppResource: vi.fn(),
   mockFeatureGate: {
-    isFeatureEnabled: vi.fn(() => false),
+    isFeatureEnabled: vi.fn((_featureName: string) => false),
   },
   mockReadFile: vi.fn(),
 }));
@@ -155,6 +155,9 @@ describe('server', () => {
     // so a future edit that drops the rendering guidance can't silently pass.
     expect(instructions).toContain('present them as Markdown tables');
     expect(instructions).toContain('to a chat or Slack surface');
+    // Admin-invocation nudge: the model must not gate admin-tool use on the user restating admin
+    // status — the per-call assertAdmin gate authorizes each call and cleanly rejects non-admins.
+    expect(instructions).toContain('Do not require the user to state or re-confirm admin status');
 
     // The clause belongs to the admin block specifically: it must be appended after the base
     // guidance and after the admin lead-in, never spliced into the base sentence.
@@ -183,6 +186,10 @@ describe('server', () => {
     // stayed out of the base instructions).
     expect(instructions).not.toContain('present them as Markdown tables');
     expect(instructions).not.toContain('Markdown tables');
+    // The admin-invocation nudge is part of the admin-only block and must also be absent.
+    expect(instructions).not.toContain(
+      'Do not require the user to state or re-confirm admin status',
+    );
   });
 
   it('should not register disabled tools', async () => {
@@ -222,7 +229,28 @@ describe('server', () => {
     expect(registeredToolNames).toContain('list-datasources');
   });
 
-  it('should register flow tools when FLOW_TOOLS_ENABLED is "true"', async () => {
+  it('should register flow tools when FLOW_TOOLS_ENABLED is "true" and the flow-tools flag is ON', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'flow-tools',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    // Both switches on turns on every flow tool...
+    expect(registeredToolNames).toContain('list-flows');
+    expect(registeredToolNames).toContain('get-flow');
+    expect(registeredToolNames).toContain('list-flow-runs');
+    expect(registeredToolNames).toContain('list-flow-tasks');
+    // ...alongside the unrelated tools.
+    expect(registeredToolNames).toContain('list-datasources');
+  });
+
+  it('should not register flow tools when FLOW_TOOLS_ENABLED is "true" but the flow-tools flag is OFF', async () => {
     vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
     const server = getServer();
     await server.registerTools();
@@ -231,12 +259,11 @@ describe('server', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
 
-    // The single switch turns on every flow tool...
-    expect(registeredToolNames).toContain('list-flows');
-    expect(registeredToolNames).toContain('get-flow');
-    expect(registeredToolNames).toContain('list-flow-runs');
-    expect(registeredToolNames).toContain('list-flow-tasks');
-    // ...alongside the unrelated tools.
+    // The feature flag is the per-environment rollout control, so it can veto the env switch.
+    expect(registeredToolNames).not.toContain('list-flows');
+    expect(registeredToolNames).not.toContain('get-flow');
+    expect(registeredToolNames).not.toContain('list-flow-runs');
+    expect(registeredToolNames).not.toContain('list-flow-tasks');
     expect(registeredToolNames).toContain('list-datasources');
   });
 

@@ -1,4 +1,8 @@
-import { getClientDisplayName, sanitizeClientIdForTelemetry } from './clientDisplayName.js';
+import {
+  getClientDisplayName,
+  isSlackClient,
+  sanitizeClientIdForTelemetry,
+} from './clientDisplayName.js';
 
 describe('getClientDisplayName', () => {
   it('returns undefined when the client id is undefined', () => {
@@ -23,6 +27,14 @@ describe('getClientDisplayName', () => {
     expect(getClientDisplayName('https://vscode.dev/oauth/client-metadata.json')).toBe('VS Code');
   });
 
+  it('maps a known ChatGPT CIMD client id URL to a friendly name', () => {
+    expect(getClientDisplayName('https://chatgpt.com/oauth/client-metadata.json')).toBe('ChatGPT');
+  });
+
+  it('maps a known Slack CIMD client id URL to a friendly name', () => {
+    expect(getClientDisplayName('https://mcp.slack.com/oauth/client-metadata.json')).toBe('Slack');
+  });
+
   it('matches subdomains of a known client host', () => {
     expect(getClientDisplayName('https://anysdk.cursor.sh/auth/client-metadata.json')).toBe(
       'Cursor',
@@ -41,6 +53,28 @@ describe('getClientDisplayName', () => {
 
   it('does not match a look-alike host that merely contains a known domain', () => {
     expect(getClientDisplayName('https://claude.ai.evil.com/client-metadata.json')).toBeUndefined();
+  });
+});
+
+describe('isSlackClient', () => {
+  it('is true for a Slack CIMD client id URL', () => {
+    expect(isSlackClient('https://slack.com/oauth/client-metadata.json')).toBe(true);
+  });
+
+  it('is true for a subdomain of slack.com', () => {
+    expect(isSlackClient('https://mcp.slack.com/client-metadata.json')).toBe(true);
+  });
+
+  it('is false for a non-Slack client', () => {
+    expect(isSlackClient('https://claude.ai/.well-known/oauth/client-metadata.json')).toBe(false);
+  });
+
+  it('is false for an unknown client', () => {
+    expect(isSlackClient('https://www.example.com/client-metadata.json')).toBe(false);
+  });
+
+  it('is false for a missing client id', () => {
+    expect(isSlackClient(undefined)).toBe(false);
   });
 });
 
