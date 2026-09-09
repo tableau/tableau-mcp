@@ -24,13 +24,7 @@ export type McpScope =
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:flow:read'
-  // Run a flow on demand (run-flow, run-flow-task). Executing a flow consumes
-  // Prep Conductor capacity but does not alter a schedule definition.
   | 'tableau:mcp:flow:run'
-  // Cancel a queued or in-progress flow run (cancel-flow-run). Kept separate from
-  // `flow:run` because interrupting a run mid-write can leave an output
-  // database partially updated (no rollback) — it is the destructive member of
-  // the flow-run lifecycle, so a deployment can grant "run" without "cancel".
   | 'tableau:mcp:flow:cancel'
   | 'tableau:mcp:pulse:read'
   | 'tableau:mcp:insight:create'
