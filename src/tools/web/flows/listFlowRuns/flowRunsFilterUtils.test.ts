@@ -36,6 +36,15 @@ describe('parseAndValidateFlowRunsFilterString', () => {
     expect(matchesStatus(run('Success'))).toBe(true);
   });
 
+  it('keeps a single non-terminal status:in server-side when the REST API supports status filters', () => {
+    const { serverFilter, matchesStatus } = parseAndValidateFlowRunsFilterString(
+      'status:in:[Pending]',
+      { statusFilterSupported: true },
+    );
+    expect(serverFilter).toBe('status:in:[Pending]');
+    expect(matchesStatus(run('Pending'))).toBe(true);
+  });
+
   it('rejects mixed terminal and non-terminal status values when supported server-side', () => {
     expect(() =>
       parseAndValidateFlowRunsFilterString('status:in:[Failed,Pending]', {
