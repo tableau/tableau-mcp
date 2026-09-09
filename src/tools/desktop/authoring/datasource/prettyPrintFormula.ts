@@ -434,12 +434,7 @@ function render(
         }
         text += flat;
         column += flat.length;
-      } else if (
-        !forceBreak &&
-        !hasComment &&
-        spaceBefore &&
-        continuation + flat.length <= WIDTH
-      ) {
+      } else if (!forceBreak && !hasComment && spaceBefore && continuation + flat.length <= WIDTH) {
         // Prefer moving the whole group to a fresh continuation line over splitting
         // it -- keeps calls like DATEPART('dayofyear',[Order Date]) intact.
         text += '\n' + indentOf(level + 1);
