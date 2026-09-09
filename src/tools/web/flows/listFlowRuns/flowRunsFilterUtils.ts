@@ -51,8 +51,6 @@ export type ValidatedFlowRunsFilter = {
   matchesStatus: (run: FlowRun) => boolean;
   /** The full normalized filter (server + status) — used for empty-result hints. */
   normalizedFilter: string;
-  /** Whether the filter contains a status clause. */
-  hasStatusFilter: boolean;
 };
 
 /**
@@ -103,7 +101,6 @@ export function parseAndValidateFlowRunsFilterString(
     serverFilter: serverClauses.join(','),
     matchesStatus: statusFilterSupported ? () => true : buildStatusMatcher(statusClause),
     normalizedFilter,
-    hasStatusFilter: statusClause !== undefined,
   };
 }
 
