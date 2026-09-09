@@ -1,5 +1,7 @@
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { ArgsValidationError, McpToolError } from '../../../../errors/mcpToolError.js';
 import { FlowRun, flowRunStatusSchema } from '../../../../sdks/tableau/types/flow.js';
 import {
   FilterOperator,
@@ -61,60 +63,65 @@ export type ValidatedFlowRunsFilter = {
 export function parseAndValidateFlowRunsFilterString(
   filterString: string,
   { statusFilterSupported = false }: { statusFilterSupported?: boolean } = {},
-): ValidatedFlowRunsFilter {
-  // Validates fields/operators, normalizes date-only values for
-  // startedAt/completedAt, and dedupes repeated fields (last one wins).
-  const normalizedFilter = parseAndValidateFilterString<FilterField, FilterExpression>({
-    filterString,
-    allowedOperatorsByField,
-    filterFieldSchema: FilterFieldSchema,
-  });
+): Result<ValidatedFlowRunsFilter, McpToolError> {
+  try {
+    // Validates fields/operators, normalizes date-only values for
+    // startedAt/completedAt, and dedupes repeated fields (last one wins).
+    const normalizedFilter = parseAndValidateFilterString<FilterField, FilterExpression>({
+      filterString,
+      allowedOperatorsByField,
+      filterFieldSchema: FilterFieldSchema,
+    });
 
-  const serverClauses: string[] = [];
-  let statusClause: { operator: FilterOperator; values: string[] } | undefined;
+    const serverClauses: string[] = [];
+    let statusClause: { operator: FilterOperator; values: string[] } | undefined;
 
-  for (const clause of splitTopLevel(normalizedFilter, ',')
-    .map((c) => c.trim())
-    .filter(Boolean)) {
-    const [field, operator, ...valueParts] = clause.split(':');
-    const value = valueParts.join(':');
-    if (field === 'status') {
-      const values = parseListOrSingle(operator as FilterOperator, value);
-      assertValidStatusValues(values);
-      statusClause = { operator: operator as FilterOperator, values };
-    } else {
-      serverClauses.push(clause);
-    }
-  }
-
-  if (statusFilterSupported && statusClause) {
-    assertSupportedStatusIn(statusClause);
-    const statusClauses = splitTopLevel(normalizedFilter, ',')
+    for (const clause of splitTopLevel(normalizedFilter, ',')
       .map((c) => c.trim())
-      .filter((c) => c.startsWith('status:'));
-    serverClauses.push(...statusClauses);
-  }
+      .filter(Boolean)) {
+      const [field, operator, ...valueParts] = clause.split(':');
+      const value = valueParts.join(':');
+      if (field === 'status') {
+        const values = parseListOrSingle(operator as FilterOperator, value);
+        assertValidStatusValues(values);
+        statusClause = { operator: operator as FilterOperator, values };
+      } else {
+        serverClauses.push(clause);
+      }
+    }
 
-  return {
-    serverFilter: serverClauses.join(','),
-    matchesStatus: statusFilterSupported ? () => true : buildStatusMatcher(statusClause),
-    normalizedFilter,
-  };
+    if (statusFilterSupported && statusClause) {
+      const statusInError = getUnsupportedStatusInError(statusClause);
+      if (statusInError) {
+        return new ArgsValidationError(statusInError).toErr();
+      }
+      const statusClauses = splitTopLevel(normalizedFilter, ',')
+        .map((c) => c.trim())
+        .filter((c) => c.startsWith('status:'));
+      serverClauses.push(...statusClauses);
+    }
+
+    return new Ok({
+      serverFilter: serverClauses.join(','),
+      matchesStatus: statusFilterSupported ? () => true : buildStatusMatcher(statusClause),
+      normalizedFilter,
+    });
+  } catch (error) {
+    return new ArgsValidationError(error instanceof Error ? error.message : String(error)).toErr();
+  }
 }
 
-function assertSupportedStatusIn(statusClause: {
+function getUnsupportedStatusInError(statusClause: {
   operator: FilterOperator;
   values: string[];
-}): void {
+}): string | undefined {
   if (statusClause.operator !== 'in' || statusClause.values.length <= 1) {
-    return;
+    return undefined;
   }
   const nonTerminalStatuses = new Set(['Pending', 'InProgress']);
-  if (statusClause.values.some((value) => nonTerminalStatuses.has(value))) {
-    throw new Error(
-      'A multi-value status:in filter is supported on REST API 3.30+ only when all values are terminal statuses: Success, Failed, or Cancelled.',
-    );
-  }
+  return statusClause.values.some((value) => nonTerminalStatuses.has(value))
+    ? 'A multi-value status:in filter is supported on REST API 3.30+ only when all values are terminal statuses: Success, Failed, or Cancelled.'
+    : undefined;
 }
 
 /**

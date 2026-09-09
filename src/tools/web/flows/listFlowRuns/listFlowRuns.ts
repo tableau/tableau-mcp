@@ -21,7 +21,10 @@ import { ConstrainedResult, WebTool } from '../../tool.js';
 import { TableauWebRequestHandlerExtra } from '../../toolContext.js';
 import { extractEqValue, looksLikeUuid } from '../flowFilterUtils.js';
 import { buildTruncationInfo, ListFlowsTruncationReason } from '../listFlows/listFlows.js';
-import { parseAndValidateFlowRunsFilterString } from './flowRunsFilterUtils.js';
+import {
+  parseAndValidateFlowRunsFilterString,
+  ValidatedFlowRunsFilter,
+} from './flowRunsFilterUtils.js';
 
 // Server page size for the run-history pagination loop. The "Get Flow Runs"
 // endpoint returns NO pagination block (no `totalAvailable`), so this tool
@@ -185,20 +188,20 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
       const configWithOverrides = await extra.getConfigWithOverrides();
       const statusFilterSupported = RestApi.versionIsAtLeast(STATUS_FILTER_SORT_MIN_REST_VERSION);
       const statusSortSupported = statusFilterSupported;
-      let validated: ReturnType<typeof parseAndValidateFlowRunsFilterString> | undefined;
+      let validated: ValidatedFlowRunsFilter | undefined;
 
       return await listFlowRunsTool.logAndExecute<ListFlowRunsResult>({
         extra,
         args: { filter, sort, limit },
         callback: async () => {
-          try {
-            validated = filter
-              ? parseAndValidateFlowRunsFilterString(filter, { statusFilterSupported })
-              : undefined;
-          } catch (error) {
-            return new ArgsValidationError(
-              error instanceof Error ? error.message : String(error),
-            ).toErr();
+          const filterResult = filter
+            ? parseAndValidateFlowRunsFilterString(filter, { statusFilterSupported })
+            : undefined;
+          if (filterResult) {
+            if (filterResult.isErr()) {
+              return filterResult.error.toErr();
+            }
+            validated = filterResult.value;
           }
 
           if (getStatusSort(sort) !== undefined && !statusSortSupported) {
