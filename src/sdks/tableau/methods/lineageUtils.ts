@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
-import { LineageContent } from '../types/lineageContent.js';
+import { LineageContent, PublishedParent } from '../types/lineageContent.js';
 import { View } from '../types/view.js';
 import { Workbook, WorkbookConnection } from '../types/workbook.js';
 
-export type { LineageContent };
+export type { LineageContent, PublishedParent };
 
 // Lenient wire-parse schema for Metadata-API GraphQL responses: luid is absent for embedded
 // datasources and name can be null, so both are optional here. collectPublishedLineage drops
@@ -23,8 +23,20 @@ const metadataLineageContentSchema = z.object({
 // This traversal is workbook-scoped ONLY. See getViewLineageConnectionQuery for views.
 // A sheet/view must report just the datasources it uses, and Workbook.embeddedDatasources is workbook-wide,
 // so unioning it into view lineage would over-attribute every published datasource in the workbook to every sheet.
+// name is the only join key shared with the REST /connections LUID (EmbeddedDatasource.id is an
+// unqueryable hash). parentPublishedDatasources is the authoritative published-parent linkage,
+// fetched only under includeEmbeddedParents.
 const metadataEmbeddedDatasourceSchema = z.object({
+  name: z.string().nullable().optional(),
   upstreamDatasources: z.array(metadataLineageContentSchema).nullish(),
+  parentPublishedDatasources: z
+    .array(
+      z.object({
+        luid: z.string().nullable().optional(),
+        name: z.string().nullable().optional(),
+      }),
+    )
+    .nullish(),
 });
 
 const workbookLineageResponseSchema = z.object({
@@ -75,26 +87,39 @@ const viewLineageResponseSchema = z.object({
   }),
 });
 
-// Shared GraphQL selection for embedded datasources' upstream (published) datasources. See
-// metadataEmbeddedDatasourceSchema for why we traverse embeddedDatasources rather than relying
-// solely on the content-level upstreamDatasources rollup.
-const embeddedUpstreamSelection = `embeddedDatasources {
+// Shared GraphQL selection for embedded datasources. upstreamDatasources is always fetched (see
+// metadataEmbeddedDatasourceSchema). includeEmbeddedParents additionally fetches the name and
+// published-parent linkage that getWorkbook needs; other callers omit it to avoid over-fetching.
+function embeddedUpstreamSelection(includeEmbeddedParents: boolean): string {
+  return `embeddedDatasources {
             upstreamDatasources {
               luid
               name
+            }${
+              includeEmbeddedParents
+                ? `
+            name
+            parentPublishedDatasources {
+              luid
+              name
+            }`
+                : ''
             }
           }`;
+}
 
 // Shared node selection for workbook lineage, used by both the single-workbook query and the
 // combined search-content query so the two never drift.
-const workbookLineageNodesSelection = `nodes {
+function workbookLineageNodesSelection(includeEmbeddedParents = false): string {
+  return `nodes {
           luid
           upstreamDatasources {
             luid
             name
           }
-          ${embeddedUpstreamSelection}
+          ${embeddedUpstreamSelection(includeEmbeddedParents)}
         }`;
+}
 
 function getViewLineageConnectionQuery(connectionName: string, viewLuids: Array<string>): string {
   return `${connectionName}(filter: { luidWithin: ${toGraphqlStringArray(viewLuids)} }) {
@@ -121,11 +146,15 @@ function getViewLineageConnectionQuery(connectionName: string, viewLuids: Array<
       }`;
 }
 
-export function getWorkbookLineageQuery(workbookLuids: Array<string>): string {
+// includeEmbeddedParents is set only by getWorkbook (via getWorkbookLineageWithParentsByLuid).
+export function getWorkbookLineageQuery(
+  workbookLuids: Array<string>,
+  { includeEmbeddedParents = false }: { includeEmbeddedParents?: boolean } = {},
+): string {
   return `
     query workbookLineage {
       workbooksConnection(filter: { luidWithin: ${toGraphqlStringArray(workbookLuids)} }) {
-        ${workbookLineageNodesSelection}
+        ${workbookLineageNodesSelection(includeEmbeddedParents)}
       }
     }
   `;
@@ -152,7 +181,7 @@ export function getSearchContentLineageQuery({
       ${
         workbookLuids.length
           ? `workbooksConnection(filter: { luidWithin: ${toGraphqlStringArray(workbookLuids)} }) {
-        ${workbookLineageNodesSelection}
+        ${workbookLineageNodesSelection()}
       }`
           : ''
       }
@@ -174,6 +203,63 @@ export function getWorkbookLineageByLuid(response: unknown): Map<string, Array<L
       collectPublishedLineage(node.upstreamDatasources, node.embeddedDatasources),
     ]),
   );
+}
+
+export type WorkbookLineage = {
+  upstreamDatasources: Array<LineageContent>;
+  // Embedded-datasource -> published-parent map, keyed by embedded name (the join key for the REST
+  // /connections LUID). Names without exactly one identifiable parent are omitted: a duplicated name
+  // is an ambiguous join, and zero/multiple parents can't map to one publishedParent.
+  embeddedParents: Map<string, PublishedParent>;
+};
+
+// Returns both the published lineage and the embedded->published-parent map per workbook luid from a
+// single response. Used by getWorkbook, which needs both from one Metadata-API call.
+export function getWorkbookLineageWithParentsByLuid(
+  response: unknown,
+): Map<string, WorkbookLineage> {
+  const parsed = workbookLineageResponseSchema.parse(response);
+  return new Map(
+    parsed.data.workbooksConnection.nodes.map((node) => [
+      node.luid,
+      {
+        upstreamDatasources: collectPublishedLineage(
+          node.upstreamDatasources,
+          node.embeddedDatasources,
+        ),
+        embeddedParents: buildEmbeddedParentMap(node.embeddedDatasources),
+      },
+    ]),
+  );
+}
+
+function buildEmbeddedParentMap(
+  embeddedDatasources: Array<z.infer<typeof metadataEmbeddedDatasourceSchema>> | null | undefined,
+): Map<string, PublishedParent> {
+  const parents = new Map<string, PublishedParent>();
+  const seenNames = new Set<string>();
+
+  for (const { name, parentPublishedDatasources } of embeddedDatasources ?? []) {
+    if (!name) {
+      continue;
+    }
+    if (seenNames.has(name)) {
+      // Duplicate embedded name -> the name->LUID join is ambiguous. Drop it entirely.
+      parents.delete(name);
+      continue;
+    }
+    seenNames.add(name);
+
+    const validParents = (parentPublishedDatasources ?? []).filter(
+      (parent): parent is { luid: string; name?: string | null } => !!parent.luid,
+    );
+    if (validParents.length === 1) {
+      const parent = validParents[0];
+      parents.set(name, { luid: parent.luid, name: parent.name ?? parent.luid });
+    }
+  }
+
+  return parents;
 }
 
 export function getViewLineageByLuid(response: unknown): Map<string, ViewLineage> {
@@ -358,20 +444,33 @@ function toGraphqlStringArray(values: Array<string>): string {
 
 // datasource.id is the VDS-queryable embedded LUID. Multi-connection datasources repeat it
 // across rows, so dedupe by luid. name is optional on the wire; fall back to the luid.
+// When parentByName is supplied, attach a publishedParent pointer — but only when the name maps to a
+// single embedded LUID here, since a duplicated name would attach the parent to the wrong LUID.
 export function toEmbeddedLineageContents(
   connections: Array<WorkbookConnection>,
+  parentByName?: Map<string, PublishedParent>,
 ): Array<LineageContent> {
   const byLuid = new Map<string, LineageContent>();
+  const nameCounts = new Map<string, number>();
   for (const { datasource } of connections) {
     if (datasource && !byLuid.has(datasource.id)) {
-      byLuid.set(datasource.id, {
-        luid: datasource.id,
-        name: datasource.name ?? datasource.id,
-        datasourceType: 'embedded',
-      });
+      const name = datasource.name ?? datasource.id;
+      byLuid.set(datasource.id, { luid: datasource.id, name, datasourceType: 'embedded' });
+      nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
     }
   }
-  return [...byLuid.values()];
+
+  if (!parentByName?.size) {
+    return [...byLuid.values()];
+  }
+
+  return [...byLuid.values()].map((entry) => {
+    if ((nameCounts.get(entry.name) ?? 0) > 1) {
+      return entry; // ambiguous name->LUID join; emit standalone.
+    }
+    const publishedParent = parentByName.get(entry.name);
+    return publishedParent ? { ...entry, publishedParent } : entry;
+  });
 }
 
 // Unions the content-level upstream datasources with those reached via embedded datasources,
@@ -417,5 +516,30 @@ export function filterLineageContentsByAllowedIds(
     return contents;
   }
 
-  return contents.filter((content) => allowedIds.has(content.luid));
+  // Also strip a publishedParent pointer whose luid is out of bounds: the same excluded datasource
+  // would be dropped as a standalone entry, so it must not leak via a parent pointer either.
+  return contents
+    .filter((content) => allowedIds.has(content.luid))
+    .map((content) =>
+      content.publishedParent && !allowedIds.has(content.publishedParent.luid)
+        ? { ...content, publishedParent: undefined }
+        : content,
+    );
+}
+
+// Merges published (Metadata) and embedded (REST /connections) lists, dropping a standalone published
+// entry whose luid is already carried as an embedded entry's publishedParent (a live-connected
+// published DS surfaces as both). Lossless: if the join was ambiguous the pointer was dropped, so the
+// standalone entry survives.
+export function mergeWorkbookDatasources(
+  published: Array<LineageContent>,
+  embedded: Array<LineageContent>,
+): Array<LineageContent> {
+  const parentLuids = new Set(
+    embedded
+      .map((entry) => entry.publishedParent?.luid)
+      .filter((luid): luid is string => luid !== undefined),
+  );
+  const dedupedPublished = published.filter((entry) => !parentLuids.has(entry.luid));
+  return [...dedupedPublished, ...embedded];
 }
