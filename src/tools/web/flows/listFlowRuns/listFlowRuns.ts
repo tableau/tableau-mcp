@@ -155,7 +155,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
   | progress    | eq, gt, gte, lt, lte | Percent complete (0–100). |
   | startedAt   | eq, gt, gte, lt, lte | ISO 8601 \`YYYY-MM-DDTHH:MM:SSZ\`, OR date-only \`YYYY-MM-DD\` (auto-promoted to midnight UTC). |
   | completedAt | eq, gt, gte, lt, lte | ISO 8601 \`YYYY-MM-DDTHH:MM:SSZ\`, OR date-only \`YYYY-MM-DD\` (auto-promoted to midnight UTC). |
-   | status      | eq, in               | One of Pending, InProgress, Success, Failed, Cancelled. Applied server-side on REST API 3.30+; older servers use a client-side fallback. |
+  | status      | eq, in               | One of Pending, InProgress, Success, Failed, Cancelled. |
 
   **Filter value contracts** (mismatches return 0 runs):
   - \`flowId\` must be the flow UUID; a flow name (or any id that doesn't resolve to a visible flow) returns no runs and the tool hints toward list-flows.
