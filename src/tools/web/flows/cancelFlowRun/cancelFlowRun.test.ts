@@ -10,6 +10,11 @@ import { getCancelFlowRunTool } from './cancelFlowRun.js';
 
 const mocks = vi.hoisted(() => ({
   mockCancelFlowRun: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../../restApiInstance.js', () => ({
@@ -41,6 +46,7 @@ describe('cancelFlowRunTool', () => {
     vi.clearAllMocks();
     RestApi.version = '3.10';
     vi.spyOn(RestApi, 'versionIsAtLeast').mockReturnValue(true);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   afterAll(() => {
@@ -61,12 +67,18 @@ describe('cancelFlowRunTool', () => {
     expect(annotations?.idempotentHint).toBe(false);
   });
 
-  it('is enabled when the flow write flag is on', () => {
+  it('is enabled when the flow write flag is on', async () => {
     const tool = getCancelFlowRunTool(new WebMcpServer());
-    expect(tool.disabled).toBeFalsy();
+    expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the flow write flag is off (state-mutating tool is opt-in)', () => {
+  it('is disabled when the flow-tools feature flag is off', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    const tool = getCancelFlowRunTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
+  it('is disabled when the flow write flag is off (state-mutating tool is opt-in)', async () => {
     vi.mocked(getConfig).mockReturnValueOnce({
       flowWriteToolsEnabled: false,
       productTelemetryEnabled: false,
@@ -74,7 +86,7 @@ describe('cancelFlowRunTool', () => {
       server: 'https://test.tableau.com',
     } as unknown as ReturnType<typeof getConfig>);
     const tool = getCancelFlowRunTool(new WebMcpServer());
-    expect(tool.disabled).toBe(true);
+    expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
   it('refuses on Tableau REST API versions before 3.10', async () => {

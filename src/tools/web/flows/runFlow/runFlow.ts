@@ -4,10 +4,12 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
 import { FlowNotAllowedError, McpToolError } from '../../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { RunFlowJob } from '../../../../sdks/tableau/types/job.js';
 import { WebMcpServer } from '../../../../server.web.js';
+import { Provider } from '../../../../utils/provider.js';
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
 import { mapFlowWriteError } from '../flowWriteErrors.js';
@@ -51,7 +53,12 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     // Write tools are only available when the base flow tool gate is on too.
     // This prevents the invalid "read-only flow tools off, write tools on"
     // configuration from exposing state-changing operations by themselves.
-    disabled: !config.flowToolsEnabled || !config.flowWriteToolsEnabled,
+    disabled: new Provider(
+      async () =>
+        !config.flowToolsEnabled ||
+        !config.flowWriteToolsEnabled ||
+        !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+    ),
     description: `
   Runs a Tableau Prep flow **on demand** ("Run Now"). This ENQUEUES a flow run on the server and returns immediately with an async job — the run is NOT finished when this tool returns. The flow executes its output steps (all of them unless you pass \`outputStepIds\`), writing to its configured outputs.
 

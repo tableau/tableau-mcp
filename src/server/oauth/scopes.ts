@@ -476,7 +476,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   // the base flow family on, while FLOW_WRITE_TOOLS_ENABLED is the explicit
   // second opt-in. This keeps the invalid "write on, read-only off" state from
   // advertising or enforcing mutation scopes.
-  if (!config.flowToolsEnabled || !config.flowWriteToolsEnabled) {
+  if (!flowToolsEnabled || !config.flowWriteToolsEnabled) {
     enabledTools.delete('run-flow');
     enabledTools.delete('run-flow-task');
     enabledTools.delete('cancel-flow-run');

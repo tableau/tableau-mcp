@@ -269,9 +269,12 @@ describe('server', () => {
     expect(registeredToolNames).toContain('list-datasources');
   });
 
-  it('should register mutating flow tools only when both flow gates are enabled', async () => {
+  it('should register mutating flow tools only when both static gates and the flow-tools feature flag are enabled', async () => {
     vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
     vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'flow-tools',
+    );
     const server = getServer();
     await server.registerTools();
 

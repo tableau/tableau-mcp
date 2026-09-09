@@ -12,6 +12,11 @@ import { exportedForTesting, getRunFlowTool } from './runFlow.js';
 const mocks = vi.hoisted(() => ({
   mockRunFlowNow: vi.fn(),
   mockIsFlowAllowed: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../resourceAccessChecker.js', () => ({
@@ -50,6 +55,7 @@ describe('runFlowTool', () => {
     RestApi.version = '3.24';
     vi.spyOn(RestApi, 'versionIsAtLeast').mockReturnValue(true);
     mocks.mockIsFlowAllowed.mockResolvedValue({ allowed: true });
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   afterAll(() => {
@@ -69,11 +75,17 @@ describe('runFlowTool', () => {
 
   it('is a non-read-only, non-idempotent tool and is enabled when the flag is on', async () => {
     const tool = getRunFlowTool(new WebMcpServer());
-    expect(tool.disabled).toBeFalsy();
+    expect(await Provider.from(tool.disabled)).toBe(false);
     const annotations = await Provider.from(tool.annotations);
     expect(annotations?.readOnlyHint).toBe(false);
     expect(annotations?.destructiveHint).toBe(true);
     expect(annotations?.idempotentHint).toBe(false);
+  });
+
+  it('is disabled when the flow-tools feature flag is off', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    const tool = getRunFlowTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
   it('enqueues a run and returns the async job plus a runStatus note', async () => {

@@ -4,9 +4,11 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
 import { McpToolError } from '../../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../../server.web.js';
+import { Provider } from '../../../../utils/provider.js';
 import { WebTool } from '../../tool.js';
 import { mapCancelFlowRunError } from '../flowWriteErrors.js';
 
@@ -33,7 +35,12 @@ export const getCancelFlowRunTool = (server: WebMcpServer): WebTool<typeof param
     name: 'cancel-flow-run',
     // Write tools require the base flow tool gate as well as their own
     // explicit opt-in, so write cannot be enabled without read-only flow tools.
-    disabled: !config.flowToolsEnabled || !config.flowWriteToolsEnabled,
+    disabled: new Provider(
+      async () =>
+        !config.flowToolsEnabled ||
+        !config.flowWriteToolsEnabled ||
+        !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+    ),
     description: `
   Requests cancellation of a **queued or in-progress Tableau Prep flow run**, by flow *run* id (not flow id). This is the counterpart to \`run-flow\` / \`run-flow-task\`: use it for a run you started that has not reached a terminal state. The request may be accepted while the run is executing, but the final status can still be Completed or Failed if the run is already finishing.
 

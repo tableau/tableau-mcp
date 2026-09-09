@@ -9,6 +9,11 @@ import { getRunFlowTaskTool } from './runFlowTask.js';
 
 const mocks = vi.hoisted(() => ({
   mockRunFlowTask: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../../restApiInstance.js', () => ({
@@ -37,6 +42,7 @@ const TASK_ID = '1bff10bb-57ae-43df-8774-a86d14aef432';
 describe('runFlowTaskTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it('creates a tool instance with correct properties', async () => {
@@ -48,6 +54,12 @@ describe('runFlowTaskTool', () => {
     expect(annotations?.readOnlyHint).toBe(false);
     expect(annotations?.destructiveHint).toBe(true);
     expect(annotations?.idempotentHint).toBe(false);
+  });
+
+  it('is disabled when the flow-tools feature flag is off', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    const tool = getRunFlowTaskTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
   it('runs an existing task and returns the async job', async () => {

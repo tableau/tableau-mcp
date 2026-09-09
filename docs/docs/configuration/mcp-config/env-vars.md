@@ -476,7 +476,7 @@ Controls the base gate for the Tableau Prep flow tool family. It controls read-o
   `flow-tools` feature flag to be enabled, which lets a deployment roll them out per environment
   without a redeploy. Both switches must be on for the tools to register; either one turns them
   off. Self-hosted deployments control the flag through `features.json`, where it ships as `false`.
-- The mutating flow tools also require [`FLOW_WRITE_TOOLS_ENABLED=true`](#flow_write_tools_enabled).
+- The mutating flow tools also require [`FLOW_WRITE_TOOLS_ENABLED=true`](#flow_write_tools_enabled); all flow tools remain subject to the `flow-tools` feature flag.
 - When the tools are disabled, their OAuth scopes (`tableau:mcp:flow:read` and
   `tableau:flows:read`) are neither advertised nor enforced.
 - When enabled, individual flow tools can still be excluded via

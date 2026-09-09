@@ -4,9 +4,11 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
 import { McpToolError } from '../../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { RunFlowJob } from '../../../../sdks/tableau/types/job.js';
 import { WebMcpServer } from '../../../../server.web.js';
+import { Provider } from '../../../../utils/provider.js';
 import { WebTool } from '../../tool.js';
 import { mapFlowWriteError } from '../flowWriteErrors.js';
 
@@ -28,7 +30,12 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
     name: 'run-flow-task',
     // Write tools require the base flow tool gate as well as their own
     // explicit opt-in, so write cannot be enabled without read-only flow tools.
-    disabled: !config.flowToolsEnabled || !config.flowWriteToolsEnabled,
+    disabled: new Provider(
+      async () =>
+        !config.flowToolsEnabled ||
+        !config.flowWriteToolsEnabled ||
+        !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+    ),
     description: `
   Runs an **existing scheduled flow run task** now ("Run Now" on a schedule), by task id. The task runs with the output steps and parameters it was configured with; a suspended task is resumed. This ENQUEUES the run and returns immediately with an async job — the run is NOT finished when this tool returns.
 

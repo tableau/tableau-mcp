@@ -9,6 +9,11 @@ import { getGetFlowTaskTool } from './getFlowTask.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetFlowRunTask: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../../restApiInstance.js', () => ({
@@ -42,6 +47,7 @@ const mockTask: FlowRunTask = {
 describe('getFlowTaskTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it('creates a read-only tool instance with correct properties', async () => {
@@ -52,7 +58,13 @@ describe('getFlowTaskTool', () => {
     const annotations = await Provider.from(tool.annotations);
     expect(annotations?.readOnlyHint).toBe(true);
     // Read tool: must NOT be gated by the write flag.
-    expect(tool.disabled).toBeFalsy();
+    expect(await Provider.from(tool.disabled)).toBe(false);
+  });
+
+  it('is disabled when the flow-tools feature flag is off', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    const tool = getGetFlowTaskTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
   it('is disabled when flow tools are not enabled', async () => {

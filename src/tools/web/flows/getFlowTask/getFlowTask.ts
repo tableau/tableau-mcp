@@ -4,11 +4,13 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
 import { McpToolError } from '../../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { FlowRunTask } from '../../../../sdks/tableau/types/flowRunTask.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../../../utils/getHttpStatus.js';
+import { Provider } from '../../../../utils/provider.js';
 import { WebTool } from '../../tool.js';
 import { extractTableauError, formatTableauError } from '../flowWriteErrors.js';
 
@@ -25,7 +27,10 @@ export const getGetFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
   const getFlowTaskTool = new WebTool({
     server,
     name: 'get-flow-task',
-    disabled: !config.flowToolsEnabled,
+    disabled: new Provider(
+      async () =>
+        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+    ),
     description: `
   Retrieves a single scheduled flow run task (the **schedule** for a Tableau Prep flow) by its task id. A flow run task describes when/how often a flow is configured to run — NOT a record of past executions (for run history use \`list-flow-runs\`).
 
