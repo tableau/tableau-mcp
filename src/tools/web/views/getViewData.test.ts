@@ -244,7 +244,11 @@ describe('getViewDataTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain(`Request failed with status code ${status}`);
+    // A 403 is rewritten by logAndExecute into the shared permission-denied guidance
+    // (W-23757363); other statuses (e.g. 404) still surface the raw Axios message.
+    const expectedText =
+      status === 403 ? 'Permission denied (403)' : `Request failed with status code ${status}`;
+    expect(result.content[0].text).toContain(expectedText);
     expect(mocks.mockQueryViewData).not.toHaveBeenCalled();
   });
 
