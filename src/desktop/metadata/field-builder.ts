@@ -35,6 +35,25 @@ export function inferFieldTypeFromType(localType: string | undefined): string {
   }
 }
 
+function normalizeLogicalTableId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().replace(/^\[|\]$/g, '');
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function getEnabledFormatElement(container: unknown, elementName: string): any {
+  if (!container || typeof container !== 'object') return undefined;
+
+  const elements = container as Record<string, unknown>;
+  if (elements[elementName] !== undefined) return elements[elementName];
+
+  const enabledSuffix = `.true...${elementName}`;
+  const matches = Object.entries(elements).filter(
+    ([name]) => name.startsWith('_.fcp.') && name.endsWith(enabledSuffix),
+  );
+  return matches.length === 1 ? matches[0][1] : undefined;
+}
+
 /**
  * Visit every `<column>` under a relation tree, outermost relation first.
  * Relations nest to any depth — a join of joins puts the leaf
@@ -310,7 +329,25 @@ export function listAvailableFields(
     >();
     const tableByColumn = new Map<string, string>();
     const ambiguousTableColumns = new Set<string>();
+    const logicalTableIdByColumn = new Map<string, string>();
+    const ambiguousLogicalTableColumns = new Set<string>();
+    const invalidLogicalTableColumns = new Set<string>();
     const approxCountByName = new Map<string, number>();
+
+    // In federated datasources, metadata-record parent-name may only identify the
+    // repeated physical relation (for example `[sqlproxy]`). `object-id` is the
+    // field's logical-table identity. Only trust ids declared by object-graph.
+    const objectGraph = getEnabledFormatElement(datasource, 'object-graph');
+    const logicalTableObjects = normalizeArray(objectGraph?.objects?.object);
+    const logicalTableIds = new Set(
+      logicalTableObjects
+        .map((object) => normalizeLogicalTableId(object?.['@_id']))
+        .filter((id): id is string => id !== undefined),
+    );
+    const soleLogicalTableId =
+      logicalTableObjects.length === 1
+        ? normalizeLogicalTableId(logicalTableObjects[0]?.['@_id'])
+        : undefined;
 
     if (datasource.connection?.['metadata-records']) {
       const records = normalizeArray(datasource.connection['metadata-records']['metadata-record']);
@@ -368,10 +405,33 @@ export function listAvailableFields(
       if (metadataRecords) {
         const records = normalizeArray(metadataRecords['metadata-record']);
         for (const record of records) {
-          if (record['@_class'] !== 'column') continue;
+          const recordClass = record['@_class'];
+          if (recordClass !== 'column' && recordClass !== 'measure') continue;
           const localName = record['local-name'];
           if (!localName) continue;
           const bracketedName = localName.startsWith('[') ? localName : `[${localName}]`;
+
+          const rawLogicalTableId = getEnabledFormatElement(record, 'object-id');
+          const logicalTableId = normalizeLogicalTableId(rawLogicalTableId);
+          if (logicalTableId && logicalTableIds.has(logicalTableId)) {
+            const previous = logicalTableIdByColumn.get(bracketedName);
+            if (previous !== undefined && previous !== logicalTableId) {
+              ambiguousLogicalTableColumns.add(bracketedName);
+              logicalTableIdByColumn.delete(bracketedName);
+            } else if (!ambiguousLogicalTableColumns.has(bracketedName)) {
+              logicalTableIdByColumn.set(bracketedName, logicalTableId);
+            }
+          } else if (rawLogicalTableId !== undefined) {
+            // An explicit id that is absent from the graph is contradictory metadata,
+            // not an unmapped field that may inherit a single-object owner.
+            invalidLogicalTableColumns.add(bracketedName);
+            logicalTableIdByColumn.delete(bracketedName);
+          }
+
+          // Keep legacy physical-table projection behavior limited to column records.
+          // Measure records are visited here only to capture logical-table identity.
+          if (recordClass !== 'column') continue;
+
           const parentName = record['parent-name'];
           if (typeof parentName === 'string' && parentName.length > 0) {
             const previous = tableByColumn.get(bracketedName);
@@ -382,6 +442,7 @@ export function listAvailableFields(
               tableByColumn.set(bracketedName, parentName);
             }
           }
+
           if (!columnMap.has(bracketedName)) {
             columnMap.set(bracketedName, {
               column: {
@@ -483,9 +544,21 @@ export function listAvailableFields(
 
       const folder = folderMap.get(columnName);
 
+      // Tableau's ObjectModelEncapsulateLegacy transform wraps an eligible pre-object-model
+      // relation tree, including physical joins, in one logical object. When the serialized
+      // graph confirms exactly one object, fields without metadata records (notably top-level
+      // calculations) have only that logical owner and may inherit its ID. A missing graph or
+      // a multi-object graph is not proof of shared ownership, so those cases are never inferred.
+      const hasUntrustworthyLogicalTableId =
+        ambiguousLogicalTableColumns.has(columnName) || invalidLogicalTableColumns.has(columnName);
+      const logicalTableId = hasUntrustworthyLogicalTableId
+        ? undefined
+        : (logicalTableIdByColumn.get(columnName) ?? soleLogicalTableId);
+
       const fieldRef: FieldReference = {
         datasource: datasourceName,
         ...(tableByColumn.has(columnName) ? { table: tableByColumn.get(columnName) } : {}),
+        ...(logicalTableId ? { logicalTableId } : {}),
         contentUrl: contentUrl,
         columnName: columnName,
         columnInstanceName: constructedInstance,

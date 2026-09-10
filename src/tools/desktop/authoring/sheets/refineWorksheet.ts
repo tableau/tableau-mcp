@@ -113,7 +113,7 @@ const paramsSchema = {
       'round_bar',
       'round_stacked_bar',
     ])
-    .describe('Operation.'),
+    .describe('Operation'),
   topN: z
     .object({
       n: z.number().int().min(1).max(50).describe('1-50.'),
@@ -127,7 +127,7 @@ const paramsSchema = {
     })
     .optional()
     .describe('sort_direction; numeric DESC=largest.'),
-  targetField: z.string().min(1).optional().describe('Axis; omit to detect.'),
+  targetField: z.string().min(1).optional().describe('Omit=innermost nested dim.'),
   sortByField: z.string().min(1).optional().describe('Sort measure.'),
   direction: z.enum(['asc', 'desc']).optional().describe('sort_by_field; numeric desc=largest.'),
   markType: z.enum(TABLEAU_MARK_TYPES).optional().describe('mark_type target.'),
