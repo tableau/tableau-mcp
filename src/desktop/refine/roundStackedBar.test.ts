@@ -379,6 +379,25 @@ describe('planRoundStackedBar', () => {
     );
   });
 
+  it('decodes Tableau-escaped backslashes in a quoted categorical filter member', () => {
+    const source = worksheet({
+      extraColumnInstances:
+        "<column caption='Region' datatype='string' name='[Region]' role='dimension' type='nominal' /><column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />",
+      filter: `<filter class='categorical' column='[${INTERNAL_DS}].[none:Region:nk]'>
+        <groupfilter function='union' user:ui-enumeration='inclusive'>
+          <groupfilter function='member' level='[none:Region:nk]' member='&quot;Path\\\\Name&quot;' />
+        </groupfilter>
+      </filter>`,
+      slices: `<slices><column>[${INTERNAL_DS}].[none:Region:nk]</column></slices>`,
+    });
+
+    const result = planRoundStackedBar(source, { preset: 'subtle' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.semanticContract.filter?.member).toBe('Path\\Name');
+  });
+
   it('preserves backslash sequences in an unquoted categorical filter member', () => {
     const source = worksheet({
       extraColumnInstances:

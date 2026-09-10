@@ -230,7 +230,7 @@ it('binds explicit Insights bar, line, and KPI proposals through the non-discove
         },
       },
       expectedMapping: {
-        '{{field_base_1}}': '[Metrics].[none:Product:nk]',
+        '{{field_base_1}}': '[Metrics].[attr:Product:nk]',
         '{{field_base_2}}': '[Metrics].[sum:ARR:qk]',
         '{{field_base_3}}': '[Metrics].[sum:ARR:qk]',
         '{{field_base_4}}': '[Metrics].[sum:ARR:qk]',

@@ -60,16 +60,40 @@ describe('desktop vendored assets', () => {
     expect(kpi).toBeDefined();
     expect(kpi?.snapshot.xml).toContain("<mark class='Text' />");
     expect(kpi?.snapshot.xml).not.toContain("<zoom type='entire-view' />");
-    expect(kpi?.snapshot.xml).toContain('<cols>[{{DATASOURCE}}].[none:{{field_base_1}}:nk]</cols>');
+    expect(kpi?.snapshot.xml).toContain('<cols />');
+    expect(kpi?.snapshot.xml).toContain(
+      "<tooltip column='[{{DATASOURCE}}].[attr:{{field_base_1}}:nk]' />",
+    );
     expect(kpi?.snapshot.xml).toContain("fontcolor='#898989' fontsize='12'>{{METRIC_NAME}}");
     expect(kpi?.snapshot.xml.match(/value='\{\{VALUE_FORMAT\}\}'/g)).toHaveLength(2);
     expect(kpi?.snapshot.xml).toContain("fontname='Tableau Medium' fontsize='24'");
     expect(kpi?.snapshot.xml).toContain('<run>Æ&#10;</run>');
     expect(kpi?.snapshot.xml).toContain("<format attr='text-align' value='left' />");
+    expect(kpi?.snapshot.xml).toContain(
+      "<text column='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />",
+    );
+    expect(kpi?.snapshot.xml).toContain(
+      "<text column='[{{DATASOURCE}}].[sum:{{field_base_5}}:qk]' />",
+    );
+    expect(kpi?.snapshot.xml).toContain(
+      "<tooltip column='[{{DATASOURCE}}].[sum:{{field_base_3}}:qk]' />",
+    );
+    expect(kpi?.snapshot.xml).toContain(
+      "<tooltip column='[{{DATASOURCE}}].[sum:{{field_base_4}}:qk]' />",
+    );
+    expect(kpi?.snapshot.xml).not.toContain(
+      "<text column='[{{DATASOURCE}}].[sum:{{field_base_3}}:qk]' />",
+    );
+    expect(kpi?.snapshot.xml).not.toContain(
+      "<text column='[{{DATASOURCE}}].[sum:{{field_base_4}}:qk]' />",
+    );
     expect(kpi?.snapshot.xml).toContain('{{COMPARISON_PERIOD_CONTEXT}} | ');
     expect(kpi?.snapshot.xml).not.toContain('PREVIOUS PERIOD | {{COMPARISON_PERIOD_CONTEXT}} | ');
     expect(kpi?.snapshot.xml).toContain('&lt;[{{DATASOURCE}}].[sum:{{field_base_3}}:qk]&gt;');
     expect(kpi?.snapshot.xml).toContain('CHANGE FROM PREVIOUS PERIOD | ');
+    expect(kpi?.snapshot.xml).toContain(
+      "<run bold='true' fontcolor='{{CHANGE_COLOR}}'>&lt;[{{DATASOURCE}}].[sum:{{field_base_5}}:qk]&gt;</run>",
+    );
     expect(kpi?.snapshot.xml).not.toContain('ABSOLUTE CHANGE | ');
     expect(kpi?.snapshot.xml).not.toContain('PREVIOUS VALUE | ');
   });

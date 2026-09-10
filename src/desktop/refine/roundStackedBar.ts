@@ -570,10 +570,7 @@ function readFilter(
   }
 
   const encodedMember = members[0].getAttribute('member') ?? '';
-  const member =
-    encodedMember.startsWith('"') && encodedMember.endsWith('"')
-      ? encodedMember.slice(1, -1).replaceAll('\\"', '"')
-      : encodedMember;
+  const member = decodeTableauFilterMember(encodedMember);
   return {
     ok: true,
     allowedColumn: filterInstance.column,
@@ -584,6 +581,30 @@ function readFilter(
       member,
     },
   };
+}
+
+/**
+ * Decode the quoted string-literal form Tableau uses for categorical filter members.
+ * The binder escapes both backslashes and quotes before wrapping the member in quotes,
+ * so decode them together in one pass to preserve adjacent escape sequences correctly.
+ * Legacy unquoted members are returned unchanged.
+ */
+function decodeTableauFilterMember(encodedMember: string): string {
+  if (!encodedMember.startsWith('"') || !encodedMember.endsWith('"')) return encodedMember;
+
+  const literal = encodedMember.slice(1, -1);
+  let decoded = '';
+  for (let index = 0; index < literal.length; index += 1) {
+    const current = literal[index];
+    const next = literal[index + 1];
+    if (current === '\\' && (next === '\\' || next === '"')) {
+      decoded += next;
+      index += 1;
+    } else {
+      decoded += current;
+    }
+  }
+  return decoded;
 }
 
 function baseNodes(parsed: ParsedXml):
