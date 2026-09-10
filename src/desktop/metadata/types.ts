@@ -32,6 +32,8 @@ export interface FieldReference {
   datasource: string;
   /** Remote relation/table from metadata-record parent-name, when Tableau supplies it. */
   table?: string;
+  /** Logical-table object id from metadata-record object-id, when confirmed by object-graph. */
+  logicalTableId?: string;
   // Published datasource's contentUrl (from the workbook's repository-location);
   // the input `generate-insight-cards` resolves to the server LUID. Undefined
   // for embedded/local datasources, which have no server copy.

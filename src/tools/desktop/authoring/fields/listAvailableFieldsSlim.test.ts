@@ -1,3 +1,4 @@
+import { listAvailableFields } from '../../../../desktop/metadata/field-builder.js';
 import {
   filterListAvailableFieldsSlimByLuid,
   projectListAvailableFieldsSlim,
@@ -56,6 +57,7 @@ describe('listAvailableFieldsSlim', () => {
       datasources: [
         {
           datasource: 'Sample - Superstore',
+          fieldTables: {},
           measures: [
             ['Profit', 'Profit', 'Sum', 'base'],
             ['Profit Ratio', 'Calculation_123', 'User', 'aggregatedCalc'],
@@ -64,6 +66,72 @@ describe('listAvailableFieldsSlim', () => {
           breakdownDimensions: [['Category', 'Category', 'nominal']],
         },
       ],
+    });
+  });
+
+  it('maps same-table and cross-table candidates while omitting unknown provenance', () => {
+    const fields = [
+      { ...baseField, logicalTableId: 'lt-orders' },
+      {
+        ...baseField,
+        columnName: '[Order Date]',
+        caption: 'Order Date',
+        derivation: 'None',
+        type: 'ordinal',
+        role: 'dimension',
+        datatype: 'date',
+        logicalTableId: 'lt-orders',
+      },
+      {
+        ...baseField,
+        columnName: '[Customer Since]',
+        caption: 'Customer Since',
+        derivation: 'None',
+        type: 'ordinal',
+        role: 'dimension',
+        datatype: 'date',
+        logicalTableId: 'lt-customers',
+      },
+      {
+        ...baseField,
+        columnName: '[Unknown Date]',
+        caption: 'Unknown Date',
+        derivation: 'None',
+        type: 'ordinal',
+        role: 'dimension',
+        datatype: 'date',
+      },
+    ] as any;
+
+    const group = projectListAvailableFieldsSlim(fields).datasources[0];
+
+    // Existing candidate tuple shapes stay unchanged; provenance is additive.
+    expect(group.measures).toEqual([['Profit', 'Profit', 'Sum', 'base']]);
+    expect(group.timeDimensions).toEqual([
+      ['Order Date', 'Order Date', 'date'],
+      ['Customer Since', 'Customer Since', 'date'],
+      ['Unknown Date', 'Unknown Date', 'date'],
+    ]);
+    expect(group.fieldTables).toEqual({
+      Profit: 'lt-orders',
+      'Order Date': 'lt-orders',
+      'Customer Since': 'lt-customers',
+    });
+    expect(group.fieldTables['Unknown Date']).toBeUndefined();
+  });
+
+  it('projects inherited single-object ownership into fieldTables', () => {
+    const xml = `<workbook><datasources><datasource name='Legacy DS'>
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Order Date]' role='dimension' type='ordinal' datatype='date' />
+      <object-graph is-legacy='true'><objects><object id='Migrated Data' /></objects></object-graph>
+    </datasource></datasources></workbook>`;
+
+    const group = projectListAvailableFieldsSlim(listAvailableFields(xml)).datasources[0];
+
+    expect(group.fieldTables).toEqual({
+      Sales: 'Migrated Data',
+      'Order Date': 'Migrated Data',
     });
   });
 
