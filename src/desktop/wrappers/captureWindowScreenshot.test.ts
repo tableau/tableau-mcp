@@ -188,6 +188,18 @@ describe('captureWindowScreenshot', () => {
     }
   });
 
+  it('returns the exact no-screenshot error and removes an empty command directory', async () => {
+    const directory = commandDirectory();
+
+    const result = await captureFrom(directory);
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.message).toBe('Tableau Desktop did not produce a screenshot.');
+    }
+    expect(() => lstatSync(directory)).toThrow();
+  });
+
   it.each([
     undefined,
     null,
