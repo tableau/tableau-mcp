@@ -35,6 +35,10 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
    * @param includeUserCount - Include total user count in pagination metadata
    * @param includeSSOInfo - Include SSO/SAML info per user
    * @param includeGroups - Include group memberships per user
+   * @param fields - Comma-separated attribute list (e.g.
+   *   `id,name,fullName,siteRole,email,lastLogin`). Name every field explicitly;
+   *   relying on Tableau's default set can silently omit `lastLogin`. The special
+   *   value `_all_` is also accepted but pulls the more expensive SSO path.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_users_on_site
    */
   listUsers = async ({
@@ -44,6 +48,7 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
     includeUserCount,
     includeSSOInfo,
     includeGroups,
+    fields,
   }: {
     siteId: string;
     pageSize?: number;
@@ -51,6 +56,7 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
     includeUserCount?: boolean;
     includeSSOInfo?: boolean;
     includeGroups?: boolean;
+    fields?: string;
   }): Promise<ListUsersResult> => {
     const response = await this._apiClient.listUsers({
       params: { siteId },
@@ -60,6 +66,7 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
         includeUserCount,
         includeSSOInfo,
         includeGroups,
+        fields,
       },
       ...this.authHeader,
     });

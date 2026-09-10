@@ -20,11 +20,20 @@ import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { log } from './logging/logger.js';
 import { registerPrompts } from './prompts/index.js';
+import { RestApiArgs } from './restApiInstance';
+import { siteRoleMeetsMinimum } from './sdks/tableau/types/user.js';
 import { ClientInfo, Server } from './server.js';
+import {
+  ClientCapabilitiesWithUiExtension,
+  clientSupportsMcpApps,
+} from './server/mcpUiCapability.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
+import { getClientDisplayName } from './telemetry/clientDisplayName.js';
+import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import {
@@ -62,12 +71,83 @@ export type LoadWebToolsResult = {
   toolNames: WebToolName[];
 };
 
+const BASE_INSTRUCTIONS =
+  'Tableau MCP exposes tools for exploring and querying Tableau Cloud/Server content: ' +
+  'datasources, workbooks, views, Pulse metrics, and content search.';
+
+// Admin/site-health guidance. Advertised only when ADMIN_TOOLS_ENABLED is set (config.adminToolsEnabled).
+// This is safe with no role lookup: the per-call assertAdmin gate still rejects any non-admin at execution,
+// so listing the capability menu leaks nothing. Tied to GENERIC admin-health intent so a generic prompt
+// (e.g. "what should I watch as an admin?") elicits these instead of only by-name requests.
+const ADMIN_INSTRUCTIONS =
+  'This server also has site-administration capabilities. For general admin/site-health, governance, ' +
+  'cleanup, or cost/license questions, proactively consider the admin prompts (stale-content cleanup, ' +
+  'job/extract optimization, user-license reclamation) and the query-admin-insights tool ' +
+  '(e.g. stale-content, job-performance, ts-users) for supporting data — even when the user asks broadly ' +
+  'rather than naming a specific tool. ' +
+  'Do not require the user to state or re-confirm admin status before using these tools — invoke them ' +
+  'whenever the task warrants; the server authorizes each call and cleanly rejects non-admins. ' +
+  'When rendering admin/list results (users, admin-insights, etc.) to a chat or Slack surface, present ' +
+  'them as Markdown tables.';
+
+// Appended to the initialize instructions when the caller's site role could not be fetched (after
+// retries) and that failure hid one or more role-gated tools. Signals that the incomplete tool set
+// is a transient error, not a permissions decision, so the user can reconnect to retry.
+const SITE_ROLE_UNAVAILABLE_WARNING =
+  "WARNING: Some tools were omitted from this session because the current user's Tableau site " +
+  'role could not be determined after multiple attempts. This is likely a transient error rather ' +
+  'than a permissions problem. Disconnect and reconnect to retry; if it persists, contact your ' +
+  'Tableau administrator.';
+
+/**
+ * Single source of truth for the web server's `initialize` instructions string. Returns the base
+ * guidance, with the admin/site-health guidance appended only when ADMIN_TOOLS_ENABLED is set.
+ *
+ * ADMIN_TOOLS_ENABLED is read straight from env (matching Config's exact semantics in config.ts:
+ * `ADMIN_TOOLS_ENABLED === 'true'`) rather than via getConfig(). The instructions string depends
+ * ONLY on this flag, and it is composed at handshake/registration-independent construction time —
+ * eagerly building the full Config here would newly require SERVER to be set and would consume test
+ * getConfig() mocks. Direct env read keeps composition side-effect-free.
+ *
+ * Both the default/web path (WebMcpServer constructs its own McpServer) and the combined path
+ * (index.combined.ts supplies a pre-built McpServer) MUST feed instructions through this function.
+ * The SDK reads `instructions` only from the McpServer constructor options (it is never settable
+ * post-construction), so a supplied McpServer that was not built with these instructions would
+ * silently drop them — see the guard in server.ts.
+ */
+export function buildWebInstructions(): string {
+  const adminToolsEnabled = process.env.ADMIN_TOOLS_ENABLED === 'true';
+  return adminToolsEnabled ? `${BASE_INSTRUCTIONS} ${ADMIN_INSTRUCTIONS}` : BASE_INSTRUCTIONS;
+}
+
+type RegistrationContext = {
+  siteRole?: string;
+};
+
 export class WebMcpServer extends Server {
   private readonly _loadedLazyWebToolGroups = new Set<WebToolGroupName>();
   private readonly _registeredLazyWebToolNames = new Set<WebToolName>();
 
-  constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
-    super({ mcpServer, clientInfo, serverName, serverVersion });
+  constructor({
+    mcpServer,
+    clientInfo,
+    capabilities,
+    clientId,
+  }: {
+    mcpServer?: McpServer;
+    clientInfo?: ClientInfo;
+    capabilities?: ClientCapabilitiesWithUiExtension;
+    clientId?: string;
+  } = {}) {
+    super({
+      mcpServer,
+      clientInfo,
+      capabilities,
+      clientId,
+      serverName,
+      serverVersion,
+      instructions: buildWebInstructions(),
+    });
   }
 
   registerResources = async (): Promise<void> => {
@@ -136,8 +216,9 @@ export class WebMcpServer extends Server {
     );
 
     for (const tool of toolsToRegister) {
-      await this._registerWebTool(tool);
-      this._registeredLazyWebToolNames.add(tool.name);
+      if (await this._registerWebTool(tool)) {
+        this._registeredLazyWebToolNames.add(tool.name);
+      }
     }
     for (const groupName of groupNames) {
       this._loadedLazyWebToolGroups.add(groupName);
@@ -182,9 +263,11 @@ export class WebMcpServer extends Server {
     );
   };
 
-  private _registerWebTool = async (tool: WebTool<any>): Promise<void> => {
+  private _registerWebTool = async (tool: WebTool<any>): Promise<boolean> => {
     const config = getConfig();
     const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
+    const supportsMcpApps = clientSupportsMcpApps(this.capabilities);
+    const isKnownIncompatibleClient = getClientDisplayName(this.clientId) === 'Claude';
 
     const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
       args: typeof tool.paramsSchema,
@@ -235,23 +318,30 @@ export class WebMcpServer extends Server {
       return tableauToolCallback(args, tableauRequestHandlerExtra);
     };
 
-    if (mcpAppsEnabled && tool.app) {
+    if (mcpAppsEnabled && tool.app && supportsMcpApps && !isKnownIncompatibleClient) {
       await this._registerAppTool(tool, toolCallback);
+    } else if (tool.app?.hideWhenUnsupported) {
+      return false;
     } else {
       await this._registerTool(tool, toolCallback);
     }
+    return true;
   };
 
   protected _getToolsToRegister = async (
     tableauAuthInfo?: TableauAuthInfo,
   ): Promise<Array<WebTool<any>>> => {
     const config = getConfig();
+    // Constructing args for invoking REST APIs outside of tool context
+    const restApiArgs: RestApiArgs = {
+      server: this,
+      tableauAuthInfo,
+      config,
+      signal: AbortSignal.timeout(config.maxRequestTimeoutMs),
+      disableLogging: true, // MCP server is not connected yet so we can't send logging notifications
+    };
     const configOverrides = await getConfigWithOverrides({
-      restApiArgs: {
-        server: this,
-        tableauAuthInfo,
-        disableLogging: true, // MCP server is not connected yet so we can't send logging notifications
-      },
+      restApiArgs,
       requestOverrides: {}, // request overrides are not relevant when getting tools
     });
 
@@ -262,12 +352,61 @@ export class WebMcpServer extends Server {
     const allTools = await Promise.all(
       webToolFactories.map((toolFactory) => toolFactory(this, tableauServerInfo.productVersion)),
     );
+
+    // The registration-time role check is gated behind `enforce-role-requirements`. When it's off
+    // (the default), tools register regardless of the caller's site role and no /users call is made.
+    const enforceRoleRequirements = await getFeatureGate().isFeatureEnabled(
+      'enforce-role-requirements',
+    );
+
+    // Stores context that is used for determining if registration conditions have been met.
+    // Registration context is uninitialized, but then gets populated with each condition checked.
+    const registrationContext: RegistrationContext = {};
+
+    // Fetching site role for user
+    if (enforceRoleRequirements) {
+      registrationContext.siteRole = await getCurrentUserSiteRole(restApiArgs);
+    }
+
+    // Names of role-gated tools hidden specifically because the role fetch FAILED
+    // rather than because the caller's role was genuinely too low.
+    const toolsOmittedForRoleFetchFailure: string[] = [];
+
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
+      if (enforceRoleRequirements && tool.minRequiredRole) {
+        const siteRole = registrationContext.siteRole;
+        if (!siteRoleMeetsMinimum(siteRole, tool.minRequiredRole)) {
+          // When the enforce-role-requirements feature flag is enabled, tools with role requirements are ommited during
+          // registration if a user does not have the minimum role or if their role is unable to be fetched.
+          // An `undefined` role means the fetch failed.
+          if (siteRole === undefined) {
+            toolsOmittedForRoleFetchFailure.push(tool.name);
+          }
+          continue;
+        }
+      }
       toolsToRegister.push(tool);
+    }
+
+    if (toolsOmittedForRoleFetchFailure.length > 0) {
+      // Telemetry: registration runs before the transport connects, so client notifications aren't
+      // available — the process logger (stderr/file, honors LOG_LEVEL) is the only sink here.
+      log({
+        level: 'warning',
+        logger: 'server',
+        message:
+          "Could not determine the current user's site role; " +
+          `${toolsOmittedForRoleFetchFailure.length} role-gated tool(s) were omitted from this ` +
+          `session: ${toolsOmittedForRoleFetchFailure.join(', ')}.`,
+      });
+
+      // Client-facing counterpart: surface the omission in the initialize instructions so the user
+      // knows the tool set is incomplete due to a fetch failure (not their permissions).
+      this.appendInstructions(SITE_ROLE_UNAVAILABLE_WARNING);
     }
 
     return toolsToRegister;

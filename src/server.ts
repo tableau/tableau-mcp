@@ -6,7 +6,9 @@ import {
 import { ErrorCode, InitializeRequest, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync } from 'fs';
 
+import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import invariant from './utils/invariant.js';
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
@@ -32,24 +34,41 @@ export abstract class Server {
   // With stdio transport, we can use the getClientVersion() method to get the client info.
   private readonly _clientInfo: ClientInfo | undefined;
 
+  // Client-advertised capabilities and OAuth `client_id`, threaded in per-request on both HTTP
+  // branches (session-managed and stateless) the same way `clientInfo` is (see note above).
+  // `capabilities` falls back to the SDK's populated value for stdio; `clientId` has no stdio
+  // equivalent (no OAuth handshake), so it is simply undefined there.
+  private readonly _capabilities: ClientCapabilitiesWithUiExtension | undefined;
+  readonly clientId: string | undefined;
+
   get clientInfo(): ClientInfo | undefined {
     return this._clientInfo ?? this.mcpServer.server.getClientVersion();
+  }
+
+  get capabilities(): ClientCapabilitiesWithUiExtension | undefined {
+    return this._capabilities ?? this.mcpServer.server.getClientCapabilities();
   }
 
   constructor({
     mcpServer,
     clientInfo,
+    capabilities,
+    clientId,
     serverName,
     serverVersion,
     instructions,
   }: {
     mcpServer?: McpServer;
     clientInfo?: ClientInfo;
+    capabilities?: ClientCapabilitiesWithUiExtension;
+    clientId?: string;
     serverName: string;
     serverVersion: string;
     /** MCP server instructions surfaced to every connecting client at initialize. */
     instructions?: string;
   }) {
+    const description =
+      'When opening local .twb/.twbx files, derive the full Tableau Desktop app path and choose the newest installed version when multiple are present.';
     this.ownsMcpServer = mcpServer === undefined;
     this.mcpServer =
       mcpServer ??
@@ -57,6 +76,7 @@ export abstract class Server {
         {
           name: serverName,
           version: serverVersion,
+          description,
         },
         {
           capabilities: {
@@ -68,9 +88,43 @@ export abstract class Server {
         },
       );
 
+    // Guard against silently dropping instructions on the provided-mcpServer path. The SDK reads
+    // `instructions` ONLY from the McpServer constructor options and never exposes a setter, so when
+    // a caller supplies its own McpServer (e.g. index.combined.ts) it MUST have built that McpServer
+    // with this variant's instruction block. A shared server may compose multiple variants, so require
+    // containment rather than whole-string equality. `_instructions` is the SDK's internal field.
+    if (mcpServer && instructions) {
+      const suppliedInstructions = (mcpServer.server as unknown as { _instructions?: string })
+        ._instructions;
+      invariant(
+        suppliedInstructions?.includes(instructions),
+        "The supplied McpServer was constructed without this server variant's instructions. " +
+          "Compose every shared variant's instructions when constructing the McpServer so the " +
+          'initialize handshake advertises the same guidance as each standalone path.',
+      );
+    }
+
     this.name = serverName;
     this.version = serverVersion;
     this._clientInfo = clientInfo;
+    this._capabilities = capabilities;
+    this.clientId = clientId;
+  }
+
+  /**
+   * Appends a sentence to the server-level instructions surfaced in the `initialize` result.
+   *
+   * Safe to call after construction but before the transport handles the initialize request (e.g.
+   * during {@link registerTools}): the SDK reads its `_instructions` field at initialize-time
+   * (server/index.js `_oninitialize`), not at construction. The SDK exposes no setter, so we write
+   * that internal field directly — the same field the constructor guard above reads. A no-op-safe
+   * concatenation preserves any base guidance composed at construction.
+   */
+  protected appendInstructions(sentence: string): void {
+    const sdkServer = this.mcpServer.server as unknown as { _instructions?: string };
+    sdkServer._instructions = sdkServer._instructions
+      ? `${sdkServer._instructions} ${sentence}`
+      : sentence;
   }
 
   get userAgent(): string {

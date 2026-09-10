@@ -128,7 +128,11 @@ export async function startExpressServer({
       let transport: StreamableHTTPServerTransport;
 
       if (config.disableSessionManagement) {
-        const server = new WebMcpServer();
+        const capabilities = isInitializeRequest(req.body)
+          ? req.body.params.capabilities
+          : undefined;
+        const clientId = req.auth?.clientId;
+        const server = new WebMcpServer({ capabilities, clientId });
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
         });
@@ -147,9 +151,11 @@ export async function startExpressServer({
           transport = session.transport;
         } else if (!sessionId && isInitializeRequest(req.body)) {
           const clientInfo = req.body.params.clientInfo;
-          transport = createSession({ clientInfo });
+          const capabilities = req.body.params.capabilities;
+          const clientId = req.auth?.clientId;
+          transport = createSession({ clientInfo, capabilities, clientId });
 
-          const server = new WebMcpServer({ clientInfo });
+          const server = new WebMcpServer({ clientInfo, capabilities, clientId });
           await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
         } else {
           log({

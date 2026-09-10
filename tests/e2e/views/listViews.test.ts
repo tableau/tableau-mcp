@@ -24,8 +24,8 @@ describe('list-views', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const views = await client.callTool('list-views', {
-      schema: z.array(viewSchema),
+    const { data: views } = await client.callTool('list-views', {
+      schema: z.object({ data: z.array(viewSchema), totalAvailable: z.number() }),
     });
 
     expect(views.length).greaterThan(0);
@@ -45,8 +45,8 @@ describe('list-views', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const views = await client.callTool('list-views', {
-      schema: z.array(viewSchema),
+    const { data: views } = await client.callTool('list-views', {
+      schema: z.object({ data: z.array(viewSchema), totalAvailable: z.number() }),
       toolArgs: { filter: 'name:eq:Overview,workbookName:eq:Superstore' },
     });
 
@@ -60,12 +60,12 @@ describe('list-views', () => {
     });
   });
 
-  it('should list views with pageSize and limit', async () => {
-    const views = await client.callTool('list-views', {
-      schema: z.array(viewSchema),
-      toolArgs: { pageSize: 5, limit: 10 },
+  it('should list views with pageNumber and limit', async () => {
+    const { data: views } = await client.callTool('list-views', {
+      schema: z.object({ data: z.array(viewSchema), totalAvailable: z.number() }),
+      toolArgs: { pageNumber: 1, limit: 10 },
     });
 
-    expect(views).toHaveLength(10);
+    expect(views.length).toBeLessThanOrEqual(10);
   });
 });

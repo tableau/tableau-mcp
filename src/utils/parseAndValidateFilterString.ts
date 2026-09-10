@@ -44,7 +44,12 @@ function normalizeDateTimeValue(field: string, value: string): string {
   );
 }
 
-const dateTimeFields = ['createdAt', 'updatedAt'];
+// Filter fields whose values are date-times and therefore get ISO-8601
+// validation + date-only auto-promotion (see normalizeDateTimeValue). Only
+// fields with these exact names are affected, so adding flow-run date fields
+// (startedAt/completedAt) here is inert for every other tool, none of which
+// filters on a bare field of that name.
+const dateTimeFields = ['createdAt', 'updatedAt', 'startedAt', 'completedAt'];
 
 /**
  * Reject filter strings whose `[...]` brackets are unbalanced before any
@@ -94,7 +99,7 @@ function validateBracketBalance(filterString: string): void {
  * `depth === 0`. Leading/trailing whitespace and empty segments are stripped
  * by the caller's `.map(trim).filter(Boolean)` chain.
  */
-function splitTopLevel(s: string, sep: string): string[] {
+export function splitTopLevel(s: string, sep: string): string[] {
   const out: string[] = [];
   let cur = '';
   let depth = 0;

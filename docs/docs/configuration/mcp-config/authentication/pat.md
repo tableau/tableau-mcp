@@ -9,7 +9,7 @@ Tableau [Personal Access Tokens (PAT)][pat] enable users to utilize Tableau REST
 requiring hard-coded credentials (username and password) or interactive sign-in.
 
 For general multi-user HTTP deployments, prefer [OAuth](oauth.md). PAT-based HTTP configurations are
-intended for testing/prototyping or deployments that are licensed and approved for user-based
+intended for testing/prototyping or deployments that are licensed and approved for usage-based
 licensing (UBL). Confirm non-OAuth HTTP usage with your Tableau licensing and security guidance.
 
 When `AUTH` is `pat`, the following environment variables are required:

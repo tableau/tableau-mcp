@@ -107,6 +107,28 @@ describe('secretMask', () => {
     });
   });
 
+  it('does not clone binary response data for debug notifications', () => {
+    const data = Buffer.from('sensitive view data');
+
+    const maskedResponse = maskResponse({
+      status: 200,
+      baseUrl: 'https://example.com',
+      params: {},
+      url: '/api/v1/views/view-1/allData',
+      headers: { 'content-type': 'multipart/form-data; boundary=example' },
+      data,
+    });
+
+    expect(maskedResponse).toEqual({
+      status: 200,
+      baseUrl: 'https://example.com',
+      params: {},
+      url: '/api/v1/views/view-1/allData',
+      headers: { 'content-type': 'multipart/form-data; boundary=example' },
+      data: { redacted: true, reason: 'binary-payload', byteLength: data.byteLength },
+    });
+  });
+
   it('should not include headers and data in the request if the log level is not debug', () => {
     setNotificationLevel(new WebMcpServer().mcpServer, 'info', { silent: true });
 
@@ -150,6 +172,26 @@ describe('secretMask', () => {
       baseUrl: 'https://example.com',
       url: '/api/v1/users',
       params: {},
+    });
+  });
+
+  it('does not include binary response metadata if the log level is not debug', () => {
+    setNotificationLevel(new WebMcpServer().mcpServer, 'info', { silent: true });
+
+    const maskedResponse = maskResponse({
+      status: 200,
+      baseUrl: 'https://example.com',
+      params: {},
+      url: '/api/v1/views/view-1/allData',
+      headers: { 'content-type': 'multipart/form-data; boundary=example' },
+      data: Buffer.from('sensitive view data'),
+    });
+
+    expect(maskedResponse).toEqual({
+      status: 200,
+      baseUrl: 'https://example.com',
+      params: {},
+      url: '/api/v1/views/view-1/allData',
     });
   });
 

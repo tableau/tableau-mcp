@@ -4,14 +4,17 @@ import { ZodRawShape } from 'zod';
 
 import { ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
+import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
+import { getAuthTypeForTelemetry } from '../../telemetry/authType.js';
 import {
   getClientDisplayName,
   sanitizeClientIdForTelemetry,
 } from '../../telemetry/clientDisplayName.js';
 import { getTelemetryProvider } from '../../telemetry/init.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
@@ -30,6 +33,8 @@ export type AppDetails = {
   name: string;
   resourceUri: string;
   htmlPath: string;
+  // Skip the plain-tool fallback entirely when the client can't render the app.
+  hideWhenUnsupported?: boolean;
 };
 
 /**
@@ -59,8 +64,14 @@ export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = To
   TableauWebRequestHandlerExtra,
   TableauWebToolCallback<Args>,
   Args
-> &
-  (
+> & {
+  /**
+   * Lowest site role allowed to see this tool at registration time. OMITTED MEANS THE TOOL IS AVAILABLE FOR ALL USERS.
+   * When set, the caller's site role must rank at or above it in {@link SITE_ROLE_HIERARCHY} (see
+   * {@link siteRoleMeetsMinimum}) or the tool is not registered for that caller.
+   */
+  minRequiredRole?: SiteRole;
+} & (
     | {
         app?: AppDetails;
         meta?: never;
@@ -108,6 +119,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
   Args
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
+  minRequiredRole?: SiteRole;
   app?: AppDetails;
   meta?: ToolMeta;
 
@@ -119,12 +131,14 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     annotations,
     callback,
     disabled,
+    minRequiredRole,
     app,
     meta,
   }: WebToolParams<Args>) {
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
+    this.minRequiredRole = minRequiredRole;
     this.app = app;
     this.meta = meta;
   }
@@ -148,11 +162,14 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       extra.authInfo?.clientId;
 
     this.notifyInvocation({ requestId, args, username });
-    log({
-      message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
-      level: 'debug',
-      logger: 'tool',
-    });
+    log(
+      {
+        message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
+        level: 'debug',
+        logger: 'tool',
+      },
+      extra,
+    );
 
     const productTelemetryForwarder = getProductTelemetry(
       config.productTelemetryEndpoint,
@@ -162,7 +179,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
 
     let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
-    let toolResult: CallToolResult;
+    let toolResult: CallToolResult | undefined;
 
     try {
       const result = await callback();
@@ -213,12 +230,15 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       if (!errorCode) {
         errorCode = '500'; // Default to 500 if no HTTP status can be determined
       }
-      log({
-        message: 'Tool execution failed',
-        level: 'error',
-        logger: 'tool',
-        data: error,
-      });
+      log(
+        {
+          message: 'Tool execution failed',
+          level: 'error',
+          logger: 'tool',
+          data: error,
+        },
+        extra,
+      );
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
@@ -232,9 +252,14 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
         is_hyperforce: config.isHyperforce,
         success,
         error_code: errorCode,
+        // Only populated for genuine error results (isError: true). The ZodiosValidationError
+        // passthrough returns isError: false with the full API payload, so keying off isError
+        // (not !success) keeps successful response data out of telemetry.
+        error_message: toolResult?.isError ? extractToolErrorMessage(toolResult) : '',
         oauth_client_id: sanitizeClientIdForTelemetry(oauthClientId),
         oauth_client_display_name:
           getClientDisplayName(oauthClientId) ?? sanitizeClientIdForTelemetry(oauthClientId),
+        auth_type: getAuthTypeForTelemetry(config, tableauAuthInfo),
       });
       // Record custom metric for this tool call
       const telemetry = getTelemetryProvider();

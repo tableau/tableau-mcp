@@ -20,16 +20,16 @@ describe('list-projects', () => {
   });
 
   it('should list projects', async () => {
-    const projects = await client.callTool('list-projects', {
-      schema: z.array(projectSchema),
+    const { data: projects } = await client.callTool('list-projects', {
+      schema: z.object({ data: z.array(projectSchema), totalAvailable: z.number() }),
     });
 
     expect(projects.length).greaterThan(0);
   });
 
   it('should list projects with filter', async () => {
-    const projects = await client.callTool('list-projects', {
-      schema: z.array(projectSchema),
+    const { data: projects } = await client.callTool('list-projects', {
+      schema: z.object({ data: z.array(projectSchema), totalAvailable: z.number() }),
       toolArgs: { filter: 'name:eq:Samples' },
     });
 

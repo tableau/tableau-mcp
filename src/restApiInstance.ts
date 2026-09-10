@@ -37,10 +37,14 @@ type JwtScopes =
   | 'tableau:tasks:delete'
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
+  | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
+  | 'tableau:workbooks:create'
+  | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
+  | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
   | 'tableau:users:update'
   | 'tableau:flows:read'
@@ -51,6 +55,7 @@ export type RestApiArgs = Pick<
   TableauWebRequestHandlerExtra,
   'config' | 'server' | 'signal' | 'tableauAuthInfo' | 'setSiteLuid' | 'setUserLuid'
 > &
+  Partial<Pick<TableauWebRequestHandlerExtra, 'getSiteLuid' | 'getUserLuid'>> &
   (
     | {
         requestId: RequestId;
@@ -75,6 +80,8 @@ const getNewRestApiInstanceAsync = async (
     disableLogging,
     setSiteLuid,
     setUserLuid,
+    getSiteLuid,
+    getUserLuid,
   } = args;
 
   if (!disableLogging) {
@@ -106,13 +113,13 @@ const getNewRestApiInstanceAsync = async (
       ? undefined
       : [
           getRequestInterceptor(server, args.requestId),
-          getRequestErrorInterceptor(server, args.requestId),
+          getRequestErrorInterceptor(server, args.requestId, { getSiteLuid, getUserLuid }),
         ],
     responseInterceptor: disableLogging
       ? undefined
       : [
           getResponseInterceptor(server, args.requestId),
-          getResponseErrorInterceptor(server, args.requestId),
+          getResponseErrorInterceptor(server, args.requestId, { getSiteLuid, getUserLuid }),
         ],
   });
 
@@ -163,6 +170,7 @@ export const useRestApi = async <T>(
     ...remaining,
     jwtScopes: new Set(args.jwtScopes),
   });
+  const logCtx = { getSiteLuid: args.getSiteLuid, getUserLuid: args.getUserLuid };
   try {
     return await callback(restApi);
   } finally {
@@ -179,14 +187,24 @@ export const useRestApi = async <T>(
       // session expires on its own regardless.
       try {
         await restApi.signOut();
-        log({ message: 'Signed out of Tableau REST API', level: 'debug', logger: 'auth' });
+        log(
+          {
+            message: 'Signed out of Tableau REST API',
+            level: 'debug',
+            logger: 'auth',
+          },
+          logCtx,
+        );
       } catch (error) {
-        log({
-          message: `Failed to sign out of Tableau REST API: ${getExceptionMessage(error)}`,
-          level: 'warning',
-          logger: 'auth',
-          data: error,
-        });
+        log(
+          {
+            message: `Failed to sign out of Tableau REST API: ${getExceptionMessage(error)}`,
+            level: 'warning',
+            logger: 'auth',
+            data: error,
+          },
+          logCtx,
+        );
       }
     }
   }
@@ -201,15 +219,22 @@ export const getRequestInterceptor =
   };
 
 export const getRequestErrorInterceptor =
-  (server: Server, requestId: RequestId): ErrorInterceptor =>
+  (
+    server: Server,
+    requestId: RequestId,
+    ctx?: { getSiteLuid?: () => string; getUserLuid?: () => string },
+  ): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.request) {
-      log({
-        message: `Request ${requestId} failed`,
-        level: 'error',
-        logger: 'rest-api',
-        data: error,
-      });
+      log(
+        {
+          message: `Request ${requestId} failed`,
+          level: 'error',
+          logger: 'rest-api',
+          data: error,
+        },
+        ctx,
+      );
       notifier.error(
         server.mcpServer,
         `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
@@ -240,15 +265,22 @@ export const getResponseInterceptor =
   };
 
 export const getResponseErrorInterceptor =
-  (server: Server, requestId: RequestId): ErrorInterceptor =>
+  (
+    server: Server,
+    requestId: RequestId,
+    ctx?: { getSiteLuid?: () => string; getUserLuid?: () => string },
+  ): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.response) {
-      log({
-        message: `Response from request ${requestId} failed`,
-        level: 'error',
-        logger: 'rest-api',
-        data: error,
-      });
+      log(
+        {
+          message: `Response from request ${requestId} failed`,
+          level: 'error',
+          logger: 'rest-api',
+          data: error,
+        },
+        ctx,
+      );
       notifier.error(
         server.mcpServer,
         `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,

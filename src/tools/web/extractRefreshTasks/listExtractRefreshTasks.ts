@@ -29,6 +29,7 @@ export const getListExtractRefreshTasksTool = (
     server,
     name: 'list-extract-refresh-tasks',
     disabled: !config.adminToolsEnabled,
+    minRequiredRole: 'ExplorerCanPublish',
     description: `
   Retrieves a list of extract refresh tasks for the Tableau site. Each task describes a scheduled refresh for a **data source** or **workbook** extract and includes schedule information (e.g. frequency, next run time, schedule name on Server).
 

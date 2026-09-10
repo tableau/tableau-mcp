@@ -13,7 +13,7 @@ The hosted service is intended for **Tableau Cloud customers** who want to conne
 ## What you get
 
 - **OAuth 2.1 authentication out of the box.** Every user signs in to their own Tableau Cloud identity. The MCP server then makes Tableau REST API calls *as that user*, so every existing per-user permission and access control is enforced automatically.
-- **Pod-aware routing.** A single URL (`https://mcp.tableau.com`) works for every Tableau Cloud pod. Tableau Routing layer  routes authenticated OAuth request to the correct pod by inspecting OAuth token. See [Architecture](architecture.md) for details.
+- **Pod-aware routing.** A single URL (`https://mcp.tableau.com`) works for every Tableau Cloud pod. The Tableau Routing layer routes authenticated OAuth requests to the correct pod by inspecting the OAuth token. See [Architecture](architecture.md) for details.
 - **The full Tableau MCP tool catalog.** All tools documented in the [Tools](./category/tools) section are available, subject to your site's SKU entitlements and the signed-in user's permissions.
 - **Continuously updated.** New tools and fixes ship to the hosted service automatically — no client-side upgrade required.
 
@@ -37,7 +37,7 @@ See [Popular Client Integrations](./client-integrations.md) for step-by-step ins
     "settings": [
       {
         "key": "EXCLUDE_TOOLS",
-        "value": "admin-insights,content-exploration,datasource,jobs,project,pulse,tasks,token-management,users,view,workbook"
+        "value": "admin-insights,authoring,content,content-exploration,datasource,flow,insights,jobs,mcp-apps,project,pulse,tasks,token-management,users,view,workbook"
       }
     ]
   }
@@ -49,7 +49,7 @@ See [Popular Client Integrations](./client-integrations.md) for step-by-step ins
     <mcpSiteSettings>
         <settings>
             <key>EXCLUDE_TOOLS</key>
-            <value>admin-insights,content-exploration,datasource,jobs,project,pulse,tasks,token-management,users,view,workbook</value>
+            <value>admin-insights,authoring,content,content-exploration,datasource,flow,insights,jobs,mcp-apps,project,pulse,tasks,token-management,users,view,workbook</value>
         </settings>
     </mcpSiteSettings>
 </tsRequest>

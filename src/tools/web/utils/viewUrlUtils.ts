@@ -1,3 +1,5 @@
+import { Workbook } from '../../../sdks/tableau/types/workbook.js';
+
 /**
  * Constructs a web URL for a Tableau view
  *
@@ -21,4 +23,31 @@ export function constructViewWebUrl(server: string, siteName: string, contentUrl
   }
 
   return url.toString();
+}
+
+export function getDefaultViewWebUrl(
+  workbook: Workbook,
+  server: string,
+  siteName: string,
+): string | undefined {
+  const views = workbook.views?.view;
+  if (!views || views.length === 0) {
+    return undefined;
+  }
+
+  // Try to find the default view first
+  let targetView = workbook.defaultViewId
+    ? views.find((view) => view.id === workbook.defaultViewId)
+    : undefined;
+
+  // If default view was filtered out, fall back to the first view
+  if (!targetView) {
+    targetView = views[0];
+  }
+
+  if (!targetView?.contentUrl) {
+    return undefined;
+  }
+
+  return constructViewWebUrl(server, siteName, targetView.contentUrl);
 }

@@ -3,11 +3,13 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
+import { getFeatureGate } from '../../../../features/init.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { Flow } from '../../../../sdks/tableau/types/flow.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { paginateWithMetadata } from '../../../../utils/paginate.js';
+import { Provider } from '../../../../utils/provider.js';
 import { genericFilterDescription } from '../../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../../tool.js';
 import { extractEqValue, looksLikeUuid } from '../flowFilterUtils.js';
@@ -90,7 +92,10 @@ export const getListFlowsTool = (server: WebMcpServer): WebTool<typeof paramsSch
   const listFlowsTool = new WebTool({
     server,
     name: 'list-flows',
-    disabled: !config.flowToolsEnabled,
+    disabled: new Provider(
+      async () =>
+        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+    ),
     description: `
   Retrieves a list of Tableau Prep flows on a Tableau site, including each flow's metadata such as name, description, owner, project, tags, and timestamps. Supports optional filtering via field:operator:value expressions (e.g., name:eq:DailySalesCleanup) and sorting (e.g., createdAt:desc) for precise discovery. Use this tool when a user requests to list, search, or filter Tableau Prep flows on a site.
 

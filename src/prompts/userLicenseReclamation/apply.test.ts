@@ -154,6 +154,66 @@ describe('user-license-reclamation-apply prompt', () => {
     expect(text).not.toContain('"Login"');
   });
 
+  it('provides a deterministic VDS query for ts-users (Step 2b) with Desktop/Prep captions', async () => {
+    const text = await textOf();
+    expect(text).toContain('"kind": "ts-users"');
+    expect(text).toContain('"fieldCaption": "Tableau Desktop - Last Access Date"');
+    expect(text).toContain('"fieldCaption": "Tableau Prep - Last Access Date"');
+    // TS Users uses plain user captions, NOT the TS-Events-specific `Actor User Name`.
+    expect(text).toContain('"fieldCaption": "User Email"');
+    expect(text).toContain('"fieldCaption": "User Name"');
+    expect(text).not.toContain('"fieldCaption": "Actor User Email"');
+    expect(text).toContain('"limit": 10000');
+  });
+
+  it('scopes the ts-users query to the Step-1 candidate emails to avoid the 10000-row truncation blind spot', async () => {
+    const text = await textOf();
+    // The query carries a SET filter on `User Email` with a replace-me placeholder.
+    expect(text).toContain('"filterType": "SET"');
+    expect(text).toContain(
+      '<REPLACE with the candidate User Emails from Step 1 — one string per candidate>',
+    );
+    // The instruction tells the model to scope, not to fetch all users.
+    expect(text).toContain('**Scope this query to the Step-1 candidates.**');
+    expect(text).toContain('Do NOT fetch all site users.');
+  });
+
+  it('warns admin when TS Users (Step 2b) results hit the row limit', async () => {
+    const text = await textOf();
+    expect(text).toContain('TS Users results were truncated at the 10000-row limit');
+    expect(text).toContain('could be falsely flagged as inactive');
+  });
+
+  it('fails loud when TS Users (Step 2b) returns 0 rows (scoping likely not applied)', async () => {
+    const text = await textOf();
+    expect(text).toContain('returns 0 rows');
+    expect(text).toContain('⚠️ TS Users returned 0 rows');
+    expect(text).toContain('may contain false positives');
+    expect(text).toContain('re-run before approving any downgrade');
+  });
+
+  it('renders a concrete ISO cutoff in the Desktop/Prep recency check (parity with inform)', async () => {
+    const text = await textOf();
+    expect(text).toMatch(
+      /on or after \d{4}-\d{2}-\d{2}T[\d:.]+Z\*\* \(i\.e\. within the last 90 days\)/,
+    );
+  });
+
+  it('treats a recent non-null Desktop/Prep date as active and null as no-signal in inactivity determination', async () => {
+    const text = await textOf();
+    expect(text).toContain('Inactivity determination (all conditions must hold):');
+    expect(text).toContain('NO recent non-null Tableau Desktop OR Prep last-access date');
+    expect(text).toContain('null is NOT activity');
+    expect(text).toContain('recent non-null Desktop or Prep last-access date is **active**');
+  });
+
+  it('includes the Desktop/Prep availability caveat in the notes and Fixed notes', async () => {
+    const text = await textOf();
+    expect(text).toContain('Desktop / Prep last-access dates');
+    expect(text).toContain('null for every');
+    expect(text).toContain('Desktop/Prep activity data');
+  });
+
   it('provides a deterministic VDS query for site-content (Step 3)', async () => {
     const text = await textOf();
     expect(text).toContain('"kind": "site-content"');

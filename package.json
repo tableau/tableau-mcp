@@ -45,6 +45,7 @@
     "build:manifest": "tsx src/scripts/createClaudeMcpBundleManifest.ts",
     "build:template-content-pack": "node --import tsx src/scripts/buildTemplateContentPack.ts",
     "start:http": "node build/index.js",
+    "start:http:combined": "node build/index.combined.js",
     "start:http:apm": "node -r ./build/telemetry/tracing.js build/index.js",
     "start:http:docker": "docker run -p 3927:3927 -i --rm --env-file env.list tableau-mcp",
     "lint": "npm exec eslint",
@@ -69,6 +70,9 @@
     "docs:start": "npm run start --prefix docs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1095.0",
+    "@aws-sdk/s3-request-presigner": "^3.1095.0",
+    "@mjackson/multipart-parser": "^0.10.1",
     "@modelcontextprotocol/ext-apps": "^1.7.2",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@xmldom/xmldom": "^0.9.10",
@@ -77,6 +81,7 @@
     "ajv-formats": "^3.0.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "csv-parse": "^7.0.2",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "fast-levenshtein": "^3.0.0",
@@ -86,6 +91,7 @@
     "jsonc-parser": "^3.3.1",
     "ssrfcheck": "^1.2.0",
     "ts-results-es": "^7.1.0",
+    "uuid": "^14.0.1",
     "xpath": "^0.0.34",
     "zod": "^3.24.3",
     "zod-validation-error": "^4.0.1"

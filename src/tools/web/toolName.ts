@@ -6,6 +6,8 @@ export const webToolNames = [
   'list-jobs',
   'list-users',
   'list-workbooks',
+  'request-workbook-upload',
+  'publish-workbook',
   'list-projects',
   'list-views',
   'list-custom-views',
@@ -13,9 +15,13 @@ export const webToolNames = [
   'query-datasource',
   'get-datasource-metadata',
   'get-embed-token',
+  'record-event',
   'get-workbook',
+  'download-workbook',
   'get-view',
   'get-flow',
+  'list-flow-runs',
+  'list-flow-tasks',
   'get-view-data',
   'get-view-image',
   'get-custom-view-data',
@@ -35,12 +41,14 @@ export const webToolNames = [
   'update-user',
   'delete-content',
   'confirm-delete-content',
+  'render-interactive-viz',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
 export const webToolGroupNames = [
   'datasource',
   'workbook',
+  'authoring',
   'project',
   'view',
   'flow',
@@ -51,6 +59,7 @@ export const webToolGroupNames = [
   'jobs',
   'users',
   'token-management',
+  'mcp-apps',
   'admin-insights',
   'content',
 ] as const;
@@ -58,7 +67,8 @@ export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
 export const webToolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
-  workbook: ['list-workbooks', 'get-workbook'],
+  workbook: ['list-workbooks', 'get-workbook', 'download-workbook'],
+  authoring: ['request-workbook-upload', 'publish-workbook'],
   project: ['list-projects'],
   view: [
     'list-views',
@@ -69,7 +79,7 @@ export const webToolGroups = {
     'get-custom-view-data',
     'get-custom-view-image',
   ],
-  flow: ['list-flows', 'get-flow'],
+  flow: ['list-flows', 'get-flow', 'list-flow-runs', 'list-flow-tasks'],
   pulse: [
     'list-all-pulse-metric-definitions',
     'list-pulse-metric-definitions-from-definition-ids',
@@ -88,7 +98,8 @@ export const webToolGroups = {
   ],
   jobs: ['list-jobs'],
   users: ['list-users', 'update-user'],
-  'token-management': ['get-embed-token', 'revoke-access-token', 'reset-consent'],
+  'token-management': ['revoke-access-token', 'reset-consent'],
+  'mcp-apps': ['get-embed-token', 'record-event', 'render-interactive-viz'],
   'admin-insights': ['query-admin-insights'],
   content: ['delete-content', 'confirm-delete-content'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;

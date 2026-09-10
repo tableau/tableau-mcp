@@ -6,12 +6,13 @@ import { getConfig } from '../../../config.js';
 import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
 import {
+  AdminInsightsQueryResult,
   executeAdminInsightsQuery,
-  QueryOutput,
   runAdminInsightsQuery,
 } from './adminInsightsToolBase.js';
 import {
@@ -25,30 +26,42 @@ import {
   computeStaleRows,
   StaleContentRow,
 } from './getStaleContentReport.js';
-import { ADMIN_INSIGHTS_DATASETS, AdminInsightsDataset } from './resolver.js';
+import {
+  ADMIN_INSIGHTS_DATASETS,
+  AdminInsightsDataset,
+  AdminInsightsResolverWarning,
+} from './resolver.js';
 
 /**
- * Dispatches on `kind` to one of four backends:
+ * Dispatches on `kind` to one of five backends:
  *
  * - `ts-events` — raw VDS query against the "TS Events" datasource
+ * - `ts-users` — raw VDS query against the "TS Users" datasource
  * - `site-content` — raw VDS query against the "Site Content" datasource
  * - `job-performance` — raw VDS query against the "Job Performance" datasource
  * - `stale-content` — server-side anti-join that returns already-filtered stale rows
  */
 
-const kindSchema = z.enum(['ts-events', 'site-content', 'job-performance', 'stale-content']);
+const kindSchema = z.enum([
+  'ts-events',
+  'ts-users',
+  'site-content',
+  'job-performance',
+  'stale-content',
+]);
 type Kind = z.infer<typeof kindSchema>;
 
 const paramsSchema = {
   kind: kindSchema.describe(
-    'Which admin-insights backend to query. Use "ts-events", "site-content", or "job-performance" ' +
-      'for raw VDS queries; use "stale-content" for the deterministic stale-content anti-join.',
+    'Which admin-insights backend to query. Use "ts-events", "ts-users", "site-content", or ' +
+      '"job-performance" for raw VDS queries; use "stale-content" for the deterministic ' +
+      'stale-content anti-join.',
   ),
   query: querySchema
     .optional()
     .describe(
       'VDS query object (fields, filters, parameters). REQUIRED when kind is "ts-events", ' +
-        '"site-content", or "job-performance"; IGNORED when kind is "stale-content".',
+        '"ts-users", "site-content", or "job-performance"; IGNORED when kind is "stale-content".',
     ),
   limit: z
     .number()
@@ -56,7 +69,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Optional row limit. Applied when kind is "ts-events", "site-content", or ' +
+      'Optional row limit. Applied when kind is "ts-events", "ts-users", "site-content", or ' +
         '"job-performance"; IGNORED when kind is "stale-content".',
     ),
   minAgeDays: z
@@ -90,7 +103,7 @@ type StaleContentResult = {
   totalStaleItems: number;
   totalStaleSizeBytes: number;
   rows: StaleContentRow[];
-  mcp?: { warnings: _StaleReportWarning[] };
+  mcp?: { warnings: Array<_StaleReportWarning | AdminInsightsResolverWarning> };
 };
 
 export const getQueryAdminInsightsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -99,17 +112,21 @@ export const getQueryAdminInsightsTool = (server: WebMcpServer): WebTool<typeof 
     server,
     name: 'query-admin-insights',
     disabled: !config.adminToolsEnabled,
+    minRequiredRole: MIN_ADMIN_SITE_ROLE,
     description: `
 Queries the Tableau Admin Insights datasources on the current site. Restricted to site
 administrators on Tableau Cloud sites with Admin Insights enabled.
 
 Dispatches on \`kind\`:
-- \`ts-events\` / \`site-content\` / \`job-performance\` — raw VDS query. Pass \`query\` (required)
-  and optional \`limit\`.
+- \`ts-events\` / \`ts-users\` / \`site-content\` / \`job-performance\` — raw VDS query. Pass
+  \`query\` (required) and optional \`limit\`. Use \`ts-users\` for per-user activity signals such
+  as last login and Tableau Desktop / Prep last-access dates.
 - \`stale-content\` — server-side stale-content report. Pass optional \`minAgeDays\`, \`projectIds\`,
   \`itemTypes\`; do NOT pass \`query\` or \`limit\`.
 
 Datasource LUIDs are resolved automatically; callers do not pass \`datasourceLuid\`.
+
+Consider this for general admin/site-health, governance, cleanup, and cost/license questions.
 `.trim(),
     paramsSchema,
     annotations: {
@@ -188,6 +205,10 @@ Datasource LUIDs are resolved automatically; callers do not pass \`datasourceLui
                   return siteContentResult;
                 }
 
+                // Surface any resolver diagnostics (ambiguous duplicate / dead-extract fallback)
+                // alongside the stale-content warnings.
+                const resolverWarnings = siteContentResult.value.mcp?.warnings ?? [];
+
                 const universe = z
                   .array(_siteContentRowSchema)
                   .parse(siteContentResult.value.data ?? []);
@@ -212,17 +233,22 @@ Datasource LUIDs are resolved automatically; callers do not pass \`datasourceLui
                     totalStaleSizeBytes,
                     rows: [] as StaleContentRow[],
                     mcp: {
-                      warnings: [...warnings, _buildRowCapWarning({ totalStaleItems, maxRows })],
+                      warnings: [
+                        ...resolverWarnings,
+                        ...warnings,
+                        _buildRowCapWarning({ totalStaleItems, maxRows }),
+                      ],
                     },
                   });
                 }
 
+                const allWarnings = [...resolverWarnings, ...warnings];
                 return new Ok({
                   thresholdDays,
                   totalStaleItems,
                   totalStaleSizeBytes,
                   rows,
-                  ...(warnings.length > 0 ? { mcp: { warnings } } : {}),
+                  ...(allWarnings.length > 0 ? { mcp: { warnings: allWarnings } } : {}),
                 });
               },
             });
@@ -231,7 +257,7 @@ Datasource LUIDs are resolved automatically; callers do not pass \`datasourceLui
         });
       }
 
-      return await tool.logAndExecute<QueryOutput>({
+      return await tool.logAndExecute<AdminInsightsQueryResult>({
         extra,
         args: { kind, query, limit },
         callback: async () => {
@@ -246,10 +272,11 @@ Datasource LUIDs are resolved automatically; callers do not pass \`datasourceLui
           const caps = [toolCap, limit].filter((v): v is number => typeof v === 'number' && v > 0);
           const rowLimit = caps.length > 0 ? Math.min(...caps) : undefined;
 
+          const datasetName = kindToDataset(kind);
           return await runAdminInsightsQuery({
             extra,
             jwtScopes: tool.requiredApiScopes,
-            datasetName: kindToDataset(kind),
+            datasetName,
             query,
             rowLimit,
           });
@@ -266,6 +293,8 @@ function kindToDataset(kind: Exclude<Kind, 'stale-content'>): AdminInsightsDatas
   switch (kind) {
     case 'ts-events':
       return ADMIN_INSIGHTS_DATASETS.TS_EVENTS;
+    case 'ts-users':
+      return ADMIN_INSIGHTS_DATASETS.TS_USERS;
     case 'site-content':
       return ADMIN_INSIGHTS_DATASETS.SITE_CONTENT;
     case 'job-performance':

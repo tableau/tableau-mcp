@@ -12,8 +12,12 @@ vi.mock('./getEmbedTokenToolClient.js');
 vi.mock('./embedTableauViz.js');
 vi.mock('./loadTableauEmbeddingApi.js');
 vi.mock('./openInTableauLink.js');
+vi.mock('./fullscreenButton.js');
+vi.mock('../shared/recordEventClient.js');
 
+import { recordEvent } from '../shared/recordEventClient.js';
 import { embedTableauViz } from './embedTableauViz.js';
+import { setupFullscreenButton } from './fullscreenButton.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
@@ -22,12 +26,19 @@ describe('handleToolResult', () => {
   let mockApp: App;
 
   beforeEach(() => {
-    // Set up DOM
+    // Set up DOM (simulating the real app structure with viz-stage wrapper)
     const main = document.createElement('div');
     main.className = 'main';
-    const container = document.createElement('div');
-    container.id = 'tableauVizContainer';
-    main.appendChild(container);
+    // Add viz stage wrapper
+    const vizStage = document.createElement('div');
+    vizStage.id = 'vizStage';
+    vizStage.className = 'viz-stage';
+    // Add viz container inside the stage
+    const vizContainer = document.createElement('div');
+    vizContainer.className = 'viz-container';
+    vizContainer.id = 'tableauVizContainer';
+    vizStage.appendChild(vizContainer);
+    main.appendChild(vizStage);
     document.body.appendChild(main);
 
     // Create mock app
@@ -129,7 +140,10 @@ describe('handleToolResult', () => {
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
   });
 
-  it('should show error UI when tool result is malformed JSON', async () => {
+  it('silently no-ops on malformed JSON instead of showing PARSE_ERROR', async () => {
+    // The host re-fires tool-result on re-render/re-mount, and those deliveries can carry
+    // unparseable text. There is nothing to embed, so this must be a silent no-op — NOT an
+    // error (which previously flooded telemetry with raw ZodError text).
     const malformedResult: CallToolResult = {
       content: [
         {
@@ -144,26 +158,16 @@ describe('handleToolResult', () => {
 
     const container = document.getElementById('tableauVizContainer');
 
-    // NO tableau-viz rendered
+    // No viz, no error UI — nothing happened
     expect(container?.querySelector('tableau-viz')).toBeNull();
+    expect(container?.querySelector('.mcp-app-error')).toBeNull();
 
-    // error UI IS displayed
-    const errorElement = container?.querySelector('.mcp-app-error');
-    expect(errorElement).toBeTruthy();
-
-    // New two-line layout: heading + subtitle
-    expect(errorElement?.querySelector('.mcp-app-error-heading')?.textContent).toBe(
-      'Unable to load this Tableau view',
-    );
-    expect(errorElement?.querySelector('.mcp-app-error-message')?.textContent).toBe(
-      'The response was not in the expected format.',
-    );
-
-    // Assert embedTableauViz was NOT called
+    // No embedding attempted and no telemetry event recorded
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
+    expect(vi.mocked(recordEvent)).not.toHaveBeenCalled();
   });
 
-  it('should show error UI when tool result has valid JSON but missing url field', async () => {
+  it('silently no-ops when the payload has valid JSON but no url field', async () => {
     const missingUrlResult: CallToolResult = {
       content: [
         {
@@ -178,11 +182,34 @@ describe('handleToolResult', () => {
 
     const container = document.getElementById('tableauVizContainer');
 
-    // Assert NO tableau-viz rendered
+    // No viz, no error UI, no embedding, no telemetry
     expect(container?.querySelector('tableau-viz')).toBeNull();
+    expect(container?.querySelector('.mcp-app-error')).toBeNull();
+    expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
+    expect(vi.mocked(recordEvent)).not.toHaveBeenCalled();
+  });
 
-    // Assert error UI IS displayed
-    expect(container?.querySelector('.mcp-app-error')).toBeTruthy();
+  it('silently no-ops when the url is an empty string', async () => {
+    // The workbook path in render-interactive-viz falls back to url: '' when no default view
+    // URL is resolvable. An empty url is not embeddable, so treat it as nothing to render.
+    const emptyUrlResult: CallToolResult = {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ url: '' }),
+        },
+      ],
+    };
+
+    await handleToolResult(mockApp, emptyUrlResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const container = document.getElementById('tableauVizContainer');
+
+    expect(container?.querySelector('tableau-viz')).toBeNull();
+    expect(container?.querySelector('.mcp-app-error')).toBeNull();
+    expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
+    expect(vi.mocked(recordEvent)).not.toHaveBeenCalled();
   });
 
   it('should show error UI when embedding API script fails to load', async () => {
@@ -320,6 +347,7 @@ describe('handleToolResult', () => {
 
     vi.mocked(callGetEmbedTokenTool).mockResolvedValue('test-token-123');
     vi.mocked(embedTableauViz).mockImplementation(() => {});
+    vi.mocked(setupFullscreenButton).mockImplementation(() => {});
     vi.mocked(setupOpenInTableauLink).mockImplementation(() => {});
 
     await handleToolResult(mockApp, validResult);
@@ -338,7 +366,94 @@ describe('handleToolResult', () => {
       expect.any(Function),
     );
 
-    // Assert setupOpenInTableauLink WAS called
+    // Assert setupOpenInTableauLink WAS called first (adds the left control to the overlay pill)
     expect(vi.mocked(setupOpenInTableauLink)).toHaveBeenCalledTimes(1);
+
+    // Assert setupFullscreenButton WAS called second (adds the right control to the overlay pill)
+    expect(vi.mocked(setupFullscreenButton)).toHaveBeenCalledTimes(1);
+
+    // Verify order: link setup called before button setup, so the link sits left of the button
+    const linkCallOrder = vi.mocked(setupOpenInTableauLink).mock.invocationCallOrder[0];
+    const buttonCallOrder = vi.mocked(setupFullscreenButton).mock.invocationCallOrder[0];
+    expect(linkCallOrder).toBeLessThan(buttonCallOrder);
+  });
+
+  it('no-ops on an empty (dataless) delivery instead of showing PARSE_ERROR', async () => {
+    // The host can re-fire ui/notifications/tool-result on a re-render/re-mount with a
+    // protocol-legal but empty result (content: [], no structuredContent). There is nothing to
+    // embed, so this must be a silent no-op — NOT a PARSE_ERROR.
+    const emptyResult: CallToolResult = {
+      content: [],
+    };
+
+    await handleToolResult(mockApp, emptyResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const container = document.getElementById('tableauVizContainer');
+
+    // NO error UI displayed
+    expect(container?.querySelector('.mcp-app-error')).toBeNull();
+
+    // No embedding attempted and no telemetry event recorded
+    expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
+    expect(vi.mocked(recordEvent)).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite an existing render when an empty re-delivery arrives', async () => {
+    // First delivery: happy path renders a viz.
+    const validResult: CallToolResult = {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            url: 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view',
+          }),
+        },
+      ],
+    };
+
+    vi.mocked(callGetEmbedTokenTool).mockResolvedValue('test-token-123');
+    vi.mocked(embedTableauViz).mockImplementation((_url, _token) => {
+      const container = document.getElementById('tableauVizContainer');
+      container?.replaceChildren(document.createElement('tableau-viz'));
+    });
+    vi.mocked(setupOpenInTableauLink).mockImplementation(() => {});
+
+    await handleToolResult(mockApp, validResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const container = document.getElementById('tableauVizContainer');
+    expect(container?.querySelector('tableau-viz')).toBeTruthy();
+
+    // Second delivery: empty re-fire. Must leave the rendered viz intact and show no error.
+    await handleToolResult(mockApp, { content: [] });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(container?.querySelector('tableau-viz')).toBeTruthy();
+    expect(container?.querySelector('.mcp-app-error')).toBeNull();
+  });
+
+  it('reports telemetry with the tool error message when a tool error occurs', async () => {
+    const errorResult: CallToolResult = {
+      isError: true,
+      content: [{ type: 'text', text: 'Tool execution failed' }],
+    };
+
+    await handleToolResult(mockApp, errorResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    // showError passes the cause as the event detail, which populates the telemetry message.
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(
+      mockApp,
+      'TOOL_ERROR',
+      'Tool execution failed',
+    );
+  });
+
+  it('reports telemetry with undefined cause when the tool result is null', async () => {
+    await handleToolResult(mockApp, null as any);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'TOOL_ERROR', undefined);
   });
 });
