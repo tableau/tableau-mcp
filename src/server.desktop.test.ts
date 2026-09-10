@@ -451,10 +451,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 60-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 59-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(60);
+    expect(selected).toHaveLength(59);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -501,7 +501,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'open-file',
       'save-workbook',
       'workbook-export-as',
-      'open-publish-workbook-dialog',
       'refresh-datasource-data',
       'refresh-datasource-extract',
       'get-workbook-xml',
@@ -686,7 +685,6 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('add-storyboard')).toBe('0.2.6');
     expect(floors.get('export-storyboard-image')).toBe('0.2.7');
     expect(floors.get('workbook-export-as')).toBe('0.2.7');
-    expect(floors.get('open-publish-workbook-dialog')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
   });
@@ -763,6 +761,23 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0]);
     expect(registeredNames.length).toBe(desktopToolFactories.length);
+  });
+
+  it('keeps published-site content operations out of the Desktop server even with TOOL_PROFILE=full', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'full');
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0]);
+    for (const webOwnedOperation of [
+      'list-site-datasources',
+      'list-site-workbooks',
+      'open-publish-workbook-dialog',
+    ]) {
+      expect(registeredNames).not.toContain(webOwnedOperation);
+    }
   });
 });
 

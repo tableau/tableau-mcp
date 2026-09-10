@@ -27,15 +27,12 @@ import { getWorksheetUnderlyingDataTool } from './api/getWorksheetUnderlyingData
 import { getGetWorksheetXmlTool } from './api/getWorksheetXml.js';
 import { getListDashboardsTool } from './api/listDashboards.js';
 import { getListInstancesTool } from './api/listInstances.js';
-import { getListSiteDatasourcesTool } from './api/listSiteDatasources.js';
-import { getListSiteWorkbooksTool } from './api/listSiteWorkbooks.js';
 import { getListStoryboardsTool } from './api/listStoryboards.js';
 import { getListWorkbookDatasourcesTool } from './api/listWorkbookDatasources.js';
 import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
 import { getListWorksheetsTool } from './api/listWorksheets.js';
 import { getOpenFileTool } from './api/openFile.js';
 import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
-import { getPublishWorkbookTool } from './api/publishWorkbook.js';
 import { getRedoWorkbookTool } from './api/redoWorkbook.js';
 import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
 import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
@@ -104,7 +101,6 @@ export const desktopToolFactories = [
   getAddDashboardTool,
   getAddStoryboardTool,
   getComposeStoryTool,
-  getPublishWorkbookTool,
   getRefreshDatasourceDataTool,
   getRefreshDatasourceExtractTool,
   getListWorksheetsTool,
@@ -169,8 +165,6 @@ export const desktopToolFactories = [
   exportStoryboardImageTool,
   getWorkbookInventoryTool,
   getListWorkbookDatasourcesTool,
-  getListSiteDatasourcesTool,
-  getListSiteWorkbooksTool,
   getAppInfoTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,
