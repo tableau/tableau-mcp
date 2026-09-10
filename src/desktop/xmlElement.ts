@@ -36,6 +36,19 @@ export function xmlNamesEqual(a: string, b: string): boolean {
   return normalizeXmlName(a) === normalizeXmlName(b);
 }
 
+/**
+ * Normalize an XML name that already came from parseXML. The parser has decoded
+ * entities exactly once, so decoding again would collapse distinct legal names
+ * such as `A &amp; B` and `A &amp;amp; B` onto the same selector.
+ */
+export function normalizeParsedXmlName(value: string): string {
+  return value.trim().normalize('NFC');
+}
+
+export function parsedXmlNamesEqual(a: string, b: string): boolean {
+  return normalizeParsedXmlName(a) === normalizeParsedXmlName(b);
+}
+
 export type ElementMatch = { start: number; end: number; text: string };
 
 /**

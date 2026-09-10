@@ -50,7 +50,21 @@ export const pulseExtensionOptionsSchema = z.object({
   allowed_dimensions: z.array(z.string()).optional(),
   allowed_granularities: z.array(z.string()).optional(),
   offset_from_today: z.number().optional(),
+  use_dynamic_offset: z.boolean().optional(),
 });
+
+const pulseLastXPeriodSchema = z.union([
+  z.object({
+    period: z.union([z.literal(7), z.literal(14), z.literal(30), z.literal(60), z.literal(90)]),
+    period_type: z.literal('GRANULARITY_BY_DAY'),
+    include_current_period: z.literal(true),
+  }),
+  z.object({
+    period: z.literal(1),
+    period_type: z.literal('GRANULARITY_BY_YEAR'),
+    include_current_period: z.literal(false),
+  }),
+]);
 
 export const pulseMetricSpecificationSchema = z.object({
   filters: z.array(pulseFilterSchema).optional(),
@@ -67,6 +81,7 @@ export const pulseMetricSpecificationSchema = z.object({
         path: ['end_date'],
       })
       .optional(),
+    last_x_period: pulseLastXPeriodSchema.optional(),
   }),
   comparison: z.object({ comparison: z.string() }),
 });

@@ -1,0 +1,13 @@
+{
+  "state": "SUCCEEDED",
+  "result": {
+    "userCalculationDetails": {
+      "calculationFormula": "YEAR([Order Date])",
+      "calculationCaption": "bYearOrderDate",
+      "errorMsgs": [],
+      "errorInds": []
+    }
+  },
+  "warnings": [],
+  "operationId": "op_b22fa571-f633-427d-94f7-ee9671831b3e"
+}

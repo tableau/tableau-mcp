@@ -245,14 +245,16 @@ describe('search-commands routing recommendation', () => {
     expect(result.recommendation).toBeTypeOf('string');
   });
 
-  it('names add-field/apply-worksheet for encoding edits and keeps refine-worksheet on top-N/sort', () => {
+  it('names the bounded populated-sheet routes, including compatible rounded stacks', () => {
     const { recommendation } = searchCommandsByKeywords(['field']) as { recommendation?: string };
     expect(recommendation).toBeTypeOf('string');
     expect(recommendation).toContain('add-field');
     expect(recommendation).toContain('apply-worksheet');
     expect(recommendation).toContain('encoding');
-    // refine-worksheet may still be named, but only for what it can actually do.
-    expect(recommendation).not.toMatch(/refine-worksheet to edit in place/);
+    expect(recommendation).toContain('refine-worksheet');
+    expect(recommendation).toContain('operation=round_stacked_bar');
+    expect(recommendation).toMatch(/compatible stacked bar/i);
+    expect(recommendation).not.toMatch(/refine-worksheet only for top-N or sort/);
   });
 
   it('does not recommend full-profile workbook XML editing', () => {

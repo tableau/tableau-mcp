@@ -203,8 +203,9 @@ describe('desktop tools/list serialized surface', () => {
     );
 
     // Tool search owns discovery; pin the merged filter recovery, dense-scatter repair,
-    // and executive-dashboard guidance without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(6_687);
+    // executive-dashboard guidance, rounded-stack proof/disclosure route, and dashboard
+    // corner routing without restoring an aggregate tools/list ceiling.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(7_964);
   });
 });
 
@@ -270,11 +271,12 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['apply-worksheet', 1579], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
-    ['refine-worksheet', 1684], // raised 2026-08-25: bounded mark-type changes keep a discoverable target enum and useful defaults/examples; earlier raise with sign-off (2026-08-05) for the UI title and omitted-targetField axis detection
+    ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
     ['build-worksheets-from-templates', 1150], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
+    ['author-action', 1376], // grew 2026-08-24 for the url mode (url/sourceDashboard/excludeSheets/urlTarget/zoneId/urlEncode params + mode/urlTarget enums); +127 the same day for the lean url describe that steers agents to a raw, unescaped URL with <[Field Name]> substitution — the one non-empty stub here, earning its bytes on the most misauthored param; do not grow
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.
     ['format-worksheets', 1097],
@@ -449,6 +451,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'author-parameter',
       'author-action',
       'format-worksheets',
+      'format-dashboard-zones',
       'compose-story',
       'ask-user',
       'search-commands',
