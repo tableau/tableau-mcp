@@ -315,8 +315,7 @@ export class WebMcpServer extends Server {
         (total, toolNames) => total + toolNames.length,
         0,
       );
-      // Telemetry: registration runs before the transport connects, so client notifications aren't
-      // available — the process logger (stderr/file, honors LOG_LEVEL) is the only sink here.
+
       log({
         level: 'warning',
         logger: 'server',
@@ -325,8 +324,8 @@ export class WebMcpServer extends Server {
           `conditions were not met — ${omittedByCondition}.`,
       });
 
-      // Client-facing counterpart: one explanation per distinct unmet condition, so a Pulse-less
-      // site is told that Pulse is off and why, rather than silently receiving a shorter tool list.
+      // Appending one explanation per distinct unmet condition to initialization message, so a client has
+      // context on why some tools were not registered.
       for (const condition of toolsOmittedFromUnmetConditions.keys()) {
         this.appendInstructions(getUnmetConditionInstructions(condition));
       }
