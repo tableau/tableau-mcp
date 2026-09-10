@@ -177,9 +177,13 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       config.server,
     );
 
+    const telemetry = getTelemetryProvider();
+    const span = telemetry.startSpan?.('tableau.tool.call', { tool_name: this.name });
+
     let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
     let toolResult: CallToolResult | undefined;
+    let spanError: unknown;
 
     try {
       const result = await callback();
@@ -224,6 +228,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       };
       return toolResult;
     } catch (error) {
+      spanError = error;
       if (error instanceof Error) {
         errorCode = getHttpStatus(error); // Default to 500 if no HTTP status can be determined
       }
@@ -242,6 +247,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
+      span?.end(spanError);
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),
@@ -262,7 +268,6 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
         auth_type: getAuthTypeForTelemetry(config, tableauAuthInfo),
       });
       // Record custom metric for this tool call
-      const telemetry = getTelemetryProvider();
       telemetry.recordMetric('mcp.tool.calls', 1, {
         tool_name: this.name,
         request_id: requestId.toString(),
