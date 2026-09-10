@@ -46,11 +46,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
-    id: 'rounded-stacked-bar',
+    id: 'rounded-bar',
     trigger:
-      'a request for slight rounded outer corners on an existing or just-built stacked bar chart',
+      'a request for slight rounded outer corners on a compatible ordinary vertical or horizontal simple or stacked bar chart',
     action:
-      'call refine-worksheet with operation=round_stacked_bar and preset=subtle. It rebuilds a compatible stack as Polygon, not a native Bar corner property. V1 refuses any workbook with top-level actions. If refine refuses a workbook with actions, stop. Dashboard object/container radius stays with the separate dashboard rounded-corners route. After success require programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered stack order; disclose that Data Guide and View Data may show internal polygon helper fields. Do not fall back to shell commands or raw whole-workbook XML.',
+      'New chart: follow plain-chart to build it, then call refine-worksheet on its returned worksheet. Existing or just-built compatible bar: call refine-worksheet directly. Use operation=round_bar and preset=subtle. It rebuilds compatible bars as Polygon geometry, not a native Bar corner property. Grouped, dual-axis, and specialty bars are outside this route; report a refusal and stop. V1 refuses any workbook with top-level actions. If refine refuses a workbook with actions, stop. Dashboard object/container radius stays with the separate dashboard rounded-corners route. After success require programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered bar geometry; disclose that Data Guide and View Data may show internal polygon helper fields. Do not fall back to shell commands or raw whole-workbook XML.',
     toolSequence: ['refine-worksheet'],
     stopConditions: [
       'If refine refuses a workbook with actions, stop',
@@ -58,7 +58,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'Do not fall back to shell commands or raw whole-workbook XML',
     ],
     requiredEvidence: [
-      'programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered stack order; disclose that Data Guide and View Data may show internal polygon helper fields',
+      'programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered bar geometry; disclose that Data Guide and View Data may show internal polygon helper fields',
     ],
   },
   {
@@ -242,7 +242,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'an edit to a populated current/existing sheet/chart/view',
     action:
-      'use existing-sheet tools only: list-worksheets -> list-dashboards -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, explicit mark-type changes, or operation=round_stacked_bar on a compatible stacked bar; add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
+      'use existing-sheet tools only: list-worksheets -> list-dashboards -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, explicit mark-type changes, or operation=round_bar on compatible ordinary vertical or horizontal simple or stacked bars; grouped, dual-axis, and specialty bars are excluded. Use add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
     toolSequence: [
       'list-worksheets',
       'list-dashboards',
@@ -257,7 +257,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded stacked bars; format-dashboard-zones rounds dashboard objects; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded ordinary bars; format-dashboard-zones rounds dashboard objects; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
   },
   {
     kind: 'prose',

@@ -203,9 +203,9 @@ describe('desktop tools/list serialized surface', () => {
     );
 
     // Tool search owns discovery; pin the merged filter recovery, dense-scatter repair,
-    // executive-dashboard guidance, rounded-stack proof/disclosure route, and dashboard
+    // executive-dashboard guidance, rounded-bar build/refine proof route, and dashboard
     // corner routing without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(7_964);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(8_318);
   });
 });
 
