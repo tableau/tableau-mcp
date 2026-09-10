@@ -7,6 +7,13 @@ type GradeInput = {
   mcpServer: MCPServerStdio;
   model: string;
   prompt: string;
+  // Number of full agent+judge attempts. The rubric passes if ANY attempt scores >= 4 in every
+  // category; only after all attempts fail do we assert (so the failure reports real scores).
+  // Defaults to 1 => behavior is unchanged for existing evals. Raise it for open-ended workflow
+  // evals where the single-shot LLM judge is noisy.
+  attempts?: number;
+  // Delay between attempts (ms) so best-of-N retries don't collide on a low per-minute token quota.
+  retryDelayMs?: number;
 };
 
 const agentSystemPrompt = `
@@ -31,11 +38,81 @@ const evalSystemPrompt = `
         "comments": "A short paragraph summarizing the strengths and weaknesses of the answer."
     }`;
 
+type Evaluation = ReturnType<typeof evaluationSchema.parse>;
+type Attempt = { evaluation: Evaluation; agentResult: StreamedRunResult<any, any> };
+
+const passesRubric = (e: Evaluation): boolean =>
+  e.accuracy >= 4 && e.completeness >= 4 && e.relevance >= 4 && e.clarity >= 4 && e.reasoning >= 4;
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+// A rate-limit (429) is transient: a low tokens-per-minute quota is easily exceeded by back-to-back
+// attempts. Detect it so we back off and retry rather than failing the whole eval.
+const isRateLimit = (error: unknown): boolean => {
+  const status = (error as { status?: number })?.status;
+  const message = error instanceof Error ? error.message : String(error);
+  return status === 429 || /rate limit|tokens per min|TPM/i.test(message);
+};
+
 export async function grade({
   mcpServer,
   model,
   prompt,
+  attempts = 1,
+  // Delay before a retry. Sized to let a small (~30k) per-minute token budget refill so best-of-N
+  // attempts don't collide with each other on a low-tier key.
+  retryDelayMs = 60_000,
 }: GradeInput): Promise<{ agentResult: StreamedRunResult<any, any> }> {
+  let last: Attempt | undefined;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (attempts > 1) {
+      log(`Grading attempt ${attempt}/${attempts}`, true);
+    }
+
+    try {
+      last = await gradeOnce({ mcpServer, model, prompt });
+    } catch (error) {
+      // On the last attempt, or for a non-retryable error, let it surface.
+      if (attempt >= attempts || !isRateLimit(error)) {
+        throw error;
+      }
+      log(`Attempt ${attempt} hit a rate limit; backing off ${retryDelayMs}ms and retrying.`, true);
+      await sleep(retryDelayMs);
+      continue;
+    }
+
+    if (passesRubric(last.evaluation)) {
+      return { agentResult: last.agentResult };
+    }
+
+    if (attempt < attempts) {
+      log(
+        `Attempt ${attempt} did not clear the rubric (${JSON.stringify(last.evaluation)}); ` +
+          `backing off ${retryDelayMs}ms and retrying.`,
+        true,
+      );
+      await sleep(retryDelayMs);
+    }
+  }
+
+  // Out of attempts with a graded result: assert on the last evaluation so the failure reports
+  // real scores. (If every attempt threw a retryable error, the throw above already surfaced it.)
+  const evaluation = last!.evaluation;
+  expect(evaluation.accuracy).toBeGreaterThanOrEqual(4);
+  expect(evaluation.completeness).toBeGreaterThanOrEqual(4);
+  expect(evaluation.relevance).toBeGreaterThanOrEqual(4);
+  expect(evaluation.clarity).toBeGreaterThanOrEqual(4);
+  expect(evaluation.reasoning).toBeGreaterThanOrEqual(4);
+
+  return { agentResult: last!.agentResult };
+}
+
+async function gradeOnce({
+  mcpServer,
+  model,
+  prompt,
+}: Omit<GradeInput, 'attempts'>): Promise<Attempt> {
   const evals = await promptAgent({ mcpServer, model, prompt });
   log('\n');
 
@@ -71,16 +148,7 @@ export async function grade({
         );
       }
 
-      const evaluation = evaluationResult.data;
-      expect(evaluation.accuracy).toBeGreaterThanOrEqual(4);
-      expect(evaluation.completeness).toBeGreaterThanOrEqual(4);
-      expect(evaluation.relevance).toBeGreaterThanOrEqual(4);
-      expect(evaluation.clarity).toBeGreaterThanOrEqual(4);
-      expect(evaluation.reasoning).toBeGreaterThanOrEqual(4);
-
-      return {
-        agentResult: evals,
-      };
+      return { evaluation: evaluationResult.data, agentResult: evals };
     }
   }
   throw new Error('Could not parse JSON from agent output');
