@@ -255,7 +255,8 @@ function buildEmbeddedParentMap(
     );
     if (validParents.length === 1) {
       const parent = validParents[0];
-      parents.set(name, { luid: parent.luid, name: parent.name ?? parent.luid });
+      // || not ?? so an empty-string parent name (permitted by the wire schema) falls back to luid.
+      parents.set(name, { luid: parent.luid, name: parent.name || parent.luid });
     }
   }
 
@@ -530,7 +531,8 @@ export function filterLineageContentsByAllowedIds(
 // Merges published (Metadata) and embedded (REST /connections) lists, dropping a standalone published
 // entry whose luid is already carried as an embedded entry's publishedParent (a live-connected
 // published DS surfaces as both). Lossless: if the join was ambiguous the pointer was dropped, so the
-// standalone entry survives.
+// standalone entry survives. Callers must apply any bounded-context filter to both lists FIRST, so a
+// dropped embedded stub can't suppress its still-allowed published parent.
 export function mergeWorkbookDatasources(
   published: Array<LineageContent>,
   embedded: Array<LineageContent>,

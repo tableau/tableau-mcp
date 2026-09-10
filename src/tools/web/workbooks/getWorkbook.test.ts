@@ -219,6 +219,39 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
+    it('keeps an allowed published DS when its embedded stub is out of the bounded context', async () => {
+      // Regression guard: the de-dupe must not let an out-of-bounds embedded stub suppress its
+      // in-bounds published parent. Only pub-luid-1 is allowed; the emb-luid-1 stub is not.
+      vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'pub-luid-1');
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                upstreamDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                embeddedDatasources: [
+                  {
+                    name: 'Embedded DS',
+                    parentPublishedDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        { luid: 'pub-luid-1', name: 'Published DS', datasourceType: 'published' },
+      ]);
+    });
+
     it('omits the publishedParent when two connections share an embedded name across LUIDs', async () => {
       mocks.mockGraphql.mockResolvedValue({
         data: {

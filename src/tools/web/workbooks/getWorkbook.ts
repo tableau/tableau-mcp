@@ -7,6 +7,7 @@ import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
+  filterLineageContentsByAllowedIds,
   getWorkbookLineageQuery,
   getWorkbookLineageWithParentsByLuid,
   LineageContent,
@@ -128,14 +129,31 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                 }
               }
 
-              // Embedded stubs get a publishedParent pointer; mergeWorkbookDatasources then drops the
-              // redundant standalone published entry reachable via that pointer.
-              const embedded = toEmbeddedLineageContents(connections, embeddedParents);
-              return mergeWorkbookLineage(
-                [workbook],
-                new Map([[workbook.id, mergeWorkbookDatasources(published, embedded)]]),
-                configWithOverrides.boundedContext.datasourceIds,
-              )[0];
+              // Pure transforms below, but wrapped so a throw degrades to the unenriched workbook
+              // rather than failing the whole call (matching the enrichment fetches above).
+              try {
+                const allowedIds = configWithOverrides.boundedContext.datasourceIds;
+                const embedded = toEmbeddedLineageContents(connections, embeddedParents);
+                // Filter each list against the bounded context BEFORE de-duping: a standalone
+                // published entry is dropped only when a *surviving* embedded stub still carries it
+                // as publishedParent, so an out-of-bounds stub can't suppress its in-bounds parent.
+                const merged = mergeWorkbookDatasources(
+                  filterLineageContentsByAllowedIds(published, allowedIds),
+                  filterLineageContentsByAllowedIds(embedded, allowedIds),
+                );
+                return mergeWorkbookLineage([workbook], new Map([[workbook.id, merged]]))[0];
+              } catch (error) {
+                log(
+                  {
+                    message: `Failed to assemble upstream data sources for workbook ${workbook.id}`,
+                    level: 'warning',
+                    logger: 'lineage',
+                    data: getExceptionMessage(error),
+                  },
+                  extra,
+                );
+                return workbook;
+              }
             },
           });
 
