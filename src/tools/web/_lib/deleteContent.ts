@@ -141,6 +141,7 @@ export const getDeleteContentTool = async (
     server,
     name: 'delete-content',
     disabled: !config.adminToolsEnabled,
+    minRequiredRole: 'ExplorerCanPublish',
     ...(mcpAppsEnabled ? { app: getAppConfig('delete-content', 'hitl-confirm') } : {}),
     description: `
 Permanently deletes a workbook, published data source, or extract refresh task. Restricted to
