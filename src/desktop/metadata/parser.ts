@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 
 import { xmlNamesEqual } from '../xmlElement.js';
-import type { ParsedWorkbook, ParsedWorksheet } from './types.js';
+import type { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from './types.js';
 
 const parserOptions = {
   ignoreAttributes: false,
@@ -214,6 +214,18 @@ export function findWorksheet(workbook: ParsedWorkbook, sheetName: string): Pars
 
 export function findAllWorksheets(workbook: ParsedWorkbook): ParsedWorksheet[] {
   return normalizeArray(workbook.workbook?.worksheets?.worksheet);
+}
+
+export function listWindowedWorksheetNames(workbook: ParsedWorkbook): string[] {
+  const worksheetNames = findAllWorksheets(workbook)
+    .map((worksheet) => worksheet['@_name'])
+    .filter((name): name is string => Boolean(name));
+  const worksheetWindowNames = normalizeArray<ParsedWindow>(workbook.workbook?.windows?.window)
+    .filter((window) => window['@_class'] === 'worksheet')
+    .map((window) => window['@_name']);
+  return worksheetNames.filter((name) =>
+    worksheetWindowNames.some((windowName) => xmlNamesEqual(windowName, name)),
+  );
 }
 
 // fast-xml-parser attaches an `xmlns`/`xmlns:*` declaration as a plain attribute on whichever

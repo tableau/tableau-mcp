@@ -1,10 +1,12 @@
+import { DOMParser } from '@xmldom/xmldom';
 import { Err, Ok, Result } from 'ts-results-es';
+import * as xpath from 'xpath';
 
 import { log } from '../../logging/logger.js';
 import { sanitizeValue } from '../../logging/sanitize.js';
 import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 import { dashboardFragmentSimpleId, upsertDashboardIntoWorkbook } from '../metadata/dashboards.js';
-import { normalizeArray, parseXML } from '../metadata/parser.js';
+import { listWindowedWorksheetNames, normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedDashboard } from '../metadata/types.js';
 import { blockingValidationIssues, runValidation } from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
@@ -191,6 +193,26 @@ export async function loadDashboardXml({
     focus.navigate === 'artifact' ? { ...focus, sheetName: canonicalName } : focus;
 
   if (requireExistingSheet) {
+    if (kind === 'dashboard') {
+      const zoneGuard = await zoneWorksheetWindowIssues({ fragmentXml: xml, executor, signal });
+      if (zoneGuard.isErr()) {
+        return Err({ type: 'execute-command-error', error: zoneGuard.error });
+      }
+      if (zoneGuard.value.length > 0) {
+        log({
+          level: 'error',
+          message:
+            'Dashboard zone references a worksheet with no live window — not sent to Tableau',
+          logger: 'dashboardCommands',
+          data: { dashboardName, issues: zoneGuard.value },
+        });
+        return Err({
+          type: 'load-dashboard-xml-error',
+          error: { type: 'validation-failed', issues: zoneGuard.value },
+        });
+      }
+    }
+
     const targetRef = dashboardFragmentSimpleId(xml) ?? canonicalName;
     const perSheetResult = await withApplyLock(() =>
       tryApplyViaPerSheetRoute({
@@ -323,6 +345,69 @@ async function loadDashboardXmlViaExternalApi({
 
     return Ok.EMPTY;
   });
+}
+
+// A per-dashboard apply posts only the <dashboard> fragment, so nothing reconciles its sheet zones
+// against live worksheet windows. Tableau resolves each sheet zone to a worksheet-class window as
+// it renders and asserts (oWindowID) when none exists — corrupting the dashboard so delete and undo
+// then fail. Refuse the apply when a zone names a worksheet with no live window.
+async function zoneWorksheetWindowIssues({
+  fragmentXml,
+  executor,
+  signal,
+}: { fragmentXml: string } & WithExecutorAndAbortSignal): Promise<
+  Result<ValidationIssue[], ExecuteCommandError>
+> {
+  const zoneWorksheetNames = dashboardZoneWorksheetNames(fragmentXml);
+  if (zoneWorksheetNames.length === 0) {
+    return Ok([]);
+  }
+  const workbookResult = await getWorkbookXml({ executor, signal });
+  if (workbookResult.isErr()) {
+    return Err(workbookResult.error);
+  }
+  const windowed = listWindowedWorksheetNames(parseXML(workbookResult.value));
+  const missing = zoneWorksheetNames.filter(
+    (name) => !windowed.some((windowName) => xmlNamesEqual(windowName, name)),
+  );
+  return Ok(missing.map(zoneWorksheetWindowIssue));
+}
+
+function dashboardZoneWorksheetNames(fragmentXml: string): string[] {
+  let doc: Document;
+  try {
+    doc = new DOMParser({ errorHandler: () => {} }).parseFromString(
+      fragmentXml.trim() || '<empty/>',
+      'text/xml',
+    ) as unknown as Document;
+  } catch {
+    return [];
+  }
+  // Worksheet zones are <zone name="Worksheet Name" .../>; layout, text, and blank zones carry
+  // type-v2 and do not name a worksheet.
+  const zones = xpath.select(
+    '//zone[@name and not(@type-v2)]',
+    doc as unknown as Node,
+  ) as Element[];
+  const names = zones
+    .map((zone) => zone.getAttribute('name'))
+    .filter((name): name is string => !!name);
+  return [...new Set(names)];
+}
+
+function zoneWorksheetWindowIssue(worksheetName: string): ValidationIssue {
+  return {
+    ruleId: 'dashboard-zone-worksheet-window',
+    severity: 'error',
+    message:
+      `This apply adds a zone for worksheet "${worksheetName}", but that worksheet has no live ` +
+      'window in the open workbook, so Tableau would leave the dashboard unable to delete or undo. ' +
+      'FIX: create the worksheet first (build-and-apply-worksheet or add-worksheet), then rebuild ' +
+      'the dashboard with compose-dashboard or run-dashboard-batch so its zones and windows are ' +
+      'created together.',
+    suggestion:
+      'Create the worksheet, then compose the dashboard so its zone and window are registered together.',
+  };
 }
 
 function sheetAbsentMessage(kind: LoadDashboardKind, canonicalName: string): string {
