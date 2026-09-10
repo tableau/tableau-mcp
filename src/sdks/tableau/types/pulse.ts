@@ -484,6 +484,30 @@ export type PulseInsightBriefResponse = z.infer<typeof pulseInsightBriefResponse
 export const pulseInsightBundleTypeEnum = ['ban', 'springboard', 'basic', 'detail'] as const;
 export type PulseInsightBundleType = (typeof pulseInsightBundleTypeEnum)[number];
 
+/**
+ * The Pulse premium entitlement that gates AI-powered insights, i.e. the one whose absence
+ * produces {@link PulseInsightsDisabledError} ("requires Tableau+").
+ *
+ * `ENTITLEMENT_TYPE_PULSE_PREMIUM_GAI` is a sibling that gates generative-AI features
+ * specifically. Distinguishing the two is a possible refinement; today a single coarse
+ * "premium" signal maps to the insights entitlement.
+ */
+export const PULSE_PREMIUM_INSIGHTS_ENTITLEMENT = 'ENTITLEMENT_TYPE_PULSE_PREMIUM_INSIGHTS';
+
+/**
+ * One Pulse feature entitlement for a site.
+ *
+ * `entitlement_type` is deliberately a bare string rather than an enum: the service owns the
+ * enum and adding a member must not fail schema validation here, since a validation error at
+ * registration time would fail closed and hide otherwise-entitled tools.
+ */
+export const pulseEntitlementSchema = z.object({
+  entitlement_type: z.string().optional(),
+  enabled: z.boolean().optional(),
+});
+
+export type PulseEntitlement = z.infer<typeof pulseEntitlementSchema>;
+
 export const pulseMetricDefinitionViewEnum = [
   'DEFINITION_VIEW_BASIC',
   'DEFINITION_VIEW_FULL',

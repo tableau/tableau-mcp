@@ -20,6 +20,7 @@ export const getGeneratePulseInsightBriefTool = (
   const generatePulseInsightBriefTool = new WebTool({
     server,
     name: 'generate-pulse-insight-brief',
+    registrationConditions: ['RequiresPulse', 'RequiresPulsePremium'],
     description: `
 Generate a concise insight brief for Pulse Metrics using Tableau REST API. This endpoint provides AI-powered conversational insights based on natural language questions about your metrics.
 

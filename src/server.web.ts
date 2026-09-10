@@ -32,6 +32,12 @@ import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
 import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
+import {
+  checkRegistrationConditions,
+  getUnmetConditionInstructions,
+  RegistrationCondition,
+  RegistrationContext,
+} from './tools/web/registrationConditions.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { webToolFactories } from './tools/web/tools.js';
@@ -93,10 +99,6 @@ export function buildWebInstructions(): string {
   const adminToolsEnabled = process.env.ADMIN_TOOLS_ENABLED === 'true';
   return adminToolsEnabled ? `${BASE_INSTRUCTIONS} ${ADMIN_INSTRUCTIONS}` : BASE_INSTRUCTIONS;
 }
-
-type RegistrationContext = {
-  siteRole?: string;
-};
 
 export class WebMcpServer extends Server {
   constructor({
@@ -232,6 +234,11 @@ export class WebMcpServer extends Server {
       'enforce-role-requirements',
     );
 
+    // When this feature is off, no conditions are checked before registering a tool.
+    const enforceRegistrationConditions = await getFeatureGate().isFeatureEnabled(
+      'enforce-registration-conditions',
+    );
+
     // Stores context that is used for determining if registration conditions have been met.
     // Registration context is uninitialized, but then gets populated with each condition checked.
     const registrationContext: RegistrationContext = {};
@@ -244,6 +251,7 @@ export class WebMcpServer extends Server {
     // Names of role-gated tools hidden specifically because the role fetch FAILED
     // rather than because the caller's role was genuinely too low.
     const toolsOmittedForRoleFetchFailure: string[] = [];
+    const toolsOmittedFromUnmetConditions = new Map<RegistrationCondition, string[]>();
 
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
@@ -262,12 +270,25 @@ export class WebMcpServer extends Server {
           continue;
         }
       }
+      if (enforceRegistrationConditions && tool.registrationConditions.length > 0) {
+        const conditionCheckResult = await checkRegistrationConditions(
+          tool.registrationConditions,
+          registrationContext,
+          restApiArgs,
+        );
+        if (!conditionCheckResult.registrationConditionsMet) {
+          // Appends this tool to list of tools that failed under a particular condition
+          const toolList =
+            toolsOmittedFromUnmetConditions.get(conditionCheckResult.failingCondition) || [];
+          toolList.push(tool.name);
+          toolsOmittedFromUnmetConditions.set(conditionCheckResult.failingCondition, toolList);
+          continue;
+        }
+      }
       toolsToRegister.push(tool);
     }
 
     if (toolsOmittedForRoleFetchFailure.length > 0) {
-      // Telemetry: registration runs before the transport connects, so client notifications aren't
-      // available — the process logger (stderr/file, honors LOG_LEVEL) is the only sink here.
       log({
         level: 'warning',
         logger: 'server',
@@ -280,6 +301,30 @@ export class WebMcpServer extends Server {
       // Client-facing counterpart: surface the omission in the initialize instructions so the user
       // knows the tool set is incomplete due to a fetch failure (not their permissions).
       this.appendInstructions(SITE_ROLE_UNAVAILABLE_WARNING);
+    }
+
+    if (toolsOmittedFromUnmetConditions.size > 0) {
+      const omittedByCondition = [...toolsOmittedFromUnmetConditions.entries()]
+        .map(([condition, toolNames]) => `${condition}: ${toolNames.join(', ')}`)
+        .join('; ');
+      const omittedCount = [...toolsOmittedFromUnmetConditions.values()].reduce(
+        (total, toolNames) => total + toolNames.length,
+        0,
+      );
+
+      log({
+        level: 'warning',
+        logger: 'server',
+        message:
+          `${omittedCount} tool(s) were omitted from this session because their registration ` +
+          `conditions were not met — ${omittedByCondition}.`,
+      });
+
+      // Appending one explanation per distinct unmet condition to initialization message, so a client has
+      // context on why some tools were not registered.
+      for (const condition of toolsOmittedFromUnmetConditions.keys()) {
+        this.appendInstructions(getUnmetConditionInstructions(condition));
+      }
     }
 
     return toolsToRegister;
