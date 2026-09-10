@@ -111,6 +111,10 @@ describe('getApplyDatasourceTool', () => {
     const tool = getApplyDatasourceTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('apply-datasource');
+    expect(tool.description).toBe(
+      'Replace an existing datasource definition in the open workbook using a document previously retrieved from that workbook. ' +
+        'Does not add datasources or import .tds/.tdsx files.',
+    );
     expect(tool.minApiVersion).toBe('0.2.10');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
