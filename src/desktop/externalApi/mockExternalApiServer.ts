@@ -2,6 +2,7 @@ import { createServer, IncomingMessage, Server, ServerResponse } from 'http';
 import { AddressInfo } from 'net';
 
 import {
+  DialogList,
   EXTERNAL_API_ROUTES,
   HEADER_APPLICATION_VERSION,
   HEADER_XSD_PAYLOAD_VERSION,
@@ -200,6 +201,26 @@ const DEFAULT_SITE_WORKBOOKS = [
     project: 'Operations',
   },
 ];
+const DEFAULT_DIALOGS: DialogList['dialogs'] = [
+  {
+    objectName: 'saveChangesDialog',
+    title: 'Save Changes',
+    className: 'QMessageBox',
+    messageText: 'Do you want to save changes to Regional Sales?',
+    informativeText: 'Unsaved changes will be lost if you discard them.',
+    detailedText: 'Workbook: Regional Sales',
+    iconLevel: 'warning',
+    buttons: ['Save', 'Discard', 'Cancel'],
+    actions: [
+      { kind: 'button', label: 'Save' },
+      { kind: 'button', label: 'Discard' },
+      { kind: 'button', label: 'Cancel' },
+    ],
+  },
+];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const readBody = (req: IncomingMessage): Promise<string> =>
   new Promise((resolve) => {
@@ -330,6 +351,11 @@ export async function startMockExternalApiServer(
 ): Promise<MockExternalApiServer> {
   let token = options.token ?? DEFAULT_TOKEN;
   const workbookXml = options.workbookXml ?? DEFAULT_WORKBOOK_XML;
+  const dialogs = DEFAULT_DIALOGS.map((dialog) => ({
+    ...dialog,
+    buttons: [...(dialog.buttons ?? [])],
+    actions: dialog.actions?.map((action) => ({ ...action })),
+  }));
   const requests: Array<RecordedRequest> = [];
   const overrides = new Map<string, MockOverride>();
   const operations = new Map<string, MockOperation>();
@@ -405,6 +431,7 @@ export async function startMockExternalApiServer(
         links: {
           health: '/v0/health',
           app: '/v0/app',
+          'app-dialogs': '/v0/app/dialogs',
           workbook: '/v0/workbook',
           site: '/v0/site',
         },
@@ -425,6 +452,98 @@ export async function startMockExternalApiServer(
         isStartPageVisible: false,
         isDataSourcePageActive: false,
         isPresentationMode: false,
+      });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.appDialogs) {
+      sendJson(res, 200, { dialogs });
+      return;
+    }
+
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.appInvokeDialogAction) {
+      if ((contentType ?? '').split(';')[0].trim() !== 'application/json') {
+        sendProblem(res, 415, 'unsupported-content-type', 'Expected application/json.');
+        return;
+      }
+
+      let request: unknown;
+      try {
+        request = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Invalid JSON request body.');
+        return;
+      }
+
+      const identity = isRecord(request) ? request.dialog : undefined;
+      const action = isRecord(request) ? request.action : undefined;
+      if (
+        !isRecord(identity) ||
+        typeof identity.objectName !== 'string' ||
+        typeof identity.title !== 'string' ||
+        typeof identity.className !== 'string' ||
+        !isRecord(action)
+      ) {
+        sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
+        return;
+      }
+      const isButtonAction =
+        action.kind === 'button' && typeof action.label === 'string' && action.label.length > 0;
+      const isCloseAction = action.kind === 'close' && !Object.hasOwn(action, 'label');
+      if (!isButtonAction && !isCloseAction) {
+        sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
+        return;
+      }
+
+      if (dialogs.length === 0) {
+        sendJson(res, 200, { outcome: 'no-active-dialog', dialogs: [] });
+        return;
+      }
+
+      const matches = dialogs.filter(
+        (dialog) =>
+          dialog.objectName === identity.objectName &&
+          dialog.title === identity.title &&
+          dialog.className === identity.className,
+      );
+      if (matches.length === 0) {
+        sendProblem(res, 409, 'dialog-not-found', 'No active dialog matched the request.');
+        return;
+      }
+      if (matches.length > 1) {
+        sendProblem(
+          res,
+          409,
+          'dialog-ambiguous',
+          'More than one active dialog matched the request.',
+        );
+        return;
+      }
+
+      const actionMatches = (matches[0].actions ?? []).filter(
+        (candidate) =>
+          candidate.kind === action.kind &&
+          (candidate.kind === 'close' || candidate.label === action.label),
+      );
+      if (actionMatches.length === 0) {
+        sendProblem(res, 409, 'dialog-action-not-found', 'No visible dialog action matched.');
+        return;
+      }
+      if (actionMatches.length > 1) {
+        sendProblem(res, 409, 'dialog-action-ambiguous', 'More than one visible action matched.');
+        return;
+      }
+
+      dialogs.splice(dialogs.indexOf(matches[0]), 1);
+      sendJson(res, 200, {
+        outcome: 'dismissed',
+        dialog: {
+          objectName: identity.objectName,
+          title: identity.title,
+          className: identity.className,
+        },
+        action,
+        dialogs,
       });
       return;
     }
