@@ -22,11 +22,9 @@ import { McpToolError } from '../../errors/mcpToolError.js';
 import type { WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 
 export const MAX_WINDOW_SCREENSHOT_BYTES = 32 * 1024 * 1024;
-export const MAX_WINDOW_SCREENSHOT_AGGREGATE_BYTES = 64 * 1024 * 1024;
-export const MAX_WINDOW_SCREENSHOT_CANDIDATES = 16;
 const MAX_WINDOW_SCREENSHOT_DIMENSION = 32_768;
 const MAX_WINDOW_SCREENSHOT_PIXELS = 100_000_000;
-const SCREENSHOT_NAME = /^ScreenShot_\d+\.png$/;
+const SCREENSHOT_NAME = 'ScreenShot.png';
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 const screenshotCommandResultSchema = z
@@ -83,10 +81,6 @@ export class WindowScreenshotCaptureError extends McpToolError {
   constructor(message: string) {
     super({ type: 'window-screenshot-capture-error', message, statusCode: 500 });
   }
-}
-
-interface Candidate extends WindowScreenshotCapture {
-  area: number;
 }
 
 interface ValidatedPath {
@@ -152,7 +146,7 @@ function hasLegalIhdrFormat(data: Buffer): boolean {
   );
 }
 
-function parsePngHeader(bytes: Buffer): { width: number; height: number; area: number } {
+function parsePngHeader(bytes: Buffer): { width: number; height: number } {
   if (!bytes.subarray(0, PNG_SIGNATURE.byteLength).equals(PNG_SIGNATURE)) {
     throw new Error('Invalid PNG header.');
   }
@@ -220,7 +214,7 @@ function parsePngHeader(bytes: Buffer): { width: number; height: number; area: n
   if (!Number.isSafeInteger(area) || area > MAX_WINDOW_SCREENSHOT_PIXELS) {
     throw new Error('PNG pixel area is outside the supported bounds.');
   }
-  return { width, height, area };
+  return { width, height };
 }
 
 function inspectCandidate(
@@ -247,7 +241,7 @@ function readCandidate(
   validatedPath: ValidatedPath,
   canonicalDirectory: string,
   fileSystem: WindowScreenshotFileSystem,
-): Candidate {
+): WindowScreenshotCapture {
   if (validatedPath.stats.size < 57 || validatedPath.stats.size > MAX_WINDOW_SCREENSHOT_BYTES) {
     throw new Error('Screenshot candidate byte length is outside the supported bounds.');
   }
@@ -358,7 +352,7 @@ export async function captureWindowScreenshot(
   }
   const commandResult = await executor.executeCommand({
     namespace: 'tabui',
-    command: 'take-all-screenshots',
+    command: 'take-active-widget-screenshot',
     args: { HideMouse: true },
     schema: screenshotCommandResultSchema,
     signal,
@@ -399,61 +393,32 @@ export async function captureWindowScreenshot(
       throw new Error('Returned screenshot directory changed during validation.');
     }
 
-    const names = fileSystem
-      .readdir(canonicalDirectory)
-      .filter((name) => SCREENSHOT_NAME.test(name));
-    if (names.length === 0) {
+    const names = fileSystem.readdir(canonicalDirectory);
+    if (!names.includes(SCREENSHOT_NAME)) {
       outcome = failure('Tableau Desktop did not produce a screenshot.');
-    } else if (names.length > MAX_WINDOW_SCREENSHOT_CANDIDATES) {
-      outcome = failure('Tableau Desktop produced too many screenshot artifacts.');
     } else {
-      names.sort((left, right) => left.localeCompare(right));
       let invalidCandidate = false;
       let cancelled: boolean = cancelledAfterCommand;
-      let aggregateBytes = 0;
-      for (const name of names) {
-        if (signal.aborted && !cancelledAfterCommand) {
-          cancelled = true;
-          break;
-        }
-        try {
-          const validated = inspectCandidate(
-            resolve(canonicalDirectory, name),
-            canonicalDirectory,
-            fileSystem,
-          );
-          validatedPaths.push(validated);
-          if (validated.stats.size < 57 || validated.stats.size > MAX_WINDOW_SCREENSHOT_BYTES) {
-            invalidCandidate = true;
-          }
-          aggregateBytes += validated.stats.size;
-          if (
-            !Number.isSafeInteger(aggregateBytes) ||
-            aggregateBytes > MAX_WINDOW_SCREENSHOT_AGGREGATE_BYTES
-          ) {
-            invalidCandidate = true;
-          }
-        } catch {
-          invalidCandidate = true;
-        }
+      let validated: ValidatedPath | undefined;
+      try {
+        validated = inspectCandidate(
+          resolve(canonicalDirectory, SCREENSHOT_NAME),
+          canonicalDirectory,
+          fileSystem,
+        );
+        validatedPaths.push(validated);
+      } catch {
+        invalidCandidate = true;
       }
 
-      let selected: Candidate | undefined;
-      let selectedIsUnique = true;
-      if (!invalidCandidate && !cancelled) {
-        for (const validated of validatedPaths) {
-          if (signal.aborted) {
-            cancelled = true;
-            break;
-          }
+      let capture: WindowScreenshotCapture | undefined;
+      if (!invalidCandidate && !cancelled && validated !== undefined) {
+        if (signal.aborted) {
+          cancelled = true;
+        } else {
           try {
-            const candidate = readCandidate(validated, canonicalDirectory, fileSystem);
-            if (selected === undefined || candidate.area > selected.area) {
-              selected = candidate;
-              selectedIsUnique = true;
-            } else if (candidate.area === selected.area) {
-              selectedIsUnique = false;
-            }
+            capture = readCandidate(validated, canonicalDirectory, fileSystem);
+            if (signal.aborted) cancelled = true;
           } catch {
             invalidCandidate = true;
           }
@@ -462,12 +427,10 @@ export async function captureWindowScreenshot(
 
       if (cancelled) {
         outcome = failure('Tableau Desktop window capture was cancelled.');
-      } else if (invalidCandidate || selected === undefined) {
+      } else if (invalidCandidate || capture === undefined) {
         outcome = failure('Tableau Desktop produced an invalid screenshot artifact.');
-      } else if (!selectedIsUnique) {
-        outcome = failure('Tableau Desktop produced ambiguous screenshot artifacts.');
       } else {
-        outcome = Ok({ bytes: selected.bytes, width: selected.width, height: selected.height });
+        outcome = Ok(capture);
       }
     }
   } catch {

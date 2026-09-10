@@ -21,9 +21,7 @@ import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import type { ExternalApiToolExecutor } from '../externalApi/executorTypes.js';
 import {
   captureWindowScreenshot,
-  MAX_WINDOW_SCREENSHOT_AGGREGATE_BYTES,
   MAX_WINDOW_SCREENSHOT_BYTES,
-  MAX_WINDOW_SCREENSHOT_CANDIDATES,
   type WindowScreenshotFileSystem,
 } from './captureWindowScreenshot.js';
 
@@ -141,10 +139,10 @@ describe('captureWindowScreenshot', () => {
     });
   }
 
-  it('calls the exact manual screenshot command and returns the copied PNG metadata', async () => {
+  it('calls the active-widget screenshot command and returns ScreenShot.png metadata', async () => {
     const directory = commandDirectory();
     const expected = png(1200, 800);
-    writeFileSync(join(directory, 'ScreenShot_1.png'), expected);
+    writeFileSync(join(directory, 'ScreenShot.png'), expected);
     const executor = executorReturning({ tempFilePath: directory });
 
     const result = await captureWindowScreenshot({ executor, signal });
@@ -157,7 +155,7 @@ describe('captureWindowScreenshot', () => {
     const call = vi.mocked(executor.executeCommand).mock.calls[0][0];
     expect(call).toMatchObject({
       namespace: 'tabui',
-      command: 'take-all-screenshots',
+      command: 'take-active-widget-screenshot',
       args: { HideMouse: true },
       signal,
     });
@@ -240,7 +238,7 @@ describe('captureWindowScreenshot', () => {
 
   it('rejects a returned directory symlink without removing its target', async () => {
     const target = commandDirectory('target');
-    writeFileSync(join(target, 'ScreenShot_1.png'), png(20, 10));
+    writeFileSync(join(target, 'ScreenShot.png'), png(20, 10));
     const link = join(canonicalTempRoot, `tableau-capture-link-${process.pid}-${Date.now()}`);
     cleanupRoots.push(link);
     symlinkSync(target, link, 'dir');
@@ -252,7 +250,7 @@ describe('captureWindowScreenshot', () => {
 
     expect(result.isErr()).toBe(true);
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
-    expect(lstatSync(join(target, 'ScreenShot_1.png')).isFile()).toBe(true);
+    expect(lstatSync(join(target, 'ScreenShot.png')).isFile()).toBe(true);
   });
 
   it('rejects a matching child symlink and does not remove its target', async () => {
@@ -260,18 +258,18 @@ describe('captureWindowScreenshot', () => {
     const target = join(canonicalTempRoot, `tableau-secret-${process.pid}-${Date.now()}.png`);
     cleanupRoots.push(target);
     writeFileSync(target, png(50, 40));
-    symlinkSync(target, join(directory, 'ScreenShot_1.png'));
+    symlinkSync(target, join(directory, 'ScreenShot.png'));
 
     const result = await captureFrom(directory);
 
     expect(result.isErr()).toBe(true);
     expect(lstatSync(target).isFile()).toBe(true);
-    expect(lstatSync(join(directory, 'ScreenShot_1.png')).isSymbolicLink()).toBe(true);
+    expect(lstatSync(join(directory, 'ScreenShot.png')).isSymbolicLink()).toBe(true);
   });
 
   it('rejects a canonical child escape before reading or deleting it', async () => {
     const directory = commandDirectory();
-    const screenshot = join(directory, 'ScreenShot_1.png');
+    const screenshot = join(directory, 'ScreenShot.png');
     const outside = join(canonicalTempRoot, `tableau-outside-${process.pid}-${Date.now()}.png`);
     cleanupRoots.push(outside);
     writeFileSync(screenshot, png(10, 10));
@@ -290,17 +288,25 @@ describe('captureWindowScreenshot', () => {
     expect(lstatSync(outside).isFile()).toBe(true);
   });
 
-  it('ignores nonmatching files but fails closed rather than deleting them during cleanup', async () => {
+  it('does not inspect or delete unknown files when the exact screenshot is absent', async () => {
     const directory = commandDirectory();
     const unrelated = join(directory, 'ScreenShot_1.png.bak');
+    const oldCommandArtifact = join(directory, 'ScreenShot_2.png');
     writeFileSync(unrelated, Buffer.from('do not inspect or delete'));
-    writeFileSync(join(directory, 'ScreenShot_2.png'), png(30, 20));
+    writeFileSync(oldCommandArtifact, png(30, 20));
+    const read = vi.fn(() => {
+      throw new Error('unknown files must not be read');
+    });
 
-    const result = await captureFrom(directory);
+    const result = await captureWindowScreenshot(
+      { executor: executorReturning({ tempFilePath: directory }), signal },
+      { read },
+    );
 
     expect(result.isErr()).toBe(true);
+    expect(read).not.toHaveBeenCalled();
     expect(lstatSync(unrelated).isFile()).toBe(true);
-    expect(() => lstatSync(join(directory, 'ScreenShot_2.png'))).toThrow();
+    expect(lstatSync(oldCommandArtifact).isFile()).toBe(true);
   });
 
   it.each([
@@ -355,7 +361,7 @@ describe('captureWindowScreenshot', () => {
     ['oversized pixel area', structurallyCompletePng(20_000, 20_000)],
   ])('rejects %s and cleans the safe command artifacts', async (_label, bytes) => {
     const directory = commandDirectory();
-    writeFileSync(join(directory, 'ScreenShot_1.png'), bytes);
+    writeFileSync(join(directory, 'ScreenShot.png'), bytes);
 
     const result = await captureFrom(directory);
 
@@ -365,7 +371,7 @@ describe('captureWindowScreenshot', () => {
 
   it('rejects a candidate over the byte cap before reading it', async () => {
     const directory = commandDirectory();
-    const screenshot = join(directory, 'ScreenShot_1.png');
+    const screenshot = join(directory, 'ScreenShot.png');
     writeFileSync(screenshot, png(10, 10));
     truncateSync(screenshot, MAX_WINDOW_SCREENSHOT_BYTES + 1);
     const read = vi.fn(() => Buffer.alloc(0));
@@ -380,26 +386,12 @@ describe('captureWindowScreenshot', () => {
     expect(() => lstatSync(directory)).toThrow();
   });
 
-  it('selects the largest pixel area rather than the largest compressed file', async () => {
+  it('permits one exact screenshot at the byte cap to reach the bounded read', async () => {
     const directory = commandDirectory();
-    writeFileSync(join(directory, 'ScreenShot_1.png'), png(200, 100));
-    writeFileSync(join(directory, 'ScreenShot_2.png'), png(100, 100, true));
-
-    const result = await captureFrom(directory);
-
-    expect(result.isOk()).toBe(true);
-    if (result.isOk()) expect(result.value).toMatchObject({ width: 200, height: 100 });
-    expect(() => lstatSync(directory)).toThrow();
-  });
-
-  it('rejects an over-count capture before reading any candidate', async () => {
-    const directory = commandDirectory();
-    for (let index = 0; index <= MAX_WINDOW_SCREENSHOT_CANDIDATES; index += 1) {
-      writeFileSync(join(directory, `ScreenShot_${index}.png`), png(1, 1));
-    }
-    const read = vi.fn(() => {
-      throw new Error('over-count candidates must not be read');
-    });
+    const screenshot = join(directory, 'ScreenShot.png');
+    writeFileSync(screenshot, png(1, 1));
+    truncateSync(screenshot, MAX_WINDOW_SCREENSHOT_BYTES);
+    const read = vi.fn((_fd: number, maxBytes: number) => Buffer.alloc(maxBytes));
 
     const result = await captureWindowScreenshot(
       { executor: executorReturning({ tempFilePath: directory }), signal },
@@ -407,29 +399,8 @@ describe('captureWindowScreenshot', () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(read).not.toHaveBeenCalled();
-    expect(lstatSync(directory).isDirectory()).toBe(true);
-  });
-
-  it('rejects an aggregate byte budget breach before full reads and cleans validated files', async () => {
-    const directory = commandDirectory();
-    const candidateBytes = Math.floor(MAX_WINDOW_SCREENSHOT_AGGREGATE_BYTES / 3) + 1;
-    for (let index = 0; index < 3; index += 1) {
-      const path = join(directory, `ScreenShot_${index}.png`);
-      writeFileSync(path, png(1, 1));
-      truncateSync(path, candidateBytes);
-    }
-    const read = vi.fn(() => {
-      throw new Error('aggregate-over-cap candidates must not be read');
-    });
-
-    const result = await captureWindowScreenshot(
-      { executor: executorReturning({ tempFilePath: directory }), signal },
-      { read },
-    );
-
-    expect(result.isErr()).toBe(true);
-    expect(read).not.toHaveBeenCalled();
+    expect(read).toHaveBeenCalledOnce();
+    expect(read).toHaveBeenCalledWith(expect.any(Number), MAX_WINDOW_SCREENSHOT_BYTES);
     expect(() => lstatSync(directory)).toThrow();
   });
 
@@ -451,11 +422,10 @@ describe('captureWindowScreenshot', () => {
     expect(lstat).not.toHaveBeenCalled();
   });
 
-  it('stops between candidate reads when aborted and cleans all preflight-validated files', async () => {
+  it('returns cancellation when aborted during the single read and cleans the validated file', async () => {
     const controller = new AbortController();
     const directory = commandDirectory();
-    writeFileSync(join(directory, 'ScreenShot_1.png'), png(20, 10));
-    writeFileSync(join(directory, 'ScreenShot_2.png'), png(10, 10));
+    writeFileSync(join(directory, 'ScreenShot.png'), png(20, 10));
     const read = vi.fn((fd: number) => {
       controller.abort();
       return readFileSync(fd);
@@ -477,7 +447,7 @@ describe('captureWindowScreenshot', () => {
   it('preflights and cleans command artifacts when the executor aborts before returning Ok', async () => {
     const controller = new AbortController();
     const directory = commandDirectory();
-    writeFileSync(join(directory, 'ScreenShot_1.png'), png(10, 10));
+    writeFileSync(join(directory, 'ScreenShot.png'), png(10, 10));
     const executor = makeExecutorMock({
       executeCommand: vi.fn().mockImplementation(async () => {
         controller.abort();
@@ -495,7 +465,7 @@ describe('captureWindowScreenshot', () => {
     'fails closed when stable %s identity is unavailable',
     async (zeroIdentityFor) => {
       const directory = commandDirectory();
-      const screenshot = join(directory, 'ScreenShot_1.png');
+      const screenshot = join(directory, 'ScreenShot.png');
       writeFileSync(screenshot, png(10, 10));
       const fileSystem: Partial<WindowScreenshotFileSystem> = {
         lstat: (path) => {
@@ -520,25 +490,28 @@ describe('captureWindowScreenshot', () => {
     },
   );
 
-  it('fails closed on equal largest pixel areas and cleans all safe candidates', async () => {
+  it('cleans only ScreenShot.png and leaves an unknown artifact untouched', async () => {
     const directory = commandDirectory();
-    writeFileSync(join(directory, 'ScreenShot_1.png'), png(200, 100));
-    writeFileSync(join(directory, 'ScreenShot_2.png'), png(100, 200));
+    const screenshot = join(directory, 'ScreenShot.png');
+    const unknown = join(directory, 'ScreenShot_2.png');
+    writeFileSync(screenshot, png(200, 100));
+    writeFileSync(unknown, png(100, 200));
 
     const result = await captureFrom(directory);
 
     expect(result.isErr()).toBe(true);
-    expect(() => lstatSync(directory)).toThrow();
+    expect(() => lstatSync(screenshot)).toThrow();
+    expect(lstatSync(unknown).isFile()).toBe(true);
   });
 
   it('fails safely when a candidate vanishes between listing and inspection', async () => {
     const directory = commandDirectory();
-    const screenshot = join(directory, 'ScreenShot_7.png');
+    const screenshot = join(directory, 'ScreenShot.png');
     writeFileSync(screenshot, png(10, 10));
     let vanished = false;
     const fileSystem: Partial<WindowScreenshotFileSystem> = {
       lstat: (path) => {
-        if (!vanished && basename(path) === 'ScreenShot_7.png') {
+        if (!vanished && basename(path) === 'ScreenShot.png') {
           vanished = true;
           unlinkSync(path);
           throw new Error('ENOENT at /secret/vanished.png');
@@ -558,7 +531,7 @@ describe('captureWindowScreenshot', () => {
 
   it('fails safely on a permission error, redacts paths, and cleans validated candidates', async () => {
     const directory = commandDirectory('TOP-SECRET');
-    const screenshot = join(directory, 'ScreenShot_9.png');
+    const screenshot = join(directory, 'ScreenShot.png');
     writeFileSync(screenshot, png(10, 10));
     const fileSystem: Partial<WindowScreenshotFileSystem> = {
       open: () => {
@@ -574,14 +547,14 @@ describe('captureWindowScreenshot', () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error.message).not.toContain('TOP-SECRET');
-      expect(result.error.message).not.toContain('ScreenShot_9.png');
+      expect(result.error.message).not.toContain('ScreenShot.png');
     }
     expect(() => lstatSync(directory)).toThrow();
   });
 
   it('does not delete a file that replaces the validated screenshot before cleanup', async () => {
     const directory = commandDirectory();
-    const screenshot = join(directory, 'ScreenShot_11.png');
+    const screenshot = join(directory, 'ScreenShot.png');
     writeFileSync(screenshot, png(10, 10));
     const replacement = Buffer.from('replacement must survive');
     let fstatCalls = 0;
@@ -608,7 +581,7 @@ describe('captureWindowScreenshot', () => {
 
   it('rejects a matching child directory without recursively deleting it', async () => {
     const directory = commandDirectory();
-    const nested = join(directory, 'ScreenShot_1.png');
+    const nested = join(directory, 'ScreenShot.png');
     mkdirSync(nested);
     writeFileSync(join(nested, 'keep.txt'), Buffer.from('keep'));
 

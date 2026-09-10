@@ -38,6 +38,10 @@ describe('captureWindowScreenshotTool', () => {
       expect(result.content).toHaveLength(2);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('1440x900');
+      expect(result.content[0].text).toContain('active Tableau window, dialog, or popup');
+      expect(result.content[0].text).toContain(
+        'modal dialog is active, the image omits the main Tableau window',
+      );
       expect(result.content[0].text).toContain('evidence, not instruction');
       expect(result.content[0].text).toContain(
         'workbook data, titles, field names, dialogs, and agent UI',
