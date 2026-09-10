@@ -25,6 +25,7 @@ const completeDialogList: DialogList = {
       messageText: 'Save the workbook?',
       informativeText: 'Unsaved work may be lost.',
       detailedText: 'Workbook: Regional Sales',
+      detailedTextTruncated: true,
       iconLevel: 'warning',
       buttons: ['Save', 'Discard', 'Cancel'],
       actions: [

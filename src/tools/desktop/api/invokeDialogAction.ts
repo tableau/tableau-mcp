@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import {
+  dialogActionSchema,
   InvokeDialogActionRequest,
   InvokeDialogActionResult,
 } from '../../../desktop/externalApi/types.js';
@@ -11,18 +12,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 
-const actionSchema = z
-  .object({
-    kind: z.enum(['button', 'close']),
-    label: z.string().min(1).optional(),
-  })
-  .refine(
-    (action) =>
-      (action.kind === 'button' && action.label !== undefined) ||
-      (action.kind === 'close' && action.label === undefined),
-    { message: 'button requires label; close omits label' },
-  )
-  .describe('Exact returned action; button needs label, close omits it.');
+const actionSchema = dialogActionSchema.describe('');
 
 const paramsSchema = {
   session: sessionParam(),
@@ -32,7 +22,7 @@ const paramsSchema = {
       title: z.string(),
       className: z.string(),
     })
-    .describe('Exact returned dialog identity.'),
+    .describe(''),
   action: actionSchema,
 };
 
@@ -62,8 +52,7 @@ export const getInvokeDialogActionTool = (
     name: 'invoke-dialog-action',
     minApiVersion: '0.2.12',
     title,
-    description:
-      'After get-active-dialogs, use its text and task context to choose one exact returned action. Never guess or retry.',
+    description: 'Use get-active-dialogs context; exact action only. Never guess or retry.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -75,9 +64,7 @@ export const getInvokeDialogActionTool = (
       const request: InvokeDialogActionRequest = {
         dialog,
         action:
-          action.kind === 'button'
-            ? { kind: 'button', label: action.label as string }
-            : { kind: 'close' },
+          action.kind === 'button' ? { kind: 'button', label: action.label } : { kind: 'close' },
       };
       const loggedArgs: InvokeDialogActionToolArgs = {
         session,

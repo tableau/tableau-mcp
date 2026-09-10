@@ -2496,7 +2496,12 @@
           "className": { "type": "string" },
           "messageText": { "type": "string" },
           "informativeText": { "type": "string" },
-          "detailedText": { "type": "string" },
+          "detailedText": {
+            "type": "string",
+            "maxLength": 1048576,
+            "description": "Diagnostic text capped to 1048576 UTF-8 bytes (1 MiB). When shortened, detailedTextTruncated is true."
+          },
+          "detailedTextTruncated": { "type": "boolean" },
           "iconLevel": {
             "type": "string",
             "x-extensible-enum": ["critical", "warning", "information", "question"]

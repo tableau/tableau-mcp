@@ -486,6 +486,7 @@ export const windowInfoSchema = z
     messageText: z.string().optional(),
     informativeText: z.string().optional(),
     detailedText: z.string().optional(),
+    detailedTextTruncated: z.boolean().optional(),
     iconLevel: z.string().optional(),
     buttons: z.array(z.string()).optional(),
     actions: z.array(dialogActionSchema).optional(),

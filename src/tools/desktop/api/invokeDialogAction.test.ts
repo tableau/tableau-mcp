@@ -57,6 +57,7 @@ const successCases: Array<[string, InvokeDialogActionResult]> = [
           messageText: 'Continue?',
           informativeText: 'A second dialog is now active.',
           detailedText: 'Details stay intact.',
+          detailedTextTruncated: true,
           iconLevel: 'question',
           buttons: ['No', 'Yes'],
         },
@@ -98,8 +99,8 @@ describe('invoke-dialog-action tool', () => {
     expect(tool.name).toBe('invoke-dialog-action');
     expect(tool.minApiVersion).toBe('0.2.12');
     expect(tool.description).toContain('get-active-dialogs');
-    expect(tool.description).toContain('text and task context');
-    expect(tool.description).toContain('exact returned action');
+    expect(tool.description).toContain('context');
+    expect(tool.description).toContain('exact action');
     expect(tool.description).toContain('Never guess or retry');
     expect(tool.annotations).toEqual({
       readOnlyHint: false,
@@ -116,6 +117,9 @@ describe('invoke-dialog-action tool', () => {
     expect(
       schema.safeParse({ dialog: defaultRequest.dialog, action: { kind: 'close', label: 'X' } })
         .success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({ dialog: defaultRequest.dialog, action: { kind: 'button' } }).success,
     ).toBe(false);
     expect(
       schema.safeParse({ dialog: defaultRequest.dialog, action: { kind: 'button', label: '' } })
@@ -204,6 +208,30 @@ describe('invoke-dialog-action tool', () => {
       expect(posts[0].body).toBe(JSON.stringify(request));
       expect(posts[0].body).not.toContain('"label"');
       expect(posts[0].body).not.toContain('"X"');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('does not forward unknown action properties accepted for contract compatibility', async () => {
+    const requestWithUnknownActionProperty = {
+      session: undefined,
+      ...defaultRequest,
+      action: {
+        ...defaultRequest.action,
+        futureProperty: 'not part of the current invocation contract',
+      },
+    };
+    const harness = await startHarness();
+
+    try {
+      const result = await harness.callTool(requestWithUnknownActionProperty);
+
+      expect(result.isError).toBe(false);
+      const posts = dialogPosts(harness.server);
+      expect(posts).toHaveLength(1);
+      expect(posts[0].body).toBe(JSON.stringify(defaultRequest));
+      expect(posts[0].body).not.toContain('futureProperty');
     } finally {
       await harness.close();
     }

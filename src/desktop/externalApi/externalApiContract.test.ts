@@ -57,6 +57,7 @@ type SpecProperty = {
   $ref?: string;
   type?: string;
   minLength?: number;
+  maxLength?: number;
   const?: string;
   items?: SpecProperty;
   'x-extensible-enum'?: Array<string>;
@@ -353,6 +354,13 @@ describe('external client API contract (captured openapi fixture)', () => {
       }
     });
 
+    it('documents bounded detailed text and its truncation marker', () => {
+      const windowInfo = specSchema('WindowInfo');
+
+      expect(windowInfo.properties?.detailedText?.maxLength).toBe(1024 * 1024);
+      expect(windowInfo.properties?.detailedTextTruncated?.type).toBe('boolean');
+    });
+
     it('models exact labeled button and semantic close actions', () => {
       const variants = specSchema('DialogAction').oneOf ?? [];
       const byKind = Object.fromEntries(
@@ -364,6 +372,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(byKind.close.required).toEqual(['kind']);
       expect(byKind.close.properties?.label).toBe(false);
       expect(dialogActionSchema.safeParse({ kind: 'button', label: 'Discard' }).success).toBe(true);
+      expect(dialogActionSchema.safeParse({ kind: 'button' }).success).toBe(false);
       expect(dialogActionSchema.safeParse({ kind: 'button', label: '' }).success).toBe(false);
       expect(dialogActionSchema.safeParse({ kind: 'close' }).success).toBe(true);
       expect(dialogActionSchema.safeParse({ kind: 'close', label: 'X' }).success).toBe(false);
