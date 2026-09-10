@@ -11,7 +11,7 @@ import { PULSE_PREMIUM_INSIGHTS_ENTITLEMENT } from '../../sdks/tableau/types/pul
 import {
   checkRegistrationConditions,
   getUnmetConditionInstructions,
-  MAX_PULSE_PROBE_ATTEMPTS,
+  MAX_API_RETRY_ATTEMPTS,
   RegistrationCondition,
   RegistrationContext,
 } from './registrationConditions.js';
@@ -227,7 +227,7 @@ describe('checkRegistrationConditions', () => {
       );
 
       expect(result).toEqual({ registrationConditionsMet: true });
-      expect(mocks.useRestApi).toHaveBeenCalledTimes(MAX_PULSE_PROBE_ATTEMPTS);
+      expect(mocks.useRestApi).toHaveBeenCalledTimes(MAX_API_RETRY_ATTEMPTS + 1);
     });
 
     it('fails closed after exhausting retries when every attempt fails', async () => {
@@ -242,7 +242,7 @@ describe('checkRegistrationConditions', () => {
         registrationConditionsMet: false,
         failingCondition: 'RequiresPulse',
       });
-      expect(mocks.useRestApi).toHaveBeenCalledTimes(MAX_PULSE_PROBE_ATTEMPTS);
+      expect(mocks.useRestApi).toHaveBeenCalledTimes(MAX_API_RETRY_ATTEMPTS + 1);
       // Memoized so the failure is not re-probed for every remaining Pulse tool.
       expect(context.isPulseEnabled).toBe(false);
     });
@@ -279,7 +279,7 @@ describe('checkRegistrationConditions', () => {
         registrationConditionsMet: false,
         failingCondition: 'RequiresPulse',
       });
-      expect(mocks.useRestApi).toHaveBeenCalledTimes(MAX_PULSE_PROBE_ATTEMPTS);
+      expect(mocks.useRestApi).toHaveBeenCalledTimes(MAX_API_RETRY_ATTEMPTS + 1);
     });
   });
 

@@ -11,6 +11,9 @@ import { retry } from '../../utils/retry.js';
 
 /**
  * A capability a tool can require at registration time to be verified by {@link checkRegistrationConditions}.
+ *
+ * Adding a new registration condition - Step 1: add condition string to RegistrationCondition type,
+ * then add or update the `registrationConditions` property for all the tools the condition should apply to.
  */
 export type RegistrationCondition =
   | 'RequiresPulse'
@@ -71,6 +74,11 @@ export async function checkRegistrationConditions(
         }
         continue;
       }
+      /**
+       * Adding a new registration condition - Step 2: Add a case for checking new condition above,
+       * and populate the `context` object to prevent the same condition from being rechecked with each pass.
+       * See `getCurrentUserSiteRole` or above functions for examples on checking conditions.
+       */
       default: {
         // guard: a RegistrationCondition without a case above results in a
         // missing condition check failure and all tools associated with the condition will
@@ -91,6 +99,9 @@ export async function checkRegistrationConditions(
  *
  * Typed as a total `Record` so adding a {@link RegistrationCondition} without user-facing copy is
  * a compile error rather than a silent omission.
+ *
+ * Adding a new registration condition - Step 3: append an initialization message to inform clients
+ * that some tools were omitted due to an unmet registration condition.
  */
 const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
   // Kept generic: Pulse can be unavailable for several reasons (Tableau Server, site setting
@@ -118,8 +129,8 @@ export function getUnmetConditionInstructions(condition: RegistrationCondition):
   return UNMET_CONDITION_INSTRUCTIONS[condition];
 }
 
-/** Total number of Pulse probe attempts (1 initial + {@link MAX_PULSE_PROBE_ATTEMPTS}-1 retries). */
-export const MAX_PULSE_PROBE_ATTEMPTS = 3;
+/** Number of retries for API calls for a condition check (1 initial attempt + {@link MAX_API_RETRY_ATTEMPTS} retries = 3 total attempts). */
+export const MAX_API_RETRY_ATTEMPTS = 2;
 
 /**
  * Whether a failed capability probe is worth retrying.
@@ -189,7 +200,7 @@ async function checkPulseEnabled(restApiArgs: RestApiArgs): Promise<boolean> {
           },
         }),
       {
-        maxRetries: MAX_PULSE_PROBE_ATTEMPTS - 1,
+        maxRetries: MAX_API_RETRY_ATTEMPTS,
         retryIf: isRetryableProbeError,
       },
     );
@@ -254,7 +265,7 @@ async function checkPulsePremium(
           },
         }),
       {
-        maxRetries: MAX_PULSE_PROBE_ATTEMPTS - 1,
+        maxRetries: MAX_API_RETRY_ATTEMPTS,
         retryIf: isRetryableProbeError,
       },
     );
