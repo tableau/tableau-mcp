@@ -184,9 +184,15 @@ function getProjectCache(): ExpiringMap<string, string> {
 
 export class AdminInsightsDatasetNotFoundError extends Error {
   constructor(datasetName: string) {
+    // Message intentionally scoped to the not-provisioned condition only. The prior wording also
+    // mentioned needing a "Site Administrator Creator" role, which conflated this 404 with an
+    // authentication/permission failure — callers reaching this point are already authenticated and
+    // admin-gated (see adminInsightsToolBase.runAdminInsightsQuery → assertAdmin). W-23757363.
     super(
       `Admin Insights dataset "${datasetName}" not found in the "${ADMIN_INSIGHTS_PROJECT_NAME}" project on this site. ` +
-        'Confirm the caller is on a Tableau Cloud site with Admin Insights enabled and that the caller is a Site Administrator Creator.',
+        'This means Admin Insights is not provisioned on the targeted Tableau Cloud site (a distinct ' +
+        'condition from an authentication or permission error). Enable Admin Insights on this site, ' +
+        'or target the site where it is provisioned.',
     );
     this.name = 'AdminInsightsDatasetNotFoundError';
   }

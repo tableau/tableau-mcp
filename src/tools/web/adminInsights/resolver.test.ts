@@ -540,4 +540,13 @@ describe('adminInsightsResolver', () => {
       expect(resolution.luid).toBe('luid-alive');
     });
   });
+
+  // W-23757363: the not-found message must mean "not provisioned" only. It previously also told the
+  // caller to be a "Site Administrator Creator", conflating this 404 with an auth/permission error.
+  it('produces a not-provisioned message without any admin-role clause', () => {
+    const error = new AdminInsightsDatasetNotFoundError(ADMIN_INSIGHTS_DATASETS.JOB_PERFORMANCE);
+    expect(error.message).toContain('not provisioned on the targeted Tableau Cloud site');
+    expect(error.message).toContain('Enable Admin Insights on this site');
+    expect(error.message).not.toContain('Site Administrator Creator');
+  });
 });

@@ -3,7 +3,12 @@ import { AxiosError } from 'axios';
 import { Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
-import { DatasourceNotAllowedError, ZodiosValidationError } from '../../errors/mcpToolError.js';
+import {
+  AdminOnlyError,
+  DatasourceNotAllowedError,
+  ServiceUnavailableError,
+  ZodiosValidationError,
+} from '../../errors/mcpToolError.js';
 import { notifier } from '../../logging/notification.js';
 import { WebMcpServer } from '../../server.web.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
@@ -230,6 +235,112 @@ describe('Tool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('An error occurred');
+  });
+
+  // W-23757363: a bare "Request failed with status code 401" was being paraphrased by the model
+  // into a misleading "feature not configured" message. A raw REST 401/403 thrown from the callback
+  // must be classified into clear, self-explanatory guidance naming the targeted site + pod.
+  describe('auth error classification (W-23757363)', () => {
+    it('should return clear authentication guidance naming site + pod on a raw 401', async () => {
+      const tool = new WebTool(mockParams);
+      const axiosError = new AxiosError('Request failed with status code 401');
+      axiosError.response = { status: 401 } as AxiosError['response'];
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw axiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      const text = result.content[0].text;
+      expect(text).toContain('Authentication failed (401)');
+      expect(text).toContain('missing, invalid, or expired');
+      expect(text).toContain('site "tc25"');
+      expect(text).toContain('pod "https://my-tableau-server.com"');
+      expect(text).toContain('verify the request targeted the intended server');
+      // Never leaks the raw axios message the model was misreading.
+      expect(text).not.toBe('requestId: 2, error: Request failed with status code 401');
+    });
+
+    it('should return clear permission guidance on a raw 403', async () => {
+      const tool = new WebTool(mockParams);
+      const axiosError = new AxiosError('Request failed with status code 403');
+      axiosError.response = { status: 403 } as AxiosError['response'];
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw axiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      const text = result.content[0].text;
+      expect(text).toContain('Permission denied (403)');
+      expect(text).toContain('may lack the required site role or permission');
+      expect(text).toContain('site "tc25"');
+    });
+
+    it('should NOT reclassify a curated McpToolError that carries its own 403 message', async () => {
+      const tool = new WebTool(mockParams);
+      const message =
+        'This tool requires site administrator permissions. Your site role is: Viewer';
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw new AdminOnlyError(message);
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe(`requestId: 2, error: ${message}`);
+    });
+
+    it('should leave a non-auth McpToolError (503) with its generic result', async () => {
+      const tool = new WebTool(mockParams);
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw new ServiceUnavailableError('Temporarily unavailable');
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe('requestId: 2, error: Temporarily unavailable');
+    });
+
+    it('should leave a plain Error (no HTTP status) with its generic result', async () => {
+      const tool = new WebTool(mockParams);
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw new Error('Something unexpected happened');
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe('requestId: 2, error: Something unexpected happened');
+    });
   });
 
   describe('product telemetry', () => {
