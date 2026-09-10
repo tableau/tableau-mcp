@@ -21,6 +21,8 @@ import { serializeRouteReceipt, sessionRouteState } from '../../../../desktop/ro
 import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
+  ensureUserNamespace,
+  workbookHasSheetNamed,
 } from '../../../../desktop/templates/injectTemplateCore.js';
 import type { RuntimeTemplateCatalogSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
 import * as runtimeTemplateCatalogModule from '../../../../desktop/templates/runtimeTemplateCatalog.js';
@@ -36,7 +38,7 @@ import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
-import { TableauDesktopToolContext } from '../../toolContext.js';
+import { TableauDesktopRequestHandlerExtra, TableauDesktopToolContext } from '../../toolContext.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { appliedSheetSignature } from './appliedSheetSignature.js';
 import { getBindTemplateTool } from './bindTemplate.js';
@@ -73,6 +75,7 @@ vi.mock('../../../../desktop/templates/injectTemplateCore.js', async (importOrig
     ...actual,
     buildInjectedWorkbookXml: vi.fn(),
     classifyWorksheetReplaceTarget: vi.fn(),
+    workbookHasSheetNamed: vi.fn(),
   };
 });
 vi.mock('../../../../desktop/templates/templatePath.js');
@@ -778,6 +781,7 @@ beforeEach(() => {
   vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockReset();
   vi.mocked(binderModule.bindTemplate).mockReset();
   vi.mocked(classifyWorksheetReplaceTarget).mockReset();
+  vi.mocked(workbookHasSheetNamed).mockReset();
   vi.mocked(validationRegistry.runValidation).mockReturnValue({ valid: true, issues: [] });
   vi.mocked(runtimeTemplateCatalogModule.loadRuntimeTemplateCatalogSnapshots).mockImplementation(
     mockedRuntimeCatalog,
@@ -808,7 +812,7 @@ describe('bindTemplateTool', () => {
     expect(paramsSchema['target_worksheet']!.description).toBe('Sheet id/name; omit to add.');
     expect(paramsSchema['auto_apply']!.description).toBe('Apply now');
     expect(paramsSchema['datasource']!.description).toBe(
-      'Internal datasource name or unique caption',
+      'Internal datasource name or unique caption.',
     );
     expect(paramsSchema['calcs']!.description).toBe('Author fields.');
     expect(
@@ -3318,8 +3322,12 @@ async function getToolResult({
   target_worksheet,
   datasource,
   calcs,
+  skip_validation,
+  allowSkipValidation,
   customSignal,
   getExecutor,
+  progressToken,
+  sendNotification,
 }: {
   // Optional: omitted exercises session-default-when-unique resolution.
   session?: string;
@@ -3336,17 +3344,28 @@ async function getToolResult({
     datatype?: string;
     role?: string;
   }>;
+  skip_validation?: boolean;
+  allowSkipValidation?: boolean;
   customSignal?: AbortSignal;
   getExecutor?: TableauDesktopToolContext['getExecutor'];
+  progressToken?: string | number;
+  sendNotification?: TableauDesktopRequestHandlerExtra['sendNotification'];
 }): Promise<CallToolResult> {
   const tool = getBindTemplateTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
 
   const mockExecutor: TableauDesktopToolContext['getExecutor'] =
     getExecutor ?? vi.fn().mockResolvedValue({});
+  const requestExtra = getMockRequestHandlerExtra();
   const extra = {
-    ...getMockRequestHandlerExtra(),
+    ...requestExtra,
+    config: {
+      ...requestExtra.config,
+      ...(allowSkipValidation !== undefined ? { allowSkipValidation } : {}),
+    },
     getExecutor: mockExecutor,
+    ...(progressToken !== undefined ? { _meta: { progressToken } } : {}),
+    ...(sendNotification ? { sendNotification } : {}),
     ...(customSignal && { signal: customSignal }),
   };
 
@@ -3360,6 +3379,7 @@ async function getToolResult({
       target_worksheet,
       datasource,
       calcs,
+      skip_validation,
     } as any,
     extra,
   );
@@ -4705,7 +4725,13 @@ describe('bindTemplateTool auto_apply gate', () => {
         ...boundM7TopNContextFilterResult,
         args: {
           ...boundM7TopNContextFilterResult.args,
-          filters: [{ field: 'Region', values: ['East'], context: true }],
+          filters: [
+            {
+              field: 'Region',
+              values: ['Archive - DLM', 'FIREInfra', 'MCIS - Operations Team'],
+              context: true,
+            },
+          ],
         },
       } as BinderResult,
       inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
@@ -4718,7 +4744,13 @@ describe('bindTemplateTool auto_apply gate', () => {
       proposal: {
         ...sampleProposal,
         top_n: 10,
-        filters: [{ field: 'Region', values: ['East'], context: true }],
+        filters: [
+          {
+            field: 'Region',
+            values: ['Archive - DLM', 'FIREInfra', 'MCIS - Operations Team'],
+            context: true,
+          },
+        ],
       },
       auto_apply: true,
       getExecutor,
@@ -4730,10 +4762,82 @@ describe('bindTemplateTool auto_apply gate', () => {
       "<filter class='categorical' column='[M7].[none:region:nk]' context='true'>",
     );
     expect(xml).toContain(
-      "<groupfilter function='member' level='[none:region:nk]' member='East' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />",
+      "<groupfilter function='member' level='[none:region:nk]' member='&quot;Archive - DLM&quot;' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />",
     );
+    expect(xml).toContain("member='&quot;FIREInfra&quot;'");
+    expect(xml).toContain("member='&quot;MCIS - Operations Team&quot;'");
     // top-N unaffected.
     expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
+  });
+
+  it('m7: leaves non-string categorical members unquoted', async () => {
+    const integerRegionWorkbook = M7_WORKBOOK_XML.replace(
+      "<column caption='Region' name='[region]' role='dimension' type='nominal' datatype='string' />",
+      "<column caption='Region' name='[region]' role='dimension' type='ordinal' datatype='integer' />",
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundM7TopNContextFilterResult,
+        args: {
+          ...boundM7TopNContextFilterResult.args,
+          filters: [{ field: 'Region', values: ['42'], context: true }],
+        },
+      } as BinderResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [integerRegionWorkbook],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'top 10 products by sales in region 42',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [{ field: 'Region', values: ['42'], context: true }],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+    expect(xml).toContain("member='42'");
+    expect(xml).not.toContain("member='&quot;42&quot;'");
+  });
+
+  it('m7: escapes special characters in string categorical members', async () => {
+    const values = ["O'Brien", 'A "quoted" member', 'Path\\Name', 'A&B <Team>', ''];
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundM7TopNContextFilterResult,
+        args: {
+          ...boundM7TopNContextFilterResult.args,
+          filters: [{ field: 'Region', values, context: true }],
+        },
+      } as BinderResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'top 10 products by sales for exact region members',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [{ field: 'Region', values, context: true }],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+    expect(xml).toContain("member='&quot;O&apos;Brien&quot;'");
+    expect(xml).toContain("member='&quot;A \\&quot;quoted\\&quot; member&quot;'");
+    expect(xml).toContain("member='&quot;Path\\\\Name&quot;'");
+    expect(xml).toContain("member='&quot;A&amp;B &lt;Team&gt;&quot;'");
+    expect(xml).toContain("member='&quot;&quot;'");
   });
 
   it('preserves two proposal filters, both slices and shown dropdown cards without losing the grouping shelf', async () => {
@@ -4764,7 +4868,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       "<filter class='categorical' column='[M7].[none:region:nk]' context='true'>",
     );
     expect(xml).toContain("<filter class='categorical' column='[M7].[none:segment:nk]'>");
-    expect(xml).toContain("member='Consumer'");
+    expect(xml).toContain("member='&quot;Consumer&quot;'");
     expect(xml).toContain('<column>[M7].[none:region:nk]</column>');
     expect(xml).toContain('<column>[M7].[none:segment:nk]</column>');
     expect(xml).toContain("<card mode='dropdown' param='[M7].[none:region:nk]' type='filter' />");
@@ -4900,6 +5004,423 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
       expect.objectContaining({ workbookXml: CALC_READBACK_XML }),
     );
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it('authors live Insights KPI calcs and worksheet in one mutation', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const appliedKpiXml = CALC_READBACK_XML.replace(
+      '</worksheets>',
+      "<worksheet name='Period change — Sales' /></worksheets>",
+    );
+    const insightBoundResult: BinderResult = {
+      ...boundResult,
+      args: {
+        ...boundResult.args,
+        template_name: 'insights__kpi',
+        title: 'Period change — Sales',
+        template_parameters: {
+          ...boundResult.args.template_parameters,
+          METRIC_NAME: 'R&amp;amp;D Sales',
+          VALUE_FORMAT: 'c&quot;$&quot;#,##0.0;-&quot;$&quot;#,##0.0',
+        },
+        field_mapping: {
+          ...boundResult.args.field_mapping,
+          '{{field_base_1}}': '[DS].[none:R&amp;amp;D:qk]',
+        },
+      },
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: insightBoundResult,
+      // The first atomic readback still sees the pre-apply document; the poll must
+      // wait for the combined calc + worksheet mutation to settle.
+      workbookReads: [CALC_BASE_XML, CALC_BASE_XML, appliedKpiXml],
+    });
+    vi.mocked(buildInjectedWorkbookXml).mockImplementation(() => ({
+      ok: true,
+      xml: appliedKpiXml,
+    }));
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Period change — Sales',
+      proposal: {
+        ...sampleProposal,
+        template: 'insights__kpi',
+        title: 'Period change — Sales',
+      },
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+      auto_apply: true,
+      skip_validation: true,
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.authored_calcs).toEqual(['Margin']);
+    expect(body.verification).toEqual({ ok: true, status: 'passed' });
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_error).toBeUndefined();
+    expect(body.phase_ms).toEqual({
+      bind: 0,
+      inject: 0,
+      apply: 0,
+      readback: 0,
+      summary: 0,
+      total: 0,
+    });
+    expect(body.guidance).toContain('Calcs authored: Margin');
+    expect(binderModule.bindTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ workbookXml: expect.stringContaining("caption='Margin'") }),
+    );
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workbookXml: expect.stringContaining("caption='Margin'"),
+        templateParameters: expect.objectContaining({
+          METRIC_NAME: 'R&amp;D Sales',
+          VALUE_FORMAT: 'c"$"#,##0.0;-"$"#,##0.0',
+        }),
+        fieldMapping: expect.objectContaining({
+          '{{field_base_1}}': '[DS].[none:R&amp;D:qk]',
+        }),
+      }),
+    );
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(3);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).toHaveBeenCalledWith(
+      expect.stringMatching(/caption='Margin'[\s\S]*worksheet name='Period change — Sales'/),
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('atomically authors calcs for any trusted deterministic proposal', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const appliedBarXml = CALC_READBACK_XML.replace(
+      '</worksheets>',
+      "<worksheet name='Sales by Region' /></worksheets>",
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [CALC_BASE_XML, appliedBarXml],
+    });
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({ ok: true, xml: appliedBarXml });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Sales by Region',
+      proposal: sampleProposal,
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+      auto_apply: true,
+      skip_validation: true,
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.authored_calcs).toEqual(['Margin']);
+    expect(body.verification).toEqual({ ok: true, status: 'passed' });
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_error).toBeUndefined();
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not verify an atomic calc that only appears in a different datasource', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const intendedXml = MULTI_DATASOURCE_CALC_READBACK_XML.replace(
+        '</worksheets>',
+        "<worksheet name='Sales by Region' /></worksheets>",
+      );
+      const wrongDatasourceXml = MULTI_DATASOURCE_CALC_BASE_XML.replace(
+        '</datasource>',
+        `${INVENTORY_CALC_COLUMN_XML}</datasource>`,
+      ).replace('</worksheets>', "<worksheet name='Sales by Region' /></worksheets>");
+      const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+        workbookReads: [MULTI_DATASOURCE_CALC_BASE_XML, wrongDatasourceXml],
+      });
+      vi.mocked(buildInjectedWorkbookXml).mockReturnValue({ ok: true, xml: intendedXml });
+
+      const resultPromise = getToolResult({
+        session: '1',
+        ask: 'Sales by Region',
+        proposal: sampleProposal,
+        datasource: 'Inventory',
+        calcs: [{ caption: 'Double Quantity', formula: '[Quantity] * 2' }],
+        auto_apply: true,
+        skip_validation: true,
+        allowSkipValidation: true,
+        getExecutor,
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      const result = await resultPromise;
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        applied: false,
+        may_have_applied: true,
+        retry_safe: false,
+        verification: {
+          status: 'failed',
+          message: expect.stringContaining('calculations were absent: Double Quantity'),
+        },
+      });
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns a may-have-applied error when trusted verification is skipped', async () => {
+    const appliedBarXml = CALC_BASE_XML.replace(
+      '</worksheets>',
+      "<worksheet name='Sales by Region'><table /></worksheet></worksheets>",
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [CALC_BASE_XML],
+    });
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({ ok: true, xml: appliedBarXml });
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml)
+      .mockResolvedValueOnce(Ok(CALC_BASE_XML))
+      .mockResolvedValue(
+        Err({ type: 'execute-command-error', error: { code: 'readback-failed' } } as any),
+      );
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Sales by Region',
+      proposal: sampleProposal,
+      auto_apply: true,
+      skip_validation: true,
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      applied: false,
+      may_have_applied: true,
+      retry_safe: false,
+      sheet_name: 'Sales by Region',
+      verification: { status: 'skipped' },
+    });
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a may-have-applied error when trusted verification fails', async () => {
+    vi.useFakeTimers();
+    try {
+      const appliedBarXml = CALC_BASE_XML.replace(
+        '</worksheets>',
+        "<worksheet name='Sales by Region'><table /></worksheet></worksheets>",
+      );
+      const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+        workbookReads: [CALC_BASE_XML],
+      });
+      vi.mocked(buildInjectedWorkbookXml).mockReturnValue({ ok: true, xml: appliedBarXml });
+      vi.mocked(getWorkbookXmlModule.getWorkbookXml)
+        .mockResolvedValueOnce(Ok(CALC_BASE_XML))
+        .mockResolvedValue(Ok(CALC_BASE_XML));
+
+      const resultPromise = getToolResult({
+        session: '1',
+        ask: 'Sales by Region',
+        proposal: sampleProposal,
+        auto_apply: true,
+        skip_validation: true,
+        allowSkipValidation: true,
+        getExecutor,
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      const result = await resultPromise;
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        applied: false,
+        may_have_applied: true,
+        retry_safe: false,
+        sheet_name: 'Sales by Region',
+        verification: { status: 'failed' },
+      });
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not overwrite an unrelated worksheet that shares a deterministic KPI title', async () => {
+    const key = 'a'.repeat(64);
+    const existingWorkbook = CALC_BASE_XML.replace(
+      '</worksheets>',
+      "<worksheet name='Sales by Region'><table /></worksheet></worksheets>",
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [existingWorkbook],
+    });
+    vi.mocked(classifyWorksheetReplaceTarget).mockImplementation((_xml, name) =>
+      name === 'Sales by Region' ? 'replaceable' : 'not-found',
+    );
+    vi.mocked(workbookHasSheetNamed).mockImplementation((_xml, name) => name === 'Sales by Region');
+    vi.mocked(buildInjectedWorkbookXml).mockImplementation(({ title }) => ({
+      ok: true,
+      xml: existingWorkbook.replace(
+        '</worksheets>',
+        `<worksheet name='${title}'><table /></worksheet></worksheets>`,
+      ),
+    }));
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Sales by Region',
+      auto_apply: true,
+      skip_validation: true,
+      proposal: {
+        ...sampleProposal,
+        template_parameters: { __TABLEAU_AGENT_IDEMPOTENCY_KEY__: key },
+      },
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).sheet_name).toBe('Sales by Region (2)');
+    const appliedXml = applyWorkbookDocument.mock.calls[0]?.[0] as string;
+    expect(appliedXml).toMatch(/worksheet name=["']Sales by Region["']/);
+    expect(appliedXml).toMatch(/worksheet\b[^>]*name=["']Sales by Region \(2\)["']/);
+    expect(appliedXml).toMatch(new RegExp(`user:tableau-agent-idempotency-key=["']${key}["']`));
+  });
+
+  it('returns a matching deterministic worksheet without applying after Desktop strips its identity stamp', async () => {
+    const key = 'c'.repeat(64);
+    const existingWorksheet =
+      "<worksheet name='Sales by Region'><table><view>" +
+      "<datasource-dependencies datasource='Orders'>" +
+      "<column datatype='string' name='[Region]' role='dimension' type='nominal' />" +
+      "<column datatype='real' name='[Sales]' role='measure' type='quantitative' />" +
+      '</datasource-dependencies></view></table></worksheet>';
+    const existingWorkbook = CALC_BASE_XML.replace(
+      "<worksheet name='Sheet 1' />",
+      existingWorksheet,
+    );
+    const { getExecutor } = setupAutoApplyMocks({ workbookReads: [existingWorkbook] });
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('in-dashboard');
+    vi.mocked(workbookHasSheetNamed).mockImplementation((_xml, name) => name === 'Sales by Region');
+    vi.mocked(buildInjectedWorkbookXml).mockImplementation(({ title }) => ({
+      ok: true,
+      xml: existingWorkbook.replace(
+        existingWorksheet,
+        `<worksheet name='${title}'><table /></worksheet>`,
+      ),
+    }));
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Sales by Region',
+      auto_apply: true,
+      skip_validation: true,
+      proposal: {
+        ...sampleProposal,
+        template_parameters: { __TABLEAU_AGENT_IDEMPOTENCY_KEY__: key },
+      },
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      applied: false,
+      reused: true,
+      sheet_name: 'Sales by Region',
+    });
+    expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
+  });
+
+  it('reuses the hidden deterministic identity while keeping the visible title clean', async () => {
+    const key = 'b'.repeat(64);
+    const existingWorkbook = ensureUserNamespace(
+      CALC_BASE_XML.replace(
+        "<worksheet name='Sheet 1' />",
+        `<worksheet name='Sales by Region' user:tableau-agent-idempotency-key='${key}'><table /></worksheet>`,
+      ),
+    );
+    const { getExecutor } = setupAutoApplyMocks({ workbookReads: [existingWorkbook] });
+    vi.mocked(classifyWorksheetReplaceTarget).mockImplementation((_xml, name) =>
+      name === 'Sales by Region' ? 'replaceable' : 'not-found',
+    );
+    vi.mocked(workbookHasSheetNamed).mockImplementation((_xml, name) => name === 'Sales by Region');
+    vi.mocked(buildInjectedWorkbookXml).mockImplementation(({ title }) => ({
+      ok: true,
+      xml: existingWorkbook.replace(
+        /<worksheet name='Sales by Region'[^>]*><table \/><\/worksheet>/,
+        `<worksheet name='${title}'><table /></worksheet>`,
+      ),
+    }));
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Sales by Region',
+      auto_apply: true,
+      skip_validation: true,
+      proposal: {
+        ...sampleProposal,
+        template_parameters: { __TABLEAU_AGENT_IDEMPOTENCY_KEY__: key },
+      },
+      allowSkipValidation: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      applied: false,
+      reused: true,
+      sheet_name: 'Sales by Region',
+    });
+    expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
+  });
+
+  it('keeps untrusted Insights KPI calc application on the ordinary two-apply path', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const insightBoundResult: BinderResult = {
+      ...boundResult,
+      args: {
+        ...boundResult.args,
+        template_name: 'insights__kpi',
+        title: 'Period change — Sales',
+      },
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: insightBoundResult,
+      workbookReads: [CALC_BASE_XML, CALC_READBACK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Period change — Sales',
+      proposal: {
+        ...sampleProposal,
+        template: 'insights__kpi',
+        title: 'Period change — Sales',
+      },
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+      auto_apply: true,
+      skip_validation: true,
+      allowSkipValidation: false,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
   });
 
@@ -5781,7 +6302,72 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
     expect(body.sheet_name).toBe('Sales by Region');
-    expect(vi.mocked(classifyWorksheetReplaceTarget)).not.toHaveBeenCalled();
+    expect(vi.mocked(classifyWorksheetReplaceTarget)).toHaveBeenCalledWith(XML, 'Sales by Region');
+  });
+
+  it('chooses a collision-free title when an omitted target already belongs to a dashboard', async () => {
+    const { getExecutor } = setupAutoApplyMocks();
+    vi.mocked(classifyWorksheetReplaceTarget).mockImplementation((_xml, name) =>
+      name === 'Sales by Region' ? 'in-dashboard' : 'not-found',
+    );
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.sheet_name).toBe('Sales by Region (2)');
+    expect(vi.mocked(buildInjectedWorkbookXml)).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Sales by Region (2)' }),
+    );
+  });
+
+  it('skips suffixed titles already owned by a dashboard or story', async () => {
+    const { getExecutor } = setupAutoApplyMocks();
+    vi.mocked(classifyWorksheetReplaceTarget).mockImplementation((_xml, name) =>
+      name === 'Sales by Region' ? 'in-dashboard' : 'not-found',
+    );
+    vi.mocked(workbookHasSheetNamed).mockImplementation(
+      (_xml, name) => name === 'Sales by Region (2)',
+    );
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.sheet_name).toBe('Sales by Region (3)');
+    expect(vi.mocked(buildInjectedWorkbookXml)).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Sales by Region (3)' }),
+    );
+  });
+
+  it('chooses a new title when a dashboard or story owns the requested title', async () => {
+    const { getExecutor } = setupAutoApplyMocks();
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('not-found');
+    vi.mocked(workbookHasSheetNamed).mockImplementation((_xml, name) => name === 'Sales by Region');
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).sheet_name).toBe('Sales by Region (2)');
   });
 });
 
@@ -6738,6 +7324,62 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     vi.clearAllMocks();
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
     vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+  });
+
+  it('reports generic preparation, apply, and verification progress at the real boundaries', async () => {
+    const mocks = setupAutoApplyMocks({ inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML } });
+    const sendNotification = vi.fn(
+      async (_notification: Parameters<TableauDesktopRequestHandlerExtra['sendNotification']>[0]) =>
+        undefined,
+    );
+
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: readbackExecutor(mocks),
+      progressToken: 'bind-1',
+      sendNotification,
+    });
+
+    expect(sendNotification.mock.calls.map(([notification]) => notification)).toEqual([
+      {
+        method: 'notifications/progress',
+        params: {
+          progressToken: 'bind-1',
+          progress: 1,
+          total: 3,
+          message: 'Preparing template',
+        },
+      },
+      {
+        method: 'notifications/progress',
+        params: {
+          progressToken: 'bind-1',
+          progress: 2,
+          total: 3,
+          message: 'Applying workbook changes',
+        },
+      },
+      {
+        method: 'notifications/progress',
+        params: {
+          progressToken: 'bind-1',
+          progress: 3,
+          total: 3,
+          message: 'Verifying workbook changes',
+        },
+      },
+    ]);
+    expect(sendNotification.mock.invocationCallOrder[1]).toBeLessThan(
+      mocks.applyWorkbookDocument.mock.invocationCallOrder[0],
+    );
+    expect(sendNotification.mock.invocationCallOrder[2]).toBeGreaterThan(
+      mocks.applyWorkbookDocument.mock.invocationCallOrder[0],
+    );
+    expect(sendNotification.mock.invocationCallOrder[2]).toBeLessThan(
+      vi.mocked(getWorkbookXmlModule.getWorkbookXml).mock.invocationCallOrder.at(-1)!,
+    );
   });
 
   it('a clean readback earns a verified host line', async () => {

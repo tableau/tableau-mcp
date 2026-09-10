@@ -13,9 +13,9 @@ const KNOWN_LIVE_FAILURE_REASON = 'known-live-failure';
 const UNVALIDATED_TARGET_REASON = 'unvalidated-target';
 const FILTER_FIX = 'express filters in the NotionalSpec (categoricalFilters/rangeFilters/...)';
 const SORT_FIX =
-  'tabdoc:sort drives a UI dialog and blocks the screen. Use refine-worksheet with operation sort_by_field (sort a dimension by a field/measure), or the cached-document round-trip for nested sorts';
+  'tabdoc:sort drives a UI dialog and blocks the screen. Use refine-worksheet with operation sort_by_field (omit targetField to sort the innermost nested dim, or pass targetField)';
 const SORT_NESTED_FIX =
-  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the cached-document round-trip (get-worksheet-xml → read-cached-xml/write-cached-xml to edit the computed-sort → apply-worksheet).';
+  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters. Do not retry it. Use refine-worksheet with operation sort_by_field (omit targetField to sort the innermost nested dim, or pass targetField).';
 const SORT_NESTED_ALLOWED =
   'DimensionToSort Worksheet MeasureName ShelfType Direction ClearSort Dashboard LevelNames MemberValues KeepFieldFilters';
 const SORT_NESTED_REQUIRED = 'DimensionToSort Worksheet MeasureName ShelfType';

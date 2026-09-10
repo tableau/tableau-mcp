@@ -4,12 +4,25 @@ import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.js';
+import {
+  ExecuteCommandArgs,
+  ExternalApiToolExecutor,
+} from '../../../../desktop/externalApi/executorTypes.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
+import invalidValidatorEnvelope from './__fixtures__/calc-validation-invalid.json';
+import validValidatorEnvelope from './__fixtures__/calc-validation-valid.json';
 import { getAuthorCalcTool } from './authorCalc.js';
-import { authorCalculationsInWorkbook } from './authorCalcCore.js';
+import {
+  authorCalculationsInWorkbook,
+  authorCalculationsWithValidation,
+  calcErrorMessages,
+  type CalcSpec,
+  layerCalculationsByDependency,
+  prepareCalculationsInWorkbook,
+} from './authorCalcCore.js';
 
 const BASE_XML = [
   "<?xml version='1.0' encoding='utf-8'?>",
@@ -630,9 +643,18 @@ async function getToolResult({
 }> {
   const documents = [initialXml, initialXml, readbackXml ?? withColumn(initialXml, '')];
   let readCount = 0;
-  const executeCommand = vi
-    .fn()
-    .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null }));
+  // The validate command must return a well-formed (empty errorMsgs) envelope: validateCalcFormula now
+  // fails CLOSED on a missing errorMsgs field, so a blanket `result: null` would abort every calc.
+  const executeCommand = vi.fn(async ({ command }: ExecuteCommandArgs) => {
+    if (command === 'get-calc-details-pres-model-for-formula') {
+      return new Ok({
+        command_id: 'validate-1',
+        status: 'completed',
+        result: { userCalculationDetails: { errorMsgs: [], errorInds: [] } },
+      });
+    }
+    return new Ok({ command_id: 'command-1', status: 'completed', result: null });
+  });
   const getWorkbookDocument = vi.fn(async () => {
     return new Ok({
       xml: documents[Math.min(readCount++, documents.length - 1)],
@@ -722,3 +744,504 @@ function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): st
   invariant(typeof xml === 'string');
   return xml;
 }
+
+describe('prepareCalculationsInWorkbook idempotency', () => {
+  const existingCalc =
+    "<column caption='Margin' datatype='real' name='[Calculation_900]' role='measure' type='quantitative'>" +
+    "<calculation class='tableau' formula='[Sales] * 0.2' /></column>";
+
+  it('reuses an identical caption/formula/type/role without editing the workbook', () => {
+    const workbookXml = withColumn(BASE_XML, existingCalc);
+    const result = prepareCalculationsInWorkbook({
+      workbookXml,
+      calcs: [{ caption: 'Margin', formula: '[Sales]  *  0.2' }],
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    expect(result.value.workbookXml).toBe(workbookXml);
+    expect(result.value.authoredCalcs).toEqual([]);
+  });
+
+  it.each(['&#10;', '&#xA;'])(
+    'reuses a multiline calculation after Desktop encodes line breaks as %s',
+    (lineBreak) => {
+      const multilineCalc =
+        "<column caption='Period Total' datatype='real' name='[Calculation_901]' role='measure' type='quantitative'>" +
+        `<calculation class='tableau' formula='SUM(${lineBreak}  [Sales]${lineBreak})' /></column>`;
+      const workbookXml = withColumn(BASE_XML, multilineCalc);
+      const result = prepareCalculationsInWorkbook({
+        workbookXml,
+        calcs: [{ caption: 'Period Total', formula: 'SUM(\n  [Sales]\n)' }],
+      });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) return;
+      expect(result.value.workbookXml).toBe(workbookXml);
+      expect(result.value.authoredCalcs).toEqual([]);
+    },
+  );
+
+  it.each([
+    { existingDatatype: 'integer', requestedDatatype: 'real' as const },
+    { existingDatatype: 'real', requestedDatatype: 'integer' as const },
+  ])(
+    'reuses an identical numeric measure when Desktop stores $existingDatatype and the caller requests $requestedDatatype',
+    ({ existingDatatype, requestedDatatype }) => {
+      const numericReadback = existingCalc.replace(
+        "datatype='real'",
+        `datatype='${existingDatatype}'`,
+      );
+      const workbookXml = withColumn(BASE_XML, numericReadback);
+      const result = prepareCalculationsInWorkbook({
+        workbookXml,
+        calcs: [
+          {
+            caption: 'Margin',
+            formula: '[Sales] * 0.2',
+            datatype: requestedDatatype,
+            role: 'measure',
+          },
+        ],
+      });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) return;
+      expect(result.value.workbookXml).toBe(workbookXml);
+      expect(result.value.authoredCalcs).toEqual([]);
+    },
+  );
+
+  it.each([
+    { existingDatatype: 'integer', requestedDatatype: 'string' as const },
+    { existingDatatype: 'date', requestedDatatype: 'real' as const },
+    { existingDatatype: 'boolean', requestedDatatype: 'integer' as const },
+  ])(
+    'rejects an identical formula when $existingDatatype and $requestedDatatype are not both numeric',
+    ({ existingDatatype, requestedDatatype }) => {
+      const incompatibleReadback = existingCalc.replace(
+        "datatype='real'",
+        `datatype='${existingDatatype}'`,
+      );
+      const result = prepareCalculationsInWorkbook({
+        workbookXml: withColumn(BASE_XML, incompatibleReadback),
+        calcs: [
+          {
+            caption: 'Margin',
+            formula: '[Sales] * 0.2',
+            datatype: requestedDatatype,
+            role: 'measure',
+          },
+        ],
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) return;
+      expect(result.error.message).toContain('caption collision');
+    },
+  );
+
+  it('does not treat integer and real as compatible for a dimension', () => {
+    const integerDimension = existingCalc
+      .replace("datatype='real'", "datatype='integer'")
+      .replace("role='measure'", "role='dimension'");
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, integerDimension),
+      calcs: [
+        {
+          caption: 'Margin',
+          formula: '[Sales] * 0.2',
+          datatype: 'real',
+          role: 'dimension',
+        },
+      ],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+
+  it('still rejects the same caption when its role differs', () => {
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, existingCalc),
+      calcs: [
+        {
+          caption: 'Margin',
+          formula: '[Sales] * 0.2',
+          datatype: 'real',
+          role: 'dimension',
+        },
+      ],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+
+  it('still rejects the same caption when its formula differs', () => {
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, existingCalc),
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.3' }],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+
+  it('does not collapse meaningful whitespace inside a string literal', () => {
+    const stringCalc =
+      "<column caption='Bucket' datatype='string' name='[Calculation_901]' role='dimension' type='nominal'>" +
+      "<calculation class='tableau' formula='IF [Region] = &quot;A  B&quot; THEN &quot;match&quot; END' /></column>";
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, stringCalc),
+      calcs: [
+        {
+          caption: 'Bucket',
+          formula: 'IF [Region] = "A B" THEN "match" END',
+          role: 'dimension',
+          datatype: 'string',
+        },
+      ],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+
+  it.each([
+    {
+      existing:
+        "<calculation class='tableau' formula='IF [Region] = &quot;A\\&quot;  B&quot; THEN &quot;match&quot; END' />",
+      requested: 'IF [Region] = "A\\" B" THEN "match" END',
+    },
+    {
+      existing:
+        '<calculation class="tableau" formula="IF [Region] = &apos;A\\&apos;  B&apos; THEN &apos;match&apos; END" />',
+      requested: "IF [Region] = 'A\\' B' THEN 'match' END",
+    },
+  ])(
+    'does not collapse literal whitespace after a backslash-escaped quote',
+    ({ existing, requested }) => {
+      const escapedQuoteCalc =
+        "<column caption='Bucket' datatype='string' name='[Calculation_902]' role='dimension' type='nominal'>" +
+        `${existing}</column>`;
+      const result = prepareCalculationsInWorkbook({
+        workbookXml: withColumn(BASE_XML, escapedQuoteCalc),
+        calcs: [
+          {
+            caption: 'Bucket',
+            formula: requested,
+            role: 'dimension',
+            datatype: 'string',
+          },
+        ],
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) return;
+      expect(result.error.message).toContain('caption collision');
+    },
+  );
+
+  it('does not reuse a calculation when its default format differs', () => {
+    const formattedCalc = existingCalc.replace(
+      " type='quantitative'",
+      " default-format='p0%' type='quantitative'",
+    );
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withColumn(BASE_XML, formattedCalc),
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('caption collision');
+  });
+});
+
+describe('layerCalculationsByDependency', () => {
+  it('orders a linear A -> B -> C chain one calc per layer', () => {
+    const { layers, cycleIndices } = layerCalculationsByDependency([
+      { caption: 'A', formula: '[Sales]' },
+      { caption: 'B', formula: '[A] + 1' },
+      { caption: 'C', formula: '[B] + 1' },
+    ]);
+
+    expect(layers).toEqual([[0], [1], [2]]);
+    expect(cycleIndices).toEqual([]);
+  });
+
+  it('places independent calcs in the same layer', () => {
+    const { layers } = layerCalculationsByDependency([
+      { caption: 'A', formula: '[Sales]' },
+      { caption: 'B', formula: '[Region]' },
+    ]);
+
+    expect(layers).toEqual([[0, 1]]);
+  });
+
+  it('ignores a self-reference rather than treating it as a cycle', () => {
+    const { layers, cycleIndices, dependencies } = layerCalculationsByDependency([
+      { caption: 'A', formula: '[A] + 1' },
+    ]);
+
+    expect(dependencies[0].size).toBe(0);
+    expect(layers).toEqual([[0]]);
+    expect(cycleIndices).toEqual([]);
+  });
+
+  it('returns mutually-referencing calcs as cycle indices, not a layer', () => {
+    const { layers, cycleIndices } = layerCalculationsByDependency([
+      { caption: 'A', formula: '[B] + 1' },
+      { caption: 'B', formula: '[A] + 1' },
+    ]);
+
+    expect(layers).toEqual([]);
+    expect(cycleIndices).toEqual([0, 1]);
+  });
+});
+
+describe('authorCalculationsWithValidation', () => {
+  const existingMargin =
+    "<column caption='Margin' datatype='real' name='[Calculation_900]' role='measure' type='quantitative'>" +
+    "<calculation class='tableau' formula='[Sales] * 0.2' /></column>";
+
+  // Validate returns the caller's envelope; every other command (set-active-datasource) succeeds.
+  // These cases all resolve to a pre-apply verdict, so no getWorkbookDocument/apply mock is needed.
+  function validationExecutor(validateResult: unknown): ExternalApiToolExecutor {
+    return makeExecutorMock({
+      executeCommand: vi.fn().mockImplementation(async ({ command }: ExecuteCommandArgs) => {
+        if (command === 'get-calc-details-pres-model-for-formula') {
+          return validateResult;
+        }
+        return new Ok({ command_id: 'activate-1', status: 'completed', result: null });
+      }),
+    });
+  }
+
+  const spec = (caption: string, formula: string): CalcSpec => ({
+    caption,
+    formula,
+    role: 'measure',
+    datatype: 'real',
+  });
+
+  it('reuses an identical existing calc and authors nothing (no activation, no validate)', async () => {
+    const executor = validationExecutor(undefined);
+    const result = await authorCalculationsWithValidation({
+      workbookXml: withColumn(BASE_XML, existingMargin),
+      calcs: [spec('Margin', '[Sales]  *  0.2')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) throw new Error('expected idempotent reuse to succeed');
+    expect(result.value).toEqual([
+      {
+        status: 'created',
+        caption: 'Margin',
+        calcName: '[Calculation_900]',
+        datasource: 'Superstore',
+      },
+    ]);
+    expect(vi.mocked(executor.executeCommand)).not.toHaveBeenCalled();
+  });
+
+  it('rejects a caption collision when the existing formula differs, before any command', async () => {
+    const executor = validationExecutor(undefined);
+    const result = await authorCalculationsWithValidation({
+      workbookXml: withColumn(BASE_XML, existingMargin),
+      calcs: [spec('Margin', '[Sales] * 0.3')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected caption collision');
+    expect(result.error.message).toContain('caption collision');
+    expect(vi.mocked(executor.executeCommand)).not.toHaveBeenCalled();
+  });
+
+  it('does not settle validated calc readback from a different datasource', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const calcXml =
+        "<column caption='Double Quantity' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Quantity] * 2' /></column>";
+      const wrongDatasourceReadback = withColumnInDatasource(
+        MODERN_CAPTIONED_DATASOURCE_XML,
+        'federated.orders',
+        calcXml,
+      );
+      const getWorkbookDocument = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Ok({
+            xml: MODERN_CAPTIONED_DATASOURCE_XML,
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        )
+        .mockResolvedValue(
+          new Ok({
+            xml: wrongDatasourceReadback,
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        );
+      const executor = makeExecutorMock({
+        executeCommand: vi.fn().mockImplementation(async ({ command }: ExecuteCommandArgs) =>
+          command === 'get-calc-details-pres-model-for-formula'
+            ? new Ok({
+                command_id: 'validate-1',
+                status: 'completed',
+                result: validValidatorEnvelope.result,
+              })
+            : new Ok({ command_id: 'activate-1', status: 'completed', result: null }),
+        ),
+        getWorkbookDocument,
+        applyWorkbookDocument: vi.fn().mockResolvedValue(
+          new Ok({
+            command_id: 'apply-1',
+            status: 'completed',
+            submitted_at: '',
+            result: {},
+          }),
+        ),
+      });
+
+      const resultPromise = authorCalculationsWithValidation({
+        workbookXml: MODERN_CAPTIONED_DATASOURCE_XML,
+        datasource: 'federated.csv040059ff380b040059ff380b',
+        calcs: [spec('Double Quantity', '[Quantity] * 2')],
+        executor,
+        signal: new AbortController().signal,
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      const result = await resultPromise;
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) throw new Error('wrong-datasource readback must not settle the calc');
+      expect(result.error.message).toContain('did not apply');
+      expect(vi.mocked(executor.applyWorkbookDocument)).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('aborts the batch when the validate command cannot complete (infra failure, not a verdict)', async () => {
+    const executor = validationExecutor(
+      new Ok({
+        command_id: 'validate-1',
+        status: 'failed',
+        error: {
+          code: 'awaiting-user',
+          message: 'Tableau Desktop is showing a dialog',
+          recoverable: true,
+        },
+      }),
+    );
+    const result = await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('New Calc', '[Sales] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected an infra abort');
+    expect(result.error.type).toBe('desktop-command-execution-error');
+    expect(result.error.message).toContain('formula validation did not complete (status: failed)');
+    expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
+  });
+
+  it('reports invalid-formula from the captured validator payload without authoring', async () => {
+    const executor = validationExecutor(
+      new Ok({
+        command_id: 'validate-1',
+        status: 'completed',
+        result: invalidValidatorEnvelope.result,
+      }),
+    );
+    const result = await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('depend', '[Sales] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr())
+      throw new Error('an invalid formula is a per-calc verdict, not a batch error');
+    const [outcome] = result.value;
+    expect(outcome.status).toBe('failed');
+    invariant(outcome.status === 'failed');
+    expect(outcome.failure).toBe('invalid-formula');
+    expect(outcome.message).toContain('Formula validation reported 6 error(s)');
+    expect(outcome.message).toContain(
+      'Cannot mix aggregate and non-aggregate arguments with this function.',
+    );
+    expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
+  });
+
+  it('cascades a failed calc to an in-batch dependent (never validates the dependent)', async () => {
+    const executor = validationExecutor(
+      new Ok({
+        command_id: 'validate-1',
+        status: 'completed',
+        result: invalidValidatorEnvelope.result,
+      }),
+    );
+    const result = await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('Base', '[Sales] + 1'), spec('Derived', '[Base] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) throw new Error('per-calc failures stay in the outcome list');
+    const [base, derived] = result.value;
+    invariant(base.status === 'failed' && derived.status === 'failed');
+    expect(base.failure).toBe('invalid-formula');
+    expect(derived.failure).toBe('dependency-failed');
+    expect(derived.message).toContain('depends on "Base"');
+    // The dependent is short-circuited before its own validate call: Base is the only validation.
+    expect(
+      vi
+        .mocked(executor.executeCommand)
+        .mock.calls.filter(([arg]) => arg.command === 'get-calc-details-pres-model-for-formula'),
+    ).toHaveLength(1);
+  });
+});
+
+describe('calcErrorMessages (captured validator payloads)', () => {
+  it('extracts every errorMsg from the real invalid-formula envelope', () => {
+    const errors = calcErrorMessages(invalidValidatorEnvelope.result as Record<string, unknown>);
+    expect(errors).toHaveLength(6);
+    expect(errors).toContain(
+      'Cannot mix aggregate and non-aggregate arguments with this function.',
+    );
+  });
+
+  it('returns an empty list for the real valid-formula envelope', () => {
+    expect(calcErrorMessages(validValidatorEnvelope.result as Record<string, unknown>)).toEqual([]);
+  });
+
+  it('returns undefined when no errorMsgs key exists so the caller fails closed', () => {
+    expect(
+      calcErrorMessages({ userCalculationDetails: { calculationCaption: 'x' } }),
+    ).toBeUndefined();
+  });
+
+  it('descends arrays to find an errorMsgs array nested under one', () => {
+    expect(
+      calcErrorMessages({ items: [{ userCalculationDetails: { errorMsgs: ['boom'] } }] }),
+    ).toEqual(['boom']);
+  });
+});

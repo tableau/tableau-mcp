@@ -1,7 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { PulseDisabledError, PulseNotAvailableError } from '../../../../errors/mcpToolError.js';
+import { pulseInsightBriefRequestSchema } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
 import invariant from '../../../../utils/invariant.js';
@@ -27,7 +29,7 @@ vi.mock('../../../../restApiInstance.js', () => ({
 }));
 
 describe('getGeneratePulseInsightBriefTool', () => {
-  const briefRequest = {
+  const briefRequest: z.infer<typeof pulseInsightBriefRequestSchema> = {
     language: 'LANGUAGE_EN_US' as const,
     locale: 'LOCALE_EN_US' as const,
     messages: [
@@ -164,6 +166,44 @@ describe('getGeneratePulseInsightBriefTool', () => {
     invariant(result.content[0].type === 'text');
     const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockBriefResponse);
+  });
+
+  it('should reject an ignored rolling period before calling the API', async () => {
+    const invalidBriefRequest = {
+      ...briefRequest,
+      messages: [
+        {
+          ...briefRequest.messages[0],
+          metric_group_context: [
+            {
+              ...briefRequest.messages[0].metric_group_context[0],
+              metric: {
+                ...briefRequest.messages[0].metric_group_context[0].metric,
+                metric_specification: {
+                  ...briefRequest.messages[0].metric_group_context[0].metric.metric_specification,
+                  measurement_period: {
+                    granularity: 'GRANULARITY_BY_DAY' as const,
+                    range: 'RANGE_CURRENT_PARTIAL' as const,
+                    last_x_period: {
+                      period: 7 as const,
+                      period_type: 'GRANULARITY_BY_DAY' as const,
+                      include_current_period: true as const,
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = await getToolResult(invalidBriefRequest);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('last_x_period is only honored');
+    expect(mocks.mockGeneratePulseInsightBrief).not.toHaveBeenCalled();
   });
 
   it('should handle API errors gracefully', async () => {

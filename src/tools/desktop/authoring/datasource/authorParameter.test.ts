@@ -302,6 +302,29 @@ describe('authorParameterTool', () => {
     expect(posted).toContain("name='textscan.returns'");
   });
 
+  it('rejects a duplicate datasource caption before writing', async () => {
+    const duplicateCaptionXml = XML_TWO_CAPTIONED_DATASOURCES.replace(
+      "caption='Sales'",
+      "caption='Returns'",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'p.Period',
+        datatype: 'string',
+        value: 'Month',
+        datasource: 'Returns',
+      },
+      initialXml: duplicateCaptionXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Datasource caption "Returns" is ambiguous');
+    expect(result.content[0].text).toContain('federated.sales');
+    expect(result.content[0].text).toContain('federated.returns');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('errors when the readback does not contain the new parameter (did not materialize)', async () => {
     process.env.TABLEAU_DESKTOP_SESSION_ID = '12345';
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);

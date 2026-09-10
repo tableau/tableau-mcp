@@ -349,6 +349,29 @@ describe('authorSetTool', () => {
     expect(JSON.parse(result.content[0].text).datasource).not.toBe('textscan.returns');
   });
 
+  it('rejects a duplicate datasource caption before writing', async () => {
+    const duplicateCaptionXml = CAPTIONED_DATASOURCES_XML.replace(
+      "caption='Orders'",
+      "caption='Returns'",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'empty',
+        caption: 'Returned Orders',
+        dimension: 'Order ID',
+        datasource: 'Returns',
+      },
+      initialXml: duplicateCaptionXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Datasource caption "Returns" is ambiguous');
+    expect(result.content[0].text).toContain('federated.orders');
+    expect(result.content[0].text).toContain('federated.returns');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('creates an empty group that matches the author-action set resolver predicate', async () => {
     const { applyWorkbookDocument } = await getToolResult({
       args: {

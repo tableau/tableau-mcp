@@ -203,8 +203,9 @@ describe('desktop tools/list serialized surface', () => {
     );
 
     // Tool search owns discovery; pin the merged filter recovery, dense-scatter repair,
-    // and executive-dashboard guidance without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(6_687);
+    // executive-dashboard guidance, rounded-stack proof/disclosure route, and dashboard
+    // corner routing without restoring an aggregate tools/list ceiling.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(7_964);
   });
 });
 
@@ -266,15 +267,16 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2575], // ratcheted 2026-08-21 after combining the dynamic fast path with the calc datasource selector; compact parameter prose preserves the route without raising the cap
+    ['bind-template', 2576], // remeasured after standardizing the calc datasource selector as internal name or unique caption
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['apply-worksheet', 1579], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
-    ['refine-worksheet', 1684], // raised 2026-08-25: bounded mark-type changes keep a discoverable target enum and useful defaults/examples; earlier raise with sign-off (2026-08-05) for the UI title and omitted-targetField axis detection
+    ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
     ['build-worksheets-from-templates', 1150], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
+    ['author-action', 1433], // remeasured after preserving URL authoring and standardizing the datasource selector as internal name or unique caption
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.
     ['format-worksheets', 1097],
@@ -436,10 +438,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 59-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 60-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(59);
+    expect(selected).toHaveLength(60);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -449,6 +451,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'author-parameter',
       'author-action',
       'format-worksheets',
+      'format-dashboard-zones',
       'compose-story',
       'ask-user',
       'search-commands',

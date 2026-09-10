@@ -227,10 +227,10 @@ describe('template-fit metadata — corpus invariants', () => {
     expect(descriptor.slots[0]?.role).toEqual(['tooltip']);
   });
 
-  it('derives every advertised channel and shared-field constraint from all 136 TBMs', () => {
+  it('derives every advertised channel and shared-field constraint from all 137 TBMs', () => {
     const templatesDir = join(process.cwd(), 'src', 'desktop', 'data', 'templates');
     const templateFiles = readdirSync(templatesDir).filter((file) => file.endsWith('.tbm'));
-    expect(templateFiles).toHaveLength(136);
+    expect(templateFiles).toHaveLength(137);
 
     for (const file of templateFiles) {
       const inference = inferFromBookmark(readFileSync(join(templatesDir, file), 'utf8'));

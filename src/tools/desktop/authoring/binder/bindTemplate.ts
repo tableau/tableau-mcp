@@ -32,11 +32,13 @@ import { ExecuteCommandError } from '../../../../desktop/externalApi/executorTyp
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
 import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { addFieldToEncoding } from '../../../../desktop/metadata/fields.js';
+import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
 import {
   extractSheetXml,
   resolveWorksheetRef,
   upsertSheetIntoWorkbook,
 } from '../../../../desktop/metadata/sheets.js';
+import type { ParsedWorkbook, ParsedWorksheet } from '../../../../desktop/metadata/types.js';
 import {
   planSortByFieldOnCategoricalAxis,
   planTopN,
@@ -55,6 +57,8 @@ import { resolveSession } from '../../../../desktop/session/sessionResolution.js
 import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
+  ensureUserNamespace,
+  workbookHasSheetNamed,
 } from '../../../../desktop/templates/injectTemplateCore.js';
 import { createPuppetCompatibilityProjection } from '../../../../desktop/templates/puppetCompatibilityProjection.js';
 import { loadRuntimeTemplateCatalogSnapshots } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
@@ -66,6 +70,8 @@ import {
 import {
   formatReadbackVerificationError,
   formatReadbackVerificationWarnings,
+  type ReadbackVerificationResult,
+  verifyWorksheetReadback,
 } from '../../../../desktop/validation/readback-verify.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
@@ -74,15 +80,18 @@ import {
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import {
+  type PostApplyWorksheetReadbackVerification,
   publicReadbackVerificationResult,
   verifyPostApplyWorksheetReadback,
 } from '../../../../desktop/wrappers/loadWorksheetXml.js';
+import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   IncompleteOperationError,
 } from '../../../../errors/mcpToolError.js';
+import { log } from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import {
@@ -103,7 +112,10 @@ import type { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 import {
   type AuthorCalcInput,
   authorCalculationsInWorkbook,
+  type AuthoredCalc,
   datatypeSchema,
+  hasColumnNameAndCaptionInDatasource,
+  prepareCalculationsInWorkbook,
   roleSchema,
 } from '../datasource/authorCalcCore.js';
 // The nested `proposal` mirrors the binder library's public data contract
@@ -125,7 +137,7 @@ const paramsSchema = {
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
   target_worksheet: z.string().optional().describe('Sheet id/name; omit to add.'),
-  datasource: z.string().optional().describe('Internal datasource name or unique caption'),
+  datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
   calcs: z
     .array(
       z.object({
@@ -151,6 +163,18 @@ type PublicBinderResult =
   | Extract<BinderResult, { status: 'propose' }>
   | Extract<BinderResult, { status: 'escalate' }>;
 
+type AuthoringPhaseMs = {
+  bind: number;
+  inject: number;
+  apply: number;
+  create?: number;
+  rename?: number;
+  replenish?: number;
+  readback?: number;
+  summary?: number;
+  total?: number;
+};
+
 type BindTemplateToolResultBase = PublicBinderResult & {
   guidance: string;
   call_2_contract?: Call2Contract;
@@ -158,8 +182,11 @@ type BindTemplateToolResultBase = PublicBinderResult & {
   warnings?: string[];
   applied?: boolean;
   sheet_name?: string;
-  phase_ms?: { bind: number; inject: number; apply: number };
+  phase_ms?: AuthoringPhaseMs;
   apply_error?: string;
+  retry_safe?: boolean;
+  may_have_applied?: boolean;
+  verification?: ReadbackVerificationResult;
 };
 
 type AppliedDefault = Pick<
@@ -181,7 +208,8 @@ type AppliedFastPathResult = {
   authored_calcs?: string[];
   warnings?: string[];
   sheet_name: string;
-  phase_ms: { bind: number; inject: number; apply: number };
+  phase_ms: AuthoringPhaseMs;
+  verification?: ReadbackVerificationResult;
   guidance: string;
   applied_default?: AppliedDefault;
   summary_rows?: { columns: unknown[]; rows: unknown[][] };
@@ -1568,6 +1596,143 @@ function applyFailureDisposition(
 
 type BoundResult = Extract<BinderResult, { status: 'bound' }>;
 
+function collisionFreeWorksheetTitle(
+  workbookXml: string,
+  requestedTitle: string,
+  replaceExisting = true,
+): string {
+  const requestedTarget = classifyWorksheetReplaceTarget(workbookXml, requestedTitle);
+  if (
+    (replaceExisting && requestedTarget === 'replaceable') ||
+    (requestedTarget !== 'in-dashboard' && !workbookHasSheetNamed(workbookXml, requestedTitle))
+  ) {
+    return requestedTitle;
+  }
+  for (let copy = 2; copy <= 10_000; copy += 1) {
+    const suffix = ` (${copy})`;
+    const candidate = `${requestedTitle.slice(0, Math.max(1, 80 - suffix.length))}${suffix}`;
+    if (
+      classifyWorksheetReplaceTarget(workbookXml, candidate) === 'not-found' &&
+      !workbookHasSheetNamed(workbookXml, candidate)
+    ) {
+      return candidate;
+    }
+  }
+  throw new Error(`could not find an unused worksheet title for "${requestedTitle}"`);
+}
+
+const IDEMPOTENCY_ATTRIBUTE = '@_user:tableau-agent-idempotency-key';
+const IDEMPOTENCY_TEMPLATE_PARAMETER = '__TABLEAU_AGENT_IDEMPOTENCY_KEY__';
+
+function worksheetTitleForIdempotencyKey(workbookXml: string, key: string): string | undefined {
+  let workbook: ParsedWorkbook;
+  try {
+    workbook = parseXML(workbookXml);
+  } catch {
+    return undefined;
+  }
+  const worksheet = normalizeArray<ParsedWorksheet>(workbook.workbook?.worksheets?.worksheet).find(
+    (candidate) => (candidate as unknown as Record<string, unknown>)[IDEMPOTENCY_ATTRIBUTE] === key,
+  );
+  return worksheet?.['@_name'];
+}
+
+function deterministicWorksheetTitle(
+  workbookXml: string,
+  requestedTitle: string,
+  idempotencyKey: string | undefined,
+  bindingFields: string[] = [],
+): string {
+  if (!idempotencyKey) {
+    return collisionFreeWorksheetTitle(workbookXml, requestedTitle);
+  }
+  const existingTitle = existingDeterministicWorksheetTitle(
+    workbookXml,
+    requestedTitle,
+    idempotencyKey,
+    bindingFields,
+  );
+  if (
+    existingTitle &&
+    classifyWorksheetReplaceTarget(workbookXml, existingTitle) === 'replaceable'
+  ) {
+    return existingTitle;
+  }
+  // A clean visible title is not an identity. Never overwrite an unrelated loose
+  // worksheet merely because it has the same label; choose a normal Tableau suffix.
+  return collisionFreeWorksheetTitle(workbookXml, requestedTitle, false);
+}
+
+function existingDeterministicWorksheetTitle(
+  workbookXml: string,
+  requestedTitle: string,
+  idempotencyKey: string,
+  bindingFields: string[],
+): string | undefined {
+  const stampedTitle = worksheetTitleForIdempotencyKey(workbookXml, idempotencyKey);
+  if (stampedTitle && workbookHasSheetNamed(workbookXml, stampedTitle)) {
+    return stampedTitle;
+  }
+  // Tableau currently strips the custom worksheet identity attribute on live
+  // workbook readback. Recover that identity without trusting the visible title
+  // alone: the requested sheet must also contain every deterministic binding.
+  return workbookHasSheetNamed(workbookXml, requestedTitle) &&
+    worksheetContainsBindingFields(workbookXml, requestedTitle, bindingFields)
+    ? requestedTitle
+    : undefined;
+}
+
+function worksheetContainsBindingFields(
+  workbookXml: string,
+  worksheetTitle: string,
+  bindingFields: string[],
+): boolean {
+  if (bindingFields.length === 0) return false;
+  let worksheetXml: string | null;
+  try {
+    worksheetXml = extractSheetXml(workbookXml, worksheetTitle);
+  } catch {
+    return false;
+  }
+  if (!worksheetXml) return false;
+
+  const identities = new Set<string>();
+  for (const match of worksheetXml.matchAll(/<column\b[^>]*>/g)) {
+    const tag = match[0];
+    for (const attribute of ['caption', 'name']) {
+      const value = tag.match(new RegExp(`\\b${attribute}=(['"])(.*?)\\1`))?.[2];
+      if (value === undefined) continue;
+      const decoded = decodeXmlEntities(value);
+      identities.add(decoded);
+      identities.add(decoded.replace(/^\[|\]$/g, ''));
+    }
+  }
+  return bindingFields.every((field) => {
+    const decoded = decodeXmlEntities(field);
+    return identities.has(decoded) || identities.has(decoded.replace(/^\[|\]$/g, ''));
+  });
+}
+
+function stampWorksheetIdempotencyKey(
+  workbookXml: string,
+  worksheetTitle: string,
+  idempotencyKey: string,
+): string {
+  const worksheetXml = extractSheetXml(workbookXml, worksheetTitle);
+  if (!worksheetXml) {
+    throw new Error(`injected worksheet "${worksheetTitle}" was not found for identity stamping`);
+  }
+  const attributeName = 'user:tableau-agent-idempotency-key';
+  const escapedKey = escapeXmlAttribute(idempotencyKey);
+  const existing = new RegExp(`\\s${attributeName}=(['"])[^'"]*\\1`);
+  const stampedWorksheet = existing.test(worksheetXml)
+    ? worksheetXml.replace(existing, ` ${attributeName}='${escapedKey}'`)
+    : worksheetXml.replace(/<worksheet\b/, `<worksheet ${attributeName}='${escapedKey}'`);
+  return ensureUserNamespace(
+    upsertSheetIntoWorkbook(workbookXml, worksheetTitle, stampedWorksheet),
+  );
+}
+
 function sortDirectionForApply(direction: 'asc' | 'desc'): SortDirection {
   return direction === 'desc' ? 'DESC' : 'ASC';
 }
@@ -1747,6 +1912,7 @@ function ensureFilterColumnDependency(
 function buildInteractiveFilterNode(p: {
   columnRef: string;
   level: string;
+  datatype: string;
   context: boolean;
   values?: string[];
 }): string {
@@ -1756,7 +1922,7 @@ function buildInteractiveFilterNode(p: {
     const members = p.values
       .map(
         (v) =>
-          `<groupfilter function='member' level='${level}' member='${escapeXmlAttribute(v)}' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />`,
+          `<groupfilter function='member' level='${level}' member='${serializeFilterMember(v, p.datatype)}' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />`,
       )
       .join('');
     return (
@@ -1770,6 +1936,18 @@ function buildInteractiveFilterNode(p: {
     `<groupfilter function='level-members' level='${level}' user:ui-enumeration='all' />` +
     '</filter>'
   );
+}
+
+/**
+ * Tableau stores string members as quoted literals inside the XML attribute
+ * (`member='&quot;East&quot;'`). Raw strings are accepted at document dispatch but
+ * Desktop silently drops the filter during persistence. Non-string members use
+ * Tableau's unquoted representation (for example, a discrete year is `2026`).
+ */
+function serializeFilterMember(value: string, datatype: string): string {
+  if (datatype.trim().toLowerCase() !== 'string') return escapeXmlAttribute(value);
+  const tableauString = `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  return escapeXmlAttribute(tableauString);
 }
 
 /**
@@ -1836,23 +2014,6 @@ function spliceCardIntoWindowBody(inner: string, card: string, columnRef: string
 }
 
 /**
- * Fully decode XML entities to a FIXPOINT. The inject path escapes the title TWICE (the binder
- * escapes proposal.title once into args.title, then inject core escapes it again for {{TITLE}}),
- * so a serialized window name can be doubly-escaped (`&amp;amp;`). decodeXmlEntities peels ONE
- * level; iterating to stability collapses any escape depth so a decoded window name compares
- * equal to the plain literal title. Bounded (each pass strictly shrinks or is the last).
- */
-function fullyDecodeXmlEntities(value: string): string {
-  let prev = value;
-  for (let i = 0; i < 8; i++) {
-    const next = decodeXmlEntities(prev);
-    if (next === prev) break;
-    prev = next;
-  }
-  return prev;
-}
-
-/**
  * Emit a SHOWN interactive filter CARD into the sheet's worksheet <window> (the judge's
  * filter_action_wired gate — a context filter alone is OoO-correct but INVISIBLE). Adds
  * `<card mode='dropdown' param='<CI>' type='filter' />` on the window's LEFT edge, creating
@@ -1860,16 +2021,15 @@ function fullyDecodeXmlEntities(value: string): string {
  * miss (no matching window, card already present) it returns the XML unchanged rather than
  * corrupting the tree — the OoO filter still applied, the card is a visibility add-on.
  *
- * `literalTitle` is the PLAIN (fully-decoded) sheet name: each candidate window's `name` is
- * fully decoded before comparison, so single- OR double-escaped serializations both match and a
- * whole-workbook re-serialize never mutates a sibling sheet's cards.
+ * `literalTitle` has the binder's one escaping layer removed. The shared injection core then
+ * applies exactly one XML escaping layer, so decode candidate window names exactly once too.
  */
 function insertShownFilterCard(xml: string, literalTitle: string, columnRef: string): string {
   const card = `<card mode='dropdown' param='${escapeXmlAttribute(columnRef)}' type='filter' />`;
   const windowRe = /<window\b([^>]*)\bclass=(['"])worksheet\2([^>]*)>([\s\S]*?)<\/window>/g;
   return xml.replace(windowRe, (whole, pre: string, _q, post: string, inner: string) => {
     const nameAttr = attrValue(`${pre} ${post}`, 'name');
-    if (nameAttr === null || fullyDecodeXmlEntities(nameAttr) !== literalTitle) return whole;
+    if (nameAttr === null || decodeXmlEntities(nameAttr) !== literalTitle) return whole;
     const openTag = whole.slice(0, whole.length - inner.length - '</window>'.length);
     return `${openTag}${spliceCardIntoWindowBody(inner, card, columnRef)}</window>`;
   });
@@ -1886,7 +2046,7 @@ function worksheetXmlByTitle(xml: string, literalTitle: string): string | null {
   const worksheetRe = /<worksheet\b([^>]*)>[\s\S]*?<\/worksheet>/g;
   for (const match of xml.matchAll(worksheetRe)) {
     const nameAttr = attrValue(match[1] ?? '', 'name');
-    if (nameAttr !== null && fullyDecodeXmlEntities(nameAttr) === literalTitle) {
+    if (nameAttr !== null && decodeXmlEntities(nameAttr) === literalTitle) {
       return match[0];
     }
   }
@@ -1902,7 +2062,7 @@ function applyProposalSplices({
   xml: string;
   args: BoundResult['args'];
   schemaSummary: SchemaSummary;
-  /** The PLAIN (fully-decoded) sheet name — scopes the shown-filter-card edit to this sheet's window. */
+  /** The binder-decoded sheet name — scopes the shown-filter-card edit to this sheet's window. */
   literalTitle: string;
 }):
   | { ok: true; xml: string; warnings: string[]; appliedFilterCount: number }
@@ -1979,6 +2139,7 @@ function applyProposalSplices({
       const filterNode = buildInteractiveFilterNode({
         columnRef: declared.columnRef,
         level: declared.level,
+        datatype: resolved.field.datatype,
         context: filter.context === true,
         values: filter.values,
       });
@@ -2005,6 +2166,7 @@ function applyFallback(
   base: BindTemplateToolResultBase,
   apply_error: string,
   guidance?: string,
+  retrySafe = false,
 ): BindTemplateToolResultBase {
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, base.status);
   return {
@@ -2014,7 +2176,97 @@ function applyFallback(
       `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). Before any correction, inspect live worksheet state with get-worksheet-xml; do not replay an uncertain apply. If correction is needed, use list-available-fields to reacquire RAW column_ref values, then list-templates, build-worksheets-from-templates, and apply-worksheet. Do not pass the returned XML-escaped field_mapping into templatePlan or call bind-template again.`,
     applied: false,
     apply_error,
+    retry_safe: retrySafe,
   };
+}
+
+/**
+ * Trusted deterministic authoring writes calculations and the worksheet in one
+ * workbook mutation. Verify both from the same workbook snapshot so the caller
+ * does not pay for two independently-polled Desktop readbacks. This verification
+ * is evidence after a confirmed dispatch: a mismatch is reported, never replayed.
+ */
+async function verifyTrustedWorkbookReadback({
+  worksheetName,
+  intendedWorksheetXml,
+  atomicCalcs,
+  executor,
+  signal,
+}: {
+  worksheetName: string;
+  intendedWorksheetXml: string;
+  atomicCalcs: AuthoredCalc[];
+  executor: ExternalApiToolExecutor;
+  signal: AbortSignal;
+}): Promise<PostApplyWorksheetReadbackVerification> {
+  try {
+    const polled = await pollReadback({
+      read: () => getWorkbookXml({ executor, signal }),
+      settled: (xml) => {
+        const calculationsPresent = atomicCalcs.every((calc) =>
+          hasColumnNameAndCaptionInDatasource(xml, calc.datasource, calc.calcName, calc.caption),
+        );
+        const fragment = extractSheetXml(xml, worksheetName);
+        return (
+          calculationsPresent &&
+          fragment !== null &&
+          !verifyWorksheetReadback(intendedWorksheetXml, fragment).some(
+            (finding) => finding.severity === 'error',
+          )
+        );
+      },
+      signal,
+    });
+    if (!polled.ok) {
+      return {
+        ok: true,
+        status: 'skipped',
+        findings: [],
+        message: `could not re-read the latest workbook after apply: ${getExceptionMessage(polled.error)}`,
+      };
+    }
+
+    const missingCalcs = atomicCalcs.filter(
+      (calc) =>
+        !hasColumnNameAndCaptionInDatasource(
+          polled.value,
+          calc.datasource,
+          calc.calcName,
+          calc.caption,
+        ),
+    );
+    const fragment = extractSheetXml(polled.value, worksheetName);
+    if (missingCalcs.length > 0 || fragment === null) {
+      const problems = [
+        ...(missingCalcs.length > 0
+          ? [`calculations were absent: ${missingCalcs.map((calc) => calc.caption).join(', ')}`]
+          : []),
+        ...(fragment === null ? [`worksheet "${worksheetName}" was absent`] : []),
+      ];
+      return {
+        ok: false,
+        status: 'failed',
+        findings: [],
+        message: `Post-apply workbook readback did not match: ${problems.join('; ')}.`,
+      };
+    }
+
+    const findings = verifyWorksheetReadback(intendedWorksheetXml, fragment);
+    if (findings.some((finding) => finding.severity === 'error')) {
+      return { ok: false, status: 'failed', findings };
+    }
+    if (findings.some((finding) => finding.severity === 'warning')) {
+      return { ok: true, status: 'warning', findings };
+    }
+    return { ok: true, status: 'passed', findings: [] };
+  } catch (error) {
+    return {
+      ok: true,
+      status: 'skipped',
+      findings: [],
+      message: getExceptionMessage(error),
+    };
+  }
 }
 
 /**
@@ -2038,6 +2290,12 @@ async function performAutoApply({
   templateSnapshot,
   appliedDefault,
   skipValidation,
+  hostBaselineWorkbookXml,
+  atomicCalcs,
+  trustedDeterministicApply,
+  idempotencyKey,
+  deterministicBindingFields,
+  reportProgress,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -2052,6 +2310,12 @@ async function performAutoApply({
   templateSnapshot: TemplateRuntimeSnapshot;
   appliedDefault?: AppliedDefault;
   skipValidation?: boolean;
+  hostBaselineWorkbookXml?: string;
+  atomicCalcs?: AuthoredCalc[];
+  trustedDeterministicApply?: boolean;
+  idempotencyKey?: string;
+  deterministicBindingFields?: string[];
+  reportProgress: (progress: 1 | 2 | 3, message: string) => Promise<void>;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
@@ -2065,19 +2329,40 @@ async function performAutoApply({
   // ── Inject leg (shared core) ─────────────────────────────────────
   const injectStart = Date.now();
   let injected: ReturnType<typeof buildInjectedWorkbookXml>;
+  let literalTitle: string;
   try {
     // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
     const templateXml = templateSnapshot.xml;
     // Per-apply calc-namespacing identity: session + apply timestamp (randomUUID
     // guards same-millisecond applies), mirroring the inject-template tool's nonce.
     const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
+    const requestedTitle = decodeXmlEntities(args.title);
+    literalTitle =
+      args.sheet_type === 'worksheet'
+        ? deterministicWorksheetTitle(
+            workbookXml,
+            requestedTitle,
+            idempotencyKey,
+            deterministicBindingFields,
+          )
+        : requestedTitle;
     injected = buildInjectedWorkbookXml({
       workbookXml,
       templateXml,
-      title: args.title,
+      // Binder output is escaped for the manual artifact path. The shared core
+      // accepts raw values and owns the single escaping boundary, so decode the
+      // binder payload before using it in this in-process auto-apply path.
+      title: literalTitle,
       sheetType: args.sheet_type,
-      templateParameters: args.template_parameters,
-      fieldMapping: args.field_mapping,
+      templateParameters: Object.fromEntries(
+        Object.entries(args.template_parameters).map(([key, value]) => [
+          key,
+          decodeXmlEntities(value),
+        ]),
+      ),
+      fieldMapping: Object.fromEntries(
+        Object.entries(args.field_mapping).map(([key, value]) => [key, decodeXmlEntities(value)]),
+      ),
       templateSlots: templateSnapshot.descriptor.slots,
       applyNonce,
       optionalFieldPrunes: args.optional_field_prunes,
@@ -2086,27 +2371,25 @@ async function performAutoApply({
     });
   } catch (err) {
     return {
-      result: applyFallback(base, `inject failed: ${getExceptionMessage(err)}`),
+      result: applyFallback(base, `inject failed: ${getExceptionMessage(err)}`, undefined, true),
       failureDisposition: 'pre-dispatch',
     };
   }
   if (!injected.ok) {
     return {
-      result: applyFallback(base, `inject failed: ${injected.issues.join('; ')}`),
+      result: applyFallback(base, `inject failed: ${injected.issues.join('; ')}`, undefined, true),
       failureDisposition: 'pre-dispatch',
     };
   }
   if (injected.warnings && injected.warnings.length > 0) {
     base.warnings = [...(base.warnings ?? []), ...injected.warnings];
   }
-  // The window name in the injected doc is escaped to the SAME depth as {{TITLE}} in the
-  // worksheet (both come from args.title through inject core), so fully-decode args.title to
-  // the plain literal and scope the shown-filter-card splice to that window by name.
-  const literalTitle = fullyDecodeXmlEntities(args.title);
+  // Binder output carries one escaping layer; the shared core owns the next and only
+  // serialization boundary. Remove exactly the binder layer so entity-like literal text survives.
   const spliced = applyProposalSplices({ xml: injected.xml, args, schemaSummary, literalTitle });
   if (!spliced.ok) {
     return {
-      result: applyFallback(base, spliced.reason),
+      result: applyFallback(base, spliced.reason, undefined, true),
       failureDisposition: 'pre-dispatch',
     };
   }
@@ -2145,23 +2428,50 @@ async function performAutoApply({
       ];
     }
   }
+  if (idempotencyKey && args.sheet_type === 'worksheet') {
+    try {
+      appliedWorkbookXml = stampWorksheetIdempotencyKey(
+        appliedWorkbookXml,
+        literalTitle,
+        idempotencyKey,
+      );
+    } catch (err) {
+      return {
+        result: applyFallback(
+          base,
+          `identity stamp failed: ${getExceptionMessage(err)}`,
+          undefined,
+          true,
+        ),
+        failureDisposition: 'pre-dispatch',
+      };
+    }
+  }
   const injectMs = Date.now() - injectStart;
 
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
+  await reportProgress(2, 'Applying workbook changes');
   const applyStart = Date.now();
+  const applyBaselineXml = hostBaselineWorkbookXml ?? workbookXml;
   const applyResult = await loadWorkbookXml({
     xml: appliedWorkbookXml,
-    baselineXml: workbookXml,
-    expectedWorkbookXml: workbookXml,
+    baselineXml: applyBaselineXml,
+    expectedWorkbookXml: applyBaselineXml,
     focus: { navigate: 'artifact', sheetName: literalTitle },
     executor,
     signal,
     skipValidation,
   });
   if (applyResult.isErr()) {
+    const failureDisposition = applyFailureDisposition(applyResult.error);
     return {
-      result: applyFallback(base, `apply failed: ${describeApplyError(applyResult.error)}`),
-      failureDisposition: applyFailureDisposition(applyResult.error),
+      result: applyFallback(
+        base,
+        `apply failed: ${describeApplyError(applyResult.error)}`,
+        undefined,
+        failureDisposition === 'pre-dispatch',
+      ),
+      failureDisposition,
     };
   }
   const applyMs = Date.now() - applyStart;
@@ -2178,15 +2488,33 @@ async function performAutoApply({
   // the document we posted. If it cannot be sliced (or the re-read fails), verification is
   // SKIPPED, not assumed — the receipt then says "unverified" rather than claiming a check
   // that never ran.
+  await reportProgress(3, 'Verifying workbook changes');
   let intendedWorksheetXml: string | null = null;
   try {
     intendedWorksheetXml = extractSheetXml(appliedWorkbookXml, literalTitle);
   } catch {
     intendedWorksheetXml = null;
   }
+  const readbackStart = Date.now();
   const verification = intendedWorksheetXml
-    ? await verifyPostApplyWorksheetReadback(literalTitle, intendedWorksheetXml, executor, signal)
-    : undefined;
+    ? trustedDeterministicApply
+      ? await verifyTrustedWorkbookReadback({
+          worksheetName: literalTitle,
+          intendedWorksheetXml,
+          atomicCalcs: atomicCalcs ?? [],
+          executor,
+          signal,
+        })
+      : await verifyPostApplyWorksheetReadback(literalTitle, intendedWorksheetXml, executor, signal)
+    : trustedDeterministicApply
+      ? {
+          ok: false,
+          status: 'failed' as const,
+          findings: [],
+          message: `Applied worksheet "${literalTitle}" could not be extracted for verification.`,
+        }
+      : undefined;
+  const readbackMs = Date.now() - readbackStart;
   const receiptInput = {
     validationWarnings: applyResult.value.validationWarnings,
     readback: verification ? publicReadbackVerificationResult(verification) : undefined,
@@ -2213,10 +2541,54 @@ async function performAutoApply({
   const readbackWarnings = formatReadbackVerificationWarnings(receiptInput.readbackFindings);
   const readbackEvidence = `${readbackError ? `\n\n${readbackError}` : ''}${readbackWarnings}`;
 
+  if (
+    trustedDeterministicApply &&
+    verification &&
+    (verification.status === 'failed' || verification.status === 'skipped')
+  ) {
+    const publicVerification = publicReadbackVerificationResult(verification);
+    const failed = applyFallback(
+      {
+        ...base,
+        authored_calcs: [
+          ...(base.authored_calcs ?? []),
+          ...(atomicCalcs ?? []).map((calc) => calc.caption),
+        ],
+      },
+      `post-apply verification ${verification.status}${verification.message ? `: ${verification.message}` : ''}`,
+    );
+    return {
+      result: {
+        ...failed,
+        sheet_name: literalTitle,
+        may_have_applied: true,
+        retry_safe: false,
+        verification: publicVerification,
+        phase_ms: {
+          bind: bindMs,
+          inject: injectMs,
+          apply: applyMs,
+          readback: readbackMs,
+          summary: 0,
+          total: bindMs + injectMs + applyMs + readbackMs,
+        },
+      },
+      failureDisposition: 'post-dispatch',
+      incomplete: true,
+    };
+  }
+
   // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
-  const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
+  const successfulCalcCaptions = [
+    ...(base.authored_calcs ?? []),
+    ...(atomicCalcs ?? []).map((calc) => calc.caption),
+  ];
+  const calcPrefix = renderAuthoredCalcPrefix(
+    successfulCalcCaptions.length > 0 ? successfulCalcCaptions : undefined,
+    res.status,
+  );
   const receiptText = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
   // Blake's spiral fix: the applied:true receipt is TERMINAL unless a genuine, named re-bind
   // slot is still unfilled (the m1 waterfall case). On INCOMPLETE we keep today's steer and
@@ -2230,11 +2602,19 @@ async function performAutoApply({
     res.encodings && res.encodings.unfilled.length > 0 ? res.encodings : undefined;
   const encodingAnalysisComplete =
     res.encodings !== undefined && res.encodings.unfilled.length === 0;
-  const summaryRows = await readAppliedSummaryRows({
-    executor,
-    signal,
-    worksheetName: literalTitle,
-  });
+  const summaryStart = Date.now();
+  // Trusted deterministic callers use one structural workbook readback for the
+  // authored calculations and worksheet. Avoid a second summary-data round trip;
+  // the live worksheet remains the source of truth after datasource refreshes.
+  // Ordinary binds keep their existing summary-read behavior unchanged.
+  const summaryRows: Awaited<ReturnType<typeof readAppliedSummaryRows>> = !trustedDeterministicApply
+    ? await readAppliedSummaryRows({
+        executor,
+        signal,
+        worksheetName: literalTitle,
+      })
+    : {};
+  const summaryMs = Date.now() - summaryStart;
   const emptySummaryReadback = summaryRows.summary_rows_error === EMPTY_SUMMARY_ROWS_ERROR;
   // A splice warning means requested work was skipped before readback. The core incomplete
   // evidence stays separate from rewriter diagnostics so this truth flag keeps its audited,
@@ -2280,13 +2660,25 @@ async function performAutoApply({
   }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
-    ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
+    ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
     guidance,
     ...(appliedDefault ? { applied_default: appliedDefault } : {}),
     applied: true,
     sheet_name: literalTitle,
-    phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
+    phase_ms: trustedDeterministicApply
+      ? {
+          bind: bindMs,
+          inject: injectMs,
+          apply: applyMs,
+          readback: readbackMs,
+          summary: summaryMs,
+          total: bindMs + injectMs + applyMs + readbackMs + summaryMs,
+        }
+      : { bind: bindMs, inject: injectMs, apply: applyMs },
+    ...(trustedDeterministicApply && receiptInput.readback
+      ? { verification: receiptInput.readback }
+      : {}),
     ...summaryRows,
     ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
@@ -2309,8 +2701,8 @@ async function performAutoApply({
               did: [
                 `applied template "${args.template_name}" as sheet "${literalTitle}"; Desktop accepted the document`,
                 `phases: bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms`,
-                ...(base.authored_calcs && base.authored_calcs.length > 0
-                  ? [`authored calcs: ${base.authored_calcs.join(', ')}`]
+                ...(successfulCalcCaptions.length > 0
+                  ? [`authored calcs: ${successfulCalcCaptions.join(', ')}`]
                   : []),
                 ...(encodingAnalysisComplete
                   ? ['bound every encoding named in the binder encoding report']
@@ -2525,6 +2917,38 @@ function hasDivisionOperator(formula: string): boolean {
 
 const title = 'Matching template';
 
+const BIND_TEMPLATE_PROGRESS_TOTAL = 3;
+
+async function reportBindTemplateProgress(
+  extra: TableauDesktopRequestHandlerExtra,
+  progress: 1 | 2 | 3,
+  message: string,
+): Promise<void> {
+  const progressToken = extra._meta?.progressToken;
+  if (progressToken === undefined) return;
+
+  try {
+    await extra.sendNotification({
+      method: 'notifications/progress',
+      params: {
+        progressToken,
+        progress,
+        total: BIND_TEMPLATE_PROGRESS_TOTAL,
+        message,
+      },
+    });
+  } catch (error) {
+    // Progress is presentation-only. A disconnected or older client must never
+    // interrupt template binding or a workbook mutation already in flight.
+    log({
+      level: 'warning',
+      logger: 'tool',
+      message: 'bind-template progress notification failed',
+      data: error,
+    });
+  }
+}
+
 export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const bindTemplateTool = new DesktopTool({
     server,
@@ -2571,11 +2995,25 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           skip_validation,
         },
         callback: async () => {
+          const reportProgress = async (progress: 1 | 2 | 3, message: string): Promise<void> =>
+            await reportBindTemplateProgress(extra, progress, message);
+          await reportProgress(1, 'Preparing template');
+
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+          const trustedDeterministicApply =
+            extra.config.allowSkipValidation === true &&
+            skip_validation === true &&
+            auto_apply === true &&
+            proposal !== undefined;
+          const idempotencyKey = trustedDeterministicApply
+            ? proposal.template_parameters?.[IDEMPOTENCY_TEMPLATE_PARAMETER]
+            : undefined;
+          const atomicCalcApply =
+            trustedDeterministicApply && calcs !== undefined && calcs.length > 0;
           const askKey = normalizeAskForMatch(ask);
           const currentProposalSignature =
             proposal !== undefined ? proposalSignature(proposal as BindingProposal) : undefined;
@@ -2676,7 +3114,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           const executor = await extra.getExecutor(resolvedSession);
-
           // Phase timing (only reported when auto_apply performs). The bind phase
           // subsumes the live workbook read since server-side they are one step.
           const bindStart = Date.now();
@@ -2686,6 +3123,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new DesktopCommandExecutionError(xmlResult.error).toErr();
           }
           let workbookXml = xmlResult.value;
+          const hostBaselineWorkbookXml = workbookXml;
           let baselineSchemaSummary: SchemaSummary | undefined;
           let baselineFilterIntent: ExactFilterIntent | undefined;
           if (priorRecovery === undefined) {
@@ -2712,6 +3150,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
           }
           let authoredCalcCaptions: string[] = [];
+          let atomicCalcs: AuthoredCalc[] = [];
           if (calcs && calcs.length > 0) {
             const percentAsk = asksForPercent(ask);
             const authoredCalcInputs = (calcs as AuthorCalcInput[]).map((calc) =>
@@ -2719,19 +3158,33 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 ? { ...calc, defaultFormat: 'p0%' as const }
                 : calc,
             );
-            const authored = await authorCalculationsInWorkbook({
-              workbookXml,
-              calcs: authoredCalcInputs,
-              datasource,
-              executor,
-              signal: extra.signal,
-              resolveLooseReferences: true,
-            });
-            if (authored.isErr()) {
-              return authored.error.toErr();
+            if (atomicCalcApply) {
+              const prepared = prepareCalculationsInWorkbook({
+                workbookXml,
+                calcs: authoredCalcInputs,
+                datasource,
+                resolveLooseReferences: true,
+              });
+              if (prepared.isErr()) {
+                return prepared.error.toErr();
+              }
+              workbookXml = prepared.value.workbookXml;
+              atomicCalcs = prepared.value.authoredCalcs;
+            } else {
+              const authored = await authorCalculationsInWorkbook({
+                workbookXml,
+                calcs: authoredCalcInputs,
+                datasource,
+                executor,
+                signal: extra.signal,
+                resolveLooseReferences: true,
+              });
+              if (authored.isErr()) {
+                return authored.error.toErr();
+              }
+              workbookXml = authored.value.workbookXml;
+              authoredCalcCaptions = authored.value.authoredCalcs.map((calc) => calc.caption);
             }
-            workbookXml = authored.value.workbookXml;
-            authoredCalcCaptions = authored.value.authoredCalcs.map((calc) => calc.caption);
           }
 
           const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots({
@@ -3025,7 +3478,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           // target_worksheet is an explicit instruction to rewrite that sheet (a reset of
           // hand edits is legitimate) and always applies.
           const sheetSignature = appliedSheetSignature(res.args);
-          if (target_worksheet === undefined) {
+          if (target_worksheet === undefined && atomicCalcs.length === 0) {
             const remembered = rememberedSheetStillPresent({
               session: resolvedSession,
               signature: sheetSignature,
@@ -3033,6 +3486,27 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             });
             if (remembered !== undefined) {
               return new Ok(reusedSheetResult(remembered, authoredCalcCaptions));
+            }
+          }
+
+          if (target_worksheet === undefined && trustedDeterministicApply && idempotencyKey) {
+            const existingTitle = existingDeterministicWorksheetTitle(
+              workbookXml,
+              decodeXmlEntities(res.args.title),
+              idempotencyKey,
+              proposal?.bindings.map((binding) => binding.field) ?? [],
+            );
+            if (existingTitle !== undefined) {
+              return new Ok(
+                reusedSheetResult(
+                  {
+                    sheetName: existingTitle,
+                    template: res.args.template_name,
+                    ts: new Date().toISOString(),
+                  },
+                  authoredCalcCaptions,
+                ),
+              );
             }
           }
 
@@ -3049,6 +3523,14 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             schemaSummary,
             templateSnapshot: selectedTemplate.snapshot,
             appliedDefault,
+            hostBaselineWorkbookXml: atomicCalcApply ? hostBaselineWorkbookXml : undefined,
+            atomicCalcs,
+            trustedDeterministicApply,
+            idempotencyKey,
+            deterministicBindingFields: trustedDeterministicApply
+              ? proposal?.bindings.map((binding) => binding.field)
+              : undefined,
+            reportProgress,
             // Honor skip_validation only for a server-trusted caller (config gate set by the
             // deterministic spawner). An untrusted LLM turn that passes the flag gets full
             // validation, not a bypass — the param alone cannot skip the preflight.
