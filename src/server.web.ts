@@ -100,6 +100,10 @@ export function buildWebInstructions(): string {
   return adminToolsEnabled ? `${BASE_INSTRUCTIONS} ${ADMIN_INSTRUCTIONS}` : BASE_INSTRUCTIONS;
 }
 
+type RegistrationContext = {
+  siteRole?: string;
+};
+
 export class WebMcpServer extends Server {
   constructor({
     mcpServer,
