@@ -135,6 +135,27 @@ describe('lineageUtils', () => {
     );
   });
 
+  it('falls back to the parent luid when the parent name is an empty string', () => {
+    const lineageByLuid = getWorkbookLineageWithParentsByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              embeddedDatasources: [
+                { name: 'Named', parentPublishedDatasources: [{ luid: 'pub-1', name: '' }] },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')?.embeddedParents).toEqual(
+      new Map([['Named', { luid: 'pub-1', name: 'pub-1' }]]),
+    );
+  });
+
   it('dedupes a standalone published entry already carried as an embedded publishedParent', () => {
     const published = [
       { luid: 'pub-1', name: 'Published DS', datasourceType: 'published' as const },
