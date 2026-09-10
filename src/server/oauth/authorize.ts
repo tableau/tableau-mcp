@@ -1,5 +1,6 @@
 import { randomBytes, randomInt, randomUUID } from 'crypto';
 import express from 'express';
+import https from 'https';
 import { isIP } from 'net';
 import { isSSRFSafeURL } from 'ssrfcheck';
 import { Err, Ok, Result } from 'ts-results-es';
@@ -241,7 +242,8 @@ async function getOAuthRedirectUrl(
 }
 
 // https://client.dev/servers
-async function getClientFromMetadataDoc(
+// Exported for testing.
+export async function getClientFromMetadataDoc(
   clientMetadataUrl: URL,
 ): Promise<Result<ClientMetadata, { error: string; error_description: string }>> {
   const originalUrl = clientMetadataUrl.toString();
@@ -298,12 +300,20 @@ async function getClientFromMetadataDoc(
   let response: AxiosResponse;
   try {
     const client = axios.create();
+    // The request URL's hostname was replaced with a resolved IP address above (to
+    // pin the connection and prevent DNS-rebinding SSRF). For HTTPS targets, the TLS
+    // layer would otherwise derive SNI from that IP, which breaks CDN-fronted hosts
+    // (e.g. Cloudflare) that route/serve certificates by SNI rather than the Host
+    // header alone. Pin SNI back to the original hostname so those hosts resolve
+    // correctly while the connection still only ever talks to the vetted IP.
+    const httpsAgent = new https.Agent({ servername: originalHostname });
     response = await retry(
       () =>
         client.get(clientMetadataUrl.toString(), {
           timeout: 5000,
           maxContentLength: 5 * 1024, // 5 KB
           maxRedirects: 3,
+          httpsAgent,
           headers: {
             Accept: 'application/json',
             Host: originalHostname,
