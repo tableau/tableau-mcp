@@ -13,7 +13,7 @@ When `TRANSPORT` is `http`, the default behavior changes to require protecting y
 OAuth as a security best practice for general multi-user deployments.
 
 Non-OAuth HTTP configurations are intended only for testing/prototyping or deployments that are
-licensed and approved for user-based licensing (UBL). Confirm this with your Tableau licensing and
+licensed and approved for usage-based licensing (UBL). Confirm this with your Tableau licensing and
 security guidance before opting out. To opt out, see the entry on
 [`DANGEROUSLY_DISABLE_OAUTH`](oauth.md#dangerously_disable_oauth).
 

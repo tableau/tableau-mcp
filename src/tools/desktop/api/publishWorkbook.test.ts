@@ -27,7 +27,7 @@ function publishPosts(server: MockExternalApiServer): Array<{ body: string }> {
   return server.requests.filter((r) => r.method === 'POST' && r.path === PUBLISH_PATH);
 }
 
-describe('publish-workbook tool', () => {
+describe('open-publish-workbook-dialog tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
@@ -36,6 +36,9 @@ describe('publish-workbook tool', () => {
   it('POSTs the publish route and reports the dialog was opened', async () => {
     const harness = await startHarness();
     try {
+      expect(getPublishWorkbookTool(new DesktopMcpServer()).name).toBe(
+        'open-publish-workbook-dialog',
+      );
       const result = await harness.callTool({});
       expect(result.isError).toBeFalsy();
       expect(messageOf(result)).toBe(

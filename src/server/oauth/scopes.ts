@@ -7,6 +7,7 @@
 
 import { getConfig } from '../../config.js';
 import { getFeatureGate } from '../../features/init.js';
+import { isSlackClient } from '../../telemetry/clientDisplayName.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
 /**
@@ -19,6 +20,7 @@ export type McpScope =
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
   | 'tableau:mcp:workbook:read'
+  | 'tableau:mcp:workbook:create'
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:flow:read'
@@ -49,10 +51,14 @@ export type TableauApiScope =
   | 'tableau:tasks:delete'
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
+  | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
+  | 'tableau:workbooks:create'
+  | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
+  | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
   | 'tableau:users:update';
 
@@ -68,6 +74,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:jobs:read',
   'tableau:mcp:users:read',
   'tableau:mcp:workbook:read',
+  'tableau:mcp:workbook:create',
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
   'tableau:mcp:users:write',
@@ -121,10 +128,22 @@ export const GET_FLOW_CONNECTIONS_API_SCOPE: TableauApiScope = 'tableau:flow_con
 export const GET_FLOW_RUNS_API_SCOPE: TableauApiScope = 'tableau:flow_runs:read';
 
 /**
+ * Per-call scopes for `list-flow-runs`. The run fetch is the primary result and
+ * must not request the optional Query Flow scope used only to build a
+ * best-effort failure-insight link. The static tool scope map remains the
+ * maximum surface and is composed from these constants.
+ */
+export const LIST_FLOW_RUNS_PRIMARY_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:flow_runs:read',
+  'tableau:mcp_site_settings:read',
+];
+export const LIST_FLOW_RUNS_FAILURE_INSIGHT_API_SCOPE: TableauApiScope = 'tableau:flows:read';
+
+/**
  * Validates that a scope string is a valid MCP scope
  */
-export async function isValidScope(scope: string): Promise<boolean> {
-  return (await getSupportedMcpScopes()).some((supported) => supported === scope);
+export async function isValidScope(scope: string, clientId?: string): Promise<boolean> {
+  return (await getSupportedMcpScopes(clientId)).some((supported) => supported === scope);
 }
 
 const toolScopeMap: Record<
@@ -167,6 +186,14 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
+  'request-workbook-upload': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set([]),
+  },
+  'publish-workbook': {
+    mcp: ['tableau:mcp:workbook:create'],
+    api: new Set(['tableau:workbooks:create', 'tableau:file_uploads:create']),
+  },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
@@ -194,6 +221,17 @@ const toolScopeMap: Record<
       GET_FLOW_RUNS_API_SCOPE,
     ]),
   },
+  'list-flow-runs': {
+    mcp: ['tableau:mcp:flow:read'],
+    // `flows:read` is needed in addition to `flow_runs:read` because, when the
+    // returned window contains a Failed run, the tool resolves one flow's
+    // `webpageUrl` (Query Flow) to build a run-history deep link for the caller.
+    api: new Set([...LIST_FLOW_RUNS_PRIMARY_API_SCOPES, LIST_FLOW_RUNS_FAILURE_INSIGHT_API_SCOPE]),
+  },
+  'list-flow-tasks': {
+    mcp: ['tableau:mcp:flow:read'],
+    api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
+  },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:viz_data_service:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
@@ -213,6 +251,10 @@ const toolScopeMap: Record<
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'download-workbook': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
@@ -293,6 +335,15 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
+  // MCP-app event telemetry relay: no Tableau REST API calls, no content scope required.
+  'record-event': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'render-interactive-viz': {
+    mcp: ['tableau:mcp:view:read', 'tableau:mcp:workbook:read'],
+    api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
   // Dispatches on `kind` to ts-events, site-content, job-performance (raw VDS) or stale-content
   // (server-side anti-join). Union of the scopes required by all four kinds.
   'query-admin-insights': {
@@ -335,11 +386,19 @@ const toolScopeMap: Record<
   },
 };
 
-async function getEnabledToolNames(): Promise<Set<WebToolName>> {
+async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>> {
   const config = getConfig();
   const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
+  const slackClient = isSlackClient(clientId);
+  // Authoring tools require the `authoring-tools` flag and are hidden only from Slack clients.
+  // Undefined `client_id` (stdio and generic discovery metadata) and unknown/non-Slack clients are
+  // allowed, mirroring the per-client `disabled` provider on the authoring tool registrations.
+  const authoringToolsEnabled =
+    (await featureGate.isFeatureEnabled('authoring-tools')) && !slackClient;
+  const flowToolsEnabled =
+    config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -358,23 +417,33 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   // human-gesture confirm steps for their preview tools and only exist when the iframe can render.
   if (!mcpAppsEnabled) {
     enabledTools.delete('get-embed-token');
+    enabledTools.delete('record-event');
+    enabledTools.delete('render-interactive-viz');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-delete-content');
   }
 
-  // Flow tools are gated off by default (FLOW_TOOLS_ENABLED). When disabled they are not registered,
-  // so their scopes must not be advertised or enforced either — otherwise a client could be asked to
-  // hold scopes for tools that don't exist. Mirrors the adminToolsEnabled gating above.
-  if (!config.flowToolsEnabled) {
+  // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag. When disabled they
+  // are not registered, so their scopes must not be advertised or enforced either — otherwise a
+  // client could be asked to hold scopes for tools that don't exist.
+  if (!flowToolsEnabled) {
     enabledTools.delete('list-flows');
     enabledTools.delete('get-flow');
+    enabledTools.delete('list-flow-runs');
+    enabledTools.delete('list-flow-tasks');
+  }
+
+  if (!authoringToolsEnabled) {
+    enabledTools.delete('request-workbook-upload');
+    enabledTools.delete('publish-workbook');
+    enabledTools.delete('download-workbook');
   }
 
   return enabledTools;
 }
 
-export async function getSupportedMcpScopes(): Promise<McpScope[]> {
-  const enabledTools = await getEnabledToolNames();
+export async function getSupportedMcpScopes(clientId?: string): Promise<McpScope[]> {
+  const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<McpScope>();
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
@@ -388,8 +457,8 @@ export async function getSupportedMcpScopes(): Promise<McpScope[]> {
   return Array.from(scopes);
 }
 
-export async function getSupportedApiScopes(): Promise<TableauApiScope[]> {
-  const enabledTools = await getEnabledToolNames();
+export async function getSupportedApiScopes(clientId?: string): Promise<TableauApiScope[]> {
+  const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<TableauApiScope>();
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
@@ -405,11 +474,13 @@ export async function getSupportedApiScopes(): Promise<TableauApiScope[]> {
 
 export async function getSupportedScopes({
   includeApiScopes,
+  clientId,
 }: {
   includeApiScopes: boolean;
+  clientId?: string;
 }): Promise<string[]> {
-  const mcpScopes = await getSupportedMcpScopes();
-  const apiScopes = await getSupportedApiScopes();
+  const mcpScopes = await getSupportedMcpScopes(clientId);
+  const apiScopes = await getSupportedApiScopes(clientId);
   return includeApiScopes ? [...mcpScopes, ...apiScopes] : mcpScopes;
 }
 

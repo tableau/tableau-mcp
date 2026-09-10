@@ -16,7 +16,7 @@ export const getPublishWorkbookTool = (
 ): DesktopTool<typeof paramsSchema> => {
   const publishWorkbookTool = new DesktopTool({
     server,
-    name: 'publish-workbook',
+    name: 'open-publish-workbook-dialog',
     minApiVersion: '0.2.8',
     title,
     description:
@@ -40,7 +40,7 @@ export const getPublishWorkbookTool = (
             extra,
             callback: async (_executor, _signal, read) => {
               const result = await read(
-                'publish-workbook',
+                'Publish Workbook dialog',
                 async (executor, signal) => await executor.publishWorkbook(signal),
               );
               if (result.isErr()) {

@@ -28,7 +28,7 @@ An **insight brief** is an AI-generated response to questions about Pulse metric
 
 ## APIs called
 
-- [Generate insight brief](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#PulseInsightsService_GenerateInsightBrief)
+- [Generate insight brief](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#EmbeddingsService_GenerateInsightBrief)
 
 ## Required arguments
 

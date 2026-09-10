@@ -104,6 +104,18 @@ export class ArgsValidationError extends McpToolError {
   }
 }
 
+// Thrown by paginated list tools when the requested `pageNumber` is beyond the
+// reach of the tool's configured MAX_RESULT_LIMIT offset ceiling. Without this
+// up-front guard the page would be fetched and then trimmed to zero items,
+// surfacing a misleading "no results were found" message even though
+// totalAvailable is non-zero. statusCode 400: the requested page is invalid for
+// the current configuration.
+export class PageExceedsLimitError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'page-exceeds-limit', message, statusCode: 400 });
+  }
+}
+
 export class DatasourceNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'datasource-not-allowed', message, statusCode: 403 });
@@ -207,6 +219,12 @@ export class ViewNotAllowedError extends McpToolError {
   }
 }
 
+export class ViewSheetNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'view-sheet-not-found', message, statusCode: 404 });
+  }
+}
+
 export class CustomViewNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'custom-view-not-allowed', message, statusCode: 403 });
@@ -216,6 +234,12 @@ export class CustomViewNotAllowedError extends McpToolError {
 export class WorkbookNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'workbook-not-allowed', message, statusCode: 403 });
+  }
+}
+
+export class ProjectNotAllowedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'project-not-allowed', message, statusCode: 403 });
   }
 }
 

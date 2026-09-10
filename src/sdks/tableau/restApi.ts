@@ -21,6 +21,7 @@ import JobsMethods from './methods/jobsMethods.js';
 import McpSettingsMethods from './methods/mcpSettingsMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import ProjectsMethods from './methods/projectsMethods.js';
+import PublishingMethods from './methods/publishingMethods.js';
 import PulseMethods from './methods/pulseMethods.js';
 import { AuthenticatedServerMethods, ServerMethods } from './methods/serverMethods.js';
 import TasksMethods from './methods/tasksMethods.js';
@@ -199,6 +200,15 @@ export class RestApi {
     });
     this._addInterceptors(RestApi.baseUrl, projectsMethods.interceptors);
     return projectsMethods;
+  }
+
+  get publishingMethods(): PublishingMethods {
+    const publishingMethods = new PublishingMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, publishingMethods.interceptors);
+    return publishingMethods;
   }
 
   get pulseMethods(): PulseMethods {

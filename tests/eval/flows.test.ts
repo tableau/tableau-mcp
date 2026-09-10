@@ -54,8 +54,16 @@ describe('flows tool descriptions (eval)', () => {
   });
 
   beforeEach(async () => {
-    // Flow tools are gated off by default (FLOW_TOOLS_ENABLED); opt in for this eval.
-    mcpServer = await getMcpServer({ ...getDefaultEnv(), FLOW_TOOLS_ENABLED: 'true' });
+    // Flow tools are gated off by default behind both FLOW_TOOLS_ENABLED and the flow-tools
+    // feature flag; opt in to both for this eval.
+    mcpServer = await getMcpServer({
+      ...getDefaultEnv(),
+      FLOW_TOOLS_ENABLED: 'true',
+      FEATURE_GATE_PROVIDER: 'custom',
+      FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
+        module: './tests/e2e/fixtures/flowToolsFeatureGate.cjs',
+      }),
+    });
   });
 
   afterEach(async () => {
@@ -98,5 +106,41 @@ describe('flows tool descriptions (eval)', () => {
     expect(getFlow.arguments.includeConnections).toBe(false);
     expect(getFlow.arguments.includeFlowRuns).not.toBe(false);
     expect(Number(getFlow.arguments.flowRunLimit ?? 10)).toBeLessThanOrEqual(3);
+  });
+
+  it('list-flow-runs: derives a status=Failed filter for a cross-flow failure question', async () => {
+    const prompt =
+      'Across all my Tableau Prep flows, which runs have failed? Just list the failed runs; no analysis.';
+
+    const stream = await runAgentWithTools(mcpServer, getModel(), prompt);
+    const toolExecutions = await getToolExecutions(stream);
+
+    const listFlowRuns = toolExecutions.find(
+      (toolExecution) => toolExecution.name === 'list_flow_runs',
+    );
+    invariant(listFlowRuns, 'list_flow_runs tool execution not found');
+
+    // A cross-flow "which runs failed" question is the dedicated run-history
+    // tool's job (not get-flow, which targets one flow), and `status` is the
+    // discriminating filter. It is client-side, but the model should still pass
+    // it so the tool can apply it.
+    const filter = String(listFlowRuns.arguments.filter ?? '');
+    expect(filter).toContain('status:');
+    expect(filter).toContain('Failed');
+  });
+
+  it('list-flow-tasks: selects the schedule tool for a "how often / next run" question', async () => {
+    const prompt =
+      'How often is each of my Tableau Prep flows scheduled to run, and when do they run next? Just list the schedules.';
+
+    const stream = await runAgentWithTools(mcpServer, getModel(), prompt);
+    const toolExecutions = await getToolExecutions(stream);
+
+    // "Scheduled to run / next run" is the flow-tasks (schedule) tool, NOT
+    // list-flow-runs (past executions) or get-flow (single-flow metadata).
+    const listFlowTasks = toolExecutions.find(
+      (toolExecution) => toolExecution.name === 'list_flow_tasks',
+    );
+    invariant(listFlowTasks, 'list_flow_tasks tool execution not found');
   });
 });

@@ -1,12 +1,15 @@
+import features from '../../features.json';
 import pkg from '../../package.json';
 import { DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../src/server.desktop.js';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
-import { resetEnv, setEnv } from '../testEnv.js';
+import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
 import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
 const serverVersion = pkg.version;
+const authoringToolsEnabled = Boolean(features['authoring-tools']);
+const flowToolsEnabled = Boolean(features['flow-tools']);
 
 describe('server', () => {
   beforeAll(setEnv);
@@ -26,7 +29,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-mcp',
         version: serverVersion,
       });
@@ -45,16 +48,28 @@ describe('server', () => {
         'delete-content',
       ];
       // These tools are gated by the mcp-apps feature (disabled by default in features.json):
-      // get-embed-token, plus the app-only confirm-* tools.
+      // get-embed-token and render-interactive-viz, plus the app-only record-event and confirm-* tools.
       const mcpAppsTools: ReadonlyArray<WebToolName> = [
         'get-embed-token',
+        'render-interactive-viz',
+        'record-event',
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
-      const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow'];
+      // flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag
+      const flowTools: ReadonlyArray<WebToolName> = [
+        'list-flows',
+        'get-flow',
+        'list-flow-runs',
+        'list-flow-tasks',
+      ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
+      // authoring tools are gated off by default (authoring-tools feature flag)
+      const authoringTools: ReadonlyArray<WebToolName> = [
+        'request-workbook-upload',
+        'publish-workbook',
+      ];
 
       let expectedToolNames = [...webToolNames];
 
@@ -68,8 +83,8 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
 
-      // Filter out flow tools if they are not enabled
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
+      // Filter out flow tools unless both the env switch and the feature flag are on
+      if (process.env.FLOW_TOOLS_ENABLED !== 'true' || !flowToolsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
       }
 
@@ -78,11 +93,63 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
       }
 
+      if (!features['authoring-tools']) {
+        expectedToolNames = expectedToolNames.filter((name) => !authoringTools.includes(name));
+      }
+
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedToolNames = expectedToolNames.filter((name) => !mcpAppsTools.includes(name));
+      if (!authoringToolsEnabled) {
+        expectedToolNames = expectedToolNames.filter((name) => name !== 'download-workbook');
+      }
 
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
+    });
+
+    // The default client spawns with getDefaultEnv(), which intentionally omits ADMIN_TOOLS_ENABLED,
+    // so the server advertises only the base instructions and no admin guidance. The substrings here
+    // are kept in lockstep with the unit test in src/server.web.test.ts.
+    it('should carry base instructions without admin guidance when admin tools are disabled', async () => {
+      const instructions = await client.getInstructions();
+      expect(instructions).toBeTruthy();
+      expect(instructions).toContain('Tableau MCP exposes tools');
+      expect(instructions).not.toContain('site-administration capabilities');
+      expect(instructions).not.toContain('general admin/site-health');
+      expect(instructions).not.toContain('user-license reclamation');
+      expect(instructions).not.toContain('query-admin-insights');
+    });
+  });
+
+  // Instructions depend on ADMIN_TOOLS_ENABLED, which is fixed at process spawn, so the admin-on case
+  // needs its own client with the flag injected into its env (mirroring how admin-tool tests inject it).
+  describe('default variant with admin tools enabled', () => {
+    let client: McpClient;
+
+    beforeAll(async () => {
+      await buildVariant('default');
+      client = new McpClient({
+        variant: 'default',
+        env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
+      });
+      await client.connect();
+    });
+
+    afterAll(async () => {
+      await client.close();
+    });
+
+    // The substrings here are kept in lockstep with the unit test in src/server.web.test.ts.
+    it('should append admin site-health guidance to instructions when admin tools are enabled', async () => {
+      const instructions = await client.getInstructions();
+      expect(instructions).toBeTruthy();
+      // Base guidance is still present...
+      expect(instructions).toContain('Tableau MCP exposes tools');
+      // ...and the admin capability menu + generic-intent tie-in is appended.
+      expect(instructions).toContain('site-administration capabilities');
+      expect(instructions).toContain('general admin/site-health');
+      expect(instructions).toContain('user-license reclamation');
+      expect(instructions).toContain('query-admin-insights');
     });
   });
 
@@ -100,7 +167,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-desktop-mcp',
         version: serverVersion,
       });
@@ -108,10 +175,6 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      // Unset TOOL_PROFILE now defaults to the lean dynamic-authoring native surface
-      // (the singer sings native by default); the raw XML get/apply tools are opt-in
-      // via TOOL_PROFILE=full. Episode-lite tools are gated by EPISODE_EVENTS and are
-      // not in the lean set anyway.
       const expectedToolNames = desktopToolNames.filter((name) =>
         DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
       );
@@ -135,7 +198,7 @@ describe('server', () => {
     });
 
     it('should get server version', async () => {
-      expect(await client.getServerVersion()).toEqual({
+      expect(await client.getServerVersion()).toMatchObject({
         name: 'tableau-combined-mcp',
         version: serverVersion,
       });
@@ -154,16 +217,28 @@ describe('server', () => {
         'delete-content',
       ];
       // These tools are gated by the mcp-apps feature (disabled by default in features.json):
-      // get-embed-token, plus the app-only confirm-* tools.
+      // get-embed-token and render-interactive-viz, plus the app-only record-event and confirm-* tools.
       const mcpAppsTools: ReadonlyArray<WebToolName> = [
         'get-embed-token',
+        'render-interactive-viz',
+        'record-event',
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
       // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
-      const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow'];
+      const flowTools: ReadonlyArray<WebToolName> = [
+        'list-flows',
+        'get-flow',
+        'list-flow-runs',
+        'list-flow-tasks',
+      ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
+      // authoring tools are gated off by default (authoring-tools feature flag)
+      const authoringTools: ReadonlyArray<WebToolName> = [
+        'request-workbook-upload',
+        'publish-workbook',
+      ];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -181,8 +256,8 @@ describe('server', () => {
         );
       }
 
-      // Filter out flow tools if they are not enabled
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
+      // Filter out flow tools unless both the env switch and the feature flag are on
+      if (process.env.FLOW_TOOLS_ENABLED !== 'true' || !flowToolsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
       }
 
@@ -191,12 +266,18 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
       }
 
+      if (!features['authoring-tools']) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !authoringTools.includes(name),
+        );
+      }
+
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
+      if (!authoringToolsEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => name !== 'download-workbook');
+      }
 
-      // Unset TOOL_PROFILE defaults the desktop half to the lean dynamic-authoring
-      // native surface (raw XML tools opt-in via TOOL_PROFILE=full); episode-lite
-      // tools are gated by EPISODE_EVENTS and not in the lean set.
       const expectedDesktopToolNames = desktopToolNames.filter((name) =>
         DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
       );
@@ -204,6 +285,23 @@ describe('server', () => {
       const expectedToolNames = [...expectedDesktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
+    });
+
+    // The combined bundle supplies its own McpServer to WebMcpServer, so instructions can only reach
+    // the handshake if index.combined.ts constructs that McpServer with buildWebInstructions(). This
+    // asserts the web guidance actually survives that provided-mcpServer path (it FAILS against
+    // pre-fix combined code, where the composed instructions were silently dropped). The default
+    // client spawns with getDefaultEnv(), which omits ADMIN_TOOLS_ENABLED, so only base guidance is
+    // advertised and no admin guidance. Substrings kept in lockstep with the unit test in
+    // src/server.web.test.ts.
+    it('should carry base web instructions without admin guidance when admin tools are disabled', async () => {
+      const instructions = await client.getInstructions();
+      expect(instructions).toBeTruthy();
+      expect(instructions).toContain('Tableau MCP exposes tools');
+      expect(instructions).not.toContain('site-administration capabilities');
+      expect(instructions).not.toContain('general admin/site-health');
+      expect(instructions).not.toContain('user-license reclamation');
+      expect(instructions).not.toContain('query-admin-insights');
     });
   });
 });

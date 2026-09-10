@@ -5,8 +5,8 @@ import { expect, test } from './base.js';
 
 test.describe('list-projects', () => {
   test('list projects', async ({ client }) => {
-    const projects = await client.callTool('list-projects', {
-      schema: z.array(projectSchema),
+    const { data: projects } = await client.callTool('list-projects', {
+      schema: z.object({ data: z.array(projectSchema), totalAvailable: z.number() }),
       toolArgs: {},
     });
 
@@ -14,8 +14,8 @@ test.describe('list-projects', () => {
   });
 
   test('list projects with filter', async ({ client }) => {
-    const projects = await client.callTool('list-projects', {
-      schema: z.array(projectSchema),
+    const { data: projects } = await client.callTool('list-projects', {
+      schema: z.object({ data: z.array(projectSchema), totalAvailable: z.number() }),
       toolArgs: { filter: 'name:eq:Samples' },
     });
 

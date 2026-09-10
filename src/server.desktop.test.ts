@@ -27,6 +27,7 @@ import {
   selectToolsForProfile,
   SPEC_LOOP_TOOL_PROFILE,
 } from './server.desktop.js';
+import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
@@ -113,7 +114,19 @@ describe('DesktopMcpServer', () => {
   it('does not override tools/list on a shared McpServer (combined variant)', async () => {
     // The combined variant registers the web half on the same McpServer; a desktop
     // tools/list override there hides every web tool (caught live by the e2e suite).
-    const sharedMcpServer = new McpServer({ name: 'shared', version: '0.0.0' });
+    const config = configModule.getDesktopConfig();
+    const desktopInstructions = buildDesktopInstructions({
+      sessionPinned: config.desktopSessionId !== undefined,
+      profile: config.toolProfile,
+    });
+    const combinedInstructions = `${buildWebInstructions()} ${desktopInstructions}`;
+    const sharedMcpServer = new McpServer(
+      { name: 'shared', version: '0.0.0' },
+      { instructions: combinedInstructions },
+    );
+    // The global McpServer mock records constructor arguments but does not mirror this SDK field.
+    (sharedMcpServer.server as unknown as { _instructions?: string })._instructions =
+      combinedInstructions;
     const server = new DesktopMcpServer({ mcpServer: sharedMcpServer });
     await server.registerTools();
 
@@ -488,7 +501,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'open-file',
       'save-workbook',
       'workbook-export-as',
-      'publish-workbook',
+      'open-publish-workbook-dialog',
       'refresh-datasource-data',
       'refresh-datasource-extract',
       'get-workbook-xml',
@@ -673,7 +686,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('add-storyboard')).toBe('0.2.6');
     expect(floors.get('export-storyboard-image')).toBe('0.2.7');
     expect(floors.get('workbook-export-as')).toBe('0.2.7');
-    expect(floors.get('publish-workbook')).toBe('0.2.8');
+    expect(floors.get('open-publish-workbook-dialog')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
   });

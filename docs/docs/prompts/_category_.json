@@ -2,7 +2,8 @@
   "label": "Prompts",
   "position": 8,
   "link": {
-    "type": "doc",
-    "id": "prompts/README"
+    "type": "generated-index",
+    "slug": "/prompts",
+    "description": "Guided admin prompts (per the MCP prompts specification) that orchestrate multiple tools. Gated behind the `ADMIN_TOOLS_ENABLED` environment variable."
   }
 }

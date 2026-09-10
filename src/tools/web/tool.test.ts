@@ -79,6 +79,8 @@ describe('Tool', () => {
   });
 
   it('should return successful result when callback succeeds', async () => {
+    vi.stubEnv('LOG_LEVEL', 'debug'); // Enable debug logs for this test
+
     const tool = new WebTool(mockParams);
     const successResult = { data: 'success' };
     const callback = vi
@@ -86,6 +88,7 @@ describe('Tool', () => {
       .mockImplementation(async (_requestId: string) => new Ok(successResult));
 
     const spy = vi.spyOn(tool, 'notifyInvocation');
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const result = await tool.logAndExecute({
       extra: mockExtra,
       args: { param1: 'test' },
@@ -108,6 +111,32 @@ describe('Tool', () => {
         param1: 'test',
       },
     });
+
+    // Assert that the invocation log line carries populated LUID fields
+    const logLines = stderrSpy.mock.calls
+      .map((call) => {
+        try {
+          return JSON.parse(call[0] as string);
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry) => entry !== null);
+
+    const invocationLogCall = logLines.find(
+      (entry) => entry.logger === 'tool' && entry.message?.includes('invoked'),
+    );
+
+    expect(invocationLogCall).toBeDefined();
+    expect(invocationLogCall).toMatchObject({
+      message: expect.stringContaining('get-datasource-metadata'),
+      level: 'debug',
+      logger: 'tool',
+      site_luid: 'test-site-luid',
+      user_luid: 'test-user-luid',
+    });
+
+    stderrSpy.mockRestore();
   });
 
   it('should return error result when callback throws', async () => {
@@ -230,6 +259,7 @@ describe('Tool', () => {
           is_hyperforce: false,
           success: true,
           error_code: '',
+          error_message: '',
         }),
       );
     });
@@ -252,6 +282,7 @@ describe('Tool', () => {
           is_hyperforce: false,
           success: false,
           error_code: '500',
+          error_message: 'requestId: 2, error: Callback failed',
         }),
       );
     });
@@ -347,6 +378,7 @@ describe('Tool', () => {
         expect.objectContaining({
           oauth_client_id: clientId,
           oauth_client_display_name: 'Claude',
+          auth_type: 'tableau-oauth',
         }),
       );
     });
@@ -386,6 +418,8 @@ describe('Tool', () => {
         expect.objectContaining({
           oauth_client_id: '',
           oauth_client_display_name: '',
+          // mockExtra has no tableauAuthInfo, so auth_type falls through to config.auth ('pat' in tests).
+          auth_type: 'pat',
         }),
       );
     });
@@ -582,6 +616,16 @@ describe('Tool', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.data).toEqual(rawApiData.toString());
       expect(parsed.warning).toContain('Expected string, received object');
+
+      // The passthrough result carries the full API payload but is isError: false, so it must
+      // NOT leak into telemetry's error_message (keyed off isError, not the false `success`).
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_message: '',
+        }),
+      );
     });
 
     it('should return isError: false with validation warning for discriminatedUnion schema errors', async () => {

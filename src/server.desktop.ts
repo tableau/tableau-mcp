@@ -164,7 +164,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'open-file',
     'save-workbook',
     'workbook-export-as',
-    'publish-workbook',
+    'open-publish-workbook-dialog',
     'pause-auto-updates',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.

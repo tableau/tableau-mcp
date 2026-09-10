@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../../config.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
@@ -46,6 +47,7 @@ export const getConfirmDeleteContentTool = (server: WebMcpServer): WebTool<typeo
       async () =>
         !config.adminToolsEnabled || !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
     ),
+    minRequiredRole: MIN_ADMIN_SITE_ROLE,
     description: `
 Confirms and executes a content deletion previously previewed by \`delete-content\`. This tool is
 **not visible to the model** — it is invoked only by an explicit human confirmation gesture inside

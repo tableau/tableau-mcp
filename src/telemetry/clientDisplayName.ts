@@ -20,6 +20,8 @@ const knownClientDisplayNamesByHost: ReadonlyMap<string, string> = new Map([
   ['cursor.com', 'Cursor'],
   ['cursor.sh', 'Cursor'],
   ['vscode.dev', 'VS Code'],
+  ['chatgpt.com', 'ChatGPT'],
+  ['slack.com', 'Slack'],
 ]);
 
 /**
@@ -81,4 +83,11 @@ export function getClientDisplayName(clientId: string | undefined): string | und
   }
 
   return undefined;
+}
+
+/**
+ * True when the OAuth `client_id` resolves to Slack.
+ */
+export function isSlackClient(clientId: string | undefined): boolean {
+  return getClientDisplayName(clientId) === 'Slack';
 }

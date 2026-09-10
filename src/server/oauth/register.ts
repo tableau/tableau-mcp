@@ -1,15 +1,20 @@
+import { randomUUID } from 'crypto';
 import express from 'express';
 
 import { isValidRedirectUri } from './isValidRedirectUri.js';
+import { ClientRegistration } from './types.js';
 
 /**
  * Dynamic Client Registration Endpoint
  *
  * Allows clients to dynamically register with the authorization
- * server. For public clients (like desktop apps), no client
- * secret is required - security comes from PKCE.
+ * server. Redirect URIs are allowlisted per registered client and
+ * enforced at authorize time, in addition to PKCE.
  */
-export function register(app: express.Application): void {
+export function register(
+  app: express.Application,
+  clientRegistrations: Map<string, ClientRegistration>,
+): void {
   app.post('/oauth2/register', express.json(), (req, res) => {
     const { redirect_uris } = req.body;
 
@@ -37,10 +42,14 @@ export function register(app: express.Application): void {
       token_endpoint_auth_method = 'client_secret_basic';
     }
 
-    // For public clients, we use a fixed client ID since no authentication is required
-    // The security comes from PKCE (code challenge/verifier) at authorization time
+    // Mint a unique client ID and store the allowlisted redirect URIs
+    const clientId = randomUUID();
+    clientRegistrations.set(clientId, {
+      redirectUris: validatedRedirectUris,
+    });
+
     res.json({
-      client_id: 'mcp-public-client',
+      client_id: clientId,
       redirect_uris: validatedRedirectUris,
       grant_types: ['authorization_code', 'client_credentials'],
       response_types: ['code'],

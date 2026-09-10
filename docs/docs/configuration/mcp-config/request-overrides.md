@@ -160,7 +160,7 @@ Overrides whether Metadata API requests are disabled.
 
 ### [`STALE_CONTENT_MIN_AGE_DAYS`](env-vars.md#stale_content_min_age_days)
 
-Overrides the default threshold (in days) used by the `get-stale-content-report` tool to flag stale workbooks and published datasources. Override value must be an integer in the range `1`–`3650`. Empty string reverts to the default (`90`).
+Overrides the default threshold (in days) used by the `query-admin-insights` tool (`kind: "stale-content"`) to flag stale workbooks and published datasources. Override value must be an integer in the range `1`–`3650`. Empty string reverts to the default (`90`).
 
 | Restriction Type | Behavior |
 |---|---|

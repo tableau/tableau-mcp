@@ -1,3 +1,5 @@
+import { LOOPBACK_HOSTS } from './loopbackHosts.js';
+
 export function isValidRedirectUri(redirectUri: unknown): boolean {
   if (typeof redirectUri !== 'string') {
     return false;
@@ -12,11 +14,8 @@ export function isValidRedirectUri(redirectUri: unknown): boolean {
     }
 
     // Allow HTTP only for loopback hosts (RFC 8252 §7.3).
-    // Note: Node's URL parser keeps IPv6 hostnames bracketed (e.g. '[::1]').
     if (url.protocol === 'http:') {
-      return (
-        url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
-      );
+      return LOOPBACK_HOSTS.has(url.hostname);
     }
 
     // Allow custom schemes (like systemprompt://)

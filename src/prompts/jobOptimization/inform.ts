@@ -79,7 +79,8 @@ export const getJobOptimizationInformPrompt: WebPromptFactory = () => ({
   description:
     'Tableau Cloud admin workflow: analyze Admin Insights job performance and surface optimization ' +
     `signals by invoking the \`${TOOL_NAME}\` tool. Defaults to extract refresh jobs; set discover ` +
-    'to analyze every Job Type on the site. Read-only.',
+    'to analyze every Job Type on the site. Read-only. ' +
+    'Consider for general admin/site-health, governance, and performance/cost optimization questions.',
   argsSchema,
   disabled: (config) => !config.adminToolsEnabled,
   callback: (args) => {

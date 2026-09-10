@@ -43,7 +43,10 @@ Slack channel in the Tableau #DataDev workspace.
 | [list-flows](tools/flows/list-flows.md)                                                                               | Retrieves a list of Tableau Prep flows from a specified Tableau site ([REST API][list-flows])                       | All SKUs     |
 | [get-datasource-metadata](tools/data-qna/get-datasource-metadata.md)                                                  | Fetches datasource metadata including table relationships, datasource and field descriptions, field roles and types, calculation strings, and parameters for the specified datasource ([Metadata API][meta] & [VDS API][vds])                         | All SKUs\*   |
 | [get-workbook](tools/workbooks/get-workbook.md)                                                                       | Retrieves information about a workbook for a specified workbook on a Tableau site ([REST API][get-workbook])                        | All SKUs     |
+| [download-workbook](tools/workbooks/download-workbook.md)                                                             | Downloads workbook content as TWB (XML) or TWBX (packaged) and returns a file link ([REST API][download-workbook])                 | All SKUs     |
 | [get-flow](tools/flows/get-flow.md)                                                                                   | Retrieves information on a Tableau Prep flow including output steps and recent runs ([REST API][get-flow])                          | All SKUs     |
+| [list-flow-runs](tools/flows/list-flow-runs.md)                                                                       | Retrieves the run history (executions) of Tableau Prep flows on a site ([REST API][list-flow-runs])                                 | All SKUs     |
+| [list-flow-tasks](tools/flows/list-flow-tasks.md)                                                                     | Retrieves the scheduled flow run tasks (schedules) for Tableau Prep flows on a site ([REST API][list-flow-tasks])                   | All SKUs     |
 | [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
 | [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data in CSV format for the specified view in a Tableau workbook. *Note: the get-view-data api currently has a limitation that when used on a dashboard sheet type, it will only return data for the first worksheet in the dashboard. This will be fixed in the 26.3 fall release.* ([REST API][get-view-data])               | All SKUs     |
 | [get-view-image](tools/views/get-view-image.md)                                                                       | Retrieves an image for the specified view in a Tableau workbook ([REST API][get-view-image])                        | All SKUs     |
@@ -62,7 +65,7 @@ Slack channel in the Tableau #DataDev workspace.
 | [update-cloud-extract-refresh-task](tools/tasks/update-cloud-extract-refresh-task.md)                                 | Admin-only. Confirm-gated update of an extract refresh task schedule on Tableau Cloud ([REST API][update-cloud-extract-refresh-task]) | All SKUs     |
 | [list-users](tools/users/list-users.md)                                                                               | Admin-only. Retrieves a list of users on the site ([REST API][list-users-api])                                      | All SKUs     |
 | [update-user](tools/users/update-user.md)                                                                             | Admin-only. Confirm-gated update of a user's site role ([REST API][update-user-api])                               | All SKUs     |
-| [query-admin-insights](tools/admin-insights/query-admin-insights.md)                                                 | Admin-only. Dispatches on `kind` to TS Events, Site Content, Job Performance, or stale-content report ([VDS API][vds]) | All SKUs     |
+| [query-admin-insights](tools/admin-insights/query-admin-insights.md)                                                 | Admin-only. Dispatches on `kind` to TS Events, TS Users, Site Content, Job Performance, or stale-content report ([VDS API][vds]) | All SKUs     |
 | [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
 
 \* The `get-datasource-metadata` tool relies on both the VizQL Data Service and the Metadata API to get rich metadata about a data source. Only sites with Data Management entitlements will be able to execute the Metadata API calls, though the tool will remain functional without it.
@@ -81,8 +84,14 @@ Slack channel in the Tableau #DataDev workspace.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#query_flows_for_site
 [get-workbook]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook
+[download-workbook]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook
 [get-flow]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#query_flow
+[list-flow-runs]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_runs
+[list-flow-tasks]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_run_tasks
 [delete-workbook]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_workbook
 [delete-datasource]:
@@ -117,7 +126,7 @@ Prompts orchestrate multiple tools into a guided admin workflow. They are gated 
 
 | **Prompt**                                                                    | **Description**                                                                                                          |
 | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| [stale-content-cleanup-inform](prompts/stale-content-cleanup-inform.md)       | Admin-only. Read-only. Generates a stale-content report by calling `get-stale-content-report`.                          |
+| [stale-content-cleanup-inform](prompts/stale-content-cleanup-inform.md)       | Admin-only. Read-only. Generates a stale-content report by calling `query-admin-insights` with `kind: "stale-content"`. |
 | [stale-content-cleanup-apply](prompts/stale-content-cleanup-apply.md)         | Admin-only. Destructive. Tags stale content, reports owners to notify, and — after a required human-confirmation break — deletes approved items to the recycle bin. |
 | [job-optimization-inform](prompts/job-optimization-inform.md)                 | Admin-only. Read-only. Analyzes Admin Insights job performance and surfaces optimization signals.                       |
 | [extract-optimization-apply](prompts/extract-optimization-apply.md)           | Admin-only. Destructive. Applies schedule downgrades and deletions to extract refresh tasks after a required human-confirmation break; defaults to a dry-run report. |

@@ -10,10 +10,14 @@ import {
 import { useRestApi } from '../../../restApiInstance.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { getImageFormatForVersion } from './getImageFormatForVersion.js';
+import {
+  buildImageToolResult,
+  ImageToolResult,
+  imageToolResultToCallToolResult,
+} from './imageToolResult.js';
 
 const paramsSchema = {
   viewId: z.string(),
@@ -39,10 +43,12 @@ export const getGetViewImageTool = (
     server,
     name: 'get-view-image',
     description: [
-      'Retrieves an image of the specified view in a Tableau workbook.',
+      'Returns a static, non-interactive image of the specified view in a Tableau workbook.',
+      'Use only when the user explicitly wants an image artifact — a screenshot, picture, thumbnail, PNG/PDF, or an image to embed in a document or export.',
+      'For a bare "show me / open / explore this view" the user wants the interactive embed — use render-interactive-viz instead.',
       'Optional width and height in pixels control render size.',
       'Optional view field names and values can be provided to filter the view.',
-      'For custom views, use the tool to get view custom view image by custom view id instead.',
+      'For custom views, use the tool to get custom view image by custom view id instead.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -56,7 +62,7 @@ export const getGetViewImageTool = (
       { viewId, width, height, format, viewFilters },
       extra,
     ): Promise<CallToolResult> => {
-      return await getViewImageTool.logAndExecute<string>({
+      return await getViewImageTool.logAndExecute<ImageToolResult>({
         extra,
         args: { viewId, width, height, format, viewFilters },
         callback: async () => {
@@ -74,7 +80,7 @@ export const getGetViewImageTool = (
             return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
           }
 
-          return await useRestApi({
+          const imageResult = await useRestApi({
             ...extra,
             jwtScopes: getViewImageTool.requiredApiScopes,
             callback: async (restApi) => {
@@ -100,14 +106,32 @@ export const getGetViewImageTool = (
               return new Ok(result.value);
             },
           });
+
+          if (imageResult.isErr()) {
+            return imageResult;
+          }
+
+          // Offload to S3 (returning a presigned URL) when configured, otherwise
+          // carry the raw bytes for inline base64. Falls back to inline on any
+          // S3 failure.
+          return new Ok(
+            await buildImageToolResult({
+              imageData: imageResult.value,
+              format,
+              resourceId: viewId,
+              config: extra.config,
+              toolName: getViewImageTool.name,
+              keyPrefixSegment: 'view-images/',
+            }),
+          );
         },
-        constrainSuccessResult: (viewImage) => {
+        constrainSuccessResult: (imageToolResult) => {
           return {
             type: 'success',
-            result: viewImage,
+            result: imageToolResult,
           };
         },
-        getSuccessResult: (imageData) => convertViewImageToToolResult(imageData, format),
+        getSuccessResult: (imageToolResult) => imageToolResultToCallToolResult(imageToolResult),
       });
     },
   });
