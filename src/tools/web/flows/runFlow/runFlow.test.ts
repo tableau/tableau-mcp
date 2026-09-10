@@ -71,6 +71,8 @@ describe('runFlowTool', () => {
     expect(tool.paramsSchema).toHaveProperty('runMode');
     expect(tool.paramsSchema).toHaveProperty('outputStepIds');
     expect(tool.paramsSchema).toHaveProperty('parameterOverrides');
+    expect(tool.paramsSchema).toHaveProperty('confirm');
+    expect(tool.paramsSchema).toHaveProperty('confirmationToken');
   });
 
   it('is a non-read-only, non-idempotent tool and is enabled when the flag is on', async () => {
@@ -88,9 +90,26 @@ describe('runFlowTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('enqueues a run and returns the async job plus a runStatus note', async () => {
-    mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+  it('previews without enqueueing and returns a confirmation token', async () => {
     const result = await getToolResult({ flowId: FLOW_ID, runMode: 'incremental' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const text = JSON.parse(result.content[0].text) as string;
+    expect(text).toContain('Preview');
+    expect(text).toContain('No flow run has been started');
+    expect(text).toMatch(/confirmationToken: "[0-9a-f-]+"/);
+    expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+  });
+
+  it('enqueues a run after a matching preview and returns the async job plus a runStatus note', async () => {
+    mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+    const confirmationToken = await previewRunFlow({ flowId: FLOW_ID, runMode: 'incremental' });
+    const result = await getToolResult({
+      flowId: FLOW_ID,
+      runMode: 'incremental',
+      confirm: true,
+      confirmationToken,
+    });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
@@ -107,10 +126,16 @@ describe('runFlowTool', () => {
 
   it('passes output steps and parameter overrides through to the SDK', async () => {
     mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
-    await getToolResult({
+    const args = {
       flowId: FLOW_ID,
       outputStepIds: ['step-1'],
       parameterOverrides: [{ parameterId: 'p1', overrideValue: '2' }],
+    };
+    const confirmationToken = await previewRunFlow(args);
+    await getToolResult({
+      ...args,
+      confirm: true,
+      confirmationToken,
     });
     expect(mocks.mockRunFlowNow).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -171,9 +196,77 @@ describe('runFlowTool', () => {
     expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
   });
 
-  it('maps a 403 into a clear licensing/permission error', async () => {
+  it('rejects confirmation without a matching preview', async () => {
+    const result = await getToolResult({
+      flowId: FLOW_ID,
+      confirm: true,
+      confirmationToken: 'bad-token',
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('could not verify that a preview ran');
+    expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+  });
+
+  it('rejects a confirmation token when the run arguments change', async () => {
+    const confirmationToken = await previewRunFlow({ flowId: FLOW_ID, runMode: 'full' });
+    const result = await getToolResult({
+      flowId: FLOW_ID,
+      runMode: 'incremental',
+      confirm: true,
+      confirmationToken,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('could not verify that a preview ran');
+    expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
+  });
+
+  it('accepts a confirmation token when array argument elements are reordered', async () => {
+    mocks.mockRunFlowNow.mockResolvedValue(mockRunFlowJob);
+    const confirmationToken = await previewRunFlow({
+      flowId: FLOW_ID,
+      outputStepIds: ['step-2', 'step-1'],
+      parameterOverrides: [
+        { parameterId: 'p2', overrideValue: 'val2' },
+        { parameterId: 'p1', overrideValue: 'val1' },
+      ],
+    });
+    const result = await getToolResult({
+      flowId: FLOW_ID,
+      outputStepIds: ['step-1', 'step-2'],
+      parameterOverrides: [
+        { parameterId: 'p1', overrideValue: 'val1' },
+        { parameterId: 'p2', overrideValue: 'val2' },
+      ],
+      confirm: true,
+      confirmationToken,
+    });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockRunFlowNow).toHaveBeenCalled();
+  });
+
+  it('redacts the confirmation token from invocation logging', async () => {
+    const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
+    const logAndExecuteSpy = vi.spyOn(WebTool.prototype, 'logAndExecute');
+
+    await getToolResult({ flowId: FLOW_ID, confirm: true, confirmationToken });
+
+    expect(logAndExecuteSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        args: expect.objectContaining({ confirmationToken: '<redacted>' }),
+      }),
+    );
+  });
+
+  it('maps a 403 into a clear licensing/permission error after confirmation', async () => {
+    const confirmationToken = await previewRunFlow({ flowId: FLOW_ID });
     mocks.mockRunFlowNow.mockRejectedValue(makeAxiosError(403));
-    const result = await getToolResult({ flowId: FLOW_ID });
+    const result = await getToolResult({
+      flowId: FLOW_ID,
+      confirm: true,
+      confirmationToken,
+    });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Not permitted to run this flow');
@@ -191,12 +284,28 @@ function makeAxiosError(status: number): Error {
   return err;
 }
 
-async function getToolResult(args: {
+type RunFlowArgs = {
   flowId: string;
   runMode?: 'full' | 'incremental';
   outputStepIds?: string[];
   parameterOverrides?: Array<{ parameterId: string; overrideValue: string }>;
-}): Promise<CallToolResult> {
+  confirm?: boolean;
+  confirmationToken?: string;
+};
+
+async function previewRunFlow(
+  args: Omit<RunFlowArgs, 'confirm' | 'confirmationToken'>,
+): Promise<string> {
+  const result = await getToolResult(args);
+  expect(result.isError).toBe(false);
+  invariant(result.content[0].type === 'text');
+  const text = JSON.parse(result.content[0].text) as string;
+  const match = text.match(/confirmationToken: "([0-9a-f-]+)"/);
+  invariant(match, `expected a confirmation token in preview: ${text}`);
+  return match[1];
+}
+
+async function getToolResult(args: RunFlowArgs): Promise<CallToolResult> {
   const tool = getRunFlowTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
@@ -205,6 +314,8 @@ async function getToolResult(args: {
       runMode: args.runMode,
       outputStepIds: args.outputStepIds,
       parameterOverrides: args.parameterOverrides,
+      confirm: args.confirm,
+      confirmationToken: args.confirmationToken,
     },
     getMockRequestHandlerExtra(),
   );
