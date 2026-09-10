@@ -114,7 +114,7 @@ import {
   authorCalculationsInWorkbook,
   type AuthoredCalc,
   datatypeSchema,
-  hasColumnNameAndCaption,
+  hasColumnNameAndCaptionInDatasource,
   prepareCalculationsInWorkbook,
   roleSchema,
 } from '../datasource/authorCalcCore.js';
@@ -128,16 +128,16 @@ import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Desktop PID; omit if pinned or sole.'),
-  ask: z.string().describe('Ask.'),
+  ask: z.string(),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
-  auto_apply: z.boolean().optional().describe('Apply now.'),
+  auto_apply: z.boolean().optional().describe('Apply now'),
   skip_validation: z.boolean().optional(),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
   target_worksheet: z.string().optional().describe('Sheet id/name; omit to add.'),
-  datasource: z.string().optional().describe('Calc source id/name.'),
+  datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
   calcs: z
     .array(
       z.object({
@@ -2204,7 +2204,7 @@ async function verifyTrustedWorkbookReadback({
       read: () => getWorkbookXml({ executor, signal }),
       settled: (xml) => {
         const calculationsPresent = atomicCalcs.every((calc) =>
-          hasColumnNameAndCaption(xml, calc.calcName, calc.caption),
+          hasColumnNameAndCaptionInDatasource(xml, calc.datasource, calc.calcName, calc.caption),
         );
         const fragment = extractSheetXml(xml, worksheetName);
         return (
@@ -2227,7 +2227,13 @@ async function verifyTrustedWorkbookReadback({
     }
 
     const missingCalcs = atomicCalcs.filter(
-      (calc) => !hasColumnNameAndCaption(polled.value, calc.calcName, calc.caption),
+      (calc) =>
+        !hasColumnNameAndCaptionInDatasource(
+          polled.value,
+          calc.datasource,
+          calc.calcName,
+          calc.caption,
+        ),
     );
     const fragment = extractSheetXml(polled.value, worksheetName);
     if (missingCalcs.length > 0 || fragment === null) {
