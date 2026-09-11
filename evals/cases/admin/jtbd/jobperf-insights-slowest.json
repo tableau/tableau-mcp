@@ -1,0 +1,12 @@
+{
+  "id": "jobperf-insights-slowest",
+  "name": "JTBD2 — Slowest extract refreshes via Admin Insights",
+  "description": "Admin read path. Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT. Model should use query-admin-insights (kind=job-performance) filtered to RefreshExtracts, aggregating on the duration field to rank the slowest extract refreshes. Traps: the duration field caption is 'Job Execution Duration' (NOT 'Avg Duration Job'); queue time is 'Job Queued Duration'; the 'limit' argument is TOP-LEVEL, not inside the query object (it is rejected as an unrecognized key inside query). Read-only.",
+  "tags": ["admin", "admin-insights", "job-performance", "read-only", "jtbd2", "real-server"],
+  "prompt": "Which extract refreshes are the slowest on this site? Use the Admin Insights Job Performance view, filtered to extract-refresh jobs, and rank by execution duration. Report the slowest task and the field(s) you aggregated on. Do not modify anything.",
+  "expected_tools": ["query-admin-insights"],
+  "budget": {
+    "max_tool_calls": 8,
+    "max_wall_ms": 180000
+  }
+}

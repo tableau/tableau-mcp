@@ -1,0 +1,12 @@
+{
+  "id": "inactive-users-listusers-path",
+  "name": "JTBD3 — Inactive users via list-users path",
+  "description": "Admin read path via REST list-users (not Admin Insights). Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT. Model should filter list-users on lastLogin before ~90 days ago to identify license-reclaim candidates. Note: never-signed-in accounts match a lastLogin:lt filter per tool contract — real inactive users are those with an actual older login. Read-only.",
+  "tags": ["admin", "users", "inactive-users", "read-only", "jtbd3", "real-server"],
+  "prompt": "List users who last logged in before roughly 90 days ago, to identify license-reclaim candidates. Use the list-users tool with a lastLogin filter. Summarize candidates with name, site role, and last login. Do not modify any user.",
+  "expected_tools": ["list-users"],
+  "budget": {
+    "max_tool_calls": 5,
+    "max_wall_ms": 120000
+  }
+}

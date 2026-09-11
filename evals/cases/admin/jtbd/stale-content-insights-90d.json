@@ -1,0 +1,12 @@
+{
+  "id": "stale-content-insights-90d",
+  "name": "JTBD1 — Stale content >90d via Admin Insights",
+  "description": "Admin read path. Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT. Model should use query-admin-insights (kind=stale-content) with minAgeDays 90 to list content not accessed in over 90 days. Note: Admin Insights reports at workbook/datasource grain and rolls up the underlying views consistently. Read-only, no mutation.",
+  "tags": ["admin", "admin-insights", "stale-content", "read-only", "jtbd1", "real-server"],
+  "prompt": "What content on this site hasn't been accessed in over 90 days? Use the Admin Insights stale-content view. Report the stale items and the age threshold you used. Do not modify or delete anything.",
+  "expected_tools": ["query-admin-insights"],
+  "budget": {
+    "max_tool_calls": 8,
+    "max_wall_ms": 180000
+  }
+}

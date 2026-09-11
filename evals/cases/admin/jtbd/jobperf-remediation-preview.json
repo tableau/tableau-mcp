@@ -1,0 +1,12 @@
+{
+  "id": "jobperf-remediation-preview",
+  "name": "JTBD2 — Refresh-cadence remediation, PREVIEW only (safe)",
+  "description": "SAFE: exercises update-cloud-extract-refresh-task PREVIEW phase only to reduce an hourly refresh to daily. With confirm omitted the tool returns the proposed schedule change plus a confirmation token without applying it. The prompt forbids confirming, so nothing is mutated. Requires ADMIN_TOOLS_ENABLED=true, site-admin PAT on Tableau Cloud, and EVAL_EXTRACT_TASK_LUID (a disposable test extract-refresh task). Trap: a Daily/Hourly schedule requires at least one intervals.interval entry carrying a weekDay.",
+  "tags": ["admin", "tasks", "job-performance", "mutation", "preview", "hitl", "jtbd2", "cloud", "real-server"],
+  "prompt": "First list the extract refresh tasks, then PREVIEW reducing the hourly task {{env.EVAL_EXTRACT_TASK_LUID}} to a daily schedule to cut refresh load. Only run the preview — do NOT confirm or apply. Report the current schedule, the proposed daily schedule, and whether a confirmation token was returned. Do not re-call with confirm=true.",
+  "expected_tools": ["list-extract-refresh-tasks", "update-cloud-extract-refresh-task"],
+  "budget": {
+    "max_tool_calls": 6,
+    "max_wall_ms": 180000
+  }
+}

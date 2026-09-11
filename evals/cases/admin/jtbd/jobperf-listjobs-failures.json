@@ -1,0 +1,12 @@
+{
+  "id": "jobperf-listjobs-failures",
+  "name": "JTBD2 — Failed extract-refresh jobs via list-jobs",
+  "description": "Job-performance JTBD via the REST list-jobs path. Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT. Model should filter list-jobs on jobType (refresh_extracts) and status (Failed) to find failed extract-refresh jobs. On the test site all tasks are healthy, so an empty/no-failures result is correct. Read-only.",
+  "tags": ["admin", "jobs", "job-performance", "read-only", "jtbd2", "real-server"],
+  "prompt": "Are there any failed extract-refresh jobs on this site? Use the list-jobs tool filtered to extract-refresh job type and Failed status. Report any failures found, or state clearly that there are none. Do not modify anything.",
+  "expected_tools": ["list-jobs"],
+  "budget": {
+    "max_tool_calls": 5,
+    "max_wall_ms": 120000
+  }
+}

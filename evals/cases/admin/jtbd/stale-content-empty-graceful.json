@@ -1,0 +1,12 @@
+{
+  "id": "stale-content-empty-graceful",
+  "name": "JTBD1 — Stale content edge case, graceful empty",
+  "description": "Edge-case case. Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT. Model queries query-admin-insights (kind=stale-content) with an extreme minAgeDays 3650 (~10 years). No content is that old, so the correct result is a graceful empty set (totalStaleItems 0, no rows) with no crash or error. Read-only.",
+  "tags": ["admin", "admin-insights", "stale-content", "read-only", "edge-case", "empty", "jtbd1", "real-server"],
+  "prompt": "Which content on this site is stale past 3650 days (about 10 years)? Use the Admin Insights stale-content view with that threshold. If nothing qualifies, say so plainly. Do not modify or delete anything.",
+  "expected_tools": ["query-admin-insights"],
+  "budget": {
+    "max_tool_calls": 8,
+    "max_wall_ms": 180000
+  }
+}
