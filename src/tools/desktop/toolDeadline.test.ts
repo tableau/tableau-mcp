@@ -29,10 +29,12 @@ function readEvents(dir: string): Array<Record<string, unknown>> {
     );
 }
 
-function makeTool(): DesktopTool<{ session: any }> {
+function makeTool(
+  name: 'apply-workbook' | 'get-active-dialogs' | 'invoke-dialog-action' = 'apply-workbook',
+): DesktopTool<{ session: any }> {
   return new DesktopTool({
     server: new DesktopMcpServer(),
-    name: 'apply-workbook',
+    name,
     title: 'Apply Workbook',
     description: 'Test tool',
     paramsSchema: { session: { _def: {} } as any },
@@ -87,12 +89,49 @@ describe('DesktopTool per-call deadline', () => {
     expect(text).toContain('Tableau Desktop did not respond within 60s');
     expect(text).toContain('session: 31875');
     expect(text).toContain('blocking dialog');
-    expect(text).toContain('Do not retry this call');
+    expect(text).toContain('Do not blindly retry the originating operation');
+    expect(text).toContain('get-active-dialogs');
+    expect(text).toContain('at most one invoke-dialog-action call');
+    expect(text).toContain('ask the user to handle the dialog');
     // Not dressed up as a generic tool failure the agent can paper over.
     expect(text).not.toContain('requestId:');
 
     extra.deadline.dispose();
   });
+
+  it.each([
+    ['get-active-dialogs', 'dialog inspection itself timed out', 'Do not retry get-active-dialogs'],
+    [
+      'invoke-dialog-action',
+      'invoke-dialog-action outcome is indeterminate',
+      'Do not call invoke-dialog-action again or click another action',
+    ],
+  ] as const)(
+    'uses the side-effect-aware guidance for a timed-out %s call',
+    async (name, state, rule) => {
+      vi.useFakeTimers();
+      const tool = makeTool(name);
+      const extra = makeExtra(undefined, 60_000);
+
+      const pending = tool.logAndExecute({
+        extra,
+        args: { session: '31875' },
+        callback: () => new Promise(() => undefined),
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      const result = await pending;
+
+      expect(result.isError).toBe(true);
+      const text = (result.content as Array<{ text: string }>)[0].text;
+      expect(text).toContain(`tool: ${name}, session: 31875`);
+      expect(text).toContain(state);
+      expect(text).toContain(rule);
+      expect(text).not.toContain('at most one invoke-dialog-action call');
+
+      extra.deadline.dispose();
+    },
+  );
 
   it('aborts the signal the tool handed to Desktop, so the request does not keep running', async () => {
     vi.useFakeTimers();

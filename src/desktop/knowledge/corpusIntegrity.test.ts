@@ -84,4 +84,64 @@ describe('knowledge corpus integrity', () => {
 
     expect(duplicates).toEqual([]);
   });
+
+  it('teaches safe dialog-tool recovery instead of obsolete human-only guidance', () => {
+    const knowledgeDir = getConfiguredKnowledgeDir();
+    const documents = [
+      {
+        name: '_index.md',
+        content: readFileSync(`${knowledgeDir}/_index.md`, 'utf-8'),
+      },
+      {
+        name: 'tactics/workflow/errors-as-modals.md',
+        content: readKnowledgeBySlug('tactics/workflow/errors-as-modals'),
+      },
+      {
+        name: 'tactics/workflow/recovery.md',
+        content: readKnowledgeBySlug('tactics/workflow/recovery'),
+      },
+      {
+        name: 'tactics/viz/building-viz-extensions.md',
+        content: readKnowledgeBySlug('tactics/viz/building-viz-extensions'),
+      },
+      {
+        name: 'tactics/viz/extension-vibe-coding-workflow.md',
+        content: readKnowledgeBySlug('tactics/viz/extension-vibe-coding-workflow'),
+      },
+      {
+        name: 'personalization/choosing-a-custom-viz-solution.md',
+        content: readKnowledgeBySlug('personalization/choosing-a-custom-viz-solution'),
+      },
+    ];
+
+    for (const document of documents) {
+      expect(document.content, `${document.name} should be shipped`).not.toBeNull();
+      expect(document.content, `${document.name} should name the inspection tool`).toContain(
+        'get-active-dialogs',
+      );
+      expect(document.content, `${document.name} should name the action tool`).toContain(
+        'invoke-dialog-action',
+      );
+      expect(
+        document.content,
+        `${document.name} should retain a conservative human fallback`,
+      ).toMatch(/human fallback|human handoff|ask the user/i);
+    }
+
+    const allGuidance = documents.map(({ content }) => content ?? '').join('\n');
+    const obsoleteClaims = [
+      'There is no command that dismisses a dialog',
+      'prevention is the only recovery',
+      'lost the session until a human intervenes',
+      'no headless dismissal',
+      'a human must dismiss the modal first',
+      'the first-trust click is a human gate by design',
+      'this is a human gate by design',
+      'the only human step for a never-trusted local extension is a one-time trust approval',
+    ];
+
+    for (const obsoleteClaim of obsoleteClaims) {
+      expect(allGuidance).not.toContain(obsoleteClaim);
+    }
+  });
 });

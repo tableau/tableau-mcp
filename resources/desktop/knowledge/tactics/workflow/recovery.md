@@ -36,19 +36,41 @@ For reversing the **most recent** apply, use `tabdoc:undo` instead — it is fas
 
 The Agent API may report `status: "completed"` even when Tableau shows a GUI error dialog. Use this escalation ladder:
 
-1. **Verify via MCP tools first.** After every apply, use worksheet-list readback or `activate-sheet` to confirm the expected sheets exist. Raw `tabdoc:goto-sheet` is refused at the execute boundary because a bad sheet value can open a blocking Desktop dialog. If a sheet you just added is missing, the apply was silently rejected.
+1. **Inspect a suspected modal with the dedicated dialog tools.** Call
+   `get-active-dialogs`, which uses `GET /v0/app/dialogs`. While an actionable modal
+   is open, ordinary UI-thread `/v0` operations remain blocked; only that route and
+   `POST /v0/app:invokeDialogAction` behind `invoke-dialog-action` are intended for use. Copy
+   the exact returned `objectName`, `title`, and `className`, and choose only an exact
+   action returned for that dialog. If the task or explicit user intent
+   makes that choice unambiguous, call `invoke-dialog-action` once. Never guess, never
+   assume Cancel is safe, and never blindly retry the originating operation. A
+   **action-invoked-dialog-remains** result confirms a side effect, so do not retry the
+   dialog action or originating operation. Ask the user to handle the dialog if
+   either tool is missing or version-gated, the identity or intent is ambiguous, or
+   no action is clearly safe.
 
-2. **Check MCP server logs.** Look for `exec_command_failed`, `fetch failed`, or `Command timed out` entries. These indicate the apply never reached Tableau or was rejected at the API level.
+2. **Verify via ordinary MCP tools only after no actionable modal remains.** Use
+   worksheet-list readback or `activate-sheet` to confirm the expected sheets exist.
+   Raw `tabdoc:goto-sheet` is refused at the execute boundary because a bad sheet
+   value can open a blocking Desktop dialog. If a sheet you just added is missing,
+   the apply was silently rejected. Diagnose and correct the original cause before
+   retrying the apply.
 
-3. **Check Tableau Desktop logs.** The session manager resolves the Tableau repository path on session create (via `tabdoc:get-app-config` with `app-config-enum: "repository-dir"`). The logs directory is at `<repositoryDir>/Logs/`. Key files:
+3. **Check MCP server logs.** Look for `exec_command_failed`, `fetch failed`, or
+   `Command timed out` entries. These indicate the apply never reached Tableau or was
+   rejected at the API level.
+
+4. **Check Tableau Desktop logs.** The session manager resolves the Tableau repository path on session create (via `tabdoc:get-app-config` with `app-config-enum: "repository-dir"`). The logs directory is at `<repositoryDir>/Logs/`. Key files:
    - `log.txt` — main application log (most recent; look for `InformationBox` entries or `Command failed` warnings)
    - `log_1.txt` through `log_N.txt` — rotated logs (check if multiple instances are running)
 
    Search for `"not in a recognizable format"`, `CommandSystemInputsException`, or `Command failed` near the timestamp of the apply attempt. If multiple Tableau Desktop instances are open, each writes to its own set of log files — check the most recent files first and match the PID from your session.
 
-4. **Check the screen (if screen-vision MCP is configured).** Use `get_window_list` to look for Tableau dialog windows — Qt-based modal dialogs are reported to the OS window manager. If a dialog is found, capture it to understand the error.
+5. **Check the screen (if screen-vision MCP is configured).** Use `get_window_list` to look for Tableau dialog windows — Qt-based modal dialogs are reported to the OS window manager. If a dialog is found, capture it to understand the error.
 
-5. **Ask the user.** If you can't determine the error programmatically, ask the user to dismiss any modal dialogs and describe what they see. This is always valid and often fastest.
+6. **Ask the user.** If the dedicated dialog tools cannot establish a safe,
+   unambiguous action, ask the user to dismiss the modal and describe what they see.
+   This conservative fallback is always valid.
 
 ### Diagnose external-API write failures by error class before retrying
 
@@ -96,7 +118,7 @@ Switching to any worksheet triggers a full view-context evaluation that complete
 3. Verify recovery with worksheet-list readback
 
 **Nuclear option — open a fresh instance:**
-If Tableau Desktop is stuck (commands time out, dialogs can't be dismissed, or the workbook is corrupted):
+If Tableau Desktop is stuck (commands time out, no dialog action can be chosen safely, or the workbook is corrupted):
 1. Save the most recent working snapshot to a `.twb` file in a known location
 2. Use `execute_tableau_command` with `tabui:open-workbook` on the backup file, OR ask the user to open it manually
 3. If `list-instances` is absent from the tool list, the session is pinned to the launching Desktop; open the backup in that Desktop, or restart the MCP session against the fresh Desktop
@@ -146,4 +168,4 @@ if (!sheets.includes(expectedNewSheet)) {
 - Source: MCP rollback-snapshot design plus Tableau Desktop log-search and post-apply verification patterns; no customer data
 - Customer-identifying details removed: yes
 - Confidence: SME-reviewed
-- Last reviewed: 2026-07-02
+- Last reviewed: 2026-09-04

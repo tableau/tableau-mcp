@@ -38,14 +38,33 @@ export function formatBudget(budgetMs: number): string {
 }
 
 export const BLOCKING_DIALOG_GUIDANCE =
-  'Desktop is most likely showing a blocking dialog that a person has to dismiss, or the instance is wedged. ' +
-  'Do not retry this call — it will hang against the same dialog. ' +
-  'Tell the user to dismiss any open Tableau dialog, then call list-instances to confirm the session is still reachable and re-target if the pid changed.';
+  'Desktop may be showing a blocking dialog, or the instance may be wedged. Do not blindly ' +
+  'retry the originating operation. Call get-active-dialogs for fresh state. Only when the task ' +
+  'or user intent makes the choice unambiguous, copy the exact returned dialog identity and exact ' +
+  'returned action into at most one invoke-dialog-action call. Do not guess or assume Cancel is ' +
+  'safe, and do not retry invoke-dialog-action after action-invoked-dialog-remains. If inspection times ' +
+  'out, either dialog tool is unavailable or version-gated, the identity or intent is ambiguous, ' +
+  'or no action is clearly safe, ask the user to handle the dialog. After the dialog is handled, ' +
+  'correct its cause before retrying the originating operation, then call list-instances to confirm ' +
+  'the session is still reachable and re-target if the pid changed.';
+
+const GET_ACTIVE_DIALOGS_TIMEOUT_GUIDANCE =
+  'The dialog inspection itself timed out. Do not retry get-active-dialogs, and do not call ' +
+  'invoke-dialog-action without a fresh exact result. Ask the user to inspect and handle any open ' +
+  'Tableau dialog, then call list-instances to confirm the session is still reachable.';
+
+export const INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE =
+  'The invoke-dialog-action outcome is indeterminate: the action may already have been invoked even ' +
+  'though no valid response confirmed the outcome. Do not call invoke-dialog-action again or click ' +
+  'another action. You may call get-active-dialogs once for fresh inspection only; its result does ' +
+  'not prove that the first click did not happen. Ask the user to handle any consequential choice. ' +
+  'If inspection also times out or is unavailable, leave the dialog to the user. Do not retry the ' +
+  'originating operation until the dialog is handled and its cause is corrected.';
 
 /**
- * The agent-facing text for an expired call. It names the budget, says what is most likely
- * wrong, and forbids a blind retry — retrying a call that raised a blocking Desktop dialog
- * just hangs against the same dialog.
+ * The agent-facing text for an expired call. Ordinary calls get exact inspect/act recovery;
+ * dialog-tool timeouts fail more conservatively because inspection cannot safely retry itself
+ * and a timed-out dialog action may already have clicked its button.
  */
 export function desktopCallTimeoutMessage({
   budgetMs,
@@ -59,12 +78,18 @@ export function desktopCallTimeoutMessage({
   const scope = [tool ? `tool: ${tool}` : undefined, session ? `session: ${session}` : undefined]
     .filter(Boolean)
     .join(', ');
+  const guidance =
+    tool === 'invoke-dialog-action'
+      ? INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE
+      : tool === 'get-active-dialogs'
+        ? GET_ACTIVE_DIALOGS_TIMEOUT_GUIDANCE
+        : BLOCKING_DIALOG_GUIDANCE;
 
   return [
     `Tableau Desktop did not respond within ${formatBudget(budgetMs)} and the call was aborted${
       scope ? ` (${scope})` : ''
     }.`,
-    BLOCKING_DIALOG_GUIDANCE,
+    guidance,
   ].join(' ');
 }
 

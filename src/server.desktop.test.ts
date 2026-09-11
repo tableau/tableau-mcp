@@ -438,10 +438,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 65-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 67-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(65);
+    expect(selected).toHaveLength(67);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -479,6 +479,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'undo-workbook',
       'redo-workbook',
       'list-instances',
+      'get-active-dialogs',
+      'invoke-dialog-action',
       'list-available-fields',
       'search-workbook-fields',
       'list-worksheets',
@@ -572,6 +574,18 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
         (tool) => tool.name === 'search-workbook-fields',
       ),
     ).toHaveLength(1);
+  });
+
+  it('registers each dialog tool once in full and dynamic-authoring profiles', () => {
+    const tools = allTools();
+    const fullTools = selectToolsForProfile(tools, 'full');
+    const dynamicTools = selectToolsForProfile(tools, 'dynamic-authoring');
+
+    for (const name of ['get-active-dialogs', 'invoke-dialog-action'] as const) {
+      expect(fullTools.filter((tool) => tool.name === name)).toHaveLength(1);
+      expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has(name)).toBe(true);
+      expect(dynamicTools.filter((tool) => tool.name === name)).toHaveLength(1);
+    }
   });
 
   it('registers refresh-auto-updates once in full and dynamic-authoring profiles', () => {
@@ -718,6 +732,8 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('publish-workbook')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
+    expect(floors.get('get-active-dialogs')).toBe('0.2.13');
+    expect(floors.get('invoke-dialog-action')).toBe('0.2.13');
     expect(floors.get('get-datasource-info')).toBe('0.2.10');
     expect(floors.get('get-datasource-xml')).toBe('0.2.10');
     expect(floors.get('apply-datasource')).toBe('0.2.10');
@@ -792,6 +808,20 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     for (const route of ['export-storyboard-image', 'workbook-export-as']) {
       expect(at26).not.toContain(route);
       expect(at27).toContain(route);
+    }
+  });
+
+  it('a connected 0.2.12 Desktop hides dialog tools and 0.2.13 exposes them', () => {
+    const profileTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'dynamic-authoring',
+    );
+    const at212 = filterToolsByApiVersion(profileTools, '0.2.12').map((tool) => tool.name);
+    const at213 = filterToolsByApiVersion(profileTools, '0.2.13').map((tool) => tool.name);
+
+    for (const name of ['get-active-dialogs', 'invoke-dialog-action'] as const) {
+      expect(at212).not.toContain(name);
+      expect(at213).toContain(name);
     }
   });
 

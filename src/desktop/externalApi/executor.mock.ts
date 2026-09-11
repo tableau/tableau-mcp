@@ -1,3 +1,5 @@
+import { Ok } from 'ts-results-es';
+
 import type { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 
 /**
@@ -24,6 +26,12 @@ export function makeExecutorMock(
     health: vi.fn(),
     getRoot: vi.fn(),
     getApp: vi.fn(),
+    getActiveDialogs: vi
+      .fn<ExternalApiToolExecutor['getActiveDialogs']>()
+      .mockResolvedValue(Ok({ dialogs: [] })),
+    invokeDialogAction: vi
+      .fn<ExternalApiToolExecutor['invokeDialogAction']>()
+      .mockResolvedValue(Ok({ outcome: 'no-active-dialog', dialogs: [] })),
     getSite: vi.fn(),
     listSiteWorkbooks: vi.fn(),
     listSiteDatasources: vi.fn(),

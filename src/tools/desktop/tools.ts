@@ -12,6 +12,7 @@ import { getExecuteTableauCommandTool } from './api/executeTableauCommand.js';
 import { exportDashboardImageTool } from './api/exportDashboardImage.js';
 import { exportStoryboardImageTool } from './api/exportStoryboardImage.js';
 import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
+import { getActiveDialogsTool } from './api/getActiveDialogs.js';
 import { getApiRootTool } from './api/getApiRoot.js';
 import { getAppInfoTool } from './api/getAppInfo.js';
 import { getDashboardInfoTool } from './api/getDashboardInfo.js';
@@ -28,6 +29,7 @@ import { getGetWorkbookXmlTool } from './api/getWorkbookXml.js';
 import { getWorksheetInfoTool } from './api/getWorksheetInfo.js';
 import { getWorksheetUnderlyingDataTool } from './api/getWorksheetUnderlyingData.js';
 import { getGetWorksheetXmlTool } from './api/getWorksheetXml.js';
+import { getInvokeDialogActionTool } from './api/invokeDialogAction.js';
 import { getListDashboardsTool } from './api/listDashboards.js';
 import { getListInstancesTool } from './api/listInstances.js';
 import { getListSiteDatasourcesTool } from './api/listSiteDatasources.js';
@@ -97,6 +99,8 @@ import { getSearchWorkbookExamplesTool } from './local/search/searchWorkbookExam
 
 export const desktopToolFactories = [
   getListInstancesTool,
+  getActiveDialogsTool,
+  getInvokeDialogActionTool,
   getGetWorkbookXmlTool,
   getApplyWorkbookTool,
   getActivateSheetTool,

@@ -39,7 +39,7 @@ Tableau's embedded **web page view** and the **viz-extension sandbox** cannot cr
 - **Search the Exchange before building.** Treat "does a maintained extension already do this?" as a required step. Name the candidate and let the user choose.
 - **Disambiguate the surfaces.** Be explicit about *viz extension* (renders the marks, bound to worksheet encodings) vs *dashboard extension* (an app in a dashboard zone) vs *web page object* (just loads a URL). Picking the wrong one wastes a cycle.
 - **Raise the WebGL caveat early** when the ask is 3D — it changes both "which existing extension" and "how to build."
-- **Factor in automation.** A viz extension can be installed and data-bound programmatically via the authoring API (`apply-workbook`) — the only human step for a never-trusted local extension is a one-time trust approval. When the goal is an automated or agent-driven build, this can tip the choice toward a viz extension over a hand-wired UI flow.
+- **Factor in automation.** A viz extension can be installed and data-bound programmatically via the authoring API (`apply-workbook`). When the user has explicitly asked to install and trust that exact extension, call `get-active-dialogs` for fresh state; only if the returned dialog identity and exact action make the intended choice unambiguous, call `invoke-dialog-action` at most once with those exact returned values. Otherwise use the human fallback and ask the user to handle the trust dialog. When the goal is an automated or agent-driven build, this can tip the choice toward a viz extension over a hand-wired UI flow.
 
 ### When to Say No
 

@@ -232,6 +232,23 @@ export class ExternalApiHttp {
     return this.parseJson(response, schema, signal);
   }
 
+  /** POST of a JSON body whose response must complete synchronously and never be polled. */
+  async postJsonForDirectBody<T extends z.ZodTypeAny>(
+    route: string,
+    body: unknown,
+    schema: T,
+    signal?: AbortSignal,
+    options?: ExternalApiRequestOptions,
+  ): Promise<Result<z.infer<T>, ExternalApiError>> {
+    const response = await this.request('POST', route, {
+      signal,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+      timeoutMs: options?.timeoutMs,
+    });
+    return this.parseDirectJson(response, schema);
+  }
+
   /** Bodyless POST expecting an Operation envelope back (a 202 is polled to terminal). */
   async postEnvelope(
     route: string,
@@ -272,6 +289,36 @@ export class ExternalApiHttp {
     }
 
     return this.parseJson(response, operationEnvelopeSchema);
+  }
+
+  /** Parses a response that must complete synchronously and therefore never follows a 202. */
+  private async parseDirectJson<T extends z.ZodTypeAny>(
+    response: Result<Response, ExternalApiError>,
+    schema: T,
+  ): Promise<Result<z.infer<T>, ExternalApiError>> {
+    if (response.isErr()) {
+      return Err(response.error);
+    }
+
+    const res = response.value;
+    if (res.status === HTTP_ACCEPTED) {
+      return Err({
+        type: 'invalid-response',
+        error: 'A synchronous JSON endpoint unexpectedly returned HTTP 202.',
+      });
+    }
+    if (!res.ok) {
+      return Err(await mapErrorResponse(res));
+    }
+
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch (error) {
+      return Err({ type: 'invalid-response', error });
+    }
+
+    return parseAgainstSchema(json, schema);
   }
 
   /** Blocks on the 202's `Location` until a terminal Operation; a blocking dialog returns `awaiting-user`. */
