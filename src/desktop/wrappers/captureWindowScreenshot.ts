@@ -1,17 +1,4 @@
-import {
-  closeSync,
-  constants,
-  fstatSync,
-  lstatSync,
-  openSync,
-  readdirSync,
-  readSync,
-  realpathSync,
-  rmdirSync,
-  type Stats,
-  statSync,
-  unlinkSync,
-} from 'fs';
+import { constants, type Stats } from 'fs';
 import { tmpdir } from 'os';
 import { dirname, isAbsolute, relative, resolve, sep } from 'path';
 import { Err, Ok, type Result } from 'ts-results-es';
@@ -19,12 +6,15 @@ import { crc32 as zlibCrc32 } from 'zlib';
 import { z } from 'zod';
 
 import { McpToolError } from '../../errors/mcpToolError.js';
+import { type FileSystem, NODE_FILE_SYSTEM } from '../../utils/fileSystem.js';
 import type { WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 
 export const MAX_WINDOW_SCREENSHOT_BYTES = 32 * 1024 * 1024;
+export const MAX_WINDOW_SCREENSHOT_AGGREGATE_BYTES = 64 * 1024 * 1024;
+export const MAX_WINDOW_SCREENSHOT_CANDIDATES = 16;
 const MAX_WINDOW_SCREENSHOT_DIMENSION = 32_768;
 const MAX_WINDOW_SCREENSHOT_PIXELS = 100_000_000;
-const SCREENSHOT_NAME = 'ScreenShot.png';
+const SCREENSHOT_NAME = /^ScreenShot_\d+\.png$/;
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 const screenshotCommandResultSchema = z
@@ -36,41 +26,6 @@ const screenshotCommandResultSchema = z
   })
   .strict();
 
-export interface WindowScreenshotFileSystem {
-  lstat(path: string): Stats;
-  realpath(path: string): string;
-  stat(path: string): Stats;
-  readdir(path: string): string[];
-  open(path: string, flags: number): number;
-  fstat(fd: number): Stats;
-  read(fd: number, maxBytes: number): Buffer;
-  close(fd: number): void;
-  unlink(path: string): void;
-  rmdir(path: string): void;
-}
-
-const DEFAULT_FILE_SYSTEM: WindowScreenshotFileSystem = {
-  lstat: lstatSync,
-  realpath: realpathSync,
-  stat: statSync,
-  readdir: (path) => readdirSync(path),
-  open: openSync,
-  fstat: fstatSync,
-  read: (fd, maxBytes) => {
-    const bytes = Buffer.allocUnsafe(maxBytes + 1);
-    let offset = 0;
-    while (offset < bytes.byteLength) {
-      const count = readSync(fd, bytes, offset, bytes.byteLength - offset, null);
-      if (count === 0) break;
-      offset += count;
-    }
-    return bytes.subarray(0, offset);
-  },
-  close: closeSync,
-  unlink: unlinkSync,
-  rmdir: rmdirSync,
-};
-
 export interface WindowScreenshotCapture {
   bytes: Buffer;
   width: number;
@@ -81,6 +36,10 @@ export class WindowScreenshotCaptureError extends McpToolError {
   constructor(message: string) {
     super({ type: 'window-screenshot-capture-error', message, statusCode: 500 });
   }
+}
+
+interface Candidate extends WindowScreenshotCapture {
+  area: number;
 }
 
 interface ValidatedPath {
@@ -146,7 +105,7 @@ function hasLegalIhdrFormat(data: Buffer): boolean {
   );
 }
 
-function parsePngHeader(bytes: Buffer): { width: number; height: number } {
+function parsePngHeader(bytes: Buffer): { width: number; height: number; area: number } {
   if (!bytes.subarray(0, PNG_SIGNATURE.byteLength).equals(PNG_SIGNATURE)) {
     throw new Error('Invalid PNG header.');
   }
@@ -214,13 +173,13 @@ function parsePngHeader(bytes: Buffer): { width: number; height: number } {
   if (!Number.isSafeInteger(area) || area > MAX_WINDOW_SCREENSHOT_PIXELS) {
     throw new Error('PNG pixel area is outside the supported bounds.');
   }
-  return { width, height };
+  return { width, height, area };
 }
 
 function inspectCandidate(
   path: string,
   canonicalDirectory: string,
-  fileSystem: WindowScreenshotFileSystem,
+  fileSystem: FileSystem,
 ): ValidatedPath {
   const listed = fileSystem.lstat(path);
   if (listed.isSymbolicLink() || !listed.isFile()) {
@@ -240,8 +199,8 @@ function inspectCandidate(
 function readCandidate(
   validatedPath: ValidatedPath,
   canonicalDirectory: string,
-  fileSystem: WindowScreenshotFileSystem,
-): WindowScreenshotCapture {
+  fileSystem: FileSystem,
+): Candidate {
   if (validatedPath.stats.size < 57 || validatedPath.stats.size > MAX_WINDOW_SCREENSHOT_BYTES) {
     throw new Error('Screenshot candidate byte length is outside the supported bounds.');
   }
@@ -255,6 +214,9 @@ function readCandidate(
       throw new Error('Opened screenshot is outside the supported bounds.');
     }
     requireMatchingIdentity(validatedPath.stats, opened);
+    if (opened.size !== validatedPath.stats.size) {
+      throw new Error('Screenshot candidate changed size before open.');
+    }
     validatedPath.stats = opened;
 
     const canonicalPathAfterOpen = fileSystem.realpath(validatedPath.path);
@@ -295,7 +257,7 @@ function cleanCommandArtifacts(
   canonicalDirectory: string,
   directoryStats: Stats,
   validatedPaths: ValidatedPath[],
-  fileSystem: WindowScreenshotFileSystem,
+  fileSystem: FileSystem,
 ): boolean {
   let clean = true;
   for (const validated of validatedPaths) {
@@ -344,15 +306,15 @@ function cleanCommandArtifacts(
 
 export async function captureWindowScreenshot(
   { executor, signal }: WithExecutorAndAbortSignal,
-  fileSystemOverrides: Partial<WindowScreenshotFileSystem> = {},
+  fileSystemOverrides: Partial<FileSystem> = {},
 ): Promise<Result<WindowScreenshotCapture, McpToolError>> {
-  const fileSystem = { ...DEFAULT_FILE_SYSTEM, ...fileSystemOverrides };
+  const fileSystem = { ...NODE_FILE_SYSTEM, ...fileSystemOverrides };
   if (signal.aborted) {
     return failure('Tableau Desktop window capture was cancelled.');
   }
   const commandResult = await executor.executeCommand({
     namespace: 'tabui',
-    command: 'take-active-widget-screenshot',
+    command: 'take-all-screenshots',
     args: { HideMouse: true },
     schema: screenshotCommandResultSchema,
     signal,
@@ -393,44 +355,76 @@ export async function captureWindowScreenshot(
       throw new Error('Returned screenshot directory changed during validation.');
     }
 
-    const names = fileSystem.readdir(canonicalDirectory);
-    if (!names.includes(SCREENSHOT_NAME)) {
+    const names = fileSystem
+      .readdir(canonicalDirectory)
+      .filter((name) => SCREENSHOT_NAME.test(name));
+    if (names.length === 0) {
       outcome = failure('Tableau Desktop did not produce a screenshot.');
+    } else if (names.length > MAX_WINDOW_SCREENSHOT_CANDIDATES) {
+      outcome = failure('Tableau Desktop produced too many screenshot artifacts.');
     } else {
+      names.sort((left, right) => left.localeCompare(right));
       let invalidCandidate = false;
       let cancelled: boolean = cancelledAfterCommand;
-      let validated: ValidatedPath | undefined;
-      try {
-        validated = inspectCandidate(
-          resolve(canonicalDirectory, SCREENSHOT_NAME),
-          canonicalDirectory,
-          fileSystem,
-        );
-        validatedPaths.push(validated);
-      } catch {
-        invalidCandidate = true;
+      let aggregateBytes = 0;
+      for (const name of names) {
+        if (signal.aborted && !cancelledAfterCommand) {
+          cancelled = true;
+          break;
+        }
+        try {
+          const validated = inspectCandidate(
+            resolve(canonicalDirectory, name),
+            canonicalDirectory,
+            fileSystem,
+          );
+          validatedPaths.push(validated);
+          if (validated.stats.size < 57 || validated.stats.size > MAX_WINDOW_SCREENSHOT_BYTES) {
+            invalidCandidate = true;
+          }
+          aggregateBytes += validated.stats.size;
+          if (
+            !Number.isSafeInteger(aggregateBytes) ||
+            aggregateBytes > MAX_WINDOW_SCREENSHOT_AGGREGATE_BYTES
+          ) {
+            invalidCandidate = true;
+          }
+        } catch {
+          invalidCandidate = true;
+        }
       }
 
-      let capture: WindowScreenshotCapture | undefined;
-      if (!invalidCandidate && !cancelled && validated !== undefined) {
-        if (signal.aborted) {
-          cancelled = true;
-        } else {
+      let selected: Candidate | undefined;
+      let selectedIsUnique = true;
+      if (!invalidCandidate && !cancelled) {
+        for (const validated of validatedPaths) {
+          if (signal.aborted) {
+            cancelled = true;
+            break;
+          }
           try {
-            capture = readCandidate(validated, canonicalDirectory, fileSystem);
-            if (signal.aborted) cancelled = true;
+            const candidate = readCandidate(validated, canonicalDirectory, fileSystem);
+            if (selected === undefined || candidate.area > selected.area) {
+              selected = candidate;
+              selectedIsUnique = true;
+            } else if (candidate.area === selected.area) {
+              selectedIsUnique = false;
+            }
           } catch {
             invalidCandidate = true;
           }
         }
+        if (signal.aborted) cancelled = true;
       }
 
       if (cancelled) {
         outcome = failure('Tableau Desktop window capture was cancelled.');
-      } else if (invalidCandidate || capture === undefined) {
+      } else if (invalidCandidate || selected === undefined) {
         outcome = failure('Tableau Desktop produced an invalid screenshot artifact.');
+      } else if (!selectedIsUnique) {
+        outcome = failure('Tableau Desktop produced ambiguous screenshot artifacts.');
       } else {
-        outcome = Ok(capture);
+        outcome = Ok({ bytes: selected.bytes, width: selected.width, height: selected.height });
       }
     }
   } catch {

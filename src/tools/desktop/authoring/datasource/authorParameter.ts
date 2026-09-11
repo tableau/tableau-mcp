@@ -30,7 +30,7 @@ const paramsSchema = {
   datatype: datatypeSchema.default('integer').describe(''),
   value: z.string().describe(''),
   members: z.array(z.string()).optional().describe(''),
-  datasource: z.string().optional().describe(''),
+  datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
 };
 
 type AuthorParameterResult = {
