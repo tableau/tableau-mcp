@@ -27,24 +27,41 @@ export function isOverInlineXmlCap(bytes: number, capBytes: number): boolean {
 export function buildInlineCapFileMessage(params: {
   kind: ArtifactKind;
   label: string;
+  documentNoun?: string;
+  cacheSelector: string | null;
   bytes: number;
   capBytes: number;
   xml: string;
   applyTool: string;
   pathParam: string;
 }): string {
-  const { kind, label, bytes, capBytes, xml, applyTool, pathParam } = params;
+  const {
+    kind,
+    label,
+    documentNoun = 'XML',
+    cacheSelector,
+    bytes,
+    capBytes,
+    xml,
+    applyTool,
+    pathParam,
+  } = params;
+  const readGuidance = cacheSelector
+    ? `pass a ${cacheSelector} selector, or startByte/endByte, to read just a slice`
+    : 'pass startByte/endByte to read just a slice';
+  const writeGuidance = cacheSelector
+    ? 'the same selector splices your edit back into the file'
+    : 'no worksheet/dashboard selector is needed';
   return [
-    `${label} XML is ${bytes} bytes, over the ${capBytes}-byte inline cap. Returned in file mode ` +
+    `${label} ${documentNoun} is ${bytes} bytes, over the ${capBytes}-byte inline cap. Returned in file mode ` +
       'regardless of the requested mode to keep large XML out of the conversation.',
     '',
     'Structural summary:',
     formatArtifactSummary(kind, xml),
     '',
     'Work with the cached file using the server tools (no local filesystem access needed): ' +
-      'read-cached-xml (pass a worksheet/dashboard selector, or startByte/endByte, to read just a ' +
-      'slice), edit that slice, write-cached-xml (same selector splices your edit back into the ' +
-      `file), then call ${applyTool} with ${pathParam} set to the returned file path.`,
+      `read-cached-xml (${readGuidance}), edit that slice, write-cached-xml (${writeGuidance}), ` +
+      `then call ${applyTool} with ${pathParam} set to the returned file path.`,
   ].join('\n');
 }
 

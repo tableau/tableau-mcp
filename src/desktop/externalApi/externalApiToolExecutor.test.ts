@@ -193,6 +193,337 @@ describe('ExternalApiToolExecutor', () => {
     });
   });
 
+  describe('individual datasource routing', () => {
+    it.each([
+      ['Sales%20Extract', '/v0/workbook/datasources/Sales%20Extract'],
+      ['Sales%2FExtract', '/v0/workbook/datasources/Sales%2FExtract'],
+      ['Sales%252FExtract', '/v0/workbook/datasources/Sales%252FExtract'],
+    ])(
+      'routes encoded inventory id %s through all datasource endpoints without changing its segment',
+      async (id, path) => {
+        await server.close();
+        server = await startMockExternalApiServer({
+          workbookDatasources: [
+            {
+              id,
+              name: 'Encoded datasource',
+              caption: 'Encoded datasource',
+              type: 'relational',
+              isExtract: false,
+              futureField: { acceptedAtTransportBoundary: true },
+            },
+          ],
+        });
+        const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+        await executor.start();
+
+        const metadata = await executor.getWorkbookDatasource(id, signal);
+        const document = await executor.getDatasourceDocument(id, signal);
+        const apply = await executor.applyDatasourceDocument(id, '<datasource />', signal);
+
+        expect(metadata.isOk()).toBe(true);
+        expect(metadata.unwrap()).toMatchObject({
+          id,
+          name: 'Encoded datasource',
+          futureField: { acceptedAtTransportBoundary: true },
+        });
+        expect(document.isOk()).toBe(true);
+        expect(apply.isOk()).toBe(true);
+        expect(server.requests).toMatchObject([
+          { method: 'GET', path },
+          { method: 'GET', path: `${path}/document` },
+          { method: 'POST', path: `${path}/document`, body: '<datasource />' },
+        ]);
+        expect(server.requests.map((request) => request.path)).not.toContain(
+          '/v0/workbook/document',
+        );
+      },
+    );
+
+    it('gets one datasource metadata object through the loopback handler', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getWorkbookDatasource('wb-ds-superstore', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        id: 'wb-ds-superstore',
+        luid: 'luid-superstore',
+        name: 'Sample - Superstore',
+        type: 'relational',
+        isExtract: true,
+      });
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/datasources/wb-ds-superstore');
+    });
+
+    it('gets the bare datasource document without fetching the workbook document', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getDatasourceDocument('wb-ds-superstore', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        xml: expect.stringContaining('<datasource name="Sample - Superstore"'),
+        applicationVersion: '2026.1',
+        xsdPayloadVersion: '2026.1.0',
+      });
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'GET',
+        path: '/v0/workbook/datasources/wb-ds-superstore/document',
+      });
+      expect(server.requests.map((request) => request.path)).not.toContain('/v0/workbook/document');
+    });
+
+    it('posts the datasource document bytes unchanged with an XML content type and no workbook fallback', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+      const xml = '  <?xml version="1.0"?>\n<datasource name="Sample - Superstore" />\n  ';
+
+      const result = await executor.applyDatasourceDocument('wb-ds-superstore', xml, signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().status).toBe('completed');
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'POST',
+        path: '/v0/workbook/datasources/wb-ds-superstore/document',
+        contentType: 'application/xml',
+        body: xml,
+      });
+      expect(server.requests.map((request) => request.path)).not.toContain('/v0/workbook/document');
+    });
+
+    it('preserves datasource apply warnings', async () => {
+      const path = '/v0/workbook/datasources/wb-ds-superstore/document';
+      server.setOverride(`POST ${path}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-datasource-warning',
+          kind: 'datasource.document.apply',
+          state: 'SUCCEEDED',
+          warnings: [{ code: 'datasource-warning', message: 'Applied with a warning.' }],
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.applyDatasourceDocument(
+        'wb-ds-superstore',
+        '<datasource />',
+        signal,
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().warnings).toEqual([
+        { code: 'datasource-warning', message: 'Applied with a warning.' },
+      ]);
+      expect(server.requests.at(-1)?.path).toBe(path);
+    });
+
+    it('polls an asynchronous datasource document read to its terminal document', async () => {
+      const path = '/v0/workbook/datasources/wb-ds-superstore/document';
+      server.setOverride(`GET ${path}`, {
+        status: 202,
+        contentType: 'application/json',
+        headers: {
+          location: '/v0/operations/op-datasource-read',
+          'retry-after': '0',
+          'x-tableau-operation-id': 'op-datasource-read',
+        },
+        body: JSON.stringify({
+          id: 'op-datasource-read',
+          kind: 'datasource.getDocument',
+          state: 'RUNNING',
+        }),
+      });
+      server.setOperation('op-datasource-read', {
+        retryAfterSeconds: 0,
+        poll: [
+          { id: 'op-datasource-read', kind: 'datasource.getDocument', state: 'RUNNING' },
+          {
+            id: 'op-datasource-read',
+            kind: 'datasource.getDocument',
+            state: 'SUCCEEDED',
+            result: { document: '<datasource name="Async" />' },
+          },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getDatasourceDocument('wb-ds-superstore', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().xml).toBe('<datasource name="Async" />');
+      expect(server.requests[0]?.path).toBe(path);
+      expect(server.requests.map((request) => request.path)).not.toContain('/v0/workbook/document');
+    });
+
+    it('polls an asynchronous datasource apply and preserves terminal warnings', async () => {
+      const path = '/v0/workbook/datasources/wb-ds-superstore/document';
+      server.setOverride(`POST ${path}`, {
+        status: 202,
+        contentType: 'application/json',
+        headers: {
+          location: '/v0/operations/op-datasource-apply',
+          'retry-after': '0',
+          'x-tableau-operation-id': 'op-datasource-apply',
+        },
+        body: JSON.stringify({
+          id: 'op-datasource-apply',
+          kind: 'datasource.document.apply',
+          state: 'RUNNING',
+        }),
+      });
+      server.setOperation('op-datasource-apply', {
+        retryAfterSeconds: 0,
+        poll: [
+          { id: 'op-datasource-apply', kind: 'datasource.document.apply', state: 'RUNNING' },
+          {
+            id: 'op-datasource-apply',
+            kind: 'datasource.document.apply',
+            state: 'SUCCEEDED',
+            warnings: [{ code: 'async-warning', message: 'Terminal apply warning.' }],
+          },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.applyDatasourceDocument(
+        'wb-ds-superstore',
+        '<datasource />',
+        signal,
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        status: 'completed',
+        warnings: [{ code: 'async-warning', message: 'Terminal apply warning.' }],
+      });
+      expect(server.requests[0]?.body).toBe('<datasource />');
+      expect(server.requests.map((request) => request.path)).not.toContain('/v0/workbook/document');
+    });
+
+    it.each([
+      [404, 'datasource-not-found'],
+      [409, 'datasource-target-mismatch'],
+      [415, 'unsupported-content-type'],
+      [422, 'invalid-datasource-document'],
+    ])(
+      'maps a %i datasource Problem response through the command error contract',
+      async (status, code) => {
+        const path = '/v0/workbook/datasources/wb-ds-superstore/document';
+        server.setOverride(`POST ${path}`, {
+          status,
+          contentType: 'application/problem+json',
+          body: JSON.stringify({
+            type: 'problem',
+            title: `Datasource apply failed: ${code}`,
+            status,
+            instance: '/v0/mock',
+            detail: `Datasource apply failed: ${code}`,
+            code,
+          }),
+        });
+        const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+        await executor.start();
+
+        const result = await executor.applyDatasourceDocument(
+          'wb-ds-superstore',
+          '<datasource />',
+          signal,
+        );
+
+        expect(result.isErr()).toBe(true);
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-failed');
+        if (error.type === 'command-failed') {
+          expect(error.error?.code).toBe(code);
+          expect(error.error?.message).toBe(`Datasource apply failed: ${code}`);
+        }
+        expect(server.requests.at(-1)?.path).toBe(path);
+      },
+    );
+
+    it('maps a failed datasource Operation envelope through the command error contract', async () => {
+      const path = '/v0/workbook/datasources/wb-ds-superstore/document';
+      server.setOverride(`POST ${path}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-datasource-failed',
+          kind: 'datasource.document.apply',
+          state: 'FAILED',
+          error: { code: 'operation-failed', message: 'Datasource operation failed.' },
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.applyDatasourceDocument(
+        'wb-ds-superstore',
+        '<datasource />',
+        signal,
+      );
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error).toMatchObject({
+          code: 'operation-failed',
+          message: 'Datasource operation failed.',
+        });
+      }
+    });
+
+    it('uses datasource-specific not-found responses for metadata and document routes', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const metadata = await executor.getWorkbookDatasource('missing-datasource', signal);
+      const document = await executor.getDatasourceDocument('missing-datasource', signal);
+      const apply = await executor.applyDatasourceDocument(
+        'missing-datasource',
+        '<datasource />',
+        signal,
+      );
+
+      for (const result of [metadata, document, apply]) {
+        expect(result.isErr()).toBe(true);
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-failed');
+        if (error.type === 'command-failed') {
+          expect(error.error?.code).toBe('datasource-not-found');
+        }
+      }
+    });
+
+    it('rejects invalid datasource document requests in the loopback handler', async () => {
+      const url = `${server.baseUrl}/v0/workbook/datasources/wb-ds-superstore/document`;
+      const headers = { authorization: 'Bearer valid-token' };
+
+      const unsupported = await fetch(url, {
+        method: 'POST',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body: '{}',
+      });
+      const empty = await fetch(url, {
+        method: 'POST',
+        headers: { ...headers, 'content-type': 'application/xml' },
+        body: '',
+      });
+
+      expect(unsupported.status).toBe(415);
+      expect(await unsupported.json()).toMatchObject({ code: 'unsupported-content-type' });
+      expect(empty.status).toBe(400);
+      expect(await empty.json()).toMatchObject({ code: 'invalid-request-body' });
+    });
+  });
+
   describe('executeCommand routing', () => {
     it('routes any other command to POST /v0/app:invokeCommand', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });

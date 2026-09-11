@@ -46,6 +46,7 @@ describe('inlineXmlCap', () => {
       const message = buildInlineCapFileMessage({
         kind: 'workbook',
         label: 'Workbook',
+        cacheSelector: 'worksheet/dashboard',
         bytes: 40000,
         capBytes: 16384,
         xml,
@@ -62,6 +63,7 @@ describe('inlineXmlCap', () => {
       const message = buildInlineCapFileMessage({
         kind: 'workbook',
         label: 'Workbook',
+        cacheSelector: 'worksheet/dashboard',
         bytes: 40000,
         capBytes: 16384,
         xml,
@@ -77,6 +79,7 @@ describe('inlineXmlCap', () => {
       const message = buildInlineCapFileMessage({
         kind: 'workbook',
         label: 'Workbook',
+        cacheSelector: 'worksheet/dashboard',
         bytes: 40000,
         capBytes: 16384,
         xml,
@@ -88,6 +91,26 @@ describe('inlineXmlCap', () => {
       expect(message).toContain('apply-workbook');
       expect(message).toContain('workbookFile');
       expect(message).not.toContain('mode=');
+    });
+
+    it('supports a datasource document workflow without a sheet selector', () => {
+      const message = buildInlineCapFileMessage({
+        kind: 'datasource',
+        label: 'Datasource "Sales"',
+        documentNoun: 'document',
+        cacheSelector: null,
+        bytes: 40000,
+        capBytes: 16384,
+        xml: '<datasource name="Sales"/>',
+        applyTool: 'apply-datasource',
+        pathParam: 'datasourceFile',
+      });
+
+      expect(message).toContain('Datasource "Sales" document is 40000 bytes');
+      expect(message).toContain('startByte/endByte');
+      expect(message).toContain('no worksheet/dashboard selector is needed');
+      expect(message).toContain('apply-datasource');
+      expect(message).toContain('datasourceFile');
     });
   });
 

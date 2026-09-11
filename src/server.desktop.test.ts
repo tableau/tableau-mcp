@@ -438,10 +438,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 62-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 65-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(62);
+    expect(selected).toHaveLength(65);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -469,6 +469,9 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'get-summary-data',
       'get-workbook-inventory',
       'list-workbook-datasources',
+      'get-datasource-info',
+      'get-datasource-xml',
+      'apply-datasource',
       'activate-sheet',
       'delete-sheet',
       'rename-sheet',
@@ -715,7 +718,37 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('publish-workbook')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
+    expect(floors.get('get-datasource-info')).toBe('0.2.10');
+    expect(floors.get('get-datasource-xml')).toBe('0.2.10');
+    expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
+  });
+
+  it('gates all individual datasource tools at 0.2.10 and fails open for an unknown version', () => {
+    const profileTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'dynamic-authoring',
+    );
+    const featureNames = ['get-datasource-info', 'get-datasource-xml', 'apply-datasource'] as const;
+    const at209 = filterToolsByApiVersion(profileTools, '0.2.9').map((tool) => tool.name);
+    const at210 = filterToolsByApiVersion(profileTools, '0.2.10').map((tool) => tool.name);
+    const unknown = filterToolsByApiVersion(profileTools, undefined);
+
+    for (const name of featureNames) {
+      expect(at209).not.toContain(name);
+      expect(at210).toContain(name);
+    }
+    expect(unknown).toBe(profileTools);
+  });
+
+  it('registers each individual datasource factory exactly once', () => {
+    const featureNames = new Set(['get-datasource-info', 'get-datasource-xml', 'apply-datasource']);
+    const names = desktopToolFactories
+      .map((factory) => factory(new DesktopMcpServer()).name)
+      .filter((name) => featureNames.has(name));
+
+    expect(names).toHaveLength(3);
+    expect(new Set(names)).toEqual(featureNames);
   });
 
   it('gates start-page visibility below External Client API 0.2.11', () => {

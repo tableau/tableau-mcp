@@ -36,6 +36,8 @@ import {
   dashboardPauseAutoUpdatesRoute,
   dashboardResumeAutoUpdatesRoute,
   dashboardRoute,
+  DatasourceItem,
+  datasourceItemSchema,
   DatasourceList,
   datasourceListSchema,
   datasourceRefreshDataRoute,
@@ -76,6 +78,8 @@ import {
   validationResultSchema,
   WindowInfo,
   workbookDashboardsNewRoute,
+  workbookDatasourceDocumentRoute,
+  workbookDatasourceRoute,
   WorkbookInventory,
   workbookInventorySchema,
   workbookStoryboardsNewRoute,
@@ -361,6 +365,15 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async getWorkbookDatasource(
+    datasourceId: string,
+    signal: AbortSignal,
+  ): Promise<Result<DatasourceItem, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(workbookDatasourceRoute(datasourceId), datasourceItemSchema, signal),
+    );
+  }
+
   async getWorksheet(
     worksheetId: string,
     signal: AbortSignal,
@@ -396,6 +409,15 @@ export class ExternalApiToolExecutor {
       if (result.isErr()) return result;
       return Ok({ ...result.value, instanceId: http.instanceId });
     });
+  }
+
+  async getDatasourceDocument(
+    datasourceId: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getXml(workbookDatasourceDocumentRoute(datasourceId), signal),
+    );
   }
 
   async getWorksheetDocument(
@@ -526,6 +548,17 @@ export class ExternalApiToolExecutor {
       (http) => http.postXmlEnvelope(EXTERNAL_API_ROUTES.workbookDocument, xml, signal),
       'apply-workbook-document',
       options,
+    );
+  }
+
+  async applyDatasourceDocument(
+    datasourceId: string,
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postXmlEnvelope(workbookDatasourceDocumentRoute(datasourceId), xml, signal),
+      'apply-datasource-document',
     );
   }
 
