@@ -49,8 +49,8 @@ import {
  * `datasources/{id}:refreshData`/`:refreshExtract`, `workbook:exportAs`,
  * `storyboards/{id}/image`, `DatasourceItem.type`/`isExtract`/`hasDownloadFilePermission`,
  * required `index`/`type`/`StoryboardItem.storyPointCount`, `unsupported-target-version`).
- * The worksheet `:refreshNow` path and `info.version` 0.2.11 were projected from
- * monolith commit bf2dd5441de9c33dc51934f1b6f2209038486093 because no live 0.2.11
+ * The worksheet `:refreshNow` path and `info.version` 0.2.13 were projected from
+ * monolith PR #64791 at commit 364d19f2e624c1859afebc34367e15c1e4b95e99 because no live 0.2.13
  * capture was available; the rest of the fixture remains the live 0.2.9 capture.
  */
 
@@ -126,7 +126,7 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
   ImageExport: ['width', 'height'],
 };
 
-describe('external client API contract (captured 0.2.9 plus projected 0.2.11 route)', () => {
+describe('external client API contract (captured 0.2.9 plus projected 0.2.13 route)', () => {
   describe('Operation ↔ operationEnvelopeSchema', () => {
     const operation = specSchema('Operation');
 
@@ -380,8 +380,8 @@ describe('external client API contract (captured 0.2.9 plus projected 0.2.11 rou
       expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
     });
 
-    it('projects the 0.2.11 worksheet refresh-now Operation contract', () => {
-      expect(spec.info.version).toBe('0.2.11');
+    it('projects the 0.2.13 worksheet refresh-now Operation contract', () => {
+      expect(spec.info.version).toBe('0.2.13');
 
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetRefreshNow] as {
         post?: {

@@ -25,7 +25,7 @@ export const getRefreshAutoUpdatesTool = (
   const refreshAutoUpdatesTool = new DesktopTool({
     server,
     name: 'refresh-auto-updates',
-    minApiVersion: '0.2.11',
+    minApiVersion: '0.2.13',
     title,
     description:
       'Run pending automatic updates for one worksheet now. Use after batching edits with pause-auto-updates.',

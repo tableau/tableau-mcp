@@ -34,7 +34,7 @@ describe('refresh-auto-updates', () => {
     const tool = getRefreshAutoUpdatesTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('refresh-auto-updates');
-    expect(tool.minApiVersion).toBe('0.2.11');
+    expect(tool.minApiVersion).toBe('0.2.13');
     expect(tool.annotations).toEqual({
       readOnlyHint: false,
       destructiveHint: false,
@@ -284,7 +284,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-refresh-auto-updates',
-    apiVersion: '0.2.11',
+    apiVersion: '0.2.13',
   };
 }
 
