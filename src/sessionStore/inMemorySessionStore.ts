@@ -90,6 +90,9 @@ export class InMemorySessionStore<V> implements SessionStore<V> {
         this.scheduleSet(key, value, remaining);
       }
     }, CHUNK_MS);
+    // This is a long-lived background re-arm timer; it must not keep the Node event loop alive
+    // (and thus block process shutdown) just because a chunk boundary is still pending.
+    timer.unref();
     this.refreshTimers.set(key, timer);
   }
 

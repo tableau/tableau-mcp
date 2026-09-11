@@ -1,3 +1,4 @@
+import { ExpiringMap } from '../utils/expiringMap.js';
 import { InMemorySessionStore } from './inMemorySessionStore.js';
 
 describe('InMemorySessionStore', () => {
@@ -126,5 +127,35 @@ describe('InMemorySessionStore', () => {
 
     await expect(store.get('a')).resolves.toBeUndefined();
     await expect(store.get('b')).resolves.toBe(2);
+  });
+
+  it('caps the chunked entry ttl at exactly MAX_SIGNED_INT32 (ExpiringMaps hard limit)', async () => {
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000; // exceeds the chunk threshold, so scheduleSet chunks
+    const store = new InMemorySessionStore<string>({ ttlMs: thirtyDaysMs });
+
+    // Observe the expiration passed into the backing ExpiringMap for the (chunked) set.
+    const setSpy = vi.spyOn((store as unknown as { map: ExpiringMap<string, string> }).map, 'set');
+    await store.set('key', 'value');
+
+    // The chunked path must store the entry with an expiration of exactly 2**31 - 1 -- the largest
+    // value ExpiringMap accepts. CHUNK_MS + REFRESH_MARGIN_MS is algebraically that cap today; this
+    // locks it in so a future REFRESH_MARGIN_MS change that broke the derivation fails here instead
+    // of throwing at runtime when ExpiringMap rejects an over-cap expiration.
+    expect(setSpy).toHaveBeenCalledTimes(1);
+    expect(setSpy.mock.calls[0][2]).toBe(2 ** 31 - 1);
+  });
+
+  it('unrefs the chunk re-arm timer so it does not keep the event loop alive on shutdown', async () => {
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000; // exceeds the chunk threshold, so scheduleSet re-arms
+    const store = new InMemorySessionStore<string>({ ttlMs: thirtyDaysMs });
+    await store.set('key', 'value');
+
+    // The pending re-arm timer must be unref'd: a ref'd timer would hold the Node event loop open
+    // and block process shutdown while a chunk boundary is still pending. hasRef() reports that state.
+    const reArmTimer = (
+      store as unknown as { refreshTimers: Map<string, NodeJS.Timeout> }
+    ).refreshTimers.get('key');
+    expect(reArmTimer).toBeDefined();
+    expect(reArmTimer?.hasRef()).toBe(false);
   });
 });
