@@ -3,6 +3,10 @@ import { toolNames } from './toolName.js';
 import { isWebToolName, webToolNames } from './web/toolName.js';
 
 describe('ToolName', () => {
+  it('recognizes capture-window-screenshot as a Desktop tool name', () => {
+    expect(isDesktopToolName('capture-window-screenshot')).toBe(true);
+  });
+
   it('should verify all tool names are unique and accounted for', () => {
     const variants = {
       desktop: {

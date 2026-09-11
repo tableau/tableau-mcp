@@ -179,6 +179,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'get-summary-data',
     'list-worksheet-logical-tables',
     'get-worksheet-underlying-data',
+    'capture-window-screenshot',
     'get-workbook-inventory',
     'list-workbook-datasources',
     'refresh-datasource-data',
