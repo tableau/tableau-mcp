@@ -215,6 +215,23 @@ export class ExternalApiHttp {
     return this.parseEnvelope(response, signal);
   }
 
+  /** POST of a JSON body whose response is a schema-validated JSON body, not an operation. */
+  async postJsonForBody<T extends z.ZodTypeAny>(
+    route: string,
+    body: unknown,
+    schema: T,
+    signal?: AbortSignal,
+    options?: ExternalApiRequestOptions,
+  ): Promise<Result<z.infer<T>, ExternalApiError>> {
+    const response = await this.request('POST', route, {
+      signal,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+      timeoutMs: options?.timeoutMs,
+    });
+    return this.parseJson(response, schema, signal);
+  }
+
   /** Bodyless POST expecting an Operation envelope back (a 202 is polled to terminal). */
   async postEnvelope(
     route: string,
