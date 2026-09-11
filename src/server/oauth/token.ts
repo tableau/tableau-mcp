@@ -178,11 +178,10 @@ export function token(
         case 'refresh_token': {
           // Handle refresh token
           const { refreshToken } = result.data;
-          const tokenData = await refreshTokens.get(refreshToken);
+          const tokenData = await refreshTokens.consume(refreshToken);
           if (!tokenData || tokenData.expiresAt < Math.floor(Date.now() / 1000)) {
             // Refresh token is expired
             if (tokenData) await refreshTokenIndex.delete(tokenData.tokens.accessToken);
-            await refreshTokens.delete(refreshToken);
             res.status(400).json({
               error: 'invalid_grant',
               error_description: 'Invalid or expired refresh token',
