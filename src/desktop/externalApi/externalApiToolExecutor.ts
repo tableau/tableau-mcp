@@ -89,6 +89,7 @@ import {
   worksheetLogicalTableDataRoute,
   worksheetLogicalTablesRoute,
   worksheetPauseAutoUpdatesRoute,
+  worksheetRefreshNowRoute,
   worksheetResumeAutoUpdatesRoute,
   worksheetRoute,
   WorksheetSort,
@@ -639,6 +640,16 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postEnvelope(worksheetResumeAutoUpdatesRoute(worksheetId), signal),
       'resume-worksheet-auto-updates',
+    );
+  }
+
+  async refreshWorksheetNow(
+    worksheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(worksheetRefreshNowRoute(worksheetId), signal),
+      'refresh-worksheet-now',
     );
   }
 
