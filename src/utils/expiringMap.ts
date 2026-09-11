@@ -2,16 +2,22 @@ export class ExpiringMap<K, V> extends Map<K, V> {
   private timeouts: Map<K, NodeJS.Timeout>;
   private expirationTimeMs: number;
   private maxSize: number | null;
+  private onDelete?: (key: K) => void;
 
   constructor({
     defaultExpirationTimeMs,
     maxSize,
+    onDelete,
   }: {
     defaultExpirationTimeMs: number;
     // Optional cap on the number of entries. Unbounded by default so existing callers (adminGate,
     // project-name cache) are unaffected. When set and exceeded on set(), the oldest inserted key
     // (Map insertion order) is evicted, clearing its timeout.
     maxSize?: number;
+    // Optional hook invoked whenever a key is actually removed -- via natural expiry, maxSize
+    // eviction, or an explicit delete(). Lets a composing owner (e.g. InMemorySessionStore) clean
+    // up its own per-key state for evictions it never initiated and could not otherwise observe.
+    onDelete?: (key: K) => void;
   }) {
     super();
 
@@ -31,6 +37,7 @@ export class ExpiringMap<K, V> extends Map<K, V> {
     this.timeouts = new Map();
     this.expirationTimeMs = defaultExpirationTimeMs;
     this.maxSize = maxSize ?? null;
+    this.onDelete = onDelete;
   }
 
   get defaultExpirationTimeMs(): number {
@@ -83,7 +90,12 @@ export class ExpiringMap<K, V> extends Map<K, V> {
       this.timeouts.delete(key);
     }
 
-    return super.delete(key);
+    const deleted = super.delete(key);
+    if (deleted) {
+      this.onDelete?.(key);
+    }
+
+    return deleted;
   };
 
   clear = (): void => {

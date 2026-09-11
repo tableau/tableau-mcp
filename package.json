@@ -26,6 +26,9 @@
     },
     "./telemetry/telemetryProvider": {
       "types": "./build/telemetry/telemetryProvider.d.ts"
+    },
+    "./sessionStore/sessionStore": {
+      "types": "./build/sessionStore/sessionStore.d.ts"
     }
   },
   "scripts": {

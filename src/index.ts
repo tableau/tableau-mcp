@@ -13,6 +13,7 @@ import { isNotificationLevel, notifier, setNotificationLevel } from './logging/n
 import { RestApi } from './sdks/tableau/restApi.js';
 import { WebMcpServer } from './server.web.js';
 import { startExpressServer } from './server/express.js';
+import { initializeSessionStore } from './sessionStore/init.js';
 
 const serverVersion = pkg.version;
 
@@ -24,6 +25,9 @@ async function startServer(): Promise<void> {
 
   // Initialize feature gate provider
   initializeFeatureGate();
+
+  // Initialize session store provider
+  initializeSessionStore();
 
   // Start fetching server info immediately but don't block the port from opening.
   // Any failure here is fatal and logged explicitly -- no silent failures.
