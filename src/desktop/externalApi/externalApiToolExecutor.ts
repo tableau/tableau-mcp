@@ -63,6 +63,8 @@ import {
   siteSchema,
   SiteWorkbookList,
   siteWorkbookListSchema,
+  StartPageVisibility,
+  startPageVisibilitySchema,
   storyboardDocumentRoute,
   storyboardImageRoute,
   StoryboardItem,
@@ -473,6 +475,24 @@ export class ExternalApiToolExecutor {
         signal,
       ),
     );
+  }
+
+  async setStartPageVisibility(
+    isStartPageVisible: boolean,
+    signal: AbortSignal,
+  ): Promise<Result<StartPageVisibility, ExecuteCommandError>> {
+    const result = await this.withRescan('command', (http) =>
+      http.postJsonForBody(
+        EXTERNAL_API_ROUTES.appToggleStartPage,
+        { isStartPageVisible },
+        startPageVisibilitySchema,
+        signal,
+      ),
+    );
+    if (result.isErr()) {
+      return Err(mapClientError(result.error, this.deps.pid));
+    }
+    return Ok(result.value);
   }
 
   async exportWorksheetImage(

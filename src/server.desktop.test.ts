@@ -438,10 +438,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 64-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 65-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(64);
+    expect(selected).toHaveLength(65);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -489,6 +489,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'add-dashboard',
       'add-storyboard',
       'open-file',
+      'set-start-page-visibility',
       'save-workbook',
       'workbook-export-as',
       'publish-workbook',
@@ -536,6 +537,29 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);
     }
+  });
+
+  it('exposes start-page visibility in dynamic and full surfaces, not specialized profiles', () => {
+    const tools = allTools();
+
+    expect(selectToolsForProfile(tools, '').map((tool) => tool.name)).toContain(
+      'set-start-page-visibility',
+    );
+    expect(selectToolsForProfile(tools, 'dynamic-authoring').map((tool) => tool.name)).toContain(
+      'set-start-page-visibility',
+    );
+    expect(selectToolsForProfile(tools, 'full').map((tool) => tool.name)).toContain(
+      'set-start-page-visibility',
+    );
+    expect(selectToolsForProfile(tools, 'combined-lean').map((tool) => tool.name)).toContain(
+      'set-start-page-visibility',
+    );
+    expect(selectToolsForProfile(tools, 'demo').map((tool) => tool.name)).not.toContain(
+      'set-start-page-visibility',
+    );
+    expect(selectToolsForProfile(tools, 'spec-loop').map((tool) => tool.name)).not.toContain(
+      'set-start-page-visibility',
+    );
   });
 
   it('registers search-workbook-fields once in full and dynamic-authoring profiles', () => {
@@ -697,6 +721,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('get-datasource-info')).toBe('0.2.10');
     expect(floors.get('get-datasource-xml')).toBe('0.2.10');
     expect(floors.get('apply-datasource')).toBe('0.2.10');
+    expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
   });
 
   it('gates all individual datasource tools at 0.2.10 and fails open for an unknown version', () => {
@@ -724,6 +749,15 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
 
     expect(names).toHaveLength(3);
     expect(new Set(names)).toEqual(featureNames);
+  });
+
+  it('gates start-page visibility below External Client API 0.2.11', () => {
+    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
+    const at210 = filterToolsByApiVersion(tools, '0.2.10').map((tool) => tool.name);
+    const at211 = filterToolsByApiVersion(tools, '0.2.11').map((tool) => tool.name);
+
+    expect(at210).not.toContain('set-start-page-visibility');
+    expect(at211).toContain('set-start-page-visibility');
   });
 
   it('a connected 0.2.5 Desktop hides only the 0.2.6 tools from the profile surface', () => {
