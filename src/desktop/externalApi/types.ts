@@ -55,6 +55,7 @@ export const EXTERNAL_API_ROUTES = {
   worksheetSort: '/v0/workbook/worksheets/{id}:sort',
   worksheetPauseAutoUpdates: '/v0/workbook/worksheets/{id}:pauseAutoUpdates',
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
+  worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
   site: '/v0/site',
   siteDatasources: '/v0/site/datasources',
   siteWorkbooks: '/v0/site/workbooks',
@@ -240,6 +241,10 @@ export function worksheetPauseAutoUpdatesRoute(worksheetId: string): string {
 
 export function worksheetResumeAutoUpdatesRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:resumeAutoUpdates`;
+}
+
+export function worksheetRefreshNowRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}:refreshNow`;
 }
 
 export function dashboardPauseAutoUpdatesRoute(dashboardId: string): string {

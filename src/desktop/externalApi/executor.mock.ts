@@ -67,6 +67,7 @@ export function makeExecutorMock(
     goToSheet: vi.fn(),
     pauseWorksheetAutoUpdates: vi.fn(),
     resumeWorksheetAutoUpdates: vi.fn(),
+    refreshWorksheetNow: vi.fn(),
     pauseDashboardAutoUpdates: vi.fn(),
     resumeDashboardAutoUpdates: vi.fn(),
   };

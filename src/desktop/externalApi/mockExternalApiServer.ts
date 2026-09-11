@@ -824,6 +824,17 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const refreshNowMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+):refreshNow$/);
+    if (method === 'POST' && refreshNowMatch) {
+      const worksheetId = decodeURIComponent(refreshNowMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendOperation(res, 'refresh-worksheet-now');
+      return;
+    }
+
     if (method === 'POST' && path === EXTERNAL_API_ROUTES.appOpenFile) {
       let parsed: { filePath?: unknown };
       try {
