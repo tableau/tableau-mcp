@@ -29,6 +29,7 @@ type JwtScopes =
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
+  | 'tableau:entitlements:read'
   | 'tableau:views:download'
   | 'tableau:views:embed'
   | 'tableau:insight_brief:create'
