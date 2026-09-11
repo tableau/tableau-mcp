@@ -11,6 +11,7 @@ const CREDENTIAL_ATTRIBUTE_NAMES = new Set([
   'passwd',
   'password',
   'privatekey',
+  'pwd',
   'refreshtoken',
   'secret',
   'secretaccesskey',
@@ -20,7 +21,7 @@ const CREDENTIAL_ATTRIBUTE_NAMES = new Set([
 ]);
 
 const CREDENTIAL_NAME_SUFFIXES = [...CREDENTIAL_ATTRIBUTE_NAMES];
-const ATTRIBUTE_PARAMETER = /(?:^|[?&;])([^?=&#;\s]+)=([^&#;\s]*)/g;
+const ATTRIBUTE_PARAMETER = /(?:^|[?&;])\s*([^?=&#;\s]+)\s*=\s*([^&#;\s]*)/g;
 const XML_TAG = /<(?:[^"'<>]|"[^"]*"|'[^']*')*>/g;
 const XML_ATTRIBUTE = /(\s+)([^\s=/>]+)(\s*=\s*)(["'])(.*?)\4/g;
 

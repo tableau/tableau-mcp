@@ -40,6 +40,8 @@ describe('redactDatasourceCredentials', () => {
   it.each([
     ['url', 'https://example.invalid/data?access_token=url-secret&safe=value'],
     ['connection-string', 'Server=example.invalid;Password=connection-secret;Database=safe'],
+    ['connection-string', 'Server=example.invalid; Password = whitespace-secret;Database=safe'],
+    ['odbc-connect-string', 'UID=user;PWD=pwd-secret'],
     ['properties', 'safe=value&oauth%5Faccess%5Ftoken=encoded-secret'],
   ])('redacts the complete %s attribute when its value embeds credentials', (name, value) => {
     const xml = `<datasource><connection ${name}="${value}" class="safe"/></datasource>`;
@@ -50,6 +52,8 @@ describe('redactDatasourceCredentials', () => {
     expect(redacted).not.toContain(value);
     expect(redacted).not.toContain('url-secret');
     expect(redacted).not.toContain('connection-secret');
+    expect(redacted).not.toContain('whitespace-secret');
+    expect(redacted).not.toContain('pwd-secret');
     expect(redacted).not.toContain('encoded-secret');
   });
 });

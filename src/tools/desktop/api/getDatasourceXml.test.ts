@@ -149,18 +149,23 @@ describe('getGetDatasourceXmlTool', () => {
   it('returns a small datasource document inline without credential values', async () => {
     const xml =
       '<datasource name="Sales"><connection oauth-access-token="inline-secret" ' +
-      'url="https://example.invalid?access_token=embedded-inline-secret"/>' +
+      'url="https://example.invalid?access_token=embedded-inline-secret" ' +
+      'connection-string="Server=example.invalid; Password = whitespace-inline-secret" ' +
+      'odbc-connect-string="UID=user;PWD=pwd-inline-secret"/>' +
       '<column name="[Sales]"/></datasource>';
     const { result } = await invoke({ datasourceName: 'Sales', mode: 'inline', xml });
 
     expect(result.isError).toBe(false);
     const body = resultBody(result);
     expect(body.datasourceXml).toBe(
-      '<datasource name="Sales"><connection oauth-access-token="" url=""/>' +
+      '<datasource name="Sales"><connection oauth-access-token="" url="" ' +
+        'connection-string="" odbc-connect-string=""/>' +
         '<column name="[Sales]"/></datasource>',
     );
     expect(resultText(result)).not.toContain('inline-secret');
     expect(resultText(result)).not.toContain('embedded-inline-secret');
+    expect(resultText(result)).not.toContain('whitespace-inline-secret');
+    expect(resultText(result)).not.toContain('pwd-inline-secret');
     expect(body.message).toContain('returned inline');
   });
 
@@ -168,12 +173,14 @@ describe('getGetDatasourceXmlTool', () => {
     const xml =
       '<datasource name="federated.sales" caption="Sales">' +
       '<connection password="must-not-appear" oauth-refresh-token="also-secret" ' +
-      'connection-string="Server=example.invalid;Password=embedded-cache-secret"/>' +
+      'connection-string="Server=example.invalid; Password = whitespace-cache-secret" ' +
+      'odbc-connect-string="UID=user;PWD=pwd-cache-secret"/>' +
       '<column/><relation/>' +
       '</datasource>';
     const redactedXml =
       '<datasource name="federated.sales" caption="Sales">' +
-      '<connection password="" oauth-refresh-token="" connection-string=""/>' +
+      '<connection password="" oauth-refresh-token="" connection-string="" ' +
+      'odbc-connect-string=""/>' +
       '<column/><relation/>' +
       '</datasource>';
     const { result } = await invoke({ datasourceName: 'Sales', mode: 'file', xml });
@@ -195,7 +202,8 @@ describe('getGetDatasourceXmlTool', () => {
     expect(body.message).toContain('connections: 1');
     expect(body.message).not.toContain('must-not-appear');
     expect(body.message).not.toContain('also-secret');
-    expect(readFileSync(body.file, 'utf-8')).not.toContain('embedded-cache-secret');
+    expect(readFileSync(body.file, 'utf-8')).not.toContain('whitespace-cache-secret');
+    expect(readFileSync(body.file, 'utf-8')).not.toContain('pwd-cache-secret');
     expect(body.instructions).toContain('datasourceFile');
   });
 
