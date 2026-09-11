@@ -21,6 +21,8 @@ interface DatasourceFieldCandidateGroup {
   datasource: string;
   name?: string;
   luid?: string;
+  /** Candidate local name to authoritative Tableau logical-table object id. */
+  fieldTables: Record<string, string>;
   measures: MeasureCandidate[];
   timeDimensions: TimeDimensionCandidate[];
   breakdownDimensions: BreakdownDimensionCandidate[];
@@ -53,6 +55,7 @@ export function projectListAvailableFieldsSlim(
     if (!group) {
       group = {
         datasource: field.datasource,
+        fieldTables: {},
         measures: [],
         timeDimensions: [],
         breakdownDimensions: [],
@@ -70,6 +73,7 @@ export function projectListAvailableFieldsSlim(
         field.isAggregated ? 'User' : field.derivation,
         field.isAggregated ? 'aggregatedCalc' : 'base',
       ]);
+      if (field.logicalTableId) group.fieldTables[localName] = field.logicalTableId;
       continue;
     }
 
@@ -77,11 +81,13 @@ export function projectListAvailableFieldsSlim(
 
     if (isDateDatatype(field.datatype)) {
       group.timeDimensions.push([caption, localName, field.datatype]);
+      if (field.logicalTableId) group.fieldTables[localName] = field.logicalTableId;
       continue;
     }
 
     if (isCategoryType(field.type)) {
       group.breakdownDimensions.push([caption, localName, field.type]);
+      if (field.logicalTableId) group.fieldTables[localName] = field.logicalTableId;
     }
   }
 

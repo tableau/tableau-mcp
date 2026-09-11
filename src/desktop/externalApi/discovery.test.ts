@@ -1,5 +1,5 @@
 import { homedir } from 'os';
-import { join } from 'path';
+import { basename, join } from 'path';
 
 import {
   discoverInstances,
@@ -117,7 +117,7 @@ describe('discoverInstances', () => {
     const instances = discoverInstances({
       discoveryDir: '/discovery',
       readDir: () => Object.keys(files),
-      readFile: (path) => files[path.split('/').pop() as string],
+      readFile: (path) => files[basename(path)],
       isPidAlive: () => true,
     });
 
