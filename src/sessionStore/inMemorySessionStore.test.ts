@@ -110,4 +110,21 @@ describe('InMemorySessionStore', () => {
     await vi.advanceTimersByTimeAsync(26 * 24 * 60 * 60 * 1000);
     await expect(store.get('key')).resolves.toBeUndefined();
   });
+
+  it('cancels the pending chunk re-arm timer when a key is evicted by maxSize', async () => {
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000; // exceeds 2**31 - 1 (~24.86 days)
+    const store = new InMemorySessionStore<number>({ ttlMs: thirtyDaysMs, maxSize: 1 });
+
+    // A >CHUNK_MS ttl means 'a' has both an ExpiringMap timeout and a chunk re-arm timer pending.
+    await store.set('a', 1);
+    expect(vi.getTimerCount()).toBe(2);
+
+    // Inserting 'b' evicts 'a' via maxSize. The eviction must cancel 'a's chunk re-arm timer too,
+    // not just its ExpiringMap timeout, leaving only 'b's two timers (no stale re-arm for 'a').
+    await store.set('b', 2);
+    expect(vi.getTimerCount()).toBe(2);
+
+    await expect(store.get('a')).resolves.toBeUndefined();
+    await expect(store.get('b')).resolves.toBe(2);
+  });
 });

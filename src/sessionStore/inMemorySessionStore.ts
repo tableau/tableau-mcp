@@ -25,6 +25,10 @@ export class InMemorySessionStore<V> implements SessionStore<V> {
     this.map = new ExpiringMap<string, V>({
       defaultExpirationTimeMs: 1,
       maxSize: options.maxSize,
+      // Every ExpiringMap removal (natural expiry, maxSize eviction, explicit delete) routes through
+      // delete(), so this hook guarantees the parallel refreshTimers entry is cleared too -- including
+      // maxSize evictions that ExpiringMap initiates internally and this store could not otherwise see.
+      onDelete: (key) => this.clearRefreshTimer(key),
     });
   }
 
