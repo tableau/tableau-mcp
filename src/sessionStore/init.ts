@@ -5,7 +5,6 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
-import { log } from '../logging/logger.js';
 import { InMemorySessionStore } from './inMemorySessionStore.js';
 import type { SessionStore } from './sessionStore.js';
 
@@ -55,8 +54,16 @@ let state: SessionStoreState | null = null;
 /**
  * Initialize the session store provider based on configuration.
  *
- * This function should be called early in application startup. On any loader error it logs
- * and falls back to the in-memory provider.
+ * This function should be called early in application startup. It fails closed: any error
+ * (malformed config from `getConfig()`, or a `custom` provider that fails to load/validate)
+ * propagates uncaught and becomes fatal at boot via the top-level handler in `index.ts`.
+ *
+ * This is deliberately NOT the graceful-degradation pattern used by the read-mostly feature
+ * gate. A session store that was explicitly configured as `custom` backs cross-replica login
+ * and centralized revocation; silently falling back to in-memory here would leave every replica
+ * running isolated state — breaking cross-replica logins and decentralizing revocation — while
+ * the server still reported healthy. Failing at boot matches `config.ts`, which already
+ * hard-throws when `SESSION_STORE_PROVIDER=custom` but its config is absent/invalid.
  *
  * @example
  * function main() {
@@ -65,34 +72,17 @@ let state: SessionStoreState | null = null;
  * }
  */
 export function initializeSessionStore(): void {
-  try {
-    const config = getConfig();
+  const config = getConfig();
 
-    switch (config.sessionStore.provider) {
-      case 'custom':
-        state = { kind: 'custom', store: loadCustomProvider(config.sessionStore.providerConfig) };
-        break;
+  switch (config.sessionStore.provider) {
+    case 'custom':
+      state = { kind: 'custom', store: loadCustomProvider(config.sessionStore.providerConfig) };
+      break;
 
-      case 'memory':
-      default:
-        state = { kind: 'memory' };
-        break;
-    }
-  } catch (error) {
-    log({
-      message: 'Failed to initialize session store provider',
-      level: 'error',
-      logger: 'sessionStore',
-      data: error,
-    });
-    log({
-      message: 'Falling back to in-memory session store provider',
-      level: 'info',
-      logger: 'sessionStore',
-    });
-
-    // Fallback to in-memory provider on error
-    state = { kind: 'memory' };
+    case 'memory':
+    default:
+      state = { kind: 'memory' };
+      break;
   }
 }
 

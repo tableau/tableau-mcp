@@ -47,21 +47,17 @@ describe('SessionStore init', () => {
       await expect(second.get('key')).resolves.toBe('value');
     });
 
-    it('falls back to memory when the custom module is missing "module"', async () => {
+    it('throws when the custom module is missing "module"', () => {
       vi.mocked(getConfig).mockReturnValue({
         sessionStore: { provider: 'custom', providerConfig: {} },
       } as any);
 
-      initializeSessionStore();
-
-      // Two calls on the memory fallback must be independent instances.
-      const a = createNamespacedStore<string>('ns', { ttlMs: 10000 });
-      const b = createNamespacedStore<string>('ns', { ttlMs: 10000 });
-      await a.set('key', 'value');
-      await expect(b.get('key')).resolves.toBeUndefined();
+      // Fail closed: an explicitly-configured custom store that cannot load must be fatal at
+      // boot, not silently downgraded to isolated in-memory state on every replica.
+      expect(() => initializeSessionStore()).toThrow(/"module"/);
     });
 
-    it('falls back to memory when the custom module fails to load', async () => {
+    it('throws when the custom module fails to load', () => {
       vi.mocked(getConfig).mockReturnValue({
         sessionStore: {
           provider: 'custom',
@@ -69,14 +65,12 @@ describe('SessionStore init', () => {
         },
       } as any);
 
-      initializeSessionStore();
-      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
-
-      await store.set('key', 'value');
-      await expect(store.get('key')).resolves.toBe('value');
+      expect(() => initializeSessionStore()).toThrow(
+        /Failed to load custom session store provider/,
+      );
     });
 
-    it('falls back to memory when a custom provider is missing rotate', async () => {
+    it('throws when a custom provider is missing rotate', () => {
       vi.mocked(getConfig).mockReturnValue({
         sessionStore: {
           provider: 'custom',
@@ -84,25 +78,17 @@ describe('SessionStore init', () => {
         },
       } as any);
 
-      initializeSessionStore();
-
-      // Memory fallback: fresh independent instances per call.
-      const a = createNamespacedStore<string>('ns', { ttlMs: 10000 });
-      const b = createNamespacedStore<string>('ns', { ttlMs: 10000 });
-      await a.set('key', 'value');
-      await expect(b.get('key')).resolves.toBeUndefined();
+      expect(() => initializeSessionStore()).toThrow(/rotate/);
     });
 
-    it('falls back to memory when getConfig throws', async () => {
+    it('propagates the original error when getConfig throws', () => {
       vi.mocked(getConfig).mockImplementation(() => {
         throw new Error('Config error');
       });
 
-      initializeSessionStore();
-      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
-
-      await store.set('key', 'value');
-      await expect(store.get('key')).resolves.toBe('value');
+      // The raw error must propagate uncaught (not wrapped or swallowed), so the existing
+      // top-level fatal-boot handler in index.ts logs it and exits.
+      expect(() => initializeSessionStore()).toThrow('Config error');
     });
   });
 
