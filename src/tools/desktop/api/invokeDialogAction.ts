@@ -50,7 +50,7 @@ export const getInvokeDialogActionTool = (
   const tool = new DesktopTool({
     server,
     name: 'invoke-dialog-action',
-    minApiVersion: '0.2.12',
+    minApiVersion: '0.2.13',
     title,
     description: 'Use get-active-dialogs context; exact action only. Never guess or retry.',
     paramsSchema,

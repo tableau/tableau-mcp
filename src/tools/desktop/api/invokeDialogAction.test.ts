@@ -92,12 +92,12 @@ describe('invoke-dialog-action tool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('declares the destructive, non-idempotent 0.2.12 action contract', () => {
+  it('declares the destructive, non-idempotent 0.2.13 action contract', () => {
     const tool = getInvokeDialogActionTool(new DesktopMcpServer());
     const schema = z.object(tool.paramsSchema as z.ZodRawShape);
 
     expect(tool.name).toBe('invoke-dialog-action');
-    expect(tool.minApiVersion).toBe('0.2.12');
+    expect(tool.minApiVersion).toBe('0.2.13');
     expect(tool.description).toContain('get-active-dialogs');
     expect(tool.description).toContain('context');
     expect(tool.description).toContain('exact action');
@@ -398,6 +398,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-invoke-dialog-action',
-    apiVersion: '0.2.12',
+    apiVersion: '0.2.13',
   };
 }

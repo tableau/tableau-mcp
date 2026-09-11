@@ -18,7 +18,7 @@ export const getActiveDialogsTool = (
   const tool = new DesktopTool({
     server,
     name: 'get-active-dialogs',
-    minApiVersion: '0.2.12',
+    minApiVersion: '0.2.13',
     title,
     description:
       'List the current actionable Tableau Desktop dialogs, including their exact identity, visible message and diagnostic text, and invokable actions. Text buttons retain their exact labels; recognized unlabeled controls use semantic actions such as close. Returns an empty dialogs array when no dialog needs a decision.',

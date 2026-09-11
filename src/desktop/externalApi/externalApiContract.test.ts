@@ -47,10 +47,10 @@ import {
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: the 0.2.12 producer document was recaptured from the monolith's
- * production route registry/OpenAPI generator harness and canonical-JSON compared on
- * 2026-09-08. The checks below additionally pin property, requiredness, enum, route,
- * and response-status contracts.
+ * Fixture provenance: the producer document comes from the monolith's production route
+ * registry/OpenAPI generator harness. The dialog contract was canonical-JSON compared on
+ * 2026-09-08, and its published API floor is 0.2.13. The checks below additionally pin
+ * property, requiredness, enum, route, and response-status contracts.
  */
 
 type SpecProperty = {
@@ -139,8 +139,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('is the authoritative 0.2.12 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.12');
+  it('is the authoritative 0.2.13 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.13');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -220,7 +220,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.12 requiredness exception set', () => {
+    it('pins the complete 0.2.13 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [

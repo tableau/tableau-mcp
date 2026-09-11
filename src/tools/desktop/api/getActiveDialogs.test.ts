@@ -53,11 +53,11 @@ describe('get-active-dialogs tool', () => {
     vi.clearAllMocks();
   });
 
-  it('declares the read contract and 0.2.12 API floor', () => {
+  it('declares the read contract and 0.2.13 API floor', () => {
     const tool = getActiveDialogsTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-active-dialogs');
-    expect(tool.minApiVersion).toBe('0.2.12');
+    expect(tool.minApiVersion).toBe('0.2.13');
     expect(tool.description).toContain('visible message and diagnostic text');
     expect(tool.description).toContain('semantic actions such as close');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
@@ -202,6 +202,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-get-active-dialogs',
-    apiVersion: '0.2.12',
+    apiVersion: '0.2.13',
   };
 }
