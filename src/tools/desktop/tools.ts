@@ -3,6 +3,7 @@ import { getAddDashboardTool } from './api/addDashboard.js';
 import { getAddStoryboardTool } from './api/addStoryboard.js';
 import { getAddWorksheetTool } from './api/addWorksheet.js';
 import { getApplyDashboardTool } from './api/applyDashboard.js';
+import { getApplyDatasourceTool } from './api/applyDatasource.js';
 import { getApplyStoryboardTool } from './api/applyStoryboard.js';
 import { getApplyWorkbookTool } from './api/applyWorkbook.js';
 import { getApplyWorksheetTool } from './api/applyWorksheet.js';
@@ -16,6 +17,8 @@ import { getApiRootTool } from './api/getApiRoot.js';
 import { getAppInfoTool } from './api/getAppInfo.js';
 import { getDashboardInfoTool } from './api/getDashboardInfo.js';
 import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
+import { getDatasourceInfoTool } from './api/getDatasourceInfo.js';
+import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getHealthTool } from './api/getHealth.js';
 import { getSiteInfoTool } from './api/getSiteInfo.js';
 import { getStoryboardInfoTool } from './api/getStoryboardInfo.js';
@@ -39,11 +42,13 @@ import { getOpenFileTool } from './api/openFile.js';
 import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
 import { getPublishWorkbookTool } from './api/publishWorkbook.js';
 import { getRedoWorkbookTool } from './api/redoWorkbook.js';
+import { getRefreshAutoUpdatesTool } from './api/refreshAutoUpdates.js';
 import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
 import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
+import { getSetStartPageVisibilityTool } from './api/setStartPageVisibility.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
 import { getUndoWorkbookTool } from './api/undoWorkbook.js';
 import { getValidateWorkbookXmlTool } from './api/validateWorkbookXml.js';
@@ -102,6 +107,7 @@ export const desktopToolFactories = [
   getUndoWorkbookTool,
   getRedoWorkbookTool,
   getOpenFileTool,
+  getSetStartPageVisibilityTool,
   getSaveWorkbookTool,
   getWorkbookExportAsTool,
   getAddWorksheetTool,
@@ -119,10 +125,14 @@ export const desktopToolFactories = [
   getRenameSheetTool,
   getSortWorksheetTool,
   getPauseAutoUpdatesTool,
+  getRefreshAutoUpdatesTool,
   getResumeAutoUpdatesTool,
   getRefineWorksheetTool,
   getGetDashboardXmlTool,
   getApplyDashboardTool,
+  getDatasourceInfoTool,
+  getGetDatasourceXmlTool,
+  getApplyDatasourceTool,
   getApplyDashboardWithViewpointsTool,
   getBuildAndApplyDashboardTool,
   getListAvailableFieldsTool,

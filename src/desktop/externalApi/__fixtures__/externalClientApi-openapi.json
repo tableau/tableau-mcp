@@ -1056,6 +1056,231 @@
         }
       }
     },
+    "/v0/workbook/datasources/{id}": {
+      "get": {
+        "summary": "Get a workbook datasource",
+        "description": "Returns metadata for a single datasource by its URL-encoded inventory id.",
+        "operationId": "getWorkbookDatasource",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns metadata for a single datasource by its URL-encoded inventory id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasourceItem"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/datasources/{id}/document": {
+      "get": {
+        "summary": "Get a datasource document",
+        "description": "Returns the datasource's local workbook representation as a Tableau XML subtree.",
+        "operationId": "getDatasourceDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the datasource's local workbook representation as a Tableau XML subtree.",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-XSD-Payload-Version": {
+                "description": "Payload (file-format) version the document was served as.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "summary": "Apply a datasource document",
+        "description": "Replaces one datasource's local workbook representation with the submitted Tableau XML, leaving all other datasources and sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. Malformed or invalid workbook XML is rejected with 422. The payload must contain exactly one datasource whose internal name matches {id}; a mismatch is rejected with 409. The apply is unconditional last-writer-wins and does not publish changes to a server-side datasource.",
+        "operationId": "applyDatasourceDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The datasource's Tableau XML -- either the bare <datasource> element returned by GET .../datasources/{id}/document, or that element inside a <datasources> or <workbook> envelope. The payload must contain exactly one datasource whose internal name matches {id}.",
+          "content": {
+            "application/xml": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "text/xml": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaces one datasource's local workbook representation with the submitted Tableau XML, leaving all other datasources and sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. Malformed or invalid workbook XML is rejected with 422. The payload must contain exactly one datasource whose internal name matches {id}; a mismatch is rejected with 409. The apply is unconditional last-writer-wins and does not publish changes to a server-side datasource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableContent"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/v0/workbook/document": {
       "get": {
         "summary": "Get the workbook document",
@@ -1963,6 +2188,74 @@
         }
       }
     },
+    "/v0/workbook/worksheets/{id}:refreshNow": {
+      "post": {
+        "summary": "Refresh a worksheet now",
+        "description": "Runs pending automatic updates for a worksheet immediately.",
+        "operationId": "refreshWorksheetNow",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Runs pending automatic updates for a worksheet immediately.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/v0/workbook/worksheets/{id}:rename": {
       "post": {
         "summary": "Rename a worksheet",
@@ -2537,7 +2830,14 @@
       "OperationError": {
         "type": "object",
         "required": ["code"],
-        "properties": { "code": { "type": "string" }, "message": { "type": "string" } },
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
         "additionalProperties": true
       },
       "OperationWarning": {

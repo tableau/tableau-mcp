@@ -37,6 +37,8 @@ import {
   dashboardPauseAutoUpdatesRoute,
   dashboardResumeAutoUpdatesRoute,
   dashboardRoute,
+  DatasourceItem,
+  datasourceItemSchema,
   DatasourceList,
   datasourceListSchema,
   datasourceRefreshDataRoute,
@@ -67,6 +69,8 @@ import {
   siteSchema,
   SiteWorkbookList,
   siteWorkbookListSchema,
+  StartPageVisibility,
+  startPageVisibilitySchema,
   storyboardDocumentRoute,
   storyboardImageRoute,
   StoryboardItem,
@@ -80,6 +84,8 @@ import {
   validationResultSchema,
   WindowInfo,
   workbookDashboardsNewRoute,
+  workbookDatasourceDocumentRoute,
+  workbookDatasourceRoute,
   WorkbookInventory,
   workbookInventorySchema,
   workbookStoryboardsNewRoute,
@@ -93,6 +99,7 @@ import {
   worksheetLogicalTableDataRoute,
   worksheetLogicalTablesRoute,
   worksheetPauseAutoUpdatesRoute,
+  worksheetRefreshNowRoute,
   worksheetResumeAutoUpdatesRoute,
   worksheetRoute,
   WorksheetSort,
@@ -321,7 +328,7 @@ export class ExternalApiToolExecutor {
     signal: AbortSignal,
   ): Promise<Result<InvokeDialogActionResult, ExecuteCommandError>> {
     const result = await this.withRescan('command', (http) =>
-      http.postJsonForBody(
+      http.postJsonForDirectBody(
         EXTERNAL_API_ROUTES.appInvokeDialogAction,
         request,
         invokeDialogActionResultSchema,
@@ -388,6 +395,15 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async getWorkbookDatasource(
+    datasourceId: string,
+    signal: AbortSignal,
+  ): Promise<Result<DatasourceItem, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(workbookDatasourceRoute(datasourceId), datasourceItemSchema, signal),
+    );
+  }
+
   async getWorksheet(
     worksheetId: string,
     signal: AbortSignal,
@@ -423,6 +439,15 @@ export class ExternalApiToolExecutor {
       if (result.isErr()) return result;
       return Ok({ ...result.value, instanceId: http.instanceId });
     });
+  }
+
+  async getDatasourceDocument(
+    datasourceId: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getXml(workbookDatasourceDocumentRoute(datasourceId), signal),
+    );
   }
 
   async getWorksheetDocument(
@@ -482,6 +507,24 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async setStartPageVisibility(
+    isStartPageVisible: boolean,
+    signal: AbortSignal,
+  ): Promise<Result<StartPageVisibility, ExecuteCommandError>> {
+    const result = await this.withRescan('command', (http) =>
+      http.postJsonForBody(
+        EXTERNAL_API_ROUTES.appToggleStartPage,
+        { isStartPageVisible },
+        startPageVisibilitySchema,
+        signal,
+      ),
+    );
+    if (result.isErr()) {
+      return Err(mapClientError(result.error, this.deps.pid));
+    }
+    return Ok(result.value);
+  }
+
   async exportWorksheetImage(
     worksheetId: string,
     query: ImageExportQuery,
@@ -535,6 +578,17 @@ export class ExternalApiToolExecutor {
       (http) => http.postXmlEnvelope(EXTERNAL_API_ROUTES.workbookDocument, xml, signal),
       'apply-workbook-document',
       options,
+    );
+  }
+
+  async applyDatasourceDocument(
+    datasourceId: string,
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postXmlEnvelope(workbookDatasourceDocumentRoute(datasourceId), xml, signal),
+      'apply-datasource-document',
     );
   }
 
@@ -649,6 +703,16 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postEnvelope(worksheetResumeAutoUpdatesRoute(worksheetId), signal),
       'resume-worksheet-auto-updates',
+    );
+  }
+
+  async refreshWorksheetNow(
+    worksheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(worksheetRefreshNowRoute(worksheetId), signal),
+      'refresh-worksheet-now',
     );
   }
 

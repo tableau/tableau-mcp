@@ -19,11 +19,14 @@ export const EXTERNAL_API_ROUTES = {
   appDialogs: '/v0/app/dialogs',
   appInvokeDialogAction: '/v0/app:invokeDialogAction',
   appOpenFile: '/v0/app:openFile',
+  appToggleStartPage: '/v0/app:toggleStartPage',
   root: '/v0/',
   workbook: '/v0/workbook',
   workbookDashboards: '/v0/workbook/dashboards',
   workbookDashboardsNew: '/v0/workbook/dashboards:new',
   workbookDatasources: '/v0/workbook/datasources',
+  workbookDatasource: '/v0/workbook/datasources/{id}',
+  workbookDatasourceDocument: '/v0/workbook/datasources/{id}/document',
   workbookDocument: '/v0/workbook/document',
   workbookDocumentValidate: '/v0/workbook/document:validate',
   workbookStoryboards: '/v0/workbook/storyboards',
@@ -59,6 +62,7 @@ export const EXTERNAL_API_ROUTES = {
   worksheetSort: '/v0/workbook/worksheets/{id}:sort',
   worksheetPauseAutoUpdates: '/v0/workbook/worksheets/{id}:pauseAutoUpdates',
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
+  worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
   site: '/v0/site',
   siteDatasources: '/v0/site/datasources',
   siteWorkbooks: '/v0/site/workbooks',
@@ -185,6 +189,27 @@ export function storyboardDocumentRoute(storyboardId: string): string {
   return `${storyboardRoute(storyboardId)}/document`;
 }
 
+// Workbook datasource inventory ids are already URL-encoded. Decode the inventory value once,
+// then encode it once for the outbound segment so encoded delimiters stay inside that segment
+// without being double-encoded.
+function canonicalDatasourceSegment(datasourceId: string): string {
+  return encodeURIComponent(decodeURIComponent(datasourceId));
+}
+
+export function workbookDatasourceRoute(datasourceId: string): string {
+  return EXTERNAL_API_ROUTES.workbookDatasource.replace(
+    '{id}',
+    canonicalDatasourceSegment(datasourceId),
+  );
+}
+
+export function workbookDatasourceDocumentRoute(datasourceId: string): string {
+  return EXTERNAL_API_ROUTES.workbookDatasourceDocument.replace(
+    '{id}',
+    canonicalDatasourceSegment(datasourceId),
+  );
+}
+
 export function worksheetSummaryDataRoute(
   worksheetId: string,
   query: WorksheetSummaryDataQuery,
@@ -244,6 +269,10 @@ export function worksheetPauseAutoUpdatesRoute(worksheetId: string): string {
 
 export function worksheetResumeAutoUpdatesRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:resumeAutoUpdates`;
+}
+
+export function worksheetRefreshNowRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}:refreshNow`;
 }
 
 export function dashboardPauseAutoUpdatesRoute(dashboardId: string): string {
@@ -813,6 +842,14 @@ export const appInfoSchema = z
   })
   .passthrough();
 export type AppInfo = z.infer<typeof appInfoSchema>;
+
+/** Desired and resulting Start Page visibility for `POST /v0/app:toggleStartPage`. */
+export const startPageVisibilitySchema = z
+  .object({
+    isStartPageVisible: z.boolean(),
+  })
+  .passthrough();
+export type StartPageVisibility = z.infer<typeof startPageVisibilitySchema>;
 
 /**
  * Typed error surfaced by {@link ExternalApiHttp} methods. The internal

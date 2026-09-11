@@ -2,6 +2,7 @@ import { createServer, IncomingMessage, Server, ServerResponse } from 'http';
 import { AddressInfo } from 'net';
 
 import {
+  type DatasourceItem,
   DialogList,
   EXTERNAL_API_ROUTES,
   HEADER_APPLICATION_VERSION,
@@ -59,8 +60,13 @@ export type MockExternalApiServer = {
 const DEFAULT_TOKEN = 'valid-token';
 const DEFAULT_WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets /></workbook>';
 // The per-item /document routes return the requested item's bare fragment directly — a
-// `<worksheet>` or `<dashboard>`, not wrapped in a `<workbook>`. The handler serves the same
-// fragment for any known id of that kind, standing in for the resolved item.
+// `<datasource>`, `<worksheet>`, or `<dashboard>`, not wrapped in a `<workbook>`. The handler
+// serves the same fragment for any known id of that kind, standing in for the resolved item.
+const DEFAULT_DATASOURCE_DOCUMENT_XML =
+  '<?xml version="1.0"?>' +
+  '<datasource name="Sample - Superstore" caption="Sample - Superstore" inline="true">' +
+  '<connection class="textscan" /><column name="[Region]" datatype="string" />' +
+  '</datasource>';
 const DEFAULT_WORKSHEET_DOCUMENT_XML =
   '<?xml version="1.0"?>' +
   '<worksheet name="Sales by Region"><table>' +
@@ -286,9 +292,10 @@ const sendDocumentApply = (
   id: string,
   known: boolean,
   kind: string,
+  notFoundCode = 'sheet-not-found',
 ): void => {
   if (!known) {
-    sendProblem(res, 404, 'sheet-not-found', `${kind} not found: ${id}`);
+    sendProblem(res, 404, notFoundCode, `${kind} not found: ${id}`);
     return;
   }
   const ct = (contentType ?? '').split(';')[0].trim();
@@ -347,7 +354,11 @@ const sendImageExport = (
 };
 
 export async function startMockExternalApiServer(
-  options: { token?: string; workbookXml?: string } = {},
+  options: {
+    token?: string;
+    workbookXml?: string;
+    workbookDatasources?: Array<DatasourceItem>;
+  } = {},
 ): Promise<MockExternalApiServer> {
   let token = options.token ?? DEFAULT_TOKEN;
   const workbookXml = options.workbookXml ?? DEFAULT_WORKBOOK_XML;
@@ -356,10 +367,12 @@ export async function startMockExternalApiServer(
     buttons: [...(dialog.buttons ?? [])],
     actions: dialog.actions?.map((action) => ({ ...action })),
   }));
+  const workbookDatasources = options.workbookDatasources ?? DEFAULT_WORKBOOK_DATASOURCES;
   const requests: Array<RecordedRequest> = [];
   const overrides = new Map<string, MockOverride>();
   const operations = new Map<string, MockOperation>();
   const operationCursors = new Map<string, number>();
+  let isStartPageVisible = false;
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const method = req.method ?? 'GET';
@@ -449,7 +462,7 @@ export async function startMockExternalApiServer(
         locale: 'en_US',
         repositoryLocation: '/Users/tableau/Documents/My Tableau Repository',
         logLocation: '/Users/tableau/Library/Logs/Tableau',
-        isStartPageVisible: false,
+        isStartPageVisible,
         isDataSourcePageActive: false,
         isPresentationMode: false,
       });
@@ -561,7 +574,51 @@ export async function startMockExternalApiServer(
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookDatasources) {
-      sendJson(res, 200, { datasources: DEFAULT_WORKBOOK_DATASOURCES });
+      sendJson(res, 200, { datasources: workbookDatasources });
+      return;
+    }
+
+    const datasourceDocumentMatch = path.match(/^\/v0\/workbook\/datasources\/([^/]+)\/document$/);
+    if (datasourceDocumentMatch) {
+      const datasourceId = decodeURIComponent(datasourceDocumentMatch[1]);
+      const known = workbookDatasources.some(
+        (datasource) =>
+          datasource.id !== undefined && decodeURIComponent(datasource.id) === datasourceId,
+      );
+      if (method === 'GET') {
+        if (!known) {
+          sendProblem(res, 404, 'datasource-not-found', `Datasource not found: ${datasourceId}`);
+          return;
+        }
+        sendXml(res, 200, DEFAULT_DATASOURCE_DOCUMENT_XML);
+        return;
+      }
+      if (method === 'POST') {
+        sendDocumentApply(
+          res,
+          contentType,
+          body,
+          datasourceId,
+          known,
+          'Datasource',
+          'datasource-not-found',
+        );
+        return;
+      }
+    }
+
+    const datasourceMatch = path.match(/^\/v0\/workbook\/datasources\/([^/]+)$/);
+    if (method === 'GET' && datasourceMatch) {
+      const datasourceId = decodeURIComponent(datasourceMatch[1]);
+      const datasource = workbookDatasources.find(
+        (candidate) =>
+          candidate.id !== undefined && decodeURIComponent(candidate.id) === datasourceId,
+      );
+      if (!datasource) {
+        sendProblem(res, 404, 'datasource-not-found', `Datasource not found: ${datasourceId}`);
+        return;
+      }
+      sendJson(res, 200, datasource);
       return;
     }
 
@@ -943,6 +1000,17 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const refreshNowMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+):refreshNow$/);
+    if (method === 'POST' && refreshNowMatch) {
+      const worksheetId = decodeURIComponent(refreshNowMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendOperation(res, 'refresh-worksheet-now');
+      return;
+    }
+
     if (method === 'POST' && path === EXTERNAL_API_ROUTES.appOpenFile) {
       let parsed: { filePath?: unknown };
       try {
@@ -956,6 +1024,28 @@ export async function startMockExternalApiServer(
         return;
       }
       sendOperation(res, 'open-workbook-file');
+      return;
+    }
+
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.appToggleStartPage) {
+      let parsed: { isStartPageVisible?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (typeof parsed.isStartPageVisible !== 'boolean') {
+        sendProblem(
+          res,
+          400,
+          'invalid-request-body',
+          'toggleStartPage requires a boolean `isStartPageVisible`.',
+        );
+        return;
+      }
+      isStartPageVisible = parsed.isStartPageVisible;
+      sendJson(res, 200, { isStartPageVisible });
       return;
     }
 
