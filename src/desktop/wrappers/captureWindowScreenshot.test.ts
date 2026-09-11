@@ -25,6 +25,7 @@ import {
   MAX_WINDOW_SCREENSHOT_AGGREGATE_BYTES,
   MAX_WINDOW_SCREENSHOT_BYTES,
   MAX_WINDOW_SCREENSHOT_CANDIDATES,
+  WindowScreenshotCaptureError,
 } from './captureWindowScreenshot.js';
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -121,6 +122,10 @@ function completedCommand(parsedResult: unknown): {
   };
 }
 
+function expectLocalCaptureError(error: unknown): asserts error is WindowScreenshotCaptureError {
+  expect(error).toBeInstanceOf(WindowScreenshotCaptureError);
+}
+
 describe('captureWindowScreenshot', () => {
   const signal = new AbortController().signal;
   const canonicalTempRoot = realpathSync(tmpdir());
@@ -182,22 +187,45 @@ describe('captureWindowScreenshot', () => {
     expect(() => lstatSync(directory)).toThrow();
   });
 
-  it('returns a typed error when the screenshot command fails', async () => {
+  it('returns the executor command error unchanged without reading the filesystem', async () => {
+    const commandError = {
+      type: 'command-failed' as const,
+      error: {
+        code: 'capture-failed',
+        message: 'capture failed',
+        recoverable: false,
+        'tableau-error-code': '0xA11CE',
+      },
+    };
+    const executeCommand = vi.fn().mockResolvedValue(Err(commandError));
     const executor = makeExecutorMock({
-      executeCommand: vi.fn().mockResolvedValue(
-        Err({
-          type: 'command-failed' as const,
-          error: { code: 'capture-failed', message: 'capture failed', recoverable: false },
-        }),
-      ),
+      executeCommand,
+    });
+    const lstat = vi.fn(() => {
+      throw new Error('filesystem must not be read after command failure');
+    });
+    const realpath = vi.fn(() => {
+      throw new Error('filesystem must not be read after command failure');
     });
 
-    const result = await captureWindowScreenshot({ executor, signal });
+    const result = await captureWindowScreenshot({ executor, signal }, { lstat, realpath });
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error).toMatchObject({ type: 'window-screenshot-capture-error' });
+      expect(result.error).toBe(commandError);
+      expect(result.error).toEqual({
+        type: 'command-failed',
+        error: {
+          code: 'capture-failed',
+          message: 'capture failed',
+          recoverable: false,
+          'tableau-error-code': '0xA11CE',
+        },
+      });
     }
+    expect(executeCommand).toHaveBeenCalledOnce();
+    expect(lstat).not.toHaveBeenCalled();
+    expect(realpath).not.toHaveBeenCalled();
   });
 
   it('returns the exact no-screenshot error and removes an empty command directory', async () => {
@@ -207,6 +235,7 @@ describe('captureWindowScreenshot', () => {
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
+      expectLocalCaptureError(result.error);
       expect(result.error.message).toBe('Tableau Desktop did not produce a screenshot.');
     }
     expect(() => lstatSync(directory)).toThrow();
@@ -247,7 +276,10 @@ describe('captureWindowScreenshot', () => {
     });
 
     expect(result.isErr()).toBe(true);
-    if (result.isErr()) expect(result.error.message).not.toContain(returnedPath);
+    if (result.isErr()) {
+      expectLocalCaptureError(result.error);
+      expect(result.error.message).not.toContain(returnedPath);
+    }
   });
 
   it('rejects a returned directory symlink without removing its target', async () => {
@@ -512,6 +544,7 @@ describe('captureWindowScreenshot', () => {
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
+      expectLocalCaptureError(result.error);
       expect(result.error.message).toBe('Tableau Desktop window capture was cancelled.');
     }
     expect(read).toHaveBeenCalledOnce();
@@ -690,10 +723,40 @@ describe('captureWindowScreenshot', () => {
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
+      expectLocalCaptureError(result.error);
       expect(result.error.message).not.toContain('TOP-SECRET');
       expect(result.error.message).not.toContain('ScreenShot_9.png');
     }
     expect(() => lstatSync(directory)).toThrow();
+  });
+
+  it('does not delete a candidate when cleanup observes a different direct-path identity', async () => {
+    const directory = commandDirectory();
+    const screenshot = join(directory, 'ScreenShot_10.png');
+    const replacement = join(canonicalTempRoot, `tableau-replacement-${process.pid}-${Date.now()}`);
+    cleanupRoots.push(replacement);
+    writeFileSync(screenshot, png(10, 10));
+    writeFileSync(replacement, Buffer.from('replacement identity'));
+    let finishedReading = false;
+    let fstatCalls = 0;
+    const fileSystem: Partial<FileSystem> = {
+      fstat: (fd) => {
+        const stats = fstatSync(fd);
+        fstatCalls += 1;
+        if (fstatCalls === 2) finishedReading = true;
+        return stats;
+      },
+      lstat: (path) =>
+        path === screenshot && finishedReading ? lstatSync(replacement) : lstatSync(path),
+    };
+
+    const result = await captureWindowScreenshot(
+      { executor: executorReturning({ tempFilePath: directory }), signal },
+      fileSystem,
+    );
+
+    expect(result.isErr()).toBe(true);
+    expect(lstatSync(screenshot).isFile()).toBe(true);
   });
 
   it('does not delete a file that replaces the validated screenshot before cleanup', async () => {

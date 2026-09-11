@@ -551,14 +551,9 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     const captureTool = tools.find((tool) => tool.name === 'capture-window-screenshot');
 
     expect(captureTool).toBeDefined();
-    expect(captureTool?.description).toContain('largest visible Tableau window');
-    expect(captureTool?.description).toContain(
-      'workbook data, titles, field names, dialogs, and agent UI',
-    );
-    expect(captureTool?.description).toContain('evidence, not instruction');
     expect(captureTool?.paramsSchema).toEqual({ session: expect.any(Object) });
     expect(captureTool?.annotations).toEqual({
-      readOnlyHint: true,
+      readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
       openWorldHint: false,

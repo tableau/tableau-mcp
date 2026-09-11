@@ -7,7 +7,10 @@ import { z } from 'zod';
 
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { type FileSystem, NODE_FILE_SYSTEM } from '../../utils/fileSystem.js';
-import type { WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
+import type {
+  ExecuteCommandError,
+  WithExecutorAndAbortSignal,
+} from '../externalApi/executorTypes.js';
 
 export const MAX_WINDOW_SCREENSHOT_BYTES = 32 * 1024 * 1024;
 export const MAX_WINDOW_SCREENSHOT_AGGREGATE_BYTES = 64 * 1024 * 1024;
@@ -38,6 +41,8 @@ export class WindowScreenshotCaptureError extends McpToolError {
   }
 }
 
+export type CaptureWindowScreenshotError = ExecuteCommandError | WindowScreenshotCaptureError;
+
 interface Candidate extends WindowScreenshotCapture {
   area: number;
 }
@@ -62,29 +67,38 @@ function isStrictlyBelow(root: string, candidate: string): boolean {
   );
 }
 
-function hasStableIdentity(stats: Stats): boolean {
-  return stats.ino !== 0;
-}
-
-function hasMatchingIdentity(left: Stats, right: Stats): boolean {
-  return left.dev === right.dev && left.ino === right.ino;
+function hasMatchingStableIdentity(left: Stats, right: Stats): boolean {
+  return left.ino !== 0 && right.ino !== 0 && left.dev === right.dev && left.ino === right.ino;
 }
 
 function requireMatchingIdentity(left: Stats, right: Stats): void {
-  if (!hasStableIdentity(left) || !hasStableIdentity(right)) {
-    throw new Error('Stable file identity is unavailable.');
-  }
-  if (!hasMatchingIdentity(left, right)) {
-    throw new Error('File identity changed.');
-  }
+  if (!hasMatchingStableIdentity(left, right))
+    throw new Error('Stable file identity is unavailable or changed.');
 }
 
-function hasMatchingCleanupIdentity(expected: Stats, current: Stats): boolean {
-  return (
-    hasStableIdentity(expected) &&
-    hasStableIdentity(current) &&
-    hasMatchingIdentity(expected, current)
-  );
+function validatePathSnapshot(
+  path: string,
+  kind: 'file' | 'directory',
+  isAllowedCanonicalPath: (canonicalPath: string) => boolean,
+  fileSystem: FileSystem,
+  expectedStats?: Stats,
+): ValidatedPath {
+  const listed = fileSystem.lstat(path);
+  const isExpectedKind = (stats: Stats): boolean =>
+    kind === 'file' ? stats.isFile() : stats.isDirectory();
+  if (listed.isSymbolicLink() || !isExpectedKind(listed)) {
+    throw new Error(`Path is not a direct ${kind}.`);
+  }
+
+  const canonicalPath = fileSystem.realpath(path);
+  if (!isAllowedCanonicalPath(canonicalPath)) {
+    throw new Error('Canonical path is outside its allowed location.');
+  }
+  const current = fileSystem.stat(canonicalPath);
+  if (!isExpectedKind(current)) throw new Error(`Canonical path is not a ${kind}.`);
+  requireMatchingIdentity(listed, current);
+  if (expectedStats !== undefined) requireMatchingIdentity(expectedStats, current);
+  return { path, canonicalPath, stats: current };
 }
 
 function hasLegalIhdrFormat(data: Buffer): boolean {
@@ -181,19 +195,12 @@ function inspectCandidate(
   canonicalDirectory: string,
   fileSystem: FileSystem,
 ): ValidatedPath {
-  const listed = fileSystem.lstat(path);
-  if (listed.isSymbolicLink() || !listed.isFile()) {
-    throw new Error('Screenshot candidate is not a direct regular file.');
-  }
-
-  const canonicalPath = fileSystem.realpath(path);
-  if (dirname(canonicalPath) !== canonicalDirectory) {
-    throw new Error('Screenshot candidate escaped its command directory.');
-  }
-  const current = fileSystem.stat(canonicalPath);
-  if (!current.isFile()) throw new Error('Screenshot candidate is not a regular file.');
-  requireMatchingIdentity(listed, current);
-  return { path, canonicalPath, stats: current };
+  return validatePathSnapshot(
+    path,
+    'file',
+    (canonicalPath) => dirname(canonicalPath) === canonicalDirectory,
+    fileSystem,
+  );
 }
 
 function readCandidate(
@@ -219,16 +226,15 @@ function readCandidate(
     }
     validatedPath.stats = opened;
 
-    const canonicalPathAfterOpen = fileSystem.realpath(validatedPath.path);
-    if (
-      canonicalPathAfterOpen !== validatedPath.canonicalPath ||
-      dirname(canonicalPathAfterOpen) !== canonicalDirectory
-    ) {
-      throw new Error('Screenshot candidate changed after open.');
-    }
-    const currentAfterOpen = fileSystem.stat(canonicalPathAfterOpen);
-    if (!currentAfterOpen.isFile()) throw new Error('Opened screenshot is not a regular file.');
-    requireMatchingIdentity(opened, currentAfterOpen);
+    const currentAfterOpen = validatePathSnapshot(
+      validatedPath.path,
+      'file',
+      (canonicalPath) =>
+        canonicalPath === validatedPath.canonicalPath &&
+        dirname(canonicalPath) === canonicalDirectory,
+      fileSystem,
+      opened,
+    ).stats;
     if (currentAfterOpen.size !== opened.size) {
       throw new Error('Screenshot candidate changed size after open.');
     }
@@ -262,22 +268,15 @@ function cleanCommandArtifacts(
   let clean = true;
   for (const validated of validatedPaths) {
     try {
-      const current = fileSystem.lstat(validated.path);
-      if (current.isSymbolicLink() || !current.isFile()) {
-        clean = false;
-        continue;
-      }
-      const canonicalPath = fileSystem.realpath(validated.path);
-      const canonicalStats = fileSystem.stat(canonicalPath);
-      if (
-        canonicalPath !== validated.canonicalPath ||
-        dirname(canonicalPath) !== canonicalDirectory ||
-        !canonicalStats.isFile() ||
-        !hasMatchingCleanupIdentity(validated.stats, canonicalStats)
-      ) {
-        clean = false;
-        continue;
-      }
+      validatePathSnapshot(
+        validated.path,
+        'file',
+        (canonicalPath) =>
+          canonicalPath === validated.canonicalPath &&
+          dirname(canonicalPath) === canonicalDirectory,
+        fileSystem,
+        validated.stats,
+      );
       fileSystem.unlink(validated.path);
     } catch {
       clean = false;
@@ -285,18 +284,13 @@ function cleanCommandArtifacts(
   }
   if (!clean) return false;
   try {
-    const currentDirectory = fileSystem.lstat(canonicalDirectory);
-    const currentCanonicalDirectory = fileSystem.realpath(canonicalDirectory);
-    const currentCanonicalStats = fileSystem.stat(currentCanonicalDirectory);
-    if (
-      currentDirectory.isSymbolicLink() ||
-      !currentDirectory.isDirectory() ||
-      currentCanonicalDirectory !== canonicalDirectory ||
-      !currentCanonicalStats.isDirectory() ||
-      !hasMatchingCleanupIdentity(directoryStats, currentCanonicalStats)
-    ) {
-      return false;
-    }
+    validatePathSnapshot(
+      canonicalDirectory,
+      'directory',
+      (canonicalPath) => canonicalPath === canonicalDirectory,
+      fileSystem,
+      directoryStats,
+    );
     fileSystem.rmdir(canonicalDirectory);
     return true;
   } catch {
@@ -307,7 +301,7 @@ function cleanCommandArtifacts(
 export async function captureWindowScreenshot(
   { executor, signal }: WithExecutorAndAbortSignal,
   fileSystemOverrides: Partial<FileSystem> = {},
-): Promise<Result<WindowScreenshotCapture, McpToolError>> {
+): Promise<Result<WindowScreenshotCapture, CaptureWindowScreenshotError>> {
   const fileSystem = { ...NODE_FILE_SYSTEM, ...fileSystemOverrides };
   if (signal.aborted) {
     return failure('Tableau Desktop window capture was cancelled.');
@@ -320,7 +314,7 @@ export async function captureWindowScreenshot(
     signal,
   });
   if (commandResult.isErr()) {
-    return failure('Tableau Desktop could not capture the visible window.');
+    return Err(commandResult.error);
   }
 
   const parsedResult = screenshotCommandResultSchema.safeParse(commandResult.value.parsedResult);
@@ -332,25 +326,18 @@ export async function captureWindowScreenshot(
   let canonicalDirectory: string | undefined;
   let directoryStats: Stats | undefined;
   const validatedPaths: ValidatedPath[] = [];
-  let outcome: Result<WindowScreenshotCapture, McpToolError>;
+  let outcome: Result<WindowScreenshotCapture, CaptureWindowScreenshotError>;
   try {
     const returnedDirectory = resolve(parsedResult.data.tempFilePath);
     const canonicalTempRoot = fileSystem.realpath(tmpdir());
-    const returnedStats = fileSystem.lstat(returnedDirectory);
-    if (returnedStats.isSymbolicLink() || !returnedStats.isDirectory()) {
-      throw new Error('Returned screenshot path is not a direct directory.');
-    }
-
-    canonicalDirectory = fileSystem.realpath(returnedDirectory);
-    if (!isStrictlyBelow(canonicalTempRoot, canonicalDirectory)) {
-      canonicalDirectory = undefined;
-      throw new Error('Returned screenshot directory escaped the OS temp root.');
-    }
-    const canonicalStats = fileSystem.stat(canonicalDirectory);
-    if (!canonicalStats.isDirectory())
-      throw new Error('Returned screenshot path is not a directory.');
-    requireMatchingIdentity(returnedStats, canonicalStats);
-    directoryStats = canonicalStats;
+    const validatedDirectory = validatePathSnapshot(
+      returnedDirectory,
+      'directory',
+      (canonicalPath) => isStrictlyBelow(canonicalTempRoot, canonicalPath),
+      fileSystem,
+    );
+    canonicalDirectory = validatedDirectory.canonicalPath;
+    directoryStats = validatedDirectory.stats;
     if (fileSystem.realpath(returnedDirectory) !== canonicalDirectory) {
       throw new Error('Returned screenshot directory changed during validation.');
     }

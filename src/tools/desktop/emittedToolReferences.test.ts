@@ -237,7 +237,7 @@ const NON_TOOL_VOCABULARY = [
   'viewpoint-workbook-apply',
   'viz-specific',
   'well-formed',
-  'window-screenshot-too-large',
+  'window-screenshot',
   'workbook-change',
   'workbook-datasource',
   'workbook-drift',
