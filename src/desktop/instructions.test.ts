@@ -34,7 +34,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('contains the required desktop routes', () => {
     expect(routes.map((route) => route.id)).toEqual(
       expect.arrayContaining([
-        'rounded-stacked-bar',
+        'rounded-bar',
         'plain-chart',
         'dashboard',
         'data-value-question',
@@ -43,12 +43,12 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     );
   });
 
-  it('routes slight rounded stacked bars before generic chart and mark edits', () => {
+  it('routes slight rounded ordinary bars before generic chart and mark edits', () => {
     const routeIds = routes.map((route) => route.id);
-    const rounded = routes.find((route) => route.id === 'rounded-stacked-bar');
+    const rounded = routes.find((route) => route.id === 'rounded-bar');
 
-    expect(routeIds.indexOf('rounded-stacked-bar')).toBeLessThan(routeIds.indexOf('plain-chart'));
-    expect(routeIds.indexOf('rounded-stacked-bar')).toBeLessThan(routeIds.indexOf('edit-in-place'));
+    expect(routeIds.indexOf('rounded-bar')).toBeLessThan(routeIds.indexOf('plain-chart'));
+    expect(routeIds.indexOf('rounded-bar')).toBeLessThan(routeIds.indexOf('edit-in-place'));
     expect(rounded).toMatchObject({
       toolSequence: ['refine-worksheet'],
       stopConditions: expect.arrayContaining([
@@ -56,14 +56,20 @@ describe('DESKTOP_ROUTE_TABLE', () => {
         'Do not fall back to shell commands or raw whole-workbook XML',
       ]),
       requiredEvidence: [
-        'programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered stack order; disclose that Data Guide and View Data may show internal polygon helper fields',
+        'programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered bar geometry; disclose that Data Guide and View Data may show internal polygon helper fields',
       ],
     });
     expect(`${rounded?.trigger} ${rounded?.action}`).toContain('slight rounded');
-    expect(rounded?.action).toContain('operation=round_stacked_bar');
+    expect(`${rounded?.trigger} ${rounded?.action}`).toContain('vertical or horizontal');
+    expect(`${rounded?.trigger} ${rounded?.action}`).toContain('simple or stacked');
+    expect(rounded?.action).toMatch(/New chart: follow plain-chart to build it/i);
+    expect(rounded?.action).toMatch(/then call refine-worksheet on its returned worksheet/i);
+    expect(rounded?.action).toMatch(/Existing or just-built compatible bar.*directly/i);
+    expect(rounded?.action).toContain('operation=round_bar');
     expect(rounded?.action).toContain('preset=subtle');
     expect(rounded?.action).toContain('Polygon');
     expect(rounded?.action).toContain('not a native Bar corner property');
+    expect(rounded?.action).toMatch(/grouped.*dual-axis.*specialty/i);
     expect(rounded?.action).toContain('separate dashboard rounded-corners route');
     expect(rounded?.action).toMatch(/dashboard object\/container/i);
     expect(rounded?.action).toContain('V1 refuses any workbook with top-level actions');
@@ -72,7 +78,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'Do not fall back to shell commands or raw whole-workbook XML',
     );
     expect(rounded?.action).toContain(
-      'programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered stack order; disclose that Data Guide and View Data may show internal polygon helper fields',
+      'programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered bar geometry; disclose that Data Guide and View Data may show internal polygon helper fields',
     );
   });
 
@@ -159,7 +165,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
 
     expect(rendered).toContain('refine-worksheet edits top-N/sort/mark type');
-    expect(rendered).toContain('compatible rounded stacked bars');
+    expect(rendered).toContain('compatible rounded ordinary bars');
     expect(rendered).toContain('format-dashboard-zones rounds dashboard objects');
     expect(rendered).toContain('add-field + apply-worksheet change encodings.');
   });

@@ -245,11 +245,11 @@ function polygonSummary(
   };
 }
 
-function helperDefinitions(xml: string, hidden = true): string {
+function helperDefinitions(xml: string, hidden = true, expectedCount = 18): string {
   const definitions = [
     ...xml.matchAll(/<column\b(?=[^>]*\bname='\[__tmcp_round_[^']+\]')[\s\S]*?<\/column>/g),
   ].map(([definition]) => definition);
-  expect(definitions).toHaveLength(18);
+  expect(definitions).toHaveLength(expectedCount);
   return definitions
     .join('')
     .replaceAll("hidden='true'", hidden ? "hidden='true'" : "hidden='false'");
@@ -284,11 +284,31 @@ function sourceWorksheet(): string {
       <style-rule element='gridline'><format attr='line-visibility' value='off' /></style-rule>
       <style-rule element='table-div'><format attr='line-visibility' value='off' /></style-rule>
     </style>
-    <panes><pane><mark class='Bar' /><encodings><color column='[Sales].[none:Segment:nk]' /></encodings></pane></panes>
+    <panes><pane><view><breakdown value='auto' /></view><mark class='Bar' /><encodings><color column='[Sales].[none:Segment:nk]' /></encodings></pane></panes>
     <rows>[Sales].[sum:Profit:qk]</rows><cols>[Sales].[none:Category:nk]</cols>
   </table>
   <simple-id uuid='${WORKSHEET_ID}' />
 </worksheet>`;
+}
+
+function simpleSourceWorksheet(): string {
+  return sourceWorksheet()
+    .replace(
+      "        <column caption='Segment' datatype='string' name='[Segment]' role='dimension' type='nominal' />\n",
+      '',
+    )
+    .replace(
+      "        <column-instance column='[Segment]' derivation='None' name='[none:Segment:nk]' pivot='key' type='nominal' />\n",
+      '',
+    )
+    .replace(
+      "      <style-rule element='mark'><encoding attr='color' field='[Sales].[none:Segment:nk]' palette='Safe Palette' type='palette'><map to='#123456'><bucket>&quot;Consumer&quot;</bucket></map></encoding></style-rule>\n",
+      '',
+    )
+    .replace(
+      "<encodings><color column='[Sales].[none:Segment:nk]' /></encodings>",
+      '<encodings />',
+    );
 }
 
 function sourceWorksheetWithPreservedContent(): string {
@@ -296,7 +316,7 @@ function sourceWorksheetWithPreservedContent(): string {
     .replace("<column caption='Category'", "<column caption='Category' original='[Category]'")
     .replace(
       '<panes><pane>',
-      "<panes><pane selection-relaxation-option='selection-relaxation-allow'><view><breakdown value='auto' /></view>",
+      "<panes><pane selection-relaxation-option='selection-relaxation-allow'>",
     )
     .replace(
       `<simple-id uuid='${WORKSHEET_ID}' />`,
@@ -312,6 +332,104 @@ function plannedWorksheet(): { contract: RoundStackedBarSemanticContract; xml: s
 }
 
 const contract = plannedWorksheet().contract;
+const simplePlan = planRoundStackedBar(simpleSourceWorksheet(), { preset: 'subtle' });
+expect(simplePlan.ok).toBe(true);
+if (!simplePlan.ok) throw new Error(simplePlan.reason);
+const simpleContract = simplePlan.semanticContract;
+
+function simpleSummary(): TabularData {
+  return {
+    worksheet: { id: WORKSHEET_ID },
+    columns: [{ name: 'Tooltip Only' }, { name: 'Category' }, { name: 'SUM(Profit)' }],
+    rows: [
+      ['extra', 'Alpha', 12],
+      ['extra', 'Beta', -8],
+    ],
+  };
+}
+
+function captureSimpleBaseline(): RoundStackedBarBaseline {
+  const captured = captureRoundStackedBarBaseline(simpleSummary(), simpleContract);
+  expect(captured.ok).toBe(true);
+  if (!captured.ok) throw new Error(captured.reason);
+  return captured.baseline;
+}
+
+function tinySimpleBaseline(): RoundStackedBarBaseline {
+  const captured = captureRoundStackedBarBaseline(
+    {
+      worksheet: { id: WORKSHEET_ID },
+      columns: [{ name: 'Tooltip Only' }, { name: 'Category' }, { name: 'SUM(Profit)' }],
+      rows: [
+        ['extra', 'Alpha', 1e-5],
+        ['extra', 'Beta', -1e-5],
+      ],
+    },
+    simpleContract,
+  );
+  expect(captured.ok).toBe(true);
+  if (!captured.ok) throw new Error(captured.reason);
+  return captured.baseline;
+}
+
+function simpleRawData(): TabularData {
+  return {
+    columns: [
+      { name: '[Friendly Sales].[Profit]' },
+      { name: '[Friendly Sales].[Category]' },
+      { name: '[Friendly Sales].[Region]' },
+    ],
+    rows: [
+      [4, 'Alpha', 'West'],
+      [8, 'Alpha', 'West'],
+      [-3, 'Beta', 'West'],
+      [-5, 'Beta', 'West'],
+    ],
+  };
+}
+
+function simplePolygonSummary(
+  intervals: Interval[] = [
+    { category: 'Alpha', segment: '', low: 0, high: 12, roundTop: true },
+    { category: 'Beta', segment: '', low: -8, high: 0, roundBottom: true },
+  ],
+): TabularData {
+  return {
+    worksheet: { id: WORKSHEET_ID },
+    columns: [
+      { name: `AGG(${helperCaption('path')})` },
+      { name: 'Category' },
+      { name: `AGG(${helperCaption('y')})` },
+      { name: helperCaption('bin') },
+      { name: `AGG(${helperCaption('x')})` },
+      { name: 'Tooltip Only' },
+    ],
+    rows: intervals
+      .flatMap((interval) =>
+        polygonRows(interval, Math.abs(interval.high - interval.low)).map((row) => [
+          row[2],
+          row[3],
+          row[4],
+          row[5],
+          row[0],
+          row[6],
+        ]),
+      )
+      .reverse(),
+  };
+}
+
+function swapGeometryAxes(data: TabularData, xIndex: number, yIndex: number): TabularData {
+  return {
+    ...data,
+    rows: data.rows.map((row) => {
+      const swapped = [...row];
+      swapped[xIndex] = row[yIndex];
+      swapped[yIndex] = row[xIndex];
+      return swapped;
+    }),
+  };
+}
 
 const FILTER_ACTIONS = `<actions>
   <action name='[Action1_DE4200E5E5F14FC68D4CEE8CB0439BBB]' caption='Use Orders as Filter'>
@@ -387,7 +505,10 @@ function structureInputForSource(
     intendedWorksheetXml: intended,
     readbackWorksheetXml: intended,
     sourceWorkbookXml: workbook(source),
-    readbackWorkbookXml: workbook(intended, helperDefinitions(intended)),
+    readbackWorkbookXml: workbook(
+      intended,
+      helperDefinitions(intended, true, Object.keys(plan.semanticContract.helpers).length),
+    ),
     contract: plan.semanticContract,
   };
 }
@@ -524,6 +645,24 @@ describe('verifyRoundStackedBarSourceWorkbook', () => {
 });
 
 describe('captureRoundStackedBarBaseline', () => {
+  it('captures shuffled simple-bar summary columns without inventing a Segment key', () => {
+    const captured = captureRoundStackedBarBaseline(simpleSummary(), simpleContract);
+
+    expect(captured).toEqual({
+      ok: true,
+      baseline: {
+        worksheetId: WORKSHEET_ID,
+        groups: [
+          { category: 'Alpha', value: 12 },
+          { category: 'Beta', value: -8 },
+        ],
+        segmentOrderFromZero: [],
+        expectedVertexRows: 24,
+        categoryVisualOrder: 'live-only',
+      },
+    });
+  });
+
   it('resolves shuffled columns, ignores extra tooltip columns, and never treats row order as visual order', () => {
     const result = captureRoundStackedBarBaseline(
       { ...summary(), rows: [...summary().rows].reverse() },
@@ -535,6 +674,30 @@ describe('captureRoundStackedBarBaseline', () => {
     expect(result.baseline.expectedVertexRows).toBe(60);
     expect(result.baseline.segmentOrderFromZero).toEqual(['Home Office', 'Corporate', 'Consumer']);
     expect(result.baseline.categoryVisualOrder).toBe('live-only');
+  });
+
+  it('normalizes finite numeric and boolean nominal keys from summary data', () => {
+    expect(
+      captureRoundStackedBarBaseline(
+        summary([
+          [2024, true, 10],
+          [2025, false, -8],
+        ]),
+        contract,
+      ),
+    ).toEqual({
+      ok: true,
+      baseline: {
+        worksheetId: WORKSHEET_ID,
+        groups: [
+          { category: '2024', segment: 'true', value: 10 },
+          { category: '2025', segment: 'false', value: -8 },
+        ],
+        segmentOrderFromZero: ['true', 'false'],
+        expectedVertexRows: 24,
+        categoryVisualOrder: 'live-only',
+      },
+    });
   });
 
   it.each([
@@ -563,6 +726,42 @@ describe('captureRoundStackedBarBaseline', () => {
 });
 
 describe('verifyRoundStackedBarSeedEvidence', () => {
+  it('validates simple-bar seed evidence without requesting or resolving Segment', () => {
+    expect(
+      verifyRoundStackedBarSeedEvidence(simpleRawData(), captureSimpleBaseline(), simpleContract),
+    ).toEqual({ ok: true, findings: [] });
+
+    const oneSeed = simpleRawData();
+    oneSeed.rows = oneSeed.rows.filter((_row, index) => index !== 1);
+    expect(
+      verifyRoundStackedBarSeedEvidence(oneSeed, captureSimpleBaseline(), simpleContract).findings,
+    ).toContainEqual(expect.objectContaining({ code: 'seed-evidence' }));
+  });
+
+  it('matches finite numeric and boolean nominal keys across underlying data', () => {
+    const baseline: RoundStackedBarBaseline = {
+      worksheetId: WORKSHEET_ID,
+      groups: [
+        { category: '2024', segment: 'true', value: 10 },
+        { category: '2025', segment: 'false', value: -8 },
+      ],
+      segmentOrderFromZero: ['true', 'false'],
+      expectedVertexRows: 24,
+      categoryVisualOrder: 'live-only',
+    };
+    const underlying = rawData([
+      [true, 'West', 4, 2024],
+      [true, 'West', 6, 2024],
+      [false, 'West', -3, 2025],
+      [false, 'West', -5, 2025],
+    ]);
+
+    expect(verifyRoundStackedBarSeedEvidence(underlying, baseline, contract)).toEqual({
+      ok: true,
+      findings: [],
+    });
+  });
+
   it('requires two distinct finite raw values for every visible group and the requested filter member', () => {
     expect(verifyRoundStackedBarSeedEvidence(rawData(), captureBaseline(), contract).ok).toBe(true);
 
@@ -710,6 +909,173 @@ describe('verifyRoundStackedBarSeedEvidence', () => {
 });
 
 describe('verifyRoundStackedBarPostSummary', () => {
+  it.each([
+    ['a null zero coordinate', 4, 0, null, 'segment-value'],
+    ['a blank zero coordinate', 4, 0, '   ', 'segment-value'],
+    ['a boolean zero coordinate', 4, 0, false, 'segment-value'],
+    ['a null zero frame', 5, 0, null, 'frame-domain'],
+    ['a boolean first path', 2, 1, true, 'path-domain'],
+  ] as const)(
+    'rejects %s instead of coercing it into valid polygon geometry',
+    (_label, columnIndex, originalValue, malformedValue, expectedCode) => {
+      const malformed = polygonSummary();
+      const rows = malformed.rows.map((row) => [...row]);
+      const rowIndex = rows.findIndex((row) => row[columnIndex] === originalValue);
+      expect(rowIndex).toBeGreaterThanOrEqual(0);
+      rows[rowIndex][columnIndex] = malformedValue;
+      malformed.rows = rows;
+
+      const verification = verifyRoundStackedBarPostSummary(malformed, captureBaseline(), contract);
+
+      expect(verification.ok).toBe(false);
+      expect(verification.findings.map((finding) => finding.code)).toContain(expectedCode);
+    },
+  );
+
+  it('accepts finite numeric strings for polygon geometry', () => {
+    const readback = polygonSummary();
+    const numericColumns = new Set([0, 2, 4, 5]);
+    readback.rows = readback.rows.map((row) =>
+      row.map((cell, index) => (numericColumns.has(index) ? String(cell) : cell)),
+    );
+
+    expect(verifyRoundStackedBarPostSummary(readback, captureBaseline(), contract)).toEqual({
+      ok: true,
+      findings: [],
+    });
+  });
+
+  it('matches finite numeric and boolean nominal keys across post-apply summary data', () => {
+    const baseline: RoundStackedBarBaseline = {
+      worksheetId: WORKSHEET_ID,
+      groups: [
+        { category: '2024', segment: 'true', value: 10 },
+        { category: '2025', segment: 'false', value: -8 },
+      ],
+      segmentOrderFromZero: ['true', 'false'],
+      expectedVertexRows: 24,
+      categoryVisualOrder: 'live-only',
+    };
+    const readback = polygonSummary(
+      [
+        { category: '2024', segment: 'true', low: 0, high: 10, roundTop: true },
+        { category: '2025', segment: 'false', low: -8, high: 0, roundBottom: true },
+      ],
+      { '2024': 10, '2025': 8 },
+    );
+    readback.rows = readback.rows.map((row) => [
+      row[0],
+      row[1] === 'true',
+      row[2],
+      Number(row[3]),
+      ...row.slice(4),
+    ]);
+
+    expect(verifyRoundStackedBarPostSummary(readback, baseline, contract)).toEqual({
+      ok: true,
+      findings: [],
+    });
+  });
+
+  it('verifies horizontal simple bars after normalizing the band and value axes', () => {
+    expect(
+      verifyRoundStackedBarPostSummary(
+        swapGeometryAxes(simplePolygonSummary(), 4, 2),
+        captureSimpleBaseline(),
+        { ...simpleContract, orientation: 'horizontal' },
+      ),
+    ).toEqual({ ok: true, findings: [] });
+  });
+
+  it('verifies horizontal stacked bars after normalizing the band and value axes', () => {
+    expect(
+      verifyRoundStackedBarPostSummary(
+        swapGeometryAxes(polygonSummary(), 0, 4),
+        captureBaseline(),
+        { ...contract, orientation: 'horizontal' },
+      ),
+    ).toEqual({ ok: true, findings: [] });
+  });
+
+  it('verifies positive and negative simple bars from zero with only the nonzero tip rounded', () => {
+    expect(
+      verifyRoundStackedBarPostSummary(
+        simplePolygonSummary(),
+        captureSimpleBaseline(),
+        simpleContract,
+      ),
+    ).toEqual({ ok: true, findings: [] });
+  });
+
+  it('rejects a shifted simple bar even when its value span and rounded tip are unchanged', () => {
+    const shifted = simplePolygonSummary([
+      { category: 'Alpha', segment: '', low: 1, high: 13, roundTop: true },
+      { category: 'Beta', segment: '', low: -8, high: 0, roundBottom: true },
+    ]);
+
+    const verification = verifyRoundStackedBarPostSummary(
+      shifted,
+      captureSimpleBaseline(),
+      simpleContract,
+    );
+
+    expect(verification.ok).toBe(false);
+    expect(verification.findings).toContainEqual(
+      expect.objectContaining({ code: 'segment-value' }),
+    );
+  });
+
+  it('verifies positive and negative simple bars whose rounded tips are just above the zero gate', () => {
+    const readback = simplePolygonSummary([
+      { category: 'Alpha', segment: '', low: 0, high: 1e-5, roundTop: true },
+      { category: 'Beta', segment: '', low: -1e-5, high: 0, roundBottom: true },
+    ]);
+
+    expect(
+      verifyRoundStackedBarPostSummary(readback, tinySimpleBaseline(), simpleContract),
+    ).toEqual({ ok: true, findings: [] });
+  });
+
+  it('still rejects a tiny simple bar whose nonzero tip is square instead of rounded', () => {
+    const squareTips = simplePolygonSummary([
+      { category: 'Alpha', segment: '', low: 0, high: 1e-5 },
+      { category: 'Beta', segment: '', low: -1e-5, high: 0 },
+    ]);
+
+    const verification = verifyRoundStackedBarPostSummary(
+      squareTips,
+      tinySimpleBaseline(),
+      simpleContract,
+    );
+
+    expect(verification.ok).toBe(false);
+    expect(verification.findings).toContainEqual(expect.objectContaining({ code: 'outer-tip' }));
+  });
+
+  it('treats a one-member colored bar as a stack because Segment remains in the contract', () => {
+    const oneMemberSummary = summary([
+      ['Alpha', 'Consumer', 10],
+      ['Beta', 'Consumer', -8],
+    ]);
+    const shiftedStack = polygonSummary(
+      [
+        { category: 'Alpha', segment: 'Consumer', low: 1, high: 11, roundTop: true },
+        { category: 'Beta', segment: 'Consumer', low: -8, high: 0, roundBottom: true },
+      ],
+      { Alpha: 10, Beta: 8 },
+    );
+
+    const verification = verifyRoundStackedBarPostSummary(
+      shiftedStack,
+      captureBaseline(oneMemberSummary),
+      contract,
+    );
+
+    expect(verification.findings).toContainEqual(
+      expect.objectContaining({ code: 'stack-gap-or-overlap' }),
+    );
+  });
+
   it('accepts unordered 12-row polygons and extra summary columns', () => {
     const result = verifyRoundStackedBarPostSummary(polygonSummary(), captureBaseline(), contract);
     expect(result).toEqual({ ok: true, findings: [] });
@@ -823,9 +1189,33 @@ describe('verifyRoundStackedBarPostSummary', () => {
 });
 
 describe('verifyRoundStackedBarStructure', () => {
-  it('accepts the strict Polygon structure with hidden helpers at worksheet and workbook scope', () => {
+  it('accepts a stacked Polygon with exactly its 18 contract helpers', () => {
     expect(verifyRoundStackedBarStructure(structureInput())).toEqual({ ok: true, findings: [] });
   });
+
+  it('accepts a simple Polygon with exactly its 14 active contract helpers', () => {
+    const input = structureInputForSource(simpleSourceWorksheet());
+
+    expect(Object.keys(input.contract.helpers)).toHaveLength(14);
+    expect(verifyRoundStackedBarStructure(input)).toEqual({ ok: true, findings: [] });
+  });
+
+  it.each(['missing', 'extra'] as const)(
+    'rejects a simple Polygon with an %s helper outside its exact active set',
+    (mutation) => {
+      const input = structureInputForSource(simpleSourceWorksheet());
+      const helpers = helperDefinitions(input.intendedWorksheetXml, true, 14);
+      const firstHelper = helpers.match(/<column\b[\s\S]*?<\/column>/)?.[0];
+      expect(firstHelper).toBeTruthy();
+      const changedHelpers =
+        mutation === 'missing'
+          ? helpers.replace(firstHelper ?? '', '')
+          : `${helpers}<column hidden='true' name='[${PREFIX}pos]'><calculation class='tableau' formula='0' /></column>`;
+      input.readbackWorkbookXml = workbook(input.readbackWorksheetXml, changedHelpers);
+
+      expect(findingCodes(verifyRoundStackedBarStructure(input))).toContain('helper-definition');
+    },
+  );
 
   it('requires the supplied semantic contract to match the deterministic source plan', () => {
     const input = structureInput();
