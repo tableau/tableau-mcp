@@ -60,6 +60,27 @@ describe('applyWorksheetArtifact', () => {
     expect(outcome).toMatchObject({ state: 'unknown', retrySafe: false });
     expect(consume).toHaveBeenCalledOnce();
   });
+
+  it('consumes an artifact and reports unknown when post-dispatch verification fails', async () => {
+    const store = artifactStore();
+    const consume = vi.spyOn(store, 'consume');
+    vi.mocked(loadWorksheetXmlModule.loadWorksheetXml).mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      return Err({
+        type: 'load-worksheet-xml-error',
+        error: {
+          type: 'readback-failed',
+          findings: [],
+          message: 'The applied worksheet did not match the artifact.',
+        },
+      });
+    });
+
+    const outcome = await applyWorksheetArtifact(deps(store));
+
+    expect(outcome).toMatchObject({ state: 'unknown', retrySafe: false });
+    expect(consume).toHaveBeenCalledOnce();
+  });
 });
 
 function deps(store: TemplateArtifactStore): ApplyWorksheetArtifactArgs {

@@ -168,6 +168,11 @@ export const getApplyWorksheetTool = (
             }
             try {
               const executor = await extra.getExecutor(resolvedSession);
+              const existingArtifactBufferId = await resolveWorksheetSimpleId({
+                worksheetRef: reservation.artifact.title,
+                resolvedSession,
+                extra,
+              });
               const outcome = await applyWorksheetArtifact({
                 store: artifactStore,
                 artifactId,
@@ -176,22 +181,25 @@ export const getApplyWorksheetTool = (
                 signal: extra.signal,
                 reservation,
               });
-              if (outcome.state !== 'applied') return outcome.error.toErr();
 
-              // A prior add-field/remove-field edit buffer for this sheet+session predates
-              // this apply; whatever it was tracking is now stale, so close it rather than
-              // let a later name-only call silently resume editing on top of it.
-              const artifactBufferId = await resolveWorksheetSimpleId({
-                worksheetRef: outcome.receipt.title,
-                resolvedSession,
-                extra,
-              });
-              if (artifactBufferId) {
-                clearStickyWorksheetFile({
-                  session: resolvedSession,
-                  worksheetId: artifactBufferId,
-                });
+              if (outcome.state !== 'failed') {
+                const artifactBufferId =
+                  existingArtifactBufferId ??
+                  (outcome.state === 'applied'
+                    ? await resolveWorksheetSimpleId({
+                        worksheetRef: reservation.artifact.title,
+                        resolvedSession,
+                        extra,
+                      })
+                    : undefined);
+                if (artifactBufferId) {
+                  clearStickyWorksheetFile({
+                    session: resolvedSession,
+                    worksheetId: artifactBufferId,
+                  });
+                }
               }
+              if (outcome.state !== 'applied') return outcome.error.toErr();
 
               // The artifact apply already carries the verification outcome
               // (applyWorksheetArtifact resolves the skipped fallback), so the
@@ -271,24 +279,35 @@ export const getApplyWorksheetTool = (
             });
             if (built.isErr()) return built.error.toErr();
 
+            const existingTemplatePlanBufferId = await resolveWorksheetSimpleId({
+              worksheetRef: built.value.artifact.title,
+              resolvedSession,
+              extra,
+            });
             const outcome = await applyWorksheetArtifactPayload({
               artifact: built.value.artifact,
               executor,
               signal: extra.signal,
             });
-            if (outcome.state !== 'applied') return outcome.error.toErr();
 
-            const templatePlanBufferId = await resolveWorksheetSimpleId({
-              worksheetRef: outcome.receipt.title,
-              resolvedSession,
-              extra,
-            });
-            if (templatePlanBufferId) {
-              clearStickyWorksheetFile({
-                session: resolvedSession,
-                worksheetId: templatePlanBufferId,
-              });
+            if (outcome.state !== 'failed') {
+              const templatePlanBufferId =
+                existingTemplatePlanBufferId ??
+                (outcome.state === 'applied'
+                  ? await resolveWorksheetSimpleId({
+                      worksheetRef: built.value.artifact.title,
+                      resolvedSession,
+                      extra,
+                    })
+                  : undefined);
+              if (templatePlanBufferId) {
+                clearStickyWorksheetFile({
+                  session: resolvedSession,
+                  worksheetId: templatePlanBufferId,
+                });
+              }
             }
+            if (outcome.state !== 'applied') return outcome.error.toErr();
 
             const verification = outcome.receipt.verification;
             const verificationRan = verification.status !== 'skipped';

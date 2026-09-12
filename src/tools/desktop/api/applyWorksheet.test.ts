@@ -63,14 +63,6 @@ describe('applyWorksheetTool', () => {
     message: z.string(),
     nextAction: nextActionSchema,
   });
-  const artifactStructuredSchema = z.object({
-    artifactId: z.string(),
-    title: z.string(),
-    applied: z.boolean(),
-    retrySafe: z.boolean(),
-    verification: z.object({ ok: z.boolean(), status: z.string() }),
-    nextAction: nextActionSchema,
-  });
   const skippedReadbackVerification = {
     ok: true,
     status: 'skipped' as const,
@@ -351,6 +343,91 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Do not retry');
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+      session: '12345',
+      worksheetId: 'artifact-sheet-uuid',
+    });
+  });
+
+  it('clears a pre-existing direct-plan edit buffer when the request aborts after dispatch', async () => {
+    const controller = new AbortController();
+    vi.mocked(listWorksheetsModule.listWorksheets).mockImplementation(async ({ signal }) => {
+      if (signal.aborted) throw new Error('aborted worksheet lookup');
+      return Ok({ count: 1, worksheets: [{ id: 'existing-sheet-uuid', name: 'Artifact Sheet' }] });
+    });
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      controller.abort(new Error('request cancelled'));
+      return Err({
+        type: 'execute-command-error',
+        error: { type: 'unknown', error: 'request aborted after POST' },
+      });
+    });
+
+    const result = await getDirectTemplateToolResult({
+      buildArtifact: vi
+        .fn()
+        .mockReturnValue(
+          Ok({ artifact: templateArtifact('direct-plan'), provenance: 'protected' }),
+        ),
+      getExecutor: vi.fn().mockResolvedValue({
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: '<workbook><worksheets/><windows/></workbook>',
+            instanceId: 'inst-build',
+          }),
+        ),
+      }),
+      customSignal: controller.signal,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(listWorksheetsModule.listWorksheets).toHaveBeenCalledOnce();
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+      session: '12345',
+      worksheetId: 'existing-sheet-uuid',
+    });
+  });
+
+  it('reports direct-plan verification findings with the target and clears stale edit state', async () => {
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      return Err({
+        type: 'load-worksheet-xml-error',
+        error: {
+          type: 'readback-failed',
+          findings: [promisedSortLossWarning],
+          message:
+            'Worksheet "Artifact Sheet" failed post-apply verification: <computed-sort column="[DS].[none:State:nk]">.',
+        },
+      });
+    });
+
+    const result = await getDirectTemplateToolResult({
+      buildArtifact: vi
+        .fn()
+        .mockReturnValue(
+          Ok({ artifact: templateArtifact('direct-plan'), provenance: 'protected' }),
+        ),
+      getExecutor: vi.fn().mockResolvedValue({
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: '<workbook><worksheets/><windows/></workbook>',
+            instanceId: 'inst-build',
+          }),
+        ),
+      }),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Worksheet "Artifact Sheet"');
+    expect(result.content[0].text).toContain('<computed-sort column="[DS].[none:State:nk]">');
+    expect(result.content[0].text).toContain('Do not retry');
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+      session: '12345',
+      worksheetId: 'artifact-sheet-uuid',
+    });
   });
 
   it.each([
@@ -905,58 +982,77 @@ describe('applyWorksheetTool', () => {
       expect(args.artifactApply?.dispatchState.attempted).toBe(false);
       expect(args.artifactApply?.expectedInstanceId).toBe('inst-build');
       args.artifactApply!.dispatchState.attempted = true;
-      return Ok({
-        readbackWarnings: [],
-        readbackVerification: { ok: false, status: 'failed' },
+      return Err({
+        type: 'load-worksheet-xml-error',
+        error: {
+          type: 'readback-failed',
+          findings: [promisedSortLossWarning],
+          message:
+            'Worksheet "Artifact Sheet" failed post-apply verification: <computed-sort column="[DS].[none:State:nk]">.',
+        },
       });
     });
 
     const result = await getArtifactToolResult(store, 'artifact-1', '12345');
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text)).toMatchObject({
-      artifactId: 'artifact-1',
-      title: 'Artifact Sheet',
-      applied: true,
-      retrySafe: false,
-      verification: { ok: false, status: 'failed' },
-    });
-
-    // The text block is unchanged: it still carries only the artifact result body.
-    expect(Object.keys(JSON.parse(result.content[0].text))).toEqual([
-      'artifactId',
-      'title',
-      'applied',
-      'retrySafe',
-      'verification',
-    ]);
-
-    // Superset rule: the structured block folds the same artifact body in — an
-    // observed failed readback, not a success claim. A failed verification must NOT
-    // mint a 'done' marker (that tells the agent to stop and would bury the failure);
-    // it directs the agent to inspect the sheet and build a fresh artifact instead.
-    const structured = artifactStructuredSchema
-      .extend({ nextAction: z.object({ kind: z.literal('prefill'), label: z.string() }) })
-      .parse(result.structuredContent);
-    expect(structured).toMatchObject({
-      artifactId: 'artifact-1',
-      title: 'Artifact Sheet',
-      applied: true,
-      retrySafe: false,
-      verification: { ok: false, status: 'failed' },
-    });
-    expect(structured.nextAction).toEqual({
-      kind: 'prefill',
-      label: 'Verification failed — inspect sheet, rebuild artifact',
-    });
+    expect(result.content[0].text).toContain('Worksheet "Artifact Sheet"');
+    expect(result.content[0].text).toContain('<computed-sort column="[DS].[none:State:nk]">');
+    expect(result.content[0].text).toContain('Do not retry');
     expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
-    // Applied (even with a failed readback) — the sheet changed, so any prior
-    // add-field/remove-field buffer for it is stale and must be closed.
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
       worksheetId: 'artifact-sheet-uuid',
     });
+  });
+
+  it('clears a pre-existing artifact edit buffer when the request aborts after dispatch', async () => {
+    const store = artifactStore();
+    const controller = new AbortController();
+    vi.mocked(listWorksheetsModule.listWorksheets).mockImplementation(async ({ signal }) => {
+      if (signal.aborted) throw new Error('aborted worksheet lookup');
+      return Ok({ count: 1, worksheets: [{ id: 'existing-sheet-uuid', name: 'Artifact Sheet' }] });
+    });
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      controller.abort(new Error('request cancelled'));
+      return Err({
+        type: 'execute-command-error',
+        error: { type: 'unknown', error: 'request aborted after POST' },
+      });
+    });
+
+    const result = await getArtifactToolResult(
+      store,
+      'artifact-1',
+      '12345',
+      undefined,
+      controller.signal,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
+    expect(listWorksheetsModule.listWorksheets).toHaveBeenCalledOnce();
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+      session: '12345',
+      worksheetId: 'existing-sheet-uuid',
+    });
+  });
+
+  it('does not clear stale edit state when an artifact fails before dispatch', async () => {
+    const store = artifactStore();
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Err({ type: 'load-worksheet-xml-error', error: { type: 'invalid-xml' } }),
+    );
+
+    const result = await getArtifactToolResult(store, 'artifact-1', '12345');
+
+    expect(result.isError).toBe(true);
+    expect(worksheetEditBufferModule.clearStickyWorksheetFile).not.toHaveBeenCalled();
+    const reservation = store.reserve('artifact-1', '12345');
+    expect(reservation.ok).toBe(true);
+    if (reservation.ok) store.release(reservation.lease);
   });
 
   it('keeps an artifactId apply nonterminal when structural verification is skipped', async () => {
@@ -1173,6 +1269,7 @@ async function getArtifactToolResult(
   artifactId: string,
   session: string,
   worksheetName?: string,
+  customSignal?: AbortSignal,
 ): Promise<CallToolResult> {
   const tool = getApplyWorksheetTool(new DesktopMcpServer(), { store });
   const callback = await Provider.from(tool.callback);
@@ -1186,6 +1283,7 @@ async function getArtifactToolResult(
     },
     {
       ...getMockRequestHandlerExtra(),
+      ...(customSignal ? { signal: customSignal } : {}),
       getExecutor: vi.fn().mockResolvedValue({}),
     },
   );
@@ -1225,12 +1323,14 @@ async function getDirectTemplateToolResult({
   store,
   plan = directTemplatePlan(),
   worksheetName,
+  customSignal,
 }: {
   buildArtifact?: ReturnType<typeof vi.fn>;
   getExecutor: TableauDesktopToolContext['getExecutor'];
   store?: TemplateArtifactStore;
   plan?: WorksheetTemplatePlan;
   worksheetName?: string;
+  customSignal?: AbortSignal;
 }): Promise<CallToolResult> {
   const tool = (getApplyWorksheetTool as any)(new DesktopMcpServer(), {
     ...(buildArtifact ? { buildArtifact } : {}),
@@ -1246,7 +1346,11 @@ async function getDirectTemplateToolResult({
       worksheetName,
       worksheetFile: undefined,
     },
-    { ...getMockRequestHandlerExtra(), getExecutor },
+    {
+      ...getMockRequestHandlerExtra(),
+      ...(customSignal ? { signal: customSignal } : {}),
+      getExecutor,
+    },
   );
 }
 
