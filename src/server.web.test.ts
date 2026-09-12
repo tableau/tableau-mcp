@@ -256,6 +256,7 @@ describe('server', () => {
     expect(registeredToolNames).not.toContain('get-flow');
     expect(registeredToolNames).not.toContain('list-flow-runs');
     expect(registeredToolNames).not.toContain('list-flow-tasks');
+    expect(registeredToolNames).not.toContain('get-flow-task');
     // ...while unrelated tools stay registered.
     expect(registeredToolNames).toContain('list-datasources');
   });
@@ -295,7 +296,40 @@ describe('server', () => {
     expect(registeredToolNames).not.toContain('get-flow');
     expect(registeredToolNames).not.toContain('list-flow-runs');
     expect(registeredToolNames).not.toContain('list-flow-tasks');
+    expect(registeredToolNames).not.toContain('get-flow-task');
     expect(registeredToolNames).toContain('list-datasources');
+  });
+
+  it('should register mutating flow tools only when both static gates and the flow-tools feature flag are enabled', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'flow-tools',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).toContain('run-flow');
+    expect(registeredToolNames).toContain('run-flow-task');
+    expect(registeredToolNames).toContain('cancel-flow-run');
+  });
+
+  it('should not register mutating flow tools when only the write gate is enabled', async () => {
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).not.toContain('run-flow');
+    expect(registeredToolNames).not.toContain('run-flow-task');
+    expect(registeredToolNames).not.toContain('cancel-flow-run');
   });
 
   it('should not register insight tools by default (INSIGHTS_TOOLS_ENABLED unset)', async () => {

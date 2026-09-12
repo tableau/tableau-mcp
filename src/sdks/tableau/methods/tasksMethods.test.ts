@@ -327,4 +327,52 @@ describe('TasksMethods', () => {
       expect(result).toEqual([]);
     });
   });
+
+  describe('getFlowRunTask', () => {
+    it('fetches a single task by id and returns its flowRun', async () => {
+      const flowRun = {
+        id: 'task-1',
+        type: 'RunFlowTask',
+        flow: { id: 'f1', name: 'Flow One' },
+        schedule: { name: 'Daily', frequency: 'Daily' },
+      };
+      const mockApiClient = {
+        getFlowRunTask: vi.fn().mockResolvedValue({ task: { flowRun } }),
+      };
+      const tasksMethods = new TasksMethods('http://test', { type: 'Bearer', token: 'test' }, {});
+      // @ts-expect-error - Mocking private property
+      tasksMethods._apiClient = mockApiClient;
+
+      const result = await tasksMethods.getFlowRunTask({ siteId: 'site-1', taskId: 'task-1' });
+
+      expect(result).toEqual(flowRun);
+      expect(mockApiClient.getFlowRunTask).toHaveBeenCalledWith(
+        expect.objectContaining({ params: { siteId: 'site-1', taskId: 'task-1' } }),
+      );
+    });
+  });
+
+  describe('runFlowTask', () => {
+    it('posts to runNow with the task id and returns the job', async () => {
+      const job = {
+        id: 'job-1',
+        type: 'RunFlow',
+        runFlowJobType: { flowRunId: 'run-1', flow: { id: 'f1', name: 'Flow One' } },
+      };
+      const mockApiClient = {
+        runFlowTask: vi.fn().mockResolvedValue({ job }),
+      };
+      const tasksMethods = new TasksMethods('http://test', { type: 'Bearer', token: 'test' }, {});
+      // @ts-expect-error - Mocking private property
+      tasksMethods._apiClient = mockApiClient;
+
+      const result = await tasksMethods.runFlowTask({ siteId: 'site-1', taskId: 'task-1' });
+
+      expect(result).toEqual(job);
+      expect(mockApiClient.runFlowTask).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({ params: { siteId: 'site-1', taskId: 'task-1' } }),
+      );
+    });
+  });
 });

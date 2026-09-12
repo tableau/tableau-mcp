@@ -17,10 +17,12 @@ export const DEFAULT_PENDING_DELETION_TAG = 'pending-deletion';
  * Context handed to an EvidenceStrategy on every guarded mutation. `confirmationToken` is the
  * caller-supplied confirmation value (e.g. the nonce echoed back from a preview), if any.
  */
+export type EvidenceTarget = Pick<MutationTarget, 'id'> & Partial<Omit<MutationTarget, 'id'>>;
+
 export interface EvidenceContext {
   restApi: RestApi;
   siteId: string;
-  target: MutationTarget;
+  target: EvidenceTarget;
   // The WebToolName, used to namespace registry keys so one tool's evidence can't satisfy another's.
   tool: WebToolName;
   userLuid: string;
