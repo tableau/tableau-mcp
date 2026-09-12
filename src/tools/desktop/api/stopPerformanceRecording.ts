@@ -18,7 +18,7 @@ export const getStopPerformanceRecordingTool = (
   const stopPerformanceRecordingTool = new DesktopTool({
     server,
     name: 'stop-performance-recording',
-    minApiVersion: '0.2.11',
+    minApiVersion: '0.2.14',
     title,
     description:
       'Stop performance recording for the open workbook in Tableau Desktop and return the path on the Desktop computer to the generated packaged recording.',

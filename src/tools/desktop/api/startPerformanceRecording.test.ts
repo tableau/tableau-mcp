@@ -25,10 +25,10 @@ describe('start-performance-recording tool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('declares the 0.2.11 floor and recorder side-effect metadata', () => {
+  it('declares the 0.2.14 floor and recorder side-effect metadata', () => {
     const tool = getStartPerformanceRecordingTool(new DesktopMcpServer());
 
-    expect(tool.minApiVersion).toBe('0.2.11');
+    expect(tool.minApiVersion).toBe('0.2.14');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
@@ -176,6 +176,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-start-performance-recording',
-    apiVersion: '0.2.11',
+    apiVersion: '0.2.14',
   };
 }

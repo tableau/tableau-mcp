@@ -27,7 +27,7 @@ Reach here when you are: scaffolding a new extension, wiring `main.js` to read l
 - **Match data columns by `fieldName`, not position.** Drop order and column count vary; find your column by name so re-binding doesn't silently break.
 - **Subscribe to change events so the extension is live.** Add listeners for `tableau.TableauEventType.FilterChanged` and `MarkSelectionChanged` (dashboard: on each worksheet) and re-read on fire.
 - **Surface init/read errors on-screen.** The sandbox has no visible console; a small error `<div>` turns a black box into a readable failure.
-- **Plan for exactly one trust click.** Installing a never-before-trusted local extension raises Tableau's one-time security/trust dialog on first load — this is a human gate by design, confirmed field-tested for viz extensions.
+- **Plan for the one-time trust dialog.** Installing a never-before-trusted local extension raises Tableau's security/trust dialog on first load. When the user has explicitly asked to install and trust that exact extension, call `get-active-dialogs` for fresh state; only if the returned dialog identity and exact action make the intended choice unambiguous, call `invoke-dialog-action` at most once with those exact returned values. Otherwise use the human fallback and ask the user to handle the trust dialog.
 
 ## Common Mistakes
 

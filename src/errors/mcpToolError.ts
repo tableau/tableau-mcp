@@ -2,6 +2,7 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
+import { BLOCKING_DIALOG_GUIDANCE } from '../desktop/callDeadline.js';
 import { ExecuteCommandError } from '../desktop/externalApi/executorTypes.js';
 import {
   BARE_COMMAND_FAILURE_GUIDANCE,
@@ -285,9 +286,9 @@ export class AdminInsightsUnavailableError extends McpToolError {
 
 /**
  * The image-render call exceeded its deadline. Distinct from client cancellation: the render
- * hangs indefinitely when Tableau Desktop is showing a modal dialog that blocks rendering, so
- * a blind retry just wedges Desktop again. The message steers toward dismissing the dialog or
- * passing a filePath rather than retrying.
+ * hangs indefinitely when Tableau Desktop is showing a modal dialog that blocks rendering. Use
+ * the same exact, bounded dialog recovery as other ordinary Desktop timeouts rather than retrying
+ * the export or requiring an immediate human-only dismissal.
  */
 export class ImageExportTimeoutError extends McpToolError {
   constructor(label: string, timeoutMs: number) {
@@ -296,10 +297,7 @@ export class ImageExportTimeoutError extends McpToolError {
       type: 'image-export-timeout',
       message: [
         `${label} image export exceeded ${seconds}s and was aborted.`,
-        'Tableau Desktop may be showing a modal dialog (e.g. a save or error prompt) that ' +
-          'blocks rendering. Do not blindly retry — it will hang again.',
-        'Bring Tableau Desktop to the foreground and dismiss any open dialog, or pass a ' +
-          'filePath so Tableau writes the image to disk directly.',
+        BLOCKING_DIALOG_GUIDANCE,
       ].join('\n'),
       statusCode: 504,
     });
@@ -307,8 +305,8 @@ export class ImageExportTimeoutError extends McpToolError {
 }
 
 export class DesktopCommandExecutionError extends McpToolError {
-  // A timeout counts as dialog-blocked too: a hung Desktop call is almost always wedged behind a
-  // modal it cannot clear over the API, and a retry just hangs against the same dialog.
+  // A timeout counts as dialog-blocked too: the dedicated dialog tools may recover an ordinary
+  // hung call, while the error guidance still forbids blindly retrying the originating operation.
   readonly blockedByDesktopDialog: boolean;
 
   constructor(error: ExecuteCommandError, fix?: string) {

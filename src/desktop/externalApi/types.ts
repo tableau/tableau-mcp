@@ -4,7 +4,9 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * live `/openapi.json` (OpenAPI 3.1, `info.version` 0.2.9, captured 2026-08-20).
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.13), derived from
+ * the production registry/generator harness. The dialog contract was canonical-JSON
+ * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
  * permissive (`.passthrough()` / optional) because the spec is read-complete but
  * write-thin, and an older Desktop build may omit a field a newer spec marks required.
@@ -14,12 +16,17 @@ import { z } from 'zod';
 export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
+  appDialogs: '/v0/app/dialogs',
+  appInvokeDialogAction: '/v0/app:invokeDialogAction',
   appOpenFile: '/v0/app:openFile',
+  appToggleStartPage: '/v0/app:toggleStartPage',
   root: '/v0/',
   workbook: '/v0/workbook',
   workbookDashboards: '/v0/workbook/dashboards',
   workbookDashboardsNew: '/v0/workbook/dashboards:new',
   workbookDatasources: '/v0/workbook/datasources',
+  workbookDatasource: '/v0/workbook/datasources/{id}',
+  workbookDatasourceDocument: '/v0/workbook/datasources/{id}/document',
   workbookDocument: '/v0/workbook/document',
   workbookDocumentValidate: '/v0/workbook/document:validate',
   workbookStoryboards: '/v0/workbook/storyboards',
@@ -57,6 +64,7 @@ export const EXTERNAL_API_ROUTES = {
   worksheetSort: '/v0/workbook/worksheets/{id}:sort',
   worksheetPauseAutoUpdates: '/v0/workbook/worksheets/{id}:pauseAutoUpdates',
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
+  worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
   site: '/v0/site',
   siteDatasources: '/v0/site/datasources',
   siteWorkbooks: '/v0/site/workbooks',
@@ -183,6 +191,27 @@ export function storyboardDocumentRoute(storyboardId: string): string {
   return `${storyboardRoute(storyboardId)}/document`;
 }
 
+// Workbook datasource inventory ids are already URL-encoded. Decode the inventory value once,
+// then encode it once for the outbound segment so encoded delimiters stay inside that segment
+// without being double-encoded.
+function canonicalDatasourceSegment(datasourceId: string): string {
+  return encodeURIComponent(decodeURIComponent(datasourceId));
+}
+
+export function workbookDatasourceRoute(datasourceId: string): string {
+  return EXTERNAL_API_ROUTES.workbookDatasource.replace(
+    '{id}',
+    canonicalDatasourceSegment(datasourceId),
+  );
+}
+
+export function workbookDatasourceDocumentRoute(datasourceId: string): string {
+  return EXTERNAL_API_ROUTES.workbookDatasourceDocument.replace(
+    '{id}',
+    canonicalDatasourceSegment(datasourceId),
+  );
+}
+
 export function worksheetSummaryDataRoute(
   worksheetId: string,
   query: WorksheetSummaryDataQuery,
@@ -242,6 +271,10 @@ export function worksheetPauseAutoUpdatesRoute(worksheetId: string): string {
 
 export function worksheetResumeAutoUpdatesRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:resumeAutoUpdates`;
+}
+
+export function worksheetRefreshNowRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}:refreshNow`;
 }
 
 export function dashboardPauseAutoUpdatesRoute(dashboardId: string): string {
@@ -385,7 +418,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.8). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.13). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -398,10 +431,16 @@ export const PROBLEM_CODES = [
   'missing-payload-version',
   'payload-version-unsupported',
   'not-found',
+  'datasource-not-found',
   'sheet-not-found',
   'logical-table-not-found',
   'operation-not-found',
   'operation-pending',
+  'dialog-not-found',
+  'dialog-ambiguous',
+  'dialog-action-not-found',
+  'dialog-action-ambiguous',
+  'dialog-action-disabled',
   'method-not-allowed',
   'not-implemented',
   'command-not-found',
@@ -453,6 +492,23 @@ export const operationWarningSchema = z
   .passthrough();
 export type OperationWarning = z.infer<typeof operationWarningSchema>;
 
+/** A visible dialog action copied exactly into `POST /v0/app:invokeDialogAction`. */
+export const dialogActionSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('button'),
+      label: z.string().min(1),
+    })
+    .passthrough(),
+  z
+    .object({
+      kind: z.literal('close'),
+      label: z.never().optional(),
+    })
+    .passthrough(),
+]);
+export type DialogAction = z.infer<typeof dialogActionSchema>;
+
 /** A visible modal Qt window on an Operation: rides `blockingWindows` when it needs a human decision, `progressWindows` when it is self-clearing. */
 export const windowInfoSchema = z
   .object({
@@ -462,11 +518,70 @@ export const windowInfoSchema = z
     messageText: z.string().optional(),
     informativeText: z.string().optional(),
     detailedText: z.string().optional(),
+    detailedTextTruncated: z.boolean().optional(),
     iconLevel: z.string().optional(),
     buttons: z.array(z.string()).optional(),
+    actions: z.array(dialogActionSchema).optional(),
   })
   .passthrough();
 export type WindowInfo = z.infer<typeof windowInfoSchema>;
+
+/** Exact current-dialog identity copied from an item returned by `GET /v0/app/dialogs`. */
+export const dialogIdentitySchema = z
+  .object({
+    objectName: z.string(),
+    title: z.string(),
+    className: z.string(),
+  })
+  .passthrough();
+export type DialogIdentity = z.infer<typeof dialogIdentitySchema>;
+
+/** Current actionable Desktop dialogs returned independently of operation state. */
+export const dialogListSchema = z
+  .object({
+    dialogs: z.array(windowInfoSchema),
+  })
+  .passthrough();
+export type DialogList = z.infer<typeof dialogListSchema>;
+
+/** Exact compare-and-act request accepted by `POST /v0/app:invokeDialogAction`. */
+export const invokeDialogActionRequestSchema = z
+  .object({
+    dialog: dialogIdentitySchema,
+    action: dialogActionSchema,
+  })
+  .passthrough();
+export type InvokeDialogActionRequest = z.infer<typeof invokeDialogActionRequestSchema>;
+
+/**
+ * Post-action dialog state. Only outcomes that confirm a click echo the selected
+ * identity and action; `no-active-dialog` confirms that no action occurred.
+ */
+export const invokeDialogActionResultSchema = z.discriminatedUnion('outcome', [
+  z
+    .object({
+      outcome: z.literal('no-active-dialog'),
+      dialogs: z.array(windowInfoSchema),
+    })
+    .passthrough(),
+  z
+    .object({
+      outcome: z.literal('dismissed'),
+      dialog: dialogIdentitySchema,
+      action: dialogActionSchema,
+      dialogs: z.array(windowInfoSchema),
+    })
+    .passthrough(),
+  z
+    .object({
+      outcome: z.literal('action-invoked-dialog-remains'),
+      dialog: dialogIdentitySchema,
+      action: dialogActionSchema,
+      dialogs: z.array(windowInfoSchema),
+    })
+    .passthrough(),
+]);
+export type InvokeDialogActionResult = z.infer<typeof invokeDialogActionResultSchema>;
 
 /**
  * Operation envelope returned by `POST /v0/workbook/document`, `POST /v0/app:invokeCommand`,
@@ -737,6 +852,14 @@ export const appInfoSchema = z
   })
   .passthrough();
 export type AppInfo = z.infer<typeof appInfoSchema>;
+
+/** Desired and resulting Start Page visibility for `POST /v0/app:toggleStartPage`. */
+export const startPageVisibilitySchema = z
+  .object({
+    isStartPageVisible: z.boolean(),
+  })
+  .passthrough();
+export type StartPageVisibility = z.infer<typeof startPageVisibilitySchema>;
 
 /**
  * Typed error surfaced by {@link ExternalApiHttp} methods. The internal

@@ -14,6 +14,13 @@ const DASHBOARD_XML = `<dashboard name="Exec Overview">
   <zones><zone name="Sales by Region"/><zone name="Profit Trend"/></zones>
 </dashboard>`;
 
+const DATASOURCE_XML = `<datasource name="federated.sales" caption="Sales">
+  <connection server="warehouse.example" password="do-not-report" oauth-token="secret"/>
+  <connection server="backup.example"/>
+  <column name="[Order ID]"/><column name="[Sales]"/>
+  <relation name="orders"/><relation name="returns"/>
+</datasource>`;
+
 describe('summarizeXmlArtifact', () => {
   it('includes bytes and a stable sha256', () => {
     const a = summarizeXmlArtifact('worksheet', WORKSHEET_XML);
@@ -39,6 +46,30 @@ describe('summarizeXmlArtifact', () => {
     expect(lines).toContain('dashboard: Exec Overview');
     expect(lines).toContain('zones: 2');
     expect(lines.find((l) => l.startsWith('worksheets referenced:'))).toContain('Sales by Region');
+  });
+
+  it('summarizes datasource structure without exposing connection attributes', () => {
+    const lines = summarizeXmlArtifact('datasource', DATASOURCE_XML);
+
+    expect(lines).toContain('datasource name: federated.sales');
+    expect(lines).toContain('datasource caption: Sales');
+    expect(lines).toContain('columns: 2');
+    expect(lines).toContain('connections: 2');
+    expect(lines).toContain('relations: 2');
+    expect(lines.join('\n')).not.toContain('warehouse.example');
+    expect(lines.join('\n')).not.toContain('do-not-report');
+    expect(lines.join('\n')).not.toContain('secret');
+  });
+
+  it('does not mistake a username attribute for the datasource name', () => {
+    const lines = summarizeXmlArtifact(
+      'datasource',
+      '<datasource username="credential-value" caption="Safe"/>',
+    );
+
+    expect(lines).toContain('datasource name: (empty)');
+    expect(lines).toContain('datasource caption: Safe');
+    expect(lines.join('\n')).not.toContain('credential-value');
   });
 
   it('formats a dash-prefixed block', () => {

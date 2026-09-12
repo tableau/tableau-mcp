@@ -356,8 +356,13 @@ describe('export-image tools', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('image export exceeded');
-      expect(result.content[0].text).toContain('modal dialog');
-      expect(result.content[0].text).toContain('Do not blindly retry');
+      expect(result.content[0].text).toContain('Do not blindly retry the originating operation');
+      expect(result.content[0].text).toContain('get-active-dialogs');
+      expect(result.content[0].text).toContain('exact returned dialog identity');
+      expect(result.content[0].text).toContain('exact returned action');
+      expect(result.content[0].text).toContain('at most one invoke-dialog-action call');
+      expect(result.content[0].text).toContain('Do not guess or assume Cancel is safe');
+      expect(result.content[0].text).toContain('ask the user to handle the dialog');
     } finally {
       await harness.close();
     }
