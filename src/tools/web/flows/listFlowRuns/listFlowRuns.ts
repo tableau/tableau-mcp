@@ -8,6 +8,7 @@ import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { FlowRun } from '../../../../sdks/tableau/types/flow.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import {
   LIST_FLOW_RUNS_FAILURE_INSIGHT_API_SCOPE,
@@ -110,6 +111,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
   const listFlowRunsTool = new WebTool({
     server,
     name: 'list-flow-runs',
+    minRequiredRole: SiteRole.Viewer,
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),

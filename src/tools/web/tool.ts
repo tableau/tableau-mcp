@@ -67,11 +67,14 @@ export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = To
   Args
 > & {
   /**
-   * Lowest site role allowed to see this tool at registration time. OMITTED MEANS THE TOOL IS AVAILABLE FOR ALL USERS.
-   * When set, the caller's site role must rank at or above it in {@link SITE_ROLE_HIERARCHY} (see
-   * {@link siteRoleMeetsMinimum}) or the tool is not registered for that caller.
+   * Lowest site role allowed to see this tool at registration time. Required: every tool must
+   * declare its minimum. Use {@link SiteRole.Viewer} for a tool with no role restriction — Viewer
+   * is satisfied by every authenticated caller, so it is never enforced (see
+   * {@link roleRequiresEnforcement}). When set above Viewer, the caller's site role must rank at or
+   * above it in {@link SITE_ROLE_HIERARCHY} (see {@link siteRoleMeetsMinimum}) or the tool is not
+   * registered for that caller.
    */
-  minRequiredRole?: SiteRole;
+  minRequiredRole: SiteRole;
   registrationConditions?: ReadonlyArray<RegistrationCondition>;
 } & (
     | {
@@ -121,7 +124,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
   Args
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
-  minRequiredRole?: SiteRole;
+  minRequiredRole: SiteRole;
   registrationConditions: ReadonlyArray<RegistrationCondition>;
   app?: AppDetails;
   meta?: ToolMeta;

@@ -12,6 +12,7 @@ import {
   UpdateCloudExtractRefreshSchedule,
   updateCloudExtractRefreshScheduleSchema,
 } from '../../../sdks/tableau/types/extractRefreshTask.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import {
@@ -118,7 +119,7 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
     server,
     name: 'update-cloud-extract-refresh-task',
     disabled: !config.adminToolsEnabled,
-    minRequiredRole: 'ExplorerCanPublish',
+    minRequiredRole: SiteRole.ExplorerCanPublish,
     ...(mcpAppsEnabled
       ? { app: getAppConfig('update-cloud-extract-refresh-task', 'hitl-confirm') }
       : {}),

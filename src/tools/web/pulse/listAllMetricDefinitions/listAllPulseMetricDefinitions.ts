@@ -7,6 +7,7 @@ import {
   PulseMetricDefinition,
   pulseMetricDefinitionViewEnum,
 } from '../../../../sdks/tableau/types/pulse.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { pulsePaginate } from '../../../../utils/paginate.js';
 import { WebTool } from '../../tool.js';
@@ -24,6 +25,7 @@ export const getListAllPulseMetricDefinitionsTool = (
   const listAllPulseMetricDefinitionsTool = new WebTool({
     server,
     name: 'list-all-pulse-metric-definitions',
+    minRequiredRole: SiteRole.Viewer,
     registrationConditions: ['RequiresPulse'],
     description: `
 Retrieves a list of all published Pulse Metric Definitions using the Tableau REST API.  Use this tool when a user requests to list all Tableau Pulse Metric Definitions on the current site.

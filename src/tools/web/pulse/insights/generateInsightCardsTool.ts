@@ -13,6 +13,7 @@ import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
 } from '../../../../sdks/tableau/types/pulse.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { getVizqlDataServiceDisabledError } from '../../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
@@ -151,6 +152,7 @@ export const getGenerateInsightCardsTool = (server: WebMcpServer): WebTool<typeo
   const tool = new WebTool({
     server,
     name: 'generate-insight-cards',
+    minRequiredRole: SiteRole.Viewer,
     registrationConditions: ['RequiresPulse', 'RequiresPulsePremium'],
     description: 'Generate deterministic insights for a published datasource.',
     // Gated off by default (INSIGHTS_TOOLS_ENABLED) so it's never frontloaded

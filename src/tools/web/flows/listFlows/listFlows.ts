@@ -7,6 +7,7 @@ import { getFeatureGate } from '../../../../features/init.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { Flow } from '../../../../sdks/tableau/types/flow.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { paginateWithMetadata } from '../../../../utils/paginate.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -92,6 +93,7 @@ export const getListFlowsTool = (server: WebMcpServer): WebTool<typeof paramsSch
   const listFlowsTool = new WebTool({
     server,
     name: 'list-flows',
+    minRequiredRole: SiteRole.Viewer,
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),

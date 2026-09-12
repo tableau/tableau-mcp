@@ -7,6 +7,7 @@ import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { parseViewAllData } from '../../../sdks/tableau/methods/viewAllData.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
@@ -38,6 +39,7 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
   const getViewDataTool = new WebTool({
     server,
     name: 'get-view-data',
+    minRequiredRole: SiteRole.Viewer,
     description: [
       "Retrieves data for the specified view in a Tableau workbook, including the user's filters.",
       "On Tableau REST API versions below 3.30, returns CSV data for the dashboard's first view.",

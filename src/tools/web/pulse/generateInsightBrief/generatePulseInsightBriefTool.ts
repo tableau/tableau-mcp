@@ -6,6 +6,7 @@ import {
   pulseInsightBriefRequestSchema,
   PulseInsightBriefResponse,
 } from '../../../../sdks/tableau/types/pulse.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { WebTool } from '../../tool.js';
 import { validateBriefRequest } from '../validatePulsePayload.js';
@@ -20,6 +21,7 @@ export const getGeneratePulseInsightBriefTool = (
   const generatePulseInsightBriefTool = new WebTool({
     server,
     name: 'generate-pulse-insight-brief',
+    minRequiredRole: SiteRole.Viewer,
     registrationConditions: ['RequiresPulse', 'RequiresPulsePremium'],
     description: `
 Generate a concise insight brief for Pulse Metrics using Tableau REST API. This endpoint provides AI-powered conversational insights based on natural language questions about your metrics.

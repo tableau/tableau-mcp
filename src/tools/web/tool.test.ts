@@ -5,6 +5,7 @@ import { z, ZodError } from 'zod';
 
 import { DatasourceNotAllowedError, ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { notifier } from '../../logging/notification.js';
+import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
 import invariant from '../../utils/invariant.js';
@@ -35,6 +36,7 @@ describe('Tool', () => {
   const mockParams = {
     server: new WebMcpServer(),
     name: 'get-datasource-metadata',
+    minRequiredRole: SiteRole.Viewer,
     description: 'A test tool',
     paramsSchema: {
       param1: z.string(),

@@ -6,6 +6,7 @@ import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { DownloadWorkbookResult } from '../../../sdks/tableau/types/downloadWorkbookResult.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { Provider } from '../../../utils/provider.js';
@@ -29,6 +30,7 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
   const downloadWorkbookTool = new WebTool({
     server,
     name: 'download-workbook',
+    minRequiredRole: SiteRole.Viewer,
     description: [
       'Downloads workbook content as a TWB (application/xml) or TWBX (application/octet-stream) file.',
       'The returned file metadata includes Tableau-provided content type and filename when available.',

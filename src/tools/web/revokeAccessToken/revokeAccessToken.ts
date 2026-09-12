@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../config.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { WebTool } from '../tool.js';
@@ -32,6 +33,7 @@ export const getRevokeAccessTokenTool = (server: WebMcpServer): WebTool<typeof p
   const revokeAccessTokenTool = new WebTool({
     server,
     name: 'revoke-access-token',
+    minRequiredRole: SiteRole.Viewer,
     description: `Revokes the access token used to authenticate the current session.
 
 After revocation the session is invalidated. Subsequent Tableau API calls within this session may fail. Clients should disconnect from the MCP server after calling this tool.

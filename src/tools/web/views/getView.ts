@@ -10,6 +10,7 @@ import {
   getViewLineageQuery,
   mergeViewLineage,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { View } from '../../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -25,6 +26,7 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   const getViewTool = new WebTool({
     server,
     name: 'get-view',
+    minRequiredRole: SiteRole.Viewer,
     description:
       'Retrieves information about the specified view, including upstream datasources, workbook information, project details, owner, tags, and usage statistics. Returns facts only, NO visual output: to display the view use render-interactive-viz (interactive) or get-view-image (static image).',
     paramsSchema,

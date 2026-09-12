@@ -6,6 +6,7 @@ import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { DataSource } from '../../../sdks/tableau/types/dataSource.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
@@ -35,6 +36,7 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
   const listDatasourcesTool = new WebTool({
     server,
     name: 'list-datasources',
+    minRequiredRole: SiteRole.Viewer,
     description: `
   Retrieves a list of published data sources from a specified Tableau site using the Tableau REST API. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Views) for precise and flexible data source discovery.
   To list results based on usage popularity or relevance, use the search-content tool instead.

@@ -13,6 +13,7 @@ import {
   FlowOutputStep,
   FlowRun,
 } from '../../../../sdks/tableau/types/flow.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import {
   GET_FLOW_BASE_API_SCOPES,
@@ -80,6 +81,7 @@ export const getGetFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   const getFlowTool = new WebTool({
     server,
     name: 'get-flow',
+    minRequiredRole: SiteRole.Viewer,
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
