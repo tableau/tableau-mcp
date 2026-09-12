@@ -548,6 +548,13 @@ export function validateBinding(
       (slot.kind === 'quantitative' || slot.kind === 'quantitative-or-categorical') &&
       f.role === 'dimension' &&
       COUNT_AGGREGATION_DERIVATIONS.has(effDeriv);
+    const feedsCalc = m.calcs.some(
+      (calc) =>
+        calc.depends_on_slots.includes(slotId) ||
+        (calc.inputs ?? []).some(
+          (input) => input.slot_id === slotId && input.required && !input.template_internal,
+        ),
+    );
 
     if (
       !f.isAggregated &&
@@ -563,6 +570,20 @@ export function validateBinding(
         detail:
           `${countSource} '${effDeriv}' returns a quantitative value and cannot bind to ` +
           `${slot.kind} slot '${slotId}'. Use a quantitative or quantitative-or-categorical slot for count/count-distinct.`,
+      });
+      continue;
+    }
+
+    if (countDimensionInMeasureSlot && feedsCalc) {
+      const countSource =
+        override !== undefined ? 'requested count override' : 'template count derivation';
+      blockers.push({
+        code: 'aggregation-level-mismatch',
+        slot_id: slotId,
+        detail:
+          `slot '${slotId}' feeds a template calculation through raw field "${fieldQuery}", so ` +
+          `${countSource} '${effDeriv}' would change the direct shelf to a count while leaving the ` +
+          "calculation's aggregate semantics unchanged. Bind a row-level numeric measure or choose a template without that calculation dependency.",
       });
       continue;
     }
@@ -654,13 +675,6 @@ export function validateBinding(
     }
 
     if (f.isAggregated && effDeriv !== 'usr') {
-      const feedsCalc = m.calcs.some(
-        (calc) =>
-          calc.depends_on_slots.includes(slotId) ||
-          (calc.inputs ?? []).some(
-            (input) => input.slot_id === slotId && input.required && !input.template_internal,
-          ),
-      );
       if (feedsCalc) {
         blockers.push({
           code: 'aggregation-level-mismatch',

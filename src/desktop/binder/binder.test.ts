@@ -1103,6 +1103,39 @@ describe('binder/bindTemplate — two-call protocol', () => {
     });
   });
 
+  it.each(['cnt', 'ctd'] as const)(
+    'rejects a %s dimension when waterfall calculations require a raw measure',
+    async (derivation) => {
+      const result = await bindTemplate({
+        ask: `waterfall of ${derivation === 'ctd' ? 'distinct count' : 'count'} of Order ID by Sub-Category`,
+        workbookXml: WORKBOOK_XML,
+        manifests: descriptors,
+        proposal: {
+          template: 'part-to-whole-waterfall',
+          title: 'Orders waterfall',
+          bindings: [
+            { slot_id: 'field_base_1_sum', field: 'Order ID', derivation },
+            { slot_id: 'field_base_2', field: 'Sub-Category' },
+            { slot_id: 'field_base_1_none', field: 'Order ID', derivation },
+          ],
+          confidence: 0.9,
+        },
+      });
+
+      expect(result.status).toBe('escalate');
+      if (result.status !== 'escalate') return;
+      expect(result.reason).toBe('aggregation-level-mismatch');
+      expect(result.blockers).toContainEqual({
+        code: 'aggregation-level-mismatch',
+        slot_id: 'field_base_1_none',
+        detail:
+          'slot \'field_base_1_none\' feeds a template calculation through raw field "Order ID", so ' +
+          `requested count override '${derivation}' would change the direct shelf to a count while leaving the ` +
+          "calculation's aggregate semantics unchanged. Bind a row-level numeric measure or choose a template without that calculation dependency.",
+      });
+    },
+  );
+
   it('rejects an unordered waterfall when more than one sequence field exists', async () => {
     const workbookXml = WORKBOOK_XML.replace(
       '</datasource>',
