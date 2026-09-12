@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { Provider } from '../../../utils/provider.js';
@@ -26,6 +27,7 @@ export const getRequestWorkbookUploadTool = (
   const tool = new WebTool({
     server,
     name: 'request-workbook-upload',
+    minRequiredRole: SiteRole.Viewer,
     description:
       'Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. Upload the workbook bytes to the returned URL, then call publish-workbook with the returned workbookUploadId.',
     paramsSchema,

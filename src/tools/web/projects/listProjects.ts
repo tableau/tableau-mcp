@@ -6,6 +6,7 @@ import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Project } from '../../../sdks/tableau/types/project.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
@@ -35,6 +36,7 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
   const listProjectsTool = new WebTool({
     server,
     name: 'list-projects',
+    minRequiredRole: SiteRole.Viewer,
     description: `
   Retrieves a list of projects on a Tableau site including their metadata such as name, description, parent project, content permissions, owner, and timestamps. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Default) for precise project discovery.
   To list results based on usage popularity or relevance, use the search-content tool instead.

@@ -11,6 +11,7 @@ import {
   getWorkbookLineageQuery,
   mergeWorkbookLineage,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -42,6 +43,7 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
   const listWorkbooksTool = new WebTool({
     server,
     name: 'list-workbooks',
+    minRequiredRole: SiteRole.Viewer,
     description: `
   Retrieves a list of workbooks on a Tableau site including their metadata such as name, description, and information about the views contained in the workbook. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Superstore) for precise and flexible workbook discovery.
   To list results based on usage popularity or relevance, use the search-content tool.

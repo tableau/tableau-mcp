@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getFeatureGate } from '../../../features/init.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getProductTelemetry } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
 import { Provider } from '../../../utils/provider.js';
@@ -38,6 +39,7 @@ export const getRecordEventTool = (server: WebMcpServer): WebTool<typeof paramsS
   const recordEventTool = new WebTool({
     server,
     name: 'record-event',
+    minRequiredRole: SiteRole.Viewer,
     description:
       'Records a product-telemetry event from the MCP app UI (errors, user actions, etc.). This tool is only visible to the app, never the model. It takes an event type and optional detail, forwards a telemetry event, and returns immediately.',
     paramsSchema,

@@ -6,6 +6,7 @@ import { getConfig } from '../../../config.js';
 import { ViewNotAllowedError, WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
@@ -31,6 +32,7 @@ export const getRenderInteractiveVizTool = (server: WebMcpServer): WebTool<typeo
   const renderInteractiveVizTool = new WebTool({
     server,
     name: 'render-interactive-viz',
+    minRequiredRole: SiteRole.Viewer,
     description:
       'Renders a workbook or view (identified by luid, objectType "workbook" or "view") as a live, interactive Tableau embed the user can explore — filter, drill down, hover, and change selections in place. Use whenever the user wants to see, open, or interact with a view, dashboard, workbook, or viz (e.g. "show me the view", "show me the workbook", "open this dashboard", "let me explore this"). This is the default for any request to display a viz. Returns an interactive embed, NOT a static image — for a fixed image snapshot (screenshot, PNG/PDF, thumbnail) use get-view-image instead.',
     paramsSchema,

@@ -7,6 +7,7 @@ import { getFeatureGate } from '../../../../features/init.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { FlowRunTask } from '../../../../sdks/tableau/types/flowRunTask.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { Provider } from '../../../../utils/provider.js';
 import { ConstrainedResult, WebTool } from '../../tool.js';
@@ -52,6 +53,7 @@ export const getListFlowTasksTool = (server: WebMcpServer): WebTool<typeof param
   const listFlowTasksTool = new WebTool({
     server,
     name: 'list-flow-tasks',
+    minRequiredRole: SiteRole.Viewer,
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),

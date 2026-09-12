@@ -17,6 +17,7 @@ import {
   querySchema,
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
@@ -57,6 +58,7 @@ export const getQueryDatasourceTool = (
   const queryDatasourceTool = new WebTool({
     server,
     name: 'query-datasource',
+    minRequiredRole: SiteRole.Viewer,
     description: new Provider(() =>
       getResultForTableauVersion({
         productVersion,

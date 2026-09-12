@@ -10,6 +10,7 @@ import {
 import { useRestApi } from '../../../restApiInstance.js';
 import { GraphQLResponse } from '../../../sdks/tableau/apis/metadataApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -104,6 +105,7 @@ export const getGetDatasourceMetadataTool = (
   const getDatasourceMetadataTool = new WebTool({
     server,
     name: 'get-datasource-metadata',
+    minRequiredRole: SiteRole.Viewer,
     description: `
     This tool retrieves metadata for a specified datasource by taking the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
     The metadata provided by this tool consists of the datasource model, fields, and parameters that belong to the datasource.

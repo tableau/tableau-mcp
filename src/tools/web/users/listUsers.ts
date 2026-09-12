@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { User } from '../../../sdks/tableau/types/user.js';
+import { SiteRole, User } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { paginateWithMetadata } from '../../../utils/paginate.js';
 import { assertAdmin } from '../adminGate.js';
@@ -24,6 +24,7 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
   const listUsersTool = new WebTool({
     server,
     name: 'list-users',
+    minRequiredRole: SiteRole.Viewer,
     disabled: !config.adminToolsEnabled,
     description: `
   Retrieves a list of users on the Tableau site. Each user includes profile information such as site role, email, full name, and last login time.

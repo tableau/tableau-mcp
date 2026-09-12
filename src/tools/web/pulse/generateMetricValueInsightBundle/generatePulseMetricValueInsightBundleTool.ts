@@ -8,6 +8,7 @@ import {
   PulseBundleResponse,
   pulseInsightBundleTypeEnum,
 } from '../../../../sdks/tableau/types/pulse.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { WebTool } from '../../tool.js';
 import { validateBundleRequest } from '../validatePulsePayload.js';
@@ -23,6 +24,7 @@ export const getGeneratePulseMetricValueInsightBundleTool = (
   const generatePulseMetricValueInsightBundleTool = new WebTool({
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
+    minRequiredRole: SiteRole.Viewer,
     registrationConditions: ['RequiresPulse', 'RequiresPulsePremium'],
     description: `
 Generate an insight bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.

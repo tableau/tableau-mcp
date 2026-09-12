@@ -12,6 +12,7 @@ import {
   mergeViewLineage,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { View } from '../../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { isAxiosError } from '../../../utils/axios.js';
@@ -49,6 +50,7 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
   const listViewsTool = new WebTool({
     server,
     name: 'list-views',
+    minRequiredRole: SiteRole.Viewer,
     description: `
   Retrieves a list of views on a Tableau site including their metadata such as name, owner, and the workbook they are found in. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Overview) for precise and flexible view discovery.
   To list results based on usage popularity or relevance, use the search-content tool instead.

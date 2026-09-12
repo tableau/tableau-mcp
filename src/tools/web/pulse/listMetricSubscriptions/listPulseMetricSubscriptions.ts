@@ -3,6 +3,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../../../../restApiInstance.js';
 import { PulseMetricSubscription } from '../../../../sdks/tableau/types/pulse.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { getRequiredApiScopesForTool } from '../../../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
@@ -17,6 +18,7 @@ export const getListPulseMetricSubscriptionsTool = (
   const listPulseMetricSubscriptionsTool = new WebTool({
     server,
     name: toolName,
+    minRequiredRole: SiteRole.Viewer,
     registrationConditions: ['RequiresPulse'],
     description: `
 Retrieves a list of published Pulse Metric Subscriptions for the current user using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metric Subscriptions for the current user.

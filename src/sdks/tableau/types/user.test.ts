@@ -1,56 +1,84 @@
-import { isAdminSiteRole, MIN_ADMIN_SITE_ROLE, siteRoleMeetsMinimum } from './user.js';
+import {
+  isAdminSiteRole,
+  MIN_ADMIN_SITE_ROLE,
+  roleRequiresEnforcement,
+  SiteRole,
+  siteRoleMeetsMinimum,
+} from './user.js';
 
 describe('siteRoleMeetsMinimum', () => {
   it('returns true when the role outranks the minimum', () => {
-    expect(siteRoleMeetsMinimum('ServerAdministrator', 'SiteAdministratorExplorer')).toBe(true);
-  });
-
-  it('returns true when the role exactly matches the minimum', () => {
-    expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', 'SiteAdministratorExplorer')).toBe(
+    expect(siteRoleMeetsMinimum('ServerAdministrator', SiteRole.SiteAdministratorExplorer)).toBe(
       true,
     );
   });
 
+  it('returns true when the role exactly matches the minimum', () => {
+    expect(
+      siteRoleMeetsMinimum('SiteAdministratorExplorer', SiteRole.SiteAdministratorExplorer),
+    ).toBe(true);
+  });
+
   it('returns false when the role ranks below the minimum', () => {
-    expect(siteRoleMeetsMinimum('Creator', 'SiteAdministratorExplorer')).toBe(false);
-    expect(siteRoleMeetsMinimum('Viewer', 'SiteAdministratorExplorer')).toBe(false);
+    expect(siteRoleMeetsMinimum('Creator', SiteRole.SiteAdministratorExplorer)).toBe(false);
+    expect(siteRoleMeetsMinimum('Viewer', SiteRole.SiteAdministratorExplorer)).toBe(false);
   });
 
   it('orders admin roles above non-admin roles', () => {
-    expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', 'Creator')).toBe(true);
+    expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', SiteRole.Creator)).toBe(true);
   });
 
   it('orders the non-admin content roles by publishing capability', () => {
-    expect(siteRoleMeetsMinimum('Creator', 'Viewer')).toBe(true);
-    expect(siteRoleMeetsMinimum('ExplorerCanPublish', 'Explorer')).toBe(true);
-    expect(siteRoleMeetsMinimum('Viewer', 'Explorer')).toBe(false);
+    expect(siteRoleMeetsMinimum('Creator', SiteRole.Viewer)).toBe(true);
+    expect(siteRoleMeetsMinimum('ExplorerCanPublish', SiteRole.Explorer)).toBe(true);
+    expect(siteRoleMeetsMinimum('Viewer', SiteRole.Explorer)).toBe(false);
   });
 
   it('fails closed for an undefined role', () => {
-    expect(siteRoleMeetsMinimum(undefined, 'SiteAdministratorExplorer')).toBe(false);
+    expect(siteRoleMeetsMinimum(undefined, SiteRole.SiteAdministratorExplorer)).toBe(false);
   });
 
   it('fails closed for an empty role', () => {
-    expect(siteRoleMeetsMinimum('', 'SiteAdministratorExplorer')).toBe(false);
+    expect(siteRoleMeetsMinimum('', SiteRole.SiteAdministratorExplorer)).toBe(false);
   });
 
   it('fails closed for an unrecognized role', () => {
-    expect(siteRoleMeetsMinimum('GuestUser', 'Viewer')).toBe(false);
+    expect(siteRoleMeetsMinimum('GuestUser', SiteRole.Viewer)).toBe(false);
   });
 
   it('ranks SupportUser just below SiteAdministratorExplorer and above Creator', () => {
-    expect(siteRoleMeetsMinimum('SupportUser', 'Creator')).toBe(true);
-    expect(siteRoleMeetsMinimum('SupportUser', 'SiteAdministratorExplorer')).toBe(false);
-    expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', 'SupportUser')).toBe(true);
+    expect(siteRoleMeetsMinimum('SupportUser', SiteRole.Creator)).toBe(true);
+    expect(siteRoleMeetsMinimum('SupportUser', SiteRole.SiteAdministratorExplorer)).toBe(false);
+    expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', SiteRole.SupportUser)).toBe(true);
   });
 
   it('uses SupportUser as the admin threshold', () => {
-    expect(MIN_ADMIN_SITE_ROLE).toBe('SupportUser');
+    expect(MIN_ADMIN_SITE_ROLE).toBe(SiteRole.SupportUser);
     expect(siteRoleMeetsMinimum('SupportUser', MIN_ADMIN_SITE_ROLE)).toBe(true);
     expect(siteRoleMeetsMinimum('SiteAdministratorExplorer', MIN_ADMIN_SITE_ROLE)).toBe(true);
     expect(siteRoleMeetsMinimum('SiteAdministratorCreator', MIN_ADMIN_SITE_ROLE)).toBe(true);
     expect(siteRoleMeetsMinimum('ServerAdministrator', MIN_ADMIN_SITE_ROLE)).toBe(true);
     expect(siteRoleMeetsMinimum('Creator', MIN_ADMIN_SITE_ROLE)).toBe(false);
+  });
+});
+
+describe('roleRequiresEnforcement', () => {
+  it('does not enforce a Viewer minimum (every authenticated caller satisfies it)', () => {
+    expect(roleRequiresEnforcement(SiteRole.Viewer)).toBe(false);
+  });
+
+  it('does not enforce a minimum below Viewer', () => {
+    expect(roleRequiresEnforcement(SiteRole.Unlicensed)).toBe(false);
+  });
+
+  it('enforces every minimum ranked above Viewer', () => {
+    expect(roleRequiresEnforcement(SiteRole.Explorer)).toBe(true);
+    expect(roleRequiresEnforcement(SiteRole.ExplorerCanPublish)).toBe(true);
+    expect(roleRequiresEnforcement(SiteRole.Creator)).toBe(true);
+    expect(roleRequiresEnforcement(SiteRole.SupportUser)).toBe(true);
+    expect(roleRequiresEnforcement(SiteRole.SiteAdministratorExplorer)).toBe(true);
+    expect(roleRequiresEnforcement(SiteRole.SiteAdministratorCreator)).toBe(true);
+    expect(roleRequiresEnforcement(SiteRole.ServerAdministrator)).toBe(true);
   });
 });
 

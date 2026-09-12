@@ -3,6 +3,7 @@ import type { MockedFunction } from 'vitest';
 
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import * as logger from './logging/logger.js';
+import { SiteRole } from './sdks/tableau/types/user.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
@@ -120,7 +121,7 @@ describe('server', () => {
       callback: vi.fn(),
       disabled: false,
       requiredApiScopes: [],
-      minRequiredRole: undefined,
+      minRequiredRole: SiteRole.Viewer,
       registrationConditions: [],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
@@ -512,7 +513,7 @@ describe('server', () => {
       },
       callback: vi.fn(),
       disabled: false,
-      minRequiredRole: 'SiteAdministratorExplorer',
+      minRequiredRole: SiteRole.SiteAdministratorExplorer,
       registrationConditions: [],
       requiredApiScopes: [],
       logAndExecute: vi.fn(),
@@ -536,7 +537,7 @@ describe('server', () => {
       },
       callback: vi.fn(),
       disabled: false,
-      minRequiredRole: undefined,
+      minRequiredRole: SiteRole.Viewer,
       registrationConditions: ['RequiresPulse'],
       requiredApiScopes: [],
       logAndExecute: vi.fn(),
@@ -671,6 +672,31 @@ describe('server', () => {
 
     await server.registerTools();
 
+    expect(getInstructions(server)).not.toContain('site role could not be determined');
+  });
+
+  it('registers a Viewer-minimum tool even when the role fetch failed (Viewer is never enforced)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    // Fetch failed (undefined): an above-Viewer tool would be omitted, but a Viewer minimum is
+    // satisfied by every authenticated caller, so enforcement is skipped for it entirely.
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockViewerTool = {
+      ...createMockAdminTool(),
+      name: 'mock-viewer-tool' as WebToolName,
+      minRequiredRole: SiteRole.Viewer,
+    } as unknown as WebTool<any>;
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockViewerTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-viewer-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+    // The tool was registered, not omitted, so no "role could not be determined" warning is emitted.
     expect(getInstructions(server)).not.toContain('site role could not be determined');
   });
 
