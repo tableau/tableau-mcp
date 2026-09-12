@@ -82,6 +82,43 @@ describe('ExternalApiHttp', () => {
     expect(server.requests.at(-1)?.authorization).toBe('Bearer valid-token');
   });
 
+  it('sets redirect manual on every request', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const client = new ExternalApiHttp(makeInstance(server.baseUrl), { fetchFn });
+
+    await client.getOk(EXTERNAL_API_ROUTES.health);
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(fetchFn.mock.calls[0][1]).toMatchObject({
+      method: 'GET',
+      redirect: 'manual',
+    });
+  });
+
+  it.each([300, 301, 302, 303, 304, 305, 306, 307, 308, 399])(
+    'rejects HTTP %i without following or reading a redirect target',
+    async (status) => {
+      const redirected = {
+        status,
+        ok: false,
+        headers: new Headers({ location: 'http://example.invalid/steal-token' }),
+        json: vi.fn(),
+        text: vi.fn(),
+      } as unknown as Response;
+      const fetchFn = vi.fn().mockResolvedValue(redirected);
+      const client = new ExternalApiHttp(makeInstance(server.baseUrl), { fetchFn });
+
+      const result = await client.getOk(EXTERNAL_API_ROUTES.health);
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('invalid-response');
+      expect(fetchFn).toHaveBeenCalledOnce();
+      expect(fetchFn.mock.calls[0][1]?.redirect).toBe('manual');
+      expect(redirected.json).not.toHaveBeenCalled();
+      expect(redirected.text).not.toHaveBeenCalled();
+    },
+  );
+
   it('returns the workbook document XML and version headers on GET', async () => {
     const result = await http.getXml(EXTERNAL_API_ROUTES.workbookDocument);
     expect(result.isOk()).toBe(true);

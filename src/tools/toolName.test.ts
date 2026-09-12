@@ -4,7 +4,11 @@ import { isWebToolName, webToolNames } from './web/toolName.js';
 
 describe('ToolName', () => {
   it('registers each dialog tool name exactly once', () => {
-    for (const toolName of ['get-active-dialogs', 'invoke-dialog-action'] as const) {
+    for (const toolName of [
+      'get-desktop-state',
+      'get-active-dialogs',
+      'invoke-dialog-action',
+    ] as const) {
       expect(desktopToolNames.filter((name) => name === toolName)).toHaveLength(1);
       expect(isDesktopToolName(toolName)).toBe(true);
     }
