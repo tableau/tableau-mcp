@@ -52,7 +52,7 @@ import {
 const templatePlanSchema = z.object({
   templateName: z.string().trim().min(1).max(128).describe('Template ID.'),
   title: z.string().trim().min(1).max(255).describe('Worksheet name.'),
-  datasource: z.string().trim().min(1).max(255).describe('Live datasource.'),
+  datasource: z.string().trim().min(1).max(255).describe('Datasource name.'),
   fieldMapping: z
     .record(z.string().trim().min(1).max(128), z.string().trim().min(1).max(255))
     .describe('Slot ID to exact live field ref.'),

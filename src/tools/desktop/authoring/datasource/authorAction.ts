@@ -96,6 +96,15 @@ type AuthorActionResult = AuthorActionResultBase &
       }
   );
 
+type PreparedAction = {
+  actionXml: string;
+  isLanded: (xml: string) => boolean;
+  readbackFailureMessage: string;
+  buildResult: (readbackXml: string) => Result<AuthorActionResult, XmlModificationError>;
+};
+
+type PrepareAction = () => Result<PreparedAction, ArgsValidationError>;
+
 type SetCandidate = {
   datasourceName: string;
   datasourceCaption?: string;
@@ -385,60 +394,144 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           const actionName = nextActionName(liveXml);
-          let target: string;
-          let actionXml: string;
-          if (mode === 'filter') {
-            target = sourceDashboard!.trim();
-            actionXml = renderFilterAction({
-              caption,
-              actionName,
-              sourceDashboard: target,
-              sourceWorksheet: sourceWorksheet.trim(),
-              excludedWorksheets: filterPlan!.excludedWorksheets,
-              clearSelection: resolvedClearSelection,
-            });
-          } else if (mode === 'set') {
-            const targetResult = resolveTargetSet(liveXml, targetSet, datasource);
-            if (targetResult.isErr()) {
-              return targetResult.error.toErr();
-            }
-            target = targetResult.value;
-            actionXml = renderSetAction({
-              caption,
-              actionName,
-              sourceWorksheet,
-              targetSet: target,
-              setMembership,
-              clearSelection: resolvedClearSelection,
-              singleSelect,
-              activation,
-            });
-          } else if (mode === 'url') {
-            target = url!.trim();
-            actionXml = renderUrlAction({
-              caption,
-              actionName,
-              sourceWorksheet: sourceWorksheet.trim(),
-              sourceDashboard: sourceDashboard?.trim() ?? '',
-              excludeSheets: (excludeSheets ?? []).map((sheet) => sheet.trim()),
-              url: target,
-              urlTarget: urlTarget ?? 'default-zone-or-browser',
-              zoneId: zoneId?.trim() ?? '',
-              urlEncode: urlEncode ?? false,
-              activation,
-            });
-          } else {
-            target = targetParameter!.trim();
-            actionXml = renderParameterAction({
-              caption,
-              actionName,
-              sourceWorksheet,
-              sourceField: sourceField ?? '',
-              targetParameter: target,
-              activation,
-            });
+          const prepareActionByMode: Record<z.infer<typeof modeSchema>, PrepareAction> = {
+            filter: () => {
+              const target = sourceDashboard!.trim();
+              const semantics: FilterActionSemantics = {
+                caption,
+                sourceDashboard: target,
+                sourceWorksheet: sourceWorksheet.trim(),
+                excludedWorksheets: filterPlan!.excludedWorksheets,
+                clearSelection: resolvedClearSelection,
+              };
+              const readbackFailureMessage =
+                'action applied but the complete filter action did not survive readback';
+              return new Ok({
+                actionXml: renderFilterAction({ ...semantics, actionName }),
+                isLanded: (xml) => findSupportedFilterAction(xml, semantics) !== undefined,
+                readbackFailureMessage,
+                buildResult: (readbackXml) => {
+                  const readbackActionName = findSupportedFilterAction(readbackXml, semantics);
+                  if (readbackActionName === undefined) {
+                    return new XmlModificationError(readbackFailureMessage).toErr();
+                  }
+                  return new Ok({
+                    actionName: readbackActionName,
+                    caption,
+                    mode: 'filter',
+                    target,
+                    targetWorksheets: targetWorksheets!.map((sheet) => sheet.trim()),
+                    hint: 'readback verified an on-select filter action across all fields, with show all as the default when the selection clears',
+                  });
+                },
+              });
+            },
+            set: () => {
+              const targetResult = resolveTargetSet(liveXml, targetSet, datasource);
+              if (targetResult.isErr()) {
+                return targetResult.error.toErr();
+              }
+              const target = targetResult.value;
+              return new Ok({
+                actionXml: renderSetAction({
+                  caption,
+                  actionName,
+                  sourceWorksheet,
+                  targetSet: target,
+                  setMembership,
+                  clearSelection: resolvedClearSelection,
+                  singleSelect,
+                  activation,
+                }),
+                isLanded: (xml) =>
+                  hasActionWithTargetParam(
+                    xml,
+                    'edit-group-action',
+                    caption,
+                    'target-group',
+                    target,
+                  ),
+                readbackFailureMessage:
+                  'action applied but the target-group param did not survive readback',
+                buildResult: () =>
+                  new Ok({
+                    actionName,
+                    caption,
+                    mode: 'set',
+                    target,
+                    targetSet: target,
+                    hint: 'readback verified the qualified target set; the source sheet must expose marks that can drive the action',
+                  }),
+              });
+            },
+            url: () => {
+              const target = url!.trim();
+              return new Ok({
+                actionXml: renderUrlAction({
+                  caption,
+                  actionName,
+                  sourceWorksheet: sourceWorksheet.trim(),
+                  sourceDashboard: sourceDashboard?.trim() ?? '',
+                  excludeSheets: (excludeSheets ?? []).map((sheet) => sheet.trim()),
+                  url: target,
+                  urlTarget: urlTarget ?? 'default-zone-or-browser',
+                  zoneId: zoneId?.trim() ?? '',
+                  urlEncode: urlEncode ?? false,
+                  activation,
+                }),
+                isLanded: (xml) => hasUrlActionWithLink(xml, caption, target),
+                readbackFailureMessage:
+                  'action applied but the <link> URL did not survive readback (it may have been dropped or rewritten as a command action)',
+                buildResult: () =>
+                  new Ok({
+                    actionName,
+                    caption,
+                    mode: 'url',
+                    target,
+                    url: target,
+                    hint: 'readback verified the <link> URL action; the source sheet/dashboard must expose marks that drive the action, and any <[Field]> references must resolve on the source view',
+                  }),
+              });
+            },
+            parameter: () => {
+              const target = targetParameter!.trim();
+              return new Ok({
+                actionXml: renderParameterAction({
+                  caption,
+                  actionName,
+                  sourceWorksheet,
+                  sourceField: sourceField ?? '',
+                  targetParameter: target,
+                  activation,
+                }),
+                isLanded: (xml) =>
+                  hasActionWithTargetParam(
+                    xml,
+                    'edit-parameter-action',
+                    caption,
+                    'target-parameter',
+                    target,
+                  ),
+                readbackFailureMessage:
+                  'action applied but the target-parameter param did not survive readback',
+                buildResult: () =>
+                  new Ok({
+                    actionName,
+                    caption,
+                    mode: 'parameter',
+                    target,
+                    targetParameter: target,
+                    hint: 'the source sheet must expose the source field; the target parameter must already exist (author it at open time)',
+                  }),
+              });
+            },
+          };
+          const preparedResult = prepareActionByMode[mode]();
+          if (preparedResult.isErr()) {
+            return preparedResult.error.toErr();
           }
-          const editResult = spliceActionIntoWorkbook(liveXml, actionXml);
+          const prepared = preparedResult.value;
+          const editResult = spliceActionIntoWorkbook(liveXml, prepared.actionXml);
           if (editResult.isErr()) {
             return editResult.error.toErr();
           }
@@ -449,42 +542,10 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new ArgsValidationError(validation.message).toErr();
           }
 
-          const targetParamLanded = (xml: string): boolean => {
-            if (mode === 'filter') {
-              return (
-                findSupportedFilterAction(xml, {
-                  caption,
-                  sourceDashboard: sourceDashboard!.trim(),
-                  sourceWorksheet: sourceWorksheet.trim(),
-                  excludedWorksheets: filterPlan!.excludedWorksheets,
-                  clearSelection: resolvedClearSelection,
-                }) !== undefined
-              );
-            }
-            if (mode === 'set') {
-              return hasActionWithTargetParam(
-                xml,
-                'edit-group-action',
-                caption,
-                'target-group',
-                target,
-              );
-            }
-            if (mode === 'url') {
-              return hasUrlActionWithLink(xml, caption, target);
-            }
-            return hasActionWithTargetParam(
-              xml,
-              'edit-parameter-action',
-              caption,
-              'target-parameter',
-              target,
-            );
-          };
           const outcome = await applyAndVerify({
             xml: editedXml,
             baselineXml: liveXml,
-            settled: targetParamLanded,
+            settled: prepared.isLanded,
             executor,
             signal: extra.signal,
           });
@@ -492,68 +553,9 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             return outcome.error.toErr();
           }
           if (outcome.status === 'not-applied') {
-            return new XmlModificationError(
-              mode === 'set'
-                ? 'action applied but the target-group param did not survive readback'
-                : mode === 'filter'
-                  ? 'action applied but the complete filter action did not survive readback'
-                  : mode === 'url'
-                    ? 'action applied but the <link> URL did not survive readback (it may have been dropped or rewritten as a command action)'
-                    : 'action applied but the target-parameter param did not survive readback',
-            ).toErr();
+            return new XmlModificationError(prepared.readbackFailureMessage).toErr();
           }
-
-          if (mode === 'filter') {
-            const readbackActionName = findSupportedFilterAction(outcome.workbookXml, {
-              caption,
-              sourceDashboard: sourceDashboard!.trim(),
-              sourceWorksheet: sourceWorksheet.trim(),
-              excludedWorksheets: filterPlan!.excludedWorksheets,
-              clearSelection: resolvedClearSelection,
-            });
-            if (readbackActionName === undefined) {
-              return new XmlModificationError(
-                'action applied but the complete filter action did not survive readback',
-              ).toErr();
-            }
-            return new Ok({
-              actionName: readbackActionName,
-              caption,
-              mode,
-              target,
-              targetWorksheets: targetWorksheets!.map((sheet) => sheet.trim()),
-              hint: 'readback verified an on-select filter action across all fields, with show all as the default when the selection clears',
-            });
-          }
-
-          if (mode === 'set') {
-            return new Ok({
-              actionName,
-              caption,
-              mode,
-              target,
-              targetSet: target,
-              hint: 'readback verified the qualified target set; the source sheet must expose marks that can drive the action',
-            });
-          }
-          if (mode === 'url') {
-            return new Ok({
-              actionName,
-              caption,
-              mode,
-              target,
-              url: target,
-              hint: 'readback verified the <link> URL action; the source sheet/dashboard must expose marks that drive the action, and any <[Field]> references must resolve on the source view',
-            });
-          }
-          return new Ok({
-            actionName,
-            caption,
-            mode,
-            target,
-            targetParameter: target,
-            hint: 'the source sheet must expose the source field; the target parameter must already exist (author it at open time)',
-          });
+          return prepared.buildResult(outcome.workbookXml);
         },
       });
     },
