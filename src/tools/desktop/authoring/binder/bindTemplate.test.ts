@@ -1390,6 +1390,107 @@ describe('bindTemplateTool', () => {
     );
   });
 
+  it.each([
+    {
+      label: 'an unoffered KPI template',
+      session: 'kpi-template-recovery',
+      ask: 'Show Sales as a KPI.',
+      proposal: {
+        template: 'kpi-tile',
+        title: 'Sales KPI',
+        bindings: [{ slot_id: 'field_base_1', field: 'Sales' }],
+        confidence: 0.9,
+      },
+      expectedGuidance:
+        'Blocked before Desktop work: the proposal violates the retained call_2_contract. ' +
+        'One corrected proposal may proceed: replace only proposal.template with one exact template-not-offered value from mismatches[].choices. ' +
+        'Reuse call_2_contract.arguments unchanged. Preserve title, bindings, filters, sort, top_n, bin_size, template_parameters, and confidence unchanged.',
+      nextActionLabel: 'Replace invalid template ID',
+    },
+    {
+      label: 'an unoffered KPI template plus a wrong required filter value',
+      session: 'kpi-template-filter-recovery',
+      ask: 'Show Sales as a KPI where Region = East.',
+      proposal: {
+        template: 'kpi_single_metric',
+        title: 'East Sales KPI',
+        bindings: [{ slot_id: 'field_base_1', field: 'Sales' }],
+        confidence: 0.9,
+        filters: [{ field: 'Region', values: ['West'] }],
+      },
+      expectedGuidance:
+        'Blocked before Desktop work: the proposal violates the retained call_2_contract. ' +
+        'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and replace proposal.template with one exact template-not-offered value from mismatches[].choices. ' +
+        'Reuse call_2_contract.arguments unchanged. Preserve title, bindings, sort, top_n, bin_size, template_parameters, and confidence unchanged.',
+      nextActionLabel: 'Correct required filters and template ID',
+    },
+  ] satisfies Array<{
+    label: string;
+    session: string;
+    ask: string;
+    proposal: BindingProposal & { confidence: number };
+    expectedGuidance: string;
+    nextActionLabel: string;
+  }>)(
+    'returns an exact correction for $label before Desktop work',
+    async ({ session, ask, proposal, expectedGuidance, nextActionLabel }) => {
+      const kpiProposeResult: BinderResult = {
+        ...proposeResult,
+        llm_input: {
+          ask,
+          candidate_templates: [
+            {
+              template: 'kpi-text',
+              description: 'single KPI value',
+              intent_keywords: ['kpi'],
+              slots: [
+                {
+                  slot_id: 'field_base_1',
+                  role: ['text'],
+                  kind: 'quantitative',
+                  required: true,
+                  derivation: 'sum',
+                },
+              ],
+            },
+          ],
+          fields: [
+            { name: 'Region', role: 'dimension', type: 'nominal', datatype: 'string' },
+            { name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' },
+          ],
+        },
+      };
+      const getExecutor = vi.fn().mockResolvedValue({});
+      vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(M7_WORKBOOK_XML));
+      vi.mocked(binderModule.bindTemplate).mockResolvedValue(kpiProposeResult);
+
+      await getToolResult({ session, ask, getExecutor });
+      const rejected = await getToolResult({
+        session,
+        ask,
+        proposal,
+        auto_apply: true,
+        getExecutor,
+      });
+
+      expect(rejected.isError).toBe(true);
+      invariant(rejected.content[0].type === 'text');
+      const body = JSON.parse(rejected.content[0].text);
+      expect(body.call_2_contract.arguments).toEqual({ session, ask, auto_apply: true });
+      expect(body.mismatches).toContainEqual({
+        code: 'template-not-offered',
+        template: proposal.template,
+        choices: ['kpi-text'],
+      });
+      expect(body.guidance).toBe(expectedGuidance);
+      expect(body.guidance).not.toContain('invalid bindings');
+      expectStructuredBlock(rejected, { label: nextActionLabel, kind: 'prefill' });
+      expect(getExecutor).toHaveBeenCalledTimes(1);
+      expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+      expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('fails the exact filter parser closed before scanning an over-cap full schema', () => {
     const fields: SchemaField[] = Array.from(
       { length: MAX_CLASSIFIABLE_FIELDS + 1 },
@@ -2771,7 +2872,7 @@ describe('bindTemplateTool', () => {
   ])(
     'names the exact returned contract and cleanly escalates a Call-2 $label',
     { timeout: 30_000 },
-    async ({ proposal, escalation }) => {
+    async ({ label, proposal, escalation }) => {
       vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(P_AND_L_WORKBOOK_XML));
       vi.mocked(binderModule.bindTemplate)
         .mockResolvedValueOnce(waterfallProposeResult)
@@ -2799,7 +2900,11 @@ describe('bindTemplateTool', () => {
         call_2_contract: call1Body.call_2_contract,
         rejected_proposal: proposal,
       });
-      expect(call2Body.guidance).toContain('Change only the invalid bindings');
+      expect(call2Body.guidance).toContain(
+        label === 'fabricated template alias'
+          ? 'replace only proposal.template'
+          : 'Change only the invalid bindings',
+      );
     },
   );
 

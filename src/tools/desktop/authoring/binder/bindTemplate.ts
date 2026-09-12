@@ -947,19 +947,28 @@ function proposalContractMismatchResult({
       mismatch.code === 'required_filter_fields_mismatch' &&
       mismatch.required_filter_values !== undefined,
   );
+  const templateMismatch = mismatches.some((mismatch) => mismatch.code === 'template-not-offered');
   const bindingMismatch = mismatches.some(
-    (mismatch) => mismatch.code !== 'required_filter_fields_mismatch',
+    (mismatch) =>
+      mismatch.code !== 'required_filter_fields_mismatch' &&
+      mismatch.code !== 'template-not-offered',
   );
   const correctionGuidance = correctionAvailable
-    ? filterSetMismatch && bindingMismatch
+    ? filterSetMismatch && templateMismatch
       ? filterValueMismatch
-        ? 'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and repair only the invalid bindings to exact listed choices.'
-        : 'One corrected proposal may proceed: use exactly required_filter_fields once each and repair only the invalid bindings to exact listed choices.'
-      : filterSetMismatch
+        ? 'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and replace proposal.template with one exact template-not-offered value from mismatches[].choices.'
+        : 'One corrected proposal may proceed: use exactly required_filter_fields once each and replace proposal.template with one exact template-not-offered value from mismatches[].choices. Values and context may vary.'
+      : filterSetMismatch && bindingMismatch
         ? filterValueMismatch
-          ? 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order, with the exact required_filter_values. Context may vary.'
-          : 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order. Values and context may vary.'
-        : 'One changed corrected proposal may proceed.'
+          ? 'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and repair only the invalid bindings to exact listed choices.'
+          : 'One corrected proposal may proceed: use exactly required_filter_fields once each and repair only the invalid bindings to exact listed choices.'
+        : filterSetMismatch
+          ? filterValueMismatch
+            ? 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order, with the exact required_filter_values. Context may vary.'
+            : 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order. Values and context may vary.'
+          : templateMismatch
+            ? 'One corrected proposal may proceed: replace only proposal.template with one exact template-not-offered value from mismatches[].choices.'
+            : 'One changed corrected proposal may proceed.'
     : hasFilters
       ? 'The correction allowance is exhausted. Stop and use ask-user: the artifact fallback cannot preserve proposal.filters. Do not guess with raw XML.'
       : 'The correction allowance is exhausted; stop calling bind-template and ask the user or use the artifact fallback.';
@@ -972,15 +981,25 @@ function proposalContractMismatchResult({
       rejected_proposal: proposal,
       guidance:
         `Blocked before Desktop work: the proposal violates the retained call_2_contract. ${correctionGuidance} ` +
-        (filterSetMismatch && bindingMismatch
-          ? 'Preserve every other proposal field unchanged.'
-          : filterSetMismatch
-            ? 'Preserve template, title, bindings, sort, and top_n unchanged.'
-            : 'Change only the invalid bindings to one exact listed choice; preserve filters, sort, and top_n unchanged. Do not guess a measure.'),
+        (templateMismatch
+          ? correctionAvailable
+            ? filterSetMismatch
+              ? 'Reuse call_2_contract.arguments unchanged. Preserve title, bindings, sort, top_n, bin_size, template_parameters, and confidence unchanged.'
+              : 'Reuse call_2_contract.arguments unchanged. Preserve title, bindings, filters, sort, top_n, bin_size, template_parameters, and confidence unchanged.'
+            : 'Do not submit another correction.'
+          : filterSetMismatch && bindingMismatch
+            ? 'Preserve every other proposal field unchanged.'
+            : filterSetMismatch
+              ? 'Preserve template, title, bindings, sort, and top_n unchanged.'
+              : 'Change only the invalid bindings to one exact listed choice; preserve filters, sort, and top_n unchanged. Do not guess a measure.'),
     },
     prefillNextAction(
       correctionAvailable
-        ? 'Correct invalid bindings'
+        ? templateMismatch
+          ? filterSetMismatch
+            ? 'Correct required filters and template ID'
+            : 'Replace invalid template ID'
+          : 'Correct invalid bindings'
         : hasFilters
           ? 'Ask user to resolve proposal'
           : 'Use fallback or ask user',
