@@ -411,6 +411,7 @@ function capSummaryRows(
 
   const cappedColumns = [...columns];
   let cellTruncated = false;
+  let byteTruncated = false;
   const candidateRows = rows.slice(0, SUMMARY_ROWS_MAX_ROWS).map((row) =>
     row.map((cell) => {
       if (typeof cell !== 'string' || cell.length <= SUMMARY_ROWS_MAX_CELL_CHARS) {
@@ -430,20 +431,36 @@ function capSummaryRows(
     const nextRowBytes =
       Buffer.byteLength(serializedRow, 'utf8') + (cappedRows.length === 0 ? 0 : 1);
     if (payloadBytes + nextRowBytes > SUMMARY_ROWS_MAX_BYTES) {
+      byteTruncated = true;
       break;
     }
     cappedRows.push(row);
     payloadBytes += nextRowBytes;
   }
 
-  if (cappedRows.length === 0) {
-    return { summary_rows_error: 'oversize readback' };
+  const omissionReasons = [
+    ...(rows.length > SUMMARY_ROWS_MAX_ROWS
+      ? [`more than the ${SUMMARY_ROWS_MAX_ROWS}-row preview limit`]
+      : []),
+    ...(cellTruncated
+      ? [`a cell exceeded the ${SUMMARY_ROWS_MAX_CELL_CHARS}-character preview limit`]
+      : []),
+    ...(byteTruncated
+      ? [`the payload exceeded the ${SUMMARY_ROWS_MAX_BYTES}-byte preview limit`]
+      : []),
+  ];
+  if (omissionReasons.length > 0) {
+    return {
+      summary_rows_error: boundedSummaryRowsError(
+        `summary rows omitted because ${omissionReasons.join('; ')}`,
+      ),
+      truncated: true,
+    };
   }
 
   return {
     summary_rows: { columns: cappedColumns, rows: cappedRows },
     summary_rows_order: rowOrder,
-    ...(cellTruncated || rows.length > cappedRows.length ? { truncated: true } : {}),
   };
 }
 

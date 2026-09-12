@@ -4270,11 +4270,21 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect((body.guidance as string).length).toBeLessThan(400);
   });
 
-  it('marks 21 source rows truncated while returning 20 summary rows', async () => {
+  it('omits a capped live-shaped state preview whose global maximum is outside the first 20 rows', async () => {
     const mocks = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
-    const rows = Array.from({ length: 21 }, (_, index) => [`Region ${index}`, index * 100]);
+    const rows = Array.from({ length: 59 }, (_, index) => [
+      'United States',
+      `State ${index}`,
+      30 + index / 10,
+      -120 + index / 10,
+      index * 1_000,
+    ]);
+    rows[0] = ['United States', 'New York', 40.7128, -74.006, 310876.271];
+    rows[1] = ['United States', 'Texas', 31.9686, -99.9018, 170188.0458];
+    rows[2] = ['United States', 'Washington', 47.4009, -121.4905, 138641.27];
+    rows[58] = ['United States', 'California', 36.7783, -119.4179, 457687.6315];
 
     const result = await getToolResult({
       session: '1',
@@ -4282,8 +4292,11 @@ describe('bindTemplateTool auto_apply gate', () => {
       auto_apply: true,
       getExecutor: summaryRowsExecutor(mocks, {
         columns: [
-          { name: 'Region', dataType: 'string' },
-          { name: 'Sales', dataType: 'real' },
+          { name: 'Country/Region', dataType: 'cstring' },
+          { name: 'State/Province', dataType: 'cstring' },
+          { name: 'Latitude (generated)', dataType: 'real' },
+          { name: 'Longitude (generated)', dataType: 'real' },
+          { name: 'SUM(Sales)', dataType: 'real' },
         ],
         rows,
       }),
@@ -4292,13 +4305,10 @@ describe('bindTemplateTool auto_apply gate', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
-    expect(body.summary_rows).toEqual({
-      columns: [
-        { name: 'Region', dataType: 'string' },
-        { name: 'Sales', dataType: 'real' },
-      ],
-      rows: rows.slice(0, 20),
-    });
+    expect(body.sheet_name).toBe('Sales by Region');
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_order).toBeUndefined();
+    expect(body.summary_rows_error).toContain('20-row preview limit');
     expect(body.truncated).toBe(true);
   });
 
@@ -4325,10 +4335,16 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
     expect(body.summary_rows.rows).toEqual(rows);
+    expect(body.summary_rows_order).toEqual({
+      status: 'unspecified',
+      usableFor: 'value_readback',
+      notUsableFor: 'visual_sort_verification',
+    });
+    expect(body.summary_rows_error).toBeUndefined();
     expect(body.truncated).toBeUndefined();
   });
 
-  it('caps serialized summary_rows near 2KB and marks truncation', async () => {
+  it('omits summary rows when the serialized preview exceeds 2KB', async () => {
     const mocks = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
@@ -4348,13 +4364,14 @@ describe('bindTemplateTool auto_apply gate', () => {
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_order).toBeUndefined();
+    expect(body.summary_rows_error).toContain('2048-byte preview limit');
     expect(body.truncated).toBe(true);
-    expect(Buffer.byteLength(JSON.stringify(body.summary_rows), 'utf8')).toBeLessThanOrEqual(2048);
-    expect(body.summary_rows.rows.length).toBeGreaterThan(0);
-    expect(body.summary_rows.rows.length).toBeLessThan(20);
   });
 
-  it('truncates a monster cell before sizing summary_rows', async () => {
+  it('omits summary rows when a cell exceeds the preview character limit', async () => {
     const mocks = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
@@ -4375,13 +4392,13 @@ describe('bindTemplateTool auto_apply gate', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
-    expect(body.summary_rows_error).toBeUndefined();
-    expect(body.summary_rows.rows).toEqual([['West', 'x'.repeat(256)]]);
-    expect(Buffer.byteLength(JSON.stringify(body.summary_rows), 'utf8')).toBeLessThanOrEqual(2048);
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_order).toBeUndefined();
+    expect(body.summary_rows_error).toContain('256-character preview limit');
     expect(body.truncated).toBe(true);
   });
 
-  it('drops a single capped row that still exceeds the summary_rows byte budget', async () => {
+  it('omits a single row that still exceeds the summary_rows byte budget after cell clipping', async () => {
     const mocks = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
@@ -4404,7 +4421,9 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
     expect(body.summary_rows).toBeUndefined();
-    expect(body.summary_rows_error).toBe('oversize readback');
+    expect(body.summary_rows_order).toBeUndefined();
+    expect(body.summary_rows_error).toContain('2048-byte preview limit');
+    expect(body.truncated).toBe(true);
   });
 
   it('treats zero summary rows as inconclusive without failing the bind', async () => {
