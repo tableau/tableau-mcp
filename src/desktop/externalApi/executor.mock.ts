@@ -1,3 +1,5 @@
+import { Ok } from 'ts-results-es';
+
 import type { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 
 /**
@@ -24,6 +26,12 @@ export function makeExecutorMock(
     health: vi.fn(),
     getRoot: vi.fn(),
     getApp: vi.fn(),
+    getActiveDialogs: vi
+      .fn<ExternalApiToolExecutor['getActiveDialogs']>()
+      .mockResolvedValue(Ok({ dialogs: [] })),
+    invokeDialogAction: vi
+      .fn<ExternalApiToolExecutor['invokeDialogAction']>()
+      .mockResolvedValue(Ok({ outcome: 'no-active-dialog', dialogs: [] })),
     getSite: vi.fn(),
     listSiteWorkbooks: vi.fn(),
     listSiteDatasources: vi.fn(),
@@ -33,21 +41,25 @@ export function makeExecutorMock(
     listDashboards: vi.fn(),
     listStoryboards: vi.fn(),
     listWorkbookDatasources: vi.fn(),
+    getWorkbookDatasource: vi.fn(),
     getWorksheet: vi.fn(),
     getDashboard: vi.fn(),
     getStoryboard: vi.fn(),
     getWorkbookDocument: vi.fn(),
+    getDatasourceDocument: vi.fn(),
     getWorksheetDocument: vi.fn(),
     getDashboardDocument: vi.fn(),
     getStoryboardDocument: vi.fn(),
     getWorksheetSummaryData: vi.fn(),
     listWorksheetLogicalTables: vi.fn(),
     getWorksheetUnderlyingData: vi.fn(),
+    setStartPageVisibility: vi.fn(),
     exportWorksheetImage: vi.fn(),
     exportDashboardImage: vi.fn(),
     exportStoryboardImage: vi.fn(),
     validateWorkbookDocument: vi.fn(),
     applyWorkbookDocument: vi.fn(),
+    applyDatasourceDocument: vi.fn(),
     applyWorksheetDocument: vi.fn(),
     applyDashboardDocument: vi.fn(),
     applyStoryboardDocument: vi.fn(),
@@ -68,6 +80,7 @@ export function makeExecutorMock(
     goToSheet: vi.fn(),
     pauseWorksheetAutoUpdates: vi.fn(),
     resumeWorksheetAutoUpdates: vi.fn(),
+    refreshWorksheetNow: vi.fn(),
     pauseDashboardAutoUpdates: vi.fn(),
     resumeDashboardAutoUpdates: vi.fn(),
   };

@@ -12,7 +12,7 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 import {
-  authorCalculationsInWorkbook,
+  authorCalculationsWithValidation,
   datatypeSchema,
   resolveCaptionReferencesForTest,
   roleSchema,
@@ -24,7 +24,7 @@ const paramsSchema = {
   formula: z.string(),
   role: roleSchema.default('measure'),
   datatype: datatypeSchema.default('real'),
-  datasource: z.string().optional(),
+  datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
 };
 
 type AuthorCalcResult = {
@@ -74,24 +74,26 @@ export const getAuthorCalcTool = (server: DesktopMcpServer): DesktopTool<typeof 
             return new DesktopCommandExecutionError(readResult.error).toErr();
           }
 
-          const authored = await authorCalculationsInWorkbook({
+          const authored = await authorCalculationsWithValidation({
             workbookXml: readResult.value,
             calcs: [{ caption, formula, role, datatype }],
             datasource,
             executor,
             signal: extra.signal,
-            labelErrors: false,
             resolveLooseReferences: true,
           });
           if (authored.isErr()) {
             return authored.error.toErr();
           }
-          const calc = authored.value.authoredCalcs[0];
+          const outcome = authored.value[0];
+          if (outcome.status === 'failed') {
+            return new ArgsValidationError(outcome.message).toErr();
+          }
 
           return new Ok({
-            calcName: calc.calcName,
-            caption: calc.caption,
-            datasource: calc.datasource,
+            calcName: outcome.calcName,
+            caption: outcome.caption,
+            datasource: outcome.datasource,
             hint: 'reference it by caption in a build-worksheets-from-templates fieldMapping (name the caption plus a chart shape)',
           });
         },

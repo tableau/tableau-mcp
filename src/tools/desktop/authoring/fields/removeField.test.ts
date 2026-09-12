@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as configModule from '../../../../config.desktop.js';
+import * as cachePathModule from '../../../../desktop/cachePath.js';
 import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
 import * as metadataModule from '../../../../desktop/metadata/index.js';
 import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
@@ -19,6 +20,7 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { mockContainedCacheReadFromFs } from '../../api/applyPreamble.testUtils.js';
 import { getApplyWorksheetTool } from '../../api/applyWorksheet.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getAddFieldTool } from './addField.js';
@@ -26,6 +28,10 @@ import * as refreshWorkbookCacheModule from './refreshWorkbookCache.js';
 import { getRemoveFieldTool } from './removeField.js';
 
 vi.mock('../../../../desktop/metadata/index.js');
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof cachePathModule>()),
+  readContainedCacheTextFile: vi.fn(),
+}));
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
 vi.mock('../../../../desktop/wrappers/listWorksheets.js');
@@ -61,6 +67,8 @@ function mockPinnedSession(desktopSessionId: string | undefined): void {
 describe('removeFieldTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockContainedCacheReadFromFs();
+    vi.mocked(cacheFingerprintModule.sidecarPath).mockImplementation((file) => `${file}.meta.json`);
     mockPinnedSession(undefined);
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
     // The edit buffer keys on the sheet's simple-id — the resolver lists the sheet to map
@@ -449,6 +457,7 @@ describe('removeFieldTool', () => {
     vi.mocked(metadataModule.addFieldToRows).mockReturnValue(addedXml);
     vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(removedXml);
     vi.mocked(cacheFingerprintModule.checkSidecar).mockReturnValue({ ok: true });
+    vi.mocked(cacheFingerprintModule.checkSidecarInput).mockReturnValue({ ok: true });
     vi.mocked(refreshWorkbookCacheModule.refreshWorkbookCache).mockResolvedValue({
       ok: true,
       xml: '<workbook/>',

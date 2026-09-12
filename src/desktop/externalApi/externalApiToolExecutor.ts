@@ -5,6 +5,7 @@ import { log } from '../../logging/logger.js';
 import {
   BLOCKING_DIALOG_GUIDANCE,
   desktopCallTimeoutMessage,
+  INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
   isDesktopCallTimeout,
 } from '../callDeadline.js';
 import {
@@ -36,10 +37,14 @@ import {
   dashboardPauseAutoUpdatesRoute,
   dashboardResumeAutoUpdatesRoute,
   dashboardRoute,
+  DatasourceItem,
+  datasourceItemSchema,
   DatasourceList,
   datasourceListSchema,
   datasourceRefreshDataRoute,
   datasourceRefreshExtractRoute,
+  DialogList,
+  dialogListSchema,
   ExportAsWorkbookRequest,
   EXTERNAL_API_ROUTES,
   ExternalApiError,
@@ -47,6 +52,9 @@ import {
   ImageExportQuery,
   ImageResult,
   imageResultSchema,
+  InvokeDialogActionRequest,
+  InvokeDialogActionResult,
+  invokeDialogActionResultSchema,
   LogicalTableList,
   logicalTableListSchema,
   OperationEnvelope,
@@ -61,6 +69,8 @@ import {
   siteSchema,
   SiteWorkbookList,
   siteWorkbookListSchema,
+  StartPageVisibility,
+  startPageVisibilitySchema,
   storyboardDocumentRoute,
   storyboardImageRoute,
   StoryboardItem,
@@ -74,6 +84,8 @@ import {
   validationResultSchema,
   WindowInfo,
   workbookDashboardsNewRoute,
+  workbookDatasourceDocumentRoute,
+  workbookDatasourceRoute,
   WorkbookInventory,
   workbookInventorySchema,
   WorkbookOptimizerResult,
@@ -89,6 +101,7 @@ import {
   worksheetLogicalTableDataRoute,
   worksheetLogicalTablesRoute,
   worksheetPauseAutoUpdatesRoute,
+  worksheetRefreshNowRoute,
   worksheetResumeAutoUpdatesRoute,
   worksheetRoute,
   WorksheetSort,
@@ -306,6 +319,30 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async getActiveDialogs(signal: AbortSignal): Promise<Result<DialogList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.appDialogs, dialogListSchema, signal),
+    );
+  }
+
+  async invokeDialogAction(
+    request: InvokeDialogActionRequest,
+    signal: AbortSignal,
+  ): Promise<Result<InvokeDialogActionResult, ExecuteCommandError>> {
+    const result = await this.withRescan('command', (http) =>
+      http.postJsonForDirectBody(
+        EXTERNAL_API_ROUTES.appInvokeDialogAction,
+        request,
+        invokeDialogActionResultSchema,
+        signal,
+      ),
+    );
+    if (result.isErr()) {
+      return Err(mapInvokeDialogActionError(result.error, this.deps.pid));
+    }
+    return Ok(result.value);
+  }
+
   async getSite(signal: AbortSignal): Promise<Result<Site, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(EXTERNAL_API_ROUTES.site, siteSchema, signal),
@@ -373,6 +410,15 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async getWorkbookDatasource(
+    datasourceId: string,
+    signal: AbortSignal,
+  ): Promise<Result<DatasourceItem, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(workbookDatasourceRoute(datasourceId), datasourceItemSchema, signal),
+    );
+  }
+
   async getWorksheet(
     worksheetId: string,
     signal: AbortSignal,
@@ -408,6 +454,15 @@ export class ExternalApiToolExecutor {
       if (result.isErr()) return result;
       return Ok({ ...result.value, instanceId: http.instanceId });
     });
+  }
+
+  async getDatasourceDocument(
+    datasourceId: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getXml(workbookDatasourceDocumentRoute(datasourceId), signal),
+    );
   }
 
   async getWorksheetDocument(
@@ -467,6 +522,24 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async setStartPageVisibility(
+    isStartPageVisible: boolean,
+    signal: AbortSignal,
+  ): Promise<Result<StartPageVisibility, ExecuteCommandError>> {
+    const result = await this.withRescan('command', (http) =>
+      http.postJsonForBody(
+        EXTERNAL_API_ROUTES.appToggleStartPage,
+        { isStartPageVisible },
+        startPageVisibilitySchema,
+        signal,
+      ),
+    );
+    if (result.isErr()) {
+      return Err(mapClientError(result.error, this.deps.pid));
+    }
+    return Ok(result.value);
+  }
+
   async exportWorksheetImage(
     worksheetId: string,
     query: ImageExportQuery,
@@ -520,6 +593,17 @@ export class ExternalApiToolExecutor {
       (http) => http.postXmlEnvelope(EXTERNAL_API_ROUTES.workbookDocument, xml, signal),
       'apply-workbook-document',
       options,
+    );
+  }
+
+  async applyDatasourceDocument(
+    datasourceId: string,
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postXmlEnvelope(workbookDatasourceDocumentRoute(datasourceId), xml, signal),
+      'apply-datasource-document',
     );
   }
 
@@ -634,6 +718,16 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postEnvelope(worksheetResumeAutoUpdatesRoute(worksheetId), signal),
       'resume-worksheet-auto-updates',
+    );
+  }
+
+  async refreshWorksheetNow(
+    worksheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(worksheetRefreshNowRoute(worksheetId), signal),
+      'refresh-worksheet-now',
     );
   }
 
@@ -1031,8 +1125,15 @@ function mapClientError(
         error: {
           code: 'awaiting-user',
           message:
-            'The operation is blocked on a Tableau Desktop dialog and cannot complete over the API ' +
-            `until a person dismisses it.${describeWindows(error.blockingWindows)}`,
+            'The operation is blocked on a Tableau Desktop dialog. Do not retry the originating ' +
+            'operation until the dialog is handled and its cause is corrected. Only the dedicated ' +
+            'dialog tools can be used while the modal blocks ordinary UI-thread operations: call ' +
+            'get-active-dialogs, then, only when the task or user intent makes the choice ' +
+            'unambiguous, copy the exact returned dialog identity and exact returned action ' +
+            'into one invoke-dialog-action call. Do not guess or assume Cancel is safe. Do not retry ' +
+            'invoke-dialog-action after action-invoked-dialog-remains. If either tool is unavailable, ' +
+            'the identity or intent is ambiguous, or no action is clearly safe, ask the user to ' +
+            `dismiss the dialog.${describeWindows(error.blockingWindows)}`,
           recoverable: false,
         },
       };
@@ -1067,6 +1168,82 @@ function mapClientError(
             : unknownInstanceUnreachableMessage(),
       };
   }
+}
+
+/**
+ * An invoke-dialog-action response can be lost or malformed after the POST is dispatched. Preserve
+ * the underlying error class, but never let its recovery text imply that another click is safe.
+ * A 5xx Problem does not prove whether Desktop invoked the action before failing. The exact
+ * api-disabled 503 is a perimeter rejection that happens before route dispatch and stays definitive.
+ */
+function mapInvokeDialogActionError(
+  error: ExternalApiError | NoInstance | InstanceMismatch,
+  pinnedPid?: number,
+): ExecuteCommandError {
+  if (error.type === 'invalid-response') {
+    return {
+      type: 'invalid-response',
+      error: appendInvokeDialogActionIndeterminateGuidance(error.error),
+    };
+  }
+  if (error.type === 'network') {
+    if (isDesktopCallTimeout(error.error)) {
+      return {
+        type: 'command-timed-out',
+        error: desktopCallTimeoutMessage({
+          budgetMs: error.error.budgetMs,
+          tool: 'invoke-dialog-action',
+        }),
+      };
+    }
+
+    const timedOutOrAborted =
+      error.aborted ||
+      (error.error instanceof Error &&
+        (error.error.name === 'TimeoutError' || error.error.name === 'AbortError'));
+    const description =
+      error.error instanceof Error
+        ? error.error.message
+        : pinnedPid === undefined
+          ? 'The External Client API connection ended before confirming the dialog action.'
+          : `The External Client API connection to Desktop PID ${pinnedPid} ended before confirming the dialog action.`;
+    const guidedError = appendInvokeDialogActionIndeterminateGuidance(description);
+    if (timedOutOrAborted) {
+      return { type: 'command-timed-out', error: guidedError };
+    }
+    return { type: 'unknown', error: guidedError };
+  }
+
+  if (
+    error.type === 'problem' &&
+    error.status >= 500 &&
+    error.status < 600 &&
+    !(error.status === 503 && error.code === 'api-disabled')
+  ) {
+    const mapped = mapClientError(error, pinnedPid);
+    if (mapped.type === 'command-failed' && mapped.error !== undefined) {
+      return {
+        type: 'command-failed',
+        error: {
+          ...mapped.error,
+          message: appendInvokeDialogActionIndeterminateGuidance(mapped.error.message),
+        },
+      };
+    }
+    return mapped;
+  }
+
+  return mapClientError(error, pinnedPid);
+}
+
+function appendInvokeDialogActionIndeterminateGuidance(detail: unknown): string {
+  const description =
+    detail instanceof Error
+      ? detail.message
+      : typeof detail === 'string'
+        ? detail
+        : 'The External Client API did not confirm the dialog action.';
+  return `${description} ${INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE}`;
 }
 
 /**

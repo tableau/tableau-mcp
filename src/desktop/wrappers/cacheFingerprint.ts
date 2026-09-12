@@ -25,7 +25,17 @@ export interface InstanceFingerprint {
   instanceId: string;
 }
 
-export type CacheArtifactKind = 'worksheet' | 'workbook' | 'dashboard' | 'storyboard';
+export type CacheArtifactKind =
+  | 'worksheet'
+  | 'workbook'
+  | 'dashboard'
+  | 'storyboard'
+  | 'datasource';
+
+export type CacheSidecarInput =
+  | { type: 'read'; text: string }
+  | { type: 'missing' }
+  | { type: 'unreadable'; error?: unknown };
 
 export interface CacheSidecarMeta extends InstanceFingerprint {
   session_id: string;
@@ -47,6 +57,7 @@ const READ_TOOL_BY_KIND: Record<CacheArtifactKind, string> = {
   workbook: 'get-workbook-xml',
   dashboard: 'get-dashboard-xml',
   storyboard: 'get-storyboard-xml',
+  datasource: 'get-datasource-xml',
 };
 
 export function sidecarPath(cacheFile: string): string {
@@ -149,6 +160,28 @@ export function checkSidecar(
 ): CheckSidecarResult {
   const metaFile = sidecarPath(cacheFile);
   if (!existsSync(metaFile)) {
+    return checkSidecarInput(cacheFile, sessionId, kind, { type: 'missing' }, resolve);
+  }
+
+  let input: CacheSidecarInput;
+  try {
+    input = { type: 'read', text: readFileSync(metaFile, 'utf-8') };
+  } catch (error) {
+    input = { type: 'unreadable', error };
+  }
+  return checkSidecarInput(cacheFile, sessionId, kind, input, resolve);
+}
+
+/** Check already-read sidecar content without reopening its path. */
+export function checkSidecarInput(
+  cacheFile: string,
+  sessionId: string,
+  kind: CacheArtifactKind,
+  input: CacheSidecarInput,
+  resolve: FingerprintResolver = defaultFingerprintResolver,
+): CheckSidecarResult {
+  const metaFile = sidecarPath(cacheFile);
+  if (input.type === 'missing') {
     log({
       message: 'cache sidecar missing — proceeding (pre-sidecar cache)',
       level: 'warning',
@@ -158,9 +191,19 @@ export function checkSidecar(
     return { ok: true };
   }
 
-  let meta: CacheSidecarMeta;
+  if (input.type === 'unreadable') {
+    log({
+      message: 'cache sidecar unreadable — proceeding',
+      level: 'warning',
+      logger: 'cacheFingerprint',
+      data: { file: cacheFile, sidecar: metaFile, error: String(input.error) },
+    });
+    return { ok: true };
+  }
+
+  let parsed: unknown;
   try {
-    meta = JSON.parse(readFileSync(metaFile, 'utf-8')) as CacheSidecarMeta;
+    parsed = JSON.parse(input.text) as unknown;
   } catch (error) {
     log({
       message: 'cache sidecar unreadable — proceeding',
@@ -171,7 +214,14 @@ export function checkSidecar(
     return { ok: true };
   }
 
-  if (typeof meta.instanceId !== 'string' || typeof meta.pid !== 'number') {
+  if (
+    parsed === null ||
+    typeof parsed !== 'object' ||
+    !('instanceId' in parsed) ||
+    typeof parsed.instanceId !== 'string' ||
+    !('pid' in parsed) ||
+    typeof parsed.pid !== 'number'
+  ) {
     // Sidecar predates the External Client API fingerprint (agent-manifest era). Same
     // policy as pre-sidecar caches: warn and proceed rather than refuse on missing data.
     log({
@@ -182,6 +232,8 @@ export function checkSidecar(
     });
     return { ok: true };
   }
+
+  const meta = parsed as CacheSidecarMeta;
 
   const current = resolve(sessionId);
   if (!current) {

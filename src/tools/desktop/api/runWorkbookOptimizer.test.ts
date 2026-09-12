@@ -54,7 +54,7 @@ describe('getRunWorkbookOptimizerTool', () => {
     const paramsSchema = await Provider.from(tool.paramsSchema);
 
     expect(tool.name).toBe('run-workbook-optimizer');
-    expect(tool.minApiVersion).toBe('0.2.11');
+    expect(tool.minApiVersion).toBe('0.2.14');
     expect(Object.keys(paramsSchema)).toEqual(['session']);
     expect(paramsSchema.session.safeParse(undefined).success).toBe(true);
     expect(tool.annotations).toEqual({
@@ -248,7 +248,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-workbook-optimizer',
-    apiVersion: '0.2.11',
+    apiVersion: '0.2.14',
   };
 }
 

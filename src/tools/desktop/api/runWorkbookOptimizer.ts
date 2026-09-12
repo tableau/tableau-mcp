@@ -18,7 +18,7 @@ export const getRunWorkbookOptimizerTool = (
   const workbookOptimizerTool = new DesktopTool({
     server,
     name: 'run-workbook-optimizer',
-    minApiVersion: '0.2.11',
+    minApiVersion: '0.2.14',
     title,
     description:
       'Evaluate the open workbook with Workbook Optimizer and return its suggestions without changing the workbook.',

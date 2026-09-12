@@ -116,7 +116,18 @@ for (const p of requestedPlatforms) {
 }
 
 function run(command: string, args: string[], cwd = repoRoot): void {
-  const result = spawnSync(command, args, { cwd, stdio: 'inherit' });
+  // On Windows, npx/unzip/tar resolve to .cmd or PATH entries that CreateProcess
+  // cannot launch without a shell, so spawnSync fails with ENOENT (status null).
+  // Every command+args here is static and internal, so shell concatenation is safe.
+  const result = spawnSync(command, args, {
+    cwd,
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  });
+  // Surface the real spawn failure (e.g. ENOENT) instead of a misleading "(null)".
+  if (result.error) {
+    throw result.error;
+  }
   if (result.status !== 0) {
     throw new Error(`Command failed (${result.status}): ${command} ${args.join(' ')}`);
   }
@@ -147,7 +158,8 @@ async function downloadNodeDist(platform: SeaPlatform, downloadDir: string): Pro
     }
     console.log(`📦 Extracting ${distName}`);
     if (platform.os === 'win') {
-      run('unzip', ['-oq', archivePath, '-d', downloadDir]);
+      // Stock Windows has no `unzip`; its bundled bsdtar (tar.exe) extracts .zip.
+      run('tar', ['-xf', archivePath, '-C', downloadDir]);
     } else {
       run('tar', ['-xzf', archivePath, '-C', downloadDir]);
     }
