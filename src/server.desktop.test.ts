@@ -438,10 +438,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 67-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 68-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(67);
+    expect(selected).toHaveLength(68);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -732,6 +732,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('publish-workbook')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
+    expect(floors.get('run-workbook-optimizer')).toBe('0.2.14');
     expect(floors.get('get-active-dialogs')).toBe('0.2.13');
     expect(floors.get('invoke-dialog-action')).toBe('0.2.13');
     expect(floors.get('get-datasource-info')).toBe('0.2.10');
@@ -808,6 +809,25 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     for (const route of ['export-storyboard-image', 'workbook-export-as']) {
       expect(at26).not.toContain(route);
       expect(at27).toContain(route);
+    }
+  });
+
+  it('advertises Workbook Optimizer only at API 0.2.14 or newer in full and dynamic-authoring', () => {
+    const allTools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
+
+    for (const profile of ['full', 'dynamic-authoring']) {
+      const selected = selectToolsForProfile(allTools, profile);
+      expect(filterToolsByApiVersion(selected, '0.2.13').map((tool) => tool.name)).not.toContain(
+        'run-workbook-optimizer',
+      );
+      expect(filterToolsByApiVersion(selected, '0.2.14').map((tool) => tool.name)).toContain(
+        'run-workbook-optimizer',
+      );
+    }
+    for (const profile of ['demo', 'spec-loop']) {
+      expect(selectToolsForProfile(allTools, profile).map((tool) => tool.name)).not.toContain(
+        'run-workbook-optimizer',
+      );
     }
   });
 

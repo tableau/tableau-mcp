@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.13",
+    "version": "0.2.14",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -2622,6 +2622,30 @@
         }
       }
     },
+    "/v0/workbook:runWorkbookOptimizer": {
+      "post": {
+        "summary": "Run Workbook Optimizer",
+        "description": "Evaluates the open workbook with Workbook Optimizer and returns evaluated suggestions, not analyzer metadata. If the request returns 202 Accepted, poll /v0/operations/{id}; the terminal Operation.result has the same WorkbookOptimizerResult shape as the synchronous 200 response.",
+        "operationId": "runWorkbookOptimizer",
+        "responses": {
+          "200": {
+            "description": "Evaluates the open workbook with Workbook Optimizer and returns evaluated suggestions, not analyzer metadata. If the request returns 202 Accepted, poll /v0/operations/{id}; the terminal Operation.result has the same WorkbookOptimizerResult shape as the synchronous 200 response.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/WorkbookOptimizerResult" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/v0/workbook:save": {
       "post": {
         "summary": "Save the workbook",
@@ -3014,6 +3038,61 @@
           "storyboards": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/StoryboardItem" }
+          }
+        }
+      },
+      "WorkbookOptimizerResult": {
+        "type": "object",
+        "description": "Evaluated Workbook Optimizer suggestions for the open workbook.",
+        "additionalProperties": false,
+        "required": ["suggestions"],
+        "properties": {
+          "suggestions": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorkbookOptimizerSuggestion" }
+          }
+        }
+      },
+      "WorkbookOptimizerSuggestion": {
+        "type": "object",
+        "description": "The evaluated outcome of one optimizer rule.",
+        "additionalProperties": false,
+        "required": ["ruleId", "title", "description", "status", "affected"],
+        "properties": {
+          "ruleId": { "type": "integer", "minimum": 1 },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["PASS", "FAIL", "NEEDS_REVIEW", "IGNORED"]
+          },
+          "affected": { "$ref": "#/components/schemas/WorkbookOptimizerAffected" }
+        }
+      },
+      "WorkbookOptimizerAffected": {
+        "type": "object",
+        "description": "Structured workbook objects affected by an optimizer rule.",
+        "additionalProperties": false,
+        "required": ["count", "items"],
+        "properties": {
+          "count": { "type": "integer", "minimum": 0 },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorkbookOptimizerAffectedItem" }
+          }
+        }
+      },
+      "WorkbookOptimizerAffectedItem": {
+        "type": "object",
+        "description": "A named affected object with an optional value or children.",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "value": { "type": "number", "minimum": 0 },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorkbookOptimizerAffectedItem" }
           }
         }
       },

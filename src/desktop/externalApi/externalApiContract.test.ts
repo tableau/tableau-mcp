@@ -37,6 +37,10 @@ import {
   validationResultSchema,
   windowInfoSchema,
   workbookInventorySchema,
+  workbookOptimizerAffectedItemSchema,
+  workbookOptimizerAffectedSchema,
+  workbookOptimizerResultSchema,
+  workbookOptimizerSuggestionSchema,
   worksheetItemSchema,
   worksheetListSchema,
 } from './types.js';
@@ -53,15 +57,16 @@ import {
  * `Operation`/`OperationList` with `progressWindows`, documents `UnprocessableContent` (422)
  * on the document-replace routes, and adds individual datasource metadata and document
  * GET/POST contracts on top of the 0.2.8 surface.
- * The worksheet `:refreshNow` path and `info.version` 0.2.13 were projected from
- * monolith PR #64791 at commit 364d19f2e624c1859afebc34367e15c1e4b95e99 because no live
- * 0.2.13 capture was available. The dialog contract was generated from the monolith production
- * registry and canonical-JSON compared on 2026-09-08. The rest remains the live 0.2.9 capture.
+ * The worksheet `:refreshNow` path and the 0.2.13 contract were projected from the production
+ * registry/generator harness. The dialog contract was canonical-JSON compared on 2026-09-08.
+ * The 0.2.14 Workbook Optimizer route and schemas come from the live 0.2.11 capture made on
+ * 2026-09-03 and remain canonical-JSON equivalent to the producer definitions.
  */
 
 type SpecProperty = {
   $ref?: string;
   type?: string;
+  enum?: Array<string>;
   minLength?: number;
   maxLength?: number;
   const?: string;
@@ -145,8 +150,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('is the authoritative 0.2.13 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.13');
+  it('captures External Client API 0.2.14', () => {
+    expect(spec.info.version).toBe('0.2.14');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -226,7 +231,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.13 requiredness exception set', () => {
+    it('pins the complete 0.2.14 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
@@ -336,6 +341,37 @@ describe('external client API contract (captured openapi fixture)', () => {
         problemResponseSchema.safeParse({ code: 'sheet-not-found', status: 404, instance: '/v0/x' })
           .success,
       ).toBe(true);
+    });
+  });
+
+  describe('Workbook Optimizer', () => {
+    it.each([
+      ['WorkbookOptimizerResult', workbookOptimizerResultSchema],
+      ['WorkbookOptimizerSuggestion', workbookOptimizerSuggestionSchema],
+      ['WorkbookOptimizerAffected', workbookOptimizerAffectedSchema],
+    ] as const)('%s: properties and required set match', (name, schema) => {
+      const component = specSchema(name);
+      expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
+      expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
+    });
+
+    it('matches the recursive affected-item component', () => {
+      const component = specSchema('WorkbookOptimizerAffectedItem');
+      expect(Object.keys(component.properties ?? {}).sort()).toEqual(['items', 'name', 'value']);
+      expect(component.required).toEqual(['name']);
+      expect(
+        workbookOptimizerAffectedItemSchema.safeParse({
+          name: 'Dashboard 1',
+          items: [{ name: 'Sheet 1', value: 2 }],
+        }).success,
+      ).toBe(true);
+      expect(workbookOptimizerAffectedItemSchema.safeParse({ value: 2 }).success).toBe(false);
+    });
+
+    it('matches the documented suggestion statuses', () => {
+      expect([...workbookOptimizerSuggestionSchema.shape.status.options].sort()).toEqual(
+        [...(specSchema('WorkbookOptimizerSuggestion').properties?.status?.enum ?? [])].sort(),
+      );
     });
   });
 
@@ -471,6 +507,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.workbookWorksheets,
       EXTERNAL_API_ROUTES.workbookUndo,
       EXTERNAL_API_ROUTES.workbookRedo,
+      EXTERNAL_API_ROUTES.workbookRunWorkbookOptimizer,
       EXTERNAL_API_ROUTES.dashboardById,
       EXTERNAL_API_ROUTES.dashboardDocument,
       EXTERNAL_API_ROUTES.storyboardById,
@@ -572,8 +609,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       ).toContain('409');
     });
 
-    it('projects the 0.2.13 worksheet refresh-now Operation contract', () => {
-      expect(spec.info.version).toBe('0.2.13');
+    it('projects the worksheet refresh-now Operation contract', () => {
+      expect(spec.info.version).toBe('0.2.14');
 
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetRefreshNow] as {
         post?: {

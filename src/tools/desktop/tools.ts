@@ -47,6 +47,7 @@ import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
 import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
+import { getRunWorkbookOptimizerTool } from './api/runWorkbookOptimizer.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
 import { getSetStartPageVisibilityTool } from './api/setStartPageVisibility.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
@@ -182,6 +183,7 @@ export const desktopToolFactories = [
   exportDashboardImageTool,
   exportStoryboardImageTool,
   getWorkbookInventoryTool,
+  getRunWorkbookOptimizerTool,
   getListWorkbookDatasourcesTool,
   getListSiteDatasourcesTool,
   getListSiteWorkbooksTool,

@@ -71,6 +71,7 @@ export const desktopToolNames = [
   'export-dashboard-image',
   'export-storyboard-image',
   'get-workbook-inventory',
+  'run-workbook-optimizer',
   'list-workbook-datasources',
   'get-datasource-info',
   'get-datasource-xml',
