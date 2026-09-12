@@ -99,12 +99,10 @@ describe('applyWorksheetTool', () => {
     episodeEvents.resetEpisodeEventsForTests();
   });
 
-  it('should create a tool instance with correct properties', () => {
+  it('should create a tool instance with correct properties', async () => {
     const tool = getApplyWorksheetTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-worksheet');
-    expect(tool.description).toBe(
-      'Build and apply an exact template plan, apply a template artifact, or update a cached worksheet file.',
-    );
+    expect(tool.description).toBe('Apply a worksheet artifact, plan, or cached file.');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
@@ -115,6 +113,11 @@ describe('applyWorksheetTool', () => {
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
       openWorldHint: false,
+    });
+    const paramsSchema = await Provider.from(tool.paramsSchema);
+    const templatePlan = paramsSchema.templatePlan.unwrap();
+    expect(templatePlan.shape).toMatchObject({
+      derivationOverrides: expect.any(Object),
     });
   });
 

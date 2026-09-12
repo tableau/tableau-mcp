@@ -50,6 +50,8 @@ const SUMMARY: SchemaSummary = {
       type: 'nominal',
       datatype: 'string',
     }),
+    field({ columnName: '[Order ID]', role: 'dimension', type: 'nominal', datatype: 'string' }),
+    field({ columnName: '[Row ID]', role: 'dimension', type: 'quantitative', datatype: 'integer' }),
     field({ columnName: '[Order Date]', role: 'dimension', type: 'ordinal', datatype: 'date' }),
     field({ columnName: '[Ship Date]', role: 'dimension', type: 'ordinal', datatype: 'date' }),
     field({ columnName: '[Sales]', role: 'measure', type: 'quantitative', datatype: 'real' }),
@@ -908,6 +910,194 @@ describe('binder/validate — KPI ask coverage', () => {
 });
 
 describe('binder/validate — derivation override', () => {
+  const mixedSlotManifest = (
+    derivation: RuntimeTemplateDescriptor['slots'][number]['derivation'],
+  ): RuntimeTemplateDescriptor => ({
+    template: `x-mixed-${derivation}`,
+    family: 'specialized',
+    fast_path_eligible: true,
+    fast_path_blockers: [],
+    intent_keywords: ['mixed'],
+    description: 'mixed slot count validation fixture',
+    slots: [
+      {
+        slot_id: 'color',
+        template_field: '{{field_base_1}}',
+        derivation,
+        instance_role: 'nk',
+        role: ['color'],
+        kind: 'quantitative-or-categorical',
+        bindable: true,
+        required: true,
+      },
+    ],
+    calcs: [],
+  });
+
+  it.each([
+    ['cnt', 'Order ID'],
+    ['ctd', 'Order ID'],
+    ['cnt', 'Row ID'],
+    ['ctd', 'Row ID'],
+    ['cnt', 'Order Date'],
+    ['ctd', 'Order Date'],
+  ] as const)('allows %s over dimension %s in a quantitative slot', (derivation, fieldName) => {
+    const m = manifests.get('kpi-text')!;
+    const r = validateBinding(
+      m,
+      {
+        template: m.template,
+        title: 'Orders KPI',
+        bindings: [{ slot_id: 'field_base_1', field: fieldName, derivation }],
+      },
+      SUMMARY,
+    );
+
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.field_mapping['{{field_base_1}}']).toBe(
+        `[Superstore].[${derivation}:${fieldName}:qk]`,
+      );
+    }
+  });
+
+  it.each(['sum', 'avg'] as const)(
+    'keeps a string dimension blocked from a quantitative slot under %s',
+    (derivation) => {
+      const m = manifests.get('kpi-text')!;
+      const r = validateBinding(
+        m,
+        {
+          template: m.template,
+          title: 'Orders KPI',
+          bindings: [{ slot_id: 'field_base_1', field: 'Order ID', derivation }],
+        },
+        SUMMARY,
+      );
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.blockers).toContainEqual(
+          expect.objectContaining({ code: 'kind-mismatch', slot_id: 'field_base_1' }),
+        );
+      }
+    },
+  );
+
+  it('keeps a string dimension blocked from a quantitative slot without a count override', () => {
+    const m = manifests.get('kpi-text')!;
+    const r = validateBinding(
+      m,
+      {
+        template: m.template,
+        title: 'Orders KPI',
+        bindings: [{ slot_id: 'field_base_1', field: 'Order ID' }],
+      },
+      SUMMARY,
+    );
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.blockers).toContainEqual(
+        expect.objectContaining({ code: 'kind-mismatch', slot_id: 'field_base_1' }),
+      );
+    }
+  });
+
+  it.each([
+    ['categorical', 'Category'],
+    ['temporal', 'Order Date'],
+    ['geo', 'Region'],
+  ] as const)('rejects a count override on a %s slot', (kind, fieldName) => {
+    const manifest: RuntimeTemplateDescriptor = {
+      ...mixedSlotManifest('none'),
+      template: `x-count-${kind}`,
+      slots: [{ ...mixedSlotManifest('none').slots[0], kind }],
+    };
+    const result = validateBinding(
+      manifest,
+      {
+        template: manifest.template,
+        title: 'Count guard',
+        bindings: [{ slot_id: 'color', field: fieldName, derivation: 'ctd' }],
+      },
+      SUMMARY,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockers).toContainEqual({
+      code: 'derivation-illegal',
+      slot_id: 'color',
+      detail: expect.stringContaining(
+        `requested count override 'ctd' returns a quantitative value and cannot bind to ${kind} slot 'color'`,
+      ),
+    });
+  });
+
+  it.each([
+    ['authored cnt', 'cnt', undefined, 'cnt'],
+    ['ctd override', 'sum', 'ctd', 'ctd'],
+    ['no count', 'sum', undefined, 'none'],
+  ] as const)(
+    'keeps mixed-slot output semantics for %s',
+    (_case, authoredDerivation, override, expectedDerivation) => {
+      const manifest = mixedSlotManifest(authoredDerivation);
+      const result = validateBinding(
+        manifest,
+        {
+          template: manifest.template,
+          title: 'Mixed slot',
+          bindings: [
+            {
+              slot_id: 'color',
+              field: 'Category',
+              ...(override !== undefined ? { derivation: override } : {}),
+            },
+          ],
+        },
+        SUMMARY,
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.field_mapping['{{field_base_1}}']).toBe(
+        `[Superstore].[${expectedDerivation}:Category:${expectedDerivation === 'none' ? 'nk' : 'qk'}]`,
+      );
+    },
+  );
+
+  it.each([
+    ['authored count', 'ctd', undefined],
+    ['count override', 'sum', 'cnt'],
+  ] as const)(
+    'allows a quantitative-typed dimension in a mixed slot for %s',
+    (_case, authoredDerivation, override) => {
+      const manifest = mixedSlotManifest(authoredDerivation);
+      const result = validateBinding(
+        manifest,
+        {
+          template: manifest.template,
+          title: 'Mixed numeric dimension count',
+          bindings: [
+            {
+              slot_id: 'color',
+              field: 'Row ID',
+              ...(override !== undefined ? { derivation: override } : {}),
+            },
+          ],
+        },
+        SUMMARY,
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.field_mapping['{{field_base_1}}']).toBe(
+        `[Superstore].[${override ?? authoredDerivation}:Row ID:qk]`,
+      );
+    },
+  );
+
   it('legal override on a numeric measure emits the override in the field_mapping value', () => {
     // kpi-text 'value' slot's template default is sum; overriding to avg must
     // emit avg (the template default is not the user's intent).

@@ -38,6 +38,7 @@ const SUMMARY: SchemaSummary = {
     field({ name: 'Latitude', role: 'measure', type: 'quantitative', datatype: 'real' }),
     field({ name: 'City', role: 'dimension', type: 'nominal', datatype: 'string' }),
     field({ name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' }),
+    field({ name: 'Order ID', role: 'dimension', type: 'nominal', datatype: 'string' }),
     field({ name: 'Order Date', role: 'dimension', type: 'ordinal', datatype: 'date' }),
     field({ name: 'Segment', role: 'dimension', type: 'nominal', datatype: 'string' }),
   ],
@@ -197,6 +198,143 @@ describe('bindExplicitTemplate', () => {
     }
   });
 
+  it('uses a typed slot derivation override for a COUNTD dimension KPI', () => {
+    const result = bindExplicitTemplate(
+      KPI.template,
+      { field_base_1: '[Superstore].[none:Order ID:nk]' },
+      SUMMARY,
+      {
+        manifests: manifests(KPI),
+        derivationOverrides: { field_base_1: 'ctd' },
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fieldMapping).toEqual({
+      '{{field_base_1}}': '[Superstore].[ctd:Order ID:qk]',
+    });
+    expect(result.fieldMetadata).toEqual({
+      '{{field_base_1}}': { datatype: 'string', type: 'nominal' },
+    });
+  });
+
+  it('uses a typed slot derivation override for an ordered COUNTD dimension KPI', () => {
+    const result = bindExplicitTemplate(
+      KPI.template,
+      ['[Superstore].[none:Order ID:nk]'],
+      SUMMARY,
+      {
+        manifests: manifests(KPI),
+        derivationOverrides: { field_base_1: 'ctd' },
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fieldMapping).toEqual({
+      '{{field_base_1}}': '[Superstore].[ctd:Order ID:qk]',
+    });
+  });
+
+  it('uses an authored count derivation when binding an ordered dimension KPI', () => {
+    const countKpi = {
+      ...KPI,
+      slots: [{ ...KPI.slots[0], derivation: 'ctd' as const }],
+    } satisfies RuntimeTemplateDescriptor;
+    const result = bindExplicitTemplate(
+      countKpi.template,
+      ['[Superstore].[none:Order ID:nk]'],
+      SUMMARY,
+      { manifests: manifests(countKpi) },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fieldMapping).toEqual({
+      '{{field_base_1}}': '[Superstore].[ctd:Order ID:qk]',
+    });
+  });
+
+  it('keeps an ordered string dimension blocked from a quantitative SUM slot', () => {
+    const result = bindExplicitTemplate(
+      KPI.template,
+      ['[Superstore].[none:Order ID:nk]'],
+      SUMMARY,
+      { manifests: manifests(KPI) },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockers).toContainEqual(
+      expect.objectContaining({ code: 'missing-required-slot', slot_id: 'field_base_1' }),
+    );
+  });
+
+  it('reuses one ordered dimension for raw and count instances of the same template field', () => {
+    const contract: TemplateBindingContract = {
+      template: 'same-field-raw-and-count',
+      slots: [
+        {
+          slot_id: 'orders_raw',
+          template_field: 'Orders',
+          derivation: 'none',
+          role: ['detail'],
+          kind: 'categorical',
+          bindable: true,
+          required: true,
+          qualified_key_required: true,
+        },
+        {
+          slot_id: 'orders_count',
+          template_field: 'Orders',
+          derivation: 'ctd',
+          role: ['text'],
+          kind: 'quantitative',
+          bindable: true,
+          required: true,
+          qualified_key_required: true,
+        },
+      ],
+      calcs: [],
+    };
+    const result = bindExplicitTemplate(
+      contract.template,
+      ['[Superstore].[none:Order ID:nk]'],
+      SUMMARY,
+      { contract },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fieldMapping).toEqual({
+      'Orders@none': '[Superstore].[none:Order ID:nk]',
+      'Orders@ctd': '[Superstore].[ctd:Order ID:qk]',
+    });
+  });
+
+  it('rejects a derivation override that does not name a bound slot', () => {
+    const result = bindExplicitTemplate(
+      KPI.template,
+      { field_base_1: '[Superstore].[sum:Sales:qk]' },
+      SUMMARY,
+      {
+        manifests: manifests(KPI),
+        derivationOverrides: { missing_slot: 'ctd' },
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockers).toEqual([
+      expect.objectContaining({
+        code: 'kind-mismatch',
+        slot_id: 'missing_slot',
+        detail: expect.stringContaining('unknown or unbound'),
+      }),
+    ]);
+  });
+
   it('rejects a kpi-text field mapping with a competing extra key', () => {
     const result = bindExplicitTemplate(
       KPI.template,
@@ -281,9 +419,6 @@ describe('bindExplicitTemplate', () => {
   });
 
   it.each([
-    ['ctd', 'qk'],
-    ['ctd', 'ok'],
-    ['cnt', 'qk'],
     ['attr', 'nk'],
     ['attr', 'ok'],
     ['attr', 'qk'],
@@ -322,6 +457,128 @@ describe('bindExplicitTemplate', () => {
       if (!result.ok) return;
       expect(result.fieldMapping).toEqual({
         '{{field_base_1}}': `[Superstore].[${derivation}:Movie:${instanceRole}]`,
+      });
+    },
+  );
+
+  it('binds an ordered quantitative-typed dimension to a mixed count slot', () => {
+    const contract: TemplateBindingContract = {
+      template: 'mixed-numeric-dimension-count',
+      slots: [
+        {
+          slot_id: 'color',
+          template_field: '{{field_base_1}}',
+          derivation: 'cnt',
+          role: ['color'],
+          kind: 'quantitative-or-categorical',
+          bindable: true,
+          required: true,
+        },
+      ],
+      calcs: [],
+    };
+    const schema: SchemaSummary = {
+      datasource: 'Superstore',
+      fields: [
+        field({ name: 'Row ID', role: 'dimension', type: 'quantitative', datatype: 'integer' }),
+      ],
+    };
+    const result = bindExplicitTemplate(
+      contract.template,
+      ['[Superstore].[none:Row ID:qk]'],
+      schema,
+      { contract },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fieldMapping).toEqual({
+      '{{field_base_1}}': '[Superstore].[cnt:Row ID:qk]',
+    });
+  });
+
+  it.each([
+    ['ctd', 'qk'],
+    ['ctd', 'ok'],
+    ['cnt', 'qk'],
+  ] as const)(
+    'rejects authored %s on a categorical slot with %s output role',
+    (derivation, instanceRole) => {
+      const contract: TemplateBindingContract = {
+        template: `categorical-${derivation}-${instanceRole}`,
+        slots: [
+          {
+            slot_id: 'field_base_1',
+            template_field: '{{field_base_1}}',
+            derivation,
+            instance_role: instanceRole,
+            role: ['rows'],
+            kind: 'categorical',
+            bindable: true,
+            required: true,
+          },
+        ],
+        calcs: [],
+      };
+
+      const result = bindExplicitTemplate(
+        contract.template,
+        { field_base_1: '[Superstore].[none:Order ID:nk]' },
+        SUMMARY,
+        { contract, datasource: 'Superstore' },
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.blockers).toContainEqual(
+        expect.objectContaining({
+          code: 'derivation-illegal',
+          slot_id: 'field_base_1',
+          detail: expect.stringContaining('returns a quantitative value'),
+        }),
+      );
+    },
+  );
+
+  it.each([
+    ['authored cnt', 'cnt', undefined, 'cnt', 'qk'],
+    ['ctd override', 'sum', 'ctd', 'ctd', 'qk'],
+    ['no count', 'sum', undefined, 'none', 'nk'],
+  ] as const)(
+    'keeps mixed-slot output semantics for %s',
+    (_case, authoredDerivation, override, expectedDerivation, expectedSuffix) => {
+      const contract: TemplateBindingContract = {
+        template: `mixed-${authoredDerivation}`,
+        slots: [
+          {
+            slot_id: 'color',
+            template_field: '{{field_base_1}}',
+            derivation: authoredDerivation,
+            instance_role: 'nk',
+            role: ['color'],
+            kind: 'quantitative-or-categorical',
+            bindable: true,
+            required: true,
+          },
+        ],
+        calcs: [],
+      };
+
+      const result = bindExplicitTemplate(
+        contract.template,
+        { color: '[Superstore].[none:Order ID:nk]' },
+        SUMMARY,
+        {
+          contract,
+          datasource: 'Superstore',
+          ...(override !== undefined ? { derivationOverrides: { color: override } } : {}),
+        },
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.fieldMapping).toEqual({
+        '{{field_base_1}}': `[Superstore].[${expectedDerivation}:Order ID:${expectedSuffix}]`,
       });
     },
   );
@@ -780,6 +1037,55 @@ describe('bindExplicitTemplate', () => {
       expect(result.fieldMapping['Order Date@mn']).toBe('[Superstore].[mn:Order Date:ok]');
       expect(result.fieldMapping['Order Date@yr']).toBe('[Superstore].[yr:Order Date:ok]');
     }
+  });
+
+  it('applies distinct count overrides to qualified keys that reuse one template field', () => {
+    const repeated = {
+      ...KPI,
+      template: 'x-repeated-count',
+      slots: [
+        {
+          slot_id: 'orders_count',
+          template_field: 'Orders',
+          derivation: 'sum',
+          role: ['text'],
+          kind: 'quantitative',
+          bindable: true,
+          required: true,
+          qualified_key_required: true,
+        },
+        {
+          slot_id: 'orders_distinct',
+          template_field: 'Orders',
+          derivation: 'avg',
+          role: ['text'],
+          kind: 'quantitative',
+          bindable: true,
+          required: true,
+          qualified_key_required: true,
+        },
+      ],
+    } as unknown as RuntimeTemplateDescriptor;
+
+    const result = bindExplicitTemplate(
+      repeated.template,
+      {
+        'Orders@sum': '[Superstore].[none:Order ID:nk]',
+        'Orders@avg': '[Superstore].[none:Order ID:nk]',
+      },
+      SUMMARY,
+      {
+        manifests: manifests(repeated),
+        derivationOverrides: { orders_count: 'cnt', orders_distinct: 'ctd' },
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fieldMapping).toEqual({
+      'Orders@sum': '[Superstore].[cnt:Order ID:qk]',
+      'Orders@avg': '[Superstore].[ctd:Order ID:qk]',
+    });
   });
 
   it('still resolves bare column-instance refs by discarding caller derivation', () => {

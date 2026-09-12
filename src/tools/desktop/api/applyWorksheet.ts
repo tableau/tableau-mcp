@@ -50,12 +50,16 @@ import {
 } from './applyWorksheetArtifact.js';
 
 const templatePlanSchema = z.object({
-  templateName: z.string().trim().min(1).max(128).describe('Worksheet template ID.'),
-  title: z.string().trim().min(1).max(255).describe('Worksheet name to create.'),
-  datasource: z.string().trim().min(1).max(255).describe('Live datasource name.'),
+  templateName: z.string().trim().min(1).max(128).describe('Template ID.'),
+  title: z.string().trim().min(1).max(255).describe('Worksheet name.'),
+  datasource: z.string().trim().min(1).max(255).describe('Live datasource.'),
   fieldMapping: z
     .record(z.string().trim().min(1).max(128), z.string().trim().min(1).max(255))
-    .describe('Template slot ID to live field reference.'),
+    .describe('Slot ID to exact live field ref.'),
+  derivationOverrides: z
+    .record(z.string(), z.enum(['cnt', 'ctd']))
+    .optional()
+    .describe('Count derivation by slot ID.'),
 });
 
 const paramsSchema = {
@@ -66,16 +70,14 @@ const paramsSchema = {
     .min(1)
     .max(255)
     .optional()
-    .describe('Template artifact ID; omit for a direct template plan or cached-file apply.'),
-  templatePlan: templatePlanSchema
-    .optional()
-    .describe('Exact template binding to build and apply in this call.'),
+    .describe('Artifact ID; omit with plan/file.'),
+  templatePlan: templatePlanSchema.optional().describe('Exact binding to build and apply.'),
   worksheetName: artifactNameParam('worksheet', { min: 1, max: 255 })
     .optional()
     .describe('Target id/name or plan/artifact title.'),
   worksheetFile: artifactFileParam('worksheet', { max: 4096 })
     .optional()
-    .describe('Cached worksheet path for manual apply; omit with other modes.'),
+    .describe('Cached-file path.'),
 };
 
 const title = 'Updating worksheet';
@@ -109,8 +111,7 @@ export const getApplyWorksheetTool = (
     server,
     name: 'apply-worksheet',
     title,
-    description:
-      'Build and apply an exact template plan, apply a template artifact, or update a cached worksheet file.',
+    description: 'Apply a worksheet artifact, plan, or cached file.',
     paramsSchema,
     annotations: {
       readOnlyHint: false, // updates worksheet in workbook

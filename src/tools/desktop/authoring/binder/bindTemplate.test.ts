@@ -1163,6 +1163,10 @@ describe('bindTemplateTool', () => {
               slot_id: 'profit',
               required: true,
               compatible_field_names: ['amount', 'budget'],
+              conditional_field_options: [
+                { name: 'line_item', requires_derivation: ['cnt', 'ctd'] },
+                { name: 'category', requires_derivation: ['cnt', 'ctd'] },
+              ],
             },
             {
               slot_id: 'sub_category',
@@ -1181,13 +1185,209 @@ describe('bindTemplateTool', () => {
         title: 'Choose a worksheet title.',
         confidence: 'Set a confidence from 0 to 1.',
         field_selection:
-          'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
+          'Choose an exact compatible_field_names value, or a conditional_field_options name with its required derivation; do not rename fields.',
       },
     });
     expect(body.call_2_contract.proposal_choices[0].slots[0].compatible_field_names).toHaveLength(
       2,
     );
     expect(body.call_2_contract.proposal_choices[0].slots[0]).not.toHaveProperty('field');
+  });
+
+  it.each(['Show COUNTD(Order ID) as a KPI.', 'Show Sales as a KPI.'])(
+    'keeps count-only dimensions separate from ordinary quantitative fields: %s',
+    async (ask) => {
+      const countdProposeResult: BinderResult = {
+        ...proposeResult,
+        llm_input: {
+          ask,
+          candidate_templates: [
+            {
+              template: 'kpi-text',
+              description: 'single KPI value',
+              intent_keywords: ['kpi'],
+              slots: [
+                {
+                  slot_id: 'field_base_1',
+                  role: ['text'],
+                  kind: 'quantitative',
+                  required: true,
+                  derivation: 'sum',
+                },
+              ],
+            },
+          ],
+          fields: [
+            { name: 'Order ID', role: 'dimension', type: 'nominal', datatype: 'string' },
+            { name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' },
+          ],
+        },
+      };
+      vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+      vi.mocked(binderModule.bindTemplate).mockResolvedValue(countdProposeResult);
+
+      const result = await getToolResult({ session: `conditional-${ask.length}`, ask });
+
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.call_2_contract.proposal_choices[0].slots[0].compatible_field_names).toEqual([
+        'Sales',
+      ]);
+      expect(body.call_2_contract.proposal_choices[0].slots[0].conditional_field_options).toEqual([
+        { name: 'Order ID', requires_derivation: ['cnt', 'ctd'] },
+      ]);
+    },
+  );
+
+  it.each([
+    { derivation: 'ctd', result: boundResult, expectedStatus: 'bound' },
+    { derivation: 'cnt', result: boundResult, expectedStatus: 'bound' },
+    { derivation: undefined, result: escalateResult, expectedStatus: 'escalate' },
+    { derivation: 'sum', result: escalateResult, expectedStatus: 'escalate' },
+  ] as const)(
+    'admits a declared conditional field to validation with derivation $derivation',
+    async ({ derivation, result: bindResult, expectedStatus }) => {
+      const ask = 'Show orders as a KPI.';
+      const proposal = {
+        template: 'kpi-text',
+        title: 'Orders',
+        bindings: [
+          {
+            slot_id: 'field_base_1',
+            field: 'Order ID',
+            ...(derivation ? { derivation } : {}),
+          },
+        ],
+        confidence: 0.9,
+      } satisfies BindingProposal & { confidence: number };
+      const countProposal: BinderResult = {
+        ...proposeResult,
+        llm_input: {
+          ask,
+          candidate_templates: [
+            {
+              template: 'kpi-text',
+              description: 'single KPI value',
+              intent_keywords: ['kpi'],
+              slots: [
+                {
+                  slot_id: 'field_base_1',
+                  role: ['text'],
+                  kind: 'quantitative',
+                  required: true,
+                  derivation: 'sum',
+                },
+              ],
+            },
+          ],
+          fields: [
+            { name: 'Order ID', role: 'dimension', type: 'nominal', datatype: 'string' },
+            { name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' },
+          ],
+        },
+      };
+      const { getExecutor } = setupAutoApplyMocks({ bind: boundResult });
+      vi.mocked(binderModule.bindTemplate)
+        .mockResolvedValueOnce(countProposal)
+        .mockResolvedValueOnce(bindResult);
+
+      await getToolResult({
+        session: `conditional-${derivation ?? 'omitted'}`,
+        ask,
+        getExecutor,
+      });
+      const call2 = await getToolResult({
+        session: `conditional-${derivation ?? 'omitted'}`,
+        ask,
+        proposal,
+        auto_apply: true,
+        getExecutor,
+      });
+
+      invariant(call2.content[0].type === 'text');
+      const body = JSON.parse(call2.content[0].text);
+      expect(expectedStatus === 'bound' ? body.status : body.reason, JSON.stringify(body)).toBe(
+        expectedStatus === 'bound' ? 'bound' : 'fallback_required',
+      );
+      expect(binderModule.bindTemplate).toHaveBeenCalledTimes(expectedStatus === 'bound' ? 3 : 2);
+      expect(binderModule.bindTemplate).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ proposal }),
+      );
+    },
+  );
+
+  it('allows one ctd correction from a mistyped field to the exact conditional name', async () => {
+    const ask = 'Show COUNTD(Order ID) as a KPI.';
+    const countProposal: BinderResult = {
+      ...proposeResult,
+      llm_input: {
+        ask,
+        candidate_templates: [
+          {
+            template: 'kpi-text',
+            description: 'single KPI value',
+            intent_keywords: ['kpi'],
+            slots: [
+              {
+                slot_id: 'field_base_1',
+                role: ['text'],
+                kind: 'quantitative',
+                required: true,
+                derivation: 'sum',
+              },
+            ],
+          },
+        ],
+        fields: [
+          { name: 'Order ID', role: 'dimension', type: 'nominal', datatype: 'string' },
+          { name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' },
+        ],
+      },
+    };
+    const mistyped = {
+      template: 'kpi-text',
+      title: 'Orders',
+      bindings: [{ slot_id: 'field_base_1', field: 'OrderID', derivation: 'ctd' }],
+      confidence: 0.9,
+    } satisfies BindingProposal & { confidence: number };
+    const corrected = {
+      ...mistyped,
+      bindings: [{ slot_id: 'field_base_1', field: 'Order ID', derivation: 'ctd' }],
+    } satisfies BindingProposal & { confidence: number };
+    const { getExecutor } = setupAutoApplyMocks({ bind: boundResult });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(countProposal)
+      .mockResolvedValueOnce(boundResult);
+
+    await getToolResult({ session: 'conditional-correction', ask, getExecutor });
+    const rejected = await getToolResult({
+      session: 'conditional-correction',
+      ask,
+      proposal: mistyped,
+      auto_apply: true,
+      getExecutor,
+    });
+    const accepted = await getToolResult({
+      session: 'conditional-correction',
+      ask,
+      proposal: corrected,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(rejected.content[0].type === 'text');
+    expect(JSON.parse(rejected.content[0].text)).toMatchObject({
+      reason: 'proposal_contract_mismatch',
+      mismatches: [{ choices: ['Order ID', 'Sales'] }],
+    });
+    invariant(accepted.content[0].type === 'text');
+    expect(JSON.parse(accepted.content[0].text).status).toBe('bound');
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3);
+    expect(binderModule.bindTemplate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ proposal: corrected }),
+    );
   });
 
   it('fails the exact filter parser closed before scanning an over-cap full schema', () => {

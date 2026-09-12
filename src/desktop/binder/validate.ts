@@ -172,6 +172,7 @@ const NUMERIC_AGGREGATION_DERIVATIONS: ReadonlySet<string> = new Set([
   'var',
   'vrp',
 ]);
+const COUNT_AGGREGATION_DERIVATIONS: ReadonlySet<Derivation> = new Set(['cnt', 'ctd']);
 
 const NUMERIC_DATATYPES: ReadonlySet<string> = new Set(['integer', 'real']);
 const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
@@ -423,7 +424,13 @@ function effectiveSlotDerivation(
   override?: Derivation,
 ): Derivation {
   if (override !== undefined) return override;
-  if (slot.kind === 'quantitative-or-categorical' && field.role === 'dimension') return 'none';
+  if (
+    slot.kind === 'quantitative-or-categorical' &&
+    field.role === 'dimension' &&
+    !COUNT_AGGREGATION_DERIVATIONS.has(slot.derivation)
+  ) {
+    return 'none';
+  }
   return slot.derivation;
 }
 
@@ -535,9 +542,33 @@ export function validateBinding(
     }
     resolutionNotes.push(...(r.notes ?? []));
     const f = r.field;
+    const override = overrideBySlot.get(slotId);
+    const effDeriv = effectiveSlotDerivation(slot, f, override);
+    const countDimensionInMeasureSlot =
+      (slot.kind === 'quantitative' || slot.kind === 'quantitative-or-categorical') &&
+      f.role === 'dimension' &&
+      COUNT_AGGREGATION_DERIVATIONS.has(effDeriv);
+
+    if (
+      !f.isAggregated &&
+      COUNT_AGGREGATION_DERIVATIONS.has(effDeriv) &&
+      slot.kind !== 'quantitative' &&
+      slot.kind !== 'quantitative-or-categorical'
+    ) {
+      const countSource =
+        override !== undefined ? 'requested count override' : 'template count derivation';
+      blockers.push({
+        code: 'derivation-illegal',
+        slot_id: slotId,
+        detail:
+          `${countSource} '${effDeriv}' returns a quantitative value and cannot bind to ` +
+          `${slot.kind} slot '${slotId}'. Use a quantitative or quantitative-or-categorical slot for count/count-distinct.`,
+      });
+      continue;
+    }
 
     // Gate 3: kind/role compatibility.
-    if (!kindCompatible(slot.kind, f)) {
+    if (!kindCompatible(slot.kind, f) && !countDimensionInMeasureSlot) {
       // temporal_axis_from_string: a temporal slot that opted in accepts a date-like
       // STRING field, which the apply-side DATEPARSE splice turns into a real date
       // (see dateparseTemporalAxis.ts). Only when the slot opts in AND the string
@@ -586,8 +617,6 @@ export function validateBinding(
     // aggregated calc forces `usr` (handled in gate 7) and bypasses legality
     // entirely. An illegal override yields a teaching blocker so the caller
     // knows why the requested aggregation/grain cannot apply.
-    const override = overrideBySlot.get(slotId);
-    const effDeriv = effectiveSlotDerivation(slot, f, override);
     const src = override !== undefined ? 'requested override' : 'template derivation';
     if (!f.isAggregated) {
       if (TEMPORAL_DERIVATIONS.has(effDeriv) && !TEMPORAL_DATATYPES.has(f.datatype)) {
@@ -1091,7 +1120,9 @@ export function validateBinding(
     const deriv = f.isAggregated ? 'usr' : effectiveSlotDerivation(slot, f, override);
     // Suffix follows the EFFECTIVE derivation, not the field type alone: a date
     // truncation is continuous (':qk') even on an ordinal date field (P1-3).
-    const suffix = suffixFor(deriv, f.type, slot.instance_role);
+    const suffix = COUNT_AGGREGATION_DERIVATIONS.has(deriv)
+      ? 'qk'
+      : suffixFor(deriv, f.type, slot.instance_role);
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;

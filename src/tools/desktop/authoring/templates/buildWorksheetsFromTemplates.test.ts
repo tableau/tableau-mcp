@@ -107,12 +107,12 @@ describe('build-worksheets-from-templates', () => {
       title: expect.any(Object),
       datasource: expect.any(Object),
       fieldMapping: expect.any(Object),
+      derivationOverrides: expect.any(Object),
       topN: expect.any(Object),
     });
     expect(schema.fieldMapping.description).toBe('Map slot ID to exact returned column_ref.');
-    expect(schema.topN.description).toBe(
-      'Limit a simple ranked worksheet to its first N members before storing the artifact.',
-    );
+    expect(schema.derivationOverrides.description).toBe('Count derivation by slot ID.');
+    expect(schema.topN.description).toBe('Rank limit (1-50).');
     expect(schema).not.toHaveProperty('templates');
     expect(schema).not.toHaveProperty('workbookFile');
     expect(schema).not.toHaveProperty('confirmation');
@@ -210,6 +210,59 @@ describe('build-worksheets-from-templates', () => {
       ok: false,
       reason: 'unknown',
     });
+  });
+
+  it('builds a COUNTD Order ID KPI from a typed derivation override', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: SUPERSTORE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-orders-countd',
+    });
+
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'kpi-text',
+        title: 'Distinct Orders',
+        datasource: 'Sample - Superstore',
+        fieldMapping: { field_base_1: '[Sample - Superstore].[none:Order ID:nk]' },
+        derivationOverrides: { field_base_1: 'ctd' },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(bodyOf(result).bindings).toEqual([
+      { slotId: 'field_base_1', field: '[Sample - Superstore].[ctd:Order ID:qk]' },
+    ]);
+    const reserved = store.reserve('artifact-orders-countd', '12345');
+    expect(reserved.ok).toBe(true);
+    if (!reserved.ok) return;
+    expect(reserved.artifact.fieldMapping).toEqual({
+      '{{field_base_1}}': '[Sample - Superstore].[ctd:Order ID:qk]',
+    });
+    expect(reserved.artifact.worksheetXml).toMatch(
+      /<column\b[^>]*datatype=(['"])string\1[^>]*name=(['"])\[Order ID\]\2[^>]*type=(['"])nominal\3/,
+    );
+    expect(reserved.artifact.worksheetXml).toMatch(
+      /<column-instance\b[^>]*derivation=(['"])CountD\1[^>]*name=(['"])\[ctd:Order ID:qk\]\2[^>]*type=(['"])quantitative\3/,
+    );
+    expect(reserved.artifact.worksheetXml).toContain('fontsize="36"');
+    expect(reserved.artifact.worksheetXml).toContain(
+      '&lt;[Sample - Superstore].[ctd:Order ID:qk]&gt;',
+    );
   });
 
   it('builds and applies the shipped insights bar without leaving a direction token', async () => {
@@ -775,13 +828,18 @@ async function callTool(
     title: string;
     datasource: string;
     fieldMapping: Record<string, string>;
+    derivationOverrides?: Record<string, 'cnt' | 'ctd'>;
     topN?: number;
   },
   executor: ExternalApiToolExecutor,
 ): Promise<CallToolResult> {
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { ...args, topN: args.topN },
+    {
+      ...args,
+      derivationOverrides: args.derivationOverrides,
+      topN: args.topN,
+    },
     {
       ...getMockRequestHandlerExtra(),
       getExecutor: vi.fn().mockResolvedValue(executor),

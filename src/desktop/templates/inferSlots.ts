@@ -48,6 +48,13 @@ function kindOf(def: ColumnDef | undefined): SlotKind | 'unknown' {
   return 'unknown';
 }
 
+function slotKindOf(def: ColumnDef | undefined, derivation: Derivation): SlotKind | 'unknown' {
+  const rawKind = kindOf(def);
+  if (rawKind === 'unknown') return 'unknown';
+  if (derivation === 'cnt' || derivation === 'ctd') return 'quantitative';
+  return rawKind;
+}
+
 /** Immediate column dependencies in a formula. Qualified parameter refs are not donor fields. */
 function baseInputsOf(formula: string): string[] {
   const out = new Set<string>();
@@ -531,7 +538,7 @@ export function inferFromBookmark(rawXml: string): Inference {
     if (seen.has(key) || isPseudo(e.base)) return;
     seen.add(key);
     const def = cols.get(e.base);
-    const k = kindOf(def);
+    const k = slotKindOf(def, e.derivation);
     if (k === 'unknown') {
       unknownCount++;
       return; // skip rather than guess

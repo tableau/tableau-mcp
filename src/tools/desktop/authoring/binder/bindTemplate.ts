@@ -544,6 +544,19 @@ function correctionFallbackResult(): StructuredBindTemplateToolResult {
   );
 }
 
+type Call2ContractSlot = Call2Contract['proposal_choices'][number]['slots'][number];
+
+function declaredFieldNames(
+  slot: Call2ContractSlot,
+  derivation?: BindingProposal['bindings'][number]['derivation'],
+): string[] {
+  const ordinary = slot.compatible_field_names;
+  const conditional = slot.conditional_field_options?.map((field) => field.name) ?? [];
+  const prioritized = derivation === 'cnt' || derivation === 'ctd' ? conditional : ordinary;
+  const remaining = prioritized === conditional ? ordinary : conditional;
+  return [...new Set([...prioritized, ...remaining])];
+}
+
 function proposalContractMismatches(
   proposal: BindingProposal,
   contract: Call2Contract,
@@ -597,14 +610,15 @@ function proposalContractMismatches(
       }
       continue;
     }
-    if (!slot.compatible_field_names.includes(binding.field)) {
+    const declaredFields = declaredFieldNames(slot, binding.derivation);
+    if (!declaredFields.includes(binding.field)) {
       if (
         addMismatch({
           code: 'field-not-compatible',
           template: proposal.template,
           slot_id: binding.slot_id,
           field: binding.field,
-          choices: slot.compatible_field_names.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+          choices: declaredFields.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
         })
       ) {
         return mismatches;
@@ -618,7 +632,7 @@ function proposalContractMismatches(
           code: 'required-slot-missing',
           template: proposal.template,
           slot_id: slot.slot_id,
-          choices: slot.compatible_field_names.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+          choices: declaredFieldNames(slot).slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
         })
       ) {
         return mismatches;
@@ -1417,11 +1431,24 @@ function buildCall2Contract({
         const labeledOptions = compatibleFields.flatMap((field) =>
           field.label ? [{ name: field.name, label: field.label }] : [],
         );
+        const conditionalFieldOptions =
+          slot.kind === 'quantitative'
+            ? llmInput.fields
+                .filter((field) => field.role === 'dimension')
+                .map((field) => ({
+                  name: field.name,
+                  ...(field.label ? { label: field.label } : {}),
+                  requires_derivation: ['cnt', 'ctd'] as Array<'cnt' | 'ctd'>,
+                }))
+            : [];
         return {
           slot_id: slot.slot_id,
           required: slot.required,
           compatible_field_names: compatibleFields.map((field) => field.name),
           ...(labeledOptions.length > 0 ? { compatible_field_options: labeledOptions } : {}),
+          ...(conditionalFieldOptions.length > 0
+            ? { conditional_field_options: conditionalFieldOptions }
+            : {}),
         };
       }),
     })),
@@ -1429,8 +1456,8 @@ function buildCall2Contract({
       title: 'Choose a worksheet title.',
       confidence: 'Set a confidence from 0 to 1.',
       field_selection: llmInput.fields.some((field) => field.label)
-        ? 'Use compatible_field_options labels to compare table grain, then bind its exact name from compatible_field_names; do not rename or infer a field.'
-        : 'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
+        ? 'Use labels to compare table grain. Choose an exact compatible_field_names value, or a conditional_field_options name with its required derivation; do not rename fields.'
+        : 'Choose an exact compatible_field_names value, or a conditional_field_options name with its required derivation; do not rename fields.',
     },
     ...(requiredFilterFields !== undefined ? { required_filter_fields: requiredFilterFields } : {}),
     ...(requiredFilterValues !== undefined && requiredFilterValues.length > 0
