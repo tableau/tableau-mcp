@@ -87,6 +87,36 @@ export function initializeSessionStore(): void {
 }
 
 /**
+ * Prove the configured store is reachable before the server declares itself ready.
+ *
+ * Kept separate from `initializeSessionStore` (which must stay synchronous for the lazy
+ * `createNamespacedStore` call path) so `index.ts` can `await` it after opening the port. Fails
+ * closed like `initializeSessionStore`: a rejecting `init()` propagates uncaught so a custom
+ * store that cannot connect is fatal at boot rather than a server that reports healthy and 500s
+ * on the first OAuth request. The in-memory default has no `init()` and is a no-op here.
+ */
+export async function connectSessionStore(): Promise<void> {
+  if (state === null) {
+    initializeSessionStore();
+  }
+
+  if (state!.kind === 'custom') {
+    await state!.store.init?.();
+  }
+}
+
+/**
+ * Release the configured store's backend resources on shutdown. Awaited from the process's
+ * SIGTERM/SIGINT handler in `index.ts`. No-op for the in-memory default and for custom providers
+ * that don't implement `close()`.
+ */
+export async function disconnectSessionStore(): Promise<void> {
+  if (state?.kind === 'custom') {
+    await state.store.close?.();
+  }
+}
+
+/**
  * Load a custom session store provider from the user's filesystem or npm package.
  *
  * The custom provider module should export a default class (or named export "SessionStore")

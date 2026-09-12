@@ -7,19 +7,32 @@ vi.mock('../config.js', () => ({
 }));
 
 import { getConfig } from '../config.js';
-import { createNamespacedStore, initializeSessionStore, resetSessionStore } from './init.js';
+import {
+  connectSessionStore,
+  createNamespacedStore,
+  disconnectSessionStore,
+  initializeSessionStore,
+  resetSessionStore,
+} from './init.js';
 import { isSessionStoreProvider, sessionStoreProviderSchema } from './types.js';
 
 const FAKE_STORE_MODULE = './src/sessionStore/__fixtures__/fakeSessionStore.cjs';
 const NO_ROTATE_STORE_MODULE = './src/sessionStore/__fixtures__/noRotateSessionStore.cjs';
 const CONFIGURE_NAMESPACE_STORE_MODULE =
   './src/sessionStore/__fixtures__/configureNamespaceSessionStore.cjs';
+const LIFECYCLE_STORE_MODULE = './src/sessionStore/__fixtures__/lifecycleSessionStore.cjs';
+const REJECTING_LIFECYCLE_STORE_MODULE =
+  './src/sessionStore/__fixtures__/rejectingLifecycleSessionStore.cjs';
 
-// The fixture provider is instantiated inside init.ts's loader, out of the test's reach, so it
-// records its configureNamespace calls here on globalThis for the test to assert against.
+// The fixture providers are instantiated inside init.ts's loader, out of the test's reach, so they
+// record their configureNamespace / init / close calls here on globalThis for the test to assert.
 declare global {
   // eslint-disable-next-line no-var
   var __configureNamespaceCalls: Array<{ namespace: string; options: unknown }> | undefined;
+  // eslint-disable-next-line no-var
+  var __initCalls: number | undefined;
+  // eslint-disable-next-line no-var
+  var __closeCalls: number | undefined;
 }
 
 describe('SessionStore init', () => {
@@ -27,6 +40,8 @@ describe('SessionStore init', () => {
     resetSessionStore();
     vi.clearAllMocks();
     vi.mocked(getConfig).mockReturnValue({ sessionStore: { provider: 'memory' } } as any);
+    globalThis.__initCalls = 0;
+    globalThis.__closeCalls = 0;
   });
 
   describe('provider selection', () => {
@@ -180,6 +195,69 @@ describe('SessionStore init', () => {
       const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
       await store.set('key', 'value');
       await expect(store.get('key')).resolves.toBe('value');
+    });
+  });
+
+  describe('lifecycle hooks', () => {
+    function useCustomStore(module: string): void {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: { provider: 'custom', providerConfig: { module } },
+      } as any);
+    }
+
+    it('connectSessionStore calls a custom provider that implements init()', async () => {
+      useCustomStore(LIFECYCLE_STORE_MODULE);
+      await connectSessionStore();
+      expect(globalThis.__initCalls).toBe(1);
+    });
+
+    it('connectSessionStore lazily initializes then calls init() when not initialized', async () => {
+      useCustomStore(LIFECYCLE_STORE_MODULE);
+      // No initializeSessionStore() call first: connect must initialize on demand, then init().
+      await connectSessionStore();
+      expect(globalThis.__initCalls).toBe(1);
+    });
+
+    it('connectSessionStore propagates a rejecting init() (fail-closed)', async () => {
+      useCustomStore(REJECTING_LIFECYCLE_STORE_MODULE);
+      await expect(connectSessionStore()).rejects.toThrow(/init failed/);
+    });
+
+    it('connectSessionStore resolves cleanly when the custom provider has no init()', async () => {
+      useCustomStore(FAKE_STORE_MODULE);
+      await expect(connectSessionStore()).resolves.toBeUndefined();
+    });
+
+    it('connectSessionStore is a no-op on the memory path', async () => {
+      await expect(connectSessionStore()).resolves.toBeUndefined();
+      expect(globalThis.__initCalls).toBe(0);
+    });
+
+    it('disconnectSessionStore calls a custom provider that implements close()', async () => {
+      useCustomStore(LIFECYCLE_STORE_MODULE);
+      initializeSessionStore();
+      await disconnectSessionStore();
+      expect(globalThis.__closeCalls).toBe(1);
+    });
+
+    it('disconnectSessionStore propagates a rejecting close()', async () => {
+      useCustomStore(REJECTING_LIFECYCLE_STORE_MODULE);
+      initializeSessionStore();
+      await expect(disconnectSessionStore()).rejects.toThrow(/close failed/);
+    });
+
+    it('disconnectSessionStore resolves cleanly when the custom provider has no close()', async () => {
+      useCustomStore(FAKE_STORE_MODULE);
+      initializeSessionStore();
+      await expect(disconnectSessionStore()).resolves.toBeUndefined();
+    });
+
+    it('disconnectSessionStore is a no-op on the memory path (including uninitialized)', async () => {
+      // state === null (never initialized) and the memory path both resolve without touching a store.
+      await expect(disconnectSessionStore()).resolves.toBeUndefined();
+      initializeSessionStore();
+      await expect(disconnectSessionStore()).resolves.toBeUndefined();
+      expect(globalThis.__closeCalls).toBe(0);
     });
   });
 

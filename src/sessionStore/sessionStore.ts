@@ -69,4 +69,20 @@ export interface SessionStore<V> {
    * harmless.
    */
   configureNamespace?(namespace: string, options: { ttlMs: number; maxSize?: number }): void;
+
+  /**
+   * Prove the backend is reachable before the server reports healthy (e.g. a Redis `PING`, or
+   * establishing a connection pool). Awaited once at startup; if it rejects, boot fails closed
+   * rather than opening the port over a store that would 500 on the first OAuth request.
+   *
+   * Optional (like `rotate`): the in-memory default has nothing external to connect to, so it
+   * needs neither `init` nor `close`, and existing custom providers without them keep working.
+   */
+  init?(): Promise<void>;
+
+  /**
+   * Release backend resources on shutdown (e.g. close a Redis connection). Awaited from the
+   * process's SIGTERM/SIGINT handler. Optional for the same reason as `init`.
+   */
+  close?(): Promise<void>;
 }

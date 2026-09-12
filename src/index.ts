@@ -13,9 +13,35 @@ import { isNotificationLevel, notifier, setNotificationLevel } from './logging/n
 import { RestApi } from './sdks/tableau/restApi.js';
 import { WebMcpServer } from './server.web.js';
 import { startExpressServer } from './server/express.js';
-import { initializeSessionStore } from './sessionStore/init.js';
+import {
+  connectSessionStore,
+  disconnectSessionStore,
+  initializeSessionStore,
+} from './sessionStore/init.js';
 
 const serverVersion = pkg.version;
+
+// Minimal shutdown hook: release the session store's backend resources on termination signals.
+// Intentionally NOT a general graceful-drain (no in-flight request draining, no Express close) --
+// this only closes the session store, matching the scope of the lifecycle-hook fix.
+function registerSessionStoreShutdown(): void {
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, async () => {
+      try {
+        await disconnectSessionStore();
+        process.exit(0);
+      } catch (error) {
+        log({
+          message: 'Error closing session store during shutdown',
+          level: 'error',
+          logger: 'shutdown',
+          data: error,
+        });
+        process.exit(1);
+      }
+    });
+  }
+}
 
 async function startServer(): Promise<void> {
   dotenv.config();
@@ -26,8 +52,11 @@ async function startServer(): Promise<void> {
   // Initialize feature gate provider
   initializeFeatureGate();
 
-  // Initialize session store provider
+  // Initialize session store provider, then prove a custom backend is reachable before serving.
+  // A rejection here is fatal via the top-level startServer().catch, matching other boot failures.
   initializeSessionStore();
+  await connectSessionStore();
+  registerSessionStoreShutdown();
 
   // Start fetching server info immediately but don't block the port from opening.
   // Any failure here is fatal and logged explicitly -- no silent failures.
