@@ -13,7 +13,7 @@ import { mockFlowRuns } from './mockFlowRuns.js';
 const mocks = vi.hoisted(() => ({
   mockGetFlowRuns: vi.fn(),
   mockQueryFlow: vi.fn(),
-  mockVersionIsAtLeast: vi.fn((_version: `${number}.${number}`): boolean => true),
+  mockVersionIsAtLeast: vi.fn((version: `${number}.${number}`): boolean => version === '3.10'),
   rejectFlowsRead: false,
   mockIsFeatureEnabled: vi.fn(),
 }));
@@ -88,7 +88,9 @@ describe('listFlowRunsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
-    mocks.mockVersionIsAtLeast.mockReturnValue(true);
+    mocks.mockVersionIsAtLeast.mockImplementation(
+      (version: `${number}.${number}`) => version === '3.10',
+    );
     mocks.rejectFlowsRead = false;
     // Default: the failure-insight resolver finds a flow with a webpageUrl.
     mocks.mockQueryFlow.mockResolvedValue({
@@ -258,6 +260,45 @@ describe('listFlowRunsTool', () => {
     );
   });
 
+  it('passes status filtering to REST API 3.30+', async () => {
+    mocks.mockVersionIsAtLeast.mockReturnValue(true);
+    mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+    const result = await getToolResult({ filter: `flowId:eq:${FLOW_ID},status:eq:Failed` });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: `flowId:eq:${FLOW_ID},status:eq:Failed` }),
+    );
+  });
+
+  it('falls back to client-side status filtering before REST API 3.30', async () => {
+    mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+    const result = await getToolResult({ filter: `flowId:eq:${FLOW_ID},status:eq:Failed` });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: `flowId:eq:${FLOW_ID}` }),
+    );
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).flowRuns).toHaveLength(1);
+  });
+
+  it('rejects status sorting before REST API 3.30', async () => {
+    const result = await getToolResult({ sort: 'status:asc', limit: 1 });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('requires Tableau REST API version 3.30');
+    expect(mocks.mockGetFlowRuns).not.toHaveBeenCalled();
+  });
+
+  it('passes status sorting to REST API 3.30+', async () => {
+    mocks.mockVersionIsAtLeast.mockReturnValue(true);
+    mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+    const result = await getToolResult({ sort: 'status:asc', limit: 1 });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 'status:asc' }),
+    );
+  });
+
   it('supports status:in:[...] client-side', async () => {
     mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
     const result = await getToolResult({ filter: 'status:in:[Failed,InProgress]' });
@@ -268,12 +309,16 @@ describe('listFlowRunsTool', () => {
     expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(expect.objectContaining({ filter: '' }));
   });
 
-  it('rejects an unknown status value with the allowed list', async () => {
-    await expect(getToolResult({ filter: 'status:eq:Borked' })).rejects.toThrow(/Allowed flow-run/);
+  it('returns an args-validation error for an unknown status value', async () => {
+    const result = await getToolResult({ filter: 'status:eq:Borked' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Allowed flow-run');
   });
 
-  it('rejects an unsupported filter field', async () => {
-    await expect(getToolResult({ filter: 'bogusField:eq:x' })).rejects.toThrow();
+  it('returns an args-validation error for an unsupported filter field', async () => {
+    const result = await getToolResult({ filter: 'bogusField:eq:x' });
+    expect(result.isError).toBe(true);
   });
 
   it('reports requested-limit truncation when the caller limit cuts the result', async () => {

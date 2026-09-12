@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../../features/init.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
@@ -20,7 +21,10 @@ import { ConstrainedResult, WebTool } from '../../tool.js';
 import { TableauWebRequestHandlerExtra } from '../../toolContext.js';
 import { extractEqValue, looksLikeUuid } from '../flowFilterUtils.js';
 import { buildTruncationInfo, ListFlowsTruncationReason } from '../listFlows/listFlows.js';
-import { parseAndValidateFlowRunsFilterString } from './flowRunsFilterUtils.js';
+import {
+  parseAndValidateFlowRunsFilterString,
+  ValidatedFlowRunsFilter,
+} from './flowRunsFilterUtils.js';
 
 // Server page size for the run-history pagination loop. The "Get Flow Runs"
 // endpoint returns NO pagination block (no `totalAvailable`), so this tool
@@ -29,13 +33,10 @@ import { parseAndValidateFlowRunsFilterString } from './flowRunsFilterUtils.js';
 // for (the "+1 probe", which lets it report `truncated` without a count).
 const FLOW_RUNS_PAGE_SIZE = 100;
 
-// Sentinel for "no caller limit and no admin cap" — pagination still terminates
-// at the server's last (short) page, so this just means "return everything".
-const UNBOUNDED = Number.MAX_SAFE_INTEGER;
-
 // The Get Flow Runs endpoint was introduced in REST API 3.10 (Tableau Server
 // 2020.4). Older servers return 404, so gate the call to give a clear message.
 const MIN_REST_VERSION = '3.10';
+const STATUS_FILTER_SORT_MIN_REST_VERSION = '3.30';
 
 // Safety backstop for an otherwise-unbounded call (no caller `limit` AND no admin
 // MAX_RESULT_LIMIT). Flow runs accumulate quickly on active sites, so default to
@@ -158,11 +159,11 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
   | progress    | eq, gt, gte, lt, lte | Percent complete (0–100). |
   | startedAt   | eq, gt, gte, lt, lte | ISO 8601 \`YYYY-MM-DDTHH:MM:SSZ\`, OR date-only \`YYYY-MM-DD\` (auto-promoted to midnight UTC). |
   | completedAt | eq, gt, gte, lt, lte | ISO 8601 \`YYYY-MM-DDTHH:MM:SSZ\`, OR date-only \`YYYY-MM-DD\` (auto-promoted to midnight UTC). |
-  | status      | eq, in               | One of Pending, InProgress, Success, Failed, Cancelled. **Applied client-side** (the Tableau API does not filter runs by status server-side), so it is matched against the runs fetched for the rest of the filter — pair it with \`flowId\` and/or a \`startedAt\` window for precise results. |
+  | status      | eq, in               | One of Pending, InProgress, Success, Failed, Cancelled. |
 
   **Filter value contracts** (mismatches return 0 runs):
   - \`flowId\` must be the flow UUID; a flow name (or any id that doesn't resolve to a visible flow) returns no runs and the tool hints toward list-flows.
-  - \`status\` values are case-sensitive and must be one of the five exact values above; an unknown value is rejected with the allowed list.
+   - \`status\` values are case-sensitive and must be one of the five exact values above; an unknown value is rejected with the allowed list. On REST API 3.30+, a multi-value \`in\` may contain only terminal statuses (Success, Failed, Cancelled), matching the REST API contract.
   - \`in:\` lists use bracket/comma form, e.g. \`flowId:in:[uuid1,uuid2]\` or \`status:in:[Failed,Cancelled]\` (unquoted; commas inside items unsupported).
 
   ${genericFilterDescription}
@@ -185,14 +186,33 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
     },
     callback: async ({ filter, sort, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
-      const validated = filter ? parseAndValidateFlowRunsFilterString(filter) : undefined;
-      const serverFilter = validated?.serverFilter ?? '';
-      const matchesStatus = validated?.matchesStatus ?? ((): boolean => true);
+      const statusFilterSupported = RestApi.versionIsAtLeast(STATUS_FILTER_SORT_MIN_REST_VERSION);
+      const statusSortSupported = statusFilterSupported;
+      let validated: ValidatedFlowRunsFilter | undefined;
 
       return await listFlowRunsTool.logAndExecute<ListFlowRunsResult>({
         extra,
         args: { filter, sort, limit },
         callback: async () => {
+          const filterResult = filter
+            ? parseAndValidateFlowRunsFilterString(filter, { statusFilterSupported })
+            : undefined;
+          if (filterResult) {
+            if (filterResult.isErr()) {
+              return filterResult.error.toErr();
+            }
+            validated = filterResult.value;
+          }
+
+          if (getStatusSort(sort) !== undefined && !statusSortSupported) {
+            return new ArgsValidationError(
+              `Sorting flow runs by status requires Tableau REST API version ${STATUS_FILTER_SORT_MIN_REST_VERSION} or later. Use startedAt, completedAt, or progress sorting on older servers.`,
+            ).toErr();
+          }
+
+          const serverFilter = validated?.serverFilter ?? '';
+          const matchesStatus = validated?.matchesStatus ?? ((): boolean => true);
+
           return new Ok(
             await useRestApi({
               ...extra,
@@ -216,6 +236,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                     : limit
                   : (maxResultLimit ?? DEFAULT_FLOW_RUNS_LIMIT);
 
+                const sortForApi = sort ?? 'completedAt:desc';
                 let collected: { items: FlowRun[]; truncatedByLimit: boolean };
                 try {
                   collected = await collectFlowRuns({
@@ -238,7 +259,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                       restApi.flowsMethods.getFlowRuns({
                         siteId: restApi.siteId,
                         filter: serverFilter,
-                        sort: sort ?? 'completedAt:desc',
+                        sort: sortForApi,
                         pageSize: FLOW_RUNS_PAGE_SIZE,
                         pageNumber,
                       }),
@@ -277,8 +298,11 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                 // The shared helper only knows 'admin-cap' / 'requested-limit'. When
                 // our backstop (not a caller limit or admin cap) was the binding
                 // constraint, label it 'default-cap' so the distinction is clear.
-                const finalTruncationReason: ListFlowRunsTruncationReason | undefined =
-                  truncated && usedDefaultBackstop ? 'default-cap' : truncationReason;
+                let finalTruncationReason: ListFlowRunsTruncationReason | undefined =
+                  truncationReason;
+                if (truncated && usedDefaultBackstop) {
+                  finalTruncationReason = 'default-cap';
+                }
 
                 // If the window holds any Failed runs, resolve a UI run-history
                 // link for one of them (the API can't tell the caller WHY a run
@@ -436,7 +460,7 @@ async function collectFlowRuns({
   pageSize: number;
   sortByRecency: boolean;
 }): Promise<{ items: FlowRun[]; truncatedByLimit: boolean }> {
-  const probeTarget = effectiveLimit === UNBOUNDED ? UNBOUNDED : effectiveLimit + 1;
+  const probeTarget = effectiveLimit + 1;
   const matched: FlowRun[] = [];
   // De-duplicate across pages by run id. The Get Flow Runs endpoint paginates
   // with an UNSTABLE order whenever the sort key is empty or tied — many runs
@@ -480,8 +504,13 @@ async function collectFlowRuns({
   }
 
   const truncatedByLimit = matched.length > effectiveLimit;
-  const items = effectiveLimit === UNBOUNDED ? matched : matched.slice(0, effectiveLimit);
+  const items = matched.slice(0, effectiveLimit);
   return { items, truncatedByLimit };
+}
+
+function getStatusSort(sort: string | undefined): 'asc' | 'desc' | undefined {
+  const match = sort?.match(/^status:(asc|desc)$/);
+  return match?.[1] as 'asc' | 'desc' | undefined;
 }
 
 export function constrainFlowRuns({
