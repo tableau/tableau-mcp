@@ -38,6 +38,8 @@ export const EXTERNAL_API_ROUTES = {
   workbookSave: '/v0/workbook:save',
   workbookExportAs: '/v0/workbook:exportAs',
   workbookPublish: '/v0/workbook:publish',
+  workbookStartPerformanceRecording: '/v0/workbook:startPerformanceRecording',
+  workbookStopPerformanceRecording: '/v0/workbook:stopPerformanceRecording',
   workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
   dashboardDocument: '/v0/workbook/dashboards/{id}/document',
@@ -605,6 +607,14 @@ export const operationEnvelopeSchema = z
   })
   .passthrough();
 export type OperationEnvelope = z.infer<typeof operationEnvelopeSchema>;
+
+/** Result returned by a successful `POST /v0/workbook:stopPerformanceRecording`. */
+export const performanceRecordingResultSchema = z
+  .object({
+    filePath: z.string().min(1),
+  })
+  .passthrough();
+export type PerformanceRecordingResult = z.infer<typeof performanceRecordingResultSchema>;
 
 /** Worksheet item returned by `GET /v0/workbook/worksheets`. */
 export const worksheetItemSchema = z

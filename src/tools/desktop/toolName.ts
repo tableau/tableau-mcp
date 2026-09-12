@@ -96,6 +96,8 @@ export const desktopToolNames = [
   'add-storyboard',
   'compose-story',
   'publish-workbook',
+  'start-performance-recording',
+  'stop-performance-recording',
   'refresh-datasource-data',
   'refresh-datasource-extract',
 ] as const;
