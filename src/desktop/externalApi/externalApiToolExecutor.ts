@@ -1075,7 +1075,7 @@ function buildCommandStatus(
 }
 
 function getTableauErrorCode(error: OperationError | undefined): string | undefined {
-  const value = error?.['tableau-error-code'];
+  const value = error?.tableauErrorCode ?? error?.['tableau-error-code'];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 

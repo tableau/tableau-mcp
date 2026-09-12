@@ -608,6 +608,39 @@ describe('ExternalApiToolExecutor', () => {
       ]);
     });
 
+    it('preserves the current Operation tableauErrorCode in the public diagnostic', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-fail-current',
+          kind: 'command.invoke',
+          state: 'FAILED',
+          error: {
+            code: 'operation-failed',
+            message: 'Desktop reported the real failure',
+            tableauErrorCode: '7A1775A4',
+          },
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.message).toBe('Desktop reported the real failure');
+        expect((error.error as Record<string, unknown>)['tableau-error-code']).toBe('7A1775A4');
+      }
+    });
+
     it('preserves failed Operation message and tableau-error-code extension', async () => {
       server.setOverride('POST /v0/app:invokeCommand', {
         status: 200,
