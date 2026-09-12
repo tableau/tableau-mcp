@@ -55,4 +55,18 @@ export interface SessionStore<V> {
    * branching on whether it exists.
    */
   rotate?(oldKey: string, newKey: string, value: V): Promise<void>;
+
+  /**
+   * Announce the TTL/bound intended for a given namespace's keys, so a custom provider can
+   * apply them itself (e.g. native Redis `EX`/`PEXPIRE` in its own `set`/`rotate`). The
+   * in-memory default learns this automatically via per-namespace construction; a custom
+   * provider shares one backend across namespaces and otherwise has no way to know which
+   * TTL/bound the app computed for which namespace's keys.
+   *
+   * Optional (like `rotate`): a provider that does not implement it is a valid no-op, so
+   * existing custom providers keep working. It may be called more than once for the same
+   * namespace with identical options, so implementations should treat repeated calls as
+   * harmless.
+   */
+  configureNamespace?(namespace: string, options: { ttlMs: number; maxSize?: number }): void;
 }

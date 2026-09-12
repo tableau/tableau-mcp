@@ -162,12 +162,19 @@ function loadCustomProvider(config?: Record<string, unknown>): SessionStore<unkn
  * Wrap a shared custom store so a single logical namespace prefixes all of its keys, keeping
  * distinct namespaces from colliding on identical raw keys in the shared backend.
  *
- * TTL is not threaded through here: a custom backend manages its own expiration policy, the
- * same way it manages its own bounding (there is no `maxSize` passthrough either).
+ * The per-namespace TTL/bound is handed to the provider via `configureNamespace` (a no-op if
+ * the provider doesn't implement it); the provider still owns applying it (e.g. native Redis
+ * `EX`/`PEXPIRE` inside its own `set`/`rotate`).
  */
-function createPrefixedStore<V>(namespace: string, store: SessionStore<unknown>): SessionStore<V> {
+function createPrefixedStore<V>(
+  namespace: string,
+  store: SessionStore<unknown>,
+  options: { ttlMs: number; maxSize?: number },
+): SessionStore<V> {
   const prefix = `${namespace}:`;
   const shared = store as SessionStore<V>;
+
+  shared.configureNamespace?.(namespace, options);
 
   return {
     get: (key) => shared.get(`${prefix}${key}`),
@@ -189,8 +196,9 @@ function createPrefixedStore<V>(namespace: string, store: SessionStore<unknown>)
  * so each caller (e.g. each EmbeddedOAuthProvider instance) gets its own isolated, non-leaking
  * state. On the `custom` path a key-prefixing wrapper over the single shared provider is returned.
  *
- * `ttlMs` configures the in-memory provider's expiration for this namespace; it is ignored on
- * the `custom` path, where the backend manages its own expiration policy.
+ * `ttlMs`/`maxSize` configure the in-memory provider's expiration/bound for this namespace; on
+ * the `custom` path they are forwarded to the provider via `configureNamespace` so it can apply
+ * them itself against the backend.
  */
 export function createNamespacedStore<V>(
   namespace: string,
@@ -201,7 +209,7 @@ export function createNamespacedStore<V>(
   }
 
   if (state!.kind === 'custom') {
-    return createPrefixedStore<V>(namespace, state!.store);
+    return createPrefixedStore<V>(namespace, state!.store, options);
   }
 
   return new InMemorySessionStore<V>(options);

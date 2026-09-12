@@ -12,6 +12,15 @@ import { isSessionStoreProvider, sessionStoreProviderSchema } from './types.js';
 
 const FAKE_STORE_MODULE = './src/sessionStore/__fixtures__/fakeSessionStore.cjs';
 const NO_ROTATE_STORE_MODULE = './src/sessionStore/__fixtures__/noRotateSessionStore.cjs';
+const CONFIGURE_NAMESPACE_STORE_MODULE =
+  './src/sessionStore/__fixtures__/configureNamespaceSessionStore.cjs';
+
+// The fixture provider is instantiated inside init.ts's loader, out of the test's reach, so it
+// records its configureNamespace calls here on globalThis for the test to assert against.
+declare global {
+  // eslint-disable-next-line no-var
+  var __configureNamespaceCalls: Array<{ namespace: string; options: unknown }> | undefined;
+}
 
 describe('SessionStore init', () => {
   beforeEach(() => {
@@ -134,6 +143,43 @@ describe('SessionStore init', () => {
       await expect(nsA.get('shared')).resolves.toBeUndefined();
       await expect(nsA.get('rotated')).resolves.toBe('a-rotated');
       await expect(nsB.get('shared')).resolves.toBe('b-value');
+    });
+
+    it('forwards each namespace its own TTL/bound via configureNamespace on the custom path', () => {
+      globalThis.__configureNamespaceCalls = [];
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: { module: CONFIGURE_NAMESPACE_STORE_MODULE },
+        },
+      } as any);
+
+      initializeSessionStore();
+
+      createNamespacedStore<string>('alpha', { ttlMs: 1000, maxSize: 500 });
+      createNamespacedStore<string>('beta', { ttlMs: 2000 });
+
+      // Each namespace's own options reach its own call, with no cross-namespace conflation.
+      expect(globalThis.__configureNamespaceCalls).toEqual([
+        { namespace: 'alpha', options: { ttlMs: 1000, maxSize: 500 } },
+        { namespace: 'beta', options: { ttlMs: 2000 } },
+      ]);
+    });
+
+    it('works with a custom provider that does not implement configureNamespace', async () => {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: { module: FAKE_STORE_MODULE },
+        },
+      } as any);
+
+      initializeSessionStore();
+
+      // The optional `?.()` call is a no-op when absent: wrapping and normal ops still work.
+      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      await store.set('key', 'value');
+      await expect(store.get('key')).resolves.toBe('value');
     });
   });
 
