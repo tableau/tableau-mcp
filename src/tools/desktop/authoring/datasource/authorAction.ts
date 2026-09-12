@@ -799,17 +799,58 @@ function matchesSupportedFilterAction(
     ['special-fields', 'all'],
     ['target', desired.sourceDashboard],
   ]);
-  if (desired.excludedWorksheets.length > 0) {
-    expectedParams.set('exclude', tableauList(desired.excludedWorksheets));
-  }
   if (desired.clearSelection === 'exclude-all') {
     expectedParams.set('on-empty', 'none');
   }
-  if (actualParams.size !== expectedParams.size) return undefined;
+  const actualExclude = actualParams.get('exclude');
+  const expectsExclusions = desired.excludedWorksheets.length > 0;
+  if (
+    expectsExclusions
+      ? actualExclude === undefined ||
+        !tableauListSetsEqual(actualExclude, desired.excludedWorksheets)
+      : actualExclude !== undefined
+  ) {
+    return undefined;
+  }
+  if (actualParams.size !== expectedParams.size + (expectsExclusions ? 1 : 0)) return undefined;
   for (const [name, value] of expectedParams) {
     if (actualParams.get(name) !== value) return undefined;
   }
   return actionName;
+}
+
+function tableauListSetsEqual(encodedActual: string, expected: string[]): boolean {
+  const actual = parseTableauList(encodedActual);
+  if (actual === undefined) return false;
+  const sortedActual = [...new Set(actual)].sort();
+  const sortedExpected = [...new Set(expected)].sort();
+  return (
+    sortedActual.length === sortedExpected.length &&
+    sortedActual.every((member, index) => member === sortedExpected[index])
+  );
+}
+
+function parseTableauList(encoded: string): string[] | undefined {
+  const members: string[] = [];
+  let member = '';
+  for (let index = 0; index < encoded.length; index += 1) {
+    const character = encoded[index];
+    if (character === '\\') {
+      const escaped = encoded[index + 1];
+      if (escaped !== '\\' && escaped !== ',') return undefined;
+      member += escaped;
+      index += 1;
+    } else if (character === ',') {
+      if (member.length === 0) return undefined;
+      members.push(member);
+      member = '';
+    } else {
+      member += character;
+    }
+  }
+  if (member.length === 0) return undefined;
+  members.push(member);
+  return members;
 }
 
 function parseWorkbook(xml: string): XmlElement | undefined {

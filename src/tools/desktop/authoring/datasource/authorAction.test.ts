@@ -1226,6 +1226,28 @@ describe('authorActionTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it('returns an existing filter action when its exclusion members are reordered', async () => {
+    const existingXml = withActions(
+      FILTER_XML,
+      filterActionXml({ excludes: ['Detail', 'Show Sales by State as a filled map.'] }),
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter KPIs by State',
+        sourceDashboard: 'Sales Cockpit',
+        sourceWorksheet: 'Show Sales by State as a filled map.',
+        targetWorksheets: FILTER_TARGETS,
+      },
+      initialXml: existingXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action1]');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it.each(['do-nothing', 'exclude-all'] as const)(
     'emits and verifies filter clear-selection behavior %s',
     async (clearSelection) => {
@@ -1287,6 +1309,31 @@ describe('authorActionTool', () => {
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
+  it('accepts complete filter readback when Desktop reorders exclusion members', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter KPIs by State',
+        sourceDashboard: 'Sales Cockpit',
+        sourceWorksheet: 'Show Sales by State as a filled map.',
+        targetWorksheets: FILTER_TARGETS,
+      },
+      initialXml: FILTER_XML,
+      readbackXml: withActions(
+        FILTER_XML,
+        filterActionXml({
+          actionName: '[Action99]',
+          excludes: ['Detail', 'Show Sales by State as a filled map.'],
+        }),
+      ),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action99]');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects filter readback with different semantics after applying', async () => {
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
@@ -1333,7 +1380,9 @@ describe('authorActionTool', () => {
   });
 
   it('rejects a same-caption filter action with different semantics without applying', async () => {
-    const variant = filterActionXml({ excludes: ['Show Sales by State as a filled map.'] });
+    const variant = filterActionXml({
+      excludes: ['Show Sales by State as a filled map.', 'KPI Sales'],
+    });
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         mode: 'filter',
@@ -1444,6 +1493,64 @@ describe('authorActionTool', () => {
 
     expect(result.isError).toBe(false);
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
+  });
+
+  it('compares reordered escaped exclusion members after decoding Tableau list syntax', async () => {
+    const specialXml = [
+      "<workbook><datasources><datasource name='Sample &amp; Source' /></datasources><worksheets>",
+      "<worksheet name='Map, State'><table><view><datasources><datasource name='Sample &amp; Source' /></datasources></view></table></worksheet>",
+      "<worksheet name='KPI &lt;Sales&gt;'><table><view><datasources><datasource name='Sample &amp; Source' /></datasources></view></table></worksheet>",
+      "<worksheet name='Detail\\West &amp; East'><table><view><datasources><datasource name='Sample &amp; Source' /></datasources></view></table></worksheet>",
+      "</worksheets><dashboards><dashboard name='Sales &amp; Ops'><zones>",
+      "<zone name='Map, State' /><zone name='KPI &lt;Sales&gt;' /><zone name='Detail\\West &amp; East' />",
+      '</zones></dashboard></dashboards></workbook>',
+    ].join('');
+    const existingAction =
+      "<action caption='Filter &apos;KPIs&apos; &amp; State' name='[Action1]'>" +
+      "<activation auto-clear='true' type='on-select' />" +
+      "<source dashboard='Sales &amp; Ops' type='sheet' worksheet='Map, State' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='exclude' value='Detail\\\\West &amp; East,Map\\, State' />" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Sales &amp; Ops' />" +
+      '</command></action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: "Filter 'KPIs' & State",
+        sourceDashboard: 'Sales & Ops',
+        sourceWorksheet: 'Map, State',
+        targetWorksheets: ['KPI <Sales>'],
+      },
+      initialXml: withActions(specialXml, existingAction),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action1]');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed Tableau exclusion-list escaping without applying', async () => {
+    const malformedAction = filterActionXml().replace(
+      'Show Sales by State as a filled map.,Detail',
+      'Show Sales by State as a filled map.,Detail\\',
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter KPIs by State',
+        sourceDashboard: 'Sales Cockpit',
+        sourceWorksheet: 'Show Sales by State as a filled map.',
+        targetWorksheets: FILTER_TARGETS,
+      },
+      initialXml: withActions(FILTER_XML, malformedAction),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('different or unsupported semantics');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 });
 
