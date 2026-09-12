@@ -29,6 +29,15 @@ export function makeExecutorMock(
     getActiveDialogs: vi
       .fn<ExternalApiToolExecutor['getActiveDialogs']>()
       .mockResolvedValue(Ok({ dialogs: [] })),
+    getDesktopState: vi.fn<ExternalApiToolExecutor['getDesktopState']>().mockResolvedValue(
+      Ok({
+        state: 'IDLE',
+        uiSnapshotAvailable: true,
+        activeActivities: [],
+        blockingWindows: [],
+        progressWindows: [],
+      }),
+    ),
     invokeDialogAction: vi
       .fn<ExternalApiToolExecutor['invokeDialogAction']>()
       .mockResolvedValue(Ok({ outcome: 'no-active-dialog', dialogs: [] })),

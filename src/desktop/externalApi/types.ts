@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.13), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.14), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -17,6 +17,7 @@ export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
   appDialogs: '/v0/app/dialogs',
+  appState: '/v0/app/state',
   appInvokeDialogAction: '/v0/app:invokeDialogAction',
   appOpenFile: '/v0/app:openFile',
   appToggleStartPage: '/v0/app:toggleStartPage',
@@ -356,13 +357,29 @@ export function datasourceRefreshExtractRoute(datasourceId: string): string {
 /**
  * Discovery file written by Desktop to `<OS app-local-data>/ExternalApi/<pid>.json`.
  * Only `schemaVersion === 1` is understood. Version fields are optional so a slightly
- * newer/older build still parses; the essentials (pid/baseUrl/token) are required.
+ * newer/older build still parses; the essentials (pid/baseUrl/token) are required. The
+ * producer publishes an origin, not a general URL: plain HTTP on numeric IPv4 loopback with
+ * an explicit valid port and no credentials, path, query, or fragment.
  */
+export function isExternalApiLoopbackOrigin(value: string): boolean {
+  const match = /^http:\/\/127\.0\.0\.1:(\d{1,5})$/.exec(value);
+  if (match === null) {
+    return false;
+  }
+
+  const port = Number(match[1]);
+  return Number.isInteger(port) && port >= 1 && port <= 65_535;
+}
+
+export const externalApiLoopbackOriginSchema = z.string().refine(isExternalApiLoopbackOrigin, {
+  message: 'Expected an exact http://127.0.0.1:<port> loopback origin.',
+});
+
 export const discoveryFileSchema = z.object({
   schemaVersion: z.literal(1),
   instanceId: z.string(),
   pid: z.number(),
-  baseUrl: z.string().url(),
+  baseUrl: externalApiLoopbackOriginSchema,
   tokenType: z.string().optional(),
   token: z.string(),
   applicationVersion: z.string().optional(),
@@ -541,6 +558,43 @@ export const dialogListSchema = z
   })
   .passthrough();
 export type DialogList = z.infer<typeof dialogListSchema>;
+
+/** One app-wide point-in-time snapshot of Desktop activity and modal state. */
+export const desktopStateSchema = z
+  .object({
+    state: z.string().min(1),
+    blockedBy: z.string().min(1).optional(),
+    uiSnapshotAvailable: z.boolean(),
+    activeActivities: z.array(z.string().min(1)).optional().default([]),
+    blockingWindows: z.array(windowInfoSchema).optional().default([]),
+    progressWindows: z.array(windowInfoSchema).optional().default([]),
+  })
+  .passthrough()
+  .superRefine((value, context) => {
+    if (value.state === 'BLOCKED' && value.blockedBy === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A BLOCKED state requires blockedBy.',
+        path: ['blockedBy'],
+      });
+    }
+
+    if (
+      value.state === 'IDLE' &&
+      (!value.uiSnapshotAvailable ||
+        value.blockedBy !== undefined ||
+        value.activeActivities.length > 0 ||
+        value.blockingWindows.length > 0 ||
+        value.progressWindows.length > 0)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'An IDLE state requires one complete empty UI snapshot.',
+        path: ['state'],
+      });
+    }
+  });
+export type DesktopState = z.infer<typeof desktopStateSchema>;
 
 /** Exact compare-and-act request accepted by `POST /v0/app:invokeDialogAction`. */
 export const invokeDialogActionRequestSchema = z

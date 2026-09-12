@@ -35,6 +35,8 @@ const DEFAULT_POLL_DEADLINE_MS = 300_000;
 const DEFAULT_RETRY_AFTER_SECONDS = 1;
 const HTTP_ACCEPTED = 202;
 const HTTP_SERVICE_UNAVAILABLE = 503;
+const HTTP_REDIRECT_MIN = 300;
+const HTTP_REDIRECT_MAX = 399;
 
 // Wire states are UPPER_SNAKE_CASE; unknown values count as non-terminal per the spec.
 const TERMINAL_STATES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
@@ -450,8 +452,17 @@ export class ExternalApiHttp {
         method,
         headers,
         body: options.body,
+        redirect: 'manual',
         signal,
       });
+      if (res.status >= HTTP_REDIRECT_MIN && res.status <= HTTP_REDIRECT_MAX) {
+        return Err({
+          type: 'invalid-response',
+          error: new Error(
+            `External Client API rejected an unexpected HTTP ${res.status} redirect.`,
+          ),
+        });
+      }
       return Ok(res);
     } catch (error) {
       return Err({ type: 'network', error, aborted: signal.aborted });

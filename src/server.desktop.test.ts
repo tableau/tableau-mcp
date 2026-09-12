@@ -438,10 +438,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 67-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 68-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(67);
+    expect(selected).toHaveLength(68);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -734,6 +734,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
     expect(floors.get('get-active-dialogs')).toBe('0.2.13');
     expect(floors.get('invoke-dialog-action')).toBe('0.2.13');
+    expect(floors.get('get-desktop-state')).toBe('0.2.14');
     expect(floors.get('get-datasource-info')).toBe('0.2.10');
     expect(floors.get('get-datasource-xml')).toBe('0.2.10');
     expect(floors.get('apply-datasource')).toBe('0.2.10');
@@ -823,6 +824,23 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
       expect(at212).not.toContain(name);
       expect(at213).toContain(name);
     }
+  });
+
+  it('keeps 0.2.13 dialog tools while gating app state until 0.2.14', () => {
+    const profileTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'dynamic-authoring',
+    );
+    const namesAt = (apiVersion: string | undefined): string[] =>
+      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
+
+    expect(namesAt('0.2.13')).toContain('get-active-dialogs');
+    expect(namesAt('0.2.13')).toContain('invoke-dialog-action');
+    expect(namesAt('0.2.13')).not.toContain('get-desktop-state');
+    expect(namesAt('0.2.14')).toContain('get-desktop-state');
+    expect(namesAt('0.3.0')).toContain('get-desktop-state');
+    expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
+    expect(namesAt(undefined)).toContain('get-desktop-state');
   });
 
   it('gates refresh-auto-updates at 0.2.13 and fails open for an unknown version', () => {
