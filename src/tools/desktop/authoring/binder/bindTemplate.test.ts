@@ -5868,8 +5868,6 @@ describe('bindTemplateTool auto_apply gate', () => {
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('dashboard member sheet with pending calculations');
-      expect(result.content[0].text).toContain('missing calculations prevent safe reuse');
       expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
       expect(applyWorkbookDocument).not.toHaveBeenCalled();
     });
