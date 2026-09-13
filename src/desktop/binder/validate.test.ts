@@ -72,6 +72,7 @@ beforeAll(() => {
   manifests = new Map(
     [
       'correlation-scatter-plot-chart',
+      'distribution-histogram',
       'gantt-task-rollup-chart',
       'kpi-text',
       'ranking-ordered-bar',
@@ -616,6 +617,170 @@ describe('binder/validate — aggregate calc-input compatibility', () => {
       );
     }
   });
+
+  it.each(['cnt', 'ctd'] as const)(
+    'blocks a %s override on a numeric measure that feeds a template calculation',
+    (derivation) => {
+      const result = validateBinding(
+        manifest,
+        {
+          template: manifest.template,
+          title: 't',
+          bindings: [{ slot_id: 'input', field: 'Sales', derivation }],
+        },
+        SUMMARY,
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.blockers).toContainEqual({
+        code: 'aggregation-level-mismatch',
+        slot_id: 'input',
+        detail: expect.stringContaining(
+          `requested count override '${derivation}' would change mapped shelf instances`,
+        ),
+      });
+    },
+  );
+
+  it('blocks a count override on a sibling use of the same calc-input template field', () => {
+    const siblingManifest = {
+      ...manifest,
+      slots: [
+        ...manifest.slots,
+        {
+          slot_id: 'display',
+          template_field: '{{field_base_1}}',
+          derivation: 'sum',
+          role: ['text'],
+          kind: 'quantitative',
+          bindable: true,
+          required: true,
+          qualified_key_required: true,
+        },
+      ],
+    } as unknown as RuntimeTemplateDescriptor;
+    const result = validateBinding(
+      siblingManifest,
+      {
+        template: siblingManifest.template,
+        title: 't',
+        bindings: [
+          { slot_id: 'input', field: 'Sales' },
+          { slot_id: 'display', field: 'Sales', derivation: 'ctd' },
+        ],
+      },
+      SUMMARY,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockers).toContainEqual({
+      code: 'aggregation-level-mismatch',
+      slot_id: 'display',
+      detail: expect.stringContaining(
+        "maps template field '{{field_base_1}}' used by a template calculation",
+      ),
+    });
+  });
+
+  it('uses an optional first-class calc input to block a count override', () => {
+    const inputOnlyManifest = {
+      ...manifest,
+      calcs: [
+        {
+          ...manifest.calcs[0],
+          depends_on_slots: [],
+          inputs: [
+            {
+              ref: '{{field_base_1}}',
+              slot_id: 'input',
+              slot_kind: 'quantitative',
+              required: false,
+              template_internal: false,
+            },
+          ],
+        },
+      ],
+    } as unknown as RuntimeTemplateDescriptor;
+    const result = validateBinding(
+      inputOnlyManifest,
+      {
+        template: inputOnlyManifest.template,
+        title: 't',
+        bindings: [{ slot_id: 'input', field: 'Sales', derivation: 'cnt' }],
+      },
+      SUMMARY,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockers).toContainEqual(
+      expect.objectContaining({ code: 'aggregation-level-mismatch', slot_id: 'input' }),
+    );
+  });
+
+  it('preserves a histogram count override that repeats the authored derivation', () => {
+    const histogram = manifests.get('distribution-histogram')!;
+    const bindings: BindingProposal['bindings'] = [
+      { slot_id: 'field_base_1_cnt', field: 'Profit' },
+      { slot_id: 'field_base_1_none', field: 'Profit' },
+    ];
+    const baseline = validateBinding(
+      histogram,
+      {
+        template: histogram.template,
+        title: 'Profit histogram',
+        bindings,
+      },
+      SUMMARY,
+    );
+    const sameCount = validateBinding(
+      histogram,
+      {
+        template: histogram.template,
+        title: 'Profit histogram',
+        bindings: bindings.map((binding) =>
+          binding.slot_id === 'field_base_1_cnt'
+            ? { ...binding, derivation: 'cnt' as const }
+            : binding,
+        ),
+      },
+      SUMMARY,
+    );
+    const changedCount = validateBinding(
+      histogram,
+      {
+        template: histogram.template,
+        title: 'Distinct Profit histogram',
+        bindings: bindings.map((binding) =>
+          binding.slot_id === 'field_base_1_cnt'
+            ? { ...binding, derivation: 'ctd' as const }
+            : binding,
+        ),
+      },
+      SUMMARY,
+    );
+
+    expect(baseline.ok).toBe(true);
+    expect(sameCount.ok).toBe(true);
+    if (baseline.ok && sameCount.ok) {
+      expect(sameCount.field_mapping).toEqual(baseline.field_mapping);
+      expect(sameCount.field_mapping).toEqual({
+        '{{field_base_1}}@cnt': '[Superstore].[cnt:Profit:qk]',
+        '{{field_base_1}}@none': '[Superstore].[none:Profit:qk]',
+      });
+    }
+    expect(changedCount.ok).toBe(false);
+    if (!changedCount.ok) {
+      expect(changedCount.blockers).toContainEqual(
+        expect.objectContaining({
+          code: 'aggregation-level-mismatch',
+          slot_id: 'field_base_1_cnt',
+        }),
+      );
+    }
+  });
 });
 
 describe('binder/validate — cardinality advice', () => {
@@ -960,6 +1125,55 @@ describe('binder/validate — derivation override', () => {
       );
     }
   });
+
+  it.each(['cnt', 'ctd'] as const)(
+    'allows %s over a numeric measure in a standalone quantitative slot',
+    (derivation) => {
+      const m = manifests.get('kpi-text')!;
+      const result = validateBinding(
+        m,
+        {
+          template: m.template,
+          title: 'Sales KPI',
+          bindings: [{ slot_id: 'field_base_1', field: 'Sales', derivation }],
+        },
+        SUMMARY,
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.field_mapping['{{field_base_1}}']).toBe(
+          `[Superstore].[${derivation}:Sales:qk]`,
+        );
+      }
+    },
+  );
+
+  it.each(['cnt', 'ctd'] as const)(
+    'rejects a %s override on an already aggregated field',
+    (derivation) => {
+      const m = manifests.get('kpi-text')!;
+      const result = validateBinding(
+        m,
+        {
+          template: m.template,
+          title: 'Profit Ratio KPI',
+          bindings: [{ slot_id: 'field_base_1', field: 'Profit Ratio', derivation }],
+        },
+        SUMMARY,
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.blockers).toContainEqual({
+        code: 'aggregation-level-mismatch',
+        slot_id: 'field_base_1',
+        detail: expect.stringContaining(
+          `requested count override '${derivation}' cannot apply to already aggregated field "Profit Ratio"`,
+        ),
+      });
+    },
+  );
 
   it.each(['sum', 'avg'] as const)(
     'keeps a string dimension blocked from a quantitative slot under %s',

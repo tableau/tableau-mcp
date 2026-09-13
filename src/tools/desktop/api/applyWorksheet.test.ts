@@ -252,6 +252,28 @@ describe('applyWorksheetTool', () => {
     expect(mockLoadWorksheetXml).toHaveBeenCalledOnce();
   });
 
+  it('rejects a count override on a calc-dependent sibling before direct apply', async () => {
+    await useRealTemplateReads();
+    const getWorkbookDocument = vi.fn().mockResolvedValue(
+      Ok({
+        xml: waterfallTemplateWorkbook(),
+        instanceId: 'inst-build',
+      }),
+    );
+
+    const result = await getDirectTemplateToolResult({
+      getExecutor: vi.fn().mockResolvedValue({ getWorkbookDocument }),
+      plan: waterfallCountTemplatePlan(),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain("requested count override 'ctd'");
+    expect(result.content[0].text).toContain('template calculation');
+    expect(getWorkbookDocument).toHaveBeenCalledOnce();
+    expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
+  });
+
   it('rejects a templatePlan worksheetName mismatch before resolving Desktop or building', async () => {
     const buildArtifact = vi.fn();
     const getExecutor = vi.fn();
@@ -1600,6 +1622,29 @@ function captionTemplatePlan(datasource = 'Superstore'): WorksheetTemplatePlan {
       field_base_2: '[federated.actual].[sum:Sales:qk]',
     },
   };
+}
+
+function waterfallCountTemplatePlan(): WorksheetTemplatePlan {
+  return {
+    templateName: 'part-to-whole-waterfall',
+    title: 'Count of Sales by Sub-Category',
+    datasource: 'Superstore',
+    fieldMapping: {
+      field_base_1_sum: '[Superstore].[sum:Sales:qk]',
+      field_base_2: '[Superstore].[none:Sub-Category:nk]',
+      field_base_1_none: '[Superstore].[none:Sales:qk]',
+    },
+    derivationOverrides: { field_base_1_sum: 'ctd' },
+  };
+}
+
+function waterfallTemplateWorkbook(): string {
+  return `<workbook><datasources>
+    <datasource name='Superstore'>
+      <column name='[Sub-Category]' datatype='string' role='dimension' type='nominal' />
+      <column name='[Sales]' datatype='real' role='measure' type='quantitative' />
+    </datasource>
+  </datasources><worksheets/><windows/></workbook>`;
 }
 
 function captionedTemplateWorkbook(): string {

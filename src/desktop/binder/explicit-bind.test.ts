@@ -13,9 +13,10 @@ function field(p: {
   refDerivation?: string;
   semanticRole?: string;
   isGroup?: boolean;
+  isAggregated?: boolean;
 }): SchemaField {
   const suffix = p.type === 'quantitative' ? 'qk' : p.type === 'ordinal' ? 'ok' : 'nk';
-  const deriv = p.refDerivation ?? (p.role === 'measure' ? 'sum' : 'none');
+  const deriv = p.refDerivation ?? (p.isAggregated ? 'usr' : p.role === 'measure' ? 'sum' : 'none');
   const datasource = p.datasource ?? 'Superstore';
   return {
     name: p.name,
@@ -25,7 +26,7 @@ function field(p: {
     datatype: p.datatype,
     ...(p.semanticRole ? { semanticRole: p.semanticRole } : {}),
     datasource,
-    isAggregated: false,
+    isAggregated: p.isAggregated ?? false,
     ...(p.isGroup ? { isGroup: true } : {}),
     column_ref: `[${datasource}].[${deriv}:${p.name}:${suffix}]`,
   };
@@ -38,6 +39,13 @@ const SUMMARY: SchemaSummary = {
     field({ name: 'Latitude', role: 'measure', type: 'quantitative', datatype: 'real' }),
     field({ name: 'City', role: 'dimension', type: 'nominal', datatype: 'string' }),
     field({ name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' }),
+    field({
+      name: 'Aggregated Sales',
+      role: 'measure',
+      type: 'quantitative',
+      datatype: 'real',
+      isAggregated: true,
+    }),
     field({ name: 'Order ID', role: 'dimension', type: 'nominal', datatype: 'string' }),
     field({ name: 'Order Date', role: 'dimension', type: 'ordinal', datatype: 'date' }),
     field({ name: 'Segment', role: 'dimension', type: 'nominal', datatype: 'string' }),
@@ -165,6 +173,51 @@ const KPI = {
   calcs: [],
 } satisfies RuntimeTemplateDescriptor;
 
+const COUNT_CALC = {
+  template: 'x-count-calc',
+  family: 'specialized',
+  fast_path_eligible: true,
+  fast_path_blockers: [],
+  intent_keywords: ['count'],
+  description: 'count calculation fixture',
+  slots: [
+    {
+      slot_id: 'calc_input',
+      template_field: 'Metric',
+      derivation: 'none',
+      role: ['detail'],
+      kind: 'quantitative',
+      bindable: true,
+      required: true,
+      qualified_key_required: true,
+    },
+    {
+      slot_id: 'display',
+      template_field: 'Metric',
+      derivation: 'sum',
+      role: ['text'],
+      kind: 'quantitative',
+      bindable: true,
+      required: true,
+      qualified_key_required: true,
+    },
+  ],
+  calcs: [
+    {
+      slot_id: 'calculation',
+      template_field: 'Calculation_1',
+      derivation: 'usr',
+      role: ['color'],
+      kind: 'calc',
+      bindable: false,
+      required: true,
+      formula: 'SUM([Metric])',
+      formula_refs: ['Metric'],
+      depends_on_slots: ['calc_input'],
+    },
+  ],
+} satisfies RuntimeTemplateDescriptor;
+
 describe('bindExplicitTemplate', () => {
   it.each([
     ['no fields', []],
@@ -234,6 +287,67 @@ describe('bindExplicitTemplate', () => {
     if (!result.ok) return;
     expect(result.fieldMapping).toEqual({
       '{{field_base_1}}': '[Superstore].[ctd:Order ID:qk]',
+    });
+  });
+
+  it.each(['cnt', 'ctd'] as const)(
+    'keeps a %s override on a standalone numeric KPI',
+    (derivation) => {
+      const result = bindExplicitTemplate(KPI.template, ['[Superstore].[sum:Sales:qk]'], SUMMARY, {
+        manifests: manifests(KPI),
+        derivationOverrides: { field_base_1: derivation },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.fieldMapping).toEqual({
+          '{{field_base_1}}': `[Superstore].[${derivation}:Sales:qk]`,
+        });
+      }
+    },
+  );
+
+  it.each([
+    ['direct calculation input', 'calc_input'],
+    ['same-template-field sibling', 'display'],
+  ] as const)('rejects a count override on a %s', (_case, slotId) => {
+    const result = bindExplicitTemplate(
+      COUNT_CALC.template,
+      {
+        calc_input: '[Superstore].[sum:Sales:qk]',
+        display: '[Superstore].[sum:Sales:qk]',
+      },
+      SUMMARY,
+      {
+        manifests: manifests(COUNT_CALC),
+        derivationOverrides: { [slotId]: 'ctd' },
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockers).toContainEqual(
+      expect.objectContaining({ code: 'aggregation-level-mismatch', slot_id: slotId }),
+    );
+  });
+
+  it('rejects a count override on an already aggregated input', () => {
+    const result = bindExplicitTemplate(
+      KPI.template,
+      ['[Superstore].[usr:Aggregated Sales:qk]'],
+      SUMMARY,
+      {
+        manifests: manifests(KPI),
+        derivationOverrides: { field_base_1: 'cnt' },
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockers).toContainEqual({
+      code: 'aggregation-level-mismatch',
+      slot_id: 'field_base_1',
+      detail: expect.stringContaining('cannot apply to already aggregated field'),
     });
   });
 

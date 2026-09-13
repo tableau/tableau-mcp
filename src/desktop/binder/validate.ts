@@ -453,6 +453,18 @@ export function validateBinding(
   for (const slot of m.slots) slotById.set(slot.slot_id, slot);
   const calcById = new Map<string, CalcSlot>();
   for (const c of m.calcs) calcById.set(c.slot_id, c);
+  const calcInputTemplateFields = new Set<string>();
+  for (const calc of m.calcs) {
+    for (const dep of calc.depends_on_slots) {
+      const depSlot = slotById.get(dep);
+      if (depSlot) calcInputTemplateFields.add(depSlot.template_field);
+    }
+    for (const input of calc.inputs ?? []) {
+      if (input.template_internal || input.slot_id === null) continue;
+      const inputSlot = slotById.get(input.slot_id);
+      if (inputSlot) calcInputTemplateFields.add(inputSlot.template_field);
+    }
+  }
 
   // Index the proposed bindings by slot_id (last wins if duplicated).
   const boundBySlot = new Map<string, string>();
@@ -544,6 +556,7 @@ export function validateBinding(
     const f = r.field;
     const override = overrideBySlot.get(slotId);
     const effDeriv = effectiveSlotDerivation(slot, f, override);
+    const hasCountOverride = override !== undefined && COUNT_AGGREGATION_DERIVATIONS.has(override);
     const countDimensionInMeasureSlot =
       (slot.kind === 'quantitative' || slot.kind === 'quantitative-or-categorical') &&
       f.role === 'dimension' &&
@@ -574,16 +587,32 @@ export function validateBinding(
       continue;
     }
 
-    if (countDimensionInMeasureSlot && feedsCalc) {
+    if (hasCountOverride && f.isAggregated) {
+      blockers.push({
+        code: 'aggregation-level-mismatch',
+        slot_id: slotId,
+        detail:
+          `requested count override '${override}' cannot apply to already aggregated field "${fieldQuery}"; ` +
+          "the binding would emit Tableau's user-aggregate ('usr') derivation instead of the requested count. Bind a row-level field.",
+      });
+      continue;
+    }
+
+    if (
+      (countDimensionInMeasureSlot && feedsCalc) ||
+      (hasCountOverride &&
+        override !== slot.derivation &&
+        calcInputTemplateFields.has(slot.template_field))
+    ) {
       const countSource =
         override !== undefined ? 'requested count override' : 'template count derivation';
       blockers.push({
         code: 'aggregation-level-mismatch',
         slot_id: slotId,
         detail:
-          `slot '${slotId}' feeds a template calculation through raw field "${fieldQuery}", so ` +
-          `${countSource} '${effDeriv}' would change the direct shelf to a count while leaving the ` +
-          "calculation's aggregate semantics unchanged. Bind a row-level numeric measure or choose a template without that calculation dependency.",
+          `slot '${slotId}' maps template field '${slot.template_field}' used by a template calculation, so ` +
+          `${countSource} '${effDeriv}' would change mapped shelf instances while leaving the calculation's ` +
+          "authored raw or aggregate semantics unchanged. Bind a source compatible with the authored calculation, keep the template's authored aggregation, or choose a template whose calculation implements the requested count.",
       });
       continue;
     }

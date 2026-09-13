@@ -1128,10 +1128,9 @@ describe('binder/bindTemplate — two-call protocol', () => {
       expect(result.blockers).toContainEqual({
         code: 'aggregation-level-mismatch',
         slot_id: 'field_base_1_none',
-        detail:
-          'slot \'field_base_1_none\' feeds a template calculation through raw field "Order ID", so ' +
-          `requested count override '${derivation}' would change the direct shelf to a count while leaving the ` +
-          "calculation's aggregate semantics unchanged. Bind a row-level numeric measure or choose a template without that calculation dependency.",
+        detail: expect.stringContaining(
+          `requested count override '${derivation}' would change mapped shelf instances`,
+        ),
       });
     },
   );
