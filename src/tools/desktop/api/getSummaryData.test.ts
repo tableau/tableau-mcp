@@ -23,6 +23,10 @@ vi.mock('../../../desktop/session/sessionResolution.js');
 const resultSchema = z.object({
   worksheet: z.object({ id: z.string(), name: z.string() }),
   maxRows: z.number(),
+  readScope: z.object({
+    target: z.literal('worksheet'),
+    ignoreSelection: z.literal(true),
+  }),
   rowOrder: z.object({
     status: z.literal('unspecified'),
     usableFor: z.literal('value_readback'),
@@ -87,6 +91,10 @@ describe('fetchWorksheetSummaryData', () => {
       status: 'unspecified',
       usableFor: 'value_readback',
       notUsableFor: 'visual_sort_verification',
+    });
+    expect(result.value.readScope).toEqual({
+      target: 'worksheet',
+      ignoreSelection: true,
     });
   });
 
@@ -242,12 +250,12 @@ describe('getSummaryDataTool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('describes an aggregated summary read of the fields on the view', () => {
+  it('describes the worksheet scope and dashboard-instance limitation', () => {
     const tool = getSummaryDataTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-summary-data');
     expect(tool.description).toBe(
-      'Read the aggregated summary rows on a populated worksheet (only the fields on the view).',
+      'Read aggregated summary rows from a worksheet, ignoring selection (only fields on the view). These rows do not verify values shown by a worksheet instance in a dashboard.',
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
@@ -267,7 +275,6 @@ describe('getSummaryDataTool', () => {
       const result = await harness.callTool({
         worksheetName: 'Sales by Region',
         maxRows: 50,
-        columns: ['Region', 'Sales'],
       });
 
       expect(result.isError).toBe(false);
@@ -279,14 +286,16 @@ describe('getSummaryDataTool', () => {
         usableFor: 'value_readback',
         notUsableFor: 'visual_sort_verification',
       });
-      expect(body.shape).toBe('2 rows x 2 columns');
+      expect(body.readScope).toEqual({ target: 'worksheet', ignoreSelection: true });
+      expect(body.shape).toBe('2 rows x 3 columns');
       expect(body.summaryData.columns).toEqual([
         { name: 'Region', dataType: 'string' },
         { name: 'Sales', dataType: 'real' },
+        { name: 'Profit', dataType: 'real' },
       ]);
       expect(body.summaryData.rows).toEqual([
-        ['West', 1200],
-        ['East', 900],
+        ['West', 1200, 240],
+        ['East', 900, 120],
       ]);
 
       const summaryRequest = harness.server.requests.at(-1) as any;
@@ -332,6 +341,16 @@ describe('getSummaryDataTool', () => {
         ],
         rows: [['West', 240]],
       });
+      expect(parseResult(result).readScope).toEqual({
+        target: 'worksheet',
+        ignoreSelection: true,
+      });
+      const summaryRequest = harness.server.requests.at(-1) as any;
+      expect(summaryRequest?.searchParams).toMatchObject({
+        maxRows: '200',
+        ignoreSelection: 'true',
+      });
+      expect(summaryRequest?.searchParams).not.toHaveProperty('columnsToIncludeByFieldName');
     } finally {
       await harness.close();
     }
@@ -385,6 +404,7 @@ describe('getSummaryDataTool', () => {
           notUsableFor: 'visual_sort_verification',
         },
         summaryData: { columns: [], rows: [] },
+        readScope: { target: 'worksheet', ignoreSelection: true },
       });
       expect(harness.server.requests.some((request) => request.path.endsWith('/summaryData'))).toBe(
         false,

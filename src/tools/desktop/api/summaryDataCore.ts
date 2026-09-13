@@ -23,11 +23,19 @@ export const SUMMARY_ROW_ORDER = {
 
 export type SummaryRowOrder = typeof SUMMARY_ROW_ORDER;
 
+export const SUMMARY_DATA_READ_SCOPE = {
+  target: 'worksheet',
+  ignoreSelection: true,
+} as const;
+
+export type SummaryDataReadScope = typeof SUMMARY_DATA_READ_SCOPE;
+
 export type WorksheetSummaryData = {
   worksheet: WorksheetItem;
   columns: unknown[];
   rows: unknown[][];
   rowOrder: SummaryRowOrder;
+  readScope: SummaryDataReadScope;
 };
 
 export type WorksheetSummaryDataError =
@@ -68,6 +76,7 @@ export async function fetchWorksheetSummaryData({
       columns: [],
       rows: [],
       rowOrder: SUMMARY_ROW_ORDER,
+      readScope: SUMMARY_DATA_READ_SCOPE,
     });
   }
 
@@ -79,7 +88,7 @@ export async function fetchWorksheetSummaryData({
       async (activeExecutor, activeSignal) =>
         await activeExecutor.getWorksheetSummaryData(
           resolvedWorksheet.id,
-          { maxRows, ignoreSelection: true },
+          { maxRows, ignoreSelection: SUMMARY_DATA_READ_SCOPE.ignoreSelection },
           activeSignal,
         ),
     );
@@ -119,6 +128,7 @@ export async function fetchWorksheetSummaryData({
       columns: returnedColumns,
       rows: returnedRows,
       rowOrder: SUMMARY_ROW_ORDER,
+      readScope: SUMMARY_DATA_READ_SCOPE,
     });
   }
 
@@ -131,6 +141,7 @@ export async function fetchWorksheetSummaryData({
     columns: projection.value.map((index) => returnedColumns[index]),
     rows: returnedRows.map((row) => projection.value.map((index) => row[index])),
     rowOrder: SUMMARY_ROW_ORDER,
+    readScope: SUMMARY_DATA_READ_SCOPE,
   });
 }
 

@@ -3936,6 +3936,7 @@ describe('bindTemplateTool auto_apply gate', () => {
         usableFor: 'value_readback',
         notUsableFor: 'visual_sort_verification',
       },
+      summary_rows_scope: { target: 'worksheet', ignoreSelection: true },
     });
     expect(body.guidance).toContain('not the user’s stated choice');
     expect(body.guidance).toContain('Sales');
@@ -3944,6 +3945,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.guidance).toContain(
       'also quote notable values of the context measures for the top entries',
     );
+    expect(result.structuredContent?.summary_rows_scope).toEqual(body.summary_rows_scope);
     expect(appliedXml(mocks.applyWorkbookDocument)).toContain(
       '<tooltip column="[Superstore].[sum:Profit:qk]"></tooltip>',
     );
@@ -4009,6 +4011,7 @@ describe('bindTemplateTool auto_apply gate', () => {
         measure: 'Sales',
         context_measures: ['Profit'],
       },
+      summary_rows_scope: { target: 'worksheet', ignoreSelection: true },
     });
     expect(appliedXml(mocks.applyWorkbookDocument)).toContain(
       '<tooltip column="[Superstore].[sum:Profit:qk]"></tooltip>',
@@ -4308,8 +4311,10 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.sheet_name).toBe('Sales by Region');
     expect(body.summary_rows).toBeUndefined();
     expect(body.summary_rows_order).toBeUndefined();
+    expect(body.summary_rows_scope).toBeUndefined();
     expect(body.summary_rows_error).toContain('20-row preview limit');
     expect(body.truncated).toBe(true);
+    expect(result.structuredContent?.summary_rows_scope).toBeUndefined();
   });
 
   it('omits truncated for exactly 20 source rows', async () => {
@@ -4340,6 +4345,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       usableFor: 'value_readback',
       notUsableFor: 'visual_sort_verification',
     });
+    expect(body.summary_rows_scope).toEqual({ target: 'worksheet', ignoreSelection: true });
     expect(body.summary_rows_error).toBeUndefined();
     expect(body.truncated).toBeUndefined();
   });
@@ -4367,6 +4373,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.applied).toBe(true);
     expect(body.summary_rows).toBeUndefined();
     expect(body.summary_rows_order).toBeUndefined();
+    expect(body.summary_rows_scope).toBeUndefined();
     expect(body.summary_rows_error).toContain('2048-byte preview limit');
     expect(body.truncated).toBe(true);
   });
@@ -4394,6 +4401,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.applied).toBe(true);
     expect(body.summary_rows).toBeUndefined();
     expect(body.summary_rows_order).toBeUndefined();
+    expect(body.summary_rows_scope).toBeUndefined();
     expect(body.summary_rows_error).toContain('256-character preview limit');
     expect(body.truncated).toBe(true);
   });
@@ -4422,6 +4430,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.applied).toBe(true);
     expect(body.summary_rows).toBeUndefined();
     expect(body.summary_rows_order).toBeUndefined();
+    expect(body.summary_rows_scope).toBeUndefined();
     expect(body.summary_rows_error).toContain('2048-byte preview limit');
     expect(body.truncated).toBe(true);
   });
@@ -4442,6 +4451,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
     expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_scope).toBeUndefined();
     expect(body.summary_rows_error).toBe('empty readback — verify with get-summary-data');
     expect(body.guidance).toContain('Summary readback returned zero rows');
     expect(body.guidance).toContain('check the sheet');

@@ -97,6 +97,7 @@ import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import {
   fetchWorksheetSummaryData,
   type SummaryDataRead,
+  type SummaryDataReadScope,
   type SummaryRowOrder,
 } from '../../api/summaryDataCore.js';
 import {
@@ -214,6 +215,7 @@ type AppliedFastPathResult = {
   applied_default?: AppliedDefault;
   summary_rows?: { columns: unknown[]; rows: unknown[][] };
   summary_rows_order?: SummaryRowOrder;
+  summary_rows_scope?: SummaryDataReadScope;
   summary_rows_error?: string;
   truncated?: true;
   /**
@@ -397,13 +399,14 @@ function currencyHeterogeneityCaveat(
 
 type SummaryRowsEnrichment = Pick<
   AppliedFastPathResult,
-  'summary_rows' | 'summary_rows_order' | 'summary_rows_error' | 'truncated'
+  'summary_rows' | 'summary_rows_order' | 'summary_rows_scope' | 'summary_rows_error' | 'truncated'
 >;
 
 function capSummaryRows(
   columns: unknown[],
   rows: unknown[][],
   rowOrder: SummaryRowOrder,
+  readScope: SummaryDataReadScope,
 ): SummaryRowsEnrichment {
   if (rows.length === 0) {
     return { summary_rows_error: EMPTY_SUMMARY_ROWS_ERROR };
@@ -461,6 +464,7 @@ function capSummaryRows(
   return {
     summary_rows: { columns: cappedColumns, rows: cappedRows },
     summary_rows_order: rowOrder,
+    summary_rows_scope: readScope,
   };
 }
 
@@ -514,7 +518,12 @@ async function readAppliedSummaryRows({
         summary_rows_error: boundedSummaryRowsError(result.error.error.getErrorText()),
       };
     }
-    return capSummaryRows(result.value.columns, result.value.rows, result.value.rowOrder);
+    return capSummaryRows(
+      result.value.columns,
+      result.value.rows,
+      result.value.rowOrder,
+      result.value.readScope,
+    );
   } catch (error) {
     return { summary_rows_error: boundedSummaryRowsError(getExceptionMessage(error)) };
   } finally {
