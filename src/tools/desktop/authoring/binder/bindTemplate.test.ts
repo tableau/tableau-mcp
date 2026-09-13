@@ -5714,6 +5714,167 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
   });
 
+  describe.each([
+    { identity: 'stamped', stamped: true },
+    { identity: 'stamp-stripped', stamped: false },
+  ])('$identity deterministic worksheet with a pending calc', ({ stamped }) => {
+    const marginProposal: BindingProposal & { confidence: number } = {
+      ...sampleProposal,
+      bindings: [
+        { slot_id: 'cat', field: 'Region' },
+        { slot_id: 'val', field: 'Margin' },
+      ],
+    };
+    const marginBoundResult: BinderResult = {
+      ...boundResult,
+      args: {
+        ...boundResult.args,
+        field_mapping: {
+          cat: '[Region]',
+          val: '[Superstore].[usr:Calculation_1700000000000:qk]',
+        },
+      },
+    };
+
+    function existingMarginWorkbook(
+      key: string,
+      dashboardMember = false,
+    ): {
+      workbookXml: string;
+      worksheetXml: string;
+    } {
+      const worksheetXml =
+        `<worksheet name='Sales by Region'${
+          stamped ? ` user:tableau-agent-idempotency-key='${key}'` : ''
+        }><table><view><datasource-dependencies datasource='Superstore'>` +
+        "<column caption='Region' datatype='string' name='[Region]' role='dimension' type='nominal' />" +
+        "<column caption='Margin' datatype='real' name='[Calculation_1699999999999]' role='measure' type='quantitative' />" +
+        '</datasource-dependencies></view>' +
+        '<rows>[Superstore].[usr:Calculation_1699999999999:qk]</rows>' +
+        '</table></worksheet>';
+      let workbookXml = ensureUserNamespace(
+        CALC_BASE_XML.replace(
+          "<column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+          "<column caption='Region' datatype='string' name='[Region]' role='dimension' type='nominal' />" +
+            "<column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+        ).replace("<worksheet name='Sheet 1' />", worksheetXml),
+      );
+      if (dashboardMember) {
+        workbookXml = workbookXml.replace(
+          '</workbook>',
+          "<dashboards><dashboard name='Overview'><zones><zone name='Sales by Region' /></zones></dashboard></dashboards></workbook>",
+        );
+      }
+      return { workbookXml, worksheetXml };
+    }
+
+    it('applies the pending Margin calc and repaired worksheet when replacement is safe', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+      const key = (stamped ? 'd' : 'e').repeat(64);
+      const { workbookXml, worksheetXml } = existingMarginWorkbook(key);
+      const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+        bind: marginBoundResult,
+        workbookReads: [workbookXml],
+      });
+      vi.mocked(classifyWorksheetReplaceTarget).mockImplementation((_xml, name) =>
+        name === 'Sales by Region' ? 'replaceable' : 'not-found',
+      );
+      vi.mocked(workbookHasSheetNamed).mockImplementation(
+        (_xml, name) => name === 'Sales by Region',
+      );
+      vi.mocked(buildInjectedWorkbookXml).mockImplementation(({ workbookXml, title }) => ({
+        ok: true,
+        xml: workbookXml.replace(
+          worksheetXml,
+          `<worksheet name='${title}'><table><view>` +
+            "<datasource-dependencies datasource='Superstore'>" +
+            "<column caption='Region' datatype='string' name='[Region]' role='dimension' type='nominal' />" +
+            "<column caption='Margin' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative' />" +
+            "<column-instance column='[Calculation_1700000000000]' derivation='User' name='[usr:Calculation_1700000000000:qk]' pivot='key' type='quantitative' />" +
+            '</datasource-dependencies></view>' +
+            '<rows>[Superstore].[usr:Calculation_1700000000000:qk]</rows>' +
+            '</table></worksheet>',
+        ),
+      }));
+
+      const result = await getToolResult({
+        session: '1',
+        ask: 'Sales by Region',
+        proposal: {
+          ...marginProposal,
+          template_parameters: { __TABLEAU_AGENT_IDEMPOTENCY_KEY__: key },
+        },
+        calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+        auto_apply: true,
+        skip_validation: true,
+        allowSkipValidation: true,
+        getExecutor,
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        applied: true,
+        authored_calcs: ['Margin'],
+        sheet_name: 'Sales by Region',
+        verification: { ok: true, status: 'passed' },
+      });
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      const appliedXml = applyWorkbookDocument.mock.calls[0]?.[0] as string;
+      expect(appliedXml).toMatch(
+        /<column\b(?=[^>]*caption="Margin")(?=[^>]*name="\[Calculation_1700000000000\]")[^>]*>/,
+      );
+      expect(appliedXml).toContain('<rows>[Superstore].[usr:Calculation_1700000000000:qk]</rows>');
+      expect(appliedXml).not.toContain('Calculation_1699999999999');
+      expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workbookXml: expect.stringContaining(CALC_COLUMN_XML),
+          title: 'Sales by Region',
+          fieldMapping: expect.objectContaining({
+            val: '[Superstore].[usr:Calculation_1700000000000:qk]',
+          }),
+        }),
+      );
+    });
+
+    it('refuses to lose the pending Margin calc or rebuild a dashboard member', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+      const key = (stamped ? 'f' : '0').repeat(64);
+      const { workbookXml } = existingMarginWorkbook(key, true);
+      const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+        bind: marginBoundResult,
+        workbookReads: [workbookXml],
+      });
+      vi.mocked(classifyWorksheetReplaceTarget).mockImplementation((_xml, name) =>
+        name === 'Sales by Region' ? 'in-dashboard' : 'not-found',
+      );
+      vi.mocked(workbookHasSheetNamed).mockImplementation(
+        (_xml, name) => name === 'Sales by Region',
+      );
+
+      const result = await getToolResult({
+        session: '1',
+        ask: 'Sales by Region',
+        proposal: {
+          ...marginProposal,
+          template_parameters: { __TABLEAU_AGENT_IDEMPOTENCY_KEY__: key },
+        },
+        calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+        auto_apply: true,
+        skip_validation: true,
+        allowSkipValidation: true,
+        getExecutor,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('dashboard member sheet with pending calculations');
+      expect(result.content[0].text).toContain('missing calculations prevent safe reuse');
+      expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+  });
+
   it('keeps untrusted Insights KPI calc application on the ordinary two-apply path', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const insightBoundResult: BinderResult = {

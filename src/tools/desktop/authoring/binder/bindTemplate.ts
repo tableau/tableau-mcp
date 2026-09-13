@@ -3560,16 +3560,23 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               proposal?.bindings.map((binding) => binding.field) ?? [],
             );
             if (existingTitle !== undefined) {
-              return new Ok(
-                reusedSheetResult(
-                  {
-                    sheetName: existingTitle,
-                    template: res.args.template_name,
-                    ts: new Date().toISOString(),
-                  },
-                  authoredCalcCaptions,
-                ),
-              );
+              if (atomicCalcs.length === 0) {
+                return new Ok(
+                  reusedSheetResult(
+                    {
+                      sheetName: existingTitle,
+                      template: res.args.template_name,
+                      ts: new Date().toISOString(),
+                    },
+                    authoredCalcCaptions,
+                  ),
+                );
+              }
+              if (classifyWorksheetReplaceTarget(workbookXml, existingTitle) === 'in-dashboard') {
+                return new ArgsValidationError(
+                  `deterministic worksheet "${existingTitle}" is a dashboard member sheet with pending calculations — missing calculations prevent safe reuse, and the dashboard member cannot be rebuilt in place`,
+                ).toErr();
+              }
             }
           }
 
