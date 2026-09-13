@@ -193,7 +193,18 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('routes unnamed derived metrics through semantic authoring before the modern flow', () => {
     const dynamicAuthoring = routes.find((route) => route.id === 'dynamic-authoring');
 
-    expect(dynamicAuthoring?.trigger).toContain('WITHOUT a conventional name');
+    expect(dynamicAuthoring?.trigger).toContain(
+      'an explicit request to create or change a dynamic construct or non-conventional calculated field, or a visualization using one',
+    );
+    expect(dynamicAuthoring?.trigger).toContain('non-conventional calculated field');
+    expect(dynamicAuthoring?.action).toContain('Use only the author-* verbs the request needs');
+    expect(dynamicAuthoring?.action).toContain(
+      'When a requested construct depends on a parameter, author and verify that parameter before its dependents.',
+    );
+    expect(dynamicAuthoring?.action).toContain(
+      'For an author-only request, verify every requested author-* result and stop after all requested constructs have read back successfully.',
+    );
+    expect(dynamicAuthoring?.action).not.toContain('Use author-parameter first');
     expect(dynamicAuthoring?.action).toContain('author-calc');
     expect(dynamicAuthoring?.action).toContain('format-worksheets');
     expect(dynamicAuthoring?.action).not.toContain('format-labels');
@@ -214,7 +225,12 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('authors a conventional derived metric before the modern flow', () => {
     const derivedMetric = routes.find((route) => route.id === 'derived-metric');
 
-    expect(derivedMetric?.trigger).toContain('no named chart type');
+    expect(derivedMetric?.trigger).toContain(
+      'an explicit request to create or change a conventional derived metric, or a visualization using one',
+    );
+    expect(derivedMetric?.action).toContain(
+      "For a field-only request, stop after the requested field's readback.",
+    );
     expect(derivedMetric?.toolSequence).toEqual([
       'author-calc',
       'list-templates',
@@ -355,12 +371,14 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('routes dashboard composition through one bounded batch', () => {
     const dashboard = routes.find((route) => route.id === 'dashboard');
     expect(dashboard).toMatchObject({
-      trigger: 'a dashboard ask',
+      trigger: 'an explicit request to create or rebuild a dashboard',
       action:
-        'For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. run-dashboard-batch is for new dashboards only; never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
+        'Do not create or change workbook content for an analytical question alone. A dashboard preview does not enter this route. For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. run-dashboard-batch is for new dashboards only; never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
       toolSequence: ['bind-template', 'run-dashboard-batch'],
       forbiddenTools: ['sort-worksheet'],
       stopConditions: [
+        'Do not create or change workbook content for an analytical question alone',
+        'A dashboard preview does not enter this route',
         'use the normal bind-template proposal protocol with auto_apply:true on every call',
         'finish one applied sheet per analytical view',
         'finish one applied kpi-text sheet per KPI metric',
@@ -563,6 +581,24 @@ describe('buildDesktopInstructions', () => {
       const instructions = buildDesktopInstructions({ sessionPinned: false, profile });
       expect(instructions).toContain('build-worksheets-from-templates');
       expect(instructions).toContain('bind-template');
+    },
+  );
+
+  it.each(['', 'dynamic-authoring', 'full'])(
+    'advertises explicit workbook-change scope for profile %s',
+    (profile) => {
+      const instructions = buildDesktopInstructions({ sessionPinned: false, profile });
+
+      expect(instructions).toContain(
+        'For an explicit request to create or change a conventional derived metric, or a visualization using one',
+      );
+      expect(instructions).toContain(
+        'For an explicit request to create or change a dynamic construct or non-conventional calculated field, or a visualization using one',
+      );
+      expect(instructions).toContain('For an explicit request to create or rebuild a dashboard');
+      expect(instructions).toContain(
+        'Do not create or change workbook content for an analytical question alone.',
+      );
     },
   );
 });

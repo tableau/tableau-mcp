@@ -94,9 +94,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'derived-metric',
     trigger:
-      'a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %)',
+      'an explicit request to create or change a conventional derived metric, or a visualization using one, with no named chart type (margin %, ratio/rate/per, growth/change %)',
     action:
-      'author the conventional calculation with author-calc, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+      "Do not create or change workbook content for an analytical question alone. Author the conventional calculation with author-calc. For a field-only request, stop after the requested field's readback. For a visualization request, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.",
     toolSequence: [
       'author-calc',
       'list-templates',
@@ -104,8 +104,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'build-worksheets-from-templates',
       'apply-worksheet',
     ],
-    stopConditions: ['author the conventional calculation with author-calc'],
-    requiredEvidence: ['calculation readback and worksheet apply receipt'],
+    stopConditions: [
+      'Do not create or change workbook content for an analytical question alone',
+      'Author the conventional calculation with author-calc',
+      "For a field-only request, stop after the requested field's readback",
+    ],
+    requiredEvidence: [
+      'requested calculation readback, plus worksheet apply receipt for a visualization request',
+    ],
   },
   {
     kind: 'route',
@@ -121,12 +127,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'route',
     id: 'dashboard',
-    trigger: 'a dashboard ask',
+    trigger: 'an explicit request to create or rebuild a dashboard',
     action:
-      'For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. run-dashboard-batch is for new dashboards only; never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
+      'Do not create or change workbook content for an analytical question alone. A dashboard preview does not enter this route. For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. run-dashboard-batch is for new dashboards only; never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
     toolSequence: ['bind-template', 'run-dashboard-batch'],
     forbiddenTools: ['sort-worksheet'],
     stopConditions: [
+      'Do not create or change workbook content for an analytical question alone',
+      'A dashboard preview does not enter this route',
       'use the normal bind-template proposal protocol with auto_apply:true on every call',
       'finish one applied sheet per analytical view',
       'finish one applied kpi-text sheet per KPI metric',
@@ -215,9 +223,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'dynamic-authoring',
     trigger:
-      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total and LOD)',
+      'an explicit request to create or change a dynamic construct or non-conventional calculated field, or a visualization using one (examples include running total and LOD)',
     action:
-      'use author-parameter first, then author-set, author-calc, author-action, and format-worksheets as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+      'Do not create or change workbook content for an analytical question alone. Use only the author-* verbs the request needs: author-parameter, author-set, author-calc, author-action, and format-worksheets. When a requested construct depends on a parameter, author and verify that parameter before its dependents. For an author-only request, verify every requested author-* result and stop after all requested constructs have read back successfully. For a visualization request, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
     toolSequence: [
       'author-parameter',
       'author-set',
@@ -229,7 +237,12 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'build-worksheets-from-templates',
       'apply-worksheet',
     ],
-    stopConditions: ['use author-parameter first'],
+    stopConditions: [
+      'Do not create or change workbook content for an analytical question alone',
+      'Use only the author-* verbs the request needs',
+      'When a requested construct depends on a parameter, author and verify that parameter before its dependents',
+      'For an author-only request, verify every requested author-* result and stop after all requested constructs have read back successfully',
+    ],
     requiredEvidence: ["each author-* verb's readback-verified result object"],
   },
   {

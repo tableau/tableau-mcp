@@ -202,10 +202,10 @@ describe('desktop tools/list serialized surface', () => {
       DYNAMIC_AUTHORING_TOOL_PROFILE,
     );
 
-    // Tool search owns discovery; pin the merged filter recovery, dense-scatter repair,
-    // executive-dashboard guidance, rounded-bar build/refine proof route, and dashboard
-    // corner routing without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(8_318);
+    // Tool search owns discovery; pin explicit authoring scope, merged filter recovery,
+    // dense-scatter repair, executive-dashboard guidance, rounded-bar build/refine proof
+    // route, and dashboard corner routing without restoring an aggregate tools/list ceiling.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(9_143);
   });
 });
 
