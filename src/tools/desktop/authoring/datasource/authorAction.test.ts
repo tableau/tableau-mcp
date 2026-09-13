@@ -1207,6 +1207,76 @@ describe('authorActionTool', () => {
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
   });
 
+  it('ignores the exact Parameters pseudo-datasource while preserving real datasource names', async () => {
+    const parameterizedXml = FILTER_XML.replaceAll(
+      "<datasource name='Sample - Superstore' /></datasources>",
+      "<datasource caption='Parameters' name='Sample - Superstore' /><datasource name='Parameters' /></datasources>",
+    );
+    const expectedAction = filterActionXml();
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter KPIs by State',
+        sourceDashboard: 'Sales Cockpit',
+        sourceWorksheet: 'Show Sales by State as a filled map.',
+        targetWorksheets: FILTER_TARGETS,
+      },
+      initialXml: parameterizedXml,
+      readbackXml: withActions(parameterizedXml, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a Parameters-only target worksheet before applying', async () => {
+    const parametersOnlyXml = FILTER_XML.replace(
+      filterWorksheet('KPI Sales', 'Sample - Superstore'),
+      filterWorksheet('KPI Sales', 'Parameters'),
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter KPI by State',
+        sourceDashboard: 'Sales Cockpit',
+        sourceWorksheet: 'Show Sales by State as a filled map.',
+        targetWorksheets: ['KPI Sales'],
+      },
+      initialXml: parametersOnlyXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('found 0');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a differently cased datasource name as the Parameters pseudo-datasource', async () => {
+    const lowercaseParametersXml = FILTER_XML.replace(
+      filterWorksheet('KPI Sales', 'Sample - Superstore'),
+      filterWorksheet('KPI Sales', 'Sample - Superstore').replace(
+        '</datasources>',
+        "<datasource name='parameters' /></datasources>",
+      ),
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter KPI by State',
+        sourceDashboard: 'Sales Cockpit',
+        sourceWorksheet: 'Show Sales by State as a filled map.',
+        targetWorksheets: ['KPI Sales'],
+      },
+      initialXml: lowercaseParametersXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('found 2');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('returns the exact existing supported filter action without another apply', async () => {
     const existingXml = withActions(FILTER_XML, filterActionXml());
     const { result, applyWorkbookDocument } = await getToolResult({
@@ -1424,7 +1494,21 @@ describe('authorActionTool', () => {
     const crossDatasourceXml = FILTER_XML.replace(
       "<zone id='6' name='Detail' />",
       "<zone id='6' name='Detail' /><zone id='8' name='Cross KPI' />",
-    );
+    )
+      .replace(
+        filterWorksheet('Show Sales by State as a filled map.', 'Sample - Superstore'),
+        filterWorksheet('Show Sales by State as a filled map.', 'Sample - Superstore').replace(
+          '</datasources>',
+          "<datasource name='Parameters' /></datasources>",
+        ),
+      )
+      .replace(
+        filterWorksheet('Cross KPI', 'Other Source'),
+        filterWorksheet('Cross KPI', 'Other Source').replace(
+          '</datasources>',
+          "<datasource name='Parameters' /></datasources>",
+        ),
+      );
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         mode: 'filter',

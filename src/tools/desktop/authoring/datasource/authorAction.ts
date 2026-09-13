@@ -888,7 +888,12 @@ function worksheetDatasourceNames(worksheet: XmlElement): string[] {
   for (const container of elementsByTagName(worksheet, 'datasources')) {
     for (const datasource of directElementChildren(container)) {
       const name = datasource.getAttribute('name');
-      if (datasource.tagName === 'datasource' && name !== null && name.length > 0) {
+      if (
+        datasource.tagName === 'datasource' &&
+        name !== null &&
+        name.length > 0 &&
+        name !== 'Parameters'
+      ) {
         names.add(name);
       }
     }
