@@ -26,6 +26,7 @@ import {
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
+  IncompleteOperationError,
   McpToolError,
   WorksheetXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
@@ -47,6 +48,7 @@ import {
   applyWorksheetArtifact,
   applyWorksheetArtifactPayload,
   templateArtifactUnavailableError,
+  type WorksheetArtifactOutcome,
 } from './applyWorksheetArtifact.js';
 
 const templatePlanSchema = z.object({
@@ -199,7 +201,7 @@ export const getApplyWorksheetTool = (
                   });
                 }
               }
-              if (outcome.state !== 'applied') return outcome.error.toErr();
+              if (outcome.state !== 'applied') return artifactApplyError(outcome);
 
               // The artifact apply already carries the verification outcome
               // (applyWorksheetArtifact resolves the skipped fallback), so the
@@ -307,7 +309,7 @@ export const getApplyWorksheetTool = (
                 });
               }
             }
-            if (outcome.state !== 'applied') return outcome.error.toErr();
+            if (outcome.state !== 'applied') return artifactApplyError(outcome);
 
             const verification = outcome.receipt.verification;
             const verificationRan = verification.status !== 'skipped';
@@ -482,3 +484,26 @@ export const getApplyWorksheetTool = (
 
   return applyWorksheetTool;
 };
+
+function artifactApplyError(
+  outcome: Exclude<WorksheetArtifactOutcome, { state: 'applied' }>,
+): ReturnType<IncompleteOperationError<object>['toErr']> {
+  return new IncompleteOperationError(
+    withNextAction(
+      {
+        state: outcome.state,
+        retrySafe: outcome.retrySafe,
+        error: {
+          type: outcome.error.type,
+          statusCode: outcome.error.statusCode,
+          message: outcome.error.getErrorText(),
+        },
+      },
+      prefillNextAction(
+        outcome.state === 'failed'
+          ? 'Address the error, then retry the apply'
+          : 'Inspect worksheet state; do not retry this apply',
+      ),
+    ),
+  ).toErr();
+}

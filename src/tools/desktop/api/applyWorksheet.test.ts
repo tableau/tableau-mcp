@@ -421,13 +421,162 @@ describe('applyWorksheetTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Worksheet "Artifact Sheet"');
-    expect(result.content[0].text).toContain('<computed-sort column="[DS].[none:State:nk]">');
-    expect(result.content[0].text).toContain('Do not retry');
+    const errorMessage = JSON.parse(result.content[0].text).error.message;
+    expect(errorMessage).toContain('Worksheet "Artifact Sheet"');
+    expect(errorMessage).toContain('<computed-sort column="[DS].[none:State:nk]">');
+    expect(errorMessage).toContain('Do not retry');
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
       worksheetId: 'artifact-sheet-uuid',
     });
+  });
+
+  it.each(['artifactId', 'templatePlan'] as const)(
+    'preserves pre-dispatch failure facts for %s mode',
+    async (mode) => {
+      const store = artifactStore();
+      const release = vi.spyOn(store, 'release');
+      const consume = vi.spyOn(store, 'consume');
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Err({
+          type: 'execute-command-error',
+          error: commandFailure('public pre-dispatch diagnostic'),
+        }),
+      );
+
+      const result = await getArtifactModeToolResult(mode, store);
+
+      expectArtifactFailure(result, {
+        state: 'failed',
+        retrySafe: true,
+        error: {
+          type: 'desktop-command-execution-error',
+          statusCode: 500,
+          message: 'public pre-dispatch diagnostic',
+        },
+        nextAction: {
+          kind: 'prefill',
+          label: 'Address the error, then retry the apply',
+        },
+      });
+      expect(release).toHaveBeenCalledTimes(mode === 'artifactId' ? 1 : 0);
+      expect(consume).not.toHaveBeenCalled();
+      expect(worksheetEditBufferModule.clearStickyWorksheetFile).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['artifactId', 'templatePlan'] as const)(
+    'preserves post-dispatch uncertainty facts for %s mode',
+    async (mode) => {
+      const store = artifactStore();
+      const release = vi.spyOn(store, 'release');
+      const consume = vi.spyOn(store, 'consume');
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+        args.artifactApply!.dispatchState.attempted = true;
+        return Err({
+          type: 'execute-command-error',
+          error: commandFailure('public post-dispatch diagnostic'),
+        });
+      });
+
+      const result = await getArtifactModeToolResult(mode, store);
+
+      expectArtifactFailure(result, {
+        state: 'unknown',
+        retrySafe: false,
+        error: {
+          type: 'desktop-command-execution-error',
+          statusCode: 500,
+          message:
+            'public post-dispatch diagnostic\n' +
+            'The artifact may have reached Desktop and was consumed. Do not retry it; build a fresh artifact after inspecting the workbook.',
+        },
+        nextAction: {
+          kind: 'prefill',
+          label: 'Inspect worksheet state; do not retry this apply',
+        },
+      });
+      expect(release).not.toHaveBeenCalled();
+      expect(consume).toHaveBeenCalledTimes(mode === 'artifactId' ? 1 : 0);
+      expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+        session: '12345',
+        worksheetId: 'artifact-sheet-uuid',
+      });
+    },
+  );
+
+  it.each(['artifactId', 'templatePlan'] as const)(
+    'preserves post-dispatch readback failure facts for %s mode',
+    async (mode) => {
+      const store = artifactStore();
+      const release = vi.spyOn(store, 'release');
+      const consume = vi.spyOn(store, 'consume');
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+        args.artifactApply!.dispatchState.attempted = true;
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: readbackFailure('public readback diagnostic'),
+        });
+      });
+
+      const result = await getArtifactModeToolResult(mode, store);
+
+      expectArtifactFailure(result, {
+        state: 'unknown',
+        retrySafe: false,
+        error: {
+          type: 'load-worksheet-xml-error',
+          statusCode: 500,
+          message:
+            'public readback diagnostic\n' +
+            'The artifact may have reached Desktop and was consumed. Do not retry it; build a fresh artifact after inspecting the workbook.',
+        },
+        nextAction: {
+          kind: 'prefill',
+          label: 'Inspect worksheet state; do not retry this apply',
+        },
+      });
+      expect(release).not.toHaveBeenCalled();
+      expect(consume).toHaveBeenCalledTimes(mode === 'artifactId' ? 1 : 0);
+      expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
+        session: '12345',
+        worksheetId: 'artifact-sheet-uuid',
+      });
+    },
+  );
+
+  it('uses an error public rendering without exposing its internal fields', async () => {
+    const store = artifactStore();
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Err({
+        type: 'execute-command-error',
+        error: commandFailure('private carrier message'),
+      }),
+    );
+    const publicErrorText = vi
+      .spyOn(DesktopCommandExecutionError.prototype, 'getErrorText')
+      .mockReturnValue('distinctive public error rendering');
+
+    const result = await getArtifactToolResult(store, 'artifact-1', '12345');
+    publicErrorText.mockRestore();
+
+    expectArtifactFailure(result, {
+      state: 'failed',
+      retrySafe: true,
+      error: {
+        type: 'desktop-command-execution-error',
+        statusCode: 500,
+        message: 'distinctive public error rendering',
+      },
+      nextAction: {
+        kind: 'prefill',
+        label: 'Address the error, then retry the apply',
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('private carrier message');
+    expect(JSON.stringify(result)).not.toContain('private dependency diagnostic');
+    expect(JSON.stringify(result)).not.toContain('internalStatusCode');
+    expect(JSON.stringify(result)).not.toContain('internalError');
   });
 
   it.each([
@@ -997,9 +1146,10 @@ describe('applyWorksheetTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Worksheet "Artifact Sheet"');
-    expect(result.content[0].text).toContain('<computed-sort column="[DS].[none:State:nk]">');
-    expect(result.content[0].text).toContain('Do not retry');
+    const errorMessage = JSON.parse(result.content[0].text).error.message;
+    expect(errorMessage).toContain('Worksheet "Artifact Sheet"');
+    expect(errorMessage).toContain('<computed-sort column="[DS].[none:State:nk]">');
+    expect(errorMessage).toContain('Do not retry');
     expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
@@ -1287,6 +1437,92 @@ async function getArtifactToolResult(
       getExecutor: vi.fn().mockResolvedValue({}),
     },
   );
+}
+
+type ArtifactApplyMode = 'artifactId' | 'templatePlan';
+
+async function getArtifactModeToolResult(
+  mode: ArtifactApplyMode,
+  store: TemplateArtifactStore,
+): Promise<CallToolResult> {
+  if (mode === 'artifactId') {
+    return await getArtifactToolResult(store, 'artifact-1', '12345');
+  }
+  return await getDirectTemplateToolResult({
+    store,
+    buildArtifact: vi
+      .fn()
+      .mockReturnValue(Ok({ artifact: templateArtifact('direct-plan'), provenance: 'protected' })),
+    getExecutor: vi.fn().mockResolvedValue({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: '<workbook><worksheets/><windows/></workbook>',
+          instanceId: 'inst-build',
+        }),
+      ),
+    }),
+  });
+}
+
+function commandFailure(message: string): {
+  type: 'command-failed';
+  error: {
+    code: string;
+    message: string;
+    recoverable: boolean;
+    internalStatusCode: number;
+    internalError: string;
+    internalErrorDetails: string;
+  };
+} {
+  return {
+    type: 'command-failed',
+    error: {
+      code: 'synthetic',
+      message,
+      recoverable: false,
+      internalStatusCode: 418,
+      internalError: 'private dependency diagnostic',
+      internalErrorDetails: 'private dependency details',
+    },
+  };
+}
+
+function readbackFailure(message: string): {
+  type: 'readback-failed';
+  findings: [];
+  message: string;
+  internalStatusCode: number;
+  internalError: string;
+  internalErrorDetails: string;
+} {
+  return {
+    type: 'readback-failed',
+    findings: [],
+    message,
+    internalStatusCode: 418,
+    internalError: 'private readback diagnostic',
+    internalErrorDetails: 'private readback details',
+  };
+}
+
+function expectArtifactFailure(
+  result: CallToolResult,
+  expected: {
+    state: 'failed' | 'unknown';
+    retrySafe: boolean;
+    error: { type: string; statusCode: number; message: string };
+    nextAction: { kind: 'prefill'; label: string };
+  },
+): void {
+  expect(result.isError).toBe(true);
+  invariant(result.content[0].type === 'text');
+  const textBody = JSON.parse(result.content[0].text);
+  const { nextAction, ...expectedBody } = expected;
+  expect(textBody).toEqual(expectedBody);
+  expect(textBody).not.toHaveProperty('applied');
+  expect(result.structuredContent).toEqual({ ...expectedBody, nextAction });
+  expect(result.structuredContent?.nextAction).not.toHaveProperty('receipt');
 }
 
 const directTemplatePlan = (): WorksheetTemplatePlan => ({
