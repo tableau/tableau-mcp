@@ -416,6 +416,45 @@ describe('getSummaryDataTool', () => {
     }
   });
 
+  it('identifies worksheet image materialization when an initially empty summary cannot render', async () => {
+    const harness = await startHarness((server) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ columns: [], rows: [] }),
+      });
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
+        status: 409,
+        body: JSON.stringify({
+          type: 'problem',
+          code: 'visualization-not-ready',
+          status: 409,
+          instance: '/v0/mock',
+          title: 'The worksheet is not ready to render.',
+          detail: 'The worksheet is not ready to render.',
+        }),
+      });
+    });
+
+    try {
+      const result = await harness.callTool({ worksheetName: 'Sales by Region' });
+
+      expect(result.isError).toBe(true);
+      expect(errorText(result)).toContain('The worksheet is not ready to render.');
+      expect(errorText(result)).toContain('tableau-error-code: visualization-not-ready');
+      expect(errorText(result)).toContain(
+        'Operation: get-summary-data materialization requested a worksheet image for worksheet "Sales by Region" ("sheet-sales").',
+      );
+      expect(harness.server.requests.map((request) => request.path)).toEqual([
+        '/v0/workbook/worksheets',
+        '/v0/workbook/worksheets/sheet-sales/summaryData',
+        '/v0/workbook/worksheets/sheet-sales/image',
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('returns the columns and zero rows when a populated worksheet query has no rows', async () => {
     const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {

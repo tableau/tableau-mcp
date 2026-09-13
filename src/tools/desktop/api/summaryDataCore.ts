@@ -12,6 +12,7 @@ export type SummaryDataRead = <T>(
     executor: ExternalApiToolExecutor,
     signal: AbortSignal,
   ) => Promise<Result<T, ExecuteCommandError>>,
+  options?: { errorContext?: string },
 ) => Promise<Result<T, McpToolError>>;
 
 export const SUMMARY_ROW_ORDER = {
@@ -97,6 +98,9 @@ export async function fetchWorksheetSummaryData({
           { mimeType: 'image/png' },
           activeSignal,
         ),
+      {
+        errorContext: `Operation: get-summary-data materialization requested a worksheet image for worksheet ${JSON.stringify(resolvedWorksheet.name)} (${JSON.stringify(resolvedWorksheet.id)}).`,
+      },
     );
     if (materializeResult.isErr()) {
       return Err({ type: 'request', error: materializeResult.error });
