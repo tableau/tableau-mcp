@@ -19,6 +19,16 @@ vi.mock('../../../desktop/session/sessionResolution.js');
 
 const WORKSHEET_ID = 'sheet-sales';
 const WORKSHEET_NAME = 'Sales by Region';
+const SHOW_ME_REJECTIONS = [
+  {
+    code: 'show-me-not-applicable',
+    message: 'The requested Show Me type is not applicable to the current worksheet context.',
+  },
+  {
+    code: 'show-me-unavailable',
+    message: 'The requested Show Me type is unavailable.',
+  },
+] as const;
 
 const accepted202 = (operationId: string): MockOverride => ({
   status: 202,
@@ -165,6 +175,77 @@ describe('show-me tool', () => {
       await harness.close();
     }
   });
+
+  it.each(SHOW_ME_REJECTIONS)(
+    'returns an MCP error for an immediate 409 $code Problem',
+    async ({ code, message }) => {
+      const harness = await startHarness();
+      harness.server.setOverride(`POST /v0/workbook/worksheets/${WORKSHEET_ID}:showMe`, {
+        status: 409,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({
+          type: `https://tableau.com/problems/${code}`,
+          title: 'Show Me could not be applied.',
+          status: 409,
+          detail: message,
+          instance: `/v0/workbook/worksheets/${WORKSHEET_ID}:showMe`,
+          code,
+        }),
+      });
+      try {
+        const result = await harness.callTool({
+          worksheet: WORKSHEET_ID,
+          showMeType: 'heat',
+        });
+
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain(message);
+        expect(result.content[0].text).not.toContain('showMeRequested');
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
+  it.each(SHOW_ME_REJECTIONS)(
+    'returns an MCP error when a 202 operation later fails with $code',
+    async ({ code, message }) => {
+      const harness = await startHarness();
+      const operationId = `op-${code}`;
+      const route = `/v0/workbook/worksheets/${WORKSHEET_ID}:showMe`;
+      harness.server.setOverride(`POST ${route}`, accepted202(operationId));
+      harness.server.setOperation(operationId, {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: operationId,
+            kind: 'tabdoc:show-me',
+            state: 'FAILED',
+            error: { code, message },
+          },
+        ],
+      });
+      try {
+        const result = await harness.callTool({
+          worksheet: WORKSHEET_ID,
+          showMeType: 'heat',
+        });
+
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain(message);
+        expect(result.content[0].text).not.toContain('showMeRequested');
+        expect(
+          harness.server.requests.some(
+            (request) => request.path === `/v0/operations/${operationId}`,
+          ),
+        ).toBe(true);
+      } finally {
+        await harness.close();
+      }
+    },
+  );
 
   it('reports a pending executor result without claiming visual verification', async () => {
     const listWorksheets = vi
