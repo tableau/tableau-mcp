@@ -24,6 +24,7 @@ import {
   operationEnvelopeSchema,
   operationErrorSchema,
   operationWarningSchema,
+  performanceRecordingResultSchema,
   PROBLEM_CODES,
   problemResponseSchema,
   protectedResourceMetadataSchema,
@@ -609,6 +610,21 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
     });
 
+    it('pins the 0.2.14 performance-recording routes outside the 0.2.13 fixture', () => {
+      expect(EXTERNAL_API_ROUTES.workbookStartPerformanceRecording).toBe(
+        '/v0/workbook:startPerformanceRecording',
+      );
+      expect(EXTERNAL_API_ROUTES.workbookStopPerformanceRecording).toBe(
+        '/v0/workbook:stopPerformanceRecording',
+      );
+      expect(Object.keys(spec.paths)).not.toContain(
+        EXTERNAL_API_ROUTES.workbookStartPerformanceRecording,
+      );
+      expect(Object.keys(spec.paths)).not.toContain(
+        EXTERNAL_API_ROUTES.workbookStopPerformanceRecording,
+      );
+    });
+
     it('documents the dialog routes with their exact request and response schemas', () => {
       const paths = spec.paths as Record<
         string,
@@ -687,6 +703,24 @@ describe('external client API contract (captured openapi fixture)', () => {
         '#/components/responses/NotFound',
       );
       expect(spec.paths).not.toHaveProperty('/v0/workbook/dashboards/{id}:refreshNow');
+    });
+  });
+
+  describe('0.2.14 performance-recording result extension', () => {
+    it('accepts a non-empty filePath and preserves extension fields', () => {
+      expect(
+        performanceRecordingResultSchema.parse({
+          filePath: 'C:/Temp/PerformanceRecording.twbx',
+          futureField: true,
+        }),
+      ).toEqual({
+        filePath: 'C:/Temp/PerformanceRecording.twbx',
+        futureField: true,
+      });
+    });
+
+    it.each([{ filePath: '' }, {}, { filePath: 42 }])('rejects malformed output %#', (result) => {
+      expect(performanceRecordingResultSchema.safeParse(result).success).toBe(false);
     });
   });
 
