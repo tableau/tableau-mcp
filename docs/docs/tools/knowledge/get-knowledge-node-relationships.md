@@ -8,6 +8,8 @@ Returns relationships around one node in an explicit Tableau Knowledge graph. An
 with at least one of an exact `nodeId` or a natural-language `query`. When both are supplied,
 `nodeId` takes precedence and `query` acts as fallback context.
 
+A site admin must enable Knowledge tools via the `KNOWLEDGE_TOOLS_ENABLED` MCP site setting.
+
 ## Arguments
 
 | Parameter   | Type                    | Required    | Description                                            |

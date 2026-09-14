@@ -6,6 +6,8 @@ sidebar_position: 9
 
 Lists semantic statements from an explicit Tableau Knowledge graph.
 
+A site admin must enable Knowledge tools via the `KNOWLEDGE_TOOLS_ENABLED` MCP site setting.
+
 ## Arguments
 
 | Parameter  | Type    | Required | Description                                                         |

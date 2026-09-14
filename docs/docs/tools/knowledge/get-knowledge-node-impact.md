@@ -7,6 +7,8 @@ sidebar_position: 7
 Returns assets transitively affected by a change to one node. A missing node is reported as a normal
 backend error.
 
+A site admin must enable Knowledge tools via the `KNOWLEDGE_TOOLS_ENABLED` MCP site setting.
+
 ## Arguments
 
 | Parameter | Type             | Required | Description         |

@@ -11,6 +11,7 @@ export const overridableVariables = [
   'ALLOWED_REQUEST_OVERRIDES',
   'INCLUDE_TOOLS',
   'EXCLUDE_TOOLS',
+  'KNOWLEDGE_TOOLS_ENABLED',
   'INCLUDE_PROJECT_IDS',
   'INCLUDE_DATASOURCE_IDS',
   'INCLUDE_WORKBOOK_IDS',
@@ -33,7 +34,11 @@ const STALE_CONTENT_MAX_ROWS_MIN = 1;
 const STALE_CONTENT_MAX_ROWS_MAX = 10000;
 
 export const requestOverridableVariables = overridableVariables.filter(
-  (v) => v !== 'ALLOWED_REQUEST_OVERRIDES' && v !== 'INCLUDE_TOOLS' && v !== 'EXCLUDE_TOOLS',
+  (v) =>
+    v !== 'ALLOWED_REQUEST_OVERRIDES' &&
+    v !== 'INCLUDE_TOOLS' &&
+    v !== 'EXCLUDE_TOOLS' &&
+    v !== 'KNOWLEDGE_TOOLS_ENABLED',
 );
 
 type OverridableVariable = (typeof overridableVariables)[number];
@@ -66,6 +71,7 @@ export class OverridableConfig {
   allowedRequestOverrides: Map<RequestOverridableVariable, RequestOverrideRestrictionType>;
   includeTools: Array<WebToolName>;
   excludeTools: Array<WebToolName>;
+  knowledgeToolsEnabled: boolean;
 
   boundedContext: BoundedContext;
 
@@ -110,6 +116,16 @@ export class OverridableConfig {
     const { includeTools, excludeTools } = this.getToolsWithOverrides(envVariables, siteOverrides);
     this.includeTools = includeTools;
     this.excludeTools = excludeTools;
+
+    // KNOWLEDGE_TOOLS_ENABLED
+    this.knowledgeToolsEnabled = this.getBooleanVariableWithOverrides(
+      'KNOWLEDGE_TOOLS_ENABLED',
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+      false, // default value
+      false, // allowed value when restricted (not request-overridable, so unused)
+    );
 
     // INCLUDE_PROJECT_IDS, INCLUDE_DATASOURCE_IDS, INCLUDE_WORKBOOK_IDS, INCLUDE_VIEW_IDS, INCLUDE_TAGS
     this.boundedContext = this.getBoundedContextWithOverrides(

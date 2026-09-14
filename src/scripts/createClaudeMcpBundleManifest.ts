@@ -657,6 +657,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  KNOWLEDGE_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable Tableau Knowledge MCP tools',
+    description:
+      'Registers the Tableau Knowledge tools (graph search, lineage, semantic context reads). Disabled by default; a site admin enables them via the KNOWLEDGE_TOOLS_ENABLED MCP site setting.',
+    required: false,
+    sensitive: false,
+  },
   ADMIN_GATE_CACHE_TTL_MINUTES: {
     includeInUserConfig: false,
     type: 'string',

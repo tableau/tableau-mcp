@@ -9,7 +9,8 @@ Returns the full health report and improvement suggestions for a Tableau knowled
 :::info[Tableau Cloud Only]
 
 This tool requires Tableau Knowledge to be available for the site. Supply a graph ID from Tableau
-Knowledge configuration or a prior workflow; the tool does not discover graphs.
+Knowledge configuration or a prior workflow; the tool does not discover graphs. A site admin must
+also enable Knowledge tools via the `KNOWLEDGE_TOOLS_ENABLED` MCP site setting.
 
 :::
 

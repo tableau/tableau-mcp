@@ -38,6 +38,18 @@ describe('OverridableConfig', () => {
     expect(config.disableMetadataApiRequests).toBe(true);
   });
 
+  it('should set knowledgeToolsEnabled to false by default', () => {
+    const config = new OverridableConfig({});
+    expect(config.knowledgeToolsEnabled).toBe(false);
+  });
+
+  it('should set knowledgeToolsEnabled to true when specified', () => {
+    vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
+
+    const config = new OverridableConfig({});
+    expect(config.knowledgeToolsEnabled).toBe(true);
+  });
+
   describe('Tool filtering', () => {
     it('should set empty arrays for includeTools and excludeTools when not specified', () => {
       const config = new OverridableConfig({});
@@ -511,6 +523,16 @@ describe('OverridableConfig', () => {
       });
 
       expect(config.disableMetadataApiRequests).toEqual(true);
+    });
+
+    it('should override KNOWLEDGE_TOOLS_ENABLED', () => {
+      vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'false');
+
+      const config = new OverridableConfig({
+        KNOWLEDGE_TOOLS_ENABLED: 'true',
+      });
+
+      expect(config.knowledgeToolsEnabled).toEqual(true);
     });
   });
 

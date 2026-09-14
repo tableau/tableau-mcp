@@ -7,6 +7,8 @@ sidebar_position: 6
 Returns dependency and lineage nodes and edges for one exact node in an explicit Tableau Knowledge
 graph. A missing node is a successful empty result.
 
+A site admin must enable Knowledge tools via the `KNOWLEDGE_TOOLS_ENABLED` MCP site setting.
+
 ## Arguments
 
 | Parameter | Type             | Required | Description         |

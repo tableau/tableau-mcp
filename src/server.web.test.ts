@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
+import { RestApi } from './sdks/tableau/restApi.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
@@ -8,7 +9,7 @@ import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasou
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
-import { WebToolName, webToolNames } from './tools/web/toolName.js';
+import { webToolGroups, WebToolName, webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
@@ -20,12 +21,21 @@ const mocks = vi.hoisted(() => ({
     isFeatureEnabled: vi.fn<(featureName: string) => boolean>(() => false),
   },
   mockReadFile: vi.fn(),
+  mockGetMcpSiteSettings: vi.fn(),
 }));
 
 vi.mock('@modelcontextprotocol/ext-apps/server', () => ({
   registerAppTool: mocks.mockRegisterAppTool,
   registerAppResource: mocks.mockRegisterAppResource,
   RESOURCE_MIME_TYPE: 'text/html',
+}));
+
+vi.mock('./restApiInstance.js', () => ({
+  useRestApi: vi
+    .fn()
+    .mockImplementation(async ({ callback }) =>
+      callback({ mcpSettingsMethods: { getMcpSiteSettings: mocks.mockGetMcpSiteSettings } }),
+    ),
 }));
 
 vi.mock('./features/init.js', () => ({
@@ -92,7 +102,10 @@ describe('server', () => {
       webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
     );
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
-    const tools = allTools.filter((_, i) => !disabledFlags[i]);
+    const knowledgeToolNames: ReadonlyArray<WebToolName> = webToolGroups.knowledge;
+    const tools = allTools.filter(
+      (tool, i) => !disabledFlags[i] && !knowledgeToolNames.includes(tool.name),
+    );
     for (const tool of tools) {
       expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
         tool.name,
@@ -107,7 +120,7 @@ describe('server', () => {
     }
   });
 
-  it('should register knowledge read tools alongside existing Tableau tools', async () => {
+  it('should not register any knowledge tools by default', async () => {
     const server = getServer();
     await server.registerTools();
 
@@ -118,22 +131,13 @@ describe('server', () => {
     expect(registeredToolNames).toContain('list-datasources');
     expect(registeredToolNames).toContain('list-workbooks');
     expect(registeredToolNames).toContain('query-datasource');
-    expect(registeredToolNames).toContain('get-knowledge-suggestions');
-    expect(registeredToolNames).toContain('list-knowledge-sources');
-    expect(registeredToolNames).toContain('search-knowledge-nodes');
-    expect(registeredToolNames).toContain('get-knowledge-node');
-    expect(registeredToolNames).toContain('get-knowledge-node-relationships');
-    expect(registeredToolNames).toContain('get-knowledge-lineage');
-    expect(registeredToolNames).toContain('get-knowledge-node-impact');
-    expect(registeredToolNames).toContain('list-knowledge-semantic-contexts');
-    expect(registeredToolNames).not.toContain('create-knowledge-semantic-contexts');
-    expect(registeredToolNames).not.toContain('update-knowledge-semantic-contexts');
+    for (const toolName of webToolGroups.knowledge) {
+      expect(registeredToolNames).not.toContain(toolName);
+    }
   });
 
-  it('should register knowledge write tools when knowledge-write-tools is enabled', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (featureName: string) => featureName === 'knowledge-write-tools',
-    );
+  it('should register all knowledge tools when KNOWLEDGE_TOOLS_ENABLED is true', async () => {
+    vi.stubEnv('KNOWLEDGE_TOOLS_ENABLED', 'true');
     const server = getServer();
     await server.registerTools();
 
@@ -141,8 +145,33 @@ describe('server', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
 
-    expect(registeredToolNames).toContain('create-knowledge-semantic-contexts');
-    expect(registeredToolNames).toContain('update-knowledge-semantic-contexts');
+    for (const toolName of webToolGroups.knowledge) {
+      expect(registeredToolNames).toContain(toolName);
+    }
+  });
+
+  it('should register all knowledge tools when a site override enables KNOWLEDGE_TOOLS_ENABLED', async () => {
+    const originalVersionIsAtLeast = RestApi.versionIsAtLeast;
+    // Site settings are only fetched on REST API versions >= 3.29 (see mcpSiteSettings.ts).
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'true');
+    // Unique site name so this test's site-settings cache entry can't collide with another test's.
+    vi.stubEnv('SITE_NAME', 'knowledge-site-override-test');
+    mocks.mockGetMcpSiteSettings.mockResolvedValue({
+      settings: [{ key: 'KNOWLEDGE_TOOLS_ENABLED', value: 'true' }],
+    });
+
+    const server = getServer();
+    await server.registerTools();
+    RestApi.versionIsAtLeast = originalVersionIsAtLeast;
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    for (const toolName of webToolGroups.knowledge) {
+      expect(registeredToolNames).toContain(toolName);
+    }
   });
 
   it('should use the web variant server name', () => {
@@ -316,8 +345,13 @@ describe('server', () => {
     const excludeDisabledFlags = await Promise.all(
       tools.map((tool) => Provider.from(tool.disabled)),
     );
+    const knowledgeToolNames: ReadonlyArray<WebToolName> = webToolGroups.knowledge;
     for (const [i, tool] of tools.entries()) {
-      if (tool.name === 'query-datasource' || excludeDisabledFlags[i]) {
+      if (
+        tool.name === 'query-datasource' ||
+        excludeDisabledFlags[i] ||
+        knowledgeToolNames.includes(tool.name)
+      ) {
         expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
           tool.name,
           expect.anything(),

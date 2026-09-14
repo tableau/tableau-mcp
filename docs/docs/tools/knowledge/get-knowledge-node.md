@@ -8,7 +8,8 @@ Resolves a natural-language query to one full knowledge node with its match scor
 ambiguous, the response instead contains sparse ranked candidates for disambiguation.
 
 Supply an explicit `graphId` from Tableau Knowledge configuration or a prior workflow; this tool
-does not discover graphs. The tool requires Tableau Knowledge on Tableau Cloud.
+does not discover graphs. The tool requires Tableau Knowledge on Tableau Cloud, and a site admin
+must enable Knowledge tools via the `KNOWLEDGE_TOOLS_ENABLED` MCP site setting.
 
 ## Arguments
 

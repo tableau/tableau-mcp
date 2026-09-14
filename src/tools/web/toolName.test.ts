@@ -19,10 +19,7 @@ describe('WebToolName', () => {
     expect(webToolNames).toContain('get-knowledge-node-relationships');
     expect(webToolNames).toContain('get-knowledge-lineage');
     expect(webToolNames).toContain('get-knowledge-node-impact');
-    expect(webToolNames).toContain('create-knowledge-semantic-contexts');
     expect(webToolNames).toContain('list-knowledge-semantic-contexts');
-    expect(webToolNames).toContain('update-knowledge-semantic-contexts');
-    expect(webToolNames).toContain('delete-knowledge-semantic-contexts');
     expect(webToolGroupNames).toContain('knowledge');
     expect((webToolGroups as any).knowledge).toEqual([
       'get-knowledge-suggestions',
@@ -32,10 +29,7 @@ describe('WebToolName', () => {
       'get-knowledge-node-relationships',
       'get-knowledge-lineage',
       'get-knowledge-node-impact',
-      'create-knowledge-semantic-contexts',
       'list-knowledge-semantic-contexts',
-      'update-knowledge-semantic-contexts',
-      'delete-knowledge-semantic-contexts',
     ]);
   });
 

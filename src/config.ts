@@ -76,6 +76,7 @@ export class Config extends BaseConfig {
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   flowToolsEnabled: boolean;
+  knowledgeToolsEnabled: boolean;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
   bucketS3: {
@@ -150,6 +151,7 @@ export class Config extends BaseConfig {
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
+      KNOWLEDGE_TOOLS_ENABLED: knowledgeToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
       MCP_S3_BUCKET: bucketS3Bucket,
@@ -317,6 +319,9 @@ export class Config extends BaseConfig {
     // Flow tools are gated off by default while flow rollouts are staged into
     // production; set FLOW_TOOLS_ENABLED=true to register them.
     this.flowToolsEnabled = flowToolsEnabled === 'true';
+    // Global default for OAuth scope advertising only; per-site opt-in for tool
+    // registration itself is resolved separately via OverridableConfig site settings.
+    this.knowledgeToolsEnabled = knowledgeToolsEnabled === 'true';
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.

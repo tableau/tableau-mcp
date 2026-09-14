@@ -36,6 +36,7 @@ describe('scopes', () => {
   it('advertises and maps the knowledge read scopes', async () => {
     mockGetConfig.mockReturnValue({
       adminToolsEnabled: false,
+      knowledgeToolsEnabled: true,
       oauth: { enforceScopes: true },
     } as any);
     expect(DEFAULT_SCOPES_SUPPORTED).toContain('tableau:mcp:knowledge:read');
@@ -56,47 +57,11 @@ describe('scopes', () => {
       'get-knowledge-node-relationships',
       'get-knowledge-lineage',
       'get-knowledge-node-impact',
+      'list-knowledge-semantic-contexts',
     ] as const) {
       expect(getRequiredApiScopesForTool(toolName as any)).toEqual(['tableau:knowledge:read']);
       expect(getRequiredScopesForTool(toolName as any)).toEqual(['tableau:mcp:knowledge:read']);
     }
-  });
-
-  it('excludes knowledge write scopes when knowledge-write-tools is disabled', async () => {
-    mockGetConfig.mockReturnValue({
-      adminToolsEnabled: false,
-      oauth: { enforceScopes: true },
-    } as any);
-    expect(DEFAULT_SCOPES_SUPPORTED).not.toContain('tableau:mcp:knowledge:write');
-    await expect(getSupportedMcpScopes()).resolves.not.toContain('tableau:mcp:knowledge:write');
-    await expect(getSupportedApiScopes()).resolves.not.toContain('tableau:knowledge:write');
-  });
-
-  it('includes and maps knowledge write scopes when knowledge-write-tools is enabled', async () => {
-    mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
-      return featureName === 'knowledge-write-tools';
-    });
-    mockGetConfig.mockReturnValue({
-      adminToolsEnabled: false,
-      oauth: { enforceScopes: true },
-    } as any);
-    await expect(getSupportedMcpScopes()).resolves.toContain('tableau:mcp:knowledge:write');
-    await expect(getSupportedApiScopes()).resolves.toContain('tableau:knowledge:write');
-    expect(getRequiredScopesForTool('create-knowledge-semantic-contexts' as any)).toEqual([
-      'tableau:mcp:knowledge:write',
-    ]);
-    expect(getRequiredApiScopesForTool('create-knowledge-semantic-contexts' as any)).toEqual([
-      'tableau:knowledge:write',
-    ]);
-    expect(getRequiredScopesForTool('list-knowledge-semantic-contexts' as any)).toEqual([
-      'tableau:mcp:knowledge:read',
-    ]);
-    expect(getRequiredApiScopesForTool('list-knowledge-semantic-contexts' as any)).toEqual([
-      'tableau:knowledge:read',
-    ]);
-    expect(getRequiredScopesForTool('update-knowledge-semantic-contexts' as any)).toEqual([
-      'tableau:mcp:knowledge:write',
-    ]);
   });
 
   it('disables MCP scope enforcement without changing semantic statement API scopes', () => {
@@ -104,10 +69,9 @@ describe('scopes', () => {
       adminToolsEnabled: false,
       oauth: { enforceScopes: false },
     } as any);
-    expect(getRequiredScopesForTool('create-knowledge-semantic-contexts' as any)).toEqual([]);
     expect(getRequiredScopesForTool('list-knowledge-semantic-contexts' as any)).toEqual([]);
-    expect(getRequiredApiScopesForTool('update-knowledge-semantic-contexts' as any)).toEqual([
-      'tableau:knowledge:write',
+    expect(getRequiredApiScopesForTool('list-knowledge-semantic-contexts' as any)).toEqual([
+      'tableau:knowledge:read',
     ]);
   });
 
@@ -218,6 +182,24 @@ describe('scopes', () => {
 
       const scopes = await getSupportedMcpScopes();
       expect(scopes).not.toContain('tableau:mcp:flow:read');
+    });
+
+    it('should include tableau:mcp:knowledge:read when knowledgeToolsEnabled is true', async () => {
+      mockGetConfig.mockReturnValue({
+        knowledgeToolsEnabled: true,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).toContain('tableau:mcp:knowledge:read');
+    });
+
+    it('should exclude tableau:mcp:knowledge:read when knowledgeToolsEnabled is false', async () => {
+      mockGetConfig.mockReturnValue({
+        knowledgeToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).not.toContain('tableau:mcp:knowledge:read');
     });
 
     it('should exclude tableau:mcp:workbook:create when authoring-tools is disabled', async () => {
@@ -346,6 +328,24 @@ describe('scopes', () => {
 
       const scopes = await getSupportedApiScopes();
       expect(scopes).not.toContain('tableau:flows:read');
+    });
+
+    it('should include tableau:knowledge:read when knowledgeToolsEnabled is true', async () => {
+      mockGetConfig.mockReturnValue({
+        knowledgeToolsEnabled: true,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:knowledge:read');
+    });
+
+    it('should exclude tableau:knowledge:read when knowledgeToolsEnabled is false', async () => {
+      mockGetConfig.mockReturnValue({
+        knowledgeToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).not.toContain('tableau:knowledge:read');
     });
 
     it('should exclude tableau:workbooks:create when authoring-tools is disabled', async () => {

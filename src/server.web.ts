@@ -25,6 +25,7 @@ import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
+import { webToolGroups, WebToolName } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
@@ -169,7 +170,7 @@ export class WebMcpServer extends Server {
 
     const tableauServerInfo = await getTableauServerInfo(config.server || tableauAuthInfo?.server);
 
-    const { includeTools, excludeTools } = configOverrides;
+    const { includeTools, excludeTools, knowledgeToolsEnabled } = configOverrides;
 
     const allTools = await Promise.all(
       webToolFactories.map((toolFactory) => toolFactory(this, tableauServerInfo.productVersion)),
@@ -177,6 +178,13 @@ export class WebMcpServer extends Server {
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
+      // Knowledge tools are opt-in per site via the KNOWLEDGE_TOOLS_ENABLED site setting,
+      // not the deploy-time feature gates the other tool groups use.
+      if (
+        !knowledgeToolsEnabled &&
+        (webToolGroups.knowledge as ReadonlyArray<WebToolName>).includes(tool.name)
+      )
+        continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
       toolsToRegister.push(tool);

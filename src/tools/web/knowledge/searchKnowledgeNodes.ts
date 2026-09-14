@@ -15,7 +15,9 @@ const paramsSchema = {
     .regex(/^[A-Za-z0-9._-]{1,128}$/)
     .refine((value) => value !== '.' && value !== '..')
     .optional()
-    .describe("Knowledge graph ID. Omit to use the site's active (default) graph."),
+    .describe(
+      'Knowledge graph ID. Ask the user for it if not already known; do not omit it to default to the active graph.',
+    ),
   query: z.string().trim().min(1).describe('Natural-language description of the nodes to find.'),
   nodeType: z.string().trim().min(1).optional().describe('Optional knowledge node type filter.'),
   scopeId: z.string().trim().min(1).optional().describe('Optional source/container node ID scope.'),

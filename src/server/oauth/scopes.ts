@@ -31,8 +31,7 @@ export type McpScope =
   | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read'
   | 'tableau:mcp:users:write'
-  | 'tableau:mcp:knowledge:read'
-  | 'tableau:mcp:knowledge:write';
+  | 'tableau:mcp:knowledge:read';
 
 export type TableauApiScope =
   | 'tableau:content:read'
@@ -62,8 +61,7 @@ export type TableauApiScope =
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
   | 'tableau:users:update'
-  | 'tableau:knowledge:read'
-  | 'tableau:knowledge:write';
+  | 'tableau:knowledge:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -206,21 +204,9 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:knowledge:read'],
     api: new Set(['tableau:knowledge:read']),
   },
-  'create-knowledge-semantic-contexts': {
-    mcp: ['tableau:mcp:knowledge:write'],
-    api: new Set(['tableau:knowledge:write']),
-  },
   'list-knowledge-semantic-contexts': {
     mcp: ['tableau:mcp:knowledge:read'],
     api: new Set(['tableau:knowledge:read']),
-  },
-  'update-knowledge-semantic-contexts': {
-    mcp: ['tableau:mcp:knowledge:write'],
-    api: new Set(['tableau:knowledge:write']),
-  },
-  'delete-knowledge-semantic-contexts': {
-    mcp: ['tableau:mcp:knowledge:write'],
-    api: new Set(['tableau:knowledge:write']),
   },
   'list-users': {
     mcp: ['tableau:mcp:users:read'],
@@ -440,7 +426,6 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
   const authoringToolsEnabled = await featureGate.isFeatureEnabled('authoring-tools');
-  const knowledgeWriteToolsEnabled = await featureGate.isFeatureEnabled('knowledge-write-tools');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -481,10 +466,17 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
     enabledTools.delete('download-workbook');
   }
 
-  if (!knowledgeWriteToolsEnabled) {
-    enabledTools.delete('create-knowledge-semantic-contexts');
-    enabledTools.delete('update-knowledge-semantic-contexts');
-    enabledTools.delete('delete-knowledge-semantic-contexts');
+  // Knowledge tools are opt-in via KNOWLEDGE_TOOLS_ENABLED (can also be turned on per-site, but
+  // this scope advertisement only sees the global env default). Mirrors flowToolsEnabled gating.
+  if (!config.knowledgeToolsEnabled) {
+    enabledTools.delete('get-knowledge-suggestions');
+    enabledTools.delete('list-knowledge-sources');
+    enabledTools.delete('search-knowledge-nodes');
+    enabledTools.delete('get-knowledge-node');
+    enabledTools.delete('get-knowledge-node-relationships');
+    enabledTools.delete('get-knowledge-lineage');
+    enabledTools.delete('get-knowledge-node-impact');
+    enabledTools.delete('list-knowledge-semantic-contexts');
   }
 
   return enabledTools;
