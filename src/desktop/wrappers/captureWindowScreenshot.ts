@@ -1,7 +1,7 @@
 import { constants, type Stats } from 'fs';
-import { imageSize } from 'image-size';
 import { tmpdir } from 'os';
 import { dirname, isAbsolute, relative, resolve, sep } from 'path';
+import probeImageSize from 'probe-image-size';
 import { Err, Ok, type Result } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -106,8 +106,9 @@ function readPngMetadata(bytes: Buffer): { width: number; height: number; area: 
     throw new Error('Invalid PNG header.');
   }
 
-  const { type, width, height } = imageSize(bytes);
-  if (type !== 'png') throw new Error('Invalid PNG metadata.');
+  const metadata = probeImageSize.sync(bytes);
+  if (metadata?.type !== 'png') throw new Error('Invalid PNG metadata.');
+  const { width, height } = metadata;
   if (
     width <= 0 ||
     height <= 0 ||
