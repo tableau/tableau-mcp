@@ -1,5 +1,12 @@
 <?xml version='1.0' encoding='utf-8' ?>
 <bookmark version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user' source-platform='mac'>
+<layout-options>
+  <title>
+    <formatted-text>
+      <run fontalignment='1'>&lt;Sheet Name&gt;</run>
+    </formatted-text>
+  </title>
+</layout-options>
 <window class='worksheet' name='kpi-text'>
   <cards>
         <edge name='left'>
