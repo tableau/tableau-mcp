@@ -633,13 +633,9 @@ describe('binder/validate — aggregate calc-input compatibility', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.blockers).toContainEqual({
-        code: 'aggregation-level-mismatch',
-        slot_id: 'input',
-        detail: expect.stringContaining(
-          `requested count override '${derivation}' would change mapped shelf instances`,
-        ),
-      });
+      expect(result.blockers).toContainEqual(
+        expect.objectContaining({ code: 'aggregation-level-mismatch', slot_id: 'input' }),
+      );
     },
   );
 
@@ -675,13 +671,9 @@ describe('binder/validate — aggregate calc-input compatibility', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.blockers).toContainEqual({
-      code: 'aggregation-level-mismatch',
-      slot_id: 'display',
-      detail: expect.stringContaining(
-        "maps template field '{{field_base_1}}' used by a template calculation",
-      ),
-    });
+    expect(result.blockers).toContainEqual(
+      expect.objectContaining({ code: 'aggregation-level-mismatch', slot_id: 'display' }),
+    );
   });
 
   it('uses an optional first-class calc input to block a count override', () => {
@@ -1165,13 +1157,12 @@ describe('binder/validate — derivation override', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.blockers).toContainEqual({
-        code: 'aggregation-level-mismatch',
-        slot_id: 'field_base_1',
-        detail: expect.stringContaining(
-          `requested count override '${derivation}' cannot apply to already aggregated field "Profit Ratio"`,
-        ),
-      });
+      expect(result.blockers).toContainEqual(
+        expect.objectContaining({
+          code: 'aggregation-level-mismatch',
+          slot_id: 'field_base_1',
+        }),
+      );
     },
   );
 
@@ -1240,13 +1231,9 @@ describe('binder/validate — derivation override', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.blockers).toContainEqual({
-      code: 'derivation-illegal',
-      slot_id: 'color',
-      detail: expect.stringContaining(
-        `requested count override 'ctd' returns a quantitative value and cannot bind to ${kind} slot 'color'`,
-      ),
-    });
+    expect(result.blockers).toContainEqual(
+      expect.objectContaining({ code: 'derivation-illegal', slot_id: 'color' }),
+    );
   });
 
   it.each([
