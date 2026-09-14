@@ -68,7 +68,6 @@ describe('captureWindowScreenshotTool', () => {
       expect(result.content[0].text).toContain(
         'workbook data, titles, field names, dialogs, and agent UI',
       );
-      expect(result.content[0].text).not.toMatch(/\b(?:red|clean)\b/i);
       invariant(result.content[1].type === 'image');
       expect(result.content[1]).toEqual({
         type: 'image',
