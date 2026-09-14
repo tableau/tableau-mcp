@@ -27,7 +27,7 @@ export const getRequestWorkbookUploadTool = (
   const tool = new WebTool({
     server,
     name: 'request-workbook-upload',
-    minRequiredRole: SiteRole.VIEWER,
+    minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
       'Creates a short-lived staged upload URL for a Tableau TWB or TWBX workbook. Upload the workbook bytes to the returned URL, then call publish-workbook with the returned workbookUploadId.',
     paramsSchema,
