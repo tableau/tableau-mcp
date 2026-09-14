@@ -445,6 +445,7 @@ export async function startMockExternalApiServer(
           health: '/v0/health',
           app: '/v0/app',
           'app-dialogs': '/v0/app/dialogs',
+          'app-state': '/v0/app/state',
           workbook: '/v0/workbook',
           site: '/v0/site',
         },
@@ -471,6 +472,17 @@ export async function startMockExternalApiServer(
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.appDialogs) {
       sendJson(res, 200, { dialogs });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.appState) {
+      sendJson(res, 200, {
+        state: 'IDLE',
+        uiSnapshotAvailable: true,
+        activeActivities: [],
+        blockingWindows: [],
+        progressWindows: [],
+      });
       return;
     }
 

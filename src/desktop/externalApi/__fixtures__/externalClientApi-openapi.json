@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.13",
+    "version": "0.2.14",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -98,6 +98,26 @@
             "description": "Returns the current visible modal dialogs that require a user decision. Actions and dialog identity fields are exact values for a subsequent POST /v0/app:invokeDialogAction request. Self-clearing progress windows are excluded.",
             "content": {
               "application/json": { "schema": { "$ref": "#/components/schemas/DialogList" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/app/state": {
+      "get": {
+        "summary": "Get application blocking state",
+        "description": "Returns one bounded app-wide snapshot of Desktop activity, modal state, and visible blocking content without dispatching a command. state is IDLE only after a complete UI snapshot observes no blocking signal. blockedBy precedence is MODAL_DIALOG, the first active native activity in canonical order, PROGRESS_DIALOG, MODAL_LOOP, then UI_UNRESPONSIVE. Window arrays are not attributed to an operation.",
+        "operationId": "getAppState",
+        "responses": {
+          "200": {
+            "description": "Returns one bounded app-wide snapshot of Desktop activity, modal state, and visible blocking content without dispatching a command. state is IDLE only after a complete UI snapshot observes no blocking signal. blockedBy precedence is MODAL_DIALOG, the first active native activity in canonical order, PROGRESS_DIALOG, MODAL_LOOP, then UI_UNRESPONSIVE. Window arrays are not attributed to an operation.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/AppState" } }
             }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
@@ -2861,6 +2881,59 @@
         "required": ["dialogs"],
         "properties": {
           "dialogs": { "type": "array", "items": { "$ref": "#/components/schemas/WindowInfo" } }
+        }
+      },
+      "AppState": {
+        "type": "object",
+        "description": "One app-wide point-in-time snapshot of Desktop activity and modal state. Window arrays are not attributed to an operation. When state is BLOCKED, blockedBy reports the strongest observed signal in precedence order: MODAL_DIALOG, the first active activity in canonical order, PROGRESS_DIALOG, MODAL_LOOP, then UI_UNRESPONSIVE.",
+        "required": ["state", "uiSnapshotAvailable", "activeActivities"],
+        "properties": {
+          "state": {
+            "type": "string",
+            "description": "IDLE only after a complete UI snapshot observes no activity, modal loop, or modal window; otherwise BLOCKED.",
+            "x-extensible-enum": ["IDLE", "BLOCKED"]
+          },
+          "blockedBy": {
+            "type": "string",
+            "description": "Present when state is BLOCKED and identifies the strongest observed signal.",
+            "x-extensible-enum": [
+              "MODAL_DIALOG",
+              "LOADING",
+              "QUERYING",
+              "EXTRACT_REFRESH",
+              "DOWNLOADING",
+              "SERVER_COMMUNICATION",
+              "PROGRESS_DIALOG",
+              "MODAL_LOOP",
+              "UI_UNRESPONSIVE"
+            ]
+          },
+          "uiSnapshotAvailable": {
+            "type": "boolean",
+            "description": "Whether modal-loop and window evidence was captured within the bounded UI probe interval. A false value never produces IDLE and window arrays are omitted."
+          },
+          "activeActivities": {
+            "type": "array",
+            "description": "All active native activities in canonical order: LOADING, QUERYING, EXTRACT_REFRESH, DOWNLOADING, SERVER_COMMUNICATION.",
+            "items": {
+              "type": "string",
+              "x-extensible-enum": [
+                "LOADING",
+                "QUERYING",
+                "EXTRACT_REFRESH",
+                "DOWNLOADING",
+                "SERVER_COMMUNICATION"
+              ]
+            }
+          },
+          "blockingWindows": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WindowInfo" }
+          },
+          "progressWindows": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WindowInfo" }
+          }
         }
       },
       "InvokeDialogActionRequest": {

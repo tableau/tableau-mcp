@@ -3,7 +3,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseInstanceRef } from './bookmarkTemplate.js';
+import { bookmarkToTemplateWorkbook, parseInstanceRef } from './bookmarkTemplate.js';
+import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 import {
   autoPurpose,
   deriveTemplateFitFacts,
@@ -476,6 +477,75 @@ describe('inferFromBookmark — walks all reference sites (filter / title / labe
         expect(s.purpose).not.toContain(name);
       }
     }
+  });
+});
+
+describe('inferFromBookmark — bookmark-root title layout', () => {
+  const TITLE_FIELDS =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<layout-options><title><formatted-text><run fontalignment='1'>Executive &lt;[donor].[attr:Company:nk]&gt;</run>" +
+    "<run italic='true'><![CDATA[ / <[donor].[attr:Region:nk]>]]></run>" +
+    "<run bold='true'> — performance</run></formatted-text></title></layout-options>" +
+    "<datasources><datasource name='donor'>" +
+    "<column name='[Company]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Region]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Secret]' datatype='string' role='dimension' type='nominal'/>" +
+    "<layout-options marker='nested-donor'><title><formatted-text><run>&lt;[donor].[attr:Secret:nk]&gt;</run></formatted-text></title></layout-options>" +
+    '</datasource></datasources>' +
+    "<table><view><datasource-dependencies datasource='donor'>" +
+    "<column name='[Company]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Region]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Secret]' datatype='string' role='dimension' type='nominal'/>" +
+    '</datasource-dependencies></view></table>' +
+    "<window class='worksheet' name='Title Only'/></bookmark>";
+
+  it('binds one title field, prunes another, and preserves static title formatting', () => {
+    const inference = inferFromBookmark(TITLE_FIELDS);
+    expect(
+      inference.slots.map(({ sourceField, derivation, shelves, required, role }) => ({
+        sourceField,
+        derivation,
+        shelves,
+        required,
+        role,
+      })),
+    ).toEqual([
+      {
+        sourceField: 'Company',
+        derivation: 'attr',
+        shelves: ['title'],
+        required: false,
+        role: 'decoration',
+      },
+      {
+        sourceField: 'Region',
+        derivation: 'attr',
+        shelves: ['title'],
+        required: false,
+        role: 'decoration',
+      },
+    ]);
+
+    const converted = bookmarkToTemplateWorkbook(TITLE_FIELDS, inference);
+    const [companySlot] = inference.slots;
+    const rebound = rewriteFieldReferences(
+      converted.xml,
+      { [companySlot.templateField]: '[Target Data].[attr:Customer Name:nk]' },
+      'Target Data',
+      undefined,
+      { templateSlots: inferBindingDescriptor('title-fields', inference).slots },
+    );
+    const title = rebound.match(/<title>[\s\S]*?<\/title>/)?.[0] ?? '';
+
+    expect(title).toContain('fontalignment="1"');
+    expect(title).toContain('italic="true"');
+    expect(title).toContain('bold="true"');
+    expect(title).toContain('[Target Data].[attr:Customer Name:nk]');
+    expect(title).toContain(' — performance');
+    expect(title).not.toContain('Region');
+    expect(rebound).not.toContain('donor');
+    expect(rebound).not.toContain('nested-donor');
+    expect(rebound).not.toMatch(/\{\{(?:DATASOURCE|field_base_\d+)\}\}/);
   });
 });
 
