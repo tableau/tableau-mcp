@@ -10,6 +10,7 @@ import {
   dashboardListSchema,
   datasourceItemSchema,
   datasourceListSchema,
+  desktopStateSchema,
   dialogActionSchema,
   dialogIdentitySchema,
   dialogListSchema,
@@ -53,10 +54,10 @@ import {
  * `Operation`/`OperationList` with `progressWindows`, documents `UnprocessableContent` (422)
  * on the document-replace routes, and adds individual datasource metadata and document
  * GET/POST contracts on top of the 0.2.8 surface.
- * The worksheet `:refreshNow` path and `info.version` 0.2.13 were projected from
+ * The worksheet `:refreshNow` path was projected from
  * monolith PR #64791 at commit 364d19f2e624c1859afebc34367e15c1e4b95e99 because no live
- * 0.2.13 capture was available. The dialog contract was generated from the monolith production
- * registry and canonical-JSON compared on 2026-09-08. The rest remains the live 0.2.9 capture.
+ * capture was available. The 0.2.13 dialog contract and 0.2.14 app-state contract were generated
+ * from the monolith production registry. The rest remains the live 0.2.9 capture.
  */
 
 type SpecProperty = {
@@ -145,8 +146,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('is the authoritative 0.2.13 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.13');
+  it('is the authoritative 0.2.14 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.14');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -453,11 +454,85 @@ describe('external client API contract (captured openapi fixture)', () => {
     });
   });
 
+  describe('app-state contract', () => {
+    const appState = specSchema('AppState');
+
+    it('pins the producer properties, required fields, and shared window references', () => {
+      expect(Object.keys(appState.properties ?? {}).sort()).toEqual([
+        'activeActivities',
+        'blockedBy',
+        'blockingWindows',
+        'progressWindows',
+        'state',
+        'uiSnapshotAvailable',
+      ]);
+      expect([...(appState.required ?? [])].sort()).toEqual([
+        'activeActivities',
+        'state',
+        'uiSnapshotAvailable',
+      ]);
+      expect(appState.properties?.blockingWindows?.items?.$ref).toBe(
+        '#/components/schemas/WindowInfo',
+      );
+      expect(appState.properties?.progressWindows?.items?.$ref).toBe(
+        '#/components/schemas/WindowInfo',
+      );
+    });
+
+    it('normalizes omitted window arrays and preserves shared dialog action context', () => {
+      expect(desktopStateSchema.parse({ state: 'IDLE', uiSnapshotAvailable: true })).toEqual({
+        state: 'IDLE',
+        uiSnapshotAvailable: true,
+        activeActivities: [],
+        blockingWindows: [],
+        progressWindows: [],
+      });
+
+      const parsed = desktopStateSchema.parse({
+        state: 'BLOCKED',
+        blockedBy: 'MODAL_DIALOG',
+        uiSnapshotAvailable: true,
+        activeActivities: [],
+        blockingWindows: [
+          {
+            objectName: 'modal',
+            title: 'Save changes',
+            className: 'QMessageBox',
+            detailedTextTruncated: true,
+            actions: [{ kind: 'button', label: 'Save' }, { kind: 'close' }],
+          },
+        ],
+      });
+      expect(parsed.blockingWindows[0].actions).toEqual([
+        { kind: 'button', label: 'Save' },
+        { kind: 'close' },
+      ]);
+      expect(parsed.blockingWindows[0].detailedTextTruncated).toBe(true);
+    });
+
+    it('rejects BLOCKED without a cause and IDLE without complete empty evidence', () => {
+      expect(
+        desktopStateSchema.safeParse({ state: 'BLOCKED', uiSnapshotAvailable: true }).success,
+      ).toBe(false);
+      expect(
+        desktopStateSchema.safeParse({ state: 'IDLE', uiSnapshotAvailable: false }).success,
+      ).toBe(false);
+      expect(
+        desktopStateSchema.safeParse({
+          state: 'IDLE',
+          uiSnapshotAvailable: true,
+          activeActivities: ['QUERYING'],
+        }).success,
+      ).toBe(false);
+    });
+  });
+
   describe('routes', () => {
     it.each([
       EXTERNAL_API_ROUTES.health,
       EXTERNAL_API_ROUTES.app,
       EXTERNAL_API_ROUTES.appDialogs,
+      EXTERNAL_API_ROUTES.appState,
       EXTERNAL_API_ROUTES.appInvokeDialogAction,
       EXTERNAL_API_ROUTES.root,
       EXTERNAL_API_ROUTES.workbook,
@@ -572,8 +647,22 @@ describe('external client API contract (captured openapi fixture)', () => {
       ).toContain('409');
     });
 
-    it('projects the 0.2.13 worksheet refresh-now Operation contract', () => {
-      expect(spec.info.version).toBe('0.2.13');
+    it('documents the app-state read with the shared AppState response', () => {
+      const path = spec.paths[EXTERNAL_API_ROUTES.appState] as {
+        get?: {
+          operationId?: string;
+          responses?: Record<string, { content?: Record<string, { schema?: { $ref?: string } }> }>;
+        };
+      };
+
+      expect(path.get?.operationId).toBe('getAppState');
+      expect(path.get?.responses?.['200']?.content?.['application/json']?.schema?.$ref).toBe(
+        '#/components/schemas/AppState',
+      );
+    });
+
+    it('retains the worksheet refresh-now Operation contract in 0.2.14', () => {
+      expect(spec.info.version).toBe('0.2.14');
 
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetRefreshNow] as {
         post?: {

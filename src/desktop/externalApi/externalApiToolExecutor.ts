@@ -43,6 +43,8 @@ import {
   datasourceListSchema,
   datasourceRefreshDataRoute,
   datasourceRefreshExtractRoute,
+  DesktopState,
+  desktopStateSchema,
   DialogList,
   dialogListSchema,
   ExportAsWorkbookRequest,
@@ -320,6 +322,12 @@ export class ExternalApiToolExecutor {
   async getActiveDialogs(signal: AbortSignal): Promise<Result<DialogList, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(EXTERNAL_API_ROUTES.appDialogs, dialogListSchema, signal),
+    );
+  }
+
+  async getDesktopState(signal: AbortSignal): Promise<Result<DesktopState, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.appState, desktopStateSchema, signal),
     );
   }
 
