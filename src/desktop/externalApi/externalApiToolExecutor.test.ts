@@ -535,6 +535,159 @@ describe('ExternalApiToolExecutor', () => {
   });
 
   describe('executeCommand routing', () => {
+    it.each([
+      {
+        caseName: 'take-all-screenshots command',
+        namespace: 'tabui' as const,
+        command: 'take-all-screenshots\0ignored',
+        apiVersion: '0.2.14',
+      },
+      {
+        caseName: 'take-active-widget-screenshot command',
+        namespace: 'tabui' as const,
+        command: 'take-active-widget-screenshot\0ignored',
+        apiVersion: '0.2.14',
+      },
+      {
+        caseName: 'namespace',
+        namespace: 'tabui\0ignored' as 'tabui',
+        command: 'take-all-screenshots',
+        apiVersion: '0.2.15',
+      },
+    ])(
+      'rejects a NUL-containing $caseName before POST',
+      async ({ namespace, command, apiVersion }) => {
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [instanceFor(server, 'valid-token', apiVersion)],
+        });
+        await executor.start();
+
+        const result = await executor.executeCommand({ namespace, command, signal });
+
+        expect(result.isErr()).toBe(true);
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-failed');
+        if (error.type === 'command-failed') {
+          expect(error.error).toEqual({
+            code: 'invalid-command',
+            message: expect.stringContaining('NUL'),
+            recoverable: false,
+          });
+        }
+        expect(
+          server.requests.filter(
+            (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+          ),
+        ).toHaveLength(0);
+      },
+    );
+
+    it.each([
+      ['take-all-screenshots', '0.2.14'],
+      ['take-active-widget-screenshot', '0.2.14'],
+      ['take-all-screenshots', undefined],
+      ['take-active-widget-screenshot', undefined],
+      ['take-all-screenshots', '0.2'],
+      ['take-active-widget-screenshot', '0.2.015'],
+      ['take-all-screenshots', '0.2.15-preview'],
+      ['take-active-widget-screenshot', ' 0.2.15'],
+      ['take-all-screenshots', '0.2.15.0'],
+      ['take-active-widget-screenshot', '0.2.15\n'],
+      ['take-active-widget-screenshot', '9007199254740992.2.15'],
+    ])(
+      'blocks tabui:%s on unsafe API version %s before sending the command',
+      async (command, apiVersion) => {
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [{ ...instanceFor(server, 'valid-token'), apiVersion }],
+        });
+        await executor.start();
+
+        const result = await executor.executeCommand({ namespace: 'tabui', command, signal });
+
+        expect(result.isErr()).toBe(true);
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-failed');
+        if (error.type === 'command-failed') {
+          expect(error.error?.code).toBe('screenshot-command-blocked');
+          expect(error.error?.message).toContain('Upgrade Tableau Desktop');
+          expect(error.error?.message).toContain('capture other applications');
+          expect(error.error?.recoverable).toBe(false);
+        }
+        expect(
+          server.requests.filter(
+            (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+          ),
+        ).toHaveLength(0);
+      },
+    );
+
+    it.each([
+      ['take-all-screenshots', '0.2.15'],
+      ['take-active-widget-screenshot', '0.2.16'],
+    ])('allows tabui:%s on safe API version %s', async (command, apiVersion) => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', apiVersion)],
+      });
+      await executor.start();
+
+      const result = await executor.executeCommand({ namespace: 'tabui', command, signal });
+
+      expect(result.isOk()).toBe(true);
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('preserves non-screenshot tabui commands on older API versions', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.14')],
+      });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabui',
+        command: 'open-bookmark',
+        signal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'POST',
+        path: '/v0/app:invokeCommand',
+      });
+    });
+
+    it('checks the pinned instance version rather than another newer instance', async () => {
+      const executor = new ExternalApiToolExecutor({
+        pid: 999,
+        discover: () => [
+          { ...instanceFor(server, 'valid-token', '0.2.15'), pid: 111 },
+          instanceFor(server, 'valid-token', '0.2.14'),
+        ],
+      });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabui',
+        command: 'take-all-screenshots',
+        signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('screenshot-command-blocked');
+      }
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+        ),
+      ).toHaveLength(0);
+    });
+
     it('routes any other command to POST /v0/app:invokeCommand', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
@@ -1441,6 +1594,65 @@ describe('ExternalApiToolExecutor', () => {
   });
 
   describe('401 rescan-once', () => {
+    it.each([
+      ['an older version', '0.2.14'],
+      ['an unknown version', undefined],
+    ])(
+      'blocks a screenshot retry when a 401 rescan selects %s',
+      async (_caseName, rescannedApiVersion) => {
+        const discover = vi
+          .fn()
+          .mockReturnValueOnce([instanceFor(server, 'stale-token', '0.2.15')])
+          .mockReturnValue([
+            { ...instanceFor(server, 'valid-token'), apiVersion: rescannedApiVersion },
+          ]);
+        const executor = new ExternalApiToolExecutor({ discover });
+        await executor.start();
+
+        const result = await executor.executeCommand({
+          namespace: 'tabui',
+          command: 'take-all-screenshots',
+          signal,
+        });
+
+        expect(result.isErr()).toBe(true);
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-failed');
+        if (error.type === 'command-failed') {
+          expect(error.error?.code).toBe('screenshot-command-blocked');
+        }
+        expect(discover).toHaveBeenCalledTimes(2);
+        expect(
+          server.requests.filter(
+            (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+          ),
+        ).toHaveLength(1);
+      },
+    );
+
+    it('retries a screenshot once when both pre- and post-401 instances are safe', async () => {
+      const discover = vi
+        .fn()
+        .mockReturnValueOnce([instanceFor(server, 'stale-token', '0.2.15')])
+        .mockReturnValue([instanceFor(server, 'valid-token', '0.2.15')]);
+      const executor = new ExternalApiToolExecutor({ discover });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabui',
+        command: 'take-active-widget-screenshot',
+        signal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(discover).toHaveBeenCalledTimes(2);
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+        ),
+      ).toHaveLength(2);
+    });
+
     it('emits one logical RPC event across a successful read', async () => {
       const onRpc = vi.fn();
       const executor = new ExternalApiToolExecutor({
