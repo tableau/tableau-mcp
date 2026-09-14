@@ -29,7 +29,7 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
   const getWorkbookTool = new WebTool({
     server,
     name: 'get-workbook',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     description:
       'Retrieves information about the specified workbook, including information about the views contained in the workbook.',
     paramsSchema,

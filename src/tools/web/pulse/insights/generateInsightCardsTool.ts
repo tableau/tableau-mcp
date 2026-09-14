@@ -152,7 +152,7 @@ export const getGenerateInsightCardsTool = (server: WebMcpServer): WebTool<typeo
   const tool = new WebTool({
     server,
     name: 'generate-insight-cards',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     registrationConditions: ['RequiresPulse', 'RequiresPulsePremium'],
     description: 'Generate deterministic insights for a published datasource.',
     // Gated off by default (INSIGHTS_TOOLS_ENABLED) so it's never frontloaded

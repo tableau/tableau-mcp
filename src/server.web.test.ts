@@ -121,7 +121,7 @@ describe('server', () => {
       callback: vi.fn(),
       disabled: false,
       requiredApiScopes: [],
-      minRequiredRole: SiteRole.Viewer,
+      minRequiredRole: SiteRole.VIEWER,
       registrationConditions: [],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
@@ -513,7 +513,7 @@ describe('server', () => {
       },
       callback: vi.fn(),
       disabled: false,
-      minRequiredRole: SiteRole.SiteAdministratorExplorer,
+      minRequiredRole: SiteRole.SITE_ADMINISTRATOR_EXPLORER,
       registrationConditions: [],
       requiredApiScopes: [],
       logAndExecute: vi.fn(),
@@ -537,7 +537,7 @@ describe('server', () => {
       },
       callback: vi.fn(),
       disabled: false,
-      minRequiredRole: SiteRole.Viewer,
+      minRequiredRole: SiteRole.VIEWER,
       registrationConditions: ['RequiresPulse'],
       requiredApiScopes: [],
       logAndExecute: vi.fn(),
@@ -685,7 +685,7 @@ describe('server', () => {
     const mockViewerTool = {
       ...createMockAdminTool(),
       name: 'mock-viewer-tool' as WebToolName,
-      minRequiredRole: SiteRole.Viewer,
+      minRequiredRole: SiteRole.VIEWER,
     } as unknown as WebTool<any>;
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockViewerTool]);
 

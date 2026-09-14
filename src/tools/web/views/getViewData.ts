@@ -39,7 +39,7 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
   const getViewDataTool = new WebTool({
     server,
     name: 'get-view-data',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     description: [
       "Retrieves data for the specified view in a Tableau workbook, including the user's filters.",
       "On Tableau REST API versions below 3.30, returns CSV data for the dashboard's first view.",

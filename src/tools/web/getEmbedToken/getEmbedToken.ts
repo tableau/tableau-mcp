@@ -25,7 +25,7 @@ export const getEmbedTokenTool = (server: WebMcpServer): WebTool<typeof paramsSc
   const getEmbedTokenTool = new WebTool({
     server,
     name: 'get-embed-token',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     description: `Returns an embed token (a Tableau-signed JWT) used to authenticate the embedded Tableau viz in the app UI.
 
 This tool resolves the embed token from the current session's signing material — a passed-through Tableau Bearer JWT, or an embed JWT signed on the server under direct-trust or uat. It requires no input and is only visible to the app, never the model. If no token is available for the current configuration, it reports that and the app falls back to a non-embedded view.`,

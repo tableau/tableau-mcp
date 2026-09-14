@@ -36,7 +36,7 @@ describe('Tool', () => {
   const mockParams = {
     server: new WebMcpServer(),
     name: 'get-datasource-metadata',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     description: 'A test tool',
     paramsSchema: {
       param1: z.string(),

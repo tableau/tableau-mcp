@@ -105,7 +105,7 @@ export const getGetDatasourceMetadataTool = (
   const getDatasourceMetadataTool = new WebTool({
     server,
     name: 'get-datasource-metadata',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     description: `
     This tool retrieves metadata for a specified datasource by taking the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
     The metadata provided by this tool consists of the datasource model, fields, and parameters that belong to the datasource.

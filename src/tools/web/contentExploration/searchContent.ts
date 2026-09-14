@@ -37,7 +37,7 @@ export const getSearchContentTool = (server: WebMcpServer): WebTool<typeof param
   const searchContentTool = new WebTool({
     server,
     name: 'search-content',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     description: `
 This tool searches and ranks Tableau content across many content types at once — including workbooks, views, datasources, projects, lenses, flows, tables, databases, virtual connections, data roles, and collections.
 Use this tool for keyword or free-text discovery: when you want to find content by name or topic, when you do not know which content type an item is, when you want to search several content types in a single call, or when you want the most relevant or most-viewed items surfaced first.

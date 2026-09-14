@@ -58,7 +58,7 @@ export const getQueryDatasourceTool = (
   const queryDatasourceTool = new WebTool({
     server,
     name: 'query-datasource',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     description: new Provider(() =>
       getResultForTableauVersion({
         productVersion,

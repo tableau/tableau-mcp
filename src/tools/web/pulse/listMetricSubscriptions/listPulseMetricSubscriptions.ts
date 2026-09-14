@@ -18,7 +18,7 @@ export const getListPulseMetricSubscriptionsTool = (
   const listPulseMetricSubscriptionsTool = new WebTool({
     server,
     name: toolName,
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     registrationConditions: ['RequiresPulse'],
     description: `
 Retrieves a list of published Pulse Metric Subscriptions for the current user using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metric Subscriptions for the current user.

@@ -21,28 +21,27 @@ export const userSchema = z.object({
 export type User = z.infer<typeof userSchema>;
 
 /**
- * Tableau site roles, modeled as a string enum so callers reference `SiteRole.Viewer` rather than
+ * Tableau site roles, modeled as a string enum so callers reference `SiteRole.VIEWER` rather than
  * repeating the raw string. The enum's string *values* deliberately equal the site-role strings the
  * Tableau REST API returns, so a raw API role compares directly against {@link SITE_ROLE_HIERARCHY}.
  * @see https://help.tableau.com/current/server/en-us/users_site_roles.htm
  */
 export enum SiteRole {
-  Unlicensed = 'Unlicensed',
-  Viewer = 'Viewer',
-  Explorer = 'Explorer',
-  ExplorerCanPublish = 'ExplorerCanPublish',
-  Creator = 'Creator',
-  SupportUser = 'SupportUser',
-  SiteAdministratorExplorer = 'SiteAdministratorExplorer',
-  SiteAdministratorCreator = 'SiteAdministratorCreator',
-  ServerAdministrator = 'ServerAdministrator',
+  VIEWER = 'Viewer',
+  EXPLORER = 'Explorer',
+  EXPLORER_CAN_PUBLISH = 'ExplorerCanPublish',
+  CREATOR = 'Creator',
+  SUPPORT_USER = 'SupportUser',
+  SITE_ADMINISTRATOR_EXPLORER = 'SiteAdministratorExplorer',
+  SITE_ADMINISTRATOR_CREATOR = 'SiteAdministratorCreator',
+  SERVER_ADMINISTRATOR = 'ServerAdministrator',
 }
 
 export const ADMIN_SITE_ROLES: readonly string[] = [
-  SiteRole.SupportUser,
-  SiteRole.SiteAdministratorCreator,
-  SiteRole.SiteAdministratorExplorer,
-  SiteRole.ServerAdministrator,
+  SiteRole.SUPPORT_USER,
+  SiteRole.SITE_ADMINISTRATOR_CREATOR,
+  SiteRole.SITE_ADMINISTRATOR_EXPLORER,
+  SiteRole.SERVER_ADMINISTRATOR,
 ];
 
 export function isAdminSiteRole(siteRole: string | undefined): boolean {
@@ -60,19 +59,18 @@ export function isAdminSiteRole(siteRole: string | undefined): boolean {
  * roles above the content roles; content roles by publishing capability).
  */
 export const SITE_ROLE_HIERARCHY = {
-  [SiteRole.Unlicensed]: 0,
-  [SiteRole.Viewer]: 1,
-  [SiteRole.Explorer]: 2,
-  [SiteRole.ExplorerCanPublish]: 3,
-  [SiteRole.Creator]: 4,
-  [SiteRole.SupportUser]: 5,
-  [SiteRole.SiteAdministratorExplorer]: 6,
-  [SiteRole.SiteAdministratorCreator]: 7,
-  [SiteRole.ServerAdministrator]: 8,
+  [SiteRole.VIEWER]: 1,
+  [SiteRole.EXPLORER]: 2,
+  [SiteRole.EXPLORER_CAN_PUBLISH]: 3,
+  [SiteRole.CREATOR]: 4,
+  [SiteRole.SUPPORT_USER]: 5,
+  [SiteRole.SITE_ADMINISTRATOR_EXPLORER]: 6,
+  [SiteRole.SITE_ADMINISTRATOR_CREATOR]: 7,
+  [SiteRole.SERVER_ADMINISTRATOR]: 8,
 } as const satisfies Record<SiteRole, number>;
 
 /** The lowest site role permitted to register the admin/site-health tools. */
-export const MIN_ADMIN_SITE_ROLE: SiteRole = SiteRole.SupportUser;
+export const MIN_ADMIN_SITE_ROLE: SiteRole = SiteRole.SUPPORT_USER;
 
 /**
  * True when `siteRole` ranks at or above `minRole` in {@link SITE_ROLE_HIERARCHY}. Fail-closed:
@@ -87,9 +85,9 @@ export function siteRoleMeetsMinimum(siteRole: string | undefined, minRole: Site
 
 /**
  * Whether a tool's `minRequiredRole` is high enough to be worth enforcing at registration time.
- * A minimum of {@link SiteRole.Viewer} (or lower) is satisfied by every authenticated caller, so
+ * A minimum of {@link SiteRole.VIEWER} (or lower) is satisfied by every authenticated caller, so
  * such tools are never gated — enforcement applies only when the minimum ranks *above* Viewer.
  */
 export function roleRequiresEnforcement(minRole: SiteRole): boolean {
-  return SITE_ROLE_HIERARCHY[minRole] > SITE_ROLE_HIERARCHY[SiteRole.Viewer];
+  return SITE_ROLE_HIERARCHY[minRole] > SITE_ROLE_HIERARCHY[SiteRole.VIEWER];
 }

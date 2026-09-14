@@ -68,7 +68,7 @@ export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = To
 > & {
   /**
    * Lowest site role allowed to see this tool at registration time. Required: every tool must
-   * declare its minimum. Use {@link SiteRole.Viewer} for a tool with no role restriction — Viewer
+   * declare its minimum. Use {@link SiteRole.VIEWER} for a tool with no role restriction — Viewer
    * is satisfied by every authenticated caller, so it is never enforced (see
    * {@link roleRequiresEnforcement}). When set above Viewer, the caller's site role must rank at or
    * above it in {@link SITE_ROLE_HIERARCHY} (see {@link siteRoleMeetsMinimum}) or the tool is not

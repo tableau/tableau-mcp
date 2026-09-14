@@ -36,7 +36,7 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
   const listDatasourcesTool = new WebTool({
     server,
     name: 'list-datasources',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     description: `
   Retrieves a list of published data sources from a specified Tableau site using the Tableau REST API. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Views) for precise and flexible data source discovery.
   To list results based on usage popularity or relevance, use the search-content tool instead.

@@ -24,7 +24,7 @@ export const getGeneratePulseMetricValueInsightBundleTool = (
   const generatePulseMetricValueInsightBundleTool = new WebTool({
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     registrationConditions: ['RequiresPulse', 'RequiresPulsePremium'],
     description: `
 Generate an insight bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.

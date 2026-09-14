@@ -93,7 +93,7 @@ export const getListFlowsTool = (server: WebMcpServer): WebTool<typeof paramsSch
   const listFlowsTool = new WebTool({
     server,
     name: 'list-flows',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),

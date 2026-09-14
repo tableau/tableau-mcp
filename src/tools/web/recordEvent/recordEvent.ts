@@ -39,7 +39,7 @@ export const getRecordEventTool = (server: WebMcpServer): WebTool<typeof paramsS
   const recordEventTool = new WebTool({
     server,
     name: 'record-event',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     description:
       'Records a product-telemetry event from the MCP app UI (errors, user actions, etc.). This tool is only visible to the app, never the model. It takes an event type and optional detail, forwards a telemetry event, and returns immediately.',
     paramsSchema,

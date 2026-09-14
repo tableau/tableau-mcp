@@ -43,7 +43,7 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
   const listWorkbooksTool = new WebTool({
     server,
     name: 'list-workbooks',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     description: `
   Retrieves a list of workbooks on a Tableau site including their metadata such as name, description, and information about the views contained in the workbook. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Superstore) for precise and flexible workbook discovery.
   To list results based on usage popularity or relevance, use the search-content tool.

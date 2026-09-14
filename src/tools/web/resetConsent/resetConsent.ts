@@ -34,7 +34,7 @@ export const getResetConsentTool = (server: WebMcpServer): WebTool<typeof params
   const resetConsentTool = new WebTool({
     server,
     name: 'reset-consent',
-    minRequiredRole: SiteRole.Viewer,
+    minRequiredRole: SiteRole.VIEWER,
     description: `Resets saved OAuth consent for the current user on the Tableau authorization server.
 
 After resetting consent, the current session remains valid. The next OAuth authorization flow will re-prompt the user for consent.
