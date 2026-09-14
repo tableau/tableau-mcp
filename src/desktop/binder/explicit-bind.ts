@@ -15,7 +15,13 @@ import type {
   TemplateBindingContract,
 } from './manifest-types.js';
 import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
-import { type BindingProposal, type Blocker, validateBinding } from './validate.js';
+import {
+  type BindingProposal,
+  type Blocker,
+  columnInstanceSuffix,
+  effectiveSlotDerivation,
+  validateBinding,
+} from './validate.js';
 
 export type ExplicitBindInput = string[] | Record<string, string>;
 
@@ -492,7 +498,6 @@ function parseColumnRef(raw: string): { datasource?: string; base: string } | nu
 }
 
 const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
-const TRUNCATION_DERIVATIONS: ReadonlySet<string> = new Set(['tyr', 'tqr', 'tmn', 'tdy']);
 const COUNT_AGGREGATION_DERIVATIONS: ReadonlySet<Derivation> = new Set(['cnt', 'ctd']);
 
 function slotAcceptsSource(
@@ -544,18 +549,6 @@ function appendCategoricalSwapWarning(warnings: string[], assignments: GreedyAss
   );
 }
 
-function suffixFor(
-  derivation: Derivation,
-  type: string,
-  authoredRole?: 'nk' | 'ok' | 'qk',
-): string {
-  if (authoredRole) return authoredRole;
-  if (TRUNCATION_DERIVATIONS.has(derivation)) return 'qk';
-  if (type === 'quantitative') return 'qk';
-  if (type === 'ordinal') return 'ok';
-  return 'nk';
-}
-
 function emitRawFieldMapping(
   manifest: TemplateBindingContract,
   fieldBySlot: Map<string, SchemaField>,
@@ -567,21 +560,11 @@ function emitRawFieldMapping(
     const field = fieldBySlot.get(slot.slot_id);
     if (!field) continue;
     const override = derivationOverrides[slot.slot_id];
-    const deriv = field.isAggregated
-      ? 'usr'
-      : override !== undefined
-        ? override
-        : slot.kind === 'quantitative-or-categorical' &&
-            field.role === 'dimension' &&
-            !COUNT_AGGREGATION_DERIVATIONS.has(slot.derivation)
-          ? 'none'
-          : slot.derivation;
+    const deriv = field.isAggregated ? 'usr' : effectiveSlotDerivation(slot, field, override);
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
-    const suffix = COUNT_AGGREGATION_DERIVATIONS.has(deriv)
-      ? 'qk'
-      : suffixFor(deriv, field.type, slot.instance_role);
+    const suffix = columnInstanceSuffix(deriv, field.type, slot.instance_role);
     mapping[key] = `[${field.datasource}].[${deriv}:${bareName(field.columnName)}:${suffix}]`;
   }
   return mapping;

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { rewriteFieldReferences } from '../templates/fieldReferenceRewriter.js';
 import { bindExplicitTemplate, schemaSummaryFromAvailableFields } from './explicit-bind.js';
 import type { RuntimeTemplateDescriptor, TemplateBindingContract } from './manifest-types.js';
 import type { SchemaField, SchemaSummary } from './schema-summary.js';
+import { validateBinding } from './validate.js';
 
 function field(p: {
   name: string;
@@ -304,6 +306,84 @@ describe('bindExplicitTemplate', () => {
           '{{field_base_1}}': `[Superstore].[${derivation}:Sales:qk]`,
         });
       }
+    },
+  );
+
+  it.each(['cnt', 'ctd'] as const)(
+    'keeps %s output quantitative and preserves raw and escaped XML boundaries',
+    (derivation) => {
+      const contract: TemplateBindingContract = {
+        template: 'mixed-count-boundary',
+        slots: [
+          {
+            slot_id: 'mixed',
+            template_field: 'Metric',
+            derivation: 'none',
+            role: ['color'],
+            kind: 'quantitative-or-categorical',
+            bindable: true,
+            required: true,
+            instance_role: 'nk',
+          },
+        ],
+        calcs: [],
+      };
+      const source = field({
+        name: 'R&D <Team>',
+        role: 'dimension',
+        type: 'nominal',
+        datatype: 'string',
+        datasource: 'Acme & Co',
+      });
+      const schema: SchemaSummary = { datasource: 'Acme & Co', fields: [source] };
+      const explicit = bindExplicitTemplate(
+        contract.template,
+        { mixed: source.column_ref },
+        schema,
+        { contract, derivationOverrides: { mixed: derivation } },
+      );
+
+      expect(explicit.ok).toBe(true);
+      if (!explicit.ok) return;
+      expect(explicit.datasource).toBe('Acme & Co');
+      expect(explicit.fieldMapping).toEqual({
+        Metric: `[Acme & Co].[${derivation}:R&D <Team>:qk]`,
+      });
+
+      const validation = validateBinding(
+        contract,
+        {
+          template: contract.template,
+          title: 'Count boundary',
+          bindings: [{ slot_id: 'mixed', field: source.column_ref, derivation }],
+        },
+        schema,
+      );
+      expect(validation.ok).toBe(true);
+      if (!validation.ok) return;
+      expect(validation.field_mapping).toEqual({
+        Metric: `[Acme &amp; Co].[${derivation}:R&amp;D &lt;Team&gt;:qk]`,
+      });
+
+      const templateXml =
+        "<worksheet><table><view><datasource-dependencies datasource='{{DATASOURCE}}'>" +
+        "<column datatype='string' name='[Metric]' role='dimension' type='nominal'/>" +
+        "<column-instance column='[Metric]' derivation='None' name='[none:Metric:nk]'/>" +
+        '</datasource-dependencies><rows>[{{DATASOURCE}}].[none:Metric:nk]</rows>' +
+        '</view></table></worksheet>';
+      const rewritten = rewriteFieldReferences(
+        templateXml,
+        explicit.fieldMapping,
+        explicit.datasource,
+        explicit.fieldMetadata,
+        { templateSlots: explicit.templateSlots },
+      );
+      expect(rewritten).toContain('Acme &amp; Co');
+      expect(rewritten).toContain('name="[R&amp;D &lt;Team&gt;]"');
+      expect(rewritten).toContain(`[${derivation}:R&amp;D &lt;Team&gt;:`);
+      expect(rewritten).not.toContain('&amp;amp;');
+      expect(rewritten).not.toContain('&amp;lt;');
+      expect(rewritten).not.toContain('R&D <Team>');
     },
   );
 

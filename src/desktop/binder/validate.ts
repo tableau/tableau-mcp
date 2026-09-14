@@ -256,15 +256,13 @@ function typeSuffixFor(type: string): string {
   return 'nk';
 }
 
-/**
- * Pivot suffix for the emitted column-instance value. A date TRUNCATION is
- * continuous and must carry ':qk' (the authored template pivot), regardless of
- * the source field's `type` — otherwise an ordinal date dimension drifts a
- * tmn/tqr/tdy slot to ':ok', diverging from the template contract (P1-3).
- * Every other derivation (aggregations, dimensions, discrete date parts) keeps
- * the field-type rule.
- */
-function suffixFor(derivation: string, type: string, authoredRole?: 'nk' | 'ok' | 'qk'): string {
+/** Count results remain quantitative even when the source or authored instance is discrete. */
+export function columnInstanceSuffix(
+  derivation: Derivation,
+  type: string,
+  authoredRole?: 'nk' | 'ok' | 'qk',
+): string {
+  if (COUNT_AGGREGATION_DERIVATIONS.has(derivation)) return 'qk';
   if (authoredRole) return authoredRole;
   if (TRUNCATION_DERIVATIONS.has(derivation)) return 'qk';
   return typeSuffixFor(type);
@@ -418,7 +416,7 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
   }
 }
 
-function effectiveSlotDerivation(
+export function effectiveSlotDerivation(
   slot: SlotSpec,
   field: SchemaField,
   override?: Derivation,
@@ -1161,11 +1159,9 @@ export function validateBinding(
     // override changes the resolved value, not which instance is targeted.
     const override = overrideBySlot.get(slot.slot_id);
     const deriv = f.isAggregated ? 'usr' : effectiveSlotDerivation(slot, f, override);
-    // Suffix follows the EFFECTIVE derivation, not the field type alone: a date
-    // truncation is continuous (':qk') even on an ordinal date field (P1-3).
-    const suffix = COUNT_AGGREGATION_DERIVATIONS.has(deriv)
-      ? 'qk'
-      : suffixFor(deriv, f.type, slot.instance_role);
+    // Suffix follows the EFFECTIVE derivation, not the field type alone: counts
+    // and date truncations are continuous (':qk') even on discrete source fields.
+    const suffix = columnInstanceSuffix(deriv, f.type, slot.instance_role);
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
