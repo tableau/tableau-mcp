@@ -1,4 +1,4 @@
-import { DesktopCommandExecutionError } from './mcpToolError.js';
+import { DesktopCommandExecutionError, ImageExportTimeoutError } from './mcpToolError.js';
 
 describe('DesktopCommandExecutionError', () => {
   it('forbids invented causes for a bare command failure', () => {
@@ -58,5 +58,21 @@ describe('DesktopCommandExecutionError', () => {
     });
 
     expect(error.blockedByDesktopDialog).toBe(false);
+  });
+});
+
+describe('ImageExportTimeoutError', () => {
+  it('uses exact one-action dialog recovery with conservative fallback', () => {
+    const error = new ImageExportTimeoutError('Worksheet', 60_000);
+
+    expect(error.message).toContain('Worksheet image export exceeded 60s');
+    expect(error.message).toContain('Do not blindly retry the originating operation');
+    expect(error.message).toContain('get-active-dialogs');
+    expect(error.message).toContain('exact returned dialog identity');
+    expect(error.message).toContain('exact returned action');
+    expect(error.message).toContain('at most one invoke-dialog-action call');
+    expect(error.message).toContain('Do not guess or assume Cancel is safe');
+    expect(error.message).toContain('action-invoked-dialog-remains');
+    expect(error.message).toContain('ask the user to handle the dialog');
   });
 });

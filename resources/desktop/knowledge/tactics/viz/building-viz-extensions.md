@@ -52,7 +52,7 @@ Offer this instead:
 4. **Encoding field-order bugs.** Ordered, multi-field encodings (e.g., Globe Path's Source/Target each take latitude then longitude) break silently if you swap the order — points/arcs land at lng,lat instead of lat,lng (the marks "mirror" to the wrong hemisphere). Reading by `fieldName` in your own code sidesteps this.
 5. **Assuming the sandbox behaves like a browser.** CDN access and WebGL availability differ from a normal page; vendor assets locally and avoid WebGL.
 6. **No fallback data / no on-screen errors.** A blank viz with no message is undebuggable in the sandbox.
-7. **Expecting XML injection to bypass the trust prompt.** Installing a *never-trusted* local/network extension via `apply-workbook` still raises Tableau's one-time security/trust dialog on first load — confirmed with a brand-new extension id (cold test). Everything else automates; the first-trust click is a human gate by design. Plan for one approval, not zero.
+7. **Expecting XML injection to bypass the trust prompt.** Installing a *never-trusted* local/network extension via `apply-workbook` still raises Tableau's one-time security/trust dialog on first load — confirmed with a brand-new extension id (cold test). When the user has explicitly asked to install and trust that exact extension, call `get-active-dialogs` for fresh state; only if the returned dialog identity and exact action make the intended choice unambiguous, call `invoke-dialog-action` at most once with those exact returned values. Otherwise use the human fallback and ask the user to handle the trust dialog.
 
 ## Implementation
 

@@ -7,8 +7,14 @@ import * as loggerModule from '../../logging/logger.js';
 import type { FingerprintResolver, InstanceFingerprint } from './cacheFingerprint.js';
 import * as cacheFingerprintModule from './cacheFingerprint.js';
 
-const { checkSidecar, restampSidecarAfterEdit, sidecarPath, sourceSha256, writeSidecar } =
-  cacheFingerprintModule;
+const {
+  checkSidecar,
+  checkSidecarInput,
+  restampSidecarAfterEdit,
+  sidecarPath,
+  sourceSha256,
+  writeSidecar,
+} = cacheFingerprintModule;
 
 const dirs: string[] = [];
 
@@ -60,6 +66,69 @@ describe('sourceSha256', () => {
 });
 
 describe('cache fingerprint sidecars', () => {
+  it('checks safely pre-read datasource sidecar text without reopening the path', () => {
+    const sourceHash = 'd'.repeat(64);
+    const result = checkSidecarInput(
+      '/cache/datasource.xml',
+      '7',
+      'datasource',
+      {
+        type: 'read',
+        text: JSON.stringify({
+          session_id: '7',
+          pid: 7,
+          instanceId: 'inst-datasource',
+          created_at: '2026-08-31T00:00:00Z',
+          source_sha256: sourceHash,
+        }),
+      },
+      resolver({ pid: 7, instanceId: 'inst-datasource' }),
+    );
+
+    expect(result).toEqual({ ok: true, sourceHash });
+  });
+
+  it('refuses a safely pre-read datasource sidecar from another instance', () => {
+    const result = checkSidecarInput(
+      '/cache/datasource.xml',
+      '8',
+      'datasource',
+      {
+        type: 'read',
+        text: JSON.stringify({
+          session_id: '7',
+          pid: 7,
+          instanceId: 'inst-old',
+          created_at: '2026-08-31T00:00:00Z',
+        }),
+      },
+      resolver({ pid: 8, instanceId: 'inst-current' }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('get-datasource-xml');
+  });
+
+  it.each([{ type: 'missing' } as const, { type: 'unreadable' } as const])(
+    'warns and proceeds for a pre-read $type sidecar',
+    (input) => {
+      const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
+
+      expect(
+        checkSidecarInput(
+          '/cache/datasource.xml',
+          '7',
+          'datasource',
+          input,
+          resolver({ pid: 7, instanceId: 'inst-current' }),
+        ),
+      ).toEqual({ ok: true });
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining(`sidecar ${input.type}`) }),
+      );
+    },
+  );
+
   it('writes sidecar metadata and accepts the same current instance', () => {
     const file = tempFile();
     writeFileSync(file, '<worksheet/>', 'utf-8');

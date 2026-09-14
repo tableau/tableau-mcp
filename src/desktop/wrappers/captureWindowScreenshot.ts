@@ -1,8 +1,8 @@
 import { constants, type Stats } from 'fs';
+import { imageSize } from 'image-size';
 import { tmpdir } from 'os';
 import { dirname, isAbsolute, relative, resolve, sep } from 'path';
 import { Err, Ok, type Result } from 'ts-results-es';
-import { crc32 as zlibCrc32 } from 'zlib';
 import { z } from 'zod';
 
 import { McpToolError } from '../../errors/mcpToolError.js';
@@ -101,79 +101,13 @@ function validatePathSnapshot(
   return { path, canonicalPath, stats: current };
 }
 
-function hasLegalIhdrFormat(data: Buffer): boolean {
-  const bitDepth = data[8];
-  const colorType = data[9];
-  const legalBitDepths: Record<number, readonly number[]> = {
-    0: [1, 2, 4, 8, 16],
-    2: [8, 16],
-    3: [1, 2, 4, 8],
-    4: [8, 16],
-    6: [8, 16],
-  };
-  return (
-    legalBitDepths[colorType]?.includes(bitDepth) === true &&
-    data[10] === 0 &&
-    data[11] === 0 &&
-    (data[12] === 0 || data[12] === 1)
-  );
-}
-
-function parsePngHeader(bytes: Buffer): { width: number; height: number; area: number } {
+function readPngMetadata(bytes: Buffer): { width: number; height: number; area: number } {
   if (!bytes.subarray(0, PNG_SIGNATURE.byteLength).equals(PNG_SIGNATURE)) {
     throw new Error('Invalid PNG header.');
   }
 
-  let offset = PNG_SIGNATURE.byteLength;
-  let ihdrCount = 0;
-  let idatCount = 0;
-  let sawIend = false;
-  let width = 0;
-  let height = 0;
-  while (offset < bytes.byteLength) {
-    if (bytes.byteLength - offset < 12) throw new Error('Truncated PNG chunk.');
-    const length = bytes.readUInt32BE(offset);
-    const dataStart = offset + 8;
-    const dataEnd = dataStart + length;
-    const chunkEnd = dataEnd + 4;
-    if (!Number.isSafeInteger(chunkEnd) || chunkEnd > bytes.byteLength) {
-      throw new Error('Invalid PNG chunk length.');
-    }
-    const type = bytes.toString('ascii', offset + 4, offset + 8);
-    const declaredCrc = bytes.readUInt32BE(dataEnd);
-    if (zlibCrc32(bytes.subarray(offset + 4, dataEnd)) !== declaredCrc) {
-      throw new Error('Invalid PNG chunk CRC.');
-    }
-
-    if (offset === PNG_SIGNATURE.byteLength && type !== 'IHDR') {
-      throw new Error('PNG does not start with IHDR.');
-    }
-    if (type === 'IHDR') {
-      ihdrCount += 1;
-      if (ihdrCount !== 1 || length !== 13) throw new Error('Invalid PNG IHDR.');
-      width = bytes.readUInt32BE(dataStart);
-      height = bytes.readUInt32BE(dataStart + 4);
-      if (!hasLegalIhdrFormat(bytes.subarray(dataStart, dataEnd))) {
-        throw new Error('Invalid PNG IHDR format.');
-      }
-    } else if (type === 'IDAT') {
-      if (ihdrCount !== 1 || sawIend || length === 0) {
-        throw new Error('Invalid PNG IDAT ordering.');
-      }
-      idatCount += 1;
-    } else if (type === 'IEND') {
-      if (length !== 0 || ihdrCount !== 1 || idatCount === 0 || sawIend) {
-        throw new Error('Invalid PNG IEND.');
-      }
-      sawIend = true;
-      if (chunkEnd !== bytes.byteLength) throw new Error('PNG has bytes after IEND.');
-    }
-    offset = chunkEnd;
-  }
-
-  if (ihdrCount !== 1 || idatCount === 0 || !sawIend) {
-    throw new Error('PNG is missing required chunks.');
-  }
+  const { type, width, height } = imageSize(bytes);
+  if (type !== 'png') throw new Error('Invalid PNG metadata.');
   if (
     width <= 0 ||
     height <= 0 ||
@@ -247,7 +181,7 @@ function readCandidate(
     requireMatchingIdentity(opened, afterRead);
     if (afterRead.size !== opened.size) throw new Error('Screenshot candidate changed after read.');
 
-    return { bytes, ...parsePngHeader(bytes) };
+    return { bytes, ...readPngMetadata(bytes) };
   } finally {
     if (fd !== null) {
       try {

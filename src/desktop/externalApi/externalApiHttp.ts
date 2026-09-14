@@ -35,6 +35,8 @@ const DEFAULT_POLL_DEADLINE_MS = 300_000;
 const DEFAULT_RETRY_AFTER_SECONDS = 1;
 const HTTP_ACCEPTED = 202;
 const HTTP_SERVICE_UNAVAILABLE = 503;
+const HTTP_REDIRECT_MIN = 300;
+const HTTP_REDIRECT_MAX = 399;
 
 // Wire states are UPPER_SNAKE_CASE; unknown values count as non-terminal per the spec.
 const TERMINAL_STATES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
@@ -215,6 +217,40 @@ export class ExternalApiHttp {
     return this.parseEnvelope(response, signal);
   }
 
+  /** POST of a JSON body whose response is a schema-validated JSON body, not an operation. */
+  async postJsonForBody<T extends z.ZodTypeAny>(
+    route: string,
+    body: unknown,
+    schema: T,
+    signal?: AbortSignal,
+    options?: ExternalApiRequestOptions,
+  ): Promise<Result<z.infer<T>, ExternalApiError>> {
+    const response = await this.request('POST', route, {
+      signal,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+      timeoutMs: options?.timeoutMs,
+    });
+    return this.parseJson(response, schema, signal);
+  }
+
+  /** POST of a JSON body whose response must complete synchronously and never be polled. */
+  async postJsonForDirectBody<T extends z.ZodTypeAny>(
+    route: string,
+    body: unknown,
+    schema: T,
+    signal?: AbortSignal,
+    options?: ExternalApiRequestOptions,
+  ): Promise<Result<z.infer<T>, ExternalApiError>> {
+    const response = await this.request('POST', route, {
+      signal,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+      timeoutMs: options?.timeoutMs,
+    });
+    return this.parseDirectJson(response, schema);
+  }
+
   /** Bodyless POST expecting an Operation envelope back (a 202 is polled to terminal). */
   async postEnvelope(
     route: string,
@@ -255,6 +291,36 @@ export class ExternalApiHttp {
     }
 
     return this.parseJson(response, operationEnvelopeSchema);
+  }
+
+  /** Parses a response that must complete synchronously and therefore never follows a 202. */
+  private async parseDirectJson<T extends z.ZodTypeAny>(
+    response: Result<Response, ExternalApiError>,
+    schema: T,
+  ): Promise<Result<z.infer<T>, ExternalApiError>> {
+    if (response.isErr()) {
+      return Err(response.error);
+    }
+
+    const res = response.value;
+    if (res.status === HTTP_ACCEPTED) {
+      return Err({
+        type: 'invalid-response',
+        error: 'A synchronous JSON endpoint unexpectedly returned HTTP 202.',
+      });
+    }
+    if (!res.ok) {
+      return Err(await mapErrorResponse(res));
+    }
+
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch (error) {
+      return Err({ type: 'invalid-response', error });
+    }
+
+    return parseAgainstSchema(json, schema);
   }
 
   /** Blocks on the 202's `Location` until a terminal Operation; a blocking dialog returns `awaiting-user`. */
@@ -386,8 +452,17 @@ export class ExternalApiHttp {
         method,
         headers,
         body: options.body,
+        redirect: 'manual',
         signal,
       });
+      if (res.status >= HTTP_REDIRECT_MIN && res.status <= HTTP_REDIRECT_MAX) {
+        return Err({
+          type: 'invalid-response',
+          error: new Error(
+            `External Client API rejected an unexpected HTTP ${res.status} redirect.`,
+          ),
+        });
+      }
       return Ok(res);
     } catch (error) {
       return Err({ type: 'network', error, aborted: signal.aborted });

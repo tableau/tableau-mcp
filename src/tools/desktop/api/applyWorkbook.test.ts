@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as cachePathModule from '../../../desktop/cachePath.js';
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as loadWorkbookXmlModule from '../../../desktop/wrappers/loadWorkbookXml.js';
 import {
@@ -15,9 +16,14 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { mockContainedCacheReadFromFs } from './applyPreamble.testUtils.js';
 import { getApplyWorkbookTool } from './applyWorkbook.js';
 
 vi.mock('../../../desktop/wrappers/loadWorkbookXml.js');
+vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof cachePathModule>()),
+  readContainedCacheTextFile: vi.fn(),
+}));
 vi.mock('fs');
 
 describe('applyWorkbookTool', () => {
@@ -39,6 +45,7 @@ describe('applyWorkbookTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockContainedCacheReadFromFs();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -104,7 +111,7 @@ describe('applyWorkbookTool', () => {
 
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
-    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecarInput').mockReturnValue({
       ok: true,
       sourceHash: 'a'.repeat(64),
     });
@@ -149,7 +156,7 @@ describe('applyWorkbookTool', () => {
 
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<?xml version="1.0"?><workbook></workbook>');
-    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecarInput').mockReturnValue({
       ok: false,
       message: 'Cache produced by a different Desktop session — re-read in the current session.',
     });

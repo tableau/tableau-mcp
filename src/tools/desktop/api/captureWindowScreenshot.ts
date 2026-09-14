@@ -67,7 +67,7 @@ export const getCaptureWindowScreenshotTool = (
         },
         getSuccessResult: ({ bytes, width, height }) => {
           const disclosure = captureDisclosure(width, height);
-          // The wrapper reads CRC-valid PNGs under 32 MiB each and 64 MiB total; this cap controls MCP inline emission after those bounded reads.
+          // The wrapper reads bounded PNG metadata under 32 MiB each and 64 MiB total; this cap controls MCP inline emission after those bounded reads.
           const cachedResult = buildCachedImageToolResult({
             tool: 'capture-window-screenshot',
             label: `Window screenshot (${width}x${height})`,

@@ -334,6 +334,94 @@ describe('rewriteFieldReferences — explicit base-name placeholders', () => {
       ),
     ).toThrow(/Unresolved template field placeholder/);
   });
+
+  it('removes an omitted title reference while preserving static text, formatting, and a bound title reference', () => {
+    const titleSlots = [
+      ...slots,
+      {
+        slot_id: 'omitted_title',
+        template_field: '{{field_base_3}}',
+        required: false,
+        bindable: true,
+        kind: 'categorical',
+        derivation: 'attr',
+        role: ['title'],
+      },
+      {
+        slot_id: 'bound_title',
+        template_field: '{{field_base_4}}',
+        required: false,
+        bindable: true,
+        kind: 'categorical',
+        derivation: 'attr',
+        role: ['title'],
+      },
+    ];
+    const titleXml =
+      '<workbook><worksheets><worksheet>' +
+      '<layout-options><title><formatted-text>' +
+      "<run bold='true'>Executive &lt;[{{DATASOURCE}}].[attr:{{field_base_3}}:nk]&gt; / &lt;[{{DATASOURCE}}].[attr:{{field_base_4}}:nk]&gt; performance</run>" +
+      "<run italic='true'><![CDATA[ | detail <[{{DATASOURCE}}].[attr:{{field_base_3}}:nk]>]]></run>" +
+      '</formatted-text></title></layout-options>' +
+      '<table><view><datasource-dependencies datasource="{{DATASOURCE}}">' +
+      '<column name="[{{field_base_1}}]" datatype="string" role="dimension" type="nominal"/>' +
+      '<column name="[{{field_base_2}}]" datatype="real" role="measure" type="quantitative"/>' +
+      '<column name="[{{field_base_3}}]" datatype="string" role="dimension" type="nominal"/>' +
+      '<column name="[{{field_base_4}}]" datatype="string" role="dimension" type="nominal"/>' +
+      '<column-instance column="[{{field_base_1}}]" derivation="None" name="[none:{{field_base_1}}:nk]"/>' +
+      '<column-instance column="[{{field_base_2}}]" derivation="Sum" name="[sum:{{field_base_2}}:qk]"/>' +
+      '<column-instance column="[{{field_base_3}}]" derivation="Attribute" name="[attr:{{field_base_3}}:nk]"/>' +
+      '<column-instance column="[{{field_base_4}}]" derivation="Attribute" name="[attr:{{field_base_4}}:nk]"/>' +
+      '</datasource-dependencies></view>' +
+      '<rows>[{{DATASOURCE}}].[none:{{field_base_1}}:nk]</rows>' +
+      '<cols>[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]</cols>' +
+      '</table></worksheet></worksheets></workbook>';
+
+    const out = rewriteFieldReferences(
+      titleXml,
+      {
+        '{{field_base_1}}': '[Target Data].[none:Category:nk]',
+        '{{field_base_2}}': '[Target Data].[sum:Sales:qk]',
+        '{{field_base_4}}': '[Target Data].[attr:Region:nk]',
+      },
+      'Target Data',
+      undefined,
+      { templateSlots: titleSlots },
+    );
+    const title = out.match(/<title>[\s\S]*?<\/title>/)?.[0] ?? '';
+
+    expect(out).toContain('<rows>[Target Data].[none:Category:nk]</rows>');
+    expect(out).toContain('<cols>[Target Data].[sum:Sales:qk]</cols>');
+    expect(title).toContain(
+      '<run bold="true"><![CDATA[Executive  / <[Target Data].[attr:Region:nk]> performance]]></run>',
+    );
+    expect(title).toContain('<run italic="true"><![CDATA[ | detail ]]></run>');
+    expect(title).not.toContain('{{field_base_3}}');
+  });
+
+  it('rewrites a bound title reference carried in native CDATA', () => {
+    const titleXml =
+      '<workbook><worksheets><worksheet>' +
+      '<layout-options><title><formatted-text>' +
+      '<run><![CDATA[Executive <[{{DATASOURCE}}].[attr:{{field_base_1}}:nk]>]]></run>' +
+      '</formatted-text></title></layout-options>' +
+      '<table><view><datasource-dependencies datasource="{{DATASOURCE}}">' +
+      '<column name="[{{field_base_1}}]" datatype="string" role="dimension" type="nominal"/>' +
+      '</datasource-dependencies></view></table>' +
+      '</worksheet></worksheets></workbook>';
+
+    const out = rewriteFieldReferences(
+      titleXml,
+      { '{{field_base_1}}': '[Target Data].[attr:Region:nk]' },
+      'Target Data',
+      undefined,
+      { templateSlots: [{ template_field: '{{field_base_1}}', required: false }] },
+    );
+
+    expect(out).toContain('<![CDATA[Executive <[Target Data].[attr:Region:nk]>]]>');
+    expect(out).not.toContain('{{DATASOURCE}}');
+    expect(out).not.toContain('{{field_base_1}}');
+  });
 });
 
 describe('rewriteFieldReferences — ref-class coverage: kpi-text (aggregated measure)', () => {
@@ -375,11 +463,15 @@ describe('rewriteFieldReferences — ref-class coverage: kpi-text (aggregated me
     expect(r).not.toContain('{{field_base_1}}');
   });
 
-  it('keeps the KPI value centered after field injection without fixing a font or color', () => {
+  it('keeps the KPI title and value centered after field injection without fixing a font or color', () => {
     const r = run();
-    expect(r).toContain('<style-rule element="cell">');
-    expect(r).toContain('<format attr="text-align" value="center"/>');
-    expect(r).toContain('<format attr="vertical-align" value="center"/>');
+    const titleLayout = r.match(/<layout-options>[\s\S]*?<\/layout-options>/)?.[0] ?? '';
+    const cellStyle = r.match(/<style-rule element="cell">[\s\S]*?<\/style-rule>/)?.[0] ?? '';
+    expect(titleLayout).toContain('<run fontalignment="1">');
+    expect(titleLayout).toContain('<![CDATA[<Sheet Name>]]>');
+    expect(cellStyle).toContain('<format attr="text-align" value="center"/>');
+    expect(cellStyle).toContain('<format attr="vertical-align" value="center"/>');
+    expect(titleLayout).not.toMatch(/\bfont(?:name|color)=/);
     expect(r).not.toContain('attr="font-family"');
     expect(r).not.toContain('attr="color"');
   });

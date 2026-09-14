@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as cachePathModule from '../../../desktop/cachePath.js';
 import * as episodeEvents from '../../../desktop/episode-events.js';
 import type { WorksheetTemplatePlan } from '../../../desktop/templates/buildTemplateWorksheetArtifact.js';
 import {
@@ -25,8 +26,13 @@ import { Provider } from '../../../utils/provider.js';
 import * as worksheetEditBufferModule from '../authoring/fields/worksheetEditBuffer.js';
 import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { mockContainedCacheReadFromFs } from './applyPreamble.testUtils.js';
 import { getApplyWorksheetTool } from './applyWorksheet.js';
 
+vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof cachePathModule>()),
+  readContainedCacheTextFile: vi.fn(),
+}));
 vi.mock('../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) => ({
   ...(await importOriginal<typeof loadWorksheetXmlModule>()),
   loadWorksheetXml: vi.fn(),
@@ -83,6 +89,7 @@ describe('applyWorksheetTool', () => {
     vi.clearAllMocks();
     vi.mocked(existsSync).mockReset();
     vi.mocked(readFileSync).mockReset();
+    mockContainedCacheReadFromFs();
     vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
       Ok({ count: 1, worksheets: [{ id: 'artifact-sheet-uuid', name: 'Artifact Sheet' }] }),
     );
@@ -432,7 +439,7 @@ describe('applyWorksheetTool', () => {
 
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
-    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecarInput').mockReturnValue({
       ok: true,
       sourceHash: 'd'.repeat(64),
     });

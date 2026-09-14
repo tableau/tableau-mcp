@@ -51,16 +51,12 @@ function pngChunk(type: string, data = Buffer.alloc(0)): Buffer {
   return chunk;
 }
 
-function ihdr(
-  width: number,
-  height: number,
-  format: { bitDepth?: number; colorType?: number } = {},
-): Buffer {
+function ihdr(width: number, height: number): Buffer {
   const data = Buffer.alloc(13);
   data.writeUInt32BE(width, 0);
   data.writeUInt32BE(height, 4);
-  data[8] = format.bitDepth ?? 8;
-  data[9] = format.colorType ?? 6;
+  data[8] = 8;
+  data[9] = 6;
   return pngChunk('IHDR', data);
 }
 
@@ -83,13 +79,8 @@ function png(width: number, height: number, noisy = false): Buffer {
   ]);
 }
 
-function structurallyCompletePng(width: number, height: number): Buffer {
-  return Buffer.concat([
-    PNG_SIGNATURE,
-    ihdr(width, height),
-    pngChunk('IDAT', deflateSync(Buffer.from([0, 0, 0, 0, 0]))),
-    pngChunk('IEND'),
-  ]);
+function pngMetadata(width: number, height: number): Buffer {
+  return Buffer.concat([PNG_SIGNATURE, ihdr(width, height), Buffer.alloc(24)]);
 }
 
 function withoutStableInode(stats: Stats): Stats {
@@ -156,7 +147,7 @@ describe('captureWindowScreenshot', () => {
     });
   }
 
-  it('captures all windows and returns the unique largest window by pixel area', async () => {
+  it('captures all windows and returns the unique largest real PNG byte-for-byte', async () => {
     const directory = commandDirectory();
     const popup = png(300, 200, true);
     const expected = png(1200, 800);
@@ -168,7 +159,8 @@ describe('captureWindowScreenshot', () => {
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
-      expect(result.value).toEqual({ bytes: expected, width: 1200, height: 800 });
+      expect(result.value.bytes.equals(expected)).toBe(true);
+      expect(result.value).toMatchObject({ width: 1200, height: 800 });
     }
     expect(executor.executeCommand).toHaveBeenCalledOnce();
     const call = vi.mocked(executor.executeCommand).mock.calls[0][0];
@@ -350,54 +342,15 @@ describe('captureWindowScreenshot', () => {
 
   it.each([
     ['invalid signature', Buffer.concat([Buffer.alloc(8), png(10, 10).subarray(8)])],
-    ['truncated chunk', png(10, 10).subarray(0, -1)],
+    ['truncated metadata', PNG_SIGNATURE],
     [
-      'malformed chunk length',
-      (() => {
-        const malformed = Buffer.from(png(10, 10));
-        malformed.writeUInt32BE(0xffffffff, 8);
-        return malformed;
-      })(),
+      'invalid metadata',
+      Buffer.concat([PNG_SIGNATURE, Buffer.alloc(4), Buffer.from('NOPE'), Buffer.alloc(41)]),
     ],
-    ['missing IDAT', Buffer.concat([PNG_SIGNATURE, ihdr(10, 10), pngChunk('IEND')])],
-    [
-      'duplicate IHDR',
-      Buffer.concat([
-        PNG_SIGNATURE,
-        ihdr(10, 10),
-        ihdr(10, 10),
-        pngChunk('IDAT', deflateSync(Buffer.from([0]))),
-        pngChunk('IEND'),
-      ]),
-    ],
-    ['missing IEND', png(10, 10).subarray(0, -12)],
-    ['bytes after IEND', Buffer.concat([png(10, 10), Buffer.from('trailing')])],
-    [
-      'invalid chunk CRC',
-      (() => {
-        const invalidCrc = Buffer.from(png(10, 10));
-        const idatTypeOffset = invalidCrc.indexOf(Buffer.from('IDAT'));
-        invalidCrc[idatTypeOffset + 4] ^= 0xff;
-        return invalidCrc;
-      })(),
-    ],
-    [
-      'illegal IHDR format fields',
-      Buffer.concat([
-        PNG_SIGNATURE,
-        ihdr(10, 10, { bitDepth: 3, colorType: 6 }),
-        pngChunk('IDAT', deflateSync(Buffer.from([0]))),
-        pngChunk('IEND'),
-      ]),
-    ],
-    [
-      'empty IDAT',
-      Buffer.concat([PNG_SIGNATURE, ihdr(10, 10), pngChunk('IDAT'), pngChunk('IEND')]),
-    ],
-    ['zero width', structurallyCompletePng(0, 10)],
-    ['zero height', structurallyCompletePng(10, 0)],
-    ['oversized dimensions', structurallyCompletePng(40_000, 10)],
-    ['oversized pixel area', structurallyCompletePng(20_000, 20_000)],
+    ['zero width', pngMetadata(0, 10)],
+    ['zero height', pngMetadata(10, 0)],
+    ['oversized dimensions', pngMetadata(40_000, 10)],
+    ['oversized pixel area', pngMetadata(20_000, 20_000)],
   ])('rejects %s and cleans the safe command artifacts', async (_label, bytes) => {
     const directory = commandDirectory();
     writeFileSync(join(directory, 'ScreenShot_1.png'), bytes);

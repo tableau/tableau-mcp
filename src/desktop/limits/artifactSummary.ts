@@ -1,9 +1,9 @@
 import { createHash } from 'crypto';
 
-export type ArtifactKind = 'workbook' | 'worksheet' | 'dashboard';
+export type ArtifactKind = 'workbook' | 'worksheet' | 'dashboard' | 'datasource';
 
 function attr(tag: string, name: string): string | null {
-  const re = new RegExp(`${name}\\s*=\\s*(['"])(.*?)\\1`, 'i');
+  const re = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(['"])(.*?)\\1`, 'i');
   return tag.match(re)?.[2] ?? null;
 }
 
@@ -73,6 +73,16 @@ export function summarizeXmlArtifact(kind: ArtifactKind, xml: string): string[] 
     lines.push(
       `encodings: ${(xml.match(/<(color|size|text|lod|shape|wedge|custom)\b/gi) ?? []).length}`,
     );
+    return lines;
+  }
+
+  if (kind === 'datasource') {
+    const datasource = firstTag(xml, 'datasource') ?? '';
+    lines.push(`datasource name: ${clip(attr(datasource, 'name'))}`);
+    lines.push(`datasource caption: ${clip(attr(datasource, 'caption'))}`);
+    lines.push(`columns: ${(xml.match(/<column(?=[\s/>])/gi) ?? []).length}`);
+    lines.push(`connections: ${(xml.match(/<connection(?=[\s/>])/gi) ?? []).length}`);
+    lines.push(`relations: ${(xml.match(/<relation(?=[\s/>])/gi) ?? []).length}`);
     return lines;
   }
 

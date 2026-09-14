@@ -7,6 +7,17 @@ describe('ToolName', () => {
     expect(isDesktopToolName('capture-window-screenshot')).toBe(true);
   });
 
+  it('registers each dialog tool name exactly once', () => {
+    for (const toolName of [
+      'get-desktop-state',
+      'get-active-dialogs',
+      'invoke-dialog-action',
+    ] as const) {
+      expect(desktopToolNames.filter((name) => name === toolName)).toHaveLength(1);
+      expect(isDesktopToolName(toolName)).toBe(true);
+    }
+  });
+
   it('should verify all tool names are unique and accounted for', () => {
     const variants = {
       desktop: {

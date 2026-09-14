@@ -10,11 +10,14 @@ import {
   datasourceListSchema,
   EXTERNAL_API_ROUTES,
   ExternalApiInstance,
+  InvokeDialogActionRequest,
+  invokeDialogActionResultSchema,
   logicalTableListSchema,
   sheetActionRoute,
   siteDatasourceListSchema,
   siteSchema,
   siteWorkbookListSchema,
+  startPageVisibilitySchema,
   storyboardDocumentRoute,
   storyboardItemSchema,
   storyboardListSchema,
@@ -46,6 +49,15 @@ const invokeBody = (
   parameters: Record<string, unknown> = {},
 ): Record<string, unknown> => ({ namespace, command, parameters });
 
+const invokeDialogActionRequest: InvokeDialogActionRequest = {
+  dialog: {
+    objectName: 'saveChangesDialog',
+    title: 'Save Changes',
+    className: 'QMessageBox',
+  },
+  action: { kind: 'button', label: 'Discard' },
+};
+
 describe('ExternalApiHttp', () => {
   let server: MockExternalApiServer;
   let http: ExternalApiHttp;
@@ -69,6 +81,43 @@ describe('ExternalApiHttp', () => {
     await http.getOk(EXTERNAL_API_ROUTES.health);
     expect(server.requests.at(-1)?.authorization).toBe('Bearer valid-token');
   });
+
+  it('sets redirect manual on every request', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const client = new ExternalApiHttp(makeInstance(server.baseUrl), { fetchFn });
+
+    await client.getOk(EXTERNAL_API_ROUTES.health);
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(fetchFn.mock.calls[0][1]).toMatchObject({
+      method: 'GET',
+      redirect: 'manual',
+    });
+  });
+
+  it.each([300, 301, 302, 303, 304, 305, 306, 307, 308, 399])(
+    'rejects HTTP %i without following or reading a redirect target',
+    async (status) => {
+      const redirected = {
+        status,
+        ok: false,
+        headers: new Headers({ location: 'http://example.invalid/steal-token' }),
+        json: vi.fn(),
+        text: vi.fn(),
+      } as unknown as Response;
+      const fetchFn = vi.fn().mockResolvedValue(redirected);
+      const client = new ExternalApiHttp(makeInstance(server.baseUrl), { fetchFn });
+
+      const result = await client.getOk(EXTERNAL_API_ROUTES.health);
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('invalid-response');
+      expect(fetchFn).toHaveBeenCalledOnce();
+      expect(fetchFn.mock.calls[0][1]?.redirect).toBe('manual');
+      expect(redirected.json).not.toHaveBeenCalled();
+      expect(redirected.text).not.toHaveBeenCalled();
+    },
+  );
 
   it('returns the workbook document XML and version headers on GET', async () => {
     const result = await http.getXml(EXTERNAL_API_ROUTES.workbookDocument);
@@ -135,6 +184,85 @@ describe('ExternalApiHttp', () => {
     });
     expect(envelope.createdAt).toBe('2026-07-07T10:00:00Z');
     expect(envelope.completedAt).toBe('2026-07-07T10:00:01Z');
+  });
+
+  describe('start-page visibility contract', () => {
+    it('pins the route and requires a boolean visibility result', () => {
+      expect(EXTERNAL_API_ROUTES.appToggleStartPage).toBe('/v0/app:toggleStartPage');
+      expect(startPageVisibilitySchema.safeParse({ isStartPageVisible: true }).success).toBe(true);
+      expect(startPageVisibilitySchema.safeParse({ isStartPageVisible: false }).success).toBe(true);
+      expect(startPageVisibilitySchema.safeParse({}).success).toBe(false);
+      expect(startPageVisibilitySchema.safeParse({ isStartPageVisible: 'false' }).success).toBe(
+        false,
+      );
+    });
+
+    it.each([true, false])(
+      'POSTs and returns isStartPageVisible=%s without coercion',
+      async (value) => {
+        const result = await http.postJsonForBody(
+          EXTERNAL_API_ROUTES.appToggleStartPage,
+          { isStartPageVisible: value },
+          startPageVisibilitySchema,
+        );
+
+        expect(result.isOk()).toBe(true);
+        expect(result.unwrap()).toEqual({ isStartPageVisible: value });
+        const posted = server.requests.at(-1);
+        expect(posted).toMatchObject({
+          method: 'POST',
+          path: '/v0/app:toggleStartPage',
+          authorization: 'Bearer valid-token',
+          contentType: 'application/json',
+        });
+        expect(JSON.parse(posted?.body ?? '{}')).toEqual({ isStartPageVisible: value });
+      },
+    );
+
+    it.each([
+      ['missing', {}],
+      ['wrong-type', { isStartPageVisible: 'false' }],
+    ])('fails closed on a %s visibility success body', async (_label, body) => {
+      server.setOverride('POST /v0/app:toggleStartPage', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
+
+      const result = await http.postJsonForBody(
+        EXTERNAL_API_ROUTES.appToggleStartPage,
+        { isStartPageVisible: false },
+        startPageVisibilitySchema,
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('invalid-response');
+    });
+
+    it('preserves an HTTP Problem response', async () => {
+      server.setOverride('POST /v0/app:toggleStartPage', {
+        status: 500,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({
+          code: 'operation-failed',
+          status: 500,
+          title: 'The Start Page could not be toggled.',
+        }),
+      });
+
+      const result = await http.postJsonForBody(
+        EXTERNAL_API_ROUTES.appToggleStartPage,
+        { isStartPageVisible: true },
+        startPageVisibilitySchema,
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr()).toMatchObject({
+        type: 'problem',
+        status: 500,
+        code: 'operation-failed',
+      });
+    });
   });
 
   it('maps a command-not-found problem', async () => {
@@ -677,6 +805,221 @@ describe('ExternalApiHttp', () => {
     expect(last?.contentType).toContain('application/xml');
     expect(last?.body).toBe(xml);
   });
+
+  it('posts exact dialog identity and action as JSON and parses the direct result', async () => {
+    const exactRequest: InvokeDialogActionRequest = {
+      dialog: {
+        objectName: ' save-dialog ',
+        title: 'Save “Regional Sales”?',
+        className: 'QMessageBox',
+      },
+      action: { kind: 'button', label: ' &Discard ' },
+    };
+    server.setOverride('POST /v0/app:invokeDialogAction', {
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        outcome: 'dismissed',
+        dialog: exactRequest.dialog,
+        action: exactRequest.action,
+        dialogs: [],
+      }),
+    });
+    const result = await http.postJsonForDirectBody(
+      EXTERNAL_API_ROUTES.appInvokeDialogAction,
+      exactRequest,
+      invokeDialogActionResultSchema,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual({
+      outcome: 'dismissed',
+      dialog: exactRequest.dialog,
+      action: exactRequest.action,
+      dialogs: [],
+    });
+    const posted = server.requests.at(-1);
+    expect(posted?.method).toBe('POST');
+    expect(posted?.path).toBe('/v0/app:invokeDialogAction');
+    expect(posted?.contentType).toBe('application/json');
+    expect(posted?.body).toBe(JSON.stringify(exactRequest));
+  });
+
+  it('preserves all fields in an action-invoked-dialog-remains response', async () => {
+    const remainingDialog = {
+      ...invokeDialogActionRequest.dialog,
+      messageText: ' Save this workbook? ',
+      informativeText: 'The label is exact.',
+      detailedText: '/private/example.twb',
+      iconLevel: 'warning',
+      buttons: [' Save ', 'Discard', 'Discard'],
+      actions: [
+        { kind: 'button', label: ' Save ' },
+        { kind: 'button', label: 'Discard' },
+        { kind: 'button', label: 'Discard' },
+        { kind: 'close' },
+      ],
+      producerExtension: 'preserved',
+    };
+    server.setOverride('POST /v0/app:invokeDialogAction', {
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        outcome: 'action-invoked-dialog-remains',
+        dialog: invokeDialogActionRequest.dialog,
+        action: invokeDialogActionRequest.action,
+        dialogs: [remainingDialog],
+        responseExtension: true,
+      }),
+    });
+
+    const result = await http.postJsonForDirectBody(
+      EXTERNAL_API_ROUTES.appInvokeDialogAction,
+      invokeDialogActionRequest,
+      invokeDialogActionResultSchema,
+    );
+
+    expect(result.unwrap()).toEqual({
+      outcome: 'action-invoked-dialog-remains',
+      dialog: invokeDialogActionRequest.dialog,
+      action: invokeDialogActionRequest.action,
+      dialogs: [remainingDialog],
+      responseExtension: true,
+    });
+  });
+
+  it.each([
+    [400, 'invalid-request-body'],
+    [409, 'dialog-not-found'],
+    [409, 'dialog-ambiguous'],
+    [409, 'dialog-action-not-found'],
+    [409, 'dialog-action-ambiguous'],
+    [409, 'dialog-action-disabled'],
+  ])('maps HTTP %i %s from a direct JSON POST', async (status, code) => {
+    server.setOverride('POST /v0/app:invokeDialogAction', {
+      status,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({
+        type: 'problem',
+        title: 'Dialog request rejected.',
+        status,
+        instance: '/v0/mock',
+        code,
+      }),
+    });
+
+    const result = await http.postJsonForDirectBody(
+      EXTERNAL_API_ROUTES.appInvokeDialogAction,
+      invokeDialogActionRequest,
+      invokeDialogActionResultSchema,
+    );
+
+    expect(result.isErr()).toBe(true);
+    const error = result.unwrapErr();
+    expect(error.type).toBe('problem');
+    if (error.type === 'problem') {
+      expect(error.status).toBe(status);
+      expect(error.code).toBe(code);
+    }
+  });
+
+  it('rejects a malformed direct JSON success response', async () => {
+    server.setOverride('POST /v0/app:invokeDialogAction', {
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ outcome: 'dismissed' }),
+    });
+
+    const result = await http.postJsonForDirectBody(
+      EXTERNAL_API_ROUTES.appInvokeDialogAction,
+      invokeDialogActionRequest,
+      invokeDialogActionResultSchema,
+    );
+
+    expect(result.unwrapErr().type).toBe('invalid-response');
+  });
+
+  it('rejects a non-JSON direct success response', async () => {
+    server.setOverride('POST /v0/app:invokeDialogAction', {
+      status: 200,
+      contentType: 'application/json',
+      body: 'not-json',
+    });
+
+    const result = await http.postJsonForDirectBody(
+      EXTERNAL_API_ROUTES.appInvokeDialogAction,
+      invokeDialogActionRequest,
+      invokeDialogActionResultSchema,
+    );
+
+    expect(result.unwrapErr().type).toBe('invalid-response');
+  });
+
+  it('rejects an unexpected 202 without polling its Operation location', async () => {
+    server.setOverride('POST /v0/app:invokeDialogAction', {
+      status: 202,
+      contentType: 'application/json',
+      headers: {
+        location: '/v0/operations/dialog-action',
+        'retry-after': '0',
+        'x-tableau-operation-id': 'dialog-action',
+      },
+      body: JSON.stringify({
+        id: 'dialog-action',
+        kind: 'app.invokeDialogAction',
+        state: 'RUNNING',
+      }),
+    });
+
+    const result = await http.postJsonForDirectBody(
+      EXTERNAL_API_ROUTES.appInvokeDialogAction,
+      invokeDialogActionRequest,
+      invokeDialogActionResultSchema,
+    );
+
+    expect(result.unwrapErr().type).toBe('invalid-response');
+    expect(server.requests.filter((request) => request.path.includes('/v0/operations/'))).toEqual(
+      [],
+    );
+  });
+
+  it.each(['timeout', 'caller abort'] as const)(
+    'reports a network abort when a direct JSON POST ends by %s',
+    async (kind) => {
+      const hangingFetch = ((_url: string, init?: RequestInit): Promise<Response> =>
+        new Promise((_resolve, reject) => {
+          if (init?.signal?.aborted) {
+            reject(init.signal.reason);
+            return;
+          }
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), {
+            once: true,
+          });
+        })) as unknown as typeof fetch;
+      const client = new ExternalApiHttp(makeInstance(server.baseUrl), {
+        fetchFn: hangingFetch,
+        timeoutMs: kind === 'timeout' ? 20 : 60_000,
+      });
+      const controller = new AbortController();
+
+      const pending = client.postJsonForDirectBody(
+        EXTERNAL_API_ROUTES.appInvokeDialogAction,
+        invokeDialogActionRequest,
+        invokeDialogActionResultSchema,
+        controller.signal,
+      );
+      if (kind === 'caller abort') {
+        controller.abort();
+      }
+      const result = await pending;
+
+      const error = result.unwrapErr();
+      expect(error.type).toBe('network');
+      if (error.type === 'network') {
+        expect(error.aborted).toBe(true);
+      }
+    },
+  );
 
   it('lists published site datasources from GET /v0/site/datasources', async () => {
     const result = await http.getJson(
