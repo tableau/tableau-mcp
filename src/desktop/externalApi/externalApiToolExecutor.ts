@@ -1,3 +1,5 @@
+import { setTimeout as delay } from 'node:timers/promises';
+
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -114,6 +116,10 @@ const LOGGER = 'ExternalApiToolExecutor';
 // Liveness must fail fast: the health probe runs on a shorter budget than the global
 // request ceiling (the HTTP layer only ever tightens, so a smaller global still wins).
 const HEALTH_TIMEOUT_MS = 10_000;
+const SUMMARY_DATA_PENDING_MAX_RESPONSES = 3;
+const SUMMARY_DATA_PENDING_DEFAULT_DELAY_MS = 1_000;
+const SUMMARY_DATA_PENDING_MIN_DELAY_MS = 100;
+const SUMMARY_DATA_PENDING_MAX_WAIT_MS = 5_000;
 
 export type ExternalApiToolExecutorDeps = {
   /** Returns candidate live instances, newest-first. Re-invoked on rescan. */
@@ -478,9 +484,39 @@ export class ExternalApiToolExecutor {
     query: WorksheetSummaryDataQuery,
     signal: AbortSignal,
   ): Promise<Result<SummaryData, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(worksheetSummaryDataRoute(worksheetId, query), summaryDataSchema, signal),
-    );
+    let pendingResponses = 0;
+    return this.readExternalApi(async (http) => {
+      const route = worksheetSummaryDataRoute(worksheetId, query);
+      while (true) {
+        const result = await http.getJson(route, summaryDataSchema, signal);
+        if (result.isOk() || result.error.type !== 'operation-pending') return result;
+        pendingResponses += 1;
+        if (pendingResponses === SUMMARY_DATA_PENDING_MAX_RESPONSES) {
+          return Err({
+            type: 'problem',
+            status: 503,
+            code: 'operation-pending',
+            detail:
+              'Desktop returned operation-pending three times for this summary-data read. Do not immediately retry. Wait for Desktop to finish preparing the worksheet, then make one fresh request.',
+          });
+        }
+        const retryDelayMs = summaryDataRetryDelayMs(result.error.retryAfterSeconds);
+        if (retryDelayMs === undefined) {
+          return Err({
+            type: 'problem',
+            status: 503,
+            code: 'operation-pending',
+            detail:
+              "Desktop requested a Retry-After longer than this client's bounded five-second wait. No early retry was sent. Wait for Desktop to finish preparing the worksheet, then make one fresh request.",
+          });
+        }
+        try {
+          await delay(retryDelayMs, undefined, { signal });
+        } catch (error) {
+          return Err({ type: 'network', error, aborted: signal.aborted });
+        }
+      }
+    });
   }
 
   async listWorksheetLogicalTables(
@@ -1039,12 +1075,24 @@ function buildCommandStatus(
 }
 
 function getTableauErrorCode(error: OperationError | undefined): string | undefined {
-  const value = error?.['tableau-error-code'];
+  const value = error?.tableauErrorCode ?? error?.['tableau-error-code'];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function supportsOperationResult(apiVersion: string | undefined): boolean {
   return apiVersionAtLeast(apiVersion, '0.1.1');
+}
+
+function summaryDataRetryDelayMs(retryAfterSeconds: number | undefined): number | undefined {
+  if (
+    retryAfterSeconds !== undefined &&
+    Number.isFinite(retryAfterSeconds) &&
+    retryAfterSeconds >= 0
+  ) {
+    if (retryAfterSeconds * 1_000 > SUMMARY_DATA_PENDING_MAX_WAIT_MS) return undefined;
+    return Math.max(SUMMARY_DATA_PENDING_MIN_DELAY_MS, retryAfterSeconds * 1_000);
+  }
+  return SUMMARY_DATA_PENDING_DEFAULT_DELAY_MS;
 }
 
 function describeWindows(windows: Array<WindowInfo> | undefined): string {

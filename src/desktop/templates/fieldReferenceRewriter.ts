@@ -50,6 +50,7 @@ import * as xpath from 'xpath';
 // DOM nodeType constants — `Node` is not a global value in the desktop runtime,
 // so compare against the numeric constants directly.
 const TEXT_NODE = 3;
+const CDATA_SECTION_NODE = 4;
 const ELEMENT_NODE = 1;
 const ATTRIBUTE_NODE = 2;
 
@@ -337,6 +338,37 @@ export function rewriteFieldReferencesWithDiagnostics(
     }
   }
 
+  const rewriteFieldRefs = (
+    input: string,
+    bareReferenceFields: ReadonlySet<string> = structurallyDescribedFields,
+  ): string =>
+    input.replace(
+      /(?:\[[^\[\]]+\]\.)?(\[[^\[\]]+\])/g,
+      (whole, bracketedName: string) => {
+        const parsed = parseInstanceName(bracketedName);
+        if (parsed && mappedFields.has(parsed.field)) {
+          const { deriv: templateDeriv, field, trailing: templateTrailing } = parsed;
+          const info = resolveFieldInfo(field, templateDeriv);
+          const target = baseTarget[field];
+          if (!target) return whole;
+          const shape =
+            isSecondaryDerivation(field, templateDeriv) || !info
+              ? { derivation: templateDeriv, trailing: templateTrailing }
+              : mappedInstanceShape(templateDeriv, templateTrailing, info);
+          const mapped = `[${shape.derivation}:${target}:${shape.trailing}]`;
+          return whole.includes('].[') ? `[${datasourceName}].${mapped}` : mapped;
+        }
+
+        const bareField = bracketedName.slice(1, -1);
+        if (!bareReferenceFields.has(bareField)) return whole;
+        const target = baseTarget[bareField];
+        if (!target) return whole;
+        const mapped = `[${target}]`;
+        return whole.includes('].[') ? `[${datasourceName}].${mapped}` : mapped;
+      },
+    );
+  const noBareReferenceFields = new Set<string>();
+
   // 1. Base <column> name attributes and metadata: <column name='[Region]' .../>
   const baseColumns = selectElements('//column[@name]', doc);
   for (const col of baseColumns) {
@@ -504,98 +536,61 @@ export function rewriteFieldReferencesWithDiagnostics(
     }
   }
 
-  // 3c. Neutralize hard-coded filter members when the filtered field was
-  //     remapped: collapse to the canonical "all members at this level"
-  //     groupfilter so the viz doesn't render blank against target data.
+  // 3c. Group filters own all of their field-bearing attributes, including set
+  //     definitions outside a <filter>. Rewrite each original value once before
+  //     a changed filter may replace its member tree with a generated neutral one.
+  for (const groupfilter of selectElements('//groupfilter', doc)) {
+    for (const attribute of Array.from(groupfilter.attributes) as Attr[]) {
+      if (!isGroupfilterFieldReferenceAttribute(attribute)) continue;
+      const rewritten = rewriteFieldRefs(
+        attribute.value,
+        attribute.name === 'member' ? noBareReferenceFields : mappedFields,
+      );
+      if (rewritten !== attribute.value) attribute.value = rewritten;
+    }
+  }
+
+  // Filters likewise own @column. Neutralize hard-coded members when the filter
+  // identity changed so the viz doesn't render blank against target data.
+  const parseFilterIdentity = (value: string): { field: string; deriv: string } | null => {
+    const terminalReference = value.match(/(\[[^\[\]]+\])$/)?.[1];
+    if (!terminalReference) return null;
+    const instance = parseInstanceName(terminalReference);
+    if (instance) return { field: instance.field, deriv: instance.deriv };
+    const bare = terminalReference.match(/^\[([^\]:]+)\]$/);
+    return bare ? { field: bare[1], deriv: 'none' } : null;
+  };
   const filterElements = selectElements('//filter', doc);
   for (const filter of filterElements) {
     const colAttr = filter.getAttribute('column');
     if (!colAttr) continue;
-    const cm = colAttr.match(/^\[[^\]]*\]\.\[([^:]+):([^:]+):([^:\]]+)\]$/);
-    if (!cm) continue;
-    const [, tDeriv, tField, tRole] = cm;
-    if (!mappedFields.has(tField)) continue;
+    const rewrittenColumn = rewriteFieldRefs(colAttr, mappedFields);
+    if (rewrittenColumn !== colAttr) filter.setAttribute('column', rewrittenColumn);
 
-    const info = resolveFieldInfo(tField, tDeriv);
-    const baseName = baseTarget[tField];
-    const preserveTemplateShape = isSecondaryDerivation(tField, tDeriv);
-    const deriv = !preserveTemplateShape && info ? info.derivation : tDeriv;
-    const role = tRole;
+    const rewrittenInstance = rewrittenColumn.match(/(\[[^\[\]]+\])$/)?.[1];
+    const originalIdentity = parseFilterIdentity(colAttr);
+    const rewrittenIdentity = parseFilterIdentity(rewrittenColumn);
+    const identityChanged =
+      originalIdentity !== null &&
+      rewrittenIdentity !== null &&
+      (originalIdentity.field !== rewrittenIdentity.field ||
+        originalIdentity.deriv !== rewrittenIdentity.deriv);
+    const hasGroupfilter = filter.getElementsByTagName('groupfilter').length > 0;
 
-    if (baseName === tField && deriv === tDeriv) continue;
-
-    if (filter.getElementsByTagName('groupfilter').length === 0) continue;
-
-    const mappedCi = `[${deriv}:${baseName}:${role}]`;
-    filter.setAttribute('column', `[${datasourceName}].${mappedCi}`);
-    while (filter.firstChild) {
-      filter.removeChild(filter.firstChild);
+    if (identityChanged && rewrittenInstance && hasGroupfilter) {
+      while (filter.firstChild) filter.removeChild(filter.firstChild);
+      const neutral = doc.createElement('groupfilter');
+      neutral.setAttribute('function', 'level-members');
+      neutral.setAttribute('level', rewrittenInstance);
+      filter.appendChild(neutral);
     }
-    const neutral = doc.createElement('groupfilter');
-    neutral.setAttribute('function', 'level-members');
-    neutral.setAttribute('level', mappedCi);
-    filter.appendChild(neutral);
   }
 
-  // Shared rewrite for datasource-qualified field references in text nodes and
-  // attribute values: [{{DATASOURCE}}].[<templateDeriv>:<field>:<role>].
-  const rewriteQualifiedRefs = (input: string): string => {
-    let out = input;
-    for (const field of mappedFields) {
-      // The pre-field derivation segment may be COMPOUND (colons allowed) for
-      // table-calc refs; escapeRegex guards the user-derived field token.
-      const regex = new RegExp(
-        `\\[[^\\[\\]]+\\]\\.\\[([^\\[\\]]+?):${escapeRegex(field)}:([^\\[\\]]+)\\]`,
-        'g',
-      );
-      out = out.replace(regex, (whole, templateDeriv: string, templateTrailing: string) => {
-        const info = resolveFieldInfo(field, templateDeriv);
-        if (isSecondaryDerivation(field, templateDeriv)) {
-          const target = baseTarget[field];
-          return target
-            ? `[${datasourceName}].[${templateDeriv}:${target}:${templateTrailing}]`
-            : whole;
-        }
-        if (templateDeriv.includes(':')) {
-          const newField = info ? info.name : baseTarget[field];
-          if (!newField) return whole;
-          const shape = info
-            ? mappedInstanceShape(templateDeriv, templateTrailing, info)
-            : { derivation: templateDeriv, trailing: templateTrailing };
-          return `[${datasourceName}].[${shape.derivation}:${newField}:${shape.trailing}]`;
-        }
-        if (!info) return whole;
-        const shape = mappedInstanceShape(templateDeriv, templateTrailing, info);
-        return `[${datasourceName}].[${shape.derivation}:${info.name}:${shape.trailing}]`;
-      });
-      const unqualifiedRegex = new RegExp(
-        `\\[([^\\[\\]]+?):${escapeRegex(field)}:([^\\[\\]]+)\\]`,
-        'g',
-      );
-      out = out.replace(
-        unqualifiedRegex,
-        (whole, templateDeriv: string, templateTrailing: string) => {
-          const info = resolveFieldInfo(field, templateDeriv);
-          if (isSecondaryDerivation(field, templateDeriv)) {
-            const target = baseTarget[field];
-            return target ? `[${templateDeriv}:${target}:${templateTrailing}]` : whole;
-          }
-          const newField = info ? info.name : baseTarget[field];
-          if (!newField) return whole;
-          const shape = info
-            ? mappedInstanceShape(templateDeriv, templateTrailing, info)
-            : { derivation: templateDeriv, trailing: templateTrailing };
-          return `[${shape.derivation}:${newField}:${shape.trailing}]`;
-        },
-      );
-    }
-    return out;
-  };
-
-  // 4. Field references in text content.
-  const allText = selectTexts('//text()', doc);
+  // 4. Field references in text content. Derived instances and descriptor-backed
+  // bare tokens share one scanner so a generated target is never consumed again.
+  const allText = selectCharacterData('//text()', doc);
   for (const textNode of allText) {
-    const newText = rewriteQualifiedRefs(textNode.data);
+    const newText = rewriteFieldRefs(textNode.data);
     if (newText !== textNode.data) textNode.data = newText;
   }
 
@@ -604,23 +599,9 @@ export function rewriteFieldReferencesWithDiagnostics(
   for (const elem of allElements) {
     const attrs = Array.from(elem.attributes) as Attr[];
     for (const attr of attrs) {
-      const newValue = rewriteQualifiedRefs(attr.value);
+      if (isOwnedFieldReferenceAttribute(elem, attr)) continue;
+      const newValue = rewriteFieldRefs(attr.value);
       if (newValue !== attr.value) attr.value = newValue;
-    }
-  }
-
-  // Explicit field tokens are structural identities, so exact bare references may occur in any XML class.
-  for (const field of structurallyDescribedFields) {
-    const target = baseTarget[field];
-    if (!target) continue;
-    const barePattern = new RegExp(`\\[${escapeRegex(field)}\\]`, 'g');
-    for (const textNode of allText) {
-      textNode.data = textNode.data.replace(barePattern, () => `[${target}]`);
-    }
-    for (const elem of allElements) {
-      for (const attr of Array.from(elem.attributes) as Attr[]) {
-        attr.value = attr.value.replace(barePattern, () => `[${target}]`);
-      }
     }
   }
 
@@ -628,7 +609,7 @@ export function rewriteFieldReferencesWithDiagnostics(
   // values. Replacer FUNCTIONS keep `$`-sequences in the datasource name literal.
   const allNodes = xpath.select('//text() | //*/@*', doc as unknown as Node) as Node[];
   for (const node of allNodes) {
-    if (node.nodeType === TEXT_NODE) {
+    if (node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE) {
       const textNode = node as Text;
       const newText = textNode.data.replace(/\{\{DATASOURCE\}\}/g, () => datasourceName);
       if (newText !== textNode.data) textNode.data = newText;
@@ -706,9 +687,43 @@ function selectElements(xp: string, doc: Document): Element[] {
   );
 }
 
-function selectTexts(xp: string, doc: Document): Text[] {
+function selectCharacterData(xp: string, doc: Document): Text[] {
   return (xpath.select(xp, doc as unknown as Node) as Node[]).filter(
-    (n): n is Text => n.nodeType === TEXT_NODE,
+    (n): n is Text => n.nodeType === TEXT_NODE || n.nodeType === CDATA_SECTION_NODE,
+  );
+}
+
+function isOwnedFieldReferenceAttribute(element: Element, attribute: Attr): boolean {
+  if (isSemanticRoleAttribute(element, attribute)) return true;
+  switch (element.tagName) {
+    case 'column':
+      return (
+        attribute.name === 'name' ||
+        (attribute.name === 'caption' && element.getElementsByTagName('calculation').length > 0)
+      );
+    case 'column-instance':
+      return attribute.name === 'column' || attribute.name === 'name';
+    case 'calculation':
+      return attribute.name === 'formula' || attribute.name === 'column';
+    case 'filter':
+      return attribute.name === 'column';
+    case 'groupfilter':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isSemanticRoleAttribute(element: Element, attribute: Attr): boolean {
+  return element.tagName === 'column' && attribute.name === 'semantic-role';
+}
+
+function isGroupfilterFieldReferenceAttribute(attribute: Attr): boolean {
+  return (
+    attribute.name === 'level' ||
+    attribute.name === 'field' ||
+    attribute.name === 'expression' ||
+    attribute.name === 'member'
   );
 }
 
@@ -837,7 +852,8 @@ function pruneShelfFieldReferences(doc: Document, templateField: string): void {
   for (const tag of ['rows', 'cols']) {
     for (const shelf of selectElements(`//${tag}`, doc)) {
       for (const text of Array.from(shelf.childNodes).filter(
-        (node): node is Text => node.nodeType === TEXT_NODE,
+        (node): node is Text =>
+          node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE,
       )) {
         if (!referencesTemplateField(text.data, templateField)) continue;
         const kept = text.data
@@ -849,6 +865,20 @@ function pruneShelfFieldReferences(doc: Document, templateField: string): void {
   }
 }
 
+function pruneTitleFieldReferences(doc: Document, templateField: string): void {
+  const fieldReference = /<(?:\[[^\]]+\]\.)?\[[^\]]+\]>|(?:\[[^\]]+\]\.)?\[[^\]]+\]/g;
+  for (const run of selectElements('//worksheet/layout-options/title/formatted-text/run', doc)) {
+    for (const node of Array.from(run.childNodes)) {
+      if (node.nodeType !== TEXT_NODE && node.nodeType !== CDATA_SECTION_NODE) continue;
+      const text = node as Text;
+      if (!referencesTemplateField(text.data, templateField)) continue;
+      text.data = text.data.replace(fieldReference, (reference) =>
+        referencesTemplateField(reference, templateField) ? '' : reference,
+      );
+    }
+  }
+}
+
 function pruneOptionalTemplateField(
   doc: Document,
   templateField: string,
@@ -856,8 +886,10 @@ function pruneOptionalTemplateField(
 ): void {
   for (const element of selectElements('//*', doc)) {
     if (!OPTIONAL_REFERENCE_ELEMENTS.has(element.tagName)) continue;
-    const unresolvedRef = Array.from(element.attributes).find((attribute) =>
-      referencesTemplateField(attribute.value, templateField),
+    const unresolvedRef = Array.from(element.attributes).find(
+      (attribute) =>
+        !isSemanticRoleAttribute(element, attribute) &&
+        referencesTemplateField(attribute.value, templateField),
     );
     if (!unresolvedRef) continue;
     if (element.tagName === 'computed-sort') {
@@ -869,6 +901,7 @@ function pruneOptionalTemplateField(
   }
   removeEmptyEncodingContainers(doc);
   pruneShelfFieldReferences(doc, templateField);
+  pruneTitleFieldReferences(doc, templateField);
 }
 
 function pruneUnusedOptionalTemplateSlots(
@@ -899,14 +932,16 @@ function pruneUnusedOptionalTemplateSlots(
 function documentReferencesTemplateField(doc: Document, templateField: string): boolean {
   for (const element of selectElements('//*[@*]', doc)) {
     if (
-      Array.from(element.attributes).some((attribute) =>
-        referencesTemplateField(attribute.value, templateField),
+      Array.from(element.attributes).some(
+        (attribute) =>
+          !isSemanticRoleAttribute(element, attribute) &&
+          referencesTemplateField(attribute.value, templateField),
       )
     ) {
       return true;
     }
   }
-  return selectTexts('//text()', doc).some((text) =>
+  return selectCharacterData('//text()', doc).some((text) =>
     referencesTemplateField(text.data, templateField),
   );
 }
@@ -978,7 +1013,7 @@ function assertNoFieldPlaceholderResidue(doc: Document): void {
   for (const element of selectElements('//*[@*]', doc)) {
     for (const attribute of Array.from(element.attributes) as Attr[]) capture(attribute.value);
   }
-  for (const text of selectTexts('//text()', doc)) capture(text.data);
+  for (const text of selectCharacterData('//text()', doc)) capture(text.data);
   if (residue.size === 0) return;
   throw new Error(
     `Unresolved template field placeholder(s) ${[...residue].sort().join(', ')} remain after substitution. No worksheet was produced.`,
@@ -1116,7 +1151,7 @@ function collectQualifiedInstanceRefs(doc: Document): Map<string, Set<string>> {
   for (const element of selectElements('//*[@*]', doc)) {
     for (const attribute of Array.from(element.attributes) as Attr[]) record(attribute.value);
   }
-  for (const text of selectTexts('//text()', doc)) record(text.data);
+  for (const text of selectCharacterData('//text()', doc)) record(text.data);
   return byDatasource;
 }
 
@@ -1273,11 +1308,12 @@ function namespaceTemplateCalcColumns(
 
   for (const elem of selectElements('//*[@*]', doc)) {
     for (const attr of Array.from(elem.attributes) as Attr[]) {
+      if (isSemanticRoleAttribute(elem, attr)) continue;
       const rewritten = rewriteCalcRefs(attr.value, renameMap);
       if (rewritten !== attr.value) attr.value = rewritten;
     }
   }
-  for (const textNode of selectTexts('//text()', doc)) {
+  for (const textNode of selectCharacterData('//text()', doc)) {
     const rewritten = rewriteCalcRefs(textNode.data, renameMap);
     if (rewritten !== textNode.data) textNode.data = rewritten;
   }

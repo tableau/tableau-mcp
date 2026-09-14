@@ -263,6 +263,64 @@ describe('addFieldToRows user derivations', () => {
   });
 });
 
+describe('count aggregation instance types over string dimensions', () => {
+  function columnDeclaration(xml: string, name: string): string | undefined {
+    return xml.match(new RegExp(`<column\\b[^>]*name="\\[${name}\\]"[^>]*>`))?.[0];
+  }
+
+  function instanceDeclaration(xml: string, name: string): string | undefined {
+    return xml.match(new RegExp(`<column-instance\\b[^>]*name="\\[${name}\\]"[^>]*>`))?.[0];
+  }
+
+  it.each([
+    ['cnt', 'Count'],
+    ['ctd', 'CountD'],
+    ['countdistinct', 'CountD'],
+  ])(
+    'uses the explicit qk suffix for %s without changing raw field metadata',
+    (prefix, derivation) => {
+      const modified = addFieldToEncoding(
+        WORKSHEET_XML,
+        'text',
+        `[Sample].[${prefix}:Category:qk]`,
+      );
+
+      expect(columnDeclaration(modified, 'Category')).toContain('datatype="string"');
+      expect(columnDeclaration(modified, 'Category')).toContain('role="dimension"');
+      expect(columnDeclaration(modified, 'Category')).toContain('type="nominal"');
+      expect(instanceDeclaration(modified, `${prefix}:Category:qk`)).toContain(
+        `derivation="${derivation}"`,
+      );
+      expect(instanceDeclaration(modified, `${prefix}:Category:qk`)).toContain(
+        'type="quantitative"',
+      );
+    },
+  );
+
+  it('respects an explicit discrete nk suffix for CountD', () => {
+    const modified = addFieldToEncoding(WORKSHEET_XML, 'text', '[Sample].[ctd:Category:nk]');
+
+    expect(instanceDeclaration(modified, 'ctd:Category:nk')).toContain('derivation="CountD"');
+    expect(instanceDeclaration(modified, 'ctd:Category:nk')).toContain('type="nominal"');
+  });
+
+  it('repairs an existing CountD instance whose type disagrees with its qk suffix', () => {
+    const withMismatchedInstance = WORKSHEET_XML.replace(
+      '</datasource-dependencies>',
+      '<column-instance name="[ctd:Category:qk]" column="[Category]" derivation="CountD" pivot="key" type="nominal"/></datasource-dependencies>',
+    );
+
+    const modified = addFieldToEncoding(
+      withMismatchedInstance,
+      'text',
+      '[Sample].[ctd:Category:qk]',
+    );
+
+    expect(instanceDeclaration(modified, 'ctd:Category:qk')).toContain('type="quantitative"');
+    expect(modified.match(/name="\[ctd:Category:qk\]"/g)).toHaveLength(1);
+  });
+});
+
 describe('addFieldToRows date-part derivations', () => {
   // Regression: mapDerivationToProperCase dropped the date-part keys, so a
   // [mn:...] ref was written with derivation="mn" (invalid) and Tableau
@@ -292,14 +350,22 @@ describe('addFieldToRows date-part derivations', () => {
     return m?.[1];
   }
 
+  function instanceTypeOf(xml: string, columnInstanceName: string): string | undefined {
+    return xml.match(
+      new RegExp(`<column-instance[^>]*name="\\[${columnInstanceName}\\]"[^>]*type="([^"]*)"`),
+    )?.[1];
+  }
+
   it('maps the discrete month part [mn:...] to derivation="Month", not "mn"', () => {
     const modified = addFieldToRows(DATE_XML, '[Sample].[mn:Order Date:ok]');
     expect(derivationOf(modified, 'mn:Order Date:ok')).toBe('Month');
+    expect(instanceTypeOf(modified, 'mn:Order Date:ok')).toBe('ordinal');
   });
 
   it('maps the truncated year part [tyr:...] to derivation="Year-Trunc"', () => {
     const modified = addFieldToRows(DATE_XML, '[Sample].[tyr:Order Date:qk]');
     expect(derivationOf(modified, 'tyr:Order Date:qk')).toBe('Year-Trunc');
+    expect(instanceTypeOf(modified, 'tyr:Order Date:qk')).toBe('quantitative');
   });
 
   it('still maps aggregations correctly (sum -> Sum)', () => {

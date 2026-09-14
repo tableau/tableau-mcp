@@ -225,16 +225,21 @@ async function verifyPostApplyArtifactReadback(
  */
 function readbackOutcome(
   verification: PostApplyWorksheetReadbackVerification,
+  worksheetName: string,
 ): LoadWorksheetXmlResult {
   const { findings } = verification;
   const errors = findings.filter((f) => f.severity === 'error');
-  if (errors.length > 0) {
+  if (!verification.ok || errors.length > 0) {
+    const detail =
+      verification.message ||
+      formatReadbackVerificationError(findings) ||
+      'The applied worksheet did not match the submitted XML.';
     return Err({
       type: 'load-worksheet-xml-error',
       error: {
         type: 'readback-failed',
         findings,
-        message: formatReadbackVerificationError(findings),
+        message: `Post-apply verification failed for Worksheet "${worksheetName}". ${detail}`,
       },
     });
   }
@@ -493,6 +498,7 @@ export async function loadWorksheetXml({
         signal,
       );
       readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
+      if (!verification.ok) return readbackOutcome(verification, canonicalName);
       return Ok({
         appliedName: canonicalName,
         readbackWarnings: verification.findings,
@@ -533,7 +539,7 @@ export async function loadWorksheetXml({
           signal,
         );
         readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
-        const outcomeResult = readbackOutcome(verification);
+        const outcomeResult = readbackOutcome(verification, applyOutcome.name);
         if (outcomeResult.isErr()) {
           return outcomeResult;
         }
@@ -701,7 +707,7 @@ async function loadWorksheetXmlViaExternalApi({
       signal,
     );
     readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
-    const outcomeResult = readbackOutcome(verification);
+    const outcomeResult = readbackOutcome(verification, worksheetName);
     if (outcomeResult.isErr()) return outcomeResult;
 
     return outcomeResult;

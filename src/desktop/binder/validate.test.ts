@@ -50,6 +50,8 @@ const SUMMARY: SchemaSummary = {
       type: 'nominal',
       datatype: 'string',
     }),
+    field({ columnName: '[Order ID]', role: 'dimension', type: 'nominal', datatype: 'string' }),
+    field({ columnName: '[Row ID]', role: 'dimension', type: 'quantitative', datatype: 'integer' }),
     field({ columnName: '[Order Date]', role: 'dimension', type: 'ordinal', datatype: 'date' }),
     field({ columnName: '[Ship Date]', role: 'dimension', type: 'ordinal', datatype: 'date' }),
     field({ columnName: '[Sales]', role: 'measure', type: 'quantitative', datatype: 'real' }),
@@ -70,6 +72,7 @@ beforeAll(() => {
   manifests = new Map(
     [
       'correlation-scatter-plot-chart',
+      'distribution-histogram',
       'gantt-task-rollup-chart',
       'kpi-text',
       'ranking-ordered-bar',
@@ -614,6 +617,162 @@ describe('binder/validate — aggregate calc-input compatibility', () => {
       );
     }
   });
+
+  it.each(['cnt', 'ctd'] as const)(
+    'blocks a %s override on a numeric measure that feeds a template calculation',
+    (derivation) => {
+      const result = validateBinding(
+        manifest,
+        {
+          template: manifest.template,
+          title: 't',
+          bindings: [{ slot_id: 'input', field: 'Sales', derivation }],
+        },
+        SUMMARY,
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.blockers).toContainEqual(
+        expect.objectContaining({ code: 'aggregation-level-mismatch', slot_id: 'input' }),
+      );
+    },
+  );
+
+  it('blocks a count override on a sibling use of the same calc-input template field', () => {
+    const siblingManifest = {
+      ...manifest,
+      slots: [
+        ...manifest.slots,
+        {
+          slot_id: 'display',
+          template_field: '{{field_base_1}}',
+          derivation: 'sum',
+          role: ['text'],
+          kind: 'quantitative',
+          bindable: true,
+          required: true,
+          qualified_key_required: true,
+        },
+      ],
+    } as unknown as RuntimeTemplateDescriptor;
+    const result = validateBinding(
+      siblingManifest,
+      {
+        template: siblingManifest.template,
+        title: 't',
+        bindings: [
+          { slot_id: 'input', field: 'Sales' },
+          { slot_id: 'display', field: 'Sales', derivation: 'ctd' },
+        ],
+      },
+      SUMMARY,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockers).toContainEqual(
+      expect.objectContaining({ code: 'aggregation-level-mismatch', slot_id: 'display' }),
+    );
+  });
+
+  it('uses an optional first-class calc input to block a count override', () => {
+    const inputOnlyManifest = {
+      ...manifest,
+      calcs: [
+        {
+          ...manifest.calcs[0],
+          depends_on_slots: [],
+          inputs: [
+            {
+              ref: '{{field_base_1}}',
+              slot_id: 'input',
+              slot_kind: 'quantitative',
+              required: false,
+              template_internal: false,
+            },
+          ],
+        },
+      ],
+    } as unknown as RuntimeTemplateDescriptor;
+    const result = validateBinding(
+      inputOnlyManifest,
+      {
+        template: inputOnlyManifest.template,
+        title: 't',
+        bindings: [{ slot_id: 'input', field: 'Sales', derivation: 'cnt' }],
+      },
+      SUMMARY,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockers).toContainEqual(
+      expect.objectContaining({ code: 'aggregation-level-mismatch', slot_id: 'input' }),
+    );
+  });
+
+  it('preserves a histogram count override that repeats the authored derivation', () => {
+    const histogram = manifests.get('distribution-histogram')!;
+    const bindings: BindingProposal['bindings'] = [
+      { slot_id: 'field_base_1_cnt', field: 'Profit' },
+      { slot_id: 'field_base_1_none', field: 'Profit' },
+    ];
+    const baseline = validateBinding(
+      histogram,
+      {
+        template: histogram.template,
+        title: 'Profit histogram',
+        bindings,
+      },
+      SUMMARY,
+    );
+    const sameCount = validateBinding(
+      histogram,
+      {
+        template: histogram.template,
+        title: 'Profit histogram',
+        bindings: bindings.map((binding) =>
+          binding.slot_id === 'field_base_1_cnt'
+            ? { ...binding, derivation: 'cnt' as const }
+            : binding,
+        ),
+      },
+      SUMMARY,
+    );
+    const changedCount = validateBinding(
+      histogram,
+      {
+        template: histogram.template,
+        title: 'Distinct Profit histogram',
+        bindings: bindings.map((binding) =>
+          binding.slot_id === 'field_base_1_cnt'
+            ? { ...binding, derivation: 'ctd' as const }
+            : binding,
+        ),
+      },
+      SUMMARY,
+    );
+
+    expect(baseline.ok).toBe(true);
+    expect(sameCount.ok).toBe(true);
+    if (baseline.ok && sameCount.ok) {
+      expect(sameCount.field_mapping).toEqual(baseline.field_mapping);
+      expect(sameCount.field_mapping).toEqual({
+        '{{field_base_1}}@cnt': '[Superstore].[cnt:Profit:qk]',
+        '{{field_base_1}}@none': '[Superstore].[none:Profit:qk]',
+      });
+    }
+    expect(changedCount.ok).toBe(false);
+    if (!changedCount.ok) {
+      expect(changedCount.blockers).toContainEqual(
+        expect.objectContaining({
+          code: 'aggregation-level-mismatch',
+          slot_id: 'field_base_1_cnt',
+        }),
+      );
+    }
+  });
 });
 
 describe('binder/validate — cardinality advice', () => {
@@ -908,6 +1067,238 @@ describe('binder/validate — KPI ask coverage', () => {
 });
 
 describe('binder/validate — derivation override', () => {
+  const mixedSlotManifest = (
+    derivation: RuntimeTemplateDescriptor['slots'][number]['derivation'],
+  ): RuntimeTemplateDescriptor => ({
+    template: `x-mixed-${derivation}`,
+    family: 'specialized',
+    fast_path_eligible: true,
+    fast_path_blockers: [],
+    intent_keywords: ['mixed'],
+    description: 'mixed slot count validation fixture',
+    slots: [
+      {
+        slot_id: 'color',
+        template_field: '{{field_base_1}}',
+        derivation,
+        instance_role: 'nk',
+        role: ['color'],
+        kind: 'quantitative-or-categorical',
+        bindable: true,
+        required: true,
+      },
+    ],
+    calcs: [],
+  });
+
+  it.each([
+    ['cnt', 'Order ID'],
+    ['ctd', 'Order ID'],
+    ['cnt', 'Row ID'],
+    ['ctd', 'Row ID'],
+    ['cnt', 'Order Date'],
+    ['ctd', 'Order Date'],
+  ] as const)('allows %s over dimension %s in a quantitative slot', (derivation, fieldName) => {
+    const m = manifests.get('kpi-text')!;
+    const r = validateBinding(
+      m,
+      {
+        template: m.template,
+        title: 'Orders KPI',
+        bindings: [{ slot_id: 'field_base_1', field: fieldName, derivation }],
+      },
+      SUMMARY,
+    );
+
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.field_mapping['{{field_base_1}}']).toBe(
+        `[Superstore].[${derivation}:${fieldName}:qk]`,
+      );
+    }
+  });
+
+  it.each(['cnt', 'ctd'] as const)(
+    'allows %s over a numeric measure in a standalone quantitative slot',
+    (derivation) => {
+      const m = manifests.get('kpi-text')!;
+      const result = validateBinding(
+        m,
+        {
+          template: m.template,
+          title: 'Sales KPI',
+          bindings: [{ slot_id: 'field_base_1', field: 'Sales', derivation }],
+        },
+        SUMMARY,
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.field_mapping['{{field_base_1}}']).toBe(
+          `[Superstore].[${derivation}:Sales:qk]`,
+        );
+      }
+    },
+  );
+
+  it.each(['cnt', 'ctd'] as const)(
+    'rejects a %s override on an already aggregated field',
+    (derivation) => {
+      const m = manifests.get('kpi-text')!;
+      const result = validateBinding(
+        m,
+        {
+          template: m.template,
+          title: 'Profit Ratio KPI',
+          bindings: [{ slot_id: 'field_base_1', field: 'Profit Ratio', derivation }],
+        },
+        SUMMARY,
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.blockers).toContainEqual(
+        expect.objectContaining({
+          code: 'aggregation-level-mismatch',
+          slot_id: 'field_base_1',
+        }),
+      );
+    },
+  );
+
+  it.each(['sum', 'avg'] as const)(
+    'keeps a string dimension blocked from a quantitative slot under %s',
+    (derivation) => {
+      const m = manifests.get('kpi-text')!;
+      const r = validateBinding(
+        m,
+        {
+          template: m.template,
+          title: 'Orders KPI',
+          bindings: [{ slot_id: 'field_base_1', field: 'Order ID', derivation }],
+        },
+        SUMMARY,
+      );
+
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.blockers).toContainEqual(
+          expect.objectContaining({ code: 'kind-mismatch', slot_id: 'field_base_1' }),
+        );
+      }
+    },
+  );
+
+  it('keeps a string dimension blocked from a quantitative slot without a count override', () => {
+    const m = manifests.get('kpi-text')!;
+    const r = validateBinding(
+      m,
+      {
+        template: m.template,
+        title: 'Orders KPI',
+        bindings: [{ slot_id: 'field_base_1', field: 'Order ID' }],
+      },
+      SUMMARY,
+    );
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.blockers).toContainEqual(
+        expect.objectContaining({ code: 'kind-mismatch', slot_id: 'field_base_1' }),
+      );
+    }
+  });
+
+  it.each([
+    ['categorical', 'Category'],
+    ['temporal', 'Order Date'],
+    ['geo', 'Region'],
+  ] as const)('rejects a count override on a %s slot', (kind, fieldName) => {
+    const manifest: RuntimeTemplateDescriptor = {
+      ...mixedSlotManifest('none'),
+      template: `x-count-${kind}`,
+      slots: [{ ...mixedSlotManifest('none').slots[0], kind }],
+    };
+    const result = validateBinding(
+      manifest,
+      {
+        template: manifest.template,
+        title: 'Count guard',
+        bindings: [{ slot_id: 'color', field: fieldName, derivation: 'ctd' }],
+      },
+      SUMMARY,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockers).toContainEqual(
+      expect.objectContaining({ code: 'derivation-illegal', slot_id: 'color' }),
+    );
+  });
+
+  it.each([
+    ['authored cnt', 'cnt', undefined, 'cnt'],
+    ['ctd override', 'sum', 'ctd', 'ctd'],
+    ['no count', 'sum', undefined, 'none'],
+  ] as const)(
+    'keeps mixed-slot output semantics for %s',
+    (_case, authoredDerivation, override, expectedDerivation) => {
+      const manifest = mixedSlotManifest(authoredDerivation);
+      const result = validateBinding(
+        manifest,
+        {
+          template: manifest.template,
+          title: 'Mixed slot',
+          bindings: [
+            {
+              slot_id: 'color',
+              field: 'Category',
+              ...(override !== undefined ? { derivation: override } : {}),
+            },
+          ],
+        },
+        SUMMARY,
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.field_mapping['{{field_base_1}}']).toBe(
+        `[Superstore].[${expectedDerivation}:Category:${expectedDerivation === 'none' ? 'nk' : 'qk'}]`,
+      );
+    },
+  );
+
+  it.each([
+    ['authored count', 'ctd', undefined],
+    ['count override', 'sum', 'cnt'],
+  ] as const)(
+    'allows a quantitative-typed dimension in a mixed slot for %s',
+    (_case, authoredDerivation, override) => {
+      const manifest = mixedSlotManifest(authoredDerivation);
+      const result = validateBinding(
+        manifest,
+        {
+          template: manifest.template,
+          title: 'Mixed numeric dimension count',
+          bindings: [
+            {
+              slot_id: 'color',
+              field: 'Row ID',
+              ...(override !== undefined ? { derivation: override } : {}),
+            },
+          ],
+        },
+        SUMMARY,
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.field_mapping['{{field_base_1}}']).toBe(
+        `[Superstore].[${override ?? authoredDerivation}:Row ID:qk]`,
+      );
+    },
+  );
+
   it('legal override on a numeric measure emits the override in the field_mapping value', () => {
     // kpi-text 'value' slot's template default is sum; overriding to avg must
     // emit avg (the template default is not the user's intent).

@@ -952,56 +952,109 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  it('reports post-dispatch artifact verification failure without making the apply retryable', async () => {
-    vi.useFakeTimers();
-    try {
-      const baseline = liveWorkbook(['Sheet 1']);
-      const intendedXml =
-        "<worksheet name='Sheet 1'><table><rows>[DS].[sum:Profit:qk]</rows></table></worksheet>";
-      const dispatchState = { attempted: false };
-      const executor = makeExecutorMock({
-        getWorkbookDocument: vi
-          .fn()
-          .mockResolvedValue(
-            Ok({ xml: baseline, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+  it.each([
+    {
+      label: 'a dropped shelf',
+      intendedXml:
+        "<worksheet name='Sheet 1'><table><rows>[DS].[sum:Profit:qk]</rows></table></worksheet>",
+      readback: liveWorkbook(['Sheet 1']),
+      expectedFindings: expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'shelf',
+          node: 'rows',
+          column: '[DS].[sum:Profit:qk]',
+          readback: 'missing',
+          severity: 'error',
+        }),
+      ]),
+      expectedMessage: '<rows column="[DS].[sum:Profit:qk]">',
+    },
+    {
+      label: 'a dropped wedge-size encoding',
+      intendedXml:
+        "<worksheet name='Sheet 1'><table><panes><pane><mark class='Pie'/><encodings>" +
+        "<wedge-size column='[DS].[sum:Box Office Revenue:qk]'/></encodings></pane></panes>" +
+        '</table></worksheet>',
+      readback: liveWorkbook(['Sheet 1']),
+      expectedFindings: expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'encoding',
+          node: 'wedge-size',
+          column: '[DS].[sum:Box Office Revenue:qk]',
+          readback: 'missing',
+          severity: 'error',
+        }),
+      ]),
+      expectedMessage: '<wedge-size column="[DS].[sum:Box Office Revenue:qk]">',
+    },
+    {
+      label: 'the worksheet missing entirely',
+      intendedXml: validXml,
+      readback: liveWorkbook([]),
+      expectedFindings: [],
+      expectedMessage: 'was absent from the post-apply workbook readback',
+    },
+  ])(
+    'reports post-dispatch artifact verification failure without making the apply retryable: $label',
+    async ({ intendedXml, readback, expectedFindings, expectedMessage }) => {
+      vi.useFakeTimers();
+      try {
+        const baseline = liveWorkbook(['Sheet 1']);
+        const dispatchState = { attempted: false };
+        const executor = makeExecutorMock({
+          getWorkbookDocument: vi
+            .fn()
+            .mockResolvedValueOnce(
+              Ok({ xml: baseline, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+            )
+            .mockResolvedValue(
+              Ok({ xml: readback, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+            ),
+          applyWorkbookDocument: vi.fn(
+            async (_xml: string, _signal: AbortSignal, options?: { onDispatch?: () => void }) => {
+              options?.onDispatch?.();
+              return Ok({
+                command_id: 'apply-artifact',
+                status: 'completed' as const,
+                submitted_at: '',
+              });
+            },
           ),
-        applyWorkbookDocument: vi.fn(
-          async (_xml: string, _signal: AbortSignal, options?: { onDispatch?: () => void }) => {
-            options?.onDispatch?.();
-            return Ok({
-              command_id: 'apply-artifact',
-              status: 'completed' as const,
-              submitted_at: '',
-            });
+        });
+
+        const pending = loadWorksheetXml({
+          worksheetName,
+          xml: intendedXml,
+          executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+          artifactApply: {
+            windowXml: `<window class='worksheet' name='${worksheetName}' />`,
+            expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, intendedXml),
+            expectedInstanceId: 'inst-build',
+            dispatchState,
           },
-        ),
-      });
+        });
+        await vi.runAllTimersAsync();
+        const result = await pending;
 
-      const pending = loadWorksheetXml({
-        worksheetName,
-        xml: intendedXml,
-        executor,
-        signal: mockSignal,
-        focus: NO_FOCUS,
-        artifactApply: {
-          windowXml: `<window class='worksheet' name='${worksheetName}' />`,
-          expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, intendedXml),
-          expectedInstanceId: 'inst-build',
-          dispatchState,
-        },
-      });
-      await vi.runAllTimersAsync();
-      const result = await pending;
-
-      expect(dispatchState.attempted).toBe(true);
-      expect(result.isOk()).toBe(true);
-      if (result.isOk()) {
-        expect(result.value.readbackVerification).toMatchObject({ ok: false, status: 'failed' });
+        expect(dispatchState.attempted).toBe(true);
+        expect(result.isErr()).toBe(true);
+        if (result.isErr()) {
+          invariant(result.error.type === 'load-worksheet-xml-error');
+          expect(result.error.error).toMatchObject({
+            type: 'readback-failed',
+            findings: expectedFindings,
+          });
+          invariant(result.error.error.type === 'readback-failed');
+          expect(result.error.error.message).toContain('Worksheet "Sheet 1"');
+          expect(result.error.error.message).toContain(expectedMessage);
+        }
+      } finally {
+        vi.useRealTimers();
       }
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+    },
+  );
 
   it('hard-fails a per-sheet apply that reports SUCCEEDED with a document-warning drop', async () => {
     const applyWorksheetDocument = vi.fn().mockResolvedValue(
