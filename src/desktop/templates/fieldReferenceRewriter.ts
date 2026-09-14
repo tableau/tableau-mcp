@@ -50,6 +50,7 @@ import * as xpath from 'xpath';
 // DOM nodeType constants — `Node` is not a global value in the desktop runtime,
 // so compare against the numeric constants directly.
 const TEXT_NODE = 3;
+const CDATA_SECTION_NODE = 4;
 const ELEMENT_NODE = 1;
 const ATTRIBUTE_NODE = 2;
 
@@ -593,7 +594,7 @@ export function rewriteFieldReferencesWithDiagnostics(
   };
 
   // 4. Field references in text content.
-  const allText = selectTexts('//text()', doc);
+  const allText = selectCharacterData('//text()', doc);
   for (const textNode of allText) {
     const newText = rewriteQualifiedRefs(textNode.data);
     if (newText !== textNode.data) textNode.data = newText;
@@ -628,7 +629,7 @@ export function rewriteFieldReferencesWithDiagnostics(
   // values. Replacer FUNCTIONS keep `$`-sequences in the datasource name literal.
   const allNodes = xpath.select('//text() | //*/@*', doc as unknown as Node) as Node[];
   for (const node of allNodes) {
-    if (node.nodeType === TEXT_NODE) {
+    if (node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE) {
       const textNode = node as Text;
       const newText = textNode.data.replace(/\{\{DATASOURCE\}\}/g, () => datasourceName);
       if (newText !== textNode.data) textNode.data = newText;
@@ -706,9 +707,9 @@ function selectElements(xp: string, doc: Document): Element[] {
   );
 }
 
-function selectTexts(xp: string, doc: Document): Text[] {
+function selectCharacterData(xp: string, doc: Document): Text[] {
   return (xpath.select(xp, doc as unknown as Node) as Node[]).filter(
-    (n): n is Text => n.nodeType === TEXT_NODE,
+    (n): n is Text => n.nodeType === TEXT_NODE || n.nodeType === CDATA_SECTION_NODE,
   );
 }
 
@@ -837,7 +838,8 @@ function pruneShelfFieldReferences(doc: Document, templateField: string): void {
   for (const tag of ['rows', 'cols']) {
     for (const shelf of selectElements(`//${tag}`, doc)) {
       for (const text of Array.from(shelf.childNodes).filter(
-        (node): node is Text => node.nodeType === TEXT_NODE,
+        (node): node is Text =>
+          node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE,
       )) {
         if (!referencesTemplateField(text.data, templateField)) continue;
         const kept = text.data
@@ -845,6 +847,20 @@ function pruneShelfFieldReferences(doc: Document, templateField: string): void {
           .filter((pill) => !referencesTemplateField(pill, templateField));
         text.data = kept.join(' / ');
       }
+    }
+  }
+}
+
+function pruneTitleFieldReferences(doc: Document, templateField: string): void {
+  const fieldReference = /<(?:\[[^\]]+\]\.)?\[[^\]]+\]>|(?:\[[^\]]+\]\.)?\[[^\]]+\]/g;
+  for (const run of selectElements('//worksheet/layout-options/title/formatted-text/run', doc)) {
+    for (const node of Array.from(run.childNodes)) {
+      if (node.nodeType !== TEXT_NODE && node.nodeType !== CDATA_SECTION_NODE) continue;
+      const text = node as Text;
+      if (!referencesTemplateField(text.data, templateField)) continue;
+      text.data = text.data.replace(fieldReference, (reference) =>
+        referencesTemplateField(reference, templateField) ? '' : reference,
+      );
     }
   }
 }
@@ -869,6 +885,7 @@ function pruneOptionalTemplateField(
   }
   removeEmptyEncodingContainers(doc);
   pruneShelfFieldReferences(doc, templateField);
+  pruneTitleFieldReferences(doc, templateField);
 }
 
 function pruneUnusedOptionalTemplateSlots(
@@ -906,7 +923,7 @@ function documentReferencesTemplateField(doc: Document, templateField: string): 
       return true;
     }
   }
-  return selectTexts('//text()', doc).some((text) =>
+  return selectCharacterData('//text()', doc).some((text) =>
     referencesTemplateField(text.data, templateField),
   );
 }
@@ -978,7 +995,7 @@ function assertNoFieldPlaceholderResidue(doc: Document): void {
   for (const element of selectElements('//*[@*]', doc)) {
     for (const attribute of Array.from(element.attributes) as Attr[]) capture(attribute.value);
   }
-  for (const text of selectTexts('//text()', doc)) capture(text.data);
+  for (const text of selectCharacterData('//text()', doc)) capture(text.data);
   if (residue.size === 0) return;
   throw new Error(
     `Unresolved template field placeholder(s) ${[...residue].sort().join(', ')} remain after substitution. No worksheet was produced.`,
@@ -1116,7 +1133,7 @@ function collectQualifiedInstanceRefs(doc: Document): Map<string, Set<string>> {
   for (const element of selectElements('//*[@*]', doc)) {
     for (const attribute of Array.from(element.attributes) as Attr[]) record(attribute.value);
   }
-  for (const text of selectTexts('//text()', doc)) record(text.data);
+  for (const text of selectCharacterData('//text()', doc)) record(text.data);
   return byDatasource;
 }
 
@@ -1277,7 +1294,7 @@ function namespaceTemplateCalcColumns(
       if (rewritten !== attr.value) attr.value = rewritten;
     }
   }
-  for (const textNode of selectTexts('//text()', doc)) {
+  for (const textNode of selectCharacterData('//text()', doc)) {
     const rewritten = rewriteCalcRefs(textNode.data, renameMap);
     if (rewritten !== textNode.data) textNode.data = rewritten;
   }
