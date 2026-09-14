@@ -10,6 +10,10 @@ Downloads workbook content from Tableau as either an unpackaged TWB XML file or 
 This tool is gated behind the `authoring-tools` feature flag, which defaults to `false` in `features.json`. It is unavailable unless an administrator enables `authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
 :::
 
+## Required permissions
+
+- **Site Role**: Requires Explorer role or higher
+
 ## APIs called
 
 - [Download Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook)
