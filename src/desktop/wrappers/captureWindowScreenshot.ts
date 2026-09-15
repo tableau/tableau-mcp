@@ -19,6 +19,7 @@ const MAX_WINDOW_SCREENSHOT_DIMENSION = 32_768;
 const MAX_WINDOW_SCREENSHOT_PIXELS = 100_000_000;
 const SCREENSHOT_NAME = /^ScreenShot_\d+\.png$/;
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const PNG_IEND = Buffer.from('0000000049454e44ae426082', 'hex');
 
 const screenshotCommandResultSchema = z
   .object({
@@ -104,6 +105,9 @@ function validatePathSnapshot(
 function readPngMetadata(bytes: Buffer): { width: number; height: number; area: number } {
   if (!bytes.subarray(0, PNG_SIGNATURE.byteLength).equals(PNG_SIGNATURE)) {
     throw new Error('Invalid PNG header.');
+  }
+  if (!bytes.subarray(-PNG_IEND.byteLength).equals(PNG_IEND)) {
+    throw new Error('Incomplete PNG image.');
   }
 
   const metadata = probeImageSize.sync(bytes);

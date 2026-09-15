@@ -80,7 +80,7 @@ function png(width: number, height: number, noisy = false): Buffer {
 }
 
 function pngMetadata(width: number, height: number): Buffer {
-  return Buffer.concat([PNG_SIGNATURE, ihdr(width, height), Buffer.alloc(24)]);
+  return Buffer.concat([PNG_SIGNATURE, ihdr(width, height), pngChunk('IDAT'), pngChunk('IEND')]);
 }
 
 function withoutStableInode(stats: Stats): Stats {
@@ -343,9 +343,18 @@ describe('captureWindowScreenshot', () => {
   it.each([
     ['invalid signature', Buffer.concat([Buffer.alloc(8), png(10, 10).subarray(8)])],
     ['truncated metadata', PNG_SIGNATURE],
+    ['truncated after 57 bytes', png(10, 10).subarray(0, 57)],
+    ['missing IEND footer', png(10, 10).subarray(0, -12)],
+    ['missing final byte', png(10, 10).subarray(0, -1)],
     [
       'invalid metadata',
-      Buffer.concat([PNG_SIGNATURE, Buffer.alloc(4), Buffer.from('NOPE'), Buffer.alloc(41)]),
+      Buffer.concat([
+        PNG_SIGNATURE,
+        Buffer.alloc(4),
+        Buffer.from('NOPE'),
+        Buffer.alloc(29),
+        pngChunk('IEND'),
+      ]),
     ],
     ['zero width', pngMetadata(0, 10)],
     ['zero height', pngMetadata(10, 0)],
