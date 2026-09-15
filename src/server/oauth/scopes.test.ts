@@ -251,9 +251,29 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:mcp:insight:create');
       expect(scopes).toContain('tableau:mcp:content:read');
     });
+
+    it('should advertise Knowledge scopes before availability is resolved at registration', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).toContain('tableau:mcp:knowledge:read');
+      expect(scopes).toContain('tableau:mcp:knowledge:write');
+    });
   });
 
   describe('getSupportedApiScopes', () => {
+    it('should advertise both Knowledge API scopes', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:knowledge:read');
+      expect(scopes).toContain('tableau:knowledge:write');
+    });
+
     it('should include tableau:tasks:read when adminToolsEnabled is true', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
@@ -476,6 +496,13 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:content:read');
       expect(scopes).toContain('tableau:mcp_site_settings:read');
     });
+  });
+
+  it('should require read and write API scopes for the management tool', () => {
+    expect(getRequiredApiScopesForTool('manage-knowledge-context')).toEqual([
+      'tableau:knowledge:read',
+      'tableau:knowledge:write',
+    ]);
   });
 
   describe('getSupportedScopes', () => {

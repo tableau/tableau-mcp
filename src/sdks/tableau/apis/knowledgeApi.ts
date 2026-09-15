@@ -1,7 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
-const severitySchema = z.enum(['high', 'medium', 'low']);
+export const severitySchema = z.enum(['high', 'medium', 'low']);
 
 export const knowledgeGraphSchema = z.object({
   id: z.string(),

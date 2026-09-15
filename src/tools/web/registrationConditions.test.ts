@@ -59,6 +59,16 @@ function stubPulseProbe(definitionsResult: unknown, entitlementsResult?: unknown
   );
 }
 
+function stubKnowledgeProbe(result: unknown, reject = false): void {
+  mocks.useRestApi.mockImplementation(async ({ callback }: { callback: (api: any) => unknown }) =>
+    callback({
+      knowledgeMethods: {
+        listGraphs: reject ? vi.fn().mockRejectedValue(result) : vi.fn().mockResolvedValue(result),
+      },
+    }),
+  );
+}
+
 // The probe retries with real backoff delays. Fake timers keep the retry-path tests fast: schedule
 // the call, drain all pending timers/microtasks, then await the settled result.
 async function resolveWithFakeTimers<T>(op: () => Promise<T>): Promise<T> {
@@ -144,6 +154,95 @@ describe('checkRegistrationConditions', () => {
         registrationConditionsMet: false,
         failingCondition: 'MissingConditionCheck',
       });
+    });
+  });
+
+  describe('RequiresKnowledge', () => {
+    it('is met when the Knowledge graph endpoint is available and reuses the result', async () => {
+      stubKnowledgeProbe([]);
+      const context: RegistrationContext = {};
+
+      await expect(
+        checkRegistrationConditions(['RequiresKnowledge'], context, restApiArgs),
+      ).resolves.toEqual({ registrationConditionsMet: true });
+      await checkRegistrationConditions(['RequiresKnowledge'], context, restApiArgs);
+
+      expect(context.isKnowledgeAvailable).toBe(true);
+      expect(mocks.useRestApi).toHaveBeenCalledTimes(1);
+      expect(mocks.useRestApi).toHaveBeenCalledWith(
+        expect.objectContaining({ jwtScopes: ['tableau:knowledge:read'] }),
+      );
+    });
+
+    it('is unmet without retrying when the site is not entitled', async () => {
+      const forbidden = new AxiosError(
+        'site_not_entitled',
+        'ERR_BAD_REQUEST',
+        undefined,
+        undefined,
+        {
+          status: 403,
+        } as AxiosResponse,
+      );
+      stubKnowledgeProbe(forbidden, true);
+
+      await expect(
+        checkRegistrationConditions(['RequiresKnowledge'], {}, restApiArgs),
+      ).resolves.toEqual({
+        registrationConditionsMet: false,
+        failingCondition: 'RequiresKnowledge',
+      });
+      expect(mocks.useRestApi).toHaveBeenCalledTimes(1);
+    });
+
+    it('is unmet without retrying when the caller lacks a Knowledge role', async () => {
+      const forbidden = new AxiosError(
+        'tableau_forbidden',
+        'ERR_BAD_REQUEST',
+        undefined,
+        undefined,
+        { status: 403 } as AxiosResponse,
+      );
+      stubKnowledgeProbe(forbidden, true);
+
+      await expect(
+        checkRegistrationConditions(['RequiresKnowledge'], {}, restApiArgs),
+      ).resolves.toEqual({
+        registrationConditionsMet: false,
+        failingCondition: 'RequiresKnowledge',
+      });
+      expect(mocks.useRestApi).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries a transient failure and succeeds when the endpoint recovers', async () => {
+      mocks.useRestApi
+        .mockRejectedValueOnce(new Error('transient'))
+        .mockImplementationOnce(async ({ callback }: { callback: (api: any) => unknown }) =>
+          callback({ knowledgeMethods: { listGraphs: vi.fn().mockResolvedValue([]) } }),
+        );
+
+      const result = await resolveWithFakeTimers(() =>
+        checkRegistrationConditions(['RequiresKnowledge'], {}, restApiArgs),
+      );
+
+      expect(result).toEqual({ registrationConditionsMet: true });
+      expect(mocks.useRestApi).toHaveBeenCalledTimes(2);
+    });
+
+    it('fails closed after exhausting transient failures', async () => {
+      mocks.useRestApi.mockRejectedValue(new Error('network down'));
+      const context: RegistrationContext = {};
+
+      const result = await resolveWithFakeTimers(() =>
+        checkRegistrationConditions(['RequiresKnowledge'], context, restApiArgs),
+      );
+
+      expect(result).toEqual({
+        registrationConditionsMet: false,
+        failingCondition: 'RequiresKnowledge',
+      });
+      expect(context.isKnowledgeAvailable).toBe(false);
+      expect(mocks.useRestApi).toHaveBeenCalledTimes(MAX_API_RETRY_ATTEMPTS + 1);
     });
   });
 
@@ -406,6 +505,13 @@ describe('checkRegistrationConditions', () => {
 });
 
 describe('getUnmetConditionInstructions', () => {
+  it('explains that Knowledge requires Tableau+', async () => {
+    const message = getUnmetConditionInstructions('RequiresKnowledge');
+
+    expect(message).toContain('Tableau Knowledge');
+    expect(message).toContain('Tableau+');
+  });
+
   it('explains that Pulse is not available and points at Cloud setup guidance', async () => {
     const message = getUnmetConditionInstructions('RequiresPulse');
 
