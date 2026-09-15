@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.14",
+    "version": "0.2.15",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -2066,6 +2066,58 @@
         }
       }
     },
+    "/v0/workbook/worksheets/{id}/showMe": {
+      "get": {
+        "summary": "Get Show Me options for a worksheet",
+        "description": "Returns Tableau's context-sensitive Show Me choices in native order, including whether each choice is applicable for the worksheet and selected-field context.",
+        "operationId": "getWorksheetShowMeOptions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "dataSource",
+            "in": "query",
+            "required": false,
+            "description": "Datasource used to evaluate Show Me requirements.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "fieldsSelectedInSchemaViewer",
+            "in": "query",
+            "required": false,
+            "description": "A fully qualified field name used to evaluate Show Me requirements. Repeat this parameter to preserve selected-field order. Supplying fields implies explicit selection unless selectionMode=ambient, which is invalid.",
+            "schema": { "type": "array", "items": { "type": "string" } }
+          },
+          {
+            "name": "selectionMode",
+            "in": "query",
+            "required": false,
+            "description": "Controls selected-field context. ambient uses the current schema-viewer selection and cannot be combined with fieldsSelectedInSchemaViewer. explicit uses the supplied fields; with no fields it evaluates an explicit empty selection.",
+            "schema": { "type": "string", "enum": ["ambient", "explicit"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns Tableau's context-sensitive Show Me choices in native order, including whether each choice is applicable for the worksheet and selected-field context.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShowMeOptions" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/v0/workbook/worksheets/{id}/summaryData": {
       "get": {
         "summary": "Get worksheet summary data",
@@ -2405,6 +2457,7 @@
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
           "421": { "$ref": "#/components/responses/MisdirectedRequest" },
           "500": { "$ref": "#/components/responses/ServerError" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
@@ -2753,6 +2806,8 @@
               "unsupported-file-type",
               "unsupported-target-version",
               "file-not-found",
+              "show-me-not-applicable",
+              "show-me-unavailable",
               "operation-failed"
             ]
           },
@@ -3331,6 +3386,58 @@
             "type": "array",
             "description": "Optional fully qualified encoded field names, each with at least a datasource and field component. An explicit empty array supplies an empty field selection; omission preserves ambient selection.",
             "items": { "type": "string" }
+          }
+        }
+      },
+      "ShowMeOptions": {
+        "type": "object",
+        "description": "Context-sensitive Show Me options from Tableau's current native model. Options preserve native order and feature gating.",
+        "required": ["worksheet", "options"],
+        "properties": {
+          "worksheet": { "$ref": "#/components/schemas/ShowMeWorksheet" },
+          "options": {
+            "type": "array",
+            "description": "Every option offered by the current native Show Me model, in native order, including inapplicable options.",
+            "items": { "$ref": "#/components/schemas/ShowMeOption" }
+          }
+        }
+      },
+      "ShowMeWorksheet": {
+        "type": "object",
+        "description": "The worksheet evaluated by the native Show Me model.",
+        "required": ["id", "name"],
+        "properties": { "id": { "type": "string" }, "name": { "type": "string" } }
+      },
+      "ShowMeOption": {
+        "type": "object",
+        "description": "A visualization option from the current native Show Me model.",
+        "required": [
+          "showMeType",
+          "isApplicable",
+          "vizHasRequiredFields",
+          "dataSourceHasRequiredFields",
+          "helpUrl"
+        ],
+        "properties": {
+          "showMeType": {
+            "type": "string",
+            "description": "The runtime visualization token from Tableau's current native Show Me model. The offered token set remains governed by native feature gating."
+          },
+          "isApplicable": {
+            "type": "boolean",
+            "description": "Whether the native Show Me model can apply this option to the worksheet and selected fields."
+          },
+          "vizHasRequiredFields": {
+            "type": "boolean",
+            "description": "Whether the current visualization supplies the fields required by this option."
+          },
+          "dataSourceHasRequiredFields": {
+            "type": "boolean",
+            "description": "Whether the current datasource supplies the fields required by this option."
+          },
+          "helpUrl": {
+            "type": "string",
+            "description": "The help URL supplied by the current native Show Me model."
           }
         }
       },
