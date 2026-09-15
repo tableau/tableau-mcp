@@ -203,6 +203,104 @@ describe('ExternalApiToolExecutor', () => {
     });
   });
 
+  describe('worksheet used-field validation', () => {
+    it('returns the default mock validation result for a known worksheet', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetFieldValidation('sheet-sales', signal, 'inst-exec');
+
+      expect(result.unwrap()).toEqual({ worksheetId: 'sheet-sales', invalidFields: [] });
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'GET',
+        path: '/v0/workbook/worksheets/sheet-sales/validation',
+      });
+    });
+
+    it('reads and parses the validation result for the exact encoded worksheet id', async () => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet%2Fsales/validation', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          worksheetId: 'sheet/sales',
+          invalidFields: [
+            {
+              fieldName: '[none:Sales:qk]',
+              fieldCaption: 'Sales',
+              shelf: 'rows',
+              marksSpecificationId: 'marks-1',
+              encodingType: 'text',
+              reason: 'The field is not available from the current datasource.',
+            },
+          ],
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetFieldValidation('sheet/sales', signal, 'inst-exec');
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toEqual({
+        worksheetId: 'sheet/sales',
+        invalidFields: [
+          {
+            fieldName: '[none:Sales:qk]',
+            fieldCaption: 'Sales',
+            shelf: 'rows',
+            marksSpecificationId: 'marks-1',
+            encodingType: 'text',
+            reason: 'The field is not available from the current datasource.',
+          },
+        ],
+      });
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'GET',
+        path: '/v0/workbook/worksheets/sheet%2Fsales/validation',
+      });
+    });
+
+    it('does not read validation from a replacement Desktop instance after a 401', async () => {
+      const discover = vi
+        .fn()
+        .mockReturnValueOnce([
+          {
+            ...instanceFor(server, 'stale-token', '0.2.16'),
+            instanceId: 'inst-expected',
+          },
+        ])
+        .mockReturnValue([
+          {
+            ...instanceFor(server, 'valid-token', '0.2.16'),
+            instanceId: 'inst-restarted',
+          },
+        ]);
+      const executor = new ExternalApiToolExecutor({ pid: 999, discover });
+      await executor.start();
+
+      const result = await executor.getWorksheetFieldValidation('sheet-1', signal, 'inst-expected');
+
+      expect(result.isErr()).toBe(true);
+      expect(
+        server.requests.filter(
+          (request) =>
+            request.method === 'GET' &&
+            request.path === '/v0/workbook/worksheets/sheet-1/validation',
+        ),
+      ).toHaveLength(1);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('unknown');
+      if (error.type === 'unknown') {
+        expect(String(error.error)).toContain('inst-expected');
+        expect(String(error.error)).toContain('inst-restarted');
+      }
+    });
+  });
+
   describe('individual datasource routing', () => {
     it.each([
       ['Sales%20Extract', '/v0/workbook/datasources/Sales%20Extract'],

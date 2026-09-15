@@ -425,6 +425,70 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(applyWorksheetDocument).toHaveBeenCalledOnce();
   });
 
+  it('automatically surfaces invalid used fields after a successful cached worksheet apply', async () => {
+    const worksheetId = 'sheet-1';
+    const xml = `<worksheet name='${worksheetName}'><simple-id uuid='${worksheetId}'/><table><rows /></table></worksheet>`;
+    const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml }));
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const getWorksheetFieldValidation = vi.fn().mockResolvedValue(
+      Ok({
+        worksheetId,
+        invalidFields: [
+          {
+            fieldName: '[none:Missing:nk]',
+            shelf: 'rows',
+            marksSpecificationId: 'marks-1',
+            encodingType: 'text',
+            reason: 'Field is unavailable.',
+          },
+        ],
+      }),
+    );
+    const executor = makeExecutorMock({
+      desktopInstanceId: 'inst-test',
+      desktopApiVersion: '0.2.16',
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: worksheetId, name: worksheetName }] })),
+      getWorksheetDocument,
+      applyWorksheetDocument,
+      getWorksheetFieldValidation,
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+      callerPreflightsBlockingIssues: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.readbackVerification).toMatchObject({
+        ok: false,
+        status: 'failed',
+        findings: [
+          expect.objectContaining({
+            source: 'used-field-validity',
+            fieldName: '[none:Missing:nk]',
+          }),
+        ],
+      });
+    }
+    expect(applyWorksheetDocument).toHaveBeenCalledWith(
+      worksheetId,
+      expect.any(String),
+      mockSignal,
+      { expectedInstanceId: 'inst-test' },
+    );
+    expect(getWorksheetFieldValidation).toHaveBeenCalledWith(worksheetId, mockSignal, 'inst-test');
+  });
+
   it('skips the introduced-issue GET when the caller already preflighted blocking issues', async () => {
     const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml: validXml }));
     const applyWorksheetDocument = vi.fn().mockResolvedValue(
@@ -761,7 +825,12 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(posted).toContain('[live].[edit]');
     expect(posted).toContain('name="Dashboard 1"');
     expect(posted).toContain('name="left"');
-    if (result.isOk()) expect(result.value.readbackVerification?.status).toBe('passed');
+    if (result.isOk()) {
+      expect(result.value.readbackVerification).toMatchObject({
+        status: 'skipped',
+        findings: [expect.objectContaining({ reason: 'target-unresolved' })],
+      });
+    }
   });
 
   it('does not let an unchanged pre-existing workbook error veto an artifact apply', async () => {
