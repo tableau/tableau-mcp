@@ -55,6 +55,7 @@ export const EXTERNAL_API_ROUTES = {
   worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetDocument: '/v0/workbook/worksheets/{id}/document',
   worksheetImage: '/v0/workbook/worksheets/{id}/image',
+  worksheetValidation: '/v0/workbook/worksheets/{id}/validation',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
   worksheetLogicalTables: '/v0/workbook/worksheets/{id}/logicalTables',
   worksheetLogicalTableData: '/v0/workbook/worksheets/{id}/logicalTables/{logicalTableId}/data',
@@ -168,6 +169,10 @@ export type ImageExportQuery = {
 
 export function worksheetRoute(worksheetId: string): string {
   return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
+}
+
+export function worksheetValidationRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}/validation`;
 }
 
 export function dashboardRoute(dashboardId: string): string {
@@ -850,6 +855,28 @@ export const validationResultSchema = z
   })
   .passthrough();
 export type ValidationResult = z.infer<typeof validationResultSchema>;
+
+/** One invalid field currently used by a worksheet shelf or marks encoding. */
+export const worksheetInvalidFieldSchema = z
+  .object({
+    fieldName: z.string(),
+    fieldCaption: z.string().optional(),
+    shelf: z.string(),
+    marksSpecificationId: z.string(),
+    encodingType: z.string(),
+    reason: z.string(),
+  })
+  .passthrough();
+export type WorksheetInvalidField = z.infer<typeof worksheetInvalidFieldSchema>;
+
+/** Invalid used fields reported by Desktop for one worksheet. */
+export const worksheetFieldValidationSchema = z
+  .object({
+    worksheetId: z.string(),
+    invalidFields: z.array(worksheetInvalidFieldSchema),
+  })
+  .passthrough();
+export type WorksheetFieldValidation = z.infer<typeof worksheetFieldValidationSchema>;
 
 /**
  * Image export result returned by `GET /v0/workbook/worksheets/{id}/image` and

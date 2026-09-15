@@ -1,5 +1,7 @@
 export type ApiVersionFloor = `${number}.${number}.${number}`;
 
+export const WORKSHEET_FIELD_VALIDATION_MIN_API_VERSION: ApiVersionFloor = '0.2.16';
+
 /**
  * Numeric SemVer comparison ("0.2.6" >= "0.2.5"). Missing/unparseable parts read as 0,
  * so `undefined` and `""` compare as 0.0.0 — below every real floor.

@@ -93,6 +93,8 @@ import {
   workbookStoryboardsNewRoute,
   workbookWorksheetsNewRoute,
   worksheetDocumentRoute,
+  WorksheetFieldValidation,
+  worksheetFieldValidationSchema,
   worksheetImageRoute,
   WorksheetItem,
   worksheetItemSchema,
@@ -109,6 +111,7 @@ import {
   WorksheetSummaryDataQuery,
   worksheetSummaryDataRoute,
   WorksheetUnderlyingDataQuery,
+  worksheetValidationRoute,
 } from './types.js';
 
 const LOGGER = 'ExternalApiToolExecutor';
@@ -214,6 +217,10 @@ export class ExternalApiToolExecutor {
 
   get desktopInstanceId(): string | undefined {
     return this.http?.instanceId;
+  }
+
+  get desktopApiVersion(): string | undefined {
+    return this.http?.apiVersion;
   }
 
   async executeCommand(
@@ -421,6 +428,31 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async getWorksheetFieldValidation(
+    worksheetId: string,
+    signal: AbortSignal,
+    expectedInstanceId: string,
+  ): Promise<Result<WorksheetFieldValidation, ExecuteCommandError>> {
+    const result = await this.withRescan('read', (http) => {
+      if (http.instanceId !== expectedInstanceId) {
+        return Promise.resolve(
+          Err({
+            type: 'instance-mismatch' as const,
+            expected: expectedInstanceId,
+            actual: http.instanceId,
+          }),
+        );
+      }
+      return http.getJson(
+        worksheetValidationRoute(worksheetId),
+        worksheetFieldValidationSchema,
+        signal,
+      );
+    });
+    if (result.isErr()) return Err(mapClientError(result.error, this.deps.pid));
+    return Ok(result.value);
+  }
+
   async getDashboard(
     dashboardId: string,
     signal: AbortSignal,
@@ -604,10 +636,12 @@ export class ExternalApiToolExecutor {
     worksheetId: string,
     xml: string,
     signal: AbortSignal,
+    options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postXmlEnvelope(worksheetDocumentRoute(worksheetId), xml, signal),
       'apply-worksheet-document',
+      options,
     );
   }
 
