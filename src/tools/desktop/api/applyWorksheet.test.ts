@@ -659,6 +659,58 @@ describe('applyWorksheetTool', () => {
     });
   });
 
+  it('post-apply contract: exposes a document warning as applied, non-retryable failed verification', async () => {
+    const warning = 'Dropped filter on [Country/Region].';
+    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Ok({
+        readbackWarnings: [],
+        readbackVerification: {
+          ok: false,
+          status: 'failed',
+          message: `Desktop accepted the worksheet document with a warning: ${warning}`,
+          findings: [
+            {
+              severity: 'error',
+              source: 'readback',
+              message: warning,
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: {
+        ok: false,
+        status: 'failed',
+        findings: [expect.objectContaining({ message: warning })],
+      },
+    });
+    expect(payload.message).toMatch(/applied.*verification found/i);
+    expect(JSON.stringify(payload.verification)).toContain(warning);
+    expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification failed — diagnose listed findings',
+      },
+    });
+  });
+
   it('keeps file-based worksheet apply nonterminal when readback is skipped', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
     const mockFilePath = '/path/to/worksheet.xml';

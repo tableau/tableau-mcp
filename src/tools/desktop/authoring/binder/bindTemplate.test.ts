@@ -3428,6 +3428,7 @@ function setupAutoApplyMocks({
   executeCommand: ReturnType<typeof vi.fn>;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
   getWorkbookDocument: ReturnType<typeof vi.fn>;
+  getWorksheetFieldValidation: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
 } {
   let liveXml = workbookReads[0] ?? XML;
@@ -3484,18 +3485,25 @@ function setupAutoApplyMocks({
       xsdPayloadVersion: undefined,
     }),
   );
+  const getWorksheetFieldValidation = vi.fn(async (worksheetId: string) =>
+    Ok({ worksheetId, invalidFields: [] }),
+  );
   const getExecutor = vi.fn().mockResolvedValue({
     desktopInstanceId: 'inst-test',
     desktopApiVersion: '0.2.16',
     executeCommand,
     getWorkbookDocument,
     applyWorkbookDocument,
-    getWorksheetFieldValidation: vi.fn(async (worksheetId: string) =>
-      Ok({ worksheetId, invalidFields: [] }),
-    ),
+    getWorksheetFieldValidation,
     ...(structuralReadback ? { listWorksheets: vi.fn(routeMissing) } : {}),
   });
-  return { executeCommand, applyWorkbookDocument, getWorkbookDocument, getExecutor };
+  return {
+    executeCommand,
+    applyWorkbookDocument,
+    getWorkbookDocument,
+    getWorksheetFieldValidation,
+    getExecutor,
+  };
 }
 
 // Route per-sheet readback through the whole-workbook fallback used by older Desktop hosts.
@@ -3917,10 +3925,11 @@ describe('bindTemplateTool auto_apply gate', () => {
   it('activation failure preserves applied:true but cannot mint terminal success without readback', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
-    const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
-      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
-      activationDispatch: Err({ type: 'command-timed-out', error: 'activation timeout' }),
-    });
+    const { executeCommand, applyWorkbookDocument, getWorksheetFieldValidation, getExecutor } =
+      setupAutoApplyMocks({
+        inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+        activationDispatch: Err({ type: 'command-timed-out', error: 'activation timeout' }),
+      });
 
     const result = await getToolResult({
       session: '1',
@@ -3941,18 +3950,7 @@ describe('bindTemplateTool auto_apply gate', () => {
         verification: {
           ok: true,
           status: 'skipped',
-          message:
-            'this.executor.listWorksheets is not a function Field verification was not checked because structural readback did not complete.',
-          findings: [
-            {
-              severity: 'warning',
-              source: 'used-field-validity',
-              message:
-                'Field verification was not checked because structural readback did not complete.',
-              worksheetId: 'sheet-sales-by-region',
-              reason: 'structural-readback-unavailable',
-            },
-          ],
+          message: 'this.executor.listWorksheets is not a function',
         },
         summary_rows_error: 'activeExecutor.listWorksheets is not a function',
       }),
@@ -3966,6 +3964,12 @@ describe('bindTemplateTool auto_apply gate', () => {
     );
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(getWorksheetFieldValidation).toHaveBeenCalledTimes(1);
+    expect(getWorksheetFieldValidation).toHaveBeenCalledWith(
+      'sheet-sales-by-region',
+      expect.any(AbortSignal),
+      'inst-test',
+    );
   });
 
   it('applied:true returns ONLY the trimmed fast-path shape (W60 P4 response-shape trim)', async () => {
