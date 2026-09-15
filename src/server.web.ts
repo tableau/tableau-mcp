@@ -21,7 +21,7 @@ import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { log } from './logging/logger.js';
 import { registerPrompts } from './prompts/index.js';
 import { RestApiArgs } from './restApiInstance';
-import { siteRoleMeetsMinimum } from './sdks/tableau/types/user.js';
+import { roleRequiresEnforcement, siteRoleMeetsMinimum } from './sdks/tableau/types/user.js';
 import { ClientInfo, Server } from './server.js';
 import {
   ClientCapabilitiesWithUiExtension,
@@ -258,7 +258,7 @@ export class WebMcpServer extends Server {
       if (await Provider.from(tool.disabled)) continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
-      if (enforceRoleRequirements && tool.minRequiredRole) {
+      if (enforceRoleRequirements && roleRequiresEnforcement(tool.minRequiredRole)) {
         const siteRole = registrationContext.siteRole;
         if (!siteRoleMeetsMinimum(siteRole, tool.minRequiredRole)) {
           // When the enforce-role-requirements feature flag is enabled, tools with role requirements are ommited during

@@ -23,6 +23,10 @@ against an older server returns an error instead of publishing.
 
 Related tools: [Request Workbook Upload](request-workbook-upload.md), [List Projects](../projects/list-projects.md)
 
+## Required permissions
+
+- **Site Role**: Requires Explorer (Can Publish) role or higher
+
 ## APIs called
 
 - [Publish Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#publish_workbook)

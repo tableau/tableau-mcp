@@ -16,6 +16,7 @@ import {
   PublishedParent,
   toEmbeddedLineageContents,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook, WorkbookConnection } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -31,6 +32,7 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
   const getWorkbookTool = new WebTool({
     server,
     name: 'get-workbook',
+    minRequiredRole: SiteRole.VIEWER,
     description:
       'Retrieves information about the specified workbook, including information about the views contained in the workbook.',
     paramsSchema,
