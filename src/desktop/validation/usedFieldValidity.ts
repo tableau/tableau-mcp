@@ -82,8 +82,16 @@ export function mergeUsedFieldValidityVerification(
   structural: ReadbackVerificationResult | undefined,
   outcome: UsedFieldValidityOutcome,
 ): ReadbackVerificationResult {
+  const scopeNote =
+    'Static validation checks fields used by the worksheet; it does not verify query execution or rendering.';
   if (outcome.status === 'valid') {
-    return structural ?? { ok: true, status: 'passed' };
+    const message = `Static validation found no invalid used fields. ${scopeNote}`;
+    return structural
+      ? {
+          ...structural,
+          message: structural.message ? `${structural.message} ${message}` : message,
+        }
+      : { ok: true, status: 'passed', message };
   }
 
   if (outcome.status === 'invalid') {
@@ -99,11 +107,12 @@ export function mergeUsedFieldValidityVerification(
       encodingType: field.encodingType,
       reason: field.reason,
     }));
+    const message =
+      'The edit was applied, but Desktop found invalid fields used by the worksheet. Diagnose the listed fields; do not automatically replay the edit.';
     return {
       ok: false,
       status: 'failed',
-      message:
-        'The edit was applied, but Desktop found invalid fields used by the worksheet. Diagnose the listed fields; do not automatically replay the edit.',
+      message: `${structural?.message ? `${structural.message} ` : ''}${message} ${scopeNote}`,
       findings: [...(structural?.findings ?? []), ...findings],
     };
   }
@@ -118,7 +127,7 @@ export function mergeUsedFieldValidityVerification(
   return {
     ok: structural?.status === 'failed' ? false : true,
     status: structural?.status === 'failed' ? 'failed' : 'skipped',
-    message: structural?.message ? `${structural.message} ${outcome.message}` : outcome.message,
+    message: `${structural?.message ? `${structural.message} ` : ''}${outcome.message} ${scopeNote}`,
     findings: [...(structural?.findings ?? []), unavailable],
   };
 }

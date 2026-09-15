@@ -162,6 +162,13 @@ describe('applyWorksheetTool', () => {
     expect(mockLoadWorksheetXml).toHaveBeenCalledOnce();
     expect(buildArtifact).toHaveBeenCalledOnce();
     expect(put).not.toHaveBeenCalled();
+    expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      nextAction: {
+        receipt: { unverified: [expect.stringContaining('query execution or rendering')] },
+      },
+    });
     // A stale add-field/remove-field buffer for this sheet predates the direct-plan
     // apply and must not survive it.
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
@@ -433,7 +440,7 @@ describe('applyWorksheetTool', () => {
       ],
       didNot: [],
       unverified: [
-        'whether the applied worksheet retained its intended structure — post-apply readback was unavailable',
+        'whether the applied worksheet retained its intended structure, or query execution or rendering succeeds — post-apply readback was unavailable',
       ],
     });
   });
@@ -788,10 +795,13 @@ describe('applyWorksheetTool', () => {
       'Successfully applied worksheet update for "Sheet 1". The worksheet has been updated.\n\nHOST VERIFICATION — verified: preflight clean · apply completed · readback clean. No host evidence of any workbook problem beyond the findings listed above — do not report unlisted issues.',
     );
 
-    // The readback ran, so its outcome is an observation the receipt may claim;
-    // rendered output stays unverified because readback compares XML only.
+    // The readback ran, so its outcome is an observation the receipt may claim.
     const structured = structuredSchema.parse(result.structuredContent);
     expect(structured.message).toBe(resultSchema.parse(JSON.parse(result.content[0].text)).message);
+    expect(result.structuredContent).toMatchObject({ applied: true, retrySafe: false });
+    expect(structured.nextAction.receipt.unverified.join(' ')).toContain(
+      'query execution or rendering',
+    );
     expect(structured.nextAction.receipt).toEqual({
       did: [
         'Desktop accepted the worksheet XML apply for "Sheet 1"',
@@ -799,9 +809,7 @@ describe('applyWorksheetTool', () => {
         'read back the applied worksheet — verification status "passed", promise outcome "verified"',
       ],
       didNot: [],
-      unverified: [
-        'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
-      ],
+      unverified: [expect.stringContaining('query execution or rendering')],
     });
     expect(eventSpy).toHaveBeenCalledWith(
       expect.objectContaining({

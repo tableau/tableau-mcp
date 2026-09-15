@@ -182,7 +182,7 @@ const COMPLETE_BIND_NEXT_ACTION = {
     // Both gaps must remain explicit instead of becoming successful claims by omission.
     unverified: expect.arrayContaining([
       expect.stringContaining('encoding analysis did not run'),
-      expect.stringContaining('renders any marks'),
+      expect.stringContaining('query execution or rendering'),
     ]),
   },
 };
@@ -3950,7 +3950,8 @@ describe('bindTemplateTool auto_apply gate', () => {
         verification: {
           ok: true,
           status: 'skipped',
-          message: 'this.executor.listWorksheets is not a function',
+          message:
+            'this.executor.listWorksheets is not a function Static validation found no invalid used fields. Static validation checks fields used by the worksheet; it does not verify query execution or rendering.',
         },
         summary_rows_error: 'activeExecutor.listWorksheets is not a function',
       }),
@@ -7604,16 +7605,16 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
   it('a clean readback earns a verified host line', async () => {
     const mocks = setupAutoApplyMocks({ inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML } });
 
-    const applied = body(
-      await getToolResult({
-        session: '1',
-        ask: 'bar chart of Sales by Region',
-        auto_apply: true,
-        getExecutor: readbackExecutor(mocks),
-      }),
-    );
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: readbackExecutor(mocks),
+    });
+    const applied = body(result);
 
     expect(applied.applied).toBe(true);
+    expect(terminalReceipt(result).unverified.join(' ')).toContain('query execution or rendering');
     expect(applied.guidance).toContain('HOST VERIFICATION — verified');
     expect(applied.guidance).toContain('readback clean');
     // The stop clause survives: a verified receipt must not re-open the re-bind spiral.

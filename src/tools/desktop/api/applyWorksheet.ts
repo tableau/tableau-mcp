@@ -232,10 +232,10 @@ export const getApplyWorksheetTool = (
                             ],
                             unverified: verificationRan
                               ? [
-                                  'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
+                                  'whether query execution or rendering succeeds — static validation and structural readback do not execute queries or inspect rendered output',
                                 ]
                               : [
-                                  'whether the applied worksheet retained its intended structure — post-apply workbook readback was unavailable',
+                                  'whether the applied worksheet retained its intended structure, or query execution or rendering succeeds — post-apply workbook readback was unavailable',
                                 ],
                           }),
                           'Artifact apply dispatched — see verification',
@@ -321,10 +321,10 @@ export const getApplyWorksheetTool = (
                           ],
                           unverified: verificationRan
                             ? [
-                                'whether the sheet renders as intended — readback compared workbook structure, not rendered output',
+                                'whether query execution or rendering succeeds — static validation and structural readback do not execute queries or inspect rendered output',
                               ]
                             : [
-                                'whether the applied worksheet retained its intended structure — post-apply workbook readback was unavailable',
+                                'whether the applied worksheet retained its intended structure, or query execution or rendering succeeds — post-apply workbook readback was unavailable',
                               ],
                         }),
                         'Direct template apply dispatched — see verification',
@@ -463,10 +463,10 @@ export const getApplyWorksheetTool = (
                         ],
                         unverified: readbackRan
                           ? [
-                              'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
+                              'whether query execution or rendering succeeds — static validation and structural readback do not execute queries or inspect rendered output',
                             ]
                           : [
-                              'whether the applied worksheet retained its intended structure — post-apply readback was unavailable',
+                              'whether the applied worksheet retained its intended structure, or query execution or rendering succeeds — post-apply readback was unavailable',
                             ],
                       }),
                       'Worksheet apply finished — see verification',
