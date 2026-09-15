@@ -98,8 +98,7 @@ describe('getScaffoldDataAppTool', () => {
       expect(result.isError).toBeFalsy();
       invariant(result.content[0].type === 'text');
       const payload = JSON.parse(result.content[0].text);
-      expect(payload.transport).toBe('stdio');
-      expect(payload.packageId).toBe('com.tableau.mcp.sales-demo');
+      expect(payload.filePath.endsWith('Sales Demo')).toBe(true);
     });
 
     it('surfaces an error result for names that escape the workspace root', async () => {

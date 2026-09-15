@@ -59,11 +59,10 @@ describe('createDataAppWorkspace', () => {
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
-      invariant(value.transport === 'stdio');
-
-      expect(value.packageId).toBe('com.tableau.mcp.sales-demo');
-      expect(value.author).toBe('jdoe via Tableau MCP');
+      invariant(value.filePath);
       expect(value.filePath.endsWith('Sales Demo')).toBe(true);
+      expect(value.s3URL).toBeUndefined();
+      expect(value.postUnzip).toBeUndefined();
 
       const pkgDir = join(value.filePath, 'Packages', 'com.tableau.mcp.sales-demo');
 
@@ -94,15 +93,23 @@ describe('createDataAppWorkspace', () => {
       const appJs = await readFile(join(pkgDir, 'content', 'src', 'app.js'), 'utf8');
       expect(appJs).toContain('AUTHOR YOUR APP HERE');
 
-      // Reported files list uses the finalized relative paths.
-      expect(value.files).toContain('Sales Demo.twb');
-      expect(value.files).toContain('Packages/com.tableau.mcp.sales-demo/manifest.json');
+      // Files were written to their finalized paths on disk.
+      expect(existsSync(join(pkgDir, 'manifest.json'))).toBe(true);
     });
 
     it('falls back to "Tableau MCP" author when no username is provided', async () => {
       const result = await createDataAppWorkspace({ datappName: 'No User', config: getConfig() });
       invariant(result.isOk());
-      expect(result.value.author).toBe('Tableau MCP');
+      const value = result.value;
+      invariant(value.filePath);
+
+      const manifest = JSON.parse(
+        await readFile(
+          join(value.filePath, 'Packages', 'com.tableau.mcp.no-user', 'manifest.json'),
+          'utf8',
+        ),
+      );
+      expect(manifest.author).toBe('Tableau MCP');
     });
 
     it('refuses to overwrite an existing workspace', async () => {
@@ -142,11 +149,10 @@ describe('createDataAppWorkspace', () => {
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
-      invariant(value.transport === 'http');
+      invariant(value.postUnzip);
 
       expect(value.s3URL).toBe('https://s3.example.com/signed-template-url');
-      expect(value.packageId).toBe('com.tableau.mcp.sales-demo');
-      expect(value.author).toBe('jdoe via Tableau MCP');
+      expect(value.filePath).toBeUndefined();
 
       // Presigned a GET of exactly the configured key/bucket; never uploaded or downloaded it.
       const { GetObjectCommand } = await import('@aws-sdk/client-s3');

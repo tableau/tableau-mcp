@@ -36,23 +36,19 @@ import {
   TEMPLATE_ROOT_DIRNAME,
 } from './templateIdentity.js';
 
-export type DataAppWorkspaceResult =
-  | {
-      datappName: string;
-      transport: 'stdio';
-      filePath: string;
-      packageId: string;
-      author: string;
-      files: string[];
-    }
-  | {
-      datappName: string;
-      transport: 'http';
-      s3URL: string;
-      packageId: string;
-      author: string;
-      postUnzip: PostUnzipPlan;
-    };
+/**
+ * Result of scaffolding a workspace. A single shape covers both transports, distinguished by which
+ * delivery field is set:
+ *  - stdio (local): `filePath` points at the finished, on-disk workspace; `postUnzip` is omitted.
+ *  - http (remote): `s3URL` is a presigned GET for the template zip, and `postUnzip` is the
+ *    rename/edit plan the client applies after unzipping to finalize the workspace.
+ */
+export type DataAppWorkspaceResult = {
+  datappName: string;
+  filePath?: string;
+  s3URL?: string;
+  postUnzip?: PostUnzipPlan;
+};
 
 // Candidate parents of the template root dir, tried in order, resolved relative to this module's own
 // directory. In the bundled build everything collapses into `build/index.js`, so `__dirname` is
@@ -135,10 +131,7 @@ async function createRemoteWorkspace({
 
   return new Ok({
     datappName,
-    transport: 'http',
     s3URL,
-    packageId: identity.packageId,
-    author: identity.author,
     postUnzip: buildPostUnzipPlan(identity),
   });
 }
@@ -176,10 +169,8 @@ async function createLocalWorkspace({
 
   const replacements = buildTextReplacements(identity);
 
-  let written: string[];
   try {
     const relFiles = (await walkFiles(templateRoot)).sort();
-    written = [];
     for (const rel of relFiles) {
       const finalRel = mapToFinalRelativePath(rel, identity);
       const finalPath = join(dest, ...finalRel.split('/'));
@@ -192,7 +183,6 @@ async function createLocalWorkspace({
       } else {
         await writeFile(finalPath, await readFile(join(templateRoot, ...rel.split('/'))));
       }
-      written.push(finalRel);
     }
   } catch (error) {
     return new DataAppTemplateUnavailableError(
@@ -202,10 +192,6 @@ async function createLocalWorkspace({
 
   return new Ok({
     datappName,
-    transport: 'stdio',
     filePath: dest,
-    packageId: identity.packageId,
-    author: identity.author,
-    files: written.sort(),
   });
 }

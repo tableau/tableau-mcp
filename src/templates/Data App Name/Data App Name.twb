@@ -59,4 +59,37 @@
       <simple-id uuid='{5CCC5EFE-BD3C-4B06-B427-3A22F445F324}' />
     </window>
   </windows>
+  <referenced-extensions>
+    <referenced-extension>
+      <manifest manifest-version='0.1'>
+        <worksheet-extension extension-version='1.0.0' id=''>
+          <default-locale>en_US</default-locale>
+          <name>TODO Name</name>
+          <description>TODO Description</description>
+          <author name='<TODO Username> via Tableau MCP' website='https://www.tableau.com' />
+          <min-api-version>1.11</min-api-version>
+          <source-location>
+            <url>tableaulocalext:///TODO Manifest Id/content/index.html</url>
+          </source-location>
+          <permissions>
+            <permission>full data</permission>
+          </permissions>
+          <encoding id='field'>
+            <display-name>Data</display-name>
+            <role-spec>
+              <role-type>discrete-dimension</role-type>
+              <role-type>discrete-measure</role-type>
+              <role-type>continuous-dimension</role-type>
+              <role-type>continuous-measure</role-type>
+            </role-spec>
+            <fields max-count='50' />
+            <encoding-icon token='level' />
+          </encoding>
+        </worksheet-extension>
+      </manifest>
+      <referenced-views>
+        <referenced-view instances='1' viewId='Sheet 1' />
+      </referenced-views>
+    </referenced-extension>
+  </referenced-extensions>
 </workbook>
