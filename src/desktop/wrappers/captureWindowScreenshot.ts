@@ -1,7 +1,7 @@
 import { constants, type Stats } from 'fs';
 import { tmpdir } from 'os';
 import { dirname, isAbsolute, relative, resolve, sep } from 'path';
-import probeImageSize from 'probe-image-size';
+import probeImageSize from 'probe-image-size/sync.js';
 import { Err, Ok, type Result } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -110,7 +110,7 @@ function readPngMetadata(bytes: Buffer): { width: number; height: number; area: 
     throw new Error('Incomplete PNG image.');
   }
 
-  const metadata = probeImageSize.sync(bytes);
+  const metadata = probeImageSize(bytes);
   if (metadata?.type !== 'png') throw new Error('Invalid PNG metadata.');
   const { width, height } = metadata;
   if (
@@ -245,11 +245,13 @@ export async function captureWindowScreenshot(
   if (signal.aborted) {
     return failure('Tableau Desktop window capture was cancelled.');
   }
+  const expectedInstanceId = executor.desktopInstanceId;
   const commandResult = await executor.executeCommand({
     namespace: 'tabui',
     command: 'take-all-screenshots',
     args: { HideMouse: true },
     schema: screenshotCommandResultSchema,
+    expectedInstanceId,
     signal,
   });
   if (commandResult.isErr()) {
@@ -286,17 +288,15 @@ export async function captureWindowScreenshot(
       .filter((name) => SCREENSHOT_NAME.test(name));
     if (names.length === 0) {
       outcome = failure('Tableau Desktop did not produce a screenshot.');
-    } else if (names.length > MAX_WINDOW_SCREENSHOT_CANDIDATES) {
-      outcome = failure('Tableau Desktop produced too many screenshot artifacts.');
     } else {
       names.sort((left, right) => left.localeCompare(right));
+      const overCandidateLimit = names.length > MAX_WINDOW_SCREENSHOT_CANDIDATES;
       let invalidCandidate = false;
       let cancelled: boolean = cancelledAfterCommand;
       let aggregateBytes = 0;
       for (const name of names) {
         if (signal.aborted && !cancelledAfterCommand) {
           cancelled = true;
-          break;
         }
         try {
           const validated = inspectCandidate(
@@ -322,7 +322,7 @@ export async function captureWindowScreenshot(
 
       let selected: Candidate | undefined;
       let selectedIsUnique = true;
-      if (!invalidCandidate && !cancelled) {
+      if (!overCandidateLimit && !invalidCandidate && !cancelled) {
         for (const validated of validatedPaths) {
           if (signal.aborted) {
             cancelled = true;
@@ -345,6 +345,8 @@ export async function captureWindowScreenshot(
 
       if (cancelled) {
         outcome = failure('Tableau Desktop window capture was cancelled.');
+      } else if (overCandidateLimit) {
+        outcome = failure('Tableau Desktop produced too many screenshot artifacts.');
       } else if (invalidCandidate || selected === undefined) {
         outcome = failure('Tableau Desktop produced an invalid screenshot artifact.');
       } else if (!selectedIsUnique) {

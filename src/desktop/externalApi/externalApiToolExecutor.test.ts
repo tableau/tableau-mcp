@@ -2,6 +2,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import * as logger from '../../logging/logger.js';
 import { INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE } from '../callDeadline.js';
+import { captureWindowScreenshot } from '../wrappers/captureWindowScreenshot.js';
 import type { ExternalApiHttp as ExternalApiClient } from './externalApiHttp.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import {
@@ -1813,6 +1814,28 @@ describe('ExternalApiToolExecutor', () => {
         expect(String(error.error)).toContain('inst-expected');
         expect(String(error.error)).toContain('inst-restarted');
       }
+    });
+
+    it('does not retry a cold screenshot capture when a 401 rescan finds a new instance with the same pid', async () => {
+      const discover = vi
+        .fn()
+        .mockReturnValueOnce([
+          { ...instanceFor(server, 'stale-token', '0.2.15'), instanceId: 'inst-capture' },
+        ])
+        .mockReturnValue([
+          { ...instanceFor(server, 'valid-token', '0.2.15'), instanceId: 'inst-restarted' },
+        ]);
+      const executor = new ExternalApiToolExecutor({ pid: 999, discover });
+
+      const result = await captureWindowScreenshot({ executor, signal });
+
+      expect(result.isErr()).toBe(true);
+      expect(discover).toHaveBeenCalledTimes(2);
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+        ),
+      ).toHaveLength(1);
     });
 
     it('does not retry a workbook POST when a 401 rescan finds a new instance with the same pid', async () => {
