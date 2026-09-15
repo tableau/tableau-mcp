@@ -20,7 +20,6 @@ import {
 } from '../metadata/targetWorksheetState.js';
 import type { ParsedWorksheet } from '../metadata/types.js';
 import {
-  formatReadbackVerificationError,
   isPromisedSortLossWarning,
   type ReadbackFinding,
   type ReadbackVerificationResult,
@@ -57,14 +56,6 @@ export type LoadWorksheetXmlError =
   // rejected the actual document load (surfaced in the response payload, not in
   // `status`). `message` carries Desktop's own error text.
   | { type: 'load-rejected'; message: string }
-  // Apply succeeded but the post-apply readback proved Tableau silently dropped or
-  // changed an intent-bearing node (the silently-dropped-pill killer, W4). `message`
-  // carries the agent-facing fix recipe; `findings` the structured evidence.
-  | { type: 'readback-failed'; findings: ReadbackFinding[]; message: string }
-  // Apply reported SUCCEEDED, but Desktop attached a document-warning: it accepted the
-  // document while dropping part of what was submitted. `message` carries Desktop's own
-  // warning text — the only per-drop detail that survives the wire; `warnings` the raw list.
-  | { type: 'document-warning'; warnings: ExecuteCommandWarning[]; message: string }
   | { type: 'source-drift'; message: string }
   // Only surfaced when a caller opts in with `requireExistingSheet` (apply-worksheet);
   // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
@@ -136,14 +127,26 @@ export async function verifyAppliedWorksheetFields({
   expectedInstanceId: string | undefined;
 } & WithExecutorAndAbortSignal): Promise<ReadbackVerificationResult> {
   const report = publicReadbackVerificationResult(structural);
-  if (structural.status !== 'passed' && structural.status !== 'warning') {
-    return mergeUsedFieldValidityVerification(report, {
-      status: 'unknown',
-      worksheetId,
-      reason: 'structural-readback-unavailable',
-      message: 'Field verification was not checked because structural readback did not complete.',
-    });
-  }
+  return verifyAppliedWorksheetFieldReport({
+    report,
+    worksheetId,
+    expectedInstanceId,
+    executor,
+    signal,
+  });
+}
+
+async function verifyAppliedWorksheetFieldReport({
+  report,
+  worksheetId,
+  expectedInstanceId,
+  executor,
+  signal,
+}: {
+  report: ReadbackVerificationResult;
+  worksheetId: string | undefined;
+  expectedInstanceId: string | undefined;
+} & WithExecutorAndAbortSignal): Promise<ReadbackVerificationResult> {
   if (!worksheetId || !expectedInstanceId) {
     return mergeUsedFieldValidityVerification(report, {
       status: 'unknown',
@@ -277,49 +280,40 @@ async function verifyPostApplyArtifactReadback(
   }
 }
 
-/**
- * Turn readback findings into a load outcome: ERROR-severity findings fail the apply
- * (the rendered chart does not match intent), WARNING-severity findings ride along on a
- * successful Ok so the tool can surface them without blocking.
- */
-function readbackOutcome(
-  verification: PostApplyWorksheetReadbackVerification,
-): LoadWorksheetXmlResult {
-  const { findings } = verification;
-  const errors = findings.filter((f) => f.severity === 'error');
-  if (errors.length > 0) {
-    return Err({
-      type: 'load-worksheet-xml-error',
-      error: {
-        type: 'readback-failed',
-        findings,
-        message: formatReadbackVerificationError(findings),
-      },
-    });
-  }
-  return Ok({
-    readbackWarnings: findings,
-    readbackVerification: publicReadbackVerificationResult(verification),
-  });
-}
-
-// The per-drop Tableau code is discarded before the wire, so a warning's message text is
-// the only field-level detail — join and surface it verbatim for the agent to act on.
-function documentWarningOutcome(warnings: ExecuteCommandWarning[]): LoadWorksheetXmlResult {
+async function documentWarningOutcome({
+  warnings,
+  worksheetId,
+  expectedInstanceId,
+  executor,
+  signal,
+}: {
+  warnings: ExecuteCommandWarning[];
+  worksheetId: string | undefined;
+  expectedInstanceId: string | undefined;
+} & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlOk> {
   const details = warnings
     .map((warning) => warning.message)
     .filter(Boolean)
     .join('; ');
-  return Err({
-    type: 'load-worksheet-xml-error',
-    error: {
-      type: 'document-warning',
-      warnings,
+  const report = await verifyAppliedWorksheetFieldReport({
+    report: {
+      ok: false,
+      status: 'failed',
       message:
-        `apply succeeded but Tableau could not honor part of the document and dropped it: ${details}. ` +
-        'The rendered chart does NOT match the intent. Fix the flagged node(s) in the worksheet XML and re-apply.',
+        `Desktop accepted the worksheet document but reported dropped state: ${details}. ` +
+        'The write already completed; do not automatically replay it.',
+      findings: warnings.map((warning) => ({
+        severity: 'error',
+        source: 'readback',
+        message: warning.message,
+      })),
     },
+    worksheetId,
+    expectedInstanceId,
+    executor,
+    signal,
   });
+  return { readbackWarnings: [], readbackVerification: report };
 }
 
 /**
@@ -542,7 +536,21 @@ export async function loadWorksheetXml({
         return Err({ type: 'execute-command-error', error: applyResult.error });
       }
       if (applyResult.value.documentWarnings.length > 0) {
-        return documentWarningOutcome(applyResult.value.documentWarnings);
+        const warningOutcome = await documentWarningOutcome({
+          warnings: applyResult.value.documentWarnings,
+          worksheetId: worksheetFragmentSimpleId(xml) ?? undefined,
+          expectedInstanceId: artifactApply.expectedInstanceId,
+          executor,
+          signal,
+        });
+        if (warningOutcome.readbackVerification) {
+          readbackVerificationOut?.push(warningOutcome.readbackVerification);
+        }
+        return Ok({
+          ...warningOutcome,
+          appliedName: canonicalName,
+          validationWarnings: [...validation.issues, ...workbookValidation.issues],
+        });
       }
 
       const verification = await verifyPostApplyArtifactReadback(
@@ -592,7 +600,21 @@ export async function loadWorksheetXml({
       const applyOutcome = outcome.value;
       if (typeof applyOutcome === 'object' && 'status' in applyOutcome) {
         if (applyOutcome.documentWarnings.length > 0) {
-          return documentWarningOutcome(applyOutcome.documentWarnings);
+          const warningOutcome = await documentWarningOutcome({
+            warnings: applyOutcome.documentWarnings,
+            worksheetId: applyOutcome.id,
+            expectedInstanceId,
+            executor,
+            signal,
+          });
+          if (warningOutcome.readbackVerification) {
+            readbackVerificationOut?.push(warningOutcome.readbackVerification);
+          }
+          return Ok({
+            ...warningOutcome,
+            appliedName: applyOutcome.name,
+            validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
+          });
         }
         const verification = await verifyPostApplyWorksheetReadback(
           applyOutcome.id,
@@ -600,10 +622,6 @@ export async function loadWorksheetXml({
           executor,
           signal,
         );
-        const outcomeResult = readbackOutcome(verification);
-        if (outcomeResult.isErr()) {
-          return outcomeResult;
-        }
         const verificationReport = await verifyAppliedWorksheetFields({
           structural: verification,
           worksheetId: applyOutcome.id,
@@ -615,7 +633,7 @@ export async function loadWorksheetXml({
         // Preflight warnings ride along so apply responses can compute the host
         // verification receipt without re-running validation.
         return Ok({
-          ...outcomeResult.value,
+          readbackWarnings: verification.findings,
           appliedName: applyOutcome.name,
           readbackVerification: verificationReport,
           validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
@@ -767,7 +785,17 @@ async function loadWorksheetXmlViaExternalApi({
       return Err({ type: 'execute-command-error', error: applyResult.error });
     }
     if (applyResult.value.documentWarnings.length > 0) {
-      return documentWarningOutcome(applyResult.value.documentWarnings);
+      const warningOutcome = await documentWarningOutcome({
+        warnings: applyResult.value.documentWarnings,
+        worksheetId: worksheetFragmentSimpleId(xml) ?? undefined,
+        expectedInstanceId,
+        executor,
+        signal,
+      });
+      if (warningOutcome.readbackVerification) {
+        readbackVerificationOut?.push(warningOutcome.readbackVerification);
+      }
+      return Ok(warningOutcome);
     }
 
     log({
@@ -783,9 +811,6 @@ async function loadWorksheetXmlViaExternalApi({
       executor,
       signal,
     );
-    const outcomeResult = readbackOutcome(verification);
-    if (outcomeResult.isErr()) return outcomeResult;
-
     const verificationReport = await verifyAppliedWorksheetFields({
       structural: verification,
       worksheetId: verification.worksheetId ?? worksheetFragmentSimpleId(xml) ?? undefined,
@@ -795,7 +820,10 @@ async function loadWorksheetXmlViaExternalApi({
     });
     readbackVerificationOut?.push(verificationReport);
 
-    return Ok({ ...outcomeResult.value, readbackVerification: verificationReport });
+    return Ok({
+      readbackWarnings: verification.findings,
+      readbackVerification: verificationReport,
+    });
   });
 }
 

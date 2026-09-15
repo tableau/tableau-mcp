@@ -489,6 +489,134 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(getWorksheetFieldValidation).toHaveBeenCalledWith(worksheetId, mockSignal, 'inst-test');
   });
 
+  it('post-apply contract: combines a durable structural drop with native invalid fields after one per-sheet apply', async () => {
+    vi.useFakeTimers();
+    try {
+      const worksheetId = 'sheet-1';
+      const intendedXml = `<worksheet name='${worksheetName}'><simple-id uuid='${worksheetId}'/><table><panes><pane><mark class='Bar'/><encodings><color column='[DS].[sum:Sales:qk]'/></encodings></pane></panes><cols>[DS].[sum:Sales:qk]</cols></table></worksheet>`;
+      const droppedXml = intendedXml.replace("<color column='[DS].[sum:Sales:qk]'/>", '');
+      const applyWorksheetDocument = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
+        );
+      const getWorksheetFieldValidation = vi.fn().mockResolvedValue(
+        Ok({
+          worksheetId,
+          invalidFields: [
+            {
+              fieldName: '[none:Missing:nk]',
+              shelf: 'rows',
+              marksSpecificationId: 'marks-1',
+              encodingType: 'text',
+              reason: 'Field is unavailable.',
+            },
+          ],
+        }),
+      );
+      const executor = makeExecutorMock({
+        desktopInstanceId: 'inst-test',
+        desktopApiVersion: '0.2.16',
+        listWorksheets: vi
+          .fn()
+          .mockResolvedValue(Ok({ worksheets: [{ id: worksheetId, name: worksheetName }] })),
+        getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: droppedXml })),
+        applyWorksheetDocument,
+        getWorksheetFieldValidation,
+      });
+
+      const pending = loadWorksheetXml({
+        worksheetName,
+        xml: intendedXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        callerPreflightsBlockingIssues: true,
+      });
+      await vi.runAllTimersAsync();
+      const result = await pending;
+
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) {
+        expect(result.value.readbackVerification).toMatchObject({
+          ok: false,
+          status: 'failed',
+          findings: expect.arrayContaining([
+            expect.objectContaining({ source: 'readback', severity: 'error' }),
+            expect.objectContaining({
+              source: 'used-field-validity',
+              fieldName: '[none:Missing:nk]',
+            }),
+          ]),
+        });
+      }
+      expect(applyWorksheetDocument).toHaveBeenCalledOnce();
+      expect(getWorksheetFieldValidation).toHaveBeenCalledOnce();
+      expect(getWorksheetFieldValidation).toHaveBeenCalledWith(
+        worksheetId,
+        mockSignal,
+        'inst-test',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('post-apply contract: runs native validation when structural readback is skipped but the target is stable', async () => {
+    const worksheetId = 'sheet-1';
+    const xml = `<worksheet name='${worksheetName}'><simple-id uuid='${worksheetId}'/><table><rows /></table></worksheet>`;
+    const applyWorksheetDocument = vi
+      .fn()
+      .mockResolvedValue(
+        Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
+      );
+    const getWorksheetFieldValidation = vi
+      .fn()
+      .mockResolvedValue(Ok({ worksheetId, invalidFields: [] }));
+    const executor = makeExecutorMock({
+      desktopInstanceId: 'inst-test',
+      desktopApiVersion: '0.2.16',
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: worksheetId, name: worksheetName }] })),
+      getWorksheetDocument: vi.fn().mockResolvedValue(
+        Err({
+          type: 'command-failed',
+          error: { code: 'READ_FAILED', message: 'readback unavailable', recoverable: true },
+        }),
+      ),
+      applyWorksheetDocument,
+      getWorksheetFieldValidation,
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+      callerPreflightsBlockingIssues: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.readbackVerification).toMatchObject({
+        ok: true,
+        status: 'skipped',
+      });
+      expect(result.value.readbackVerification?.findings ?? []).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ reason: 'structural-readback-unavailable' }),
+        ]),
+      );
+    }
+    expect(applyWorksheetDocument).toHaveBeenCalledOnce();
+    expect(getWorksheetFieldValidation).toHaveBeenCalledOnce();
+    expect(getWorksheetFieldValidation).toHaveBeenCalledWith(worksheetId, mockSignal, 'inst-test');
+  });
+
   it('skips the introduced-issue GET when the caller already preflighted blocking issues', async () => {
     const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml: validXml }));
     const applyWorksheetDocument = vi.fn().mockResolvedValue(
@@ -1072,7 +1200,8 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     }
   });
 
-  it('hard-fails a per-sheet apply that reports SUCCEEDED with a document-warning drop', async () => {
+  it('post-apply contract: keeps a per-sheet document warning as failed verification after native validation', async () => {
+    const worksheetId = 'sheet-1';
     const applyWorksheetDocument = vi.fn().mockResolvedValue(
       Ok({
         command_id: 'cmd-apply',
@@ -1081,12 +1210,18 @@ describe('loadWorksheetXml (External Client API transport)', () => {
         warnings: [{ code: 'document-warning', message: 'Dropped filter on [Country/Region].' }],
       }),
     );
+    const getWorksheetFieldValidation = vi
+      .fn()
+      .mockResolvedValue(Ok({ worksheetId, invalidFields: [] }));
     const executor = makeExecutorMock({
+      desktopInstanceId: 'inst-test',
+      desktopApiVersion: '0.2.16',
       listWorksheets: vi
         .fn()
-        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] })),
+        .mockResolvedValue(Ok({ worksheets: [{ id: worksheetId, name: worksheetName }] })),
       getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: validXml })),
       applyWorksheetDocument,
+      getWorksheetFieldValidation,
     });
 
     const result = await loadWorksheetXml({
@@ -1098,20 +1233,21 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       requireExistingSheet: true,
     });
 
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      invariant(result.error.type === 'load-worksheet-xml-error');
-      invariant(result.error.error.type === 'document-warning');
-      expect(result.error.error.warnings).toEqual([
-        { code: 'document-warning', message: 'Dropped filter on [Country/Region].' },
-      ]);
-      expect(result.error.error.message).toContain('Dropped filter on [Country/Region].');
-      expect(result.error.error.message).toContain('does NOT match the intent');
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.readbackVerification).toMatchObject({ ok: false, status: 'failed' });
+      expect(JSON.stringify(result.value.readbackVerification)).toContain(
+        'Dropped filter on [Country/Region].',
+      );
     }
     expect(applyWorksheetDocument).toHaveBeenCalledOnce();
+    expect(getWorksheetFieldValidation).toHaveBeenCalledOnce();
+    expect(getWorksheetFieldValidation).toHaveBeenCalledWith(worksheetId, mockSignal, 'inst-test');
   });
 
-  it('hard-fails the whole-workbook worksheet apply on a document-warning drop', async () => {
+  it('post-apply contract: keeps a whole-workbook document warning as failed verification after native validation', async () => {
+    const worksheetId = 'sheet-1';
+    const xml = `<worksheet name='${worksheetName}'><simple-id uuid='${worksheetId}'/><table><rows /></table></worksheet>`;
     const applyWorkbookDocument = vi.fn().mockResolvedValue(
       Ok({
         command_id: 'cmd-apply',
@@ -1120,7 +1256,12 @@ describe('loadWorksheetXml (External Client API transport)', () => {
         warnings: [{ code: 'document-warning', message: 'Dropped rows shelf field.' }],
       }),
     );
+    const getWorksheetFieldValidation = vi
+      .fn()
+      .mockResolvedValue(Ok({ worksheetId, invalidFields: [] }));
     const executor = makeExecutorMock({
+      desktopInstanceId: 'inst-test',
+      desktopApiVersion: '0.2.16',
       getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
           xml: liveWorkbook(['Sheet 1']),
@@ -1129,26 +1270,32 @@ describe('loadWorksheetXml (External Client API transport)', () => {
         }),
       ),
       applyWorkbookDocument,
+      getWorksheetFieldValidation,
     });
 
     const result = await loadWorksheetXml({
       worksheetName,
-      xml: validXml,
+      xml,
       executor,
       signal: mockSignal,
       focus: NO_FOCUS,
     });
 
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      invariant(result.error.type === 'load-worksheet-xml-error');
-      invariant(result.error.error.type === 'document-warning');
-      expect(result.error.error.message).toContain('Dropped rows shelf field.');
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.readbackVerification).toMatchObject({ ok: false, status: 'failed' });
+      expect(JSON.stringify(result.value.readbackVerification)).toContain(
+        'Dropped rows shelf field.',
+      );
     }
     expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+    expect(getWorksheetFieldValidation).toHaveBeenCalledOnce();
+    expect(getWorksheetFieldValidation).toHaveBeenCalledWith(worksheetId, mockSignal, 'inst-test');
   });
 
-  it('hard-fails an artifact apply on a document-warning drop', async () => {
+  it('post-apply contract: keeps an artifact document warning as failed verification after native validation', async () => {
+    const worksheetId = 'sheet-1';
+    const xml = `<worksheet name='${worksheetName}'><simple-id uuid='${worksheetId}'/><table><rows /></table></worksheet>`;
     const baseline = liveWorkbook(['Sheet 1']);
     const dispatchState = { attempted: false };
     const applyWorkbookDocument = vi.fn(
@@ -1162,34 +1309,43 @@ describe('loadWorksheetXml (External Client API transport)', () => {
         });
       },
     );
+    const getWorksheetFieldValidation = vi
+      .fn()
+      .mockResolvedValue(Ok({ worksheetId, invalidFields: [] }));
     const executor = makeExecutorMock({
+      desktopApiVersion: '0.2.16',
       getWorkbookDocument: vi.fn(async () =>
         Ok({ xml: baseline, applicationVersion: undefined, xsdPayloadVersion: undefined }),
       ),
       applyWorkbookDocument,
+      getWorksheetFieldValidation,
     });
 
     const result = await loadWorksheetXml({
       worksheetName,
-      xml: validXml,
+      xml,
       executor,
       signal: mockSignal,
       focus: NO_FOCUS,
       artifactApply: {
         windowXml: `<window class='worksheet' name='${worksheetName}' />`,
-        expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, validXml),
+        expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, xml),
         expectedInstanceId: 'inst-build',
         dispatchState,
       },
     });
 
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      invariant(result.error.type === 'load-worksheet-xml-error');
-      invariant(result.error.error.type === 'document-warning');
-      expect(result.error.error.message).toContain('Dropped color encoding.');
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.readbackVerification).toMatchObject({ ok: false, status: 'failed' });
+      expect(JSON.stringify(result.value.readbackVerification)).toContain(
+        'Dropped color encoding.',
+      );
     }
     expect(dispatchState.attempted).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+    expect(getWorksheetFieldValidation).toHaveBeenCalledOnce();
+    expect(getWorksheetFieldValidation).toHaveBeenCalledWith(worksheetId, mockSignal, 'inst-build');
   });
 });
 
