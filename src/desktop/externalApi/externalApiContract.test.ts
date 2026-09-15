@@ -38,6 +38,8 @@ import {
   validationResultSchema,
   windowInfoSchema,
   workbookInventorySchema,
+  worksheetFieldValidationSchema,
+  worksheetInvalidFieldSchema,
   worksheetItemSchema,
   worksheetListSchema,
 } from './types.js';
@@ -58,6 +60,7 @@ import {
  * monolith PR #64791 at commit 364d19f2e624c1859afebc34367e15c1e4b95e99 because no live
  * capture was available. The 0.2.13 dialog contract and 0.2.14 app-state contract were generated
  * from the monolith production registry. The rest remains the live 0.2.9 capture.
+ * Worksheet field validation is overlaid from a live 0.2.16 capture.
  */
 
 type SpecProperty = {
@@ -146,8 +149,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('is the authoritative 0.2.14 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.14');
+  it('is the authoritative 0.2.16 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.16');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -204,6 +207,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['SiteWorkbookList', siteWorkbookListSchema],
       ['WorksheetItem', worksheetItemSchema],
       ['WorksheetList', worksheetListSchema],
+      ['WorksheetInvalidField', worksheetInvalidFieldSchema],
+      ['WorksheetFieldValidation', worksheetFieldValidationSchema],
       ['StoryboardItem', storyboardItemSchema],
       ['StoryboardList', storyboardListSchema],
       ['WorkbookInventory', workbookInventorySchema],
@@ -553,6 +558,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.worksheetById,
       EXTERNAL_API_ROUTES.worksheetDocument,
       EXTERNAL_API_ROUTES.worksheetImage,
+      EXTERNAL_API_ROUTES.worksheetValidation,
       EXTERNAL_API_ROUTES.worksheetSummaryData,
       EXTERNAL_API_ROUTES.worksheetLogicalTables,
       EXTERNAL_API_ROUTES.worksheetLogicalTableData,
@@ -603,6 +609,24 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(metadata.get?.operationId).toBe('getWorkbookDatasource');
       expect(document.get?.operationId).toBe('getDatasourceDocument');
       expect(document.post?.operationId).toBe('applyDatasourceDocument');
+    });
+
+    it('documents worksheet field validation with its exact response schemas', () => {
+      const validation = spec.paths[EXTERNAL_API_ROUTES.worksheetValidation] as {
+        get?: {
+          operationId?: string;
+          responses?: Record<string, { content?: Record<string, { schema?: SpecProperty }> }>;
+        };
+      };
+      const response = specSchema('WorksheetFieldValidation');
+
+      expect(validation.get?.operationId).toBe('getWorksheetValidation');
+      expect(validation.get?.responses?.['200']?.content?.['application/json']?.schema?.$ref).toBe(
+        '#/components/schemas/WorksheetFieldValidation',
+      );
+      expect(response.properties?.invalidFields?.items?.$ref).toBe(
+        '#/components/schemas/WorksheetInvalidField',
+      );
     });
 
     it('invokeCommand stays deliberately undocumented (hidden route, owned separately)', () => {
@@ -661,8 +685,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       );
     });
 
-    it('retains the worksheet refresh-now Operation contract in 0.2.14', () => {
-      expect(spec.info.version).toBe('0.2.14');
+    it('retains the 0.2.14 worksheet refresh-now Operation contract in 0.2.16', () => {
+      expect(spec.info.version).toBe('0.2.16');
 
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetRefreshNow] as {
         post?: {

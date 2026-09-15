@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.14",
+    "version": "0.2.16",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -1962,6 +1962,39 @@
         }
       }
     },
+    "/v0/workbook/worksheets/{id}/validation": {
+      "get": {
+        "summary": "Validate fields used by a worksheet",
+        "description": "Validates only fields used by the addressed worksheet with Tableau's native shelf validator. This does not verify rendering or query execution.",
+        "operationId": "getWorksheetValidation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validates only fields used by the addressed worksheet with Tableau's native shelf validator. This does not verify rendering or query execution.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/WorksheetFieldValidation" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/v0/workbook/worksheets/{id}/logicalTables": {
       "get": {
         "summary": "List worksheet logical tables",
@@ -3006,6 +3039,31 @@
           },
           "isAutoUpdatesPaused": { "type": "boolean" },
           "datasources": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "WorksheetInvalidField": {
+        "type": "object",
+        "description": "One invalid field used by a worksheet and its native location.",
+        "required": ["fieldName", "shelf", "marksSpecificationId", "encodingType", "reason"],
+        "properties": {
+          "fieldName": { "type": "string" },
+          "fieldCaption": { "type": "string" },
+          "shelf": { "type": "string" },
+          "marksSpecificationId": { "type": "string" },
+          "encodingType": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      },
+      "WorksheetFieldValidation": {
+        "type": "object",
+        "description": "Native used-field validation for one worksheet.",
+        "required": ["worksheetId", "invalidFields"],
+        "properties": {
+          "worksheetId": { "type": "string" },
+          "invalidFields": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorksheetInvalidField" }
+          }
         }
       },
       "DashboardItem": {

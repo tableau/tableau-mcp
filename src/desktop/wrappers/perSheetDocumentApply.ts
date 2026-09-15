@@ -4,6 +4,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { log } from '../../logging/logger.js';
 import { escapeXml } from '../binder/escape.js';
 import {
+  ApplyWorkbookDocumentOptions,
   ExecuteCommandError,
   ExecuteCommandResult,
   ExecuteCommandWarning,
@@ -65,6 +66,7 @@ export async function tryApplyViaPerSheetRoute({
   focus,
   executor,
   signal,
+  expectedInstanceId,
 }: {
   kind: PerSheetKind;
   sheetName: string;
@@ -72,6 +74,7 @@ export async function tryApplyViaPerSheetRoute({
   expectedSourceHash?: string;
   validationContext?: ValidationContext;
   focus: ApplyFocus;
+  expectedInstanceId?: string;
 } & WithExecutorAndAbortSignal): Promise<Result<PerSheetApplyOutcome, ExecuteCommandError>> {
   const client = executor as ExternalApiToolExecutor;
 
@@ -142,6 +145,7 @@ export async function tryApplyViaPerSheetRoute({
     retitledFragment.value,
     client,
     signal,
+    expectedInstanceId,
   );
   if (applyResult.isErr()) {
     // A build with the list route but not the POST route (unlikely) still falls back cleanly.
@@ -317,10 +321,15 @@ async function applyDocumentForKind(
   documentXml: string,
   client: ExternalApiToolExecutor,
   signal: AbortSignal,
+  expectedInstanceId?: string,
 ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
   switch (kind) {
     case 'worksheet':
-      return client.applyWorksheetDocument(id, documentXml, signal);
+      return expectedInstanceId
+        ? client.applyWorksheetDocument(id, documentXml, signal, {
+            expectedInstanceId,
+          } satisfies ApplyWorkbookDocumentOptions)
+        : client.applyWorksheetDocument(id, documentXml, signal);
     case 'dashboard':
       return client.applyDashboardDocument(id, documentXml, signal);
     case 'storyboard':

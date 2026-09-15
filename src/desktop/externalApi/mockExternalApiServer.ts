@@ -696,6 +696,20 @@ export async function startMockExternalApiServer(
       }
     }
 
+    const worksheetValidationMatch = path.match(
+      /^\/v0\/workbook\/worksheets\/([^/]+)\/validation$/,
+    );
+    if (method === 'GET' && worksheetValidationMatch) {
+      const worksheetId = decodeURIComponent(worksheetValidationMatch[1]);
+      const known = DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId);
+      if (!known) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendJson(res, 200, { worksheetId, invalidFields: [] });
+      return;
+    }
+
     const dashboardDocumentMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)\/document$/);
     if (dashboardDocumentMatch) {
       const dashboardId = decodeURIComponent(dashboardDocumentMatch[1]);

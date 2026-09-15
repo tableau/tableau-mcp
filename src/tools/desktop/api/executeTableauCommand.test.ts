@@ -739,11 +739,37 @@ describe('executeTableauCommandTool', () => {
       );
     });
 
-    it('does not inspect the workbook after generate-viz-from-notional-spec succeeds', async () => {
+    it('automatically validates the pinned active worksheet after generate-viz succeeds', async () => {
       const executeCommand = vi
         .fn()
         .mockResolvedValue(new Ok({ command_id: 'generate-1', result: null }));
-      const extra = makeExtra(executeCommand);
+      const listWorksheets = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ id: 'sheet-1', name: 'Sheet 1', hidden: false, isActiveSheet: true }],
+        }),
+      );
+      const getWorksheetFieldValidation = vi.fn().mockResolvedValue(
+        Ok({
+          worksheetId: 'sheet-1',
+          invalidFields: [
+            {
+              fieldName: '[none:Revenue:qk]',
+              shelf: 'rows',
+              marksSpecificationId: 'marks-1',
+              encodingType: 'text',
+              reason: 'Field is unavailable.',
+            },
+          ],
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets,
+        getWorksheetFieldValidation,
+      });
 
       const result = await getResult(
         {
@@ -760,8 +786,71 @@ describe('executeTableauCommandTool', () => {
 
       expect(result.isError).toBeFalsy();
       invariant(result.content[0].type === 'text');
-      expect(JSON.parse(result.content[0].text).message).toBe('Command executed successfully.');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.message).toContain('Command executed successfully, but');
+      expect(payload.verification).toMatchObject({ ok: false, status: 'failed' });
+      expect(payload.verification.findings[0]).toMatchObject({
+        source: 'used-field-validity',
+        fieldName: '[none:Revenue:qk]',
+      });
       expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ expectedInstanceId: 'instance-1' }),
+      );
+      expect(listWorksheets).toHaveBeenCalledTimes(2);
+      expect(getWorksheetFieldValidation).toHaveBeenCalledWith(
+        'sheet-1',
+        expect.any(AbortSignal),
+        'instance-1',
+      );
+    });
+
+    it('does not validate or claim completion while generate-viz is still running', async () => {
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'generate-pending',
+          status: 'running',
+          submitted_at: '2026-09-14T00:00:00Z',
+        }),
+      );
+      const getWorksheetFieldValidation = vi.fn();
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi.fn().mockResolvedValue(
+          Ok({
+            worksheets: [{ id: 'sheet-1', name: 'Sheet 1', hidden: false, isActiveSheet: true }],
+          }),
+        ),
+        getWorksheetFieldValidation,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:generate-viz-from-notional-spec',
+          args: {
+            NotionalSpecJson:
+              '{"version":"0.2.0","chart":"bar","fields":[{"caption":"Region","data":"string","type":"discrete","role":"dimension","encoding":"x"}]}',
+            ClearSheet: true,
+          },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload).toMatchObject({
+        command_id: 'generate-pending',
+        status: 'running',
+        verification: { status: 'skipped' },
+      });
+      expect(payload.message).toContain('still running');
+      expect(payload.message).not.toContain('successfully');
+      expect(getWorksheetFieldValidation).not.toHaveBeenCalled();
     });
 
     it('leaves an arbitrary valid command call untouched', async () => {
@@ -819,6 +908,53 @@ describe('executeTableauCommandTool', () => {
         { local: 'FilePath', type: 'UPI_FilePath', required: true, wire: 'filepath' },
       ],
     };
+
+    it('reports unknown scope instead of guessing when a mutator has multiple worksheet params', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:compare-sheets': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            { local: 'Left', type: 'DPI_Worksheet', required: true, wire: 'left' },
+            { local: 'Right', type: 'DPI_Worksheet', required: true, wire: 'right' },
+          ],
+        },
+      });
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'compare-1',
+          status: 'completed',
+          submitted_at: '2026-09-14T00:00:00Z',
+        }),
+      );
+      const getWorksheetFieldValidation = vi.fn();
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi.fn(),
+        getWorksheetFieldValidation,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:compare-sheets',
+          args: { Left: 'Sheet 1', Right: 'Sheet 2' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).verification).toMatchObject({
+        status: 'skipped',
+        findings: [expect.objectContaining({ reason: 'target-unresolved' })],
+      });
+      expect(getWorksheetFieldValidation).not.toHaveBeenCalled();
+    });
 
     it('keeps existing behavior when TABLEAU_COMMANDS_REGISTRY_DIR is unset', async () => {
       const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
