@@ -1,0 +1,12 @@
+{
+  "id": "delete-content-preview",
+  "name": "Delete Content — Preview Only (safe)",
+  "description": "SAFE: exercises the delete-content PREVIEW phase only. With confirm omitted, the tool runs a non-destructive preview (tags the target / mints evidence) and returns a confirm payload WITHOUT deleting. The prompt forbids confirming, so nothing is deleted. Requires ADMIN_TOOLS_ENABLED=true, site-admin PAT, and EVAL_DELETE_WORKBOOK_LUID (a disposable test workbook).",
+  "tags": ["admin", "content", "mutation", "preview", "hitl", "real-server"],
+  "prompt": "Use the Tableau MCP server to PREVIEW deleting the workbook with LUID {{env.EVAL_DELETE_WORKBOOK_LUID}}. Only run the preview — do NOT confirm or apply the deletion. Report what the tool says would be deleted and whether it returned a confirmation payload. Do not call any confirm tool and do not re-call with confirm=true.",
+  "expected_tools": ["delete-content"],
+  "budget": {
+    "max_tool_calls": 4,
+    "max_wall_ms": 120000
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "get-datasource-metadata",
+  "name": "Get Datasource Metadata",
+  "description": "Exercises metadata retrieval for a known datasource LUID provided by EVAL_DATASOURCE_LUID.",
+  "tags": ["datasource", "metadata", "real-server"],
+  "prompt": "Use the Tableau MCP server to get metadata for datasource LUID {{env.EVAL_DATASOURCE_LUID}}. Summarize the datasource name, fields, and any warnings returned by the tool. Do not query data rows.",
+  "expected_tools": ["get-datasource-metadata"],
+  "budget": {
+    "max_tool_calls": 5,
+    "max_wall_ms": 120000
+  }
+}
