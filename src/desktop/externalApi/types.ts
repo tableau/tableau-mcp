@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.13), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.14), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -54,6 +54,7 @@ export const EXTERNAL_API_ROUTES = {
   worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetDocument: '/v0/workbook/worksheets/{id}/document',
   worksheetImage: '/v0/workbook/worksheets/{id}/image',
+  worksheetShowMeOptions: '/v0/workbook/worksheets/{id}/showMe',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
   worksheetLogicalTables: '/v0/workbook/worksheets/{id}/logicalTables',
   worksheetLogicalTableData: '/v0/workbook/worksheets/{id}/logicalTables/{logicalTableId}/data',
@@ -91,6 +92,17 @@ export type WorksheetSummaryDataQuery = {
    * field name may itself contain a comma.
    */
   columnsToIncludeByFieldName?: Array<string>;
+};
+
+/** Selection context accepted by {@link worksheetShowMeOptionsRoute}. */
+export type ShowMeOptionsQuery = {
+  /** Internal datasource name used to evaluate the native Show Me model. */
+  dataSource?: string;
+  /**
+   * Ordered fully qualified field names selected in the schema viewer. Omission
+   * preserves Desktop's ambient selection; an explicit empty array clears it.
+   */
+  fieldsSelectedInSchemaViewer?: Array<string>;
 };
 
 /** Query accepted by {@link worksheetLogicalTableDataRoute}. */
@@ -269,6 +281,25 @@ export function worksheetSummaryDataRoute(
 
   const suffix = search.size > 0 ? `?${search.toString()}` : '';
   return `${worksheetRoute(worksheetId)}/summaryData${suffix}`;
+}
+
+export function worksheetShowMeOptionsRoute(
+  worksheetId: string,
+  query: ShowMeOptionsQuery,
+): string {
+  const search = new URLSearchParams();
+  if (query.dataSource !== undefined) {
+    search.set('dataSource', query.dataSource);
+  }
+  if (query.fieldsSelectedInSchemaViewer !== undefined) {
+    search.set('selectionMode', 'explicit');
+    for (const field of query.fieldsSelectedInSchemaViewer) {
+      search.append('fieldsSelectedInSchemaViewer', field);
+    }
+  }
+
+  const suffix = search.size > 0 ? `?${search.toString()}` : '';
+  return `${worksheetRoute(worksheetId)}/showMe${suffix}`;
 }
 
 const SHEET_ROUTE_PREFIX: Record<SheetKind, string> = {
@@ -459,7 +490,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.13). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.14). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -490,6 +521,8 @@ export const PROBLEM_CODES = [
   'unsupported-file-type',
   'unsupported-target-version',
   'file-not-found',
+  'show-me-not-applicable',
+  'show-me-unavailable',
   'operation-failed',
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
@@ -663,6 +696,34 @@ export const worksheetItemSchema = z
   })
   .passthrough();
 export type WorksheetItem = z.infer<typeof worksheetItemSchema>;
+
+/** Worksheet identity evaluated by the native Show Me presentation model. */
+export const showMeWorksheetSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+  })
+  .passthrough();
+
+/** One runtime option from the native Show Me presentation model. */
+export const showMeOptionSchema = z
+  .object({
+    showMeType: z.string(),
+    isApplicable: z.boolean(),
+    vizHasRequiredFields: z.boolean(),
+    dataSourceHasRequiredFields: z.boolean(),
+    helpUrl: z.string(),
+  })
+  .passthrough();
+
+/** Ordered Show Me discovery result returned for a worksheet. */
+export const showMeOptionsResultSchema = z
+  .object({
+    worksheet: showMeWorksheetSchema,
+    options: z.array(showMeOptionSchema),
+  })
+  .passthrough();
+export type ShowMeOptionsResult = z.infer<typeof showMeOptionsResultSchema>;
 
 /** Worksheet list returned by `GET /v0/workbook/worksheets`. */
 export const worksheetListSchema = z

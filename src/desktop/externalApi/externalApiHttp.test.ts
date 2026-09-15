@@ -14,6 +14,7 @@ import {
   invokeDialogActionResultSchema,
   logicalTableListSchema,
   sheetActionRoute,
+  showMeOptionsResultSchema,
   siteDatasourceListSchema,
   siteSchema,
   siteWorkbookListSchema,
@@ -31,6 +32,7 @@ import {
   worksheetLogicalTableDataRoute,
   worksheetLogicalTablesRoute,
   worksheetRoute,
+  worksheetShowMeOptionsRoute,
   worksheetSortRoute,
   worksheetSummaryDataRoute,
 } from './types.js';
@@ -639,6 +641,88 @@ describe('ExternalApiHttp', () => {
     const last = server.requests.at(-1) as any;
     expect(last?.method).toBe('GET');
     expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales/summaryData');
+  });
+
+  it('serializes ambient, explicit-empty, and ordered explicit Show Me selection contexts', () => {
+    const ambient = worksheetShowMeOptionsRoute('sheet/sales now', {
+      dataSource: 'Sample - Superstore',
+    });
+    expect(ambient).toBe(
+      '/v0/workbook/worksheets/sheet%2Fsales%20now/showMe?dataSource=Sample+-+Superstore',
+    );
+
+    const explicitEmpty = new URL(
+      worksheetShowMeOptionsRoute('sheet-sales', { fieldsSelectedInSchemaViewer: [] }),
+      'http://localhost',
+    ).searchParams;
+    expect([...explicitEmpty.entries()]).toEqual([['selectionMode', 'explicit']]);
+
+    const explicitFields = new URL(
+      worksheetShowMeOptionsRoute('sheet-sales', {
+        dataSource: 'Sample - Superstore',
+        fieldsSelectedInSchemaViewer: [
+          '[Sample - Superstore].[none:Region:nk]',
+          '[Sample - Superstore].[sum:Sales:qk]',
+        ],
+      }),
+      'http://localhost',
+    ).searchParams;
+    expect([...explicitFields.entries()]).toEqual([
+      ['dataSource', 'Sample - Superstore'],
+      ['selectionMode', 'explicit'],
+      ['fieldsSelectedInSchemaViewer', '[Sample - Superstore].[none:Region:nk]'],
+      ['fieldsSelectedInSchemaViewer', '[Sample - Superstore].[sum:Sales:qk]'],
+    ]);
+  });
+
+  it('keeps native Show Me order and future tokens while requiring every producer field', () => {
+    const response = {
+      worksheet: { id: 'sheet-sales', name: 'Sales by Region', futureWorksheetField: true },
+      options: [
+        {
+          showMeType: 'bar-horiz',
+          isApplicable: true,
+          vizHasRequiredFields: true,
+          dataSourceHasRequiredFields: true,
+          helpUrl: 'https://help.tableau.com/show-me/bar-chart',
+        },
+        {
+          showMeType: 'native-future-viz',
+          isApplicable: false,
+          vizHasRequiredFields: false,
+          dataSourceHasRequiredFields: true,
+          helpUrl: 'https://help.tableau.com/show-me/future-viz',
+          futureOptionField: 'preserved',
+        },
+      ],
+      futureResponseField: 1,
+    };
+
+    expect(showMeOptionsResultSchema.parse(response)).toEqual(response);
+    expect(
+      showMeOptionsResultSchema.safeParse({
+        worksheet: response.worksheet,
+        options: [{ ...response.options[0], helpUrl: undefined }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('gets Show Me options through the real HTTP mock', async () => {
+    const result = await http.getJson(
+      worksheetShowMeOptionsRoute('sheet-sales', {}),
+      showMeOptionsResultSchema,
+      new AbortController().signal,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().options.map(({ showMeType }) => showMeType)).toEqual([
+      'bar-horiz',
+      'native-future-viz',
+    ]);
+    expect(server.requests.at(-1)).toMatchObject({
+      method: 'GET',
+      path: '/v0/workbook/worksheets/sheet-sales/showMe',
+    });
   });
 
   it('lists worksheet logical tables from GET .../logicalTables', async () => {

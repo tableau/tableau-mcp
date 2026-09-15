@@ -42,6 +42,7 @@ export function makeExecutorMock(
     listWorkbookDatasources: vi.fn(),
     getWorkbookDatasource: vi.fn(),
     getWorksheet: vi.fn(),
+    getWorksheetShowMeOptions: vi.fn(),
     getDashboard: vi.fn(),
     getStoryboard: vi.fn(),
     getWorkbookDocument: vi.fn(),

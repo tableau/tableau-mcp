@@ -8,6 +8,7 @@ import {
   HEADER_APPLICATION_VERSION,
   HEADER_XSD_PAYLOAD_VERSION,
   SHOW_ME_TYPES,
+  type ShowMeOptionsResult,
 } from './types.js';
 
 /**
@@ -103,6 +104,22 @@ const DEFAULT_WORKSHEETS = [
     isAutoUpdatesPaused: true,
     index: 1,
     datasources: ['Sample - Superstore'],
+  },
+];
+const DEFAULT_SHOW_ME_OPTIONS: ShowMeOptionsResult['options'] = [
+  {
+    showMeType: 'bar-horiz',
+    isApplicable: true,
+    vizHasRequiredFields: true,
+    dataSourceHasRequiredFields: true,
+    helpUrl: 'https://help.tableau.com/show-me/bar-chart',
+  },
+  {
+    showMeType: 'native-future-viz',
+    isApplicable: false,
+    vizHasRequiredFields: false,
+    dataSourceHasRequiredFields: true,
+    helpUrl: 'https://help.tableau.com/show-me/future-viz',
   },
 ];
 const DEFAULT_DASHBOARDS = [
@@ -730,6 +747,21 @@ export async function startMockExternalApiServer(
         return;
       }
       sendJson(res, 200, worksheet);
+      return;
+    }
+
+    const showMeOptionsMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/showMe$/);
+    if (method === 'GET' && showMeOptionsMatch) {
+      const worksheetId = decodeURIComponent(showMeOptionsMatch[1]);
+      const worksheet = DEFAULT_WORKSHEETS.find((candidate) => candidate.id === worksheetId);
+      if (!worksheet) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendJson(res, 200, {
+        worksheet: { id: worksheet.id, name: worksheet.name },
+        options: DEFAULT_SHOW_ME_OPTIONS,
+      });
       return;
     }
 

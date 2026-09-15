@@ -180,6 +180,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'list-available-fields',
     'search-workbook-fields',
     'list-worksheets',
+    'get-show-me-options',
     'list-dashboards',
     'get-summary-data',
     'list-worksheet-logical-tables',

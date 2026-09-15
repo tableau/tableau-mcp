@@ -438,10 +438,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 68-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 69-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(68);
+    expect(selected).toHaveLength(69);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -740,6 +740,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('get-datasource-xml')).toBe('0.2.10');
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
+    expect(floors.get('get-show-me-options')).toBe('0.2.14');
   });
 
   it('gates all individual datasource tools at 0.2.10 and fails open for an unknown version', () => {
@@ -853,6 +854,20 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(namesAt('0.3.0')).toContain('refresh-auto-updates');
     expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
     expect(namesAt(undefined)).toContain('refresh-auto-updates');
+  });
+
+  it('gates Show Me option discovery at External Client API 0.2.14', () => {
+    const profileTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'dynamic-authoring',
+    );
+    const namesAt = (apiVersion: string | undefined): string[] =>
+      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
+
+    expect(namesAt('0.2.13')).not.toContain('get-show-me-options');
+    expect(namesAt('0.2.14')).toContain('get-show-me-options');
+    expect(namesAt('0.3.0')).toContain('get-show-me-options');
+    expect(namesAt(undefined)).toContain('get-show-me-options');
   });
 });
 

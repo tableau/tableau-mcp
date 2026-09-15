@@ -8,6 +8,7 @@ export const desktopToolNames = [
   'undo-workbook',
   'redo-workbook',
   'list-worksheets',
+  'get-show-me-options',
   'list-dashboards',
   'get-worksheet-xml',
   'apply-worksheet',

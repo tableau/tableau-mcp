@@ -63,6 +63,9 @@ import {
   RefreshExtractRequest,
   sheetActionRoute,
   SheetRef,
+  ShowMeOptionsQuery,
+  ShowMeOptionsResult,
+  showMeOptionsResultSchema,
   Site,
   SiteDatasourceList,
   siteDatasourceListSchema,
@@ -102,6 +105,7 @@ import {
   worksheetRefreshNowRoute,
   worksheetResumeAutoUpdatesRoute,
   worksheetRoute,
+  worksheetShowMeOptionsRoute,
   WorksheetShowMeRequest,
   worksheetShowMeRoute,
   WorksheetSort,
@@ -412,6 +416,20 @@ export class ExternalApiToolExecutor {
   ): Promise<Result<WorksheetItem, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(worksheetRoute(worksheetId), worksheetItemSchema, signal),
+    );
+  }
+
+  async getWorksheetShowMeOptions(
+    worksheetId: string,
+    query: ShowMeOptionsQuery,
+    signal: AbortSignal,
+  ): Promise<Result<ShowMeOptionsResult, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(
+        worksheetShowMeOptionsRoute(worksheetId, query),
+        showMeOptionsResultSchema,
+        signal,
+      ),
     );
   }
 

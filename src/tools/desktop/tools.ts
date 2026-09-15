@@ -20,6 +20,7 @@ import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
 import { getDatasourceInfoTool } from './api/getDatasourceInfo.js';
 import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getHealthTool } from './api/getHealth.js';
+import { getShowMeOptionsTool } from './api/getShowMeOptions.js';
 import { getSiteInfoTool } from './api/getSiteInfo.js';
 import { getStoryboardInfoTool } from './api/getStoryboardInfo.js';
 import { getStoryboardXmlTool } from './api/getStoryboardXml.js';
@@ -119,6 +120,7 @@ export const desktopToolFactories = [
   getRefreshDatasourceDataTool,
   getRefreshDatasourceExtractTool,
   getListWorksheetsTool,
+  getShowMeOptionsTool,
   getListDashboardsTool,
   getGetWorksheetXmlTool,
   getApplyWorksheetTool,
