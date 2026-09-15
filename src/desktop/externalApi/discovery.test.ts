@@ -54,6 +54,47 @@ describe('discoverInstances', () => {
     ]);
   });
 
+  it.each(['http://127.0.0.1:1', 'http://127.0.0.1:51000', 'http://127.0.0.1:65535'])(
+    'accepts the exact producer loopback origin %s',
+    (baseUrl) => {
+      const instances = discoverInstances({
+        discoveryDir: '/discovery',
+        readDir: () => ['12345.json'],
+        readFile: () => validFile({ baseUrl }),
+        isPidAlive: () => true,
+      });
+
+      expect(instances).toHaveLength(1);
+      expect(instances[0].baseUrl).toBe(baseUrl);
+    },
+  );
+
+  it.each([
+    'https://127.0.0.1:51000',
+    'http://localhost:51000',
+    'http://127.0.0.2:51000',
+    'http://[::1]:51000',
+    'http://127.0.0.1',
+    'http://127.0.0.1:0',
+    'http://127.0.0.1:65536',
+    'http://user@127.0.0.1:51000',
+    'http://127.0.0.1:51000/',
+    'http://127.0.0.1:51000/v0',
+    'http://127.0.0.1:51000?target=elsewhere',
+    'http://127.0.0.1:51000#fragment',
+  ])('rejects a discovery origin outside the exact producer form: %s', (baseUrl) => {
+    const readFile = vi.fn(() => validFile({ baseUrl }));
+    const instances = discoverInstances({
+      discoveryDir: '/discovery',
+      readDir: () => ['12345.json'],
+      readFile,
+      isPidAlive: () => true,
+    });
+
+    expect(readFile).toHaveBeenCalledOnce();
+    expect(instances).toEqual([]);
+  });
+
   it('skips entries whose pid is dead', () => {
     const instances = discoverInstances({
       discoveryDir: '/discovery',

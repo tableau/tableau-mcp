@@ -19,6 +19,7 @@ import { getDashboardInfoTool } from './api/getDashboardInfo.js';
 import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
 import { getDatasourceInfoTool } from './api/getDatasourceInfo.js';
 import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
+import { getDesktopStateTool } from './api/getDesktopState.js';
 import { getHealthTool } from './api/getHealth.js';
 import { getShowMeOptionsTool } from './api/getShowMeOptions.js';
 import { getSiteInfoTool } from './api/getSiteInfo.js';
@@ -101,6 +102,7 @@ import { getSearchWorkbookExamplesTool } from './local/search/searchWorkbookExam
 
 export const desktopToolFactories = [
   getListInstancesTool,
+  getDesktopStateTool,
   getActiveDialogsTool,
   getInvokeDialogActionTool,
   getGetWorkbookXmlTool,

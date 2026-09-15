@@ -175,6 +175,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'redo-workbook',
     'ask-user',
     'list-instances',
+    'get-desktop-state',
     'get-active-dialogs',
     'invoke-dialog-action',
     'list-available-fields',

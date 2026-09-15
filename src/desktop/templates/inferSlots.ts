@@ -192,7 +192,10 @@ function communicativeRole(
  */
 export function inferFromBookmark(rawXml: string): Inference {
   const { all, attr } = parseBookmarkDom(rawXml);
-  const placementRoots = [...all('table'), ...all('window')];
+  const rootLayoutOptions = all('layout-options').filter(
+    (layout) => layout.parentNode?.nodeName === 'bookmark',
+  );
+  const placementRoots = [...all('table'), ...all('window'), ...rootLayoutOptions];
   const placementElements = (tag: string): Element[] =>
     placementRoots.flatMap((root) =>
       root.tagName === tag
