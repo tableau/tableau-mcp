@@ -136,6 +136,7 @@ describe('captureWindowScreenshot', () => {
 
   function executorReturning(parsedResult: unknown): ExternalApiToolExecutor {
     return makeExecutorMock({
+      desktopInstanceId: 'inst-capture',
       executeCommand: vi.fn().mockResolvedValue(Ok(completedCommand(parsedResult))),
     });
   }
@@ -168,6 +169,7 @@ describe('captureWindowScreenshot', () => {
       namespace: 'tabui',
       command: 'take-all-screenshots',
       args: { HideMouse: true },
+      expectedInstanceId: 'inst-capture',
       signal,
     });
     expect(call.schema?.safeParse({ tempFilePath: directory }).success).toBe(true);
@@ -410,18 +412,52 @@ describe('captureWindowScreenshot', () => {
     for (let index = 0; index <= MAX_WINDOW_SCREENSHOT_CANDIDATES; index += 1) {
       writeFileSync(join(directory, `ScreenShot_${index}.png`), png(1, 1));
     }
+    const open = vi.fn(() => {
+      throw new Error('over-count candidates must not be opened');
+    });
     const read = vi.fn(() => {
       throw new Error('over-count candidates must not be read');
     });
 
     const result = await captureWindowScreenshot(
       { executor: executorReturning({ tempFilePath: directory }), signal },
-      { read },
+      { open, read },
     );
 
     expect(result.isErr()).toBe(true);
+    expect(open).not.toHaveBeenCalled();
     expect(read).not.toHaveBeenCalled();
-    expect(lstatSync(directory).isDirectory()).toBe(true);
+    expect(() => lstatSync(directory)).toThrow();
+  });
+
+  it('removes only validated over-count candidates while preserving foreign and symlink entries', async () => {
+    const directory = commandDirectory();
+    const realCandidates = Array.from({ length: MAX_WINDOW_SCREENSHOT_CANDIDATES }, (_, index) =>
+      join(directory, `ScreenShot_${index}.png`),
+    );
+    for (const candidate of realCandidates) writeFileSync(candidate, png(1, 1));
+    const foreign = join(directory, 'keep.txt');
+    writeFileSync(foreign, Buffer.from('keep'));
+    const target = join(canonicalTempRoot, `tableau-target-${process.pid}-${Date.now()}.png`);
+    cleanupRoots.push(target);
+    writeFileSync(target, png(2, 2));
+    const link = join(directory, `ScreenShot_${MAX_WINDOW_SCREENSHOT_CANDIDATES}.png`);
+    symlinkSync(target, link);
+    const open = vi.fn(() => {
+      throw new Error('over-count candidates must not be opened');
+    });
+
+    const result = await captureWindowScreenshot(
+      { executor: executorReturning({ tempFilePath: directory }), signal },
+      { open },
+    );
+
+    expect(result.isErr()).toBe(true);
+    expect(open).not.toHaveBeenCalled();
+    for (const candidate of realCandidates) expect(() => lstatSync(candidate)).toThrow();
+    expect(lstatSync(foreign).isFile()).toBe(true);
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(lstatSync(target).isFile()).toBe(true);
   });
 
   it('rejects an aggregate byte budget breach before full reads and cleans validated files', async () => {
@@ -462,6 +498,40 @@ describe('captureWindowScreenshot', () => {
     expect(result.isErr()).toBe(true);
     expect(executor.executeCommand).not.toHaveBeenCalled();
     expect(lstat).not.toHaveBeenCalled();
+  });
+
+  it('keeps validating later candidates after cancellation during metadata gathering', async () => {
+    const controller = new AbortController();
+    const directory = commandDirectory();
+    const first = join(directory, 'ScreenShot_1.png');
+    const second = join(directory, 'ScreenShot_2.png');
+    writeFileSync(first, png(20, 10));
+    writeFileSync(second, png(10, 10));
+    const stat = vi.fn((path: string) => {
+      const stats = lstatSync(path);
+      if (path === first) controller.abort();
+      return stats;
+    });
+    const read = vi.fn(() => {
+      throw new Error('cancelled candidates must not be read');
+    });
+
+    const result = await captureWindowScreenshot(
+      {
+        executor: executorReturning({ tempFilePath: directory }),
+        signal: controller.signal,
+      },
+      { stat, read },
+    );
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expectLocalCaptureError(result.error);
+      expect(result.error.message).toBe('Tableau Desktop window capture was cancelled.');
+    }
+    expect(stat).toHaveBeenCalledWith(second);
+    expect(read).not.toHaveBeenCalled();
+    expect(() => lstatSync(directory)).toThrow();
   });
 
   it('stops between candidate reads when aborted and cleans all preflight-validated files', async () => {

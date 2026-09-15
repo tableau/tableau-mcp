@@ -257,6 +257,9 @@ export class ExternalApiToolExecutor {
     const resolvedArgs = args ?? {};
 
     const outcomeResult = await this.withRescan('command', async (http) => {
+      if (isScreenshotCaptureCommand(namespace, command)) {
+        expectedInstanceId ??= http.instanceId;
+      }
       if (expectedInstanceId !== undefined && http.instanceId !== expectedInstanceId) {
         return Err({
           type: 'instance-mismatch' as const,
