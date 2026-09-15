@@ -1,0 +1,293 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../config.js', () => ({
+  getConfig: vi.fn(() => ({
+    sessionStore: { provider: 'memory' },
+  })),
+}));
+
+import { getConfig } from '../config.js';
+import {
+  connectSessionStore,
+  createNamespacedStore,
+  disconnectSessionStore,
+  initializeSessionStore,
+  resetSessionStore,
+} from './init.js';
+import { isSessionStoreProvider, sessionStoreProviderSchema } from './types.js';
+
+const FAKE_STORE_MODULE = './src/sessionStore/__fixtures__/fakeSessionStore.cjs';
+const NO_ROTATE_STORE_MODULE = './src/sessionStore/__fixtures__/noRotateSessionStore.cjs';
+const CONFIGURE_NAMESPACE_STORE_MODULE =
+  './src/sessionStore/__fixtures__/configureNamespaceSessionStore.cjs';
+const LIFECYCLE_STORE_MODULE = './src/sessionStore/__fixtures__/lifecycleSessionStore.cjs';
+const REJECTING_LIFECYCLE_STORE_MODULE =
+  './src/sessionStore/__fixtures__/rejectingLifecycleSessionStore.cjs';
+
+// The fixture providers are instantiated inside init.ts's loader, out of the test's reach, so they
+// record their configureNamespace / init / close calls here on globalThis for the test to assert.
+declare global {
+  // eslint-disable-next-line no-var
+  var __configureNamespaceCalls: Array<{ namespace: string; options: unknown }> | undefined;
+  // eslint-disable-next-line no-var
+  var __initCalls: number | undefined;
+  // eslint-disable-next-line no-var
+  var __closeCalls: number | undefined;
+}
+
+describe('SessionStore init', () => {
+  beforeEach(() => {
+    resetSessionStore();
+    vi.clearAllMocks();
+    vi.mocked(getConfig).mockReturnValue({ sessionStore: { provider: 'memory' } } as any);
+    globalThis.__initCalls = 0;
+    globalThis.__closeCalls = 0;
+  });
+
+  describe('provider selection', () => {
+    it('defaults to the memory provider when unconfigured', async () => {
+      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      await store.set('key', 'value');
+      await expect(store.get('key')).resolves.toBe('value');
+    });
+
+    it('loads a custom provider successfully from a fixture module', async () => {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: { module: FAKE_STORE_MODULE },
+        },
+      } as any);
+
+      initializeSessionStore();
+      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+
+      await store.set('key', 'value');
+      await expect(store.get('key')).resolves.toBe('value');
+
+      // Proves the custom backend (not the memory fallback) is in use: two calls for the same
+      // namespace share the one loaded provider, whereas the memory path returns fresh instances.
+      const second = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      await expect(second.get('key')).resolves.toBe('value');
+    });
+
+    it('throws when the custom module is missing "module"', () => {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: { provider: 'custom', providerConfig: {} },
+      } as any);
+
+      // Fail closed: an explicitly-configured custom store that cannot load must be fatal at
+      // boot, not silently downgraded to isolated in-memory state on every replica.
+      expect(() => initializeSessionStore()).toThrow(/"module"/);
+    });
+
+    it('throws when the custom module fails to load', () => {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: { module: './nonexistent-provider.cjs' },
+        },
+      } as any);
+
+      expect(() => initializeSessionStore()).toThrow(
+        /Failed to load custom session store provider/,
+      );
+    });
+
+    it('throws when a custom provider is missing rotate', () => {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: { module: NO_ROTATE_STORE_MODULE },
+        },
+      } as any);
+
+      expect(() => initializeSessionStore()).toThrow(/rotate/);
+    });
+
+    it('propagates the original error when getConfig throws', () => {
+      vi.mocked(getConfig).mockImplementation(() => {
+        throw new Error('Config error');
+      });
+
+      // The raw error must propagate uncaught (not wrapped or swallowed), so the existing
+      // top-level fatal-boot handler in index.ts logs it and exits.
+      expect(() => initializeSessionStore()).toThrow('Config error');
+    });
+  });
+
+  describe('createNamespacedStore', () => {
+    it('returns independent stores for the same namespace on the memory path', async () => {
+      const a = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      const b = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+
+      await a.set('key', 'value');
+      await expect(a.get('key')).resolves.toBe('value');
+      await expect(b.get('key')).resolves.toBeUndefined();
+    });
+
+    it('lazily initializes when initializeSessionStore was not called', async () => {
+      // No initializeSessionStore() call; createNamespacedStore initializes on demand.
+      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      await store.set('key', 'value');
+      await expect(store.get('key')).resolves.toBe('value');
+    });
+
+    it('isolates identical raw keys across namespaces sharing one custom backend', async () => {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: { module: FAKE_STORE_MODULE },
+        },
+      } as any);
+
+      initializeSessionStore();
+
+      const nsA = createNamespacedStore<string>('alpha', { ttlMs: 10000 });
+      const nsB = createNamespacedStore<string>('beta', { ttlMs: 10000 });
+
+      await nsA.set('shared', 'a-value');
+      await nsB.set('shared', 'b-value');
+
+      // Prefixing keeps the identical raw key 'shared' from colliding on the shared backend.
+      await expect(nsA.get('shared')).resolves.toBe('a-value');
+      await expect(nsB.get('shared')).resolves.toBe('b-value');
+
+      // rotate on one namespace prefixes both keys and does not disturb the other.
+      await nsA.rotate!('shared', 'rotated', 'a-rotated');
+      await expect(nsA.get('shared')).resolves.toBeUndefined();
+      await expect(nsA.get('rotated')).resolves.toBe('a-rotated');
+      await expect(nsB.get('shared')).resolves.toBe('b-value');
+    });
+
+    it('forwards each namespace its own TTL/bound via configureNamespace on the custom path', () => {
+      globalThis.__configureNamespaceCalls = [];
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: { module: CONFIGURE_NAMESPACE_STORE_MODULE },
+        },
+      } as any);
+
+      initializeSessionStore();
+
+      createNamespacedStore<string>('alpha', { ttlMs: 1000, maxSize: 500 });
+      createNamespacedStore<string>('beta', { ttlMs: 2000 });
+
+      // Each namespace's own options reach its own call, with no cross-namespace conflation.
+      expect(globalThis.__configureNamespaceCalls).toEqual([
+        { namespace: 'alpha', options: { ttlMs: 1000, maxSize: 500 } },
+        { namespace: 'beta', options: { ttlMs: 2000 } },
+      ]);
+    });
+
+    it('works with a custom provider that does not implement configureNamespace', async () => {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: {
+          provider: 'custom',
+          providerConfig: { module: FAKE_STORE_MODULE },
+        },
+      } as any);
+
+      initializeSessionStore();
+
+      // The optional `?.()` call is a no-op when absent: wrapping and normal ops still work.
+      const store = createNamespacedStore<string>('ns', { ttlMs: 10000 });
+      await store.set('key', 'value');
+      await expect(store.get('key')).resolves.toBe('value');
+    });
+  });
+
+  describe('lifecycle hooks', () => {
+    function useCustomStore(module: string): void {
+      vi.mocked(getConfig).mockReturnValue({
+        sessionStore: { provider: 'custom', providerConfig: { module } },
+      } as any);
+    }
+
+    it('connectSessionStore calls a custom provider that implements init()', async () => {
+      useCustomStore(LIFECYCLE_STORE_MODULE);
+      await connectSessionStore();
+      expect(globalThis.__initCalls).toBe(1);
+    });
+
+    it('connectSessionStore lazily initializes then calls init() when not initialized', async () => {
+      useCustomStore(LIFECYCLE_STORE_MODULE);
+      // No initializeSessionStore() call first: connect must initialize on demand, then init().
+      await connectSessionStore();
+      expect(globalThis.__initCalls).toBe(1);
+    });
+
+    it('connectSessionStore propagates a rejecting init() (fail-closed)', async () => {
+      useCustomStore(REJECTING_LIFECYCLE_STORE_MODULE);
+      await expect(connectSessionStore()).rejects.toThrow(/init failed/);
+    });
+
+    it('connectSessionStore resolves cleanly when the custom provider has no init()', async () => {
+      useCustomStore(FAKE_STORE_MODULE);
+      await expect(connectSessionStore()).resolves.toBeUndefined();
+    });
+
+    it('connectSessionStore is a no-op on the memory path', async () => {
+      await expect(connectSessionStore()).resolves.toBeUndefined();
+      expect(globalThis.__initCalls).toBe(0);
+    });
+
+    it('disconnectSessionStore calls a custom provider that implements close()', async () => {
+      useCustomStore(LIFECYCLE_STORE_MODULE);
+      initializeSessionStore();
+      await disconnectSessionStore();
+      expect(globalThis.__closeCalls).toBe(1);
+    });
+
+    it('disconnectSessionStore propagates a rejecting close()', async () => {
+      useCustomStore(REJECTING_LIFECYCLE_STORE_MODULE);
+      initializeSessionStore();
+      await expect(disconnectSessionStore()).rejects.toThrow(/close failed/);
+    });
+
+    it('disconnectSessionStore resolves cleanly when the custom provider has no close()', async () => {
+      useCustomStore(FAKE_STORE_MODULE);
+      initializeSessionStore();
+      await expect(disconnectSessionStore()).resolves.toBeUndefined();
+    });
+
+    it('disconnectSessionStore is a no-op on the memory path (including uninitialized)', async () => {
+      // state === null (never initialized) and the memory path both resolve without touching a store.
+      await expect(disconnectSessionStore()).resolves.toBeUndefined();
+      initializeSessionStore();
+      await expect(disconnectSessionStore()).resolves.toBeUndefined();
+      expect(globalThis.__closeCalls).toBe(0);
+    });
+  });
+
+  describe('Session Store Provider Types', () => {
+    describe('sessionStoreProviderSchema', () => {
+      it('accepts "memory" as a valid provider', () => {
+        expect(sessionStoreProviderSchema.safeParse('memory').success).toBe(true);
+      });
+
+      it('accepts "custom" as a valid provider', () => {
+        expect(sessionStoreProviderSchema.safeParse('custom').success).toBe(true);
+      });
+
+      it('rejects invalid provider values', () => {
+        expect(sessionStoreProviderSchema.safeParse('invalid').success).toBe(false);
+      });
+    });
+
+    describe('isSessionStoreProvider', () => {
+      it('returns true for valid providers', () => {
+        expect(isSessionStoreProvider('memory')).toBe(true);
+        expect(isSessionStoreProvider('custom')).toBe(true);
+      });
+
+      it('returns false for invalid values', () => {
+        expect(isSessionStoreProvider('invalid')).toBe(false);
+        expect(isSessionStoreProvider(undefined)).toBe(false);
+        expect(isSessionStoreProvider(null)).toBe(false);
+        expect(isSessionStoreProvider(123)).toBe(false);
+      });
+    });
+  });
+});
