@@ -606,7 +606,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
         ok: true,
         status: 'skipped',
       });
-      expect(result.value.readbackVerification?.findings ?? []).not.toEqual(
+      expect(result.value.readbackVerification?.findings ?? []).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ reason: 'structural-readback-unavailable' }),
         ]),
@@ -1313,6 +1313,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       .fn()
       .mockResolvedValue(Ok({ worksheetId, invalidFields: [] }));
     const executor = makeExecutorMock({
+      desktopInstanceId: 'inst-build',
       desktopApiVersion: '0.2.16',
       getWorkbookDocument: vi.fn(async () =>
         Ok({ xml: baseline, applicationVersion: undefined, xsdPayloadVersion: undefined }),

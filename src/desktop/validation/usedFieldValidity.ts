@@ -27,6 +27,23 @@ export async function checkUsedFieldValidity({
   expectedInstanceId: string;
   signal: AbortSignal;
 }): Promise<UsedFieldValidityOutcome> {
+  const actualInstanceId = executor.desktopInstanceId;
+  if (!actualInstanceId) {
+    return {
+      status: 'unknown',
+      worksheetId,
+      reason: 'instance-unavailable',
+      message: 'Field verification could not confirm the current Desktop instance.',
+    };
+  }
+  if (actualInstanceId !== expectedInstanceId) {
+    return {
+      status: 'unknown',
+      worksheetId,
+      reason: 'instance-mismatch',
+      message: `Field verification expected Desktop instance ${expectedInstanceId}, but found ${actualInstanceId}.`,
+    };
+  }
   if (!apiVersionAtLeast(executor.desktopApiVersion, WORKSHEET_FIELD_VALIDATION_MIN_API_VERSION)) {
     return {
       status: 'unknown',

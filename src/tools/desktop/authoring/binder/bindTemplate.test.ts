@@ -3952,6 +3952,14 @@ describe('bindTemplateTool auto_apply gate', () => {
           status: 'skipped',
           message:
             'this.executor.listWorksheets is not a function Static validation found no invalid used fields. Static validation checks fields used by the worksheet; it does not verify query execution or rendering.',
+          findings: [
+            {
+              severity: 'warning',
+              source: 'readback',
+              message: 'this.executor.listWorksheets is not a function',
+              reason: 'structural-readback-unavailable',
+            },
+          ],
         },
         summary_rows_error: 'activeExecutor.listWorksheets is not a function',
       }),

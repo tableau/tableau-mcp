@@ -313,7 +313,7 @@ function shapeCommandResult({
 
 type CommandWorksheetTarget =
   | { kind: 'active' }
-  | { kind: 'explicit'; worksheetRef: string }
+  | { kind: 'stable-id'; worksheetId: string }
   | { kind: 'unknown' };
 
 function commandWorksheetTarget(
@@ -326,12 +326,15 @@ function commandWorksheetTarget(
   }
   const registry = lookupExternalApiCommandRegistry(namespace, command);
   if (!registry?.modifiesWorkbookState) return null;
-  const worksheetParams = registry.params.filter((param) => param.type === 'DPI_Worksheet');
+  const worksheetParams = registry.params.filter(
+    (param) => param.type === 'DPI_Worksheet' || param.type === 'DPI_WorksheetSimpleID',
+  );
   if (worksheetParams.length !== 1) return { kind: 'unknown' };
   const worksheetParam = worksheetParams[0]!;
+  if (worksheetParam.type !== 'DPI_WorksheetSimpleID') return { kind: 'unknown' };
   const value = dispatchArgs[worksheetParam.wire];
   return typeof value === 'string' && value.trim()
-    ? { kind: 'explicit', worksheetRef: value.trim() }
+    ? { kind: 'stable-id', worksheetId: value }
     : { kind: 'unknown' };
 }
 
@@ -346,7 +349,7 @@ async function resolveCommandWorksheetTarget(
   if (target.kind === 'unknown') {
     return {
       status: 'unknown',
-      reason: 'target-unresolved',
+      reason: 'target-unproven',
       message:
         'Field verification was not checked because this command has no proven worksheet target.',
     };
@@ -366,15 +369,13 @@ async function resolveCommandWorksheetTarget(
               'Field verification was not checked because the active worksheet was not unique.',
           };
     }
-    const matches = worksheets.filter(
-      (worksheet) => worksheet.id === target.worksheetRef || worksheet.name === target.worksheetRef,
-    );
+    const matches = worksheets.filter((worksheet) => worksheet.id === target.worksheetId);
     return matches.length === 1
       ? { status: 'resolved', worksheetId: matches[0]!.id }
       : {
           status: 'unknown',
-          reason: 'target-unresolved',
-          message: `Field verification was not checked because worksheet ${target.worksheetRef} could not be resolved uniquely.`,
+          reason: 'target-unproven',
+          message: `Field verification was not checked because worksheet ID ${target.worksheetId} could not be resolved uniquely.`,
         };
   } catch {
     return {

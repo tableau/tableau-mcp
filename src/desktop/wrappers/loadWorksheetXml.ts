@@ -23,6 +23,7 @@ import {
   isPromisedSortLossWarning,
   type ReadbackFinding,
   type ReadbackVerificationResult,
+  type VerificationFinding,
   verifyWorksheetReadback,
 } from '../validation/readback-verify.js';
 import {
@@ -102,11 +103,19 @@ export function publicReadbackVerificationResult(
   result: PostApplyWorksheetReadbackVerification,
 ): ReadbackVerificationResult {
   const promisedSortLoss = result.findings.some(isPromisedSortLossWarning);
-  const findings = result.findings.map((finding) => ({
+  const findings: VerificationFinding[] = result.findings.map((finding) => ({
     severity: finding.severity,
     source: 'readback' as const,
     message: `Tableau ${finding.readback} ${finding.node}${finding.column ? ` (${finding.column})` : ''}.`,
   }));
+  if (result.status === 'skipped') {
+    findings.push({
+      severity: 'warning',
+      source: 'readback',
+      message: result.message ?? 'Structural readback verification was unavailable.',
+      reason: 'structural-readback-unavailable',
+    });
+  }
   return {
     ok: promisedSortLoss ? false : result.ok,
     status: promisedSortLoss ? 'failed' : result.status,

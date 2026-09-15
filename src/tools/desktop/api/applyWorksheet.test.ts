@@ -10,7 +10,10 @@ import {
   TemplateArtifactStore,
   type TemplateWorksheetArtifact,
 } from '../../../desktop/templates/templateArtifactStore.js';
-import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
+import type {
+  ReadbackFinding,
+  VerificationFinding,
+} from '../../../desktop/validation/readback-verify.js';
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as listWorksheetsModule from '../../../desktop/wrappers/listWorksheets.js';
 import * as loadWorksheetXmlModule from '../../../desktop/wrappers/loadWorksheetXml.js';
@@ -75,6 +78,20 @@ describe('applyWorksheetTool', () => {
     ok: true,
     status: 'skipped' as const,
     message: 'worksheet busy',
+    findings: [
+      {
+        severity: 'warning' as const,
+        source: 'readback' as const,
+        message: 'worksheet busy',
+        reason: 'structural-readback-unavailable',
+      },
+      {
+        severity: 'warning' as const,
+        source: 'used-field-validity' as const,
+        message: 'Field verification requires External Client API 0.2.16 or newer.',
+        reason: 'unsupported-api',
+      },
+    ],
   };
   const promisedSortLossWarning: ReadbackFinding = {
     kind: 'sort',
@@ -198,6 +215,8 @@ describe('applyWorksheetTool', () => {
 
     expect(result.isError).toBe(false);
     expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
       verification: { status: 'skipped' },
       nextAction: {
         kind: 'prefill',
@@ -207,6 +226,107 @@ describe('applyWorksheetTool', () => {
     expect(
       (result.structuredContent as { nextAction: { receipt?: unknown } }).nextAction.receipt,
     ).toBeUndefined();
+  });
+
+  it.each<[string, VerificationFinding[]]>([
+    ['passed', []],
+    [
+      'warning',
+      [
+        {
+          severity: 'warning' as const,
+          source: 'readback' as const,
+          message: 'A non-critical formatting node changed.',
+        },
+      ],
+    ],
+  ])(
+    'keeps a structurally %s templatePlan terminal when only native validation is unsupported',
+    async (_structuralStatus, structuralFindings) => {
+      const artifact = templateArtifact('direct-plan');
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+        args.artifactApply!.dispatchState.attempted = true;
+        return Ok({
+          readbackWarnings: [],
+          readbackVerification: {
+            ok: true,
+            status: 'skipped',
+            findings: [
+              ...structuralFindings,
+              {
+                severity: 'warning' as const,
+                source: 'used-field-validity' as const,
+                message: 'Field verification requires External Client API 0.2.16 or newer.',
+                reason: 'unsupported-api',
+              },
+            ],
+          },
+        });
+      });
+
+      const result = await getDirectTemplateToolResult({
+        buildArtifact: vi.fn().mockReturnValue(Ok({ artifact, provenance: 'protected' })),
+        getExecutor: vi.fn().mockResolvedValue({
+          getWorkbookDocument: vi.fn().mockResolvedValue(
+            Ok({
+              xml: '<workbook><worksheets/><windows/></workbook>',
+              instanceId: 'inst-build',
+            }),
+          ),
+        }),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(result.structuredContent).toMatchObject({
+        applied: true,
+        retrySafe: false,
+        verification: { status: 'skipped' },
+        nextAction: { kind: 'done' },
+      });
+    },
+  );
+
+  it('keeps a structurally failed templatePlan failed when native validation is unsupported', async () => {
+    const artifact = templateArtifact('direct-plan');
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      return Ok({
+        readbackWarnings: [],
+        readbackVerification: {
+          ok: false,
+          status: 'failed',
+          findings: [
+            { severity: 'error', source: 'readback', message: 'A shelf was dropped.' },
+            {
+              severity: 'warning',
+              source: 'used-field-validity',
+              message: 'Field verification requires External Client API 0.2.16 or newer.',
+              reason: 'unsupported-api',
+            },
+          ],
+        },
+      });
+    });
+
+    const result = await getDirectTemplateToolResult({
+      buildArtifact: vi.fn().mockReturnValue(Ok({ artifact, provenance: 'protected' })),
+      getExecutor: vi.fn().mockResolvedValue({
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: '<workbook><worksheets/><windows/></workbook>',
+            instanceId: 'inst-build',
+          }),
+        ),
+      }),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: { status: 'failed' },
+      nextAction: { kind: 'prefill' },
+    });
   });
 
   it('applies a live-shaped templatePlan with a matching worksheetName and unique datasource caption exactly once', async () => {
@@ -597,9 +717,25 @@ describe('applyWorksheetTool', () => {
     invariant(result.content[0].type === 'text');
     const message = resultSchema.parse(JSON.parse(result.content[0].text)).message;
     expect(message).toContain('HOST VERIFICATION — unverified');
-    expect(message).toContain('readback unavailable');
+    expect(message).toContain('verification incomplete (see findings)');
     expect(message).not.toMatch(/\bverified\b/i);
     expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: {
+        status: 'skipped',
+        message: 'worksheet busy',
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'readback',
+            reason: 'structural-readback-unavailable',
+          }),
+          expect.objectContaining({
+            source: 'used-field-validity',
+            reason: 'unsupported-api',
+          }),
+        ]),
+      },
       nextAction: {
         kind: 'prefill',
         label: 'Verification unavailable — inspect live worksheet state',
@@ -738,9 +874,25 @@ describe('applyWorksheetTool', () => {
     invariant(result.content[0].type === 'text');
     const message = resultSchema.parse(JSON.parse(result.content[0].text)).message;
     expect(message).toContain('HOST VERIFICATION — unverified');
-    expect(message).toContain('readback unavailable');
+    expect(message).toContain('verification incomplete (see findings)');
     expect(message).not.toMatch(/\bverified\b/i);
     expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: {
+        status: 'skipped',
+        message: 'worksheet busy',
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'readback',
+            reason: 'structural-readback-unavailable',
+          }),
+          expect.objectContaining({
+            source: 'used-field-validity',
+            reason: 'unsupported-api',
+          }),
+        ]),
+      },
       nextAction: {
         kind: 'prefill',
         label: 'Verification unavailable — inspect live worksheet state',
@@ -1089,6 +1241,8 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(false);
     expect(result.structuredContent).toMatchObject({
       artifactId: 'artifact-1',
+      applied: true,
+      retrySafe: false,
       verification: { status: 'skipped' },
       nextAction: {
         kind: 'prefill',

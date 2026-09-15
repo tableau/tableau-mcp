@@ -485,9 +485,14 @@ export const getApplyWorksheetTool = (
 function isUnsupportedUsedFieldValidation(
   verification: ReadbackVerificationResult | undefined,
 ): boolean {
+  const findings = verification?.findings ?? [];
   return (
-    verification?.findings?.some(
+    findings.some(
       (finding) => finding.source === 'used-field-validity' && finding.reason === 'unsupported-api',
-    ) ?? false
+    ) &&
+    !findings.some(
+      (finding) =>
+        finding.source === 'readback' && finding.reason === 'structural-readback-unavailable',
+    )
   );
 }

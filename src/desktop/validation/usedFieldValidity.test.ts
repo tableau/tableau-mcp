@@ -165,6 +165,7 @@ describe('used-field validity verification', () => {
 
   it('returns unknown instead of throwing when the best-effort post-check throws', async () => {
     const executor = {
+      desktopInstanceId: 'instance-1',
       desktopApiVersion: '0.2.16',
       getWorksheetFieldValidation: vi.fn().mockRejectedValue(new Error('discovery failed')),
     } as unknown as ExternalApiToolExecutor;
@@ -185,6 +186,7 @@ describe('used-field validity verification', () => {
 
   it('returns unknown when Desktop responds for a different worksheet id', async () => {
     const executor = {
+      desktopInstanceId: 'instance-1',
       desktopApiVersion: '0.2.16',
       getWorksheetFieldValidation: vi.fn().mockResolvedValue(
         Ok({
@@ -206,5 +208,50 @@ describe('used-field validity verification', () => {
       worksheetId: 'sheet-1',
       reason: 'target-mismatch',
     });
+  });
+
+  it('reports a replaced Desktop instance before an older API version', async () => {
+    const getWorksheetFieldValidation = vi.fn();
+    const executor = {
+      desktopInstanceId: 'instance-replacement',
+      desktopApiVersion: '0.2.15',
+      getWorksheetFieldValidation,
+    } as unknown as ExternalApiToolExecutor;
+
+    const outcome = await checkUsedFieldValidity({
+      executor,
+      worksheetId: 'sheet-1',
+      expectedInstanceId: 'instance-original',
+      signal: new AbortController().signal,
+    });
+
+    expect(outcome).toMatchObject({
+      status: 'unknown',
+      worksheetId: 'sheet-1',
+      reason: 'instance-mismatch',
+    });
+    expect(getWorksheetFieldValidation).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes missing Desktop identity from a compatible instance', async () => {
+    const getWorksheetFieldValidation = vi.fn();
+    const executor = {
+      desktopApiVersion: '0.2.16',
+      getWorksheetFieldValidation,
+    } as unknown as ExternalApiToolExecutor;
+
+    const outcome = await checkUsedFieldValidity({
+      executor,
+      worksheetId: 'sheet-1',
+      expectedInstanceId: 'instance-original',
+      signal: new AbortController().signal,
+    });
+
+    expect(outcome).toMatchObject({
+      status: 'unknown',
+      worksheetId: 'sheet-1',
+      reason: 'instance-unavailable',
+    });
+    expect(getWorksheetFieldValidation).not.toHaveBeenCalled();
   });
 });
