@@ -418,6 +418,11 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(payload.message).not.toContain('readback clean');
     expect(payload.message).not.toContain('preflight clean');
     expect(payload.message).not.toContain('Built and applied');
+    expect(payload).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: { ok: true, status: 'passed' },
+    });
     expect(payload.fieldCount).toBe(2);
     expect(payload.requestedFieldCount).toBe(3);
   });
@@ -828,9 +833,72 @@ describe('buildAndApplyWorksheetTool', () => {
 
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('HOST VERIFICATION — unverified');
-    expect(result.content[0].text).toContain('readback unavailable');
-    expect(result.content[0].text).not.toMatch(/\bverified\b/i);
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: { ok: true, status: 'skipped', message: 'worksheet busy' },
+    });
+    expect(payload.message).toContain('HOST VERIFICATION — unverified');
+    expect(payload.message).toContain('readback unavailable');
+    expect(payload.message).toMatch(/do not claim.*confirmed/i);
+    expect(payload.message).not.toMatch(/\bverified\b/i);
+  });
+
+  it('forwards failed shared field verification without treating the applied write as retryable', async () => {
+    const extra = makeExtra();
+    const verification = {
+      ok: false,
+      status: 'failed' as const,
+      findings: [
+        {
+          severity: 'error' as const,
+          source: 'used-field-validity' as const,
+          message: 'Sales is invalid on Color.',
+          fieldName: '[Sales]',
+          shelf: 'Color',
+          reason: 'Field does not exist.',
+        },
+      ],
+    };
+    vi.mocked(loadWorksheetXml).mockResolvedValue(
+      new Ok({ readbackWarnings: [], readbackVerification: verification }),
+    );
+
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification,
+    });
+    expect(payload.message).toMatch(/verification failed/i);
+  });
+
+  it('forwards clean shared verification with the completed write receipt', async () => {
+    const extra = makeExtra();
+    vi.mocked(loadWorksheetXml).mockResolvedValue(
+      new Ok({
+        readbackWarnings: [],
+        readbackVerification: { ok: true, status: 'passed' },
+      }),
+    );
+
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: { ok: true, status: 'passed' },
+    });
+    expect(payload.message).toMatch(/^Built and applied worksheet/);
+    expect(payload.message).not.toMatch(/verification (?:failed|incomplete)/i);
   });
 
   it('fails the receipt when readback warnings show promised sort loss', async () => {

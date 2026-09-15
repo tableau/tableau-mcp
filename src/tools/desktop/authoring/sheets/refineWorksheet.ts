@@ -35,6 +35,7 @@ import {
 } from '../../../../desktop/refine/roundStackedBar.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { ensureUserNamespace } from '../../../../desktop/templates/injectTemplateCore.js';
+import type { ReadbackVerificationResult } from '../../../../desktop/validation/readback-verify.js';
 import {
   blockingValidationIssues,
   runValidation,
@@ -80,9 +81,19 @@ type RefineWorksheetToolResult =
       operation: RefineOperation;
       worksheetName: string;
       message: string;
-      verification?: ProgrammaticRoundedBarVerification;
+      applied?: true;
+      retrySafe?: false;
+      verification?: ProgrammaticRoundedBarVerification | ReadbackVerificationResult;
     }
-  | { refined: false; operation: RefineOperation; worksheetName: string; reason: string };
+  | {
+      refined: false;
+      operation: RefineOperation;
+      worksheetName: string;
+      reason: string;
+      applied?: true;
+      retrySafe?: false;
+      verification?: ReadbackVerificationResult;
+    };
 
 /** A hand-back-to-the-standard-path refusal — not an error, so isError stays false. */
 function refusal(
@@ -472,6 +483,28 @@ export const getRefineWorksheetTool = (
             settled: (fragment) => confirm(fragment.xml),
             signal: extra.signal,
           });
+          const verification = applied.value.readbackVerification;
+          if (
+            (verification?.status === 'failed' || verification?.status === 'skipped') &&
+            (!readback.ok || !readback.settled)
+          ) {
+            const nodeOutcome = readback.ok
+              ? `The ${nodeLabel} node was not confirmed on readback.`
+              : `The ${nodeLabel} node could not be confirmed because readback failed.`;
+            const verificationOutcome =
+              verification.status === 'failed'
+                ? 'Worksheet verification failed; diagnose the listed findings.'
+                : 'Worksheet verification was incomplete; inspect the listed findings.';
+            return new Ok({
+              refined: false,
+              applied: true,
+              retrySafe: false,
+              operation,
+              worksheetName: canonicalWorksheetName,
+              reason: `${nodeOutcome} ${verificationOutcome} The write already completed; do not automatically retry.`,
+              verification,
+            });
+          }
           if (!readback.ok) {
             const { type, error } = readback.error;
             switch (type) {
@@ -486,11 +519,22 @@ export const getRefineWorksheetTool = (
             }
           }
           if (readback.settled) {
+            const verificationCaveat =
+              verification?.status === 'failed'
+                ? ' The requested node was confirmed, but worksheet verification failed; diagnose the listed findings and do not retry automatically.'
+                : verification?.status === 'skipped'
+                  ? ' The requested node was confirmed, but worksheet verification was incomplete; inspect the listed findings and do not retry automatically.'
+                  : verification?.status === 'warning'
+                    ? ' The requested node was confirmed, but worksheet verification reported warnings; inspect the listed findings before continuing.'
+                    : '';
             return new Ok({
               refined: true,
+              applied: true,
+              retrySafe: false,
               operation,
               worksheetName: canonicalWorksheetName,
-              message: `Applied ${operation} to worksheet "${canonicalWorksheetName}" and confirmed the ${nodeLabel} on readback.`,
+              message: `Applied ${operation} to worksheet "${canonicalWorksheetName}" and confirmed the ${nodeLabel} on readback.${verificationCaveat}`,
+              verification,
             });
           }
           const lastReadback = readback.value.xml;
