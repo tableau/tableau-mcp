@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../../features/init.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
@@ -124,18 +125,23 @@ export const getListFlowTasksTool = (server: WebMcpServer): WebTool<typeof param
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {
-      const configWithOverrides = await extra.getConfigWithOverrides();
-
-      // Validate the filter string early so a malformed filter fails fast with a
-      // clear error before any network call.
-      if (args.filter) {
-        parseAndValidateFlowTasksFilterString(args.filter);
-      }
-
       return await listFlowTasksTool.logAndExecute<ListFlowTasksResult>({
         extra,
         args,
         callback: async () => {
+          const configWithOverrides = await extra.getConfigWithOverrides();
+
+          // Return malformed filters as MCP errors.
+          if (args.filter) {
+            try {
+              parseAndValidateFlowTasksFilterString(args.filter);
+            } catch (error) {
+              return new ArgsValidationError(
+                error instanceof Error ? error.message : 'Invalid flow task filter.',
+              ).toErr();
+            }
+          }
+
           const tasks = await useRestApi({
             ...extra,
             jwtScopes: listFlowTasksTool.requiredApiScopes,
@@ -193,11 +199,13 @@ export const getListFlowTasksTool = (server: WebMcpServer): WebTool<typeof param
             },
           } satisfies ListFlowTasksResult);
         },
-        constrainSuccessResult: (result) =>
-          constrainFlowTasks({
+        constrainSuccessResult: async (result) => {
+          const configWithOverrides = await extra.getConfigWithOverrides();
+          return constrainFlowTasks({
             result,
             boundedContext: configWithOverrides.boundedContext,
-          }),
+          });
+        },
       });
     },
   });

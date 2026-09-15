@@ -24,6 +24,8 @@ export type McpScope =
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:flow:read'
+  | 'tableau:mcp:flow:run'
+  | 'tableau:mcp:flow:cancel'
   | 'tableau:mcp:pulse:read'
   | 'tableau:mcp:insight:create'
   | 'tableau:mcp:tasks:read'
@@ -39,8 +41,11 @@ export type TableauApiScope =
   | 'tableau:views:download'
   | 'tableau:views:embed'
   | 'tableau:flows:read'
+  | 'tableau:flows:run'
   | 'tableau:flow_connections:read'
   | 'tableau:flow_runs:read'
+  | 'tableau:flow_runs:update'
+  | 'tableau:flow_tasks:run'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
@@ -232,6 +237,23 @@ const toolScopeMap: Record<
   'list-flow-tasks': {
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
+  },
+  'get-flow-task': {
+    mcp: ['tableau:mcp:flow:read'],
+    api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
+  },
+  'run-flow': {
+    // Needed for resourceAccessChecker.isFlowAllowed under bounded contexts.
+    mcp: ['tableau:mcp:flow:run'],
+    api: new Set(['tableau:flows:run', 'tableau:flows:read', 'tableau:mcp_site_settings:read']),
+  },
+  'run-flow-task': {
+    mcp: ['tableau:mcp:flow:run'],
+    api: new Set(['tableau:flow_tasks:run', 'tableau:mcp_site_settings:read']),
+  },
+  'cancel-flow-run': {
+    mcp: ['tableau:mcp:flow:cancel'],
+    api: new Set(['tableau:flow_runs:update', 'tableau:mcp_site_settings:read']),
   },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
@@ -432,6 +454,14 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('get-flow');
     enabledTools.delete('list-flow-runs');
     enabledTools.delete('list-flow-tasks');
+    enabledTools.delete('get-flow-task');
+  }
+
+  // Requires the base flow gate (static + dynamic) and the write opt-in.
+  if (!flowToolsEnabled || !config.flowWriteToolsEnabled) {
+    enabledTools.delete('run-flow');
+    enabledTools.delete('run-flow-task');
+    enabledTools.delete('cancel-flow-run');
   }
 
   if (!authoringToolsEnabled) {
