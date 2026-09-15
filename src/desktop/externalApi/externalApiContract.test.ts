@@ -61,8 +61,8 @@ import {
  * monolith PR #64791 at commit 364d19f2e624c1859afebc34367e15c1e4b95e99 because no live
  * capture was available. The 0.2.13 dialog contract and 0.2.14 app-state contract were generated
  * from the monolith production registry. The worksheet `/showMe` path, its response components,
- * and `info.version` 0.2.14 were projected on 2026-09-12 from the W-23715530 monolith producer
- * branch `dev/michaelyu/w-23715530-get-show-me-options` because no live 0.2.14 Desktop capture was
+ * and `info.version` 0.2.15 were projected on 2026-09-12 from the W-23715530 monolith producer
+ * branch `dev/michaelyu/w-23715530-get-show-me-options` because no live 0.2.15 Desktop capture was
  * available. The rest remains the live 0.2.9 capture.
  */
 
@@ -153,8 +153,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.14 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.14');
+  it('tracks the 0.2.15 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.15');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -237,7 +237,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.14 requiredness exception set', () => {
+    it('pins the complete 0.2.15 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
@@ -672,8 +672,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       );
     });
 
-    it('retains the worksheet refresh-now Operation contract in 0.2.14', () => {
-      expect(spec.info.version).toBe('0.2.14');
+    it('retains the worksheet refresh-now Operation contract in 0.2.15', () => {
+      expect(spec.info.version).toBe('0.2.15');
 
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetRefreshNow] as {
         post?: {
@@ -700,7 +700,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(spec.paths).not.toHaveProperty('/v0/workbook/dashboards/{id}:refreshNow');
     });
 
-    it('projects the 0.2.14 worksheet Show Me option discovery contract', () => {
+    it('projects the 0.2.15 worksheet Show Me option discovery contract', () => {
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetShowMeOptions] as {
         get?: {
           operationId?: string;

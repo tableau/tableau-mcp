@@ -58,7 +58,7 @@ describe('getShowMeOptionsTool', () => {
 
     expect(tool.name).toBe('get-show-me-options');
     expect(tool.title).toBe('Get Show Me Options');
-    expect(tool.minApiVersion).toBe('0.2.14');
+    expect(tool.minApiVersion).toBe('0.2.15');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheet: expect.any(Object),

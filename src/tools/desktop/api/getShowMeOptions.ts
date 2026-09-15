@@ -31,7 +31,7 @@ export const getShowMeOptionsTool = (
     description:
       "Call this before applying Show Me. Use only a returned showMeType whose isApplicable value is true; never invent or infer a type. If multiple applicable choices fit but the user's intent is unclear, ask the user to choose.",
     paramsSchema,
-    minApiVersion: '0.2.14',
+    minApiVersion: '0.2.15',
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,

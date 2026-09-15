@@ -741,7 +741,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('get-datasource-xml')).toBe('0.2.10');
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
-    expect(floors.get('get-show-me-options')).toBe('0.2.14');
+    expect(floors.get('get-show-me-options')).toBe('0.2.15');
   });
 
   it('gates all individual datasource tools at 0.2.10 and fails open for an unknown version', () => {
@@ -874,7 +874,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(namesAt(undefined)).toContain('refresh-auto-updates');
   });
 
-  it('gates Show Me option discovery at External Client API 0.2.14', () => {
+  it('gates Show Me option discovery at External Client API 0.2.15', () => {
     const profileTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'dynamic-authoring',
@@ -882,8 +882,8 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     const namesAt = (apiVersion: string | undefined): string[] =>
       filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
 
-    expect(namesAt('0.2.13')).not.toContain('get-show-me-options');
-    expect(namesAt('0.2.14')).toContain('get-show-me-options');
+    expect(namesAt('0.2.14')).not.toContain('get-show-me-options');
+    expect(namesAt('0.2.15')).toContain('get-show-me-options');
     expect(namesAt('0.3.0')).toContain('get-show-me-options');
     expect(namesAt(undefined)).toContain('get-show-me-options');
   });

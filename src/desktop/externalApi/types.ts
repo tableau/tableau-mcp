@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.14), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.15), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -507,7 +507,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.14). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.15). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
