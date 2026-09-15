@@ -385,6 +385,10 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
+  'scaffold-data-app': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
 };
 
 async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>> {
@@ -400,6 +404,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     (await featureGate.isFeatureEnabled('authoring-tools')) && !slackClient;
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
+  const dataAppsEnabled = await featureGate.isFeatureEnabled('tableau-data-apps');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -438,6 +443,10 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
     enabledTools.delete('download-workbook');
+  }
+
+  if (!dataAppsEnabled) {
+    enabledTools.delete('scaffold-data-app');
   }
 
   return enabledTools;

@@ -27,6 +27,11 @@ const TOOLS_WITHOUT_API_SCOPES_WITH_PASSTHROUGH_GUARD: ReadonlyArray<WebToolName
   // Staged workbook upload URL creation: no Tableau REST API call. The tool callback explicitly
   // returns an error for Passthrough auth before issuing a signed upload URL.
   'request-workbook-upload',
+  // Data-app scaffolding: no Tableau REST API call. Writes a starter workspace to server disk
+  // (stdio) or presigns a static template zip (http); it only reads the caller's username to fill
+  // an author string (falling back to "Tableau MCP"). No identity-bound or sensitive operation, so
+  // it is safe with passthrough auth.
+  'scaffold-data-app',
 ];
 
 describe('passthroughAuthMiddleware', () => {

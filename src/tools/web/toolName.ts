@@ -42,6 +42,7 @@ export const webToolNames = [
   'delete-content',
   'confirm-delete-content',
   'render-interactive-viz',
+  'scaffold-data-app',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -62,6 +63,7 @@ export const webToolGroupNames = [
   'mcp-apps',
   'admin-insights',
   'content',
+  'tableau-data-apps',
 ] as const;
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
@@ -102,6 +104,7 @@ export const webToolGroups = {
   'mcp-apps': ['get-embed-token', 'record-event', 'render-interactive-viz'],
   'admin-insights': ['query-admin-insights'],
   content: ['delete-content', 'confirm-delete-content'],
+  'tableau-data-apps': ['scaffold-data-app'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
 export function isWebToolName(value: unknown): value is WebToolName {
