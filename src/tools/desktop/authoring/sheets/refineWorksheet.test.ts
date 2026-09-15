@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
 import { planRoundStackedBar } from '../../../../desktop/refine/roundStackedBar.js';
+import type { ReadbackVerificationResult } from '../../../../desktop/validation/readback-verify.js';
 import * as applyRoundedStackedBarModule from '../../../../desktop/wrappers/applyRoundedStackedBar.js';
 import * as getWorksheetXmlModule from '../../../../desktop/wrappers/getWorksheetXml.js';
 import * as loadWorksheetXmlModule from '../../../../desktop/wrappers/loadWorksheetXml.js';
@@ -140,6 +141,8 @@ interface MockOpts {
    * node is present, so it is not an async-settle miss — the confirm just never matches).
    */
   readbackXml?: string;
+  readbackErr?: ErrOf<GetResult>;
+  verification?: ReadbackVerificationResult;
 }
 
 const getMock = (): ReturnType<typeof vi.mocked<typeof getWorksheetXmlModule.getWorksheetXml>> =>
@@ -177,6 +180,7 @@ function setupMocks(opts: MockOpts = {}): { applied: () => string | null } {
     }
     // A readback poll.
     readbackCalls += 1;
+    if (opts.readbackErr) return Err(opts.readbackErr) as GetResult;
     if (opts.readbackXml !== undefined) return Ok({ xml: opts.readbackXml, name }) as GetResult;
     if (opts.readback === 'source') return Ok({ xml: source, name }) as GetResult;
     if (typeof opts.readback === 'number') {
@@ -191,7 +195,11 @@ function setupMocks(opts: MockOpts = {}): { applied: () => string | null } {
 
   loadMock().mockImplementation(async ({ xml }: { xml: string }): Promise<LoadResult> => {
     lastApplied = xml;
-    return (opts.applyErr ? Err(opts.applyErr) : Ok.EMPTY) as LoadResult;
+    return (
+      opts.applyErr
+        ? Err(opts.applyErr)
+        : Ok({ readbackWarnings: [], readbackVerification: opts.verification })
+    ) as LoadResult;
   });
 
   return { applied: () => lastApplied };
@@ -605,6 +613,99 @@ describe('refineWorksheetTool — mark_type', () => {
     );
   });
 
+  it('forwards clean shared verification with the completed write receipt', async () => {
+    const verification: ReadbackVerificationResult = { ok: true, status: 'passed' };
+    setupMocks({ verification });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      refined: true,
+      applied: true,
+      retrySafe: false,
+      verification,
+    });
+  });
+
+  it('keeps node confirmation separate from failed shared field verification', async () => {
+    const verification: ReadbackVerificationResult = {
+      ok: false,
+      status: 'failed',
+      findings: [
+        {
+          severity: 'error',
+          source: 'used-field-validity',
+          message: 'Sales is invalid on Color.',
+          fieldName: '[Sales]',
+          shelf: 'Color',
+          reason: 'Field does not exist.',
+        },
+      ],
+    };
+    setupMocks({ verification });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: true,
+      applied: true,
+      retrySafe: false,
+      verification,
+    });
+    expect(payload.message).toContain('confirmed');
+    expect(payload.message).toMatch(/verification failed/i);
+    expect(payload.message).toMatch(/do not retry/i);
+  });
+
+  it('does not present unavailable shared field verification as clean success', async () => {
+    const verification: ReadbackVerificationResult = {
+      ok: true,
+      status: 'skipped',
+      message: 'Field verification was unavailable.',
+      findings: [
+        {
+          severity: 'warning',
+          source: 'used-field-validity',
+          message: 'Field verification was unavailable.',
+          reason: 'unsupported-api',
+        },
+      ],
+    };
+    setupMocks({ verification });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: true,
+      applied: true,
+      retrySafe: false,
+      verification,
+    });
+    expect(payload.message).toContain('confirmed');
+    expect(payload.message).toMatch(/verification (?:was )?incomplete/i);
+    expect(payload.message).toMatch(/do not retry/i);
+  });
+
   it('refuses a multi-pane worksheet without applying', async () => {
     const source = SOURCE.replace(
       '</panes>',
@@ -1011,6 +1112,77 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     expect(parsed.reason).toMatch(/async-settle miss/);
     expect(getMock()).toHaveBeenCalledTimes(9);
   });
+
+  it('preserves failed shared verification when the requested node never lands', async () => {
+    vi.useFakeTimers();
+    const verification: ReadbackVerificationResult = {
+      ok: false,
+      status: 'failed',
+      findings: [
+        {
+          severity: 'error',
+          source: 'used-field-validity',
+          message: 'Sales is invalid on Color.',
+          fieldName: '[Sales]',
+          shelf: 'Color',
+          reason: 'Field does not exist.',
+        },
+      ],
+    };
+    setupMocks({ readback: 'source', verification });
+    const resultPromise = getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+    await vi.advanceTimersByTimeAsync(8 * 250);
+    const result = await resultPromise;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: false,
+      applied: true,
+      retrySafe: false,
+      verification,
+    });
+    expect(payload.reason).toMatch(/node was not confirmed/i);
+    expect(payload.reason).toMatch(/verification failed/i);
+    expect(payload.reason).toMatch(/do not.*retry/i);
+    expect(payload.reason).not.toMatch(/fallback|standard path/i);
+  });
+
+  it('preserves unavailable shared verification when the requested node never lands', async () => {
+    vi.useFakeTimers();
+    const verification: ReadbackVerificationResult = {
+      ok: true,
+      status: 'skipped',
+      message: 'Field verification was unavailable.',
+    };
+    setupMocks({ readback: 'source', verification });
+    const resultPromise = getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+    await vi.advanceTimersByTimeAsync(8 * 250);
+    const result = await resultPromise;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: false,
+      applied: true,
+      retrySafe: false,
+      verification,
+    });
+    expect(payload.reason).toMatch(/node was not confirmed/i);
+    expect(payload.reason).toMatch(/verification (?:was )?incomplete/i);
+    expect(payload.reason).toMatch(/do not.*retry/i);
+    expect(payload.reason).not.toMatch(/fallback|standard path/i);
+  });
 });
 
 describe('refineWorksheetTool — refusals and errors', () => {
@@ -1047,6 +1219,52 @@ describe('refineWorksheetTool — refusals and errors', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(new GetWorksheetXmlFailedError(fetchErr.error).message);
     expect(loadMock()).not.toHaveBeenCalled();
+  });
+
+  it('preserves failed shared verification when the post-write node readback errors', async () => {
+    const verification: ReadbackVerificationResult = {
+      ok: false,
+      status: 'failed',
+      findings: [
+        {
+          severity: 'error',
+          source: 'used-field-validity',
+          message: 'Sales is invalid on Color.',
+          fieldName: '[Sales]',
+          reason: 'Field does not exist.',
+        },
+      ],
+    };
+    setupMocks({
+      verification,
+      readbackErr: {
+        type: 'get-worksheet-xml-error',
+        error: {
+          type: 'no-worksheet-found',
+          message: 'Worksheet disappeared during readback.',
+        },
+      },
+    });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: false,
+      applied: true,
+      retrySafe: false,
+      verification,
+    });
+    expect(payload.reason).toMatch(/node could not be confirmed/i);
+    expect(payload.reason).toMatch(/verification failed/i);
+    expect(payload.reason).toMatch(/do not.*retry/i);
+    expect(payload.reason).not.toMatch(/fallback|standard path/i);
   });
 
   it('refuses on preflight failure and NEVER applies', async () => {
