@@ -1,6 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodiosError } from '@zodios/core';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
+import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
 
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
@@ -209,8 +211,10 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
  * Annotates each upstream data source with `isQueryable` by calling VDS's user-has-query-permissions
  * endpoint once per data source (concurrently). Maps the result to:
  *  - 200 → Set `isQueryable` to API response's `hasQueryPermission` value.
- *  - `api-error` (any HTTP error other than 404) → `false`: VDS rejected the request.
- *  - `feature-disabled` (404, no endpoint), `zodios-error`, or a thrown error → left unset.
+ *  - A definitive HTTP rejection (e.g. 403800 "no API access permission") → `false`: VDS evaluated
+ *    the request and rejected it.
+ *  - A transient HTTP error (429 / 408 / 5xx), `feature-disabled` (404, no endpoint),
+ *    `zodios-error`, or a thrown error → left unset (indeterminate).
  *
  * Best-effort: a failed check never fails get-workbook.
  */
@@ -238,8 +242,9 @@ export async function enrichUpstreamDatasourceQueryability({
         if (result.isOk()) {
           return { ...ds, isQueryable: result.value.hasQueryPermission };
         }
-        // An API error (non-404) means the data source is not queryable.
-        if (result.error.type === 'api-error') {
+        // A definitive (non-transient) HTTP rejection means VDS evaluated the request,
+        // so the caller cannot query this data source.
+        if (result.error.type === 'api-error' && !isTransientVdsError(result.error.httpStatus)) {
           return { ...ds, isQueryable: false };
         }
         detail = JSON.stringify(result.error);
@@ -261,6 +266,11 @@ export async function enrichUpstreamDatasourceQueryability({
   );
 
   return { ...workbook, upstreamDatasources: enriched };
+}
+
+// Rate-limit (429), request-timeout (408), and server (5xx) responses are transient VDS failures, not a permission verdict
+function isTransientVdsError(httpStatus: number): boolean {
+  return httpStatus === 408 || httpStatus === 429 || httpStatus >= 500;
 }
 
 export function filterWorkbookViews({

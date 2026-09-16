@@ -443,6 +443,33 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
+    it('leaves isQueryable unset when the check returns a transient HTTP error (e.g. 503)', async () => {
+      // Rate-limit / server errors are transient failures, not a permission verdict, so they stay
+      // indeterminate rather than being reported as false (matches how query-datasource treats them).
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        datasource.datasourceLuid === 'pub-luid-1'
+          ? Ok({ hasQueryPermission: true })
+          : Err({
+              type: 'api-error',
+              message: 'The underlying data engine is unavailable.',
+              httpStatus: 503,
+              errorCode: '503800',
+            }),
+      );
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: true,
+        },
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
+    });
+
     it('leaves isQueryable unset when the check fails without an HTTP response (zodios-error)', async () => {
       // A transport or schema-parse failure isn't evidence the user can't query, so it stays
       // indeterminate (unset) rather than being reported as false.
