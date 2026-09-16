@@ -1,6 +1,6 @@
 export type ApiVersionFloor = `${number}.${number}.${number}`;
 
-export const SCREENSHOT_MIN_API_VERSION: ApiVersionFloor = '0.2.15';
+export const SCREENSHOT_MIN_API_VERSION: ApiVersionFloor = '0.2.17';
 
 /**
  * Numeric SemVer comparison ("0.2.6" >= "0.2.5"). Missing/unparseable parts read as 0,

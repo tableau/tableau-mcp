@@ -739,7 +739,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
         .map((factory) => factory(new DesktopMcpServer()))
         .map((tool) => [tool.name, tool.minApiVersion]),
     );
-    expect(floors.get('capture-window-screenshot')).toBe('0.2.15');
+    expect(floors.get('capture-window-screenshot')).toBe('0.2.17');
     expect(floors.get('pause-auto-updates')).toBe('0.2.5');
     expect(floors.get('refresh-auto-updates')).toBe('0.2.13');
     expect(floors.get('resume-auto-updates')).toBe('0.2.5');

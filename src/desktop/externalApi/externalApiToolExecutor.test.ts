@@ -586,6 +586,10 @@ describe('ExternalApiToolExecutor', () => {
     it.each([
       ['take-all-screenshots', '0.2.14'],
       ['take-active-widget-screenshot', '0.2.14'],
+      ['take-all-screenshots', '0.2.15'],
+      ['take-active-widget-screenshot', '0.2.15'],
+      ['take-all-screenshots', '0.2.16'],
+      ['take-active-widget-screenshot', '0.2.16'],
       ['take-all-screenshots', undefined],
       ['take-active-widget-screenshot', undefined],
       ['take-all-screenshots', '0.2'],
@@ -623,8 +627,8 @@ describe('ExternalApiToolExecutor', () => {
     );
 
     it.each([
-      ['take-all-screenshots', '0.2.15'],
-      ['take-active-widget-screenshot', '0.2.16'],
+      ['take-all-screenshots', '0.2.17'],
+      ['take-active-widget-screenshot', '0.2.18'],
     ])('allows tabui:%s on safe API version %s', async (command, apiVersion) => {
       const executor = new ExternalApiToolExecutor({
         discover: () => [instanceFor(server, 'valid-token', apiVersion)],
@@ -1596,14 +1600,18 @@ describe('ExternalApiToolExecutor', () => {
 
   describe('401 rescan-once', () => {
     it.each([
-      ['an older version', '0.2.14'],
-      ['an unknown version', undefined],
+      ['take-all-screenshots', '0.2.14'],
+      ['take-all-screenshots', undefined],
+      ['take-all-screenshots', '0.2.15'],
+      ['take-all-screenshots', '0.2.16'],
+      ['take-active-widget-screenshot', '0.2.15'],
+      ['take-active-widget-screenshot', '0.2.16'],
     ])(
-      'blocks a screenshot retry when a 401 rescan selects %s',
-      async (_caseName, rescannedApiVersion) => {
+      'blocks tabui:%s retry when a 401 rescan selects API %s',
+      async (command, rescannedApiVersion) => {
         const discover = vi
           .fn()
-          .mockReturnValueOnce([instanceFor(server, 'stale-token', '0.2.15')])
+          .mockReturnValueOnce([instanceFor(server, 'stale-token', '0.2.17')])
           .mockReturnValue([
             { ...instanceFor(server, 'valid-token'), apiVersion: rescannedApiVersion },
           ]);
@@ -1612,7 +1620,7 @@ describe('ExternalApiToolExecutor', () => {
 
         const result = await executor.executeCommand({
           namespace: 'tabui',
-          command: 'take-all-screenshots',
+          command,
           signal,
         });
 
@@ -1634,8 +1642,8 @@ describe('ExternalApiToolExecutor', () => {
     it('retries a screenshot once when both pre- and post-401 instances are safe', async () => {
       const discover = vi
         .fn()
-        .mockReturnValueOnce([instanceFor(server, 'stale-token', '0.2.15')])
-        .mockReturnValue([instanceFor(server, 'valid-token', '0.2.15')]);
+        .mockReturnValueOnce([instanceFor(server, 'stale-token', '0.2.17')])
+        .mockReturnValue([instanceFor(server, 'valid-token', '0.2.17')]);
       const executor = new ExternalApiToolExecutor({ discover });
       await executor.start();
 
@@ -1820,10 +1828,10 @@ describe('ExternalApiToolExecutor', () => {
       const discover = vi
         .fn()
         .mockReturnValueOnce([
-          { ...instanceFor(server, 'stale-token', '0.2.15'), instanceId: 'inst-capture' },
+          { ...instanceFor(server, 'stale-token', '0.2.17'), instanceId: 'inst-capture' },
         ])
         .mockReturnValue([
-          { ...instanceFor(server, 'valid-token', '0.2.15'), instanceId: 'inst-restarted' },
+          { ...instanceFor(server, 'valid-token', '0.2.17'), instanceId: 'inst-restarted' },
         ]);
       const executor = new ExternalApiToolExecutor({ pid: 999, discover });
 
