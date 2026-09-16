@@ -1,8 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { ZodiosError } from '@zodios/core';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
-import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
 
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
