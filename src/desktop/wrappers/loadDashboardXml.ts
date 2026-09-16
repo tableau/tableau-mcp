@@ -5,10 +5,11 @@ import { sanitizeValue } from '../../logging/sanitize.js';
 import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 import { dashboardFragmentSimpleId, upsertDashboardIntoWorkbook } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
-import type { ParsedDashboard } from '../metadata/types.js';
+import type { ParsedDashboard, ParsedZone } from '../metadata/types.js';
+import { worksheetDocumentState } from '../metadata/worksheetRenderState.js';
 import { blockingValidationIssues, runValidation } from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
-import { xmlNamesEqual } from '../xmlElement.js';
+import { findElement, xmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
@@ -30,7 +31,11 @@ export type LoadDashboardXmlError =
   | { type: 'source-drift'; message: string }
   // Only surfaced when a caller opts in with `requireExistingSheet` (apply-dashboard, apply-storyboard);
   // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
-  | { type: 'sheet-absent'; message: string };
+  | { type: 'sheet-absent'; message: string }
+  // A dashboard zone references a worksheet that exists by name but has no applied
+  // mark/encoding (no visual doc). Desktop's HasVisualDoc would reject this with
+  // IDP_ERR_DASHBOARD_MISSING_VISUAL_DOC; we catch it before dispatch. retry-safe: nothing sent.
+  | { type: 'sheet-not-rendered'; message: string; worksheetNames: string[] };
 
 export interface LoadDashboardXmlOk {
   appliedName?: string;
@@ -108,6 +113,87 @@ function resolveCanonicalDashboardName(
   }
 
   return Ok(xmlName);
+}
+
+/**
+ * Worksheet-zone names referenced by the dashboard fragment's zones, at any nesting depth.
+ * Mirrors the selector convention used by the `dashboard-zones-reference-included-worksheets`
+ * validation rule: a zone with a `@name` and no `@type-v2` names a worksheet; layout, text, and
+ * blank zones carry `type-v2` and do not. Returns `[]` (never throws) when the fragment has no
+ * `<dashboard>` root or no zones — malformed/absent XML has nothing to say here, and is caught
+ * elsewhere.
+ */
+function collectWorksheetZoneNames(dashboardXml: string): string[] {
+  let dashboard: ParsedDashboard | undefined;
+  try {
+    dashboard = normalizeArray(parseXML(dashboardXml).dashboard as ParsedDashboard | undefined)[0];
+  } catch {
+    return [];
+  }
+  if (!dashboard?.zones) {
+    return [];
+  }
+
+  const names = new Set<string>();
+  const visit = (zone: ParsedZone): void => {
+    if (zone['@_name'] && !zone['@_type-v2']) {
+      names.add(zone['@_name']);
+    }
+    for (const child of normalizeArray(zone.zone as ParsedZone | ParsedZone[] | undefined)) {
+      visit(child);
+    }
+  };
+  for (const zone of normalizeArray(dashboard.zones.zone)) {
+    visit(zone);
+  }
+  return [...names];
+}
+
+/**
+ * Preflight render guard. A dashboard zone can name a worksheet that exists in the live
+ * workbook but has never been rendered (no mark/encoding — a blank sheet skeleton). Desktop's
+ * own HasVisualDoc check rejects that combination only AFTER dispatch
+ * (IDP_ERR_DASHBOARD_MISSING_VISUAL_DOC); catching it here keeps the apply retry-safe, since
+ * nothing is sent to Tableau. Fails OPEN: a transient live-workbook read failure must not turn
+ * into a spurious block, so it falls through to the normal apply path instead. Only worksheets
+ * PRESENT-but-blank are flagged — absent worksheets are the `sheet-absent` / create path's
+ * concern, and this guard must not duplicate that.
+ */
+async function checkWorksheetsRendered(
+  canonicalName: string,
+  dashboardXml: string,
+  { executor, signal }: WithExecutorAndAbortSignal,
+): Promise<Result<void, Extract<LoadDashboardXmlError, { type: 'sheet-not-rendered' }>>> {
+  const worksheetZoneNames = collectWorksheetZoneNames(dashboardXml);
+  if (worksheetZoneNames.length === 0) {
+    return Ok.EMPTY;
+  }
+
+  const workbookResult = await getWorkbookXml({ executor, signal });
+  if (workbookResult.isErr()) {
+    return Ok.EMPTY;
+  }
+  const liveWorkbookXml = workbookResult.value;
+
+  const blankNames = worksheetZoneNames.filter((name) => {
+    const match = findElement(liveWorkbookXml, 'worksheet', name);
+    return match !== null && worksheetDocumentState(match.text) === 'blank';
+  });
+
+  if (blankNames.length === 0) {
+    return Ok.EMPTY;
+  }
+
+  return Err({
+    type: 'sheet-not-rendered',
+    worksheetNames: blankNames,
+    message:
+      `Dashboard "${canonicalName}" references worksheet(s) ${blankNames.join(', ')} that exist ` +
+      'by name but have no applied mark/encoding, so Tableau cannot wire them into a dashboard ' +
+      '("no visual representation"). FIX: build/render each worksheet first (e.g. ' +
+      'build-and-apply-worksheet) so it has a mark, then re-apply the dashboard. No changes were ' +
+      'sent to Tableau.',
+  });
 }
 
 type LoadDashboardKind = Extract<PerSheetKind, 'dashboard' | 'storyboard'>;
@@ -189,6 +275,20 @@ export async function loadDashboardXml({
   const canonicalName = canonicalNameResult.value;
   const canonicalFocus: ApplyFocus =
     focus.navigate === 'artifact' ? { ...focus, sheetName: canonicalName } : focus;
+
+  // Preflight render guard, ahead of both the per-sheet and whole-workbook apply routes below —
+  // a zone naming an existing-but-blank worksheet would otherwise dispatch and be rejected by
+  // Desktop's own HasVisualDoc check. See {@link checkWorksheetsRendered}.
+  const renderCheck = await checkWorksheetsRendered(canonicalName, xml, { executor, signal });
+  if (renderCheck.isErr()) {
+    log({
+      level: 'error',
+      message: 'Dashboard references a blank (unrendered) worksheet — not sent to Tableau',
+      logger: 'dashboardCommands',
+      data: { dashboardName: canonicalName, worksheetNames: renderCheck.error.worksheetNames },
+    });
+    return Err({ type: 'load-dashboard-xml-error', error: renderCheck.error });
+  }
 
   if (requireExistingSheet) {
     const targetRef = dashboardFragmentSimpleId(xml) ?? canonicalName;
