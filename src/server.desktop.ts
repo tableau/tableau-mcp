@@ -175,6 +175,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'ask-user',
     'list-instances',
     'get-desktop-state',
+    'get-diagnostics',
     'get-active-dialogs',
     'invoke-dialog-action',
     'list-available-fields',

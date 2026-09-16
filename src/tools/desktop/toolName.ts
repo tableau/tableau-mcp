@@ -1,6 +1,7 @@
 export const desktopToolNames = [
   'list-instances',
   'get-desktop-state',
+  'get-diagnostics',
   'get-active-dialogs',
   'invoke-dialog-action',
   'get-workbook-xml',

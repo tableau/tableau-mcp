@@ -146,6 +146,117 @@ describe('ExternalApiToolExecutor', () => {
       expect(last?.body).toBe(xml);
     });
 
+    it('retains terminal workbook diagnostics beside independent operation warnings', async () => {
+      const diagnostics = {
+        worksheets: [
+          {
+            worksheetId: 'sheet-sales',
+            status: 'partial',
+            invalidFields: [],
+            message: 'Some worksheet fields could not be checked.',
+          },
+        ],
+      };
+      server.setOverride('POST /v0/workbook/document', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'apply-with-diagnostics',
+          kind: 'workbook.document.apply',
+          state: 'SUCCEEDED',
+          warnings: [{ code: 'document-warning', message: 'Dropped unsupported formatting.' }],
+          diagnostics,
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.applyWorkbookDocument('<workbook />', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        status: 'completed',
+        warnings: [{ code: 'document-warning', message: 'Dropped unsupported formatting.' }],
+        diagnostics,
+      });
+    });
+
+    it('does not turn malformed optional diagnostics into a retryable document-apply error', async () => {
+      server.setOverride('POST /v0/workbook/document', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'apply-with-malformed-diagnostics',
+          kind: 'workbook.document.apply',
+          state: 'SUCCEEDED',
+          diagnostics: { worksheets: 'not-an-array' },
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.applyWorkbookDocument('<workbook />', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        status: 'completed',
+        diagnosticsInvalid: true,
+      });
+      expect(result.unwrap()).not.toHaveProperty('warnings');
+      expect(result.unwrap()).not.toHaveProperty('diagnostics');
+    });
+
+    it('keeps a polled document apply successful when terminal diagnostics are malformed', async () => {
+      server.setOverride('POST /v0/workbook/document', {
+        status: 202,
+        contentType: 'application/json',
+        headers: {
+          location: '/v0/operations/apply-polled-malformed-diagnostics',
+          'retry-after': '0',
+          'x-tableau-operation-id': 'apply-polled-malformed-diagnostics',
+        },
+        body: JSON.stringify({
+          id: 'apply-polled-malformed-diagnostics',
+          kind: 'workbook.document.apply',
+          state: 'RUNNING',
+        }),
+      });
+      server.setOperation('apply-polled-malformed-diagnostics', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'apply-polled-malformed-diagnostics',
+            kind: 'workbook.document.apply',
+            state: 'RUNNING',
+          },
+          {
+            id: 'apply-polled-malformed-diagnostics',
+            kind: 'workbook.document.apply',
+            state: 'SUCCEEDED',
+            diagnostics: { worksheets: [{ worksheetId: 17, status: 'complete' }] },
+          },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.applyWorkbookDocument('<workbook />', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        status: 'completed',
+        diagnosticsInvalid: true,
+      });
+      expect(result.unwrap()).not.toHaveProperty('warnings');
+      expect(result.unwrap()).not.toHaveProperty('diagnostics');
+    });
+
     it('surfaces the tableauErrorCode extension from a client-rejected apply as tableau-error-code', async () => {
       server.setOverride('POST /v0/workbook/worksheets/sheet-sales/document', {
         status: 422,
@@ -201,6 +312,186 @@ describe('ExternalApiToolExecutor', () => {
       const result = await executor.getWorkbookDocument(signal);
 
       expect(result.unwrap().instanceId).toBe('inst-read');
+    });
+  });
+
+  describe('workbook diagnostics', () => {
+    it('returns the default mock diagnostics for a known worksheet', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetDiagnostics('sheet-sales', signal, 'inst-exec');
+
+      expect(result.unwrap()).toEqual({
+        worksheets: [{ worksheetId: 'sheet-sales', status: 'complete', invalidFields: [] }],
+      });
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'GET',
+        path: '/v0/workbook/worksheets/sheet-sales/diagnostics',
+      });
+    });
+
+    it('reads and parses diagnostics for the exact encoded worksheet id', async () => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet%2Fsales/diagnostics', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          worksheets: [
+            {
+              worksheetId: 'sheet/sales',
+              status: 'complete',
+              invalidFields: [
+                {
+                  fieldName: '[none:Sales:qk]',
+                  fieldCaption: 'Sales',
+                  shelf: 'rows',
+                  marksSpecificationId: 'marks-1',
+                  encodingType: 'text',
+                  reason: 'The field is not available from the current datasource.',
+                },
+              ],
+            },
+          ],
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetDiagnostics('sheet/sales', signal, 'inst-exec');
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toEqual({
+        worksheets: [
+          {
+            worksheetId: 'sheet/sales',
+            status: 'complete',
+            invalidFields: [
+              {
+                fieldName: '[none:Sales:qk]',
+                fieldCaption: 'Sales',
+                shelf: 'rows',
+                marksSpecificationId: 'marks-1',
+                encodingType: 'text',
+                reason: 'The field is not available from the current datasource.',
+              },
+            ],
+          },
+        ],
+      });
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'GET',
+        path: '/v0/workbook/worksheets/sheet%2Fsales/diagnostics',
+      });
+    });
+
+    it.each([
+      ['an empty aggregate', { worksheets: [] }],
+      [
+        'a different worksheet',
+        {
+          worksheets: [{ worksheetId: 'sheet-decoy', status: 'complete', invalidFields: [] }],
+        },
+      ],
+      [
+        'duplicate target records',
+        {
+          worksheets: [
+            { worksheetId: 'sheet-sales', status: 'complete', invalidFields: [] },
+            { worksheetId: 'sheet-sales', status: 'unavailable', message: 'Not checked.' },
+          ],
+        },
+      ],
+    ])('rejects %s from a worksheet-scoped diagnostics read', async (_label, body) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/diagnostics', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetDiagnostics('sheet-sales', signal, 'inst-exec');
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr()).toMatchObject({ type: 'unknown' });
+      expect(String(result.unwrapErr().error)).toContain('sheet-sales');
+    });
+
+    it.each([
+      [
+        'partial',
+        {
+          worksheetId: 'sheet-sales',
+          status: 'partial',
+          invalidFields: [],
+          message: 'Some fields were not checked.',
+        },
+      ],
+      [
+        'unavailable',
+        {
+          worksheetId: 'sheet-sales',
+          status: 'unavailable',
+          message: 'The worksheet could not be checked.',
+        },
+      ],
+    ])('accepts a single exact %s worksheet diagnostics record', async (_label, worksheet) => {
+      const body = { worksheets: [worksheet] };
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/diagnostics', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetDiagnostics('sheet-sales', signal, 'inst-exec');
+
+      expect(result.unwrap()).toEqual(body);
+    });
+
+    it('does not read diagnostics from a replacement Desktop instance after a 401', async () => {
+      const discover = vi
+        .fn()
+        .mockReturnValueOnce([
+          {
+            ...instanceFor(server, 'stale-token', '0.2.16'),
+            instanceId: 'inst-expected',
+          },
+        ])
+        .mockReturnValue([
+          {
+            ...instanceFor(server, 'valid-token', '0.2.16'),
+            instanceId: 'inst-restarted',
+          },
+        ]);
+      const executor = new ExternalApiToolExecutor({ pid: 999, discover });
+      await executor.start();
+
+      const result = await executor.getWorksheetDiagnostics('sheet-1', signal, 'inst-expected');
+
+      expect(result.isErr()).toBe(true);
+      expect(
+        server.requests.filter(
+          (request) =>
+            request.method === 'GET' &&
+            request.path === '/v0/workbook/worksheets/sheet-1/diagnostics',
+        ),
+      ).toHaveLength(1);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('unknown');
+      if (error.type === 'unknown') {
+        expect(String(error.error)).toContain('inst-expected');
+        expect(String(error.error)).toContain('inst-restarted');
+      }
     });
   });
 

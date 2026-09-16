@@ -438,13 +438,14 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 69-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 70-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(69);
+    expect(selected).toHaveLength(70);
     // The full dynamic dialect, semantically named — every author-* verb present,
-    // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
-    // knowledge doors the system prompt's "consult the expertise library" law routes to.
+    // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
+    // fast-path, and the two knowledge doors the system prompt's "consult the expertise
+    // library" law routes to.
     for (const verb of [
       'author-calc',
       'author-set',
@@ -756,10 +757,24 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('get-active-dialogs')).toBe('0.2.13');
     expect(floors.get('invoke-dialog-action')).toBe('0.2.13');
     expect(floors.get('get-desktop-state')).toBe('0.2.14');
+    expect(floors.get('get-diagnostics')).toBe('0.2.16');
     expect(floors.get('get-datasource-info')).toBe('0.2.10');
     expect(floors.get('get-datasource-xml')).toBe('0.2.10');
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
+  });
+
+  it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {
+    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
+    const registered = tools.filter((tool) => tool.name === 'get-diagnostics');
+
+    expect(registered).toHaveLength(1);
+    expect(filterToolsByApiVersion(tools, '0.2.15').map((tool) => tool.name)).not.toContain(
+      'get-diagnostics',
+    );
+    expect(filterToolsByApiVersion(tools, '0.2.16').map((tool) => tool.name)).toContain(
+      'get-diagnostics',
+    );
   });
 
   it('gates all individual datasource tools at 0.2.10 and fails open for an unknown version', () => {

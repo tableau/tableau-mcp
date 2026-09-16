@@ -88,6 +88,9 @@ export const getApplyWorkbookTool = (
           // no structural readback, so say so honestly instead of implying
           // full re-verification happened.
           const validationWarnings = result.isOk() ? result.value.validationWarnings : [];
+          const documentWarnings = result.isOk() ? (result.value.documentWarnings ?? []) : [];
+          const diagnostics = result.isOk() ? result.value.diagnostics : undefined;
+          const diagnosticsInvalid = result.isOk() && result.value.diagnosticsInvalid === true;
           const hostVerification = result.isOk()
             ? formatWorkbookPromiseCheck(validationWarnings)
             : '';
@@ -105,13 +108,38 @@ export const getApplyWorkbookTool = (
           // The shared structured receipt mirrors the text above and nothing more:
           // dispatch and preflight warnings were observed; the applied structure was
           // not, so it is listed as unverified (promise_outcome 'unverified' above).
-          return new Ok(
-            acceptedNoReadbackApplyResult({
-              kind: 'workbook',
-              resultWarnings: validationWarnings,
-              hostVerification,
-            }),
-          );
+          const diagnosticsCoverage = diagnosticsInvalid
+            ? 'invalid'
+            : diagnostics
+              ? diagnostics.worksheets.length > 0 &&
+                diagnostics.worksheets.every((worksheet) => worksheet.status === 'complete')
+                ? 'complete'
+                : 'incomplete'
+              : 'absent';
+          const accepted = acceptedNoReadbackApplyResult({
+            kind: 'workbook',
+            resultWarnings: validationWarnings,
+            hostVerification,
+            ...(diagnosticsCoverage === 'incomplete'
+              ? {
+                  messageSuffix:
+                    ' Diagnostics are partial; not all worksheet diagnostics completed.',
+                  additionalUnverified: ['not all worksheet diagnostics completed'],
+                }
+              : diagnosticsCoverage === 'invalid'
+                ? {
+                    messageSuffix:
+                      ' Diagnostics are unavailable because Desktop returned malformed diagnostics.',
+                    additionalUnverified: ['static field diagnostics were unavailable'],
+                  }
+                : {}),
+          });
+          return new Ok({
+            ...accepted,
+            ...(diagnostics ? { diagnostics } : {}),
+            ...(diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
+            ...(documentWarnings.length > 0 ? { warnings: documentWarnings } : {}),
+          });
         },
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });

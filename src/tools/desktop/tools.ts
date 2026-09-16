@@ -21,6 +21,7 @@ import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
 import { getDatasourceInfoTool } from './api/getDatasourceInfo.js';
 import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getDesktopStateTool } from './api/getDesktopState.js';
+import { getDiagnosticsTool } from './api/getDiagnostics.js';
 import { getHealthTool } from './api/getHealth.js';
 import { getSiteInfoTool } from './api/getSiteInfo.js';
 import { getStoryboardInfoTool } from './api/getStoryboardInfo.js';
@@ -102,6 +103,7 @@ import { getSearchWorkbookExamplesTool } from './local/search/searchWorkbookExam
 export const desktopToolFactories = [
   getListInstancesTool,
   getDesktopStateTool,
+  getDiagnosticsTool,
   getActiveDialogsTool,
   getInvokeDialogActionTool,
   getGetWorkbookXmlTool,
