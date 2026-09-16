@@ -16,12 +16,14 @@ import {
   PublishedParent,
   toEmbeddedLineageContents,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
+import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook, WorkbookConnection } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
+import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 
 const paramsSchema = {
@@ -34,7 +36,9 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
     name: 'get-workbook',
     minRequiredRole: SiteRole.VIEWER,
     description:
-      'Retrieves information about the specified workbook, including information about the views contained in the workbook.',
+      'Retrieves information about the specified workbook, including information about the views contained in the workbook and backing datasources. ' +
+      "The response's upstreamDatasources list each data source the workbook depends on; " +
+      "when an entry's isQueryable is true, the calling user can query that data source with the query-datasource tool.",
     paramsSchema,
     annotations: {
       title: 'Get Workbook',
@@ -143,7 +147,16 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                   filterLineageContentsByAllowedIds(published, allowedIds),
                   filterLineageContentsByAllowedIds(embedded, allowedIds),
                 );
-                return mergeWorkbookLineage([workbook], new Map([[workbook.id, merged]]))[0];
+                const mergedWorkbook = mergeWorkbookLineage(
+                  [workbook],
+                  new Map([[workbook.id, merged]]),
+                )[0];
+
+                return await enrichUpstreamDatasourceQueryability({
+                  workbook: mergedWorkbook,
+                  vizqlDataServiceMethods: restApi.vizqlDataServiceMethods,
+                  extra,
+                });
               } catch (error) {
                 log(
                   {
@@ -191,6 +204,64 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
 
   return getWorkbookTool;
 };
+
+/**
+ * Annotates each upstream data source with `isQueryable` by calling VDS's user-has-query-permissions
+ * endpoint once per data source (concurrently). Maps the result to:
+ *  - 200 → Set `isQueryable` to API response's `hasQueryPermission` value.
+ *  - `api-error` (any HTTP error other than 404) → `false`: VDS rejected the request.
+ *  - `feature-disabled` (404, no endpoint), `zodios-error`, or a thrown error → left unset.
+ *
+ * Best-effort: a failed check never fails get-workbook.
+ */
+export async function enrichUpstreamDatasourceQueryability({
+  workbook,
+  vizqlDataServiceMethods,
+  extra,
+}: {
+  workbook: Workbook;
+  vizqlDataServiceMethods: VizqlDataServiceMethods;
+  extra: TableauWebRequestHandlerExtra;
+}): Promise<Workbook> {
+  const upstreamDatasources = workbook.upstreamDatasources;
+  if (!upstreamDatasources?.length) {
+    return workbook;
+  }
+
+  const enriched = await Promise.all(
+    upstreamDatasources.map(async (ds) => {
+      let detail: string;
+      try {
+        const result = await vizqlDataServiceMethods.userHasQueryPermissions({
+          datasource: { datasourceLuid: ds.luid },
+        });
+        if (result.isOk()) {
+          return { ...ds, isQueryable: result.value.hasQueryPermission };
+        }
+        // An API error (non-404) means the data source is not queryable.
+        if (result.error.type === 'api-error') {
+          return { ...ds, isQueryable: false };
+        }
+        detail = JSON.stringify(result.error);
+      } catch (error) {
+        detail = getExceptionMessage(error);
+      }
+
+      log(
+        {
+          message: `Could not determine queryability for data source ${ds.luid}`,
+          level: 'debug',
+          logger: 'lineage',
+          data: detail,
+        },
+        extra,
+      );
+      return ds;
+    }),
+  );
+
+  return { ...workbook, upstreamDatasources: enriched };
+}
 
 export function filterWorkbookViews({
   workbook,

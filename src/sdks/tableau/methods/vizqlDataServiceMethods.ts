@@ -7,8 +7,10 @@ import {
   GetDatasourceModelRequest,
   MetadataResponse,
   QueryOutput,
+  QueryPermissionsOutput,
   QueryRequest,
   ReadMetadataRequest,
+  UserHasQueryPermissionsRequest,
   vizqlDataServiceApis,
 } from '../apis/vizqlDataServiceApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -116,6 +118,41 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
         error.response.status === 404
       ) {
         return Err('feature-disabled');
+      }
+
+      throw error;
+    }
+  };
+
+  /**
+   * Checks whether the calling user has permission to query the specified data source via VDS.
+   * 404 maps to `feature-disabled` (as with the other VDS methods); other HTTP errors are returned
+   * as `api-error`, not thrown.
+   *
+   * Required scopes: `tableau:viz_data_service:read`
+   *
+   * @param {UserHasQueryPermissionsRequest} request
+   */
+  userHasQueryPermissions = async (
+    request: UserHasQueryPermissionsRequest,
+  ): Promise<Result<QueryPermissionsOutput, VdsQueryError>> => {
+    try {
+      return Ok(await this._apiClient.userHasQueryPermissions(request, { ...this.authHeader }));
+    } catch (error) {
+      if (isErrorFromAlias(this._apiClient.api, 'userHasQueryPermissions', error)) {
+        if (error.response.status === 404) {
+          return Err({ type: 'feature-disabled' });
+        }
+        return Err({
+          type: 'api-error',
+          message: error.response.data?.message ?? 'Unknown Tableau error',
+          httpStatus: error.response.status,
+          errorCode: error.response.data?.errorCode,
+        });
+      }
+
+      if (error instanceof ZodiosError) {
+        return Err({ type: 'zodios-error', error });
       }
 
       throw error;

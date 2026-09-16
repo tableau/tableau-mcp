@@ -251,7 +251,11 @@ const toolScopeMap: Record<
   },
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
-    api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+    api: new Set([
+      'tableau:content:read',
+      'tableau:viz_data_service:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
   },
   'download-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
