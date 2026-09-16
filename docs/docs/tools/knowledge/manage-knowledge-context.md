@@ -7,6 +7,16 @@ sidebar_position: 2
 Inspects graph status and curates customer-governed semantic context through one management tool. It
 is available on Tableau+ sites.
 
+:::warning[Disabled by Default]
+This tool requires the `knowledge-tools` feature flag, which defaults to `false` in `features.json`.
+See [Feature Flags](../../developers/feature-flags.md).
+:::
+
+## Required permissions
+
+- **Site Role**: Requires Creator role or higher
+- **Site**: Tableau Knowledge must be enabled on the Tableau+ site
+
 ## Actions
 
 | `action`      | Behavior                                                             | Mutation |

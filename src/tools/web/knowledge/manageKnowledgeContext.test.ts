@@ -9,12 +9,17 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getManageKnowledgeContextTool } from './manageKnowledgeContext.js';
 
 const mocks = vi.hoisted(() => ({
+  isFeatureEnabled: vi.fn(),
   listGraphs: vi.fn(),
   listSemanticStatements: vi.fn(),
   getKnowledgeSuggestions: vi.fn(),
   createSemanticStatements: vi.fn(),
   updateSemanticStatements: vi.fn(),
   deleteSemanticStatements: vi.fn(),
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.isFeatureEnabled })),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -42,6 +47,7 @@ const context = (statements = ['AOV = revenue / orders']): Record<string, unknow
 describe('manageKnowledgeContextTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.isFeatureEnabled.mockResolvedValue(true);
     mocks.listGraphs.mockResolvedValue([]);
     mocks.listSemanticStatements.mockResolvedValue([]);
     mocks.getKnowledgeSuggestions.mockResolvedValue({
@@ -69,6 +75,13 @@ describe('manageKnowledgeContextTool', () => {
     mocks.createSemanticStatements.mockResolvedValue(context());
     mocks.updateSemanticStatements.mockResolvedValue(context(['Updated definition']));
     mocks.deleteSemanticStatements.mockResolvedValue(undefined);
+  });
+
+  it('is disabled when the knowledge-tools feature flag is off', async () => {
+    mocks.isFeatureEnabled.mockResolvedValue(false);
+
+    expect(await Provider.from(getTool().disabled)).toBe(true);
+    expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-tools');
   });
 
   it('uses conservative mutation annotations and requires both Knowledge scopes', async () => {

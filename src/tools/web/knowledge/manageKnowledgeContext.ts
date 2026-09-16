@@ -3,10 +3,12 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { severitySchema } from '../../../sdks/tableau/apis/knowledgeApi.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import {
   flattenKnowledgeStatements,
@@ -46,6 +48,9 @@ export const getManageKnowledgeContextTool = (
   const tool = new WebTool({
     server,
     name: 'manage-knowledge-context',
+    disabled: new Provider(
+      async () => !(await getFeatureGate().isFeatureEnabled('knowledge-tools')),
+    ),
     minRequiredRole: SiteRole.CREATOR,
     registrationConditions: ['RequiresKnowledge'],
     description: `

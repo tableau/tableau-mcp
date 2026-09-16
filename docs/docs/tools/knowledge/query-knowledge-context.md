@@ -7,6 +7,11 @@ sidebar_position: 1
 Queries governed definitions, relationships, lineage, impact, and source inventory from Tableau
 Knowledge. This read-only tool is available on Tableau+ sites.
 
+:::warning[Disabled by Default]
+This tool requires the `knowledge-tools` feature flag, which defaults to `false` in `features.json`.
+See [Feature Flags](../../developers/feature-flags.md).
+:::
+
 ## Intents
 
 | `intent`        | Result                                                           | Tableau Knowledge operations                           |

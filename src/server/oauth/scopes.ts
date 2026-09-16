@@ -414,6 +414,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     (await featureGate.isFeatureEnabled('authoring-tools')) && !slackClient;
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
+  const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -446,6 +447,11 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('get-flow');
     enabledTools.delete('list-flow-runs');
     enabledTools.delete('list-flow-tasks');
+  }
+
+  if (!knowledgeToolsEnabled) {
+    enabledTools.delete('query-knowledge-context');
+    enabledTools.delete('manage-knowledge-context');
   }
 
   if (!authoringToolsEnabled) {

@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   edgeTypeSchema,
@@ -13,6 +14,7 @@ import {
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getHttpStatus } from '../../../utils/getHttpStatus.js';
+import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import {
   flattenKnowledgeStatements,
@@ -73,6 +75,9 @@ export const getQueryKnowledgeContextTool = (
   const tool = new WebTool({
     server,
     name: 'query-knowledge-context',
+    disabled: new Provider(
+      async () => !(await getFeatureGate().isFeatureEnabled('knowledge-tools')),
+    ),
     minRequiredRole: SiteRole.VIEWER,
     registrationConditions: ['RequiresKnowledge'],
     description: `

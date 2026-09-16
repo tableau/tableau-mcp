@@ -597,7 +597,10 @@ describe('server', () => {
     ['omits both when Knowledge is unavailable on the site', SiteRole.CREATOR, false, []],
   ] as const)('%s', async (_, siteRole, knowledgeAvailable, expectedTools) => {
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (name: string) => enforceRoleRequirements(name) || enforceRegistrationConditions(name),
+      (name: string) =>
+        name === 'knowledge-tools' ||
+        enforceRoleRequirements(name) ||
+        enforceRegistrationConditions(name),
     );
     mocks.mockGetCurrentUserSiteRole.mockResolvedValue(siteRole);
     mocks.mockCheckRegistrationConditions.mockResolvedValue(
@@ -622,6 +625,24 @@ describe('server', () => {
         expect.any(Function),
       );
     }
+  });
+
+  it('omits Knowledge tools when the knowledge-tools feature flag is off', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) => enforceRoleRequirements(name) || enforceRegistrationConditions(name),
+    );
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(SiteRole.CREATOR);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+      getQueryKnowledgeContextTool(server),
+      getManageKnowledgeContextTool(server),
+    ]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalled();
   });
 
   it('does not register a tool when the caller ranks below minRequiredRole', async () => {

@@ -253,6 +253,9 @@ describe('scopes', () => {
     });
 
     it('should advertise Knowledge scopes before availability is resolved at registration', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'knowledge-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
@@ -261,10 +264,23 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:mcp:knowledge:read');
       expect(scopes).toContain('tableau:mcp:knowledge:write');
     });
+
+    it('should not advertise Knowledge scopes when knowledge-tools is disabled', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).not.toContain('tableau:mcp:knowledge:read');
+      expect(scopes).not.toContain('tableau:mcp:knowledge:write');
+    });
   });
 
   describe('getSupportedApiScopes', () => {
     it('should advertise both Knowledge API scopes', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'knowledge-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
@@ -272,6 +288,16 @@ describe('scopes', () => {
       const scopes = await getSupportedApiScopes();
       expect(scopes).toContain('tableau:knowledge:read');
       expect(scopes).toContain('tableau:knowledge:write');
+    });
+
+    it('should not advertise Knowledge API scopes when knowledge-tools is disabled', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).not.toContain('tableau:knowledge:read');
+      expect(scopes).not.toContain('tableau:knowledge:write');
     });
 
     it('should include tableau:tasks:read when adminToolsEnabled is true', async () => {

@@ -9,6 +9,7 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getQueryKnowledgeContextTool } from './queryKnowledgeContext.js';
 
 const mocks = vi.hoisted(() => ({
+  isFeatureEnabled: vi.fn(),
   searchKnowledgeNodes: vi.fn(),
   getKnowledgeNode: vi.fn(),
   listSemanticStatements: vi.fn(),
@@ -16,6 +17,10 @@ const mocks = vi.hoisted(() => ({
   getKnowledgeLineage: vi.fn(),
   getKnowledgeNodeImpact: vi.fn(),
   listKnowledgeSources: vi.fn(),
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.isFeatureEnabled })),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -59,6 +64,7 @@ const semanticContext = (
 describe('queryKnowledgeContextTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.isFeatureEnabled.mockResolvedValue(true);
     mocks.searchKnowledgeNodes.mockResolvedValue({ matches: [candidate()] });
     mocks.getKnowledgeNode.mockResolvedValue({
       id: 'pds-1',
@@ -77,6 +83,13 @@ describe('queryKnowledgeContextTool', () => {
     mocks.getKnowledgeLineage.mockResolvedValue({ nodes: [], edges: [] });
     mocks.getKnowledgeNodeImpact.mockResolvedValue({ node_id: 'pds-1', affected_assets: [] });
     mocks.listKnowledgeSources.mockResolvedValue([]);
+  });
+
+  it('is disabled when the knowledge-tools feature flag is off', async () => {
+    mocks.isFeatureEnabled.mockResolvedValue(false);
+
+    expect(await Provider.from(getTool().disabled)).toBe(true);
+    expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-tools');
   });
 
   it('is a read-only tool with the Knowledge read scope', async () => {
