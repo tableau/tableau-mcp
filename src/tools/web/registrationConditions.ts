@@ -147,6 +147,7 @@ export function getUnmetConditionInstructions(condition: RegistrationCondition):
 /** Number of retries for API calls for a condition check (1 initial attempt + {@link MAX_API_RETRY_ATTEMPTS} retries = 3 total attempts). */
 export const MAX_API_RETRY_ATTEMPTS = 2;
 
+/** `listGraphs` is available to every Knowledge read role and succeeds for an entitled empty site. */
 async function checkKnowledgeAvailable(restApiArgs: RestApiArgs): Promise<boolean> {
   try {
     return await retry(

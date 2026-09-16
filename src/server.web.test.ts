@@ -558,10 +558,39 @@ describe('server', () => {
 
   it.each([
     ['omits both for an unlicensed user', 'Unlicensed', false, []],
+    ['omits both for a Guest', 'Guest', false, []],
+    ['omits both for a Support User', SiteRole.SUPPORT_USER, false, []],
+    ['omits both for an unrecognized role', 'Unknown', false, []],
+    ['omits both on Tableau Server', SiteRole.SERVER_ADMINISTRATOR, false, []],
+    [
+      'registers read only when the role lookup fails but the Knowledge read probe succeeds',
+      undefined,
+      true,
+      ['query-knowledge-context'],
+    ],
     ['registers read only for a Viewer', SiteRole.VIEWER, true, ['query-knowledge-context']],
+    ['registers read only for an Explorer', SiteRole.EXPLORER, true, ['query-knowledge-context']],
+    [
+      'registers read only for an Explorer who can publish',
+      SiteRole.EXPLORER_CAN_PUBLISH,
+      true,
+      ['query-knowledge-context'],
+    ],
     [
       'registers read and manage for a Creator',
       SiteRole.CREATOR,
+      true,
+      ['query-knowledge-context', 'manage-knowledge-context'],
+    ],
+    [
+      'registers read and manage for a Site Administrator Explorer',
+      SiteRole.SITE_ADMINISTRATOR_EXPLORER,
+      true,
+      ['query-knowledge-context', 'manage-knowledge-context'],
+    ],
+    [
+      'registers read and manage for a Site Administrator Creator',
+      SiteRole.SITE_ADMINISTRATOR_CREATOR,
       true,
       ['query-knowledge-context', 'manage-knowledge-context'],
     ],

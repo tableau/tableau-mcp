@@ -174,36 +174,18 @@ describe('checkRegistrationConditions', () => {
       );
     });
 
-    it('is unmet without retrying when the site is not entitled', async () => {
-      const forbidden = new AxiosError(
-        'site_not_entitled',
-        'ERR_BAD_REQUEST',
-        undefined,
-        undefined,
-        {
-          status: 403,
-        } as AxiosResponse,
+    it.each([
+      ['the site is not entitled', 'site_not_entitled', 403],
+      ['the caller lacks a Knowledge role', 'tableau_forbidden', 403],
+      ['authentication fails', 'unauthorized', 401],
+      ['the Knowledge endpoint is unavailable', 'not_found', 404],
+    ])('is unmet without retrying when %s', async (_, code, status) => {
+      stubKnowledgeProbe(
+        new AxiosError(code, 'ERR_BAD_REQUEST', undefined, undefined, {
+          status,
+        } as AxiosResponse),
+        true,
       );
-      stubKnowledgeProbe(forbidden, true);
-
-      await expect(
-        checkRegistrationConditions(['RequiresKnowledge'], {}, restApiArgs),
-      ).resolves.toEqual({
-        registrationConditionsMet: false,
-        failingCondition: 'RequiresKnowledge',
-      });
-      expect(mocks.useRestApi).toHaveBeenCalledTimes(1);
-    });
-
-    it('is unmet without retrying when the caller lacks a Knowledge role', async () => {
-      const forbidden = new AxiosError(
-        'tableau_forbidden',
-        'ERR_BAD_REQUEST',
-        undefined,
-        undefined,
-        { status: 403 } as AxiosResponse,
-      );
-      stubKnowledgeProbe(forbidden, true);
 
       await expect(
         checkRegistrationConditions(['RequiresKnowledge'], {}, restApiArgs),
