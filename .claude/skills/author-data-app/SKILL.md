@@ -98,44 +98,54 @@ datasource wired in.
 **Do this only once the user has named a target published datasource.** It is
 skippable if the user only wants to publish the starter to prove packaging.
 
-1. **Get the datasource's identity** with `list-datasources` (find its LUID and
-   name) and `get-datasource-metadata({ datasourceLuid })` (fields to query).
-2. **Add a workbook-root `<datasource>`** inside the empty `<datasources/>`, an
-   inline `sqlproxy` (Data Server) connection. Mirror the *structure* of the
-   synthetic Superstore reference at
-   `/Users/patrick.green/Downloads/Snake/Superstore Data App.twb` (sample data, no
-   PII). Shape:
+Do **not** hand-edit the XML — the wiring spans four coordinated locations (root
+datasource `name`, root `relation connection`, view `datasource name`,
+`datasource-dependencies datasource`) that must all carry the identical
+`sqlproxy.<hash>` join key, and both empty anchors must be filled. Use the bundled
+[wire-datasource.mjs](wire-datasource.mjs) script, which does all four edits
+atomically and hard-fails rather than emitting a half-wired workbook.
 
-   ```xml
-   <datasource caption='<Friendly Name>' inline='true' name='sqlproxy.<hash>' version='18.1'>
-     <repository-location id='<datasource repo id>' path='/datasources' revision='1.0' site='<site>' />
-     <connection channel='https' class='sqlproxy' dbname='<datasource repo id>'
-                 directory='dataserver' port='443' server='<server host>'
-                 server-ds-friendly-name='<Friendly Name>' username=''>
-       <relation connection='sqlproxy.<hash>' name='sqlproxy' table='[sqlproxy]' type='table' />
-       <metadata-records>
-         <!-- one <metadata-record class='column'> per field you will query -->
-       </metadata-records>
-     </connection>
-     <!-- one <column .../> per field you will query -->
-   </datasource>
+1. **Get the datasource's identity** with `list-datasources` (LUID, name/caption,
+   contentUrl, and the server host + site) and `get-datasource-metadata({ datasourceLuid })`
+   (field names + datatypes). The published DS **contentUrl** is the
+   `repositoryId`.
+2. **Write a descriptor** listing *only the fields the app will query* (name +
+   datatype + role), e.g.:
+
+   ```bash
+   cat > "$WORK/descriptor.json" <<'DS_JSON'
+   {
+     "caption": "<Friendly Name>",
+     "repositoryId": "<published DS contentUrl>",
+     "site": "<site>",
+     "server": "<server host, e.g. 10ax.online.tableau.com>",
+     "channel": "https", "port": 443,
+     "fields": [
+       { "name": "Profit", "datatype": "real",   "role": "measure"   },
+       { "name": "Region", "datatype": "string", "role": "dimension" }
+     ]
+   }
+   DS_JSON
    ```
 
-3. **Reference it from the worksheet.** In the worksheet `<view>`, replace the
-   empty `<datasources/>` with a `<datasources><datasource caption=… name='sqlproxy.<hash>' /></datasources>`
-   pointing at the same `name`, and add a `<datasource-dependencies datasource='sqlproxy.<hash>'>`
-   block listing the `<column>` / `<column-instance>` for the fields the app uses.
+3. **Run the wiring script** (it prints the wired `.twb` path, and generates a
+   consistent `sqlproxy.<hash>` unless you supply `connectionName`):
 
-Populate `server`/`site`/`dbname` from the `list-datasources` /
-`get-datasource-metadata` output for the user's datasource. **This wiring is
-fragile and server/site-specific** — the `name='sqlproxy.<hash>'` must be
-identical everywhere it appears, and the worksheet reference must match the
-workbook-root datasource.
+   ```bash
+   node "$SKILL_DIR/wire-datasource.mjs" "<App Name>/<App Name>.twb" "$WORK/descriptor.json"
+   ```
+
+The script hard-fails if an anchor is missing (already wired / template drifted),
+if any empty `<datasources />` survives, or if the join key isn't referenced ≥4×.
+Trust that failure over patching the XML by hand. `datatype` maps to the column
+`type` (`real`/`integer` → quantitative, `date`/`datetime` → ordinal, else
+nominal); `role: "measure"` gets a `Sum` aggregation, `dimension` a `Count`.
 
 > **Long-term fix (separate follow-up, not this skill):** enhance the
 > `scaffold-data-app` MCP tool to accept `datasources` LUIDs and emit this wiring
-> automatically (as the `compass/data-apps-dev` branch does). Until that lands,
-> this manual step is required. File it as its own work item.
+> server-side (as the `compass/data-apps-dev` branch does), retiring this client
+> step. Until that lands, `wire-datasource.mjs` is the near-term path. File it as
+> its own work item.
 
 ---
 
@@ -247,6 +257,9 @@ to Slack clients).
   `Packages/` at root), not the `<App Name>/` directory. Always `unzip -l` to confirm.
 - **Applying a postUnzip plan freehand.** Use `apply-plan.mjs` — edits before
   renames, renames deepest-first, verified. See its Common Mistakes section.
+- **Hand-editing the `<datasources/>` wiring.** Use `wire-datasource.mjs` — freehand
+  edits mismatch the `sqlproxy.<hash>` join key across its four locations or leave an
+  empty `<datasources />` anchor, and the app silently reaches no data.
 - **Running finalize on a local result.** A result with `filePath` and no
   `postUnzip` is already done; skip straight to phase 3 (after authoring).
 - **Authoring the app yourself unprompted.** Phase 2 is a human handoff by
