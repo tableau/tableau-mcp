@@ -66,13 +66,21 @@ describe('createDataAppWorkspace', () => {
 
       const pkgDir = join(value.filePath, 'Packages', 'com.tableau.mcp.sales-demo');
 
-      // Workbook renamed to the display name.
-      expect(existsSync(join(value.filePath, 'Sales Demo.twb'))).toBe(true);
+      // Workbook renamed to the display name and fully substituted: the extension
+      // id and tableaulocalext path must resolve to the package id, or publishing fails.
+      const twbPath = join(value.filePath, 'Sales Demo.twb');
+      expect(existsSync(twbPath)).toBe(true);
+      const twb = await readFile(twbPath, 'utf8');
+      expect(twb).not.toContain('TODO-MANIFEST-ID');
+      expect(twb).not.toContain('TODO App Name');
+      expect(twb).toContain("id='com.tableau.mcp.sales-demo'");
+      expect(twb).toContain('tableaulocalext:///com.tableau.mcp.sales-demo/content/index.html');
 
       // manifest.json fully substituted, valid JSON, no residual placeholders.
       const manifestRaw = await readFile(join(pkgDir, 'manifest.json'), 'utf8');
-      expect(manifestRaw).not.toContain('<TODO');
-      expect(manifestRaw).not.toContain('com.example.name');
+      expect(manifestRaw).not.toContain('TODO-MANIFEST-ID');
+      expect(manifestRaw).not.toContain('TODO App Name');
+      expect(manifestRaw).not.toContain('TODO Username');
       const manifest = JSON.parse(manifestRaw);
       expect(manifest.id).toBe('com.tableau.mcp.sales-demo');
       expect(manifest.name).toBe('Sales Demo');
@@ -80,7 +88,9 @@ describe('createDataAppWorkspace', () => {
 
       // data-app.trex fully substituted.
       const trex = await readFile(join(pkgDir, 'extensions', 'data-app.trex'), 'utf8');
-      expect(trex).not.toContain('<TODO');
+      expect(trex).not.toContain('TODO-MANIFEST-ID');
+      expect(trex).not.toContain('TODO App Name');
+      expect(trex).not.toContain('TODO Username');
       expect(trex).toContain('id="com.tableau.mcp.sales-demo"');
       expect(trex).toContain('name="jdoe via Tableau MCP"');
 

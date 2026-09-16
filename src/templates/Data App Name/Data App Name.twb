@@ -25,7 +25,13 @@
             <view>
               <breakdown value='auto' />
             </view>
-            <mark class='Automatic' />
+            <mark class='VizExtension' />
+            <add-in add-in-id='TODO-MANIFEST-ID' extension-url='tableaulocalext:///TODO-MANIFEST-ID/content/index.html' extension-version='1.0.0' instance-id='A1B2C3D4E5F60718293A4B5C6D7E8F90'>
+              <instance-settings />
+              <type-settings>
+                <worksheet />
+              </type-settings>
+            </add-in>
           </pane>
         </panes>
         <rows />
@@ -62,15 +68,16 @@
   <referenced-extensions>
     <referenced-extension>
       <manifest manifest-version='0.1'>
-        <worksheet-extension extension-version='1.0.0' id=''>
+        <worksheet-extension extension-version='1.0.0' id='TODO-MANIFEST-ID'>
           <default-locale>en_US</default-locale>
-          <name>TODO Name</name>
-          <description>TODO Description</description>
-          <author name='<TODO Username> via Tableau MCP' website='https://www.tableau.com' />
+          <name>TODO App Name</name>
+          <description>Embedded workbook extension.</description>
+          <author email='noreply@tableau.com' name='Claude' organization='Tableau' website='https://www.tableau.com' />
           <min-api-version>1.11</min-api-version>
           <source-location>
-            <url>tableaulocalext:///TODO Manifest Id/content/index.html</url>
+            <url>tableaulocalext:///TODO-MANIFEST-ID/content/index.html</url>
           </source-location>
+          <icon>iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=</icon>
           <permissions>
             <permission>full data</permission>
           </permissions>

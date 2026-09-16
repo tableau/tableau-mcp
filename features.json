@@ -7,5 +7,5 @@
   "view-file-mode": false,
   "view-data-file-mode": false,
   "workbook-file-mode": true,
-  "tableau-data-apps": false
+  "tableau-data-apps": true
 }

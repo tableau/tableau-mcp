@@ -9,6 +9,7 @@ import {
   TEMPLATE_ROOT_DIRNAME,
   TEMPLATE_TWB_FILENAME,
   TREX_RELPATH,
+  TWB_RELPATH,
 } from './templateIdentity.js';
 
 describe('slug', () => {
@@ -50,19 +51,39 @@ describe('deriveIdentity', () => {
 });
 
 describe('buildTextReplacements', () => {
-  it('maps every placeholder token in manifest.json and data-app.trex', () => {
+  it('maps every placeholder token in the .twb, manifest.json, and data-app.trex', () => {
     const identity = deriveIdentity('Sales Demo', 'jsmith@example.com');
     const replacements = buildTextReplacements(identity);
 
+    expect(replacements[TWB_RELPATH]).toEqual([
+      { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
+      { find: 'TODO App Name', replace: 'Sales Demo' },
+    ]);
     expect(replacements[MANIFEST_RELPATH]).toEqual([
-      { find: 'com.example.name', replace: 'com.tableau.mcp.sales-demo' },
-      { find: '<TODO Name>', replace: 'Sales Demo' },
-      { find: '<TODO Username> via Tableau MCP', replace: 'jsmith@example.com via Tableau MCP' },
+      { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
+      { find: 'TODO App Name', replace: 'Sales Demo' },
+      { find: 'TODO Username via Tableau MCP', replace: 'jsmith@example.com via Tableau MCP' },
     ]);
     expect(replacements[TREX_RELPATH]).toEqual([
-      { find: '<TODO-manifest-id>', replace: 'com.tableau.mcp.sales-demo' },
-      { find: '<TODO Username> via Tableau MCP', replace: 'jsmith@example.com via Tableau MCP' },
+      { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
+      { find: 'TODO App Name', replace: 'Sales Demo' },
+      { find: 'TODO Username via Tableau MCP', replace: 'jsmith@example.com via Tableau MCP' },
     ]);
+  });
+
+  it('escapes displayName for the target format of each file', () => {
+    const identity = deriveIdentity('Tom & "Jerry" <Co>', undefined);
+    const replacements = buildTextReplacements(identity);
+
+    // XML text (.twb, .trex): & < > escaped, quotes left as-is.
+    const xmlName = { find: 'TODO App Name', replace: 'Tom &amp; "Jerry" &lt;Co&gt;' };
+    expect(replacements[TWB_RELPATH]).toContainEqual(xmlName);
+    expect(replacements[TREX_RELPATH]).toContainEqual(xmlName);
+    // JSON string (manifest.json): quotes/backslashes escaped, & < > left as-is.
+    expect(replacements[MANIFEST_RELPATH]).toContainEqual({
+      find: 'TODO App Name',
+      replace: 'Tom & \\"Jerry\\" <Co>',
+    });
   });
 });
 
@@ -84,10 +105,10 @@ describe('mapToFinalRelativePath', () => {
   });
 
   it('renames the package directory to the package id', () => {
-    expect(mapToFinalRelativePath('Packages/PackageId/manifest.json', identity)).toBe(
+    expect(mapToFinalRelativePath('Packages/TODO-MANIFEST-ID/manifest.json', identity)).toBe(
       'Packages/com.tableau.mcp.sales-demo/manifest.json',
     );
-    expect(mapToFinalRelativePath('Packages/PackageId/content/src/app.js', identity)).toBe(
+    expect(mapToFinalRelativePath('Packages/TODO-MANIFEST-ID/content/src/app.js', identity)).toBe(
       'Packages/com.tableau.mcp.sales-demo/content/src/app.js',
     );
   });
@@ -103,6 +124,7 @@ describe('buildPostUnzipPlan', () => {
     const plan = buildPostUnzipPlan(identity);
 
     expect(plan.edits.map((e) => e.file)).toEqual([
+      `${TEMPLATE_ROOT_DIRNAME}/${TWB_RELPATH}`,
       `${TEMPLATE_ROOT_DIRNAME}/${MANIFEST_RELPATH}`,
       `${TEMPLATE_ROOT_DIRNAME}/${TREX_RELPATH}`,
     ]);
@@ -112,7 +134,7 @@ describe('buildPostUnzipPlan', () => {
 
     expect(plan.renames).toEqual([
       {
-        from: `${TEMPLATE_ROOT_DIRNAME}/Packages/PackageId`,
+        from: `${TEMPLATE_ROOT_DIRNAME}/Packages/TODO-MANIFEST-ID`,
         to: `${TEMPLATE_ROOT_DIRNAME}/Packages/com.tableau.mcp.sales-demo`,
       },
       {
