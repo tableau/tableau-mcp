@@ -167,7 +167,7 @@ describe('used-field validity verification', () => {
     const executor = {
       desktopInstanceId: 'instance-1',
       desktopApiVersion: '0.2.16',
-      getWorksheetFieldValidation: vi.fn().mockRejectedValue(new Error('discovery failed')),
+      getWorksheetDiagnostics: vi.fn().mockRejectedValue(new Error('discovery failed')),
     } as unknown as ExternalApiToolExecutor;
 
     const outcome = await checkUsedFieldValidity({
@@ -188,10 +188,9 @@ describe('used-field validity verification', () => {
     const executor = {
       desktopInstanceId: 'instance-1',
       desktopApiVersion: '0.2.16',
-      getWorksheetFieldValidation: vi.fn().mockResolvedValue(
+      getWorksheetDiagnostics: vi.fn().mockResolvedValue(
         Ok({
-          worksheetId: 'wrong-sheet',
-          invalidFields: [],
+          worksheets: [{ worksheetId: 'wrong-sheet', status: 'complete', invalidFields: [] }],
         }),
       ),
     } as unknown as ExternalApiToolExecutor;
@@ -206,16 +205,97 @@ describe('used-field validity verification', () => {
     expect(outcome).toMatchObject({
       status: 'unknown',
       worksheetId: 'sheet-1',
-      reason: 'target-mismatch',
+      reason: 'diagnostics-target-missing',
+    });
+  });
+
+  it('treats duplicate exact worksheet diagnostics as unknown without a fallback read', async () => {
+    const getWorksheetDiagnostics = vi.fn();
+    const executor = {
+      desktopInstanceId: 'instance-1',
+      desktopApiVersion: '0.2.16',
+      getWorksheetDiagnostics,
+    } as unknown as ExternalApiToolExecutor;
+
+    const outcome = await checkUsedFieldValidity({
+      executor,
+      worksheetId: 'sheet-1',
+      expectedInstanceId: 'instance-1',
+      signal: new AbortController().signal,
+      diagnostics: {
+        worksheets: [
+          { worksheetId: 'sheet-1', status: 'complete', invalidFields: [] },
+          {
+            worksheetId: 'sheet-1',
+            status: 'partial',
+            invalidFields: [
+              {
+                fieldName: '[none:Missing:nk]',
+                shelf: 'rows',
+                marksSpecificationId: 'marks-1',
+                encodingType: 'text',
+                reason: 'Field is unavailable.',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(outcome).toMatchObject({
+      status: 'unknown',
+      worksheetId: 'sheet-1',
+      reason: 'diagnostics-target-ambiguous',
+    });
+    expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+  });
+
+  it('preserves definite invalid fields from an incomplete diagnostics record', async () => {
+    const executor = {
+      desktopInstanceId: 'instance-1',
+      desktopApiVersion: '0.2.16',
+      getWorksheetDiagnostics: vi.fn(),
+    } as unknown as ExternalApiToolExecutor;
+
+    const outcome = await checkUsedFieldValidity({
+      executor,
+      worksheetId: 'sheet-1',
+      expectedInstanceId: 'instance-1',
+      signal: new AbortController().signal,
+      diagnostics: {
+        worksheets: [
+          {
+            worksheetId: 'sheet-1',
+            status: 'unavailable',
+            invalidFields: [
+              {
+                fieldName: '[none:Missing:nk]',
+                shelf: 'rows',
+                marksSpecificationId: 'marks-1',
+                encodingType: 'text',
+                reason: 'Field is unavailable.',
+              },
+            ],
+            message: 'The remaining fields were not checked.',
+          },
+        ],
+      },
+    });
+
+    expect(outcome).toMatchObject({
+      status: 'invalid',
+      worksheetId: 'sheet-1',
+      invalidFields: [expect.objectContaining({ fieldName: '[none:Missing:nk]' })],
+      incompleteMessage: 'The remaining fields were not checked.',
     });
   });
 
   it('reports a replaced Desktop instance before an older API version', async () => {
-    const getWorksheetFieldValidation = vi.fn();
+    const getWorksheetDiagnostics = vi.fn();
     const executor = {
       desktopInstanceId: 'instance-replacement',
       desktopApiVersion: '0.2.15',
-      getWorksheetFieldValidation,
+      getWorksheetDiagnostics,
     } as unknown as ExternalApiToolExecutor;
 
     const outcome = await checkUsedFieldValidity({
@@ -230,14 +310,14 @@ describe('used-field validity verification', () => {
       worksheetId: 'sheet-1',
       reason: 'instance-mismatch',
     });
-    expect(getWorksheetFieldValidation).not.toHaveBeenCalled();
+    expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
   });
 
   it('distinguishes missing Desktop identity from a compatible instance', async () => {
-    const getWorksheetFieldValidation = vi.fn();
+    const getWorksheetDiagnostics = vi.fn();
     const executor = {
       desktopApiVersion: '0.2.16',
-      getWorksheetFieldValidation,
+      getWorksheetDiagnostics,
     } as unknown as ExternalApiToolExecutor;
 
     const outcome = await checkUsedFieldValidity({
@@ -252,6 +332,6 @@ describe('used-field validity verification', () => {
       worksheetId: 'sheet-1',
       reason: 'instance-unavailable',
     });
-    expect(getWorksheetFieldValidation).not.toHaveBeenCalled();
+    expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
   });
 });

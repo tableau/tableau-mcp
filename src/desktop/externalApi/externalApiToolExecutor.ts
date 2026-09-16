@@ -88,13 +88,14 @@ import {
   workbookDashboardsNewRoute,
   workbookDatasourceDocumentRoute,
   workbookDatasourceRoute,
+  WorkbookDiagnostics,
+  workbookDiagnosticsSchema,
   WorkbookInventory,
   workbookInventorySchema,
   workbookStoryboardsNewRoute,
   workbookWorksheetsNewRoute,
+  worksheetDiagnosticsRoute,
   worksheetDocumentRoute,
-  WorksheetFieldValidation,
-  worksheetFieldValidationSchema,
   worksheetImageRoute,
   WorksheetItem,
   worksheetItemSchema,
@@ -111,7 +112,6 @@ import {
   WorksheetSummaryDataQuery,
   worksheetSummaryDataRoute,
   WorksheetUnderlyingDataQuery,
-  worksheetValidationRoute,
 } from './types.js';
 
 const LOGGER = 'ExternalApiToolExecutor';
@@ -152,6 +152,8 @@ type RawOutcome = {
   state: string | undefined;
   envelopeError: OperationError | undefined;
   warnings: OperationWarning[] | undefined;
+  diagnostics: WorkbookDiagnostics | undefined;
+  diagnosticsInvalid: boolean;
   createdAt: string | undefined;
   completedAt: string | undefined;
   operationId: string | undefined;
@@ -428,11 +430,45 @@ export class ExternalApiToolExecutor {
     );
   }
 
-  async getWorksheetFieldValidation(
+  async getWorkbookDiagnostics(
+    signal: AbortSignal,
+    expectedInstanceId: string,
+  ): Promise<Result<WorkbookDiagnostics, ExecuteCommandError>> {
+    return this.readPinnedDiagnostics(
+      EXTERNAL_API_ROUTES.workbookDiagnostics,
+      signal,
+      expectedInstanceId,
+    );
+  }
+
+  async getWorksheetDiagnostics(
     worksheetId: string,
     signal: AbortSignal,
     expectedInstanceId: string,
-  ): Promise<Result<WorksheetFieldValidation, ExecuteCommandError>> {
+  ): Promise<Result<WorkbookDiagnostics, ExecuteCommandError>> {
+    const result = await this.readPinnedDiagnostics(
+      worksheetDiagnosticsRoute(worksheetId),
+      signal,
+      expectedInstanceId,
+    );
+    if (result.isErr()) return result;
+    if (
+      result.value.worksheets.length !== 1 ||
+      result.value.worksheets[0]?.worksheetId !== worksheetId
+    ) {
+      return Err({
+        type: 'unknown',
+        error: `Worksheet diagnostics did not return exactly one record for ${worksheetId}.`,
+      });
+    }
+    return result;
+  }
+
+  private async readPinnedDiagnostics(
+    route: string,
+    signal: AbortSignal,
+    expectedInstanceId: string,
+  ): Promise<Result<WorkbookDiagnostics, ExecuteCommandError>> {
     const result = await this.withRescan('read', (http) => {
       if (http.instanceId !== expectedInstanceId) {
         return Promise.resolve(
@@ -443,11 +479,7 @@ export class ExternalApiToolExecutor {
           }),
         );
       }
-      return http.getJson(
-        worksheetValidationRoute(worksheetId),
-        worksheetFieldValidationSchema,
-        signal,
-      );
+      return http.getJson(route, workbookDiagnosticsSchema, signal);
     });
     if (result.isErr()) return Err(mapClientError(result.error, this.deps.pid));
     return Ok(result.value);
@@ -1022,11 +1054,18 @@ export class ExternalApiToolExecutor {
 }
 
 function normalizeEnvelope(envelope: OperationEnvelope, apiVersion?: string): RawOutcome {
+  const hasDiagnostics = Object.hasOwn(envelope, 'diagnostics');
+  const parsedDiagnostics = hasDiagnostics
+    ? workbookDiagnosticsSchema.safeParse(envelope['diagnostics'])
+    : undefined;
+  const diagnosticsInvalid = parsedDiagnostics !== undefined && !parsedDiagnostics.success;
   return {
     result: isRecord(envelope.result) ? envelope.result : undefined,
     state: envelope.state,
     envelopeError: envelope.error,
     warnings: envelope.warnings,
+    diagnostics: parsedDiagnostics?.success ? parsedDiagnostics.data : undefined,
+    diagnosticsInvalid,
     createdAt: envelope.createdAt,
     completedAt: envelope.completedAt,
     operationId: envelope.id,
@@ -1077,6 +1116,8 @@ function buildCommandStatus(
     completed_at: outcome.completedAt ?? now,
     ...resultPayload,
     ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
+    ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
+    ...(outcome.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
   });
 }
 

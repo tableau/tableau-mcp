@@ -3428,7 +3428,7 @@ function setupAutoApplyMocks({
   executeCommand: ReturnType<typeof vi.fn>;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
   getWorkbookDocument: ReturnType<typeof vi.fn>;
-  getWorksheetFieldValidation: ReturnType<typeof vi.fn>;
+  getWorksheetDiagnostics: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
 } {
   let liveXml = workbookReads[0] ?? XML;
@@ -3485,8 +3485,8 @@ function setupAutoApplyMocks({
       xsdPayloadVersion: undefined,
     }),
   );
-  const getWorksheetFieldValidation = vi.fn(async (worksheetId: string) =>
-    Ok({ worksheetId, invalidFields: [] }),
+  const getWorksheetDiagnostics = vi.fn(async (worksheetId: string) =>
+    Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
   );
   const getExecutor = vi.fn().mockResolvedValue({
     desktopInstanceId: 'inst-test',
@@ -3494,14 +3494,14 @@ function setupAutoApplyMocks({
     executeCommand,
     getWorkbookDocument,
     applyWorkbookDocument,
-    getWorksheetFieldValidation,
+    getWorksheetDiagnostics,
     ...(structuralReadback ? { listWorksheets: vi.fn(routeMissing) } : {}),
   });
   return {
     executeCommand,
     applyWorkbookDocument,
     getWorkbookDocument,
-    getWorksheetFieldValidation,
+    getWorksheetDiagnostics,
     getExecutor,
   };
 }
@@ -3531,9 +3531,11 @@ function readbackExecutor(
     applyWorkbookDocument: base.applyWorkbookDocument,
     getWorkbookDocument: base.getWorkbookDocument,
     listWorksheets: vi.fn(routeMissing),
-    getWorksheetFieldValidation:
+    getWorksheetDiagnostics:
       options.fieldValidation ??
-      vi.fn(async (worksheetId: string) => Ok({ worksheetId, invalidFields: [] })),
+      vi.fn(async (worksheetId: string) =>
+        Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
+      ),
   });
 }
 
@@ -3575,8 +3577,8 @@ function summaryRowsExecutor(
         ],
       }),
     ),
-    getWorksheetFieldValidation: vi.fn(async (worksheetId: string) =>
-      Ok({ worksheetId, invalidFields: [] }),
+    getWorksheetDiagnostics: vi.fn(async (worksheetId: string) =>
+      Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
     ),
     getWorksheetDocument: vi.fn(routeMissing),
     getWorksheetSummaryData,
@@ -3925,7 +3927,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   it('activation failure preserves applied:true but cannot mint terminal success without readback', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
-    const { executeCommand, applyWorkbookDocument, getWorksheetFieldValidation, getExecutor } =
+    const { executeCommand, applyWorkbookDocument, getWorksheetDiagnostics, getExecutor } =
       setupAutoApplyMocks({
         inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
         activationDispatch: Err({ type: 'command-timed-out', error: 'activation timeout' }),
@@ -3973,12 +3975,89 @@ describe('bindTemplateTool auto_apply gate', () => {
     );
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     expect(executeCommand).toHaveBeenCalledTimes(1);
-    expect(getWorksheetFieldValidation).toHaveBeenCalledTimes(1);
-    expect(getWorksheetFieldValidation).toHaveBeenCalledWith(
+    expect(getWorksheetDiagnostics).toHaveBeenCalledTimes(1);
+    expect(getWorksheetDiagnostics).toHaveBeenCalledWith(
       'sheet-sales-by-region',
       expect.any(AbortSignal),
       'inst-test',
     );
+  });
+
+  it('uses inline workbook diagnostics for the bound worksheet without a redundant validation GET', async () => {
+    const { getWorksheetDiagnostics, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      dispatch: Ok({
+        command_id: 'cmd-inline-diagnostics',
+        status: 'completed',
+        submitted_at: '',
+        result: {},
+        diagnostics: {
+          worksheets: [
+            {
+              worksheetId: 'sheet-sales-by-region',
+              status: 'partial',
+              invalidFields: [
+                {
+                  fieldName: '[none:Missing:nk]',
+                  shelf: 'rows',
+                  marksSpecificationId: 'marks-1',
+                  encodingType: 'text',
+                  reason: 'Field is unavailable.',
+                },
+              ],
+              message: 'Some fields could not be checked.',
+            },
+          ],
+        },
+      }),
+    });
+    const executor = await getExecutor();
+    executor.listWorksheets = vi.fn().mockResolvedValue(
+      Ok({
+        worksheets: [
+          {
+            id: 'sheet-sales-by-region',
+            name: 'Sales by Region',
+            hidden: false,
+            isActiveSheet: true,
+          },
+          { id: 'sheet-decoy', name: 'Decoy', hidden: false, isActiveSheet: false },
+        ],
+      }),
+    );
+    executor.getWorksheetDocument = vi.fn().mockResolvedValue(
+      Ok({
+        xml: "<worksheet name='Sales by Region'><table /><simple-id uuid='sheet-sales-by-region' /></worksheet>",
+      }),
+    );
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body).toMatchObject({
+      applied: true,
+      verification: {
+        ok: false,
+        status: 'failed',
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'used-field-validity',
+            worksheetId: 'sheet-sales-by-region',
+            fieldName: '[none:Missing:nk]',
+          }),
+          expect.objectContaining({ reason: 'diagnostics-partial', severity: 'warning' }),
+        ]),
+      },
+    });
+    expect(body.guidance).toContain('Do NOT call bind-template again or replay apply.');
+    expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
   });
 
   it('applied:true returns ONLY the trimmed fast-path shape (W60 P4 response-shape trim)', async () => {
@@ -7543,14 +7622,19 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
       getExecutor: readbackExecutor(mocks, {
         fieldValidation: vi.fn(async (worksheetId: string) =>
           Ok({
-            worksheetId,
-            invalidFields: [
+            worksheets: [
               {
-                fieldName: '[none:Missing:nk]',
-                shelf: 'rows',
-                marksSpecificationId: 'marks-1',
-                encodingType: 'text',
-                reason: 'Field is unavailable.',
+                worksheetId,
+                status: 'complete',
+                invalidFields: [
+                  {
+                    fieldName: '[none:Missing:nk]',
+                    shelf: 'rows',
+                    marksSpecificationId: 'marks-1',
+                    encodingType: 'text',
+                    reason: 'Field is unavailable.',
+                  },
+                ],
               },
             ],
           }),
@@ -7587,14 +7671,19 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
       getExecutor: readbackExecutor(mocks, {
         fieldValidation: vi.fn(async (worksheetId: string) =>
           Ok({
-            worksheetId,
-            invalidFields: [
+            worksheets: [
               {
-                fieldName: '[none:Missing:nk]',
-                shelf: 'color',
-                marksSpecificationId: 'marks-1',
-                encodingType: 'color',
-                reason: 'Field is unavailable.',
+                worksheetId,
+                status: 'complete',
+                invalidFields: [
+                  {
+                    fieldName: '[none:Missing:nk]',
+                    shelf: 'color',
+                    marksSpecificationId: 'marks-1',
+                    encodingType: 'color',
+                    reason: 'Field is unavailable.',
+                  },
+                ],
               },
             ],
           }),

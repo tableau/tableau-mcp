@@ -696,17 +696,30 @@ export async function startMockExternalApiServer(
       }
     }
 
-    const worksheetValidationMatch = path.match(
-      /^\/v0\/workbook\/worksheets\/([^/]+)\/validation$/,
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookDiagnostics) {
+      sendJson(res, 200, {
+        worksheets: DEFAULT_WORKSHEETS.map((worksheet) => ({
+          worksheetId: worksheet.id,
+          status: 'complete',
+          invalidFields: [],
+        })),
+      });
+      return;
+    }
+
+    const worksheetDiagnosticsMatch = path.match(
+      /^\/v0\/workbook\/worksheets\/([^/]+)\/diagnostics$/,
     );
-    if (method === 'GET' && worksheetValidationMatch) {
-      const worksheetId = decodeURIComponent(worksheetValidationMatch[1]);
+    if (method === 'GET' && worksheetDiagnosticsMatch) {
+      const worksheetId = decodeURIComponent(worksheetDiagnosticsMatch[1]);
       const known = DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId);
       if (!known) {
         sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
         return;
       }
-      sendJson(res, 200, { worksheetId, invalidFields: [] });
+      sendJson(res, 200, {
+        worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }],
+      });
       return;
     }
 

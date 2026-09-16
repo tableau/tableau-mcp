@@ -748,16 +748,21 @@ describe('executeTableauCommandTool', () => {
           worksheets: [{ id: 'sheet-1', name: 'Sheet 1', hidden: false, isActiveSheet: true }],
         }),
       );
-      const getWorksheetFieldValidation = vi.fn().mockResolvedValue(
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
         Ok({
-          worksheetId: 'sheet-1',
-          invalidFields: [
+          worksheets: [
             {
-              fieldName: '[none:Revenue:qk]',
-              shelf: 'rows',
-              marksSpecificationId: 'marks-1',
-              encodingType: 'text',
-              reason: 'Field is unavailable.',
+              worksheetId: 'sheet-1',
+              status: 'complete',
+              invalidFields: [
+                {
+                  fieldName: '[none:Revenue:qk]',
+                  shelf: 'rows',
+                  marksSpecificationId: 'marks-1',
+                  encodingType: 'text',
+                  reason: 'Field is unavailable.',
+                },
+              ],
             },
           ],
         }),
@@ -768,7 +773,7 @@ describe('executeTableauCommandTool', () => {
         desktopApiVersion: '0.2.16',
         executeCommand,
         listWorksheets,
-        getWorksheetFieldValidation,
+        getWorksheetDiagnostics,
       });
 
       const result = await getResult(
@@ -798,7 +803,7 @@ describe('executeTableauCommandTool', () => {
         expect.objectContaining({ expectedInstanceId: 'instance-1' }),
       );
       expect(listWorksheets).toHaveBeenCalledTimes(2);
-      expect(getWorksheetFieldValidation).toHaveBeenCalledWith(
+      expect(getWorksheetDiagnostics).toHaveBeenCalledWith(
         'sheet-1',
         expect.any(AbortSignal),
         'instance-1',
@@ -813,7 +818,11 @@ describe('executeTableauCommandTool', () => {
           submitted_at: '2026-09-14T00:00:00Z',
         }),
       );
-      const getWorksheetFieldValidation = vi.fn();
+      const getWorksheetDiagnostics = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }] }),
+        );
       const extra = getMockRequestHandlerExtra();
       extra.getExecutor = vi.fn().mockResolvedValue({
         desktopInstanceId: 'instance-1',
@@ -824,7 +833,7 @@ describe('executeTableauCommandTool', () => {
             worksheets: [{ id: 'sheet-1', name: 'Sheet 1', hidden: false, isActiveSheet: true }],
           }),
         ),
-        getWorksheetFieldValidation,
+        getWorksheetDiagnostics,
       });
 
       const result = await getResult(
@@ -850,7 +859,7 @@ describe('executeTableauCommandTool', () => {
       });
       expect(payload.message).toContain('still running');
       expect(payload.message).not.toContain('successfully');
-      expect(getWorksheetFieldValidation).not.toHaveBeenCalled();
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
     });
 
     it('leaves an arbitrary valid command call untouched', async () => {
@@ -928,14 +937,18 @@ describe('executeTableauCommandTool', () => {
           submitted_at: '2026-09-14T00:00:00Z',
         }),
       );
-      const getWorksheetFieldValidation = vi.fn();
+      const getWorksheetDiagnostics = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }] }),
+        );
       const extra = getMockRequestHandlerExtra();
       extra.getExecutor = vi.fn().mockResolvedValue({
         desktopInstanceId: 'instance-1',
         desktopApiVersion: '0.2.16',
         executeCommand,
         listWorksheets: vi.fn(),
-        getWorksheetFieldValidation,
+        getWorksheetDiagnostics,
       });
 
       const result = await getResult(
@@ -953,7 +966,7 @@ describe('executeTableauCommandTool', () => {
         status: 'skipped',
         findings: [expect.objectContaining({ reason: 'target-unproven' })],
       });
-      expect(getWorksheetFieldValidation).not.toHaveBeenCalled();
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
     });
 
     it('rewrites one stable worksheet-id parameter and validates that exact target without retrying', async () => {
@@ -985,16 +998,21 @@ describe('executeTableauCommandTool', () => {
           ],
         }),
       );
-      const getWorksheetFieldValidation = vi.fn().mockResolvedValue(
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
         Ok({
-          worksheetId: 'target-id',
-          invalidFields: [
+          worksheets: [
             {
-              fieldName: '[none:Missing:nk]',
-              shelf: 'rows',
-              marksSpecificationId: 'marks-1',
-              encodingType: 'text',
-              reason: 'Field is unavailable.',
+              worksheetId: 'target-id',
+              status: 'complete',
+              invalidFields: [
+                {
+                  fieldName: '[none:Missing:nk]',
+                  shelf: 'rows',
+                  marksSpecificationId: 'marks-1',
+                  encodingType: 'text',
+                  reason: 'Field is unavailable.',
+                },
+              ],
             },
           ],
         }),
@@ -1005,7 +1023,7 @@ describe('executeTableauCommandTool', () => {
         desktopApiVersion: '0.2.16',
         executeCommand,
         listWorksheets,
-        getWorksheetFieldValidation,
+        getWorksheetDiagnostics,
       });
 
       const result = await getResult(
@@ -1040,11 +1058,297 @@ describe('executeTableauCommandTool', () => {
         }),
       );
       expect(listWorksheets).toHaveBeenCalledTimes(1);
-      expect(getWorksheetFieldValidation).toHaveBeenCalledWith(
+      expect(getWorksheetDiagnostics).toHaveBeenCalledWith(
         'target-id',
         expect.any(AbortSignal),
         'instance-1',
       );
+    });
+
+    it('prefers inline partial diagnostics for the exact stable target and reports known invalid fields', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:mutate-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            {
+              local: 'WorksheetId',
+              type: 'DPI_WorksheetSimpleID',
+              required: true,
+              wire: 'worksheetdoc-id',
+            },
+          ],
+        },
+      });
+      const diagnostics = {
+        worksheets: [
+          {
+            worksheetId: 'target-id',
+            status: 'partial' as const,
+            invalidFields: [
+              {
+                fieldName: '[none:Missing:nk]',
+                shelf: 'rows',
+                marksSpecificationId: 'marks-1',
+                encodingType: 'text',
+                reason: 'Field is unavailable.',
+              },
+            ],
+            message: 'Some fields could not be checked.',
+          },
+        ],
+      };
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'mutate-inline',
+          status: 'completed',
+          submitted_at: '2026-09-15T00:00:00Z',
+          diagnostics,
+        }),
+      );
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }],
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi.fn().mockResolvedValue(
+          Ok({
+            worksheets: [
+              { id: 'target-id', name: 'Target', hidden: false, isActiveSheet: false },
+              { id: 'decoy-id', name: 'Decoy', hidden: false, isActiveSheet: true },
+            ],
+          }),
+        ),
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:mutate-sheet',
+          args: { WorksheetId: 'target-id' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.verification).toMatchObject({
+        ok: false,
+        status: 'failed',
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'used-field-validity',
+            worksheetId: 'target-id',
+            fieldName: '[none:Missing:nk]',
+          }),
+          expect.objectContaining({ reason: 'diagnostics-partial', severity: 'warning' }),
+        ]),
+      });
+      expect(payload.message).toContain('do not retry the command automatically');
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+    });
+
+    it('treats a present aggregate without the stable target as unknown without another GET', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:mutate-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            {
+              local: 'WorksheetId',
+              type: 'DPI_WorksheetSimpleID',
+              required: true,
+              wire: 'worksheetdoc-id',
+            },
+          ],
+        },
+      });
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'mutate-inline-missing-target',
+          status: 'completed',
+          submitted_at: '2026-09-15T00:00:00Z',
+          diagnostics: {
+            worksheets: [{ worksheetId: 'decoy-id', status: 'complete', invalidFields: [] }],
+          },
+        }),
+      );
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }],
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi.fn().mockResolvedValue(
+          Ok({
+            worksheets: [
+              { id: 'target-id', name: 'Target', hidden: false, isActiveSheet: false },
+              { id: 'decoy-id', name: 'Decoy', hidden: false, isActiveSheet: true },
+            ],
+          }),
+        ),
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:mutate-sheet',
+          args: { WorksheetId: 'target-id' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        verification: {
+          status: 'skipped',
+          findings: [expect.objectContaining({ reason: 'diagnostics-target-missing' })],
+        },
+      });
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+    });
+
+    it('falls back to one pinned worksheet diagnostics GET only when inline diagnostics are absent', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:mutate-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            {
+              local: 'WorksheetId',
+              type: 'DPI_WorksheetSimpleID',
+              required: true,
+              wire: 'worksheetdoc-id',
+            },
+          ],
+        },
+      });
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'mutate-no-inline-diagnostics',
+          status: 'completed',
+          submitted_at: '2026-09-15T00:00:00Z',
+        }),
+      );
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }],
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi.fn().mockResolvedValue(
+          Ok({
+            worksheets: [{ id: 'target-id', name: 'Target', hidden: false, isActiveSheet: false }],
+          }),
+        ),
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:mutate-sheet',
+          args: { WorksheetId: 'target-id' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).verification).toMatchObject({
+        ok: true,
+        status: 'passed',
+      });
+      expect(getWorksheetDiagnostics).toHaveBeenCalledWith(
+        'target-id',
+        expect.any(AbortSignal),
+        'instance-1',
+      );
+    });
+
+    it('does not retry diagnostics when a completed command marks its inline diagnostics invalid', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:mutate-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            {
+              local: 'WorksheetId',
+              type: 'DPI_WorksheetSimpleID',
+              required: true,
+              wire: 'worksheetdoc-id',
+            },
+          ],
+        },
+      });
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'mutate-malformed-inline-diagnostics',
+          status: 'completed',
+          submitted_at: '2026-09-15T00:00:00Z',
+          diagnosticsInvalid: true,
+        }),
+      );
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }],
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi
+          .fn()
+          .mockResolvedValue(
+            Ok({ worksheets: [{ id: 'target-id', name: 'Target', hidden: false }] }),
+          ),
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:mutate-sheet',
+          args: { WorksheetId: 'target-id' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        verification: {
+          status: 'skipped',
+          findings: [expect.objectContaining({ reason: 'diagnostics-invalid' })],
+        },
+      });
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
     });
 
     it('skips validation when a generic stable worksheet id is absent from inventory', async () => {
@@ -1073,14 +1377,14 @@ describe('executeTableauCommandTool', () => {
           worksheets: [{ id: 'active-id', name: 'missing-id', hidden: false, isActiveSheet: true }],
         }),
       );
-      const getWorksheetFieldValidation = vi.fn();
+      const getWorksheetDiagnostics = vi.fn();
       const extra = getMockRequestHandlerExtra();
       extra.getExecutor = vi.fn().mockResolvedValue({
         desktopInstanceId: 'instance-1',
         desktopApiVersion: '0.2.16',
         executeCommand,
         listWorksheets,
-        getWorksheetFieldValidation,
+        getWorksheetDiagnostics,
       });
 
       const result = await getResult(
@@ -1108,7 +1412,7 @@ describe('executeTableauCommandTool', () => {
         }),
       );
       expect(listWorksheets).toHaveBeenCalledTimes(1);
-      expect(getWorksheetFieldValidation).not.toHaveBeenCalled();
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
     });
 
     it('does not claim a name-only worksheet parameter proves the command target', async () => {
@@ -1140,16 +1444,18 @@ describe('executeTableauCommandTool', () => {
           ],
         }),
       );
-      const getWorksheetFieldValidation = vi
+      const getWorksheetDiagnostics = vi
         .fn()
-        .mockResolvedValue(Ok({ worksheetId: 'target-id', invalidFields: [] }));
+        .mockResolvedValue(
+          Ok({ worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }] }),
+        );
       const extra = getMockRequestHandlerExtra();
       extra.getExecutor = vi.fn().mockResolvedValue({
         desktopInstanceId: 'instance-1',
         desktopApiVersion: '0.2.16',
         executeCommand,
         listWorksheets,
-        getWorksheetFieldValidation,
+        getWorksheetDiagnostics,
       });
 
       const result = await getResult(
@@ -1177,7 +1483,7 @@ describe('executeTableauCommandTool', () => {
         }),
       );
       expect(listWorksheets).not.toHaveBeenCalled();
-      expect(getWorksheetFieldValidation).not.toHaveBeenCalled();
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
     });
 
     it('rejects a generate-viz worksheet id before dispatch', async () => {

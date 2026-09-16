@@ -1,14 +1,19 @@
 import {
   apiVersionAtLeast,
-  WORKSHEET_FIELD_VALIDATION_MIN_API_VERSION,
+  WORKBOOK_DIAGNOSTICS_MIN_API_VERSION,
 } from '../externalApi/apiVersion.js';
 import type { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
-import type { WorksheetFieldValidation } from '../externalApi/types.js';
+import type { WorkbookDiagnostics, WorksheetInvalidField } from '../externalApi/types.js';
 import type { ReadbackVerificationResult, VerificationFinding } from './readback-verify.js';
 
 export type UsedFieldValidityOutcome =
   | { status: 'valid'; worksheetId: string }
-  | ({ status: 'invalid' } & WorksheetFieldValidation)
+  | {
+      status: 'invalid';
+      worksheetId: string;
+      invalidFields: WorksheetInvalidField[];
+      incompleteMessage?: string;
+    }
   | {
       status: 'unknown';
       worksheetId?: string;
@@ -21,11 +26,15 @@ export async function checkUsedFieldValidity({
   worksheetId,
   expectedInstanceId,
   signal,
+  diagnostics,
+  diagnosticsInvalid = false,
 }: {
   executor: ExternalApiToolExecutor;
   worksheetId: string;
   expectedInstanceId: string;
   signal: AbortSignal;
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
 }): Promise<UsedFieldValidityOutcome> {
   const actualInstanceId = executor.desktopInstanceId;
   if (!actualInstanceId) {
@@ -44,18 +53,30 @@ export async function checkUsedFieldValidity({
       message: `Field verification expected Desktop instance ${expectedInstanceId}, but found ${actualInstanceId}.`,
     };
   }
-  if (!apiVersionAtLeast(executor.desktopApiVersion, WORKSHEET_FIELD_VALIDATION_MIN_API_VERSION)) {
+  if (!apiVersionAtLeast(executor.desktopApiVersion, WORKBOOK_DIAGNOSTICS_MIN_API_VERSION)) {
     return {
       status: 'unknown',
       worksheetId,
       reason: 'unsupported-api',
-      message: `Field verification requires External Client API ${WORKSHEET_FIELD_VALIDATION_MIN_API_VERSION} or newer.`,
+      message: `Field verification requires External Client API ${WORKBOOK_DIAGNOSTICS_MIN_API_VERSION} or newer.`,
     };
+  }
+
+  if (diagnosticsInvalid) {
+    return {
+      status: 'unknown',
+      worksheetId,
+      reason: 'diagnostics-invalid',
+      message: 'Field verification was unavailable because Desktop returned malformed diagnostics.',
+    };
+  }
+  if (diagnostics !== undefined) {
+    return diagnosticsOutcome(diagnostics, worksheetId);
   }
 
   let result;
   try {
-    result = await executor.getWorksheetFieldValidation(worksheetId, signal, expectedInstanceId);
+    result = await executor.getWorksheetDiagnostics(worksheetId, signal, expectedInstanceId);
   } catch (error) {
     return {
       status: 'unknown',
@@ -72,17 +93,60 @@ export async function checkUsedFieldValidity({
       message: `Field verification could not be read after the edit: ${formatExecutorError(result.error)}`,
     };
   }
-  if (result.value.worksheetId !== worksheetId) {
+  return diagnosticsOutcome(result.value, worksheetId);
+}
+
+function diagnosticsOutcome(
+  diagnostics: WorkbookDiagnostics,
+  worksheetId: string,
+): UsedFieldValidityOutcome {
+  const matches = diagnostics.worksheets.filter((item) => item.worksheetId === worksheetId);
+  if (matches.length !== 1) {
     return {
       status: 'unknown',
       worksheetId,
-      reason: 'target-mismatch',
-      message: `Field verification returned worksheet ${result.value.worksheetId}, not the applied worksheet ${worksheetId}.`,
+      reason: matches.length === 0 ? 'diagnostics-target-missing' : 'diagnostics-target-ambiguous',
+      message:
+        matches.length === 0
+          ? `Desktop diagnostics did not include the applied worksheet ${worksheetId}.`
+          : `Desktop diagnostics included the applied worksheet ${worksheetId} more than once.`,
     };
   }
-  return result.value.invalidFields.length === 0
-    ? { status: 'valid', worksheetId: result.value.worksheetId }
-    : { status: 'invalid', ...result.value };
+  const worksheet = matches[0];
+  const invalidFields = worksheet.invalidFields ?? [];
+  if (invalidFields.length > 0) {
+    return {
+      status: 'invalid',
+      worksheetId,
+      invalidFields,
+      ...(worksheet.status !== 'complete'
+        ? {
+            incompleteMessage:
+              worksheet.message ?? 'Desktop checked only part of the worksheet diagnostics.',
+          }
+        : {}),
+    };
+  }
+  if (worksheet.status === 'unavailable') {
+    return {
+      status: 'unknown',
+      worksheetId,
+      reason: 'diagnostics-unavailable',
+      message: worksheet.message ?? 'Desktop reported that worksheet diagnostics were unavailable.',
+    };
+  }
+
+  if (worksheet.status === 'partial') {
+    return {
+      status: 'unknown',
+      worksheetId,
+      reason: 'diagnostics-partial',
+      message:
+        worksheet.message ??
+        'Desktop checked only part of the worksheet diagnostics; no invalid fields were reported in the checked subset.',
+    };
+  }
+  return { status: 'valid', worksheetId };
 }
 
 function formatExecutorError(error: unknown): string {
@@ -124,6 +188,15 @@ export function mergeUsedFieldValidityVerification(
       encodingType: field.encodingType,
       reason: field.reason,
     }));
+    if (outcome.incompleteMessage) {
+      findings.push({
+        severity: 'warning',
+        source: 'used-field-validity',
+        message: outcome.incompleteMessage,
+        worksheetId: outcome.worksheetId,
+        reason: 'diagnostics-partial',
+      });
+    }
     const message =
       'The edit was applied, but Desktop found invalid fields used by the worksheet. Diagnose the listed fields; do not automatically replay the edit.';
     return {

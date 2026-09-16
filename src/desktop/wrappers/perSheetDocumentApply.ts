@@ -12,6 +12,7 @@ import {
 } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
+import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import { introducedBlockingValidationIssues, runValidation } from '../validation/registry.js';
 import { type ValidationContext, type ValidationIssue } from '../validation/types.js';
 import { parseOuterElement, xmlNamesEqual } from '../xmlElement.js';
@@ -36,6 +37,8 @@ export type PerSheetApplyOutcome =
       fragmentXml: string;
       // Empty on a clean apply; every entry is a node Tableau dropped, never a benign notice.
       documentWarnings: ExecuteCommandWarning[];
+      diagnostics?: WorkbookDiagnostics;
+      diagnosticsInvalid?: boolean;
     }
   | { type: 'dashboard-member-blank-transition'; dashboards: string[] }
   | 'sheet-absent'
@@ -179,6 +182,8 @@ export async function tryApplyViaPerSheetRoute({
     name: resolved.value.name,
     fragmentXml: retitledFragment.value,
     documentWarnings: applyResult.value.warnings ?? [],
+    ...(applyResult.value.diagnostics ? { diagnostics: applyResult.value.diagnostics } : {}),
+    ...(applyResult.value.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
   });
 }
 

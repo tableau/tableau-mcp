@@ -185,6 +185,8 @@ export const getExecuteTableauCommandTool = (
                         worksheetId: targetBefore.worksheetId,
                         expectedInstanceId,
                         signal: extra.signal,
+                        diagnostics: result.value.diagnostics,
+                        diagnosticsInvalid: result.value.diagnosticsInvalid,
                       })
                     : {
                         status: 'unknown',
@@ -199,6 +201,8 @@ export const getExecuteTableauCommandTool = (
                   worksheetId: targetBefore.worksheetId,
                   expectedInstanceId,
                   signal: extra.signal,
+                  diagnostics: result.value.diagnostics,
+                  diagnosticsInvalid: result.value.diagnosticsInvalid,
                 });
               }
               worksheetVerification = mergeUsedFieldValidityVerification(undefined, validity);

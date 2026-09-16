@@ -23,6 +23,7 @@ export const EXTERNAL_API_ROUTES = {
   appToggleStartPage: '/v0/app:toggleStartPage',
   root: '/v0/',
   workbook: '/v0/workbook',
+  workbookDiagnostics: '/v0/workbook/diagnostics',
   workbookDashboards: '/v0/workbook/dashboards',
   workbookDashboardsNew: '/v0/workbook/dashboards:new',
   workbookDatasources: '/v0/workbook/datasources',
@@ -55,7 +56,7 @@ export const EXTERNAL_API_ROUTES = {
   worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetDocument: '/v0/workbook/worksheets/{id}/document',
   worksheetImage: '/v0/workbook/worksheets/{id}/image',
-  worksheetValidation: '/v0/workbook/worksheets/{id}/validation',
+  worksheetDiagnostics: '/v0/workbook/worksheets/{id}/diagnostics',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
   worksheetLogicalTables: '/v0/workbook/worksheets/{id}/logicalTables',
   worksheetLogicalTableData: '/v0/workbook/worksheets/{id}/logicalTables/{logicalTableId}/data',
@@ -171,8 +172,8 @@ export function worksheetRoute(worksheetId: string): string {
   return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
 }
 
-export function worksheetValidationRoute(worksheetId: string): string {
-  return `${worksheetRoute(worksheetId)}/validation`;
+export function worksheetDiagnosticsRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}/diagnostics`;
 }
 
 export function dashboardRoute(dashboardId: string): string {
@@ -656,6 +657,7 @@ export const operationEnvelopeSchema = z
     result: z.record(z.string(), z.unknown()).optional(),
     error: operationErrorSchema.optional(),
     warnings: z.array(operationWarningSchema).optional(),
+    diagnostics: z.unknown().optional(),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
     createdAt: z.string().optional(),
@@ -869,14 +871,33 @@ export const worksheetInvalidFieldSchema = z
   .passthrough();
 export type WorksheetInvalidField = z.infer<typeof worksheetInvalidFieldSchema>;
 
-/** Invalid used fields reported by Desktop for one worksheet. */
-export const worksheetFieldValidationSchema = z
+/** Diagnostics reported by Desktop for one worksheet. */
+export const worksheetDiagnosticsSchema = z
   .object({
     worksheetId: z.string(),
-    invalidFields: z.array(worksheetInvalidFieldSchema),
+    status: z.enum(['complete', 'partial', 'unavailable']),
+    invalidFields: z.array(worksheetInvalidFieldSchema).optional(),
+    message: z.string().optional(),
+  })
+  .passthrough()
+  .superRefine((value, context) => {
+    if (value.status === 'complete' && value.invalidFields === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['invalidFields'],
+        message: 'Complete worksheet diagnostics must include invalidFields.',
+      });
+    }
+  });
+export type WorksheetDiagnostics = z.infer<typeof worksheetDiagnosticsSchema>;
+
+/** Aggregate diagnostics returned by workbook and worksheet diagnostic reads and completed writes. */
+export const workbookDiagnosticsSchema = z
+  .object({
+    worksheets: z.array(worksheetDiagnosticsSchema),
   })
   .passthrough();
-export type WorksheetFieldValidation = z.infer<typeof worksheetFieldValidationSchema>;
+export type WorkbookDiagnostics = z.infer<typeof workbookDiagnosticsSchema>;
 
 /**
  * Image export result returned by `GET /v0/workbook/worksheets/{id}/image` and

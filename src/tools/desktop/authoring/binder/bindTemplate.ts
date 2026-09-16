@@ -2534,6 +2534,8 @@ async function performAutoApply({
     expectedInstanceId,
     executor,
     signal,
+    diagnostics: applyResult.value.diagnostics,
+    diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
   });
   const receiptInput = {
     validationWarnings: applyResult.value.validationWarnings,

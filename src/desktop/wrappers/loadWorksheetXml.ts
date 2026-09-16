@@ -7,6 +7,7 @@ import {
   ExecuteCommandWarning,
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
+import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import {
   extractSheetXml,
@@ -130,10 +131,14 @@ export async function verifyAppliedWorksheetFields({
   expectedInstanceId,
   executor,
   signal,
+  diagnostics,
+  diagnosticsInvalid,
 }: {
   structural: PostApplyWorksheetReadbackVerification;
   worksheetId: string | undefined;
   expectedInstanceId: string | undefined;
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
 } & WithExecutorAndAbortSignal): Promise<ReadbackVerificationResult> {
   const report = publicReadbackVerificationResult(structural);
   return verifyAppliedWorksheetFieldReport({
@@ -142,6 +147,8 @@ export async function verifyAppliedWorksheetFields({
     expectedInstanceId,
     executor,
     signal,
+    diagnostics,
+    diagnosticsInvalid,
   });
 }
 
@@ -151,10 +158,14 @@ async function verifyAppliedWorksheetFieldReport({
   expectedInstanceId,
   executor,
   signal,
+  diagnostics,
+  diagnosticsInvalid,
 }: {
   report: ReadbackVerificationResult;
   worksheetId: string | undefined;
   expectedInstanceId: string | undefined;
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
 } & WithExecutorAndAbortSignal): Promise<ReadbackVerificationResult> {
   if (!worksheetId || !expectedInstanceId) {
     return mergeUsedFieldValidityVerification(report, {
@@ -171,6 +182,8 @@ async function verifyAppliedWorksheetFieldReport({
     worksheetId,
     expectedInstanceId,
     signal,
+    diagnostics,
+    diagnosticsInvalid,
   });
   return mergeUsedFieldValidityVerification(report, validity);
 }
@@ -295,10 +308,14 @@ async function documentWarningOutcome({
   expectedInstanceId,
   executor,
   signal,
+  diagnostics,
+  diagnosticsInvalid,
 }: {
   warnings: ExecuteCommandWarning[];
   worksheetId: string | undefined;
   expectedInstanceId: string | undefined;
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlOk> {
   const details = warnings
     .map((warning) => warning.message)
@@ -321,6 +338,8 @@ async function documentWarningOutcome({
     expectedInstanceId,
     executor,
     signal,
+    diagnostics,
+    diagnosticsInvalid,
   });
   return { readbackWarnings: [], readbackVerification: report };
 }
@@ -544,13 +563,16 @@ export async function loadWorksheetXml({
       if (applyResult.isErr()) {
         return Err({ type: 'execute-command-error', error: applyResult.error });
       }
-      if (applyResult.value.documentWarnings.length > 0) {
+      const documentWarnings = applyResult.value.documentWarnings;
+      if (documentWarnings.length > 0) {
         const warningOutcome = await documentWarningOutcome({
-          warnings: applyResult.value.documentWarnings,
+          warnings: documentWarnings,
           worksheetId: worksheetFragmentSimpleId(xml) ?? undefined,
           expectedInstanceId: artifactApply.expectedInstanceId,
           executor,
           signal,
+          diagnostics: applyResult.value.diagnostics,
+          diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
         });
         if (warningOutcome.readbackVerification) {
           readbackVerificationOut?.push(warningOutcome.readbackVerification);
@@ -574,6 +596,8 @@ export async function loadWorksheetXml({
         expectedInstanceId: artifactApply.expectedInstanceId,
         executor,
         signal,
+        diagnostics: applyResult.value.diagnostics,
+        diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
       });
       readbackVerificationOut?.push(verificationReport);
       return Ok({
@@ -608,13 +632,16 @@ export async function loadWorksheetXml({
       }
       const applyOutcome = outcome.value;
       if (typeof applyOutcome === 'object' && 'status' in applyOutcome) {
-        if (applyOutcome.documentWarnings.length > 0) {
+        const documentWarnings = applyOutcome.documentWarnings;
+        if (documentWarnings.length > 0) {
           const warningOutcome = await documentWarningOutcome({
-            warnings: applyOutcome.documentWarnings,
+            warnings: documentWarnings,
             worksheetId: applyOutcome.id,
             expectedInstanceId,
             executor,
             signal,
+            diagnostics: applyOutcome.diagnostics,
+            diagnosticsInvalid: applyOutcome.diagnosticsInvalid,
           });
           if (warningOutcome.readbackVerification) {
             readbackVerificationOut?.push(warningOutcome.readbackVerification);
@@ -637,6 +664,8 @@ export async function loadWorksheetXml({
           expectedInstanceId,
           executor,
           signal,
+          diagnostics: applyOutcome.diagnostics,
+          diagnosticsInvalid: applyOutcome.diagnosticsInvalid,
         });
         readbackVerificationOut?.push(verificationReport);
         // Preflight warnings ride along so apply responses can compute the host
@@ -793,13 +822,16 @@ async function loadWorksheetXmlViaExternalApi({
     if (applyResult.isErr()) {
       return Err({ type: 'execute-command-error', error: applyResult.error });
     }
-    if (applyResult.value.documentWarnings.length > 0) {
+    const documentWarnings = applyResult.value.documentWarnings;
+    if (documentWarnings.length > 0) {
       const warningOutcome = await documentWarningOutcome({
-        warnings: applyResult.value.documentWarnings,
+        warnings: documentWarnings,
         worksheetId: worksheetFragmentSimpleId(xml) ?? undefined,
         expectedInstanceId,
         executor,
         signal,
+        diagnostics: applyResult.value.diagnostics,
+        diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
       });
       if (warningOutcome.readbackVerification) {
         readbackVerificationOut?.push(warningOutcome.readbackVerification);
@@ -826,6 +858,8 @@ async function loadWorksheetXmlViaExternalApi({
       expectedInstanceId,
       executor,
       signal,
+      diagnostics: applyResult.value.diagnostics,
+      diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
     });
     readbackVerificationOut?.push(verificationReport);
 
