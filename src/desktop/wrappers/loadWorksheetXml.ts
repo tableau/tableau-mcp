@@ -344,6 +344,57 @@ async function documentWarningOutcome({
   return { readbackWarnings: [], readbackVerification: report };
 }
 
+async function finalizeWorksheetApply({
+  apply,
+  expectedInstanceId,
+  executor,
+  signal,
+  readback,
+  worksheetIdFor,
+  readbackVerificationOut,
+}: {
+  apply: {
+    documentWarnings: ExecuteCommandWarning[];
+    diagnostics?: WorkbookDiagnostics;
+    diagnosticsInvalid?: boolean;
+  };
+  expectedInstanceId: string | undefined;
+  readback: () => Promise<PostApplyWorksheetReadbackVerification>;
+  worksheetIdFor: (readback?: PostApplyWorksheetReadbackVerification) => string | undefined;
+  readbackVerificationOut?: ReadbackVerificationResult[];
+} & WithExecutorAndAbortSignal): Promise<
+  Pick<LoadWorksheetXmlOk, 'readbackWarnings' | 'readbackVerification'>
+> {
+  if (apply.documentWarnings.length > 0) {
+    const outcome = await documentWarningOutcome({
+      warnings: apply.documentWarnings,
+      worksheetId: worksheetIdFor(),
+      expectedInstanceId,
+      executor,
+      signal,
+      diagnostics: apply.diagnostics,
+      diagnosticsInvalid: apply.diagnosticsInvalid,
+    });
+    if (outcome.readbackVerification) {
+      readbackVerificationOut?.push(outcome.readbackVerification);
+    }
+    return outcome;
+  }
+
+  const structural = await readback();
+  const report = await verifyAppliedWorksheetFields({
+    structural,
+    worksheetId: worksheetIdFor(structural),
+    expectedInstanceId,
+    executor,
+    signal,
+    diagnostics: apply.diagnostics,
+    diagnosticsInvalid: apply.diagnosticsInvalid,
+  });
+  readbackVerificationOut?.push(report);
+  return { readbackWarnings: structural.findings, readbackVerification: report };
+}
+
 /**
  * Canonical-name gate. When the caller provides `worksheetName`, require it to identify the authored
  * fragment — matching either its stable id (the `<simple-id uuid>`, the External Client API worksheet
@@ -563,47 +614,19 @@ export async function loadWorksheetXml({
       if (applyResult.isErr()) {
         return Err({ type: 'execute-command-error', error: applyResult.error });
       }
-      const documentWarnings = applyResult.value.documentWarnings;
-      if (documentWarnings.length > 0) {
-        const warningOutcome = await documentWarningOutcome({
-          warnings: documentWarnings,
-          worksheetId: worksheetFragmentSimpleId(xml) ?? undefined,
-          expectedInstanceId: artifactApply.expectedInstanceId,
-          executor,
-          signal,
-          diagnostics: applyResult.value.diagnostics,
-          diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
-        });
-        if (warningOutcome.readbackVerification) {
-          readbackVerificationOut?.push(warningOutcome.readbackVerification);
-        }
-        return Ok({
-          ...warningOutcome,
-          appliedName: canonicalName,
-          validationWarnings: [...validation.issues, ...workbookValidation.issues],
-        });
-      }
-
-      const verification = await verifyPostApplyArtifactReadback(
-        canonicalName,
-        xml,
-        executor,
-        signal,
-      );
-      const verificationReport = await verifyAppliedWorksheetFields({
-        structural: verification,
-        worksheetId: verification.worksheetId ?? worksheetFragmentSimpleId(xml) ?? undefined,
+      const finalized = await finalizeWorksheetApply({
+        apply: applyResult.value,
         expectedInstanceId: artifactApply.expectedInstanceId,
         executor,
         signal,
-        diagnostics: applyResult.value.diagnostics,
-        diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
+        readback: () => verifyPostApplyArtifactReadback(canonicalName, xml, executor, signal),
+        worksheetIdFor: (readback) =>
+          readback?.worksheetId ?? worksheetFragmentSimpleId(xml) ?? undefined,
+        readbackVerificationOut,
       });
-      readbackVerificationOut?.push(verificationReport);
       return Ok({
+        ...finalized,
         appliedName: canonicalName,
-        readbackWarnings: verification.findings,
-        readbackVerification: verificationReport,
         validationWarnings: [...validation.issues, ...workbookValidation.issues],
       });
     });
@@ -632,48 +655,26 @@ export async function loadWorksheetXml({
       }
       const applyOutcome = outcome.value;
       if (typeof applyOutcome === 'object' && 'status' in applyOutcome) {
-        const documentWarnings = applyOutcome.documentWarnings;
-        if (documentWarnings.length > 0) {
-          const warningOutcome = await documentWarningOutcome({
-            warnings: documentWarnings,
-            worksheetId: applyOutcome.id,
-            expectedInstanceId,
-            executor,
-            signal,
-            diagnostics: applyOutcome.diagnostics,
-            diagnosticsInvalid: applyOutcome.diagnosticsInvalid,
-          });
-          if (warningOutcome.readbackVerification) {
-            readbackVerificationOut?.push(warningOutcome.readbackVerification);
-          }
-          return Ok({
-            ...warningOutcome,
-            appliedName: applyOutcome.name,
-            validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
-          });
-        }
-        const verification = await verifyPostApplyWorksheetReadback(
-          applyOutcome.id,
-          applyOutcome.fragmentXml,
-          executor,
-          signal,
-        );
-        const verificationReport = await verifyAppliedWorksheetFields({
-          structural: verification,
-          worksheetId: applyOutcome.id,
+        const finalized = await finalizeWorksheetApply({
+          apply: applyOutcome,
           expectedInstanceId,
           executor,
           signal,
-          diagnostics: applyOutcome.diagnostics,
-          diagnosticsInvalid: applyOutcome.diagnosticsInvalid,
+          readback: () =>
+            verifyPostApplyWorksheetReadback(
+              applyOutcome.id,
+              applyOutcome.fragmentXml,
+              executor,
+              signal,
+            ),
+          worksheetIdFor: () => applyOutcome.id,
+          readbackVerificationOut,
         });
-        readbackVerificationOut?.push(verificationReport);
         // Preflight warnings ride along so apply responses can compute the host
         // verification receipt without re-running validation.
         return Ok({
-          readbackWarnings: verification.findings,
+          ...finalized,
           appliedName: applyOutcome.name,
-          readbackVerification: verificationReport,
           validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
         });
       }
@@ -822,51 +823,25 @@ async function loadWorksheetXmlViaExternalApi({
     if (applyResult.isErr()) {
       return Err({ type: 'execute-command-error', error: applyResult.error });
     }
-    const documentWarnings = applyResult.value.documentWarnings;
-    if (documentWarnings.length > 0) {
-      const warningOutcome = await documentWarningOutcome({
-        warnings: documentWarnings,
-        worksheetId: worksheetFragmentSimpleId(xml) ?? undefined,
-        expectedInstanceId,
-        executor,
-        signal,
-        diagnostics: applyResult.value.diagnostics,
-        diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
-      });
-      if (warningOutcome.readbackVerification) {
-        readbackVerificationOut?.push(warningOutcome.readbackVerification);
-      }
-      return Ok(warningOutcome);
-    }
-
-    log({
-      level: 'info',
-      message: 'load-worksheet completed',
-      logger: 'worksheetCommands',
-      data: { worksheetName },
-    });
-
-    const verification = await verifyPostApplyWorksheetReadback(
-      worksheetName,
-      xml,
-      executor,
-      signal,
-    );
-    const verificationReport = await verifyAppliedWorksheetFields({
-      structural: verification,
-      worksheetId: verification.worksheetId ?? worksheetFragmentSimpleId(xml) ?? undefined,
+    const finalized = await finalizeWorksheetApply({
+      apply: applyResult.value,
       expectedInstanceId,
       executor,
       signal,
-      diagnostics: applyResult.value.diagnostics,
-      diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
+      readback: () => {
+        log({
+          level: 'info',
+          message: 'load-worksheet completed',
+          logger: 'worksheetCommands',
+          data: { worksheetName },
+        });
+        return verifyPostApplyWorksheetReadback(worksheetName, xml, executor, signal);
+      },
+      worksheetIdFor: (readback) =>
+        readback?.worksheetId ?? worksheetFragmentSimpleId(xml) ?? undefined,
+      readbackVerificationOut,
     });
-    readbackVerificationOut?.push(verificationReport);
-
-    return Ok({
-      readbackWarnings: verification.findings,
-      readbackVerification: verificationReport,
-    });
+    return Ok(finalized);
   });
 }
 

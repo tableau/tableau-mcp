@@ -129,6 +129,131 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     };
   }
 
+  function inlineDiagnosticsDocumentWarningScenario(route: 'artifact' | 'per-sheet' | 'upsert'): {
+    applyWorkbookDocument: ReturnType<typeof vi.fn>;
+    applyWorksheetDocument: ReturnType<typeof vi.fn>;
+    documentWarning: string;
+    expectedWorksheetId: string;
+    getWorkbookDocument: ReturnType<typeof vi.fn>;
+    getWorksheetDiagnostics: ReturnType<typeof vi.fn>;
+    getWorksheetDocument: ReturnType<typeof vi.fn>;
+    nativeFieldName: string;
+    readbackVerificationOut: NonNullable<
+      Parameters<typeof loadWorksheetXml>[0]['readbackVerificationOut']
+    >;
+    run: () => ReturnType<typeof loadWorksheetXml>;
+  } {
+    const liveWorksheetId = 'live-sheet-id';
+    const xmlWorksheetId = 'xml-sheet-id';
+    const expectedWorksheetId = route === 'per-sheet' ? liveWorksheetId : xmlWorksheetId;
+    const decoyWorksheetId = route === 'per-sheet' ? xmlWorksheetId : liveWorksheetId;
+    const nativeFieldName = `[none:${route} Missing:nk]`;
+    const documentWarning = `Dropped ${route} filter.`;
+    const xml =
+      route === 'per-sheet'
+        ? validXml
+        : `<worksheet name='${worksheetName}'><simple-id uuid='${xmlWorksheetId}'/><table><rows /></table></worksheet>`;
+    const baseline = liveWorkbook([worksheetName]);
+    const diagnostics = {
+      worksheets: [
+        {
+          worksheetId: expectedWorksheetId,
+          status: 'complete' as const,
+          invalidFields: [
+            {
+              fieldName: nativeFieldName,
+              fieldCaption: `${route} Missing`,
+              shelf: 'filter-shelf',
+              marksSpecificationId: 'marks-1',
+              encodingType: 'filter',
+              reason: 'Field is unavailable.',
+            },
+          ],
+        },
+        {
+          worksheetId: decoyWorksheetId,
+          status: 'complete' as const,
+          invalidFields: [
+            {
+              fieldName: '[none:Wrong Target:nk]',
+              fieldCaption: 'Wrong Target',
+              shelf: 'rows-shelf',
+              marksSpecificationId: 'marks-decoy',
+              encodingType: 'text',
+              reason: 'This finding belongs to another worksheet.',
+            },
+          ],
+        },
+      ],
+    };
+    const applyResponse = Ok({
+      command_id: `apply-${route}`,
+      status: 'completed' as const,
+      submitted_at: '',
+      warnings: [{ code: 'document-warning', message: documentWarning }],
+      diagnostics,
+    });
+    const applyWorksheetDocument = vi.fn().mockResolvedValue(applyResponse);
+    const applyWorkbookDocument = vi.fn().mockResolvedValue(applyResponse);
+    const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml }));
+    const getWorkbookDocument = vi
+      .fn()
+      .mockResolvedValue(
+        Ok({ xml: baseline, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      );
+    const getWorksheetDiagnostics = vi.fn();
+    const executor = makeExecutorMock({
+      desktopInstanceId: route === 'artifact' ? 'inst-build' : 'inst-test',
+      desktopApiVersion: '0.2.16',
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: liveWorksheetId, name: worksheetName }] })),
+      getWorksheetDocument,
+      getWorkbookDocument,
+      applyWorksheetDocument,
+      applyWorkbookDocument,
+      getWorksheetDiagnostics,
+    });
+    const readbackVerificationOut: NonNullable<
+      Parameters<typeof loadWorksheetXml>[0]['readbackVerificationOut']
+    > = [];
+    const dispatchState = { attempted: false };
+
+    return {
+      applyWorkbookDocument,
+      applyWorksheetDocument,
+      documentWarning,
+      expectedWorksheetId,
+      getWorkbookDocument,
+      getWorksheetDiagnostics,
+      getWorksheetDocument,
+      nativeFieldName,
+      readbackVerificationOut,
+      run: () =>
+        loadWorksheetXml({
+          worksheetName,
+          xml,
+          executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+          readbackVerificationOut,
+          ...(route === 'per-sheet'
+            ? { requireExistingSheet: true, callerPreflightsBlockingIssues: true }
+            : {}),
+          ...(route === 'artifact'
+            ? {
+                artifactApply: {
+                  windowXml: `<window class='worksheet' name='${worksheetName}' />`,
+                  expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, xml),
+                  expectedInstanceId: 'inst-build',
+                  dispatchState,
+                },
+              }
+            : {}),
+        }),
+    };
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     sheetUpsertMock.upsertSheetIntoWorkbook = undefined;
@@ -558,6 +683,96 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       ]),
     });
     expect(applyWorksheetDocument).toHaveBeenCalledOnce();
+    expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+  });
+
+  it('uses the per-sheet apply ID for inline diagnostics even when structural readback reports another ID', async () => {
+    const appliedWorksheetId = 'live-sheet-id';
+    const readbackWorksheetId = 'readback-sheet-id';
+    const readbackXml = `<worksheet name='${worksheetName}'><simple-id uuid='${readbackWorksheetId}'/><table><rows /></table></worksheet>`;
+    const getWorksheetDiagnostics = vi.fn();
+    const getWorksheetDocument = vi.fn().mockResolvedValue(Ok({ xml: readbackXml }));
+    const applyWorksheetDocument = vi.fn().mockResolvedValue(
+      Ok({
+        command_id: 'cmd-apply',
+        status: 'completed',
+        submitted_at: '',
+        diagnostics: {
+          worksheets: [
+            {
+              worksheetId: appliedWorksheetId,
+              status: 'complete',
+              invalidFields: [
+                {
+                  fieldName: '[none:Applied Target Missing:nk]',
+                  fieldCaption: 'Applied Target Missing',
+                  shelf: 'rows-shelf',
+                  marksSpecificationId: 'marks-live',
+                  encodingType: 'text',
+                  reason: 'Field is unavailable.',
+                },
+              ],
+            },
+            {
+              worksheetId: readbackWorksheetId,
+              status: 'complete',
+              invalidFields: [
+                {
+                  fieldName: '[none:Wrong Readback Target:nk]',
+                  fieldCaption: 'Wrong Readback Target',
+                  shelf: 'filter-shelf',
+                  marksSpecificationId: 'marks-readback',
+                  encodingType: 'filter',
+                  reason: 'This finding belongs to another worksheet.',
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    const executor = makeExecutorMock({
+      desktopInstanceId: 'inst-test',
+      desktopApiVersion: '0.2.16',
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: appliedWorksheetId, name: worksheetName }] })),
+      getWorksheetDocument,
+      applyWorksheetDocument,
+      getWorksheetDiagnostics,
+    });
+    const readbackVerificationOut: NonNullable<
+      Parameters<typeof loadWorksheetXml>[0]['readbackVerificationOut']
+    > = [];
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+      callerPreflightsBlockingIssues: true,
+      readbackVerificationOut,
+    });
+
+    expect(result.isOk()).toBe(true);
+    const report = result.unwrap().readbackVerification;
+    expect(report).toMatchObject({
+      ok: false,
+      status: 'failed',
+      findings: expect.arrayContaining([
+        expect.objectContaining({
+          source: 'used-field-validity',
+          worksheetId: appliedWorksheetId,
+          fieldName: '[none:Applied Target Missing:nk]',
+        }),
+      ]),
+    });
+    expect(JSON.stringify(report)).not.toContain('[none:Wrong Readback Target:nk]');
+    expect(readbackVerificationOut).toEqual([report]);
+    expect(applyWorksheetDocument).toHaveBeenCalledOnce();
+    expect(getWorksheetDocument).toHaveBeenCalledOnce();
     expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
   });
 
@@ -1473,6 +1688,48 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(getWorksheetDiagnostics).toHaveBeenCalledOnce();
     expect(getWorksheetDiagnostics).toHaveBeenCalledWith(worksheetId, mockSignal, 'inst-build');
   });
+
+  it.each(['artifact', 'per-sheet', 'upsert'] as const)(
+    'post-apply contract: %s warning merges inline native findings without structural polling or a diagnostics GET',
+    async (route) => {
+      vi.useFakeTimers();
+      try {
+        const scenario = inlineDiagnosticsDocumentWarningScenario(route);
+        const pending = scenario.run();
+        await vi.runAllTimersAsync();
+        const result = await pending;
+
+        expect(result.isOk()).toBe(true);
+        const report = result.unwrap().readbackVerification;
+        expect(report).toMatchObject({
+          ok: false,
+          status: 'failed',
+          findings: expect.arrayContaining([
+            expect.objectContaining({
+              source: 'readback',
+              message: scenario.documentWarning,
+            }),
+            expect.objectContaining({
+              source: 'used-field-validity',
+              worksheetId: scenario.expectedWorksheetId,
+              fieldName: scenario.nativeFieldName,
+            }),
+          ]),
+        });
+        expect(JSON.stringify(report)).not.toContain('[none:Wrong Target:nk]');
+        expect(scenario.readbackVerificationOut).toEqual([report]);
+        expect(scenario.getWorksheetDiagnostics).not.toHaveBeenCalled();
+        expect(scenario.applyWorksheetDocument).toHaveBeenCalledTimes(
+          route === 'per-sheet' ? 1 : 0,
+        );
+        expect(scenario.applyWorkbookDocument).toHaveBeenCalledTimes(route === 'per-sheet' ? 0 : 1);
+        expect(scenario.getWorksheetDocument).not.toHaveBeenCalled();
+        expect(scenario.getWorkbookDocument).toHaveBeenCalledTimes(route === 'per-sheet' ? 0 : 1);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 });
 
 describe('verifyPostApplyWorksheetReadback (async-settle poll)', () => {

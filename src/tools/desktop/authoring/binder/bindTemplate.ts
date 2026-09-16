@@ -2757,7 +2757,7 @@ async function performAutoApply({
                   : []),
                 ...(readbackRan
                   ? [
-                      'whether query execution or rendering succeeds — static validation and structural readback do not execute queries or inspect rendered output',
+                      'whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering',
                     ]
                   : [
                       'whether the applied sheet retained its intended structure, or query execution or rendering succeeds — structural readback did not run',
