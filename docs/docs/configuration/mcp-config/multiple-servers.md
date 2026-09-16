@@ -13,8 +13,11 @@ keeping them **distinctly named** so both you and the AI can tell them apart, an
 
 The AI client chooses which configured server to send a tool call to. If several servers are
 configured with similar names — or several expose the same tool — a request can land on the
-**wrong** server, or on one that is **not authenticated**. When that happens the failure often
-reads like "the feature isn't set up," when the real cause is *which server answered*.
+**wrong** server, or on one that is **not authenticated**, producing unintended or erroneous
+behavior. The result is not always an error: the call may **succeed** against the wrong server and
+return another site's data, a search may **find nothing** and read as a false negative, or an
+unauthenticated server may return a `401` that reads like "the feature isn't set up." In every case
+the real cause is *which server answered*.
 
 Give each server a name that encodes site + purpose, e.g.:
 

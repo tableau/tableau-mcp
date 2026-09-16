@@ -60,6 +60,5 @@ export function buildPermissionErrorMessage(target: AuthTarget = {}): string {
  * `WWW-Authenticate` challenge so the re-authentication flow still works.
  */
 export const OAUTH_AUTH_CHALLENGE_GUIDANCE =
-  'If multiple Tableau MCP servers are configured, this 401 means the request reached a server ' +
-  'whose session is missing, invalid, or expired — verify you targeted the intended server and ' +
-  're-authenticate. A 401 is an authentication problem, not a missing feature.';
+  'This 401 means the request reached a Tableau MCP server whose session is missing, invalid, or ' +
+  'expired — re-authenticate. A 401 is an authentication problem, not a missing feature.';

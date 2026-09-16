@@ -25,10 +25,10 @@ All Tableau auth modes are *site scoped*. If you are a multi-site user, and you 
 - **Problem:** After a user has already connected to the hosted Tableau MCP server, disconnecting and reconnecting may not trigger the OAuth flow again.
 - **Workaround:** Sign out of Tableau Cloud, then trigger the Tableau MCP OAuth flow again. If the issue persists, clear your browser cookies and try again.
 
-**Issue 3: Multiple configured servers — a tool call may target the wrong or unauthenticated server**
+**Issue 3: Multiple configured servers — a tool call may target the wrong server**
 
-- **Problem:** When more than one Tableau MCP server is configured, the AI client may send a tool call to a different server than you intended — including one that is not authenticated. The resulting `401` can be summarized by the AI as a vague "feature not configured" message.
-- **Workaround:** Name each server distinctly, confirm which server answered before trusting admin results, and read the raw error. See [Running Multiple Servers & Diagnosing Auth Errors](../multiple-servers.md).
+- **Problem:** When more than one Tableau MCP server is configured, the AI client may send a tool call to a different server than you intended, producing unintended or erroneous behavior. The outcome varies: the call may **still succeed** against the wrong server and return another site's data (for example, "list datasources" silently lists a different server's datasources); a search may run against the wrong server, **find nothing**, and read as a false negative; or, if the targeted server is not authenticated, it may return a `401` that the AI summarizes as a vague "feature not configured" message. A `401` is only one of several possible outcomes, not the defining one.
+- **Workaround:** Name each server distinctly, confirm which server answered before trusting results, and read the raw error. See [Running Multiple Servers & Diagnosing Auth Errors](../multiple-servers.md).
 
 ### Self-hosted Tableau MCP
 
