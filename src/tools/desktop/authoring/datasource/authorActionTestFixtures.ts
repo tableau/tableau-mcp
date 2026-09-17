@@ -24,7 +24,7 @@ const DATASOURCE_COLUMNS = {
 export type WorkbookField = keyof typeof DATASOURCE_COLUMNS;
 export type WorkbookDashboard = { name: string; zones?: string[] };
 
-// Builds a workbook document from its structured parts — the worksheets, any dashboards with their member zones, 
+// Builds a workbook document from its structured parts — the worksheets, any dashboards with their member zones,
 // and any fields on the datasource that are needed
 export function buildWorkbookXml({
   worksheets,
