@@ -38,7 +38,8 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
     description:
       'Retrieves information about the specified workbook, including information about the views contained in the workbook and backing datasources. ' +
       "The response's upstreamDatasources list each data source the workbook depends on; " +
-      "when an entry's isQueryable is true, the calling user can query that data source with the query-datasource tool.",
+      "an entry's isQueryable is true when the calling user can query that data source with the query-datasource tool, " +
+      'false when they cannot, and absent when it could not be determined.',
     paramsSchema,
     annotations: {
       title: 'Get Workbook',
@@ -255,7 +256,7 @@ export async function enrichUpstreamDatasourceQueryability({
       log(
         {
           message: `Could not determine queryability for data source ${ds.luid}`,
-          level: 'debug',
+          level: 'warning',
           logger: 'lineage',
           data: detail,
         },

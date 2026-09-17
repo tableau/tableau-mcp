@@ -375,6 +375,18 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
+    it('skips the permission calls when the workbook has zero upstream datasources', async () => {
+      // No connections and empty lineage → no upstream datasources, so enrichment early-returns
+      // without hitting the has-query-permissions endpoint at all.
+      mocks.mockGraphql.mockResolvedValue(emptyWorkbookLineage);
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(mocks.mockUserHasQueryPermissions).not.toHaveBeenCalled();
+      expect(response.data.upstreamDatasources ?? []).toEqual([]);
+    });
+
     it('sets isQueryable false for every datasource when the endpoint is unavailable (old server)', async () => {
       // On older servers the endpoint is absent (404), surfaced as feature-disabled. VDS can't be
       // queried there, so isQueryable is false for both published and embedded.
