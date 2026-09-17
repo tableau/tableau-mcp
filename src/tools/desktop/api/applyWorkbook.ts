@@ -11,7 +11,7 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, sessionParam } from '../params.js';
-import { jsonToolResult } from '../structuredContent.js';
+import { jsonToolResult, prefillNextAction, withNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { acceptedNoReadbackApplyResult, runApplyPreamble } from './applyPreamble.js';
 
@@ -116,6 +116,9 @@ export const getApplyWorkbookTool = (
                 ? 'complete'
                 : 'incomplete'
               : 'absent';
+          const hasInvalidFields = diagnostics?.worksheets.some(
+            (worksheet) => (worksheet.invalidFields?.length ?? 0) > 0,
+          );
           const accepted = acceptedNoReadbackApplyResult({
             kind: 'workbook',
             resultWarnings: validationWarnings,
@@ -134,8 +137,19 @@ export const getApplyWorkbookTool = (
                   }
                 : {}),
           });
+          const acceptedWithGuidance = hasInvalidFields
+            ? withNextAction(
+                {
+                  ...accepted,
+                  message:
+                    `${accepted.message} The edit was accepted; address the reported invalid fields ` +
+                    'without replaying the apply. Static diagnostics do not establish query execution or rendering success.',
+                },
+                prefillNextAction('Address invalid fields reported in diagnostics'),
+              )
+            : accepted;
           return new Ok({
-            ...accepted,
+            ...acceptedWithGuidance,
             ...(diagnostics ? { diagnostics } : {}),
             ...(diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
             ...(documentWarnings.length > 0 ? { warnings: documentWarnings } : {}),
