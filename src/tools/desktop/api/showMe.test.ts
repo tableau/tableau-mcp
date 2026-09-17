@@ -63,11 +63,9 @@ describe('show-me tool', () => {
     const paramsSchema = await Provider.from(tool.paramsSchema);
 
     expect(tool.minApiVersion).toBe('0.2.11');
-    expect(tool.description).toContain('Call get-show-me-options first');
-    expect(tool.description).toContain('isApplicable value is true');
-    expect(tool.description).toContain(
-      'same worksheet, dataSource, and fieldsSelectedInSchemaViewer context',
-    );
+    expect(tool.description).toContain('First call get-show-me-options');
+    expect(tool.description).toContain('marked applicable');
+    expect(tool.description).toContain('reuse its worksheet, data source, and selected fields');
     expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     expect(paramsSchema.showMeType.safeParse('native-future-viz').success).toBe(true);
     expect(paramsSchema.showMeType.safeParse('').success).toBe(false);

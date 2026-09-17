@@ -13,20 +13,15 @@ import { DesktopTool } from '../tool.js';
 const paramsSchema = {
   session: sessionParam(),
   worksheet: z.string().min(1).describe('Worksheet name or stable id used for discovery.'),
-  showMeType: z
-    .string()
-    .min(1)
-    .describe('Exact applicable showMeType returned by get-show-me-options.'),
+  showMeType: z.string().min(1).describe('Applicable showMeType returned by Show Me discovery.'),
   dataSource: z
     .string()
     .optional()
-    .describe('Use the same optional internal Tableau datasource name used for discovery.'),
+    .describe('Same optional internal datasource name used for discovery.'),
   fieldsSelectedInSchemaViewer: z
     .array(z.string())
     .optional()
-    .describe(
-      'Use the same ordered qualified field names used for discovery; omit only if discovery omitted them.',
-    ),
+    .describe('Same ordered qualified field names used for discovery; omit if discovery did.'),
 };
 const title = 'Show Me';
 
@@ -37,7 +32,7 @@ export const getShowMeTool = (server: DesktopMcpServer): DesktopTool<typeof para
     minApiVersion: '0.2.11',
     title,
     description:
-      'Apply one Show Me recommendation. Call get-show-me-options first, then use only a returned showMeType whose isApplicable value is true. Preserve the same worksheet, dataSource, and fieldsSelectedInSchemaViewer context from discovery.',
+      'Apply a Show Me option. First call get-show-me-options, choose one marked applicable, and reuse its worksheet, data source, and selected fields.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
