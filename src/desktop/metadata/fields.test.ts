@@ -263,6 +263,54 @@ describe('addFieldToRows user derivations', () => {
   });
 });
 
+describe('addFieldToRows aggregate correction consistency (regression)', () => {
+  // ensureColumnInstanceInDependencies corrects an aggregating calculated field to a
+  // "usr:" derivation in two places: (1) when the base column is ALREADY in the
+  // worksheet's <datasource-dependencies> (fields.ts ~790), and (2) when the base
+  // column is copied in from the workbook because it was absent (fields.ts ~936-943).
+  // Only the SECOND site updates `actualColumnInstanceName`; the function still
+  // returns the (uncorrected) `correctedInstanceName` from the first site. When only
+  // the second correction fires -- an aggregating calc present in the workbook but
+  // absent from the worksheet's deps -- the written column-instance is "usr:..." but
+  // the value returned to the caller (and placed on the shelf) is the original
+  // aggregate-prefixed ref, leaving the shelf pointing at a pill that was never written.
+  it('places the same [usr:...] ref on the shelf that it writes as the column-instance name', () => {
+    const workbookXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="Sample">
+      <column name="[Calculation_1]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="SUM([Sales])"/>
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+    // Calculation_1 is absent from WORKSHEET_XML's <datasource-dependencies>, so it is
+    // copied in from the workbook here -- the path that triggers the SECOND correction
+    // without the FIRST one ever running.
+    const modified = addFieldToRows(
+      WORKSHEET_XML,
+      '[Sample].[ctd:Calculation_1:qk]',
+      undefined,
+      workbookXml,
+    );
+
+    const writtenInstanceName = modified.match(
+      /<column-instance[^>]*name="(\[[^"]*Calculation_1[^"]*\])"[^>]*column="\[Calculation_1\]"/,
+    )?.[1];
+    expect(writtenInstanceName).toBe('[usr:Calculation_1:qk]');
+
+    const rowsField = listFields(modified).find(
+      (f) => f.location === 'rows' && f.column.includes('Calculation_1'),
+    );
+
+    // The shelf reference must name the column-instance that was actually written,
+    // or the rows shelf points at a pill that does not exist in the datasource-deps.
+    expect(rowsField?.column).toBe(`[Sample].${writtenInstanceName}`);
+  });
+});
+
 describe('addFieldToRows date-part derivations', () => {
   // Regression: mapDerivationToProperCase dropped the date-part keys, so a
   // [mn:...] ref was written with derivation="mn" (invalid) and Tableau

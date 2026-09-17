@@ -950,6 +950,10 @@ function ensureColumnInstanceInDependencies(
             datasource,
           });
         }
+        // W-24126644: return the User-corrected ref (usr:) the caller places on the
+        // shelf/encoding. Diverging from the written column-instance makes Tableau
+        // reconcile the pill, which readback verification reports as a false drop.
+        correctedInstanceName = actualColumnInstanceName;
       }
     }
 
