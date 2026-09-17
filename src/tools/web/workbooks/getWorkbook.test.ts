@@ -387,9 +387,10 @@ describe('getWorkbookTool', () => {
       expect(response.data.upstreamDatasources ?? []).toEqual([]);
     });
 
-    it('sets isQueryable false for every datasource when the endpoint is unavailable (old server)', async () => {
-      // On older servers the endpoint is absent (404), surfaced as feature-disabled. VDS can't be
-      // queried there, so isQueryable is false for both published and embedded.
+    it('sets isQueryable false for every datasource when VDS is systemically unavailable (feature-disabled)', async () => {
+      // feature-disabled covers both systemic cases: the feature is off site-wide, or the endpoint
+      // is absent on an older server. VDS can't be queried at all, so isQueryable is false for both
+      // published and embedded.
       mocks.mockUserHasQueryPermissions.mockResolvedValue(Err({ type: 'feature-disabled' }));
 
       const response = await getResponseData({ workbookId });
@@ -474,17 +475,17 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
-    it('sets isQueryable false when the feature is not enabled (403 / errorCode 403800)', async () => {
-      // Feature-disabled arrives as a 403 with errorCode 403800 (same code as a per-datasource
-      // denial, differing only in message). Either way the caller can't query → false.
+    it('sets isQueryable false when the data source is not found (404 / errorCode 404937)', async () => {
+      // A 404937 is scoped to the requested data source (it no longer exists), unlike the
+      // missing-endpoint 404950 which is systemic. The data source can't be queried → false.
       mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
         datasource.datasourceLuid === 'pub-luid-1'
           ? Ok({ hasQueryPermission: true })
           : Err({
               type: 'api-error',
-              message: 'The VDSForWorkbookDatasources feature is not enabled.',
-              httpStatus: 403,
-              errorCode: '403800',
+              message: 'Datasource not found.',
+              httpStatus: 404,
+              errorCode: '404937',
             }),
       );
 

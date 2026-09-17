@@ -210,7 +210,8 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
  * Annotates each upstream data source with `isQueryable` by calling VDS's user-has-query-permissions
  * endpoint once per data source (concurrently). Maps the result to:
  *  - 200 → the API's `hasQueryPermission` value.
- *  - 403, or feature-disabled (404, no endpoint on older servers) → `false`: the caller can't query it.
+ *  - feature-disabled (feature off site-wide, or endpoint absent on older servers), errorCode
+ *    403800 (permission denied), or 404937 (data source not found) → `false`: not queryable.
  *  - Anything else (401, transient 429/5xx, zodios-error, thrown) → left unset (indeterminate).
  *
  * Best-effort: a failed check never fails get-workbook.
@@ -239,12 +240,14 @@ export async function enrichUpstreamDatasourceQueryability({
         if (result.isOk()) {
           return { ...ds, isQueryable: result.value.hasQueryPermission };
         }
-        // isQueryable is false in these scenarios:
-        // * 403 (feature off or access denied)
-        // * feature-disabled (404, no endpoint on older servers).
+        // isQueryable is false when the data source is definitively not queryable:
+        // * feature-disabled: VDS is off site-wide or the endpoint is absent (no DS is queryable)
+        // * 403800: the caller lacks permission to query this data source
+        // * 404937: the data source no longer exists
         if (
           result.error.type === 'feature-disabled' ||
-          (result.error.type === 'api-error' && result.error.httpStatus === 403)
+          (result.error.type === 'api-error' &&
+            (result.error.errorCode === '403800' || result.error.errorCode === '404937'))
         ) {
           return { ...ds, isQueryable: false };
         }
