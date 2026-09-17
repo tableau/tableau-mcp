@@ -30,6 +30,10 @@ const paramsSchema = {
   workbookId: z.string(),
 };
 
+// Cap on concurrent user-has-query-permissions calls when enriching a workbook's upstream data
+// sources, so a workbook with many data sources can't burst an unbounded number of VDS requests.
+const VDS_QUERYABILITY_CONCURRENCY = 5;
+
 export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getWorkbookTool = new WebTool({
     server,
@@ -211,7 +215,8 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
  * endpoint. The first data source is probed on its own: if that probe reports a *systemic* failure
  * (feature-disabled — VDS off site-wide or the endpoint absent on older servers), no data source is
  * queryable, so every entry is marked `false` and the remaining checks are skipped. Otherwise the
- * probe result is kept and the remaining data sources are checked concurrently. Each check maps to:
+ * probe result is kept and the remaining data sources are checked concurrently, in batches of
+ * {@link VDS_QUERYABILITY_CONCURRENCY} so VDS isn't hit by an unbounded burst. Each check maps to:
  *  - 200 → the API's `hasQueryPermission` value.
  *  - feature-disabled, errorCode 403800 (permission denied), or 404937 (data source not found)
  *    → `false`: not queryable.
@@ -290,8 +295,13 @@ export async function enrichUpstreamDatasourceQueryability({
     };
   }
 
-  // The first probe succeeded (or failed non-systemically), so check the rest concurrently.
-  const restEnriched = await Promise.all(rest.map((ds) => checkDatasourceQueryability(ds)));
+  // The first probe succeeded (or failed non-systemically), so check the rest concurrently, in
+  // batches so no more than VDS_QUERYABILITY_CONCURRENCY calls hit VDS at once.
+  const restEnriched: Array<{ datasource: LineageContent; systemic: boolean }> = [];
+  for (let i = 0; i < rest.length; i += VDS_QUERYABILITY_CONCURRENCY) {
+    const batch = rest.slice(i, i + VDS_QUERYABILITY_CONCURRENCY);
+    restEnriched.push(...(await Promise.all(batch.map((ds) => checkDatasourceQueryability(ds)))));
+  }
 
   return {
     ...workbook,

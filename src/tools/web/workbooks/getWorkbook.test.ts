@@ -443,6 +443,44 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
+    it('caps in-flight has-query-permissions calls at 5 when fanning out many datasources', async () => {
+      // A workbook with many upstream datasources must not fire an unbounded burst of VDS calls; the
+      // fan-out is batched so at most 5 checks are in flight at once (the probe runs first, on its own).
+      const datasourceCount = 12;
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                upstreamDatasources: Array.from({ length: datasourceCount }, (_, i) => ({
+                  luid: `pub-luid-${i + 1}`,
+                  name: `Published DS ${i + 1}`,
+                })),
+              },
+            ],
+          },
+        },
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([]);
+
+      let inFlight = 0;
+      let peak = 0;
+      mocks.mockUserHasQueryPermissions.mockImplementation(async () => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        inFlight--;
+        return Ok({ hasQueryPermission: true });
+      });
+
+      const response = await getResponseData({ workbookId });
+
+      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalledTimes(datasourceCount);
+      expect(peak).toBe(5);
+      expect(response.data.upstreamDatasources).toHaveLength(datasourceCount);
+    });
+
     it('sets isQueryable false when the check returns 403 (no permission to view)', async () => {
       // A 403 (Forbidden, e.g. errorCode 403800 "does not have permission") means VDS
       // authenticated the caller and denied query access → isQueryable is false.
