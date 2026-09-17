@@ -6,10 +6,10 @@ import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   edgeTypeSchema,
-  KnowledgeNodeContext,
+  type KnowledgeNodeContext,
   nodeTypeSchema,
-  SemanticContextNode,
-} from '../../../sdks/tableau/apis/knowledgeApi.js';
+  type SemanticContextNode,
+} from '../../../sdks/tableau/types/knowledge.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getHttpStatus } from '../../../utils/getHttpStatus.js';

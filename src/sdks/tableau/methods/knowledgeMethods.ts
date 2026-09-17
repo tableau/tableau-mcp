@@ -1,8 +1,9 @@
 import { Zodios } from '@zodios/core';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
-import {
-  knowledgeApis,
+import { knowledgeApis } from '../apis/knowledgeApi.js';
+import { RestApiCredentials } from '../restApi.js';
+import type {
   KnowledgeGraph,
   KnowledgeLineage,
   KnowledgeNodeContext,
@@ -16,8 +17,7 @@ import {
   SemanticStatementInput,
   SuggestionReport,
   SuggestionSeverity,
-} from '../apis/knowledgeApi.js';
-import { RestApiCredentials } from '../restApi.js';
+} from '../types/knowledge.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowledgeApis> {

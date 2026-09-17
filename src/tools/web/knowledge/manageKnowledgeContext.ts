@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { severitySchema } from '../../../sdks/tableau/apis/knowledgeApi.js';
+import { severitySchema } from '../../../sdks/tableau/types/knowledge.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';

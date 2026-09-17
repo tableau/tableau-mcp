@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { SemanticContextNode } from '../../../sdks/tableau/apis/knowledgeApi.js';
+import type { SemanticContextNode } from '../../../sdks/tableau/types/knowledge.js';
 
 export const graphIdSchema = z
   .string()
