@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { bareName, summarizeSchema } from '../../../../desktop/binder/schema-summary.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
@@ -14,16 +15,20 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 import { applyAndVerify } from './applyAndVerify.js';
-import { findDatasourceElements, selectTargetDatasource } from './authorCalcCore.js';
+import {
+  DatasourceElement,
+  findDatasourceElements,
+  selectTargetDatasource,
+} from './authorCalcCore.js';
 
 const activationSchema = z.enum(['on-select', 'on-hover', 'on-menu']);
-const modeSchema = z.enum(['parameter', 'set', 'url']);
+const modeSchema = z.enum(['parameter', 'set', 'url', 'filter']);
 const setMembershipSchema = z.enum(['assign', 'add', 'remove']);
 const clearSelectionSchema = z.enum(['do-nothing', 'show-all', 'exclude-all']);
 const urlTargetSchema = z.enum(['default-zone-or-browser', 'browser', 'specific-zone']);
 
-// Primitives in, parameter/set action XML server-side, readback out. An action
-// wires a mark interaction on a source sheet to a target parameter or set.
+// Primitives in, action XML server-side, readback out. An action wires a mark
+// interaction on a source sheet to a target parameter, set, URL, or filter.
 // PROVEN live 2026-07-19 (CODA): a workbook-level <actions> block MERGES via the
 // document round-trip — the action survived readback with the target-parameter link
 // intact. This is the interactivity layer over the key signature.
@@ -35,6 +40,8 @@ const paramsSchema = {
   sourceField: z.string().optional().describe(''),
   targetParameter: z.string().optional().describe(''),
   targetSet: z.string().optional().describe(''),
+  targetSheet: z.string().optional().describe(''),
+  filterFields: z.array(z.string()).optional().describe(''),
   datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
   setMembership: setMembershipSchema.default('assign').describe(''),
   clearSelection: clearSelectionSchema.default('do-nothing').describe(''),
@@ -74,6 +81,19 @@ type AuthorActionResult = AuthorActionResultBase &
         mode: 'url';
         url: string;
       }
+    | {
+        mode: 'filter';
+        targetSheet: string;
+        sourceWorksheet: string;
+        sourceDashboard: string;
+        // Key settings echoed back: activation (on-select/on-hover/on-menu),
+        // clearing behavior (do-nothing/show-all/exclude-all), and the single-select-only toggle.
+        activation: z.infer<typeof activationSchema>;
+        clearSelection: z.infer<typeof clearSelectionSchema>;
+        singleSelect: boolean;
+        specificFields: { datasourceName: string | undefined; columnNames: string[] };
+        excludeSheets: string[];
+      }
   );
 
 type SetCandidate = {
@@ -106,6 +126,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
         sourceField,
         targetParameter,
         targetSet,
+        targetSheet,
+        filterFields,
         datasource,
         setMembership = 'assign',
         clearSelection = 'do-nothing',
@@ -130,6 +152,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           sourceField,
           targetParameter,
           targetSet,
+          targetSheet,
+          filterFields,
           datasource,
           setMembership,
           clearSelection,
@@ -143,10 +167,19 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           urlEncode,
         },
         callback: async () => {
+          const effectiveSourceSheet = sourceWorksheet.trim();
+          const effectiveSourceDashboard = sourceDashboard?.trim() ?? '';
+          const hasWorksheet = effectiveSourceSheet.length > 0;
+          const hasDashboard = effectiveSourceDashboard.length > 0;
+          const effectiveTargetSheet = targetSheet?.trim() ?? '';
+          const effectiveExcludedSheets = (excludeSheets ?? [])
+            .map((sheet) => sheet.trim())
+            .filter((sheet) => sheet.length > 0);
+
           if (caption.trim().length === 0) {
             return new ArgsValidationError('caption empty').toErr();
           }
-          if (mode !== 'url' && sourceWorksheet.trim().length === 0) {
+          if (mode !== 'url' && mode !== 'filter' && effectiveSourceSheet.length === 0) {
             return new ArgsValidationError('sourceWorksheet empty').toErr();
           }
           if (mode === 'url') {
@@ -171,8 +204,6 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 'targetParameter/targetSet are not allowed in url mode',
               ).toErr();
             }
-            const hasWorksheet = sourceWorksheet.trim().length > 0;
-            const hasDashboard = (sourceDashboard?.trim().length ?? 0) > 0;
             if (!hasWorksheet && !hasDashboard) {
               return new ArgsValidationError(
                 'url mode requires a source: set sourceWorksheet, sourceDashboard, or both',
@@ -229,6 +260,24 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               ).toErr();
             }
           }
+          if (mode === 'filter') {
+            if ((targetParameter?.trim().length ?? 0) > 0 || (targetSet?.trim().length ?? 0) > 0) {
+              return new ArgsValidationError(
+                'targetParameter/targetSet are not allowed in filter mode; use targetSheet',
+              ).toErr();
+            }
+            if ((url?.trim().length ?? 0) > 0) {
+              return new ArgsValidationError('url is not allowed in filter mode').toErr();
+            }
+            if (targetSheet === undefined || targetSheet.trim().length === 0) {
+              return new ArgsValidationError('targetSheet is required in filter mode').toErr();
+            }
+            if (!hasWorksheet && !hasDashboard) {
+              return new ArgsValidationError(
+                'filter mode requires a source: set sourceWorksheet, sourceDashboard, or both',
+              ).toErr();
+            }
+          }
 
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -247,25 +296,38 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               'caption collision — pick a new caption or edit the existing action',
             ).toErr();
           }
-          if (mode === 'url') {
+
+          const worksheetNames = findSheetNames(liveXml, 'worksheets', 'worksheet');
+          const dashboardNames = findSheetNames(liveXml, 'dashboards', 'dashboard');
+          if (mode === 'url' || mode === 'filter') {
             // Worksheet, dashboard, and story names share one namespace, so a source name
             // is unambiguously one kind. Emitting <source worksheet='<dashboard>'> (a
             // dashboard name in the worksheet slot) persists cleanly but makes Tableau raise
             // an internal error when the action is later opened for editing, because it then
             // resolves that name as a worksheet and finds a dashboard instead. Reject the
             // miscategorized source up front and steer the caller to the correct slot.
-            const worksheetNames = findSheetNames(liveXml, 'worksheets', 'worksheet');
-            const dashboardNames = findSheetNames(liveXml, 'dashboards', 'dashboard');
-            const trimmedWorksheet = sourceWorksheet.trim();
-            const trimmedDashboard = sourceDashboard?.trim() ?? '';
-            if (trimmedWorksheet.length > 0 && dashboardNames.has(trimmedWorksheet)) {
+            if (effectiveSourceSheet.length > 0 && dashboardNames.has(effectiveSourceSheet)) {
               return new ArgsValidationError(
-                `'${trimmedWorksheet}' is a dashboard, not a worksheet. Pass it as sourceDashboard and leave sourceWorksheet empty (or set sourceWorksheet to a worksheet inside the dashboard) so the URL action is scoped to the dashboard.`,
+                `'${effectiveSourceSheet}' is a dashboard, not a worksheet. Pass it as sourceDashboard and leave sourceWorksheet empty (or set sourceWorksheet to a worksheet inside the dashboard) so the action is scoped to the dashboard.`,
               ).toErr();
             }
-            if (trimmedDashboard.length > 0 && worksheetNames.has(trimmedDashboard)) {
+            if (
+              effectiveSourceDashboard.length > 0 &&
+              worksheetNames.has(effectiveSourceDashboard)
+            ) {
               return new ArgsValidationError(
-                `'${trimmedDashboard}' is a worksheet, not a dashboard. Pass it as sourceWorksheet instead.`,
+                `'${effectiveSourceDashboard}' is a worksheet, not a dashboard. Pass it as sourceWorksheet instead.`,
+              ).toErr();
+            }
+          }
+          if (mode === 'filter') {
+            // A filter action names the sheet/dashboard it filters. A target that is not a
+            // real sheet or dashboard silently filters nothing, so reject a typo up front.
+            const trimmedTarget = targetSheet!.trim();
+            if (!worksheetNames.has(trimmedTarget) && !dashboardNames.has(trimmedTarget)) {
+              const available = [...worksheetNames, ...dashboardNames];
+              return new ArgsValidationError(
+                `targetSheet "${trimmedTarget}" was not found. Available sheets: ${available.length > 0 ? available.join(', ') : 'none'}`,
               ).toErr();
             }
           }
@@ -274,18 +336,36 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             hasUrlActionDuplicate(
               liveXml,
               url!.trim(),
-              sourceWorksheet.trim(),
-              sourceDashboard?.trim() ?? '',
+              effectiveSourceSheet,
+              effectiveSourceDashboard,
             )
           ) {
             return new ArgsValidationError(
               'an identical URL action (same url and same source) already exists',
             ).toErr();
           }
+          if (
+            mode === 'filter' &&
+            hasFilterActionDuplicate(
+              liveXml,
+              effectiveTargetSheet,
+              effectiveSourceSheet,
+              effectiveSourceDashboard,
+            )
+          ) {
+            return new ArgsValidationError(
+              'an identical filter action (same source and same target) already exists',
+            ).toErr();
+          }
 
           const actionName = nextActionName(liveXml);
           let target: string;
           let actionXml: string;
+          let filterDependencies:
+            | { datasourceName: string; datasourceXml: string; columnsXml: string[] }
+            | undefined;
+          let targetDatasource: DatasourceElement | undefined;
+          let resolvedFields: ResolvedFilterField[] | undefined;
           if (mode === 'set') {
             const targetResult = resolveTargetSet(liveXml, targetSet, datasource);
             if (targetResult.isErr()) {
@@ -307,13 +387,53 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             actionXml = renderUrlAction({
               caption,
               actionName,
-              sourceWorksheet: sourceWorksheet.trim(),
-              sourceDashboard: sourceDashboard?.trim() ?? '',
+              sourceWorksheet: effectiveSourceSheet,
+              sourceDashboard: effectiveSourceDashboard,
               excludeSheets: (excludeSheets ?? []).map((sheet) => sheet.trim()),
               url: target,
               urlTarget: urlTarget ?? 'default-zone-or-browser',
               zoneId: zoneId?.trim() ?? '',
               urlEncode: urlEncode ?? false,
+              activation,
+            });
+          } else if (mode === 'filter') {
+            target = effectiveTargetSheet;
+            const targetIsDashboard = findSheetNames(liveXml, 'dashboards', 'dashboard').has(
+              target,
+            );
+            const hasFilterFields = (filterFields ?? []).some((field) => field.trim().length > 0);
+            if (hasFilterFields) {
+              const datasourceResult = selectTargetDatasource(liveXml, datasource);
+              if (datasourceResult.isErr()) {
+                return datasourceResult.error.toErr();
+              }
+              targetDatasource = datasourceResult.value;
+              const fieldsResult = resolveFilterFields(
+                liveXml,
+                targetDatasource.name,
+                filterFields ?? [],
+              );
+              if (fieldsResult.isErr()) {
+                return fieldsResult.error.toErr();
+              }
+              resolvedFields = fieldsResult.value;
+              filterDependencies = {
+                datasourceName: targetDatasource.name,
+                datasourceXml: renderActionDatasource(targetDatasource),
+                columnsXml: resolvedFields.map((field) => renderDependencyColumn(field)),
+              };
+            }
+            actionXml = renderFilterAction({
+              caption,
+              actionName,
+              sourceWorksheet: effectiveSourceSheet,
+              sourceDashboard: effectiveSourceDashboard,
+              target: target,
+              targetDatasource,
+              resolvedFields,
+              excludeSheets: effectiveExcludedSheets,
+              clearSelection,
+              singleSelect,
               activation,
             });
           } else {
@@ -327,7 +447,9 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               activation,
             });
           }
-          const editResult = spliceActionIntoWorkbook(liveXml, actionXml);
+          const editResult = filterDependencies
+            ? spliceFilterActionWithDependencies(liveXml, actionXml, filterDependencies)
+            : spliceActionIntoWorkbook(liveXml, actionXml);
           if (editResult.isErr()) {
             return editResult.error.toErr();
           }
@@ -350,6 +472,9 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
             if (mode === 'url') {
               return hasUrlActionWithLink(xml, caption, target);
+            }
+            if (mode === 'filter') {
+              return hasFilterActionWithTarget(xml, caption, target);
             }
             return hasActionWithTargetParam(
               xml,
@@ -375,7 +500,9 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 ? 'action applied but the target-group param did not survive readback'
                 : mode === 'url'
                   ? 'action applied but the <link> URL did not survive readback (it may have been dropped or rewritten as a command action)'
-                  : 'action applied but the target-parameter param did not survive readback',
+                  : mode === 'filter'
+                    ? 'action applied but the tsl-filter target did not survive readback (it may have been dropped or rewritten as a different action type)'
+                    : 'action applied but the target-parameter param did not survive readback',
             ).toErr();
           }
 
@@ -397,6 +524,30 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               target,
               url: target,
               hint: 'readback verified the <link> URL action; the source sheet/dashboard must expose marks that drive the action, and any <[Field]> references must resolve on the source view',
+            });
+          }
+          if (mode === 'filter') {
+            const scopeHint =
+              effectiveSourceDashboard.length > 0
+                ? `source scoped to dashboard '${effectiveSourceDashboard}', so target is the dashboard, not a single worksheet; `
+                : '';
+            return new Ok({
+              actionName,
+              caption,
+              mode,
+              sourceWorksheet: effectiveSourceSheet,
+              sourceDashboard: effectiveSourceDashboard,
+              target: target,
+              targetSheet: target,
+              specificFields: {
+                datasourceName: targetDatasource?.name,
+                columnNames: resolvedFields?.map((field) => field.columnName) ?? [],
+              },
+              excludeSheets: effectiveExcludedSheets,
+              clearSelection,
+              singleSelect: singleSelect === true,
+              activation,
+              hint: `readback verified the tsl-filter action; ${scopeHint}Tableau generates the sheet_link group column on the target datasource(s) when the action runs, and the source view must expose marks that drive the filter`,
             });
           }
           return new Ok({
@@ -454,6 +605,29 @@ function nextActionName(xml: string): string {
   return `[Action${n}]`;
 }
 
+// Emit <source> attributes type-first (type, worksheet, dashboard). Attribute order is not
+// semantically meaningful and Tableau re-normalizes it on save, so we keep the shared order the
+// URL-action tests already pin rather than sorting.
+function renderSourceAttrs(sourceWorksheet: string, sourceDashboard: string): string {
+  return (
+    " type='sheet'" +
+    (sourceWorksheet.length > 0 ? ` worksheet='${escapeXml(sourceWorksheet)}'` : '') +
+    (sourceDashboard.length > 0 ? ` dashboard='${escapeXml(sourceDashboard)}'` : '')
+  );
+}
+
+// Serializes the <activation> element uniformly for every action type:
+// click ('on-select') and hover ('on-hover') write a type attribute; the tooltip-menu trigger
+// ('on-menu') writes none. auto-clear (the filter clear-on-empty flag) is written when set.
+function renderActivation(
+  activation: z.infer<typeof activationSchema>,
+  autoClear = false,
+): string {
+  const autoClearAttr = autoClear ? " auto-clear='true'" : '';
+  const typeAttr = activation === 'on-menu' ? '' : ` type='${activation}'`;
+  return `<activation${autoClearAttr}${typeAttr} />`;
+}
+
 function renderParameterAction({
   caption,
   actionName,
@@ -476,7 +650,7 @@ function renderParameterAction({
   params.push(`<param name='target-parameter' value='${escapeXml(targetParameter.trim())}' />`);
   return (
     `<edit-parameter-action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
-    `<activation type='${activation}' />` +
+    renderActivation(activation) +
     `<source type='sheet' worksheet='${escapeXml(sourceWorksheet.trim())}' />` +
     "<agg-type type='attr' />" +
     "<clear-option type='do-nothing' value='s:LROOT:' />" +
@@ -619,7 +793,7 @@ function renderSetAction({
     singleSelect === undefined ? '' : `<single-select value='${singleSelect}' />`;
   return (
     `<edit-group-action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
-    `<activation type='${activation}' />` +
+    renderActivation(activation) +
     `<source type='sheet' worksheet='${escapeXml(sourceWorksheet.trim())}' />` +
     singleSelectXml +
     `<add-or-remove-marks value='${setMembership}' />` +
@@ -660,17 +834,15 @@ function renderUrlAction({
   urlEncode: boolean;
   activation: z.infer<typeof activationSchema>;
 }): string {
-  const sourceAttrs =
-    (sourceWorksheet.length > 0 ? ` worksheet='${escapeXml(sourceWorksheet)}'` : '') +
-    (sourceDashboard.length > 0 ? ` dashboard='${escapeXml(sourceDashboard)}'` : '');
+  const sourceAttrs = renderSourceAttrs(sourceWorksheet, sourceDashboard);
   const excludeChildren = excludeSheets
     .filter((sheet) => sheet.length > 0)
     .map((sheet) => `<exclude-sheet name='${escapeXml(sheet)}' />`)
     .join('');
   const sourceXml =
     excludeChildren.length > 0
-      ? `<source type='sheet'${sourceAttrs}>${excludeChildren}</source>`
-      : `<source type='sheet'${sourceAttrs} />`;
+      ? `<source${sourceAttrs}>${excludeChildren}</source>`
+      : `<source${sourceAttrs} />`;
 
   const urlEscapeAttr = urlEncode ? " url-escape='true'" : '';
   const linkChildren =
@@ -686,9 +858,163 @@ function renderUrlAction({
 
   return (
     `<action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
-    `<activation type='${activation}' />` +
+    renderActivation(activation) +
     sourceXml +
     linkXml +
+    '</action>'
+  );
+}
+
+type ResolvedFilterField = {
+  columnName: string; // bracketed internal name, e.g. "[Category]"
+  datatype: string;
+  role: string;
+  type: string;
+};
+
+// Resolve caller-named filter fields (captions, friendly names, or bracketed names) to their
+// internal column name and datatype/role/type via the shared schema source (summarizeSchema).
+// A missing field is a blocker that lists the available fields, never a silent all-fields fallback.
+function resolveFilterFields(
+  liveXml: string,
+  datasourceName: string,
+  requested: string[],
+): Result<ResolvedFilterField[], ArgsValidationError> {
+  const fields = summarizeSchema(liveXml).fields.filter(
+    (field) => field.datasource === datasourceName,
+  );
+  const available =
+    fields.length > 0
+      ? [...new Set(fields.map((field) => field.caption ?? bareName(field.columnName)))].join(', ')
+      : 'none';
+  const resolved: ResolvedFilterField[] = [];
+  for (const raw of requested) {
+    const token = normalizeReferenceToken(raw).normalize('NFC');
+    // Ignore empty/whitespace-only entries so a raw, untrimmed field list resolves cleanly.
+    if (token.length === 0) {
+      continue;
+    }
+    const match = fields.find(
+      (field) =>
+        field.name.normalize('NFC') === token ||
+        (field.caption !== undefined && field.caption.normalize('NFC') === token) ||
+        bareName(field.columnName).normalize('NFC') === token,
+    );
+    if (match === undefined) {
+      return new ArgsValidationError(
+        `Filter field "${raw}" was not found in datasource ${datasourceName}. Available fields: ${available}`,
+      ).toErr();
+    }
+    resolved.push({
+      columnName: match.columnName,
+      datatype: match.datatype,
+      role: match.role,
+      type: match.type,
+    });
+  }
+  return new Ok(resolved);
+}
+
+// Build the raw tsl: sheet-link expression for a specific-field filter. Each field adds a clause
+// `<urlenc([ds].[field])>~s0=<[ds].[field]~na>` (locator URL-encoded on the left, raw in the <…~na>
+// token on the right), joined with '&'; the caller XML-escapes the result into <link expression>.
+function buildTslExpression(target: string, datasourceName: string, columnNames: string[]): string {
+  const clauses = columnNames.map((columnName) => {
+    const locator = `[${datasourceName}].${columnName}`;
+    return `${encodeURIComponent(locator)}~s0=<${locator}~na>`;
+  });
+  return `tsl:${encodeURIComponent(target)}?${clauses.join('&')}`;
+}
+
+function renderActionDatasource(datasourceElement: DatasourceElement): string {
+  const captionAttr =
+    datasourceElement.caption !== undefined
+      ? `caption='${escapeXml(datasourceElement.caption)}' `
+      : '';
+  return `<datasource ${captionAttr}name='${escapeXml(datasourceElement.name)}' />`;
+}
+
+function renderDependencyColumn(field: ResolvedFilterField): string {
+  return (
+    `<column datatype='${escapeXml(field.datatype)}' name='${escapeXml(field.columnName)}' ` +
+    `role='${escapeXml(field.role)}' type='${escapeXml(field.type)}' />`
+  );
+}
+
+// A filter action is the legacy <action> tag with a <command command='tsc:tsl-filter'> payload;
+// the source's selected marks filter the target. We only author the <action> — Tableau backfills
+// the "sheet_link" <group> column on the target datasource at run time. 
+// Fields come in two shapes (both confirmed against field-observed XML):
+//   All Fields (filterFields undefined) -> a lone <command> with special-fields='all'.
+//   Specific fields (filterFields defined) -> a tsl: <link> of field locators plus a <command> keeping only the target
+//     param, with the fields declared in sibling <datasources>/<datasource-dependencies> blocks
+//     (see spliceFilterActionWithDependencies). 
+function renderFilterAction({
+  caption,
+  actionName,
+  sourceWorksheet,
+  sourceDashboard,
+  target,
+  targetDatasource,
+  resolvedFields,
+  excludeSheets,
+  clearSelection,
+  singleSelect,
+  activation,
+}: {
+  caption: string;
+  actionName: string;
+  sourceWorksheet: string;
+  sourceDashboard: string;
+  target: string;
+  targetDatasource?: DatasourceElement;
+  resolvedFields?: ResolvedFilterField[];
+  excludeSheets: string[];
+  clearSelection: z.infer<typeof clearSelectionSchema>;
+  singleSelect: boolean | undefined;
+  activation: z.infer<typeof activationSchema>;
+}): string {
+  const activationXml = renderActivation(activation, clearSelection !== 'do-nothing');
+
+  const sourceXml = `<source${renderSourceAttrs(sourceWorksheet, sourceDashboard)} />`;
+
+  // The caller resolves the named fields (and only when at least one non-empty field was
+  // requested), so their presence is what marks a specific-field filter; otherwise All Fields.
+  const isSpecificFilter = (resolvedFields?.length ?? 0) > 0;
+
+  // A specific-field filter carries its fields in a tsl: <link> that precedes the <command>,
+  // built from the datasource and columns the caller resolved for the requested fields.
+  const linkXml = isSpecificFilter
+    ? `<link caption='${escapeXml(caption)}' delimiter=',' escape='\\' expression='${escapeXml(
+        buildTslExpression(
+          target,
+          targetDatasource?.name ?? '',
+          (resolvedFields ?? []).map((field) => field.columnName),
+        ),
+      )}' include-null='true' multi-select='true' url-escape='true' />`
+    : '';
+
+  const params: string[] = [];
+  if (excludeSheets.length > 0) {
+    params.push(`<param name='exclude' value='${escapeXml(excludeSheets.join(','))}' />`);
+  }
+  if (clearSelection === 'exclude-all') {
+    params.push("<param name='on-empty' value='none' />");
+  }
+  if (singleSelect === true) {
+    params.push("<param name='single-select' value='' />");
+  }
+  if (!isSpecificFilter) {
+    params.push("<param name='special-fields' value='all' />");
+  }
+  params.push(`<param name='target' value='${escapeXml(target)}' />`);
+
+  return (
+    `<action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
+    activationXml +
+    sourceXml +
+    linkXml +
+    `<command command='tsc:tsl-filter'>${params.join('')}</command>` +
     '</action>'
   );
 }
@@ -723,6 +1049,29 @@ function hasUrlActionWithLink(xml: string, caption: string, expression: string):
   });
 }
 
+// Shared skeleton for the action-dedup guards: iterate every <action> block and report a
+// duplicate when the block's <source> worksheet/dashboard match (attribute-order-independent,
+// via getAttr) AND the type-specific predicate accepts the block's non-source content.
+function hasDuplicateActionForSource(
+  xml: string,
+  sourceWorksheet: string,
+  sourceDashboard: string,
+  matchesTypeSpecific: (block: string) => boolean,
+): boolean {
+  return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) => {
+    const block = match[0];
+    if (!matchesTypeSpecific(block)) {
+      return false;
+    }
+    const sourceTag = block.match(/<source\b[^>]*>/)?.[0];
+    const existingWorksheet =
+      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'worksheet') ?? '');
+    const existingDashboard =
+      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'dashboard') ?? '');
+    return existingWorksheet === sourceWorksheet && existingDashboard === sourceDashboard;
+  });
+}
+
 // Dedup guard: the document-apply path appends, so a same-url + same-source action
 // authored under a different caption would silently double. Caption collision is
 // handled separately by hasActionCaption.
@@ -732,22 +1081,57 @@ function hasUrlActionDuplicate(
   sourceWorksheet: string,
   sourceDashboard: string,
 ): boolean {
-  return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) => {
-    const block = match[0];
+  return hasDuplicateActionForSource(xml, sourceWorksheet, sourceDashboard, (block) => {
     const linkTag = block.match(/<link\b[^>]*>/)?.[0];
     if (linkTag === undefined) {
       return false;
     }
     const linkExpression = getAttr(linkTag, 'expression');
-    if (linkExpression === undefined || unescapeXml(linkExpression) !== expression) {
+    return linkExpression !== undefined && unescapeXml(linkExpression) === expression;
+  });
+}
+
+// Readback predicate for filter mode: the caption-matched legacy <action> must carry a
+// <command command='tsc:tsl-filter'> whose target param survived. An action that
+// persisted under a different command (or lost its target) is not a working filter action.
+function hasFilterActionWithTarget(xml: string, caption: string, target: string): boolean {
+  return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) => {
+    const block = match[0];
+    const openingTag = block.match(/^<action\b[^>]*>/)?.[0];
+    if (openingTag === undefined || unescapeXml(getAttr(openingTag, 'caption') ?? '') !== caption) {
       return false;
     }
-    const sourceTag = block.match(/<source\b[^>]*>/)?.[0];
-    const existingWorksheet =
-      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'worksheet') ?? '');
-    const existingDashboard =
-      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'dashboard') ?? '');
-    return existingWorksheet === sourceWorksheet && existingDashboard === sourceDashboard;
+    const commandTag = block.match(/<command\b[^>]*>/)?.[0];
+    if (commandTag === undefined || getAttr(commandTag, 'command') !== 'tsc:tsl-filter') {
+      return false;
+    }
+    return [...block.matchAll(/<param\b[^>]*>/g)].some(
+      (paramMatch) =>
+        getAttr(paramMatch[0], 'name') === 'target' &&
+        unescapeXml(getAttr(paramMatch[0], 'value') ?? '') === target,
+    );
+  });
+}
+
+// Dedup guard: the document-apply path appends, so a same-source + same-target filter
+// action authored under a different caption would silently double. Caption collision is
+// handled separately by hasActionCaption.
+function hasFilterActionDuplicate(
+  xml: string,
+  target: string,
+  sourceWorksheet: string,
+  sourceDashboard: string,
+): boolean {
+  return hasDuplicateActionForSource(xml, sourceWorksheet, sourceDashboard, (block) => {
+    const commandTag = block.match(/<command\b[^>]*>/)?.[0];
+    if (commandTag === undefined || getAttr(commandTag, 'command') !== 'tsc:tsl-filter') {
+      return false;
+    }
+    return [...block.matchAll(/<param\b[^>]*>/g)].some(
+      (paramMatch) =>
+        getAttr(paramMatch[0], 'name') === 'target' &&
+        unescapeXml(getAttr(paramMatch[0], 'value') ?? '') === target,
+    );
   });
 }
 
@@ -775,6 +1159,130 @@ function spliceActionIntoWorkbook(
   }
   const insertAt = dsClose + '</datasources>'.length;
   return new Ok(`${xml.slice(0, insertAt)}<actions>${actionXml}</actions>${xml.slice(insertAt)}`);
+}
+
+// Splice a specific-field filter action plus its <datasources>/<datasource-dependencies> siblings
+// into the workbook-level <actions> block
+function spliceFilterActionWithDependencies(
+  xml: string,
+  actionXml: string,
+  deps: { datasourceName: string; datasourceXml: string; columnsXml: string[] },
+): Result<string, XmlModificationError> {
+  const actionsOpen = xml.indexOf('<actions>');
+  if (actionsOpen !== -1) {
+    const actionsClose = xml.indexOf('</actions>', actionsOpen);
+    if (actionsClose === -1) {
+      return new XmlModificationError('malformed document: <actions> without </actions>').toErr();
+    }
+    const innerStart = actionsOpen + '<actions>'.length;
+    let inner = xml.slice(innerStart, actionsClose);
+
+    // Peel the nested <datasources> and every <datasource-dependencies> block out of the actions
+    // body; what remains is the run of <action> elements. (The top-level <datasources> sits before
+    // <actions>, so these regexes only ever see the nested copies inside the block.)
+    let nestedDatasources = '';
+    inner = inner.replace(/<datasources>[\s\S]*?<\/datasources>/, (block) => {
+      nestedDatasources = block;
+      return '';
+    });
+    const dependencyBlocks: string[] = [];
+    inner = inner.replace(
+      /<datasource-dependencies\b[\s\S]*?<\/datasource-dependencies>/g,
+      (block) => {
+        dependencyBlocks.push(block);
+        return '';
+      },
+    );
+
+    const mergedActions = `${inner}${actionXml}`;
+    const mergedDatasources = mergeActionDatasources(
+      nestedDatasources,
+      deps.datasourceName,
+      deps.datasourceXml,
+    );
+    const mergedDependencies = mergeDependencyBlocks(
+      dependencyBlocks,
+      deps.datasourceName,
+      deps.columnsXml,
+    );
+
+    return new Ok(
+      `${xml.slice(0, innerStart)}${mergedActions}${mergedDatasources}${mergedDependencies}${xml.slice(actionsClose)}`,
+    );
+  }
+
+  // No <actions> block yet: there are no existing siblings to merge, so build a fresh block and
+  // anchor it right after the top-level </datasources>.
+  const dsClose = xml.indexOf('</datasources>');
+  if (dsClose === -1) {
+    return new XmlModificationError(
+      'cannot place actions: no </datasources> anchor in document',
+    ).toErr();
+  }
+  const insertAt = dsClose + '</datasources>'.length;
+  const actionsBlock =
+    `<actions>${actionXml}` +
+    mergeActionDatasources('', deps.datasourceName, deps.datasourceXml) +
+    mergeDependencyBlocks([], deps.datasourceName, deps.columnsXml) +
+    '</actions>';
+  return new Ok(`${xml.slice(0, insertAt)}${actionsBlock}${xml.slice(insertAt)}`);
+}
+
+// Add the datasource entry to the nested <datasources> block, creating the block if absent and
+// skipping a datasource that is already listed (matched by internal name).
+function mergeActionDatasources(
+  existing: string,
+  datasourceName: string,
+  datasourceXml: string,
+): string {
+  if (existing === '') {
+    return `<datasources>${datasourceXml}</datasources>`;
+  }
+  const present = [...existing.matchAll(/<datasource\b[^>]*\/>/g)].some(
+    (match) => unescapeXml(getAttr(match[0], 'name') ?? '') === datasourceName,
+  );
+  if (present) {
+    return existing;
+  }
+  return existing.replace('</datasources>', `${datasourceXml}</datasources>`);
+}
+
+// Add the columns to the <datasource-dependencies> block for this datasource, creating the block if
+// none matches and appending only columns not already declared (matched by name).
+function mergeDependencyBlocks(
+  blocks: string[],
+  datasourceName: string,
+  columnsXml: string[],
+): string {
+  const index = blocks.findIndex((block) => {
+    const openTag = block.match(/<datasource-dependencies\b[^>]*>/)?.[0];
+    return (
+      openTag !== undefined && unescapeXml(getAttr(openTag, 'datasource') ?? '') === datasourceName
+    );
+  });
+  if (index === -1) {
+    return (
+      blocks.join('') +
+      `<datasource-dependencies datasource='${escapeXml(datasourceName)}'>${columnsXml.join('')}</datasource-dependencies>`
+    );
+  }
+  const block = blocks[index];
+  const existingNames = new Set(
+    [...block.matchAll(/<column\b[^>]*\/>/g)].map((match) =>
+      unescapeXml(getAttr(match[0], 'name') ?? ''),
+    ),
+  );
+  const additions = columnsXml.filter(
+    (column) => !existingNames.has(unescapeXml(getAttr(column, 'name') ?? '')),
+  );
+  const merged = [...blocks];
+  if (additions.length > 0) {
+    merged[index] = block.replace(
+      '</datasource-dependencies>',
+      `${additions.join('')}</datasource-dependencies>`,
+    );
+  }
+  return merged.join('');
 }
 
 function getAttr(tag: string, name: string): string | undefined {

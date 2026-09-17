@@ -215,9 +215,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'dynamic-authoring',
     trigger:
-      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total and LOD)',
+      "a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total, LOD, and filter interactivity such as 'click to filter' or 'highlight to filter', i.e. a filter action triggered by selecting or highlighting/hovering a mark to filter other views, NOT a highlight action that only dims marks), or a request to edit or delete an existing action",
     action:
-      'use author-parameter first, then author-set, author-calc, author-action, and format-worksheets as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+      'use author-parameter first, then author-set, author-calc, author-action, and format-worksheets as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet. Before authoring, consult the knowledge docs via search-knowledge. If the scope is unclear, ask-user (urgency=blocking). Note that author-action only creates actions; it cannot edit or delete, so an ask to edit or delete an existing action is a blocker: ask-user (urgency=blocking) to either delete the original yourself in Tableau Desktop or give explicit permission to create a new action anyway. Do not author until the user picks. A genuinely new action needs no blocker. If create-vs-edit intent is ambiguous, ask-user.',
     toolSequence: [
       'author-parameter',
       'author-set',
@@ -228,9 +228,16 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'list-available-fields',
       'build-worksheets-from-templates',
       'apply-worksheet',
+      'search-knowledge',
+      'ask-user',
     ],
-    stopConditions: ['use author-parameter first'],
-    requiredEvidence: ["each author-* verb's readback-verified result object"],
+    stopConditions: [
+      'use author-parameter first',
+      'author-action only creates actions; it cannot edit or delete'
+    ],
+    requiredEvidence: [
+      "each author-* verb's readback-verified result object. For actions, an interaction test that clicking or hovering over a mark filters the target",
+    ],
   },
   {
     kind: 'prose',
