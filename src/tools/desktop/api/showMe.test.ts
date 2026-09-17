@@ -7,7 +7,7 @@ import {
   MockOverride,
   startMockExternalApiServer,
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
-import { ExternalApiInstance, SHOW_ME_TYPES } from '../../../desktop/externalApi/types.js';
+import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -58,16 +58,36 @@ describe('show-me tool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('declares the 0.2.11 route floor and exact Show Me enum', async () => {
+  it('declares the route floor, workflow guidance, and an extensible Show Me type', async () => {
     const tool = getShowMeTool(new DesktopMcpServer());
     const paramsSchema = await Provider.from(tool.paramsSchema);
 
     expect(tool.minApiVersion).toBe('0.2.11');
-    expect(paramsSchema.showMeType.options).toEqual(SHOW_ME_TYPES);
-    for (const value of SHOW_ME_TYPES) {
-      expect(paramsSchema.showMeType.safeParse(value).success).toBe(true);
+    expect(tool.description).toContain('Call get-show-me-options first');
+    expect(tool.description).toContain('isApplicable value is true');
+    expect(tool.description).toContain(
+      'same worksheet, dataSource, and fieldsSelectedInSchemaViewer context',
+    );
+    expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+    expect(paramsSchema.showMeType.safeParse('native-future-viz').success).toBe(true);
+    expect(paramsSchema.showMeType.safeParse('').success).toBe(false);
+  });
+
+  it('lets Desktop validate a future non-empty Show Me type and surfaces its 400 response', async () => {
+    const harness = await startHarness();
+    try {
+      const result = await harness.callTool({
+        worksheet: WORKSHEET_ID,
+        showMeType: 'native-future-viz',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(showMePosts(harness.server)).toHaveLength(1);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('showMe requires a supported `showMeType`');
+    } finally {
+      await harness.close();
     }
-    expect(paramsSchema.showMeType.safeParse('not-a-show-me-type').success).toBe(false);
   });
 
   it.each([
@@ -265,6 +285,7 @@ describe('show-me tool', () => {
     );
 
     expect(result.isError).toBe(false);
+    expect(sessionResolution.resolveSession).toHaveBeenCalledTimes(1);
     expect(resultBody(result)).toMatchObject({ showMeRequested: true, operationStatus: 'running' });
     expect(String(resultBody(result).message)).toContain('still applying');
   });

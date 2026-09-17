@@ -128,7 +128,7 @@ export type WorksheetSort = {
   clearSort?: boolean;
 };
 
-/** Serialized visualization types accepted by `POST .../worksheets/{id}:showMe`. */
+/** Serialized visualization types known to the captured External API contract. */
 export const SHOW_ME_TYPES = [
   'text',
   'heat',
@@ -161,7 +161,7 @@ export type ShowMeType = (typeof SHOW_ME_TYPES)[number];
 
 /** Body of `POST /v0/workbook/worksheets/{id}:showMe`. */
 export type WorksheetShowMeRequest = {
-  showMeType: ShowMeType;
+  showMeType: string;
   dataSource?: string;
   fieldsSelectedInSchemaViewer?: Array<string>;
 };
