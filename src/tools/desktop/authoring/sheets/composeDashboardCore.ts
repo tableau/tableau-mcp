@@ -5,12 +5,7 @@ import {
   deleteDashboard,
   listWorkbookDashboards,
 } from '../../../../desktop/metadata/dashboards.js';
-import {
-  findAllWorksheets,
-  normalizeArray,
-  parseXML,
-} from '../../../../desktop/metadata/parser.js';
-import type { ParsedWindow } from '../../../../desktop/metadata/types.js';
+import { listWindowedWorksheetNames, parseXML } from '../../../../desktop/metadata/parser.js';
 import { injectTemplate } from '../../../../desktop/templates/injectTemplate.js';
 import { targetDashboardInvariantIssues } from '../../../../desktop/validation/targetDashboardInvariant.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
@@ -514,17 +509,9 @@ export function resolveRenderedWorksheetNames(
   workbookXml: string,
   requestedNames: string[],
 ): Array<string | undefined> {
-  const workbook = parseXML(workbookXml);
-  const worksheetNames = findAllWorksheets(workbook).map((worksheet) => worksheet['@_name']);
-  const worksheetWindowNames = normalizeArray<ParsedWindow>(workbook.workbook?.windows?.window)
-    .filter((window) => window['@_class'] === 'worksheet')
-    .map((window) => window['@_name']);
+  const windowedWorksheetNames = listWindowedWorksheetNames(parseXML(workbookXml));
   return requestedNames.map((requestedName) =>
-    worksheetNames.find(
-      (worksheetName) =>
-        xmlNamesEqual(worksheetName, requestedName) &&
-        worksheetWindowNames.some((windowName) => xmlNamesEqual(windowName, worksheetName)),
-    ),
+    windowedWorksheetNames.find((worksheetName) => xmlNamesEqual(worksheetName, requestedName)),
   );
 }
 
