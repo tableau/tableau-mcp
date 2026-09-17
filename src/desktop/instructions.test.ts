@@ -142,15 +142,13 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     const guidance = routes.find((route) => route.id === 'dynamic-authoring');
 
     expect(guidance).toBeDefined();
-    expect(guidance?.trigger).toContain("'highlight to filter'");
-    expect(guidance?.trigger).toContain("'click to filter'");
-    expect(guidance?.trigger).toContain('NOT a highlight action that only dims marks');
+    expect(guidance?.trigger).toContain('interactivity on mark interaction');
+    expect(guidance?.trigger).toContain('by selecting or hovering over marks');
+    expect(guidance?.trigger).toContain('selecting a link in a tooltip menu');
 
     const rendered = renderInstructionEntry(guidance!);
-    expect(rendered).toContain('author it with author-action mode:filter');
-    expect(rendered).toContain('worksheet vs dashboard scope from the ask, not workbook structure');
-    expect(rendered).toContain('before authoring, consult the knowledge docs via search-knowledge');
-    expect(rendered).toContain('map sourceWorksheet/sourceDashboard/targetSheet');
+    expect(rendered).toContain('author-action');
+    expect(rendered).toContain('Before authoring, consult the knowledge docs via search-knowledge');
     expect(rendered).toContain('If the scope is unclear, ask-user (urgency=blocking)');
   });
 
@@ -158,7 +156,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     const guidance = routes.find((route) => route.id === 'dynamic-authoring');
 
     expect(guidance).toBeDefined();
-    expect(guidance?.trigger).toContain('edit or delete an existing action');
+    expect(guidance?.action).toContain('edit or delete an existing action');
 
     const rendered = renderInstructionEntry(guidance!);
     expect(rendered).toContain('author-action only creates actions; it cannot edit or delete');
@@ -168,7 +166,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('give explicit permission to create a new action anyway');
     expect(rendered).toContain('Do not author until the user picks');
     expect(rendered).toContain('A genuinely new action needs no blocker');
-    expect(rendered).toContain('If create-vs-edit-or-delete intent is ambiguous, ask-user');
+    expect(rendered).toContain('If create-vs-edit intent is ambiguous, ask-user');
   });
 
   it('names add-field then apply-worksheet as the encoding edit path', () => {

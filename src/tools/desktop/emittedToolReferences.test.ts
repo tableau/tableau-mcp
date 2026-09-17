@@ -148,6 +148,7 @@ const NON_TOOL_VOCABULARY = [
   'not-run',
   'on-empty',
   'on-hover',
+  'on-menu',
   'on-select',
   'order-dependent',
   'output-serialization-failed',
@@ -262,12 +263,15 @@ type Candidate = {
   literal: string;
 };
 
-// Every non-test .ts file under src/tools/desktop, plus EXTRA_FILES: a new tool's guidance
-// prose is covered the moment its file lands, with no list to remember to update.
+// Every non-test-support .ts file under src/tools/desktop, plus EXTRA_FILES: a new tool's
+// guidance prose is covered the moment its file lands, with no list to remember to update.
+// Test-support modules (unit tests, mocks, shared fixtures) are scaffolding, not guidance the
+// model ever sees, so skip them all
+const TEST_SUPPORT_RE = /(\.test|\.mock|\.testutils|testfixtures)\.ts$/i;
 function sourceFiles(): string[] {
   return readdirSync(DESKTOP_TOOLS_ROOT, { recursive: true })
     .map(String)
-    .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+    .filter((file) => file.endsWith('.ts') && !TEST_SUPPORT_RE.test(file))
     .map((file) => join(DESKTOP_TOOLS_ROOT, file))
     .concat(EXTRA_FILES.map((file) => join(REPO_ROOT, file)));
 }
