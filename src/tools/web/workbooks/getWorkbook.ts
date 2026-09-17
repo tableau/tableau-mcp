@@ -208,10 +208,13 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
 
 /**
  * Annotates each upstream data source with `isQueryable` by calling VDS's user-has-query-permissions
- * endpoint once per data source (concurrently). Maps the result to:
+ * endpoint. The first data source is probed on its own: if that probe reports a *systemic* failure
+ * (feature-disabled — VDS off site-wide or the endpoint absent on older servers), no data source is
+ * queryable, so every entry is marked `false` and the remaining checks are skipped. Otherwise the
+ * probe result is kept and the remaining data sources are checked concurrently. Each check maps to:
  *  - 200 → the API's `hasQueryPermission` value.
- *  - feature-disabled (feature off site-wide, or endpoint absent on older servers), errorCode
- *    403800 (permission denied), or 404937 (data source not found) → `false`: not queryable.
+ *  - feature-disabled, errorCode 403800 (permission denied), or 404937 (data source not found)
+ *    → `false`: not queryable.
  *  - Anything else (401, transient 429/5xx, zodios-error, thrown) → left unset (indeterminate).
  *
  * Best-effort: a failed check never fails get-workbook.
@@ -230,46 +233,70 @@ export async function enrichUpstreamDatasourceQueryability({
     return workbook;
   }
 
-  const enriched = await Promise.all(
-    upstreamDatasources.map(async (ds) => {
-      let detail: string;
-      try {
-        const result = await vizqlDataServiceMethods.userHasQueryPermissions({
-          datasource: { datasourceLuid: ds.luid },
-        });
-        if (result.isOk()) {
-          return { ...ds, isQueryable: result.value.hasQueryPermission };
-        }
-        // isQueryable is false when the data source is definitively not queryable:
-        // * feature-disabled: VDS is off site-wide or the endpoint is absent (no DS is queryable)
-        // * 403800: the caller lacks permission to query this data source
-        // * 404937: the data source no longer exists
-        if (
-          result.error.type === 'feature-disabled' ||
-          (result.error.type === 'api-error' &&
-            (result.error.errorCode === '403800' || result.error.errorCode === '404937'))
-        ) {
-          return { ...ds, isQueryable: false };
-        }
-        detail = JSON.stringify(result.error);
-      } catch (error) {
-        detail = getExceptionMessage(error);
+  const checkDatasourceQueryability = async (
+    ds: LineageContent,
+  ): Promise<{ datasource: LineageContent; systemic: boolean }> => {
+    let detail: string;
+    try {
+      const result = await vizqlDataServiceMethods.userHasQueryPermissions({
+        datasource: { datasourceLuid: ds.luid },
+      });
+      if (result.isOk()) {
+        return {
+          datasource: { ...ds, isQueryable: result.value.hasQueryPermission },
+          systemic: false,
+        };
       }
+      // feature-disabled is systemic: VDS is off site-wide or the endpoint is absent, so NO data
+      // source is queryable. Flag it so the caller can skip the rest.
+      if (result.error.type === 'feature-disabled') {
+        return { datasource: { ...ds, isQueryable: false }, systemic: true };
+      }
+      // Per-data-source denials are false but not systemic:
+      // * 403800: the caller lacks permission to query this data source
+      // * 404937: the data source no longer exists
+      if (
+        result.error.type === 'api-error' &&
+        (result.error.errorCode === '403800' || result.error.errorCode === '404937')
+      ) {
+        return { datasource: { ...ds, isQueryable: false }, systemic: false };
+      }
+      detail = JSON.stringify(result.error);
+    } catch (error) {
+      detail = getExceptionMessage(error);
+    }
 
-      log(
-        {
-          message: `Could not determine queryability for data source ${ds.luid}`,
-          level: 'warning',
-          logger: 'lineage',
-          data: detail,
-        },
-        extra,
-      );
-      return ds;
-    }),
-  );
+    log(
+      {
+        message: `Could not determine queryability for data source ${ds.luid}`,
+        level: 'warning',
+        logger: 'lineage',
+        data: detail,
+      },
+      extra,
+    );
+    return { datasource: ds, systemic: false };
+  };
 
-  return { ...workbook, upstreamDatasources: enriched };
+  const [first, ...rest] = upstreamDatasources;
+
+  // PROBE: Check the first data source on its own. If it fails systemically (FF is off or endpoint is absent),
+  // we can short-circuit and set isQueryable to false for all data sources without checking the rest.
+  const probe = await checkDatasourceQueryability(first);
+  if (probe.systemic) {
+    return {
+      ...workbook,
+      upstreamDatasources: upstreamDatasources.map((ds) => ({ ...ds, isQueryable: false })),
+    };
+  }
+
+  // The first probe succeeded (or failed non-systemically), so check the rest concurrently.
+  const restEnriched = await Promise.all(rest.map((ds) => checkDatasourceQueryability(ds)));
+
+  return {
+    ...workbook,
+    upstreamDatasources: [probe.datasource, ...restEnriched.map((r) => r.datasource)],
+  };
 }
 
 export function filterWorkbookViews({

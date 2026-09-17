@@ -390,12 +390,13 @@ describe('getWorkbookTool', () => {
     it('sets isQueryable false for every datasource when VDS is systemically unavailable (feature-disabled)', async () => {
       // feature-disabled covers both systemic cases: the feature is off site-wide, or the endpoint
       // is absent on an older server. VDS can't be queried at all, so isQueryable is false for both
-      // published and embedded.
+      // published and embedded. Since the first (probe) check already proves the systemic failure,
+      // the remaining data sources are marked false without another call — exactly one call total.
       mocks.mockUserHasQueryPermissions.mockResolvedValue(Err({ type: 'feature-disabled' }));
 
       const response = await getResponseData({ workbookId });
 
-      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalled();
+      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalledTimes(1);
       expect(response.data.upstreamDatasources).toEqual([
         {
           luid: 'pub-luid-1',
