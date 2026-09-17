@@ -1,6 +1,6 @@
 ---
 name: author-data-app
-description: End-to-end workflow for building a Tableau data app — scaffold a new app with the scaffold-data-app MCP tool (and finalize its postUnzip plan on remote/http), pause for a human to author the extension, then package the workspace into a .twbx and publish it with the MCP publish-workbook flow. Use whenever a user wants to create, build, or publish a Tableau data app.
+description: End-to-end workflow for building a Tableau data app — scaffold a new app with the scaffold-data-app MCP tool (and finalize its postUnzip plan on remote/http), author the extension's query + visualization yourself from the human's stated criteria/vibe, then package the workspace into a .twbx and publish it with the MCP publish-workbook flow. Use whenever a user wants to create, build, or publish a Tableau data app.
 ---
 
 # Author Data App
@@ -9,7 +9,7 @@ Builds a Tableau data app from nothing to published. Walk the phases top to
 bottom.
 
 ```
-1. Scaffold + finalize  →  1.5 Wire datasource*  →  2. Author (human)  →  3. Package  →  4. Publish
+1. Scaffold + finalize  →  1.5 Wire datasource*  →  2. Author (you)  →  3. Package  →  4. Publish
 ```
 
 \* Phase 1.5 is a prerequisite to a *working* app: the name-only
@@ -18,10 +18,14 @@ no datasource at runtime and renders "no data source found." Wire the target
 published datasource into the `.twb` before authoring against it. (Publishing the
 starter as-is to prove packaging works does not need it.)
 
-When the user wants you to actually author the app (not just hand off the
-starter), read the two bundled guides first:
-[design-data-app.md](design-data-app.md) (what to build) and
-[build-data-app.md](build-data-app.md) (how, using this skill's local tools).
+**Division of labor: you write ALL the code, every phase, always — including
+`app.js`.** The human "vibe codes" by describing what they want (criteria,
+theme, vibe, target insights) — they do not write `app.js` themselves. Read
+the two bundled guides before authoring: [design-data-app.md](design-data-app.md)
+(what to build) and [build-data-app.md](build-data-app.md) (how, using this
+skill's local tools). Only skip authoring `app.js` if the human explicitly says
+they want to write it themselves for this app (rare) — in that case hand off
+the workspace path and point them at both guides as their own reference.
 
 There is intentionally **no separate validation phase** — a TWBX cannot be
 pre-validated (Tableau validates extracts/extensions at publish time), so
@@ -151,18 +155,11 @@ nominal); `role: "measure"` gets a `Sum` aggregation, `dimension` a `Count`.
 
 ## Phase 2 — Author
 
-**Default: hand off to the human.** This skill does **not** write app logic on
-its own. The starter `content/src/app.js` carries an `AUTHOR YOUR APP HERE` marker;
-the extension queries its published datasource live and renders a visualization.
-Unless the user asks you to author, **stop and hand off**: tell them the workspace
-path and that they (or a follow-up pass) should edit
-`Packages/com.tableau.mcp.<slug>/content/src/app.js`. Do not fabricate query/chart
-logic unprompted. Resume at phase 3 once they say it's authored (or want to publish
-the starter as-is).
-
-### When the user asks you to author the app
-
-Read [design-data-app.md](design-data-app.md) (what to build) and
+**Always author `app.js` yourself — this is the fixed default, not a
+fallback.** The human vibe-codes: they describe what they want (criteria,
+theme, target insights, audience) and you turn that into the actual
+`ds.queryAsync(...)` → chart implementation. Read
+[design-data-app.md](design-data-app.md) (what to build) and
 [build-data-app.md](build-data-app.md) (how) first, then:
 
 1. **Introspect the datasource.** `list-datasources` → find the LUID →
@@ -189,6 +186,15 @@ Read [design-data-app.md](design-data-app.md) (what to build) and
 5. **There is no local preview.** You cannot see the app render against live data
    while authoring — the visual review happens live in Tableau after publish
    (phase 4).
+
+### Rare exception: the human wants to write `app.js` themselves
+
+Only skip authoring if the human explicitly says they want to write `app.js`
+themselves for this app — an override of the default, not the norm. In that
+case, stop and hand off: tell them the workspace path
+(`Packages/com.tableau.mcp.<slug>/content/src/app.js`) and point them at
+[design-data-app.md](design-data-app.md) and [build-data-app.md](build-data-app.md)
+as their own reference. Resume at phase 3 once they say it's authored.
 
 ---
 
@@ -262,6 +268,8 @@ to Slack clients).
   empty `<datasources />` anchor, and the app silently reaches no data.
 - **Running finalize on a local result.** A result with `filePath` and no
   `postUnzip` is already done; skip straight to phase 3 (after authoring).
-- **Authoring the app yourself unprompted.** Phase 2 is a human handoff by
-  default. Only write `app.js` logic when the user asks.
+- **Handing off `app.js` to the human unprompted.** Phase 2 authoring is the
+  fixed default — always write `app.js` yourself from the human's stated
+  criteria/vibe. Only hand off when the human explicitly says they want to
+  write it themselves.
 - **Shipping OS cruft.** Exclude `.DS_Store` / `__MACOSX` from the `.twbx`.
