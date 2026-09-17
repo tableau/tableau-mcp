@@ -696,6 +696,33 @@ export async function startMockExternalApiServer(
       }
     }
 
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookDiagnostics) {
+      sendJson(res, 200, {
+        worksheets: DEFAULT_WORKSHEETS.map((worksheet) => ({
+          worksheetId: worksheet.id,
+          status: 'complete',
+          invalidFields: [],
+        })),
+      });
+      return;
+    }
+
+    const worksheetDiagnosticsMatch = path.match(
+      /^\/v0\/workbook\/worksheets\/([^/]+)\/diagnostics$/,
+    );
+    if (method === 'GET' && worksheetDiagnosticsMatch) {
+      const worksheetId = decodeURIComponent(worksheetDiagnosticsMatch[1]);
+      const known = DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId);
+      if (!known) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendJson(res, 200, {
+        worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }],
+      });
+      return;
+    }
+
     const dashboardDocumentMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)\/document$/);
     if (dashboardDocumentMatch) {
       const dashboardId = decodeURIComponent(dashboardDocumentMatch[1]);

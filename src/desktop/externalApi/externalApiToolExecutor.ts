@@ -88,10 +88,13 @@ import {
   workbookDashboardsNewRoute,
   workbookDatasourceDocumentRoute,
   workbookDatasourceRoute,
+  WorkbookDiagnostics,
+  workbookDiagnosticsSchema,
   WorkbookInventory,
   workbookInventorySchema,
   workbookStoryboardsNewRoute,
   workbookWorksheetsNewRoute,
+  worksheetDiagnosticsRoute,
   worksheetDocumentRoute,
   worksheetImageRoute,
   WorksheetItem,
@@ -149,6 +152,8 @@ type RawOutcome = {
   state: string | undefined;
   envelopeError: OperationError | undefined;
   warnings: OperationWarning[] | undefined;
+  diagnostics: WorkbookDiagnostics | undefined;
+  diagnosticsInvalid: boolean;
   createdAt: string | undefined;
   completedAt: string | undefined;
   operationId: string | undefined;
@@ -214,6 +219,10 @@ export class ExternalApiToolExecutor {
 
   get desktopInstanceId(): string | undefined {
     return this.http?.instanceId;
+  }
+
+  get desktopApiVersion(): string | undefined {
+    return this.http?.apiVersion;
   }
 
   async executeCommand(
@@ -421,6 +430,61 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async getWorkbookDiagnostics(
+    signal: AbortSignal,
+    expectedInstanceId: string,
+  ): Promise<Result<WorkbookDiagnostics, ExecuteCommandError>> {
+    return this.readPinnedDiagnostics(
+      EXTERNAL_API_ROUTES.workbookDiagnostics,
+      signal,
+      expectedInstanceId,
+    );
+  }
+
+  async getWorksheetDiagnostics(
+    worksheetId: string,
+    signal: AbortSignal,
+    expectedInstanceId: string,
+  ): Promise<Result<WorkbookDiagnostics, ExecuteCommandError>> {
+    const result = await this.readPinnedDiagnostics(
+      worksheetDiagnosticsRoute(worksheetId),
+      signal,
+      expectedInstanceId,
+    );
+    if (result.isErr()) return result;
+    if (
+      result.value.worksheets.length !== 1 ||
+      result.value.worksheets[0]?.worksheetId !== worksheetId
+    ) {
+      return Err({
+        type: 'unknown',
+        error: `Worksheet diagnostics did not return exactly one record for ${worksheetId}.`,
+      });
+    }
+    return result;
+  }
+
+  private async readPinnedDiagnostics(
+    route: string,
+    signal: AbortSignal,
+    expectedInstanceId: string,
+  ): Promise<Result<WorkbookDiagnostics, ExecuteCommandError>> {
+    const result = await this.withRescan('read', (http) => {
+      if (http.instanceId !== expectedInstanceId) {
+        return Promise.resolve(
+          Err({
+            type: 'instance-mismatch' as const,
+            expected: expectedInstanceId,
+            actual: http.instanceId,
+          }),
+        );
+      }
+      return http.getJson(route, workbookDiagnosticsSchema, signal);
+    });
+    if (result.isErr()) return Err(mapClientError(result.error, this.deps.pid));
+    return Ok(result.value);
+  }
+
   async getDashboard(
     dashboardId: string,
     signal: AbortSignal,
@@ -604,10 +668,12 @@ export class ExternalApiToolExecutor {
     worksheetId: string,
     xml: string,
     signal: AbortSignal,
+    options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postXmlEnvelope(worksheetDocumentRoute(worksheetId), xml, signal),
       'apply-worksheet-document',
+      options,
     );
   }
 
@@ -988,11 +1054,18 @@ export class ExternalApiToolExecutor {
 }
 
 function normalizeEnvelope(envelope: OperationEnvelope, apiVersion?: string): RawOutcome {
+  const hasDiagnostics = Object.hasOwn(envelope, 'diagnostics');
+  const parsedDiagnostics = hasDiagnostics
+    ? workbookDiagnosticsSchema.safeParse(envelope['diagnostics'])
+    : undefined;
+  const diagnosticsInvalid = parsedDiagnostics !== undefined && !parsedDiagnostics.success;
   return {
     result: isRecord(envelope.result) ? envelope.result : undefined,
     state: envelope.state,
     envelopeError: envelope.error,
     warnings: envelope.warnings,
+    diagnostics: parsedDiagnostics?.success ? parsedDiagnostics.data : undefined,
+    diagnosticsInvalid,
     createdAt: envelope.createdAt,
     completedAt: envelope.completedAt,
     operationId: envelope.id,
@@ -1043,6 +1116,8 @@ function buildCommandStatus(
     completed_at: outcome.completedAt ?? now,
     ...resultPayload,
     ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
+    ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
+    ...(outcome.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
   });
 }
 

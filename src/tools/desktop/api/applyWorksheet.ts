@@ -18,7 +18,10 @@ import {
   classifyWorksheetPromiseOutcome,
   formatWorksheetPromiseCheck,
 } from '../../../desktop/validation/promise-check.js';
-import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
+import {
+  formatReadbackVerificationWarnings,
+  type ReadbackVerificationResult,
+} from '../../../desktop/validation/readback-verify.js';
 import {
   loadWorksheetXml,
   resolveCanonicalWorksheetName,
@@ -81,17 +84,19 @@ const paramsSchema = {
 const title = 'Updating worksheet';
 
 type ApplyWorksheetResult =
-  | { message: string }
+  | {
+      message: string;
+      title: string;
+      applied: true;
+      retrySafe: false;
+      verification: ReadbackVerificationResult;
+    }
   | {
       artifactId?: string;
       title: string;
       applied: true;
       retrySafe: false;
-      verification: {
-        ok: boolean;
-        status: 'passed' | 'warning' | 'failed' | 'skipped';
-        message?: string;
-      };
+      verification: ReadbackVerificationResult;
     };
 
 export const getApplyWorksheetTool = (
@@ -210,10 +215,11 @@ export const getApplyWorksheetTool = (
                   // A 'done' marker tells the agent to stop; an observed FAILED readback
                   // is the one outcome where stopping buries the failure, so that branch
                   // points at the follow-up work instead of minting a terminal receipt.
-                  verification.status === 'skipped'
+                  verification.status === 'skipped' &&
+                    !isUnsupportedUsedFieldValidation(verification)
                     ? prefillNextAction('Verification unavailable — inspect live worksheet state')
                     : verification.status === 'failed'
-                      ? prefillNextAction('Verification failed — inspect sheet, rebuild artifact')
+                      ? prefillNextAction('Verification failed — diagnose listed findings')
                       : doneNextAction(
                           receipt({
                             did: [
@@ -226,10 +232,10 @@ export const getApplyWorksheetTool = (
                             ],
                             unverified: verificationRan
                               ? [
-                                  'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
+                                  'whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering',
                                 ]
                               : [
-                                  'whether the applied worksheet retained its intended structure — post-apply workbook readback was unavailable',
+                                  'whether the applied worksheet retained its intended structure, or query execution or rendering succeeds — post-apply workbook readback was unavailable',
                                 ],
                           }),
                           'Artifact apply dispatched — see verification',
@@ -299,10 +305,10 @@ export const getApplyWorksheetTool = (
                   retrySafe: false as const,
                   verification,
                 },
-                verification.status === 'skipped'
+                verification.status === 'skipped' && !isUnsupportedUsedFieldValidation(verification)
                   ? prefillNextAction('Verification unavailable — inspect live worksheet state')
                   : verification.status === 'failed'
-                    ? prefillNextAction('Verification failed — inspect sheet, build again')
+                    ? prefillNextAction('Verification failed — diagnose listed findings')
                     : doneNextAction(
                         receipt({
                           did: [
@@ -315,10 +321,10 @@ export const getApplyWorksheetTool = (
                           ],
                           unverified: verificationRan
                             ? [
-                                'whether the sheet renders as intended — readback compared workbook structure, not rendered output',
+                                'whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering',
                               ]
                             : [
-                                'whether the applied worksheet retained its intended structure — post-apply workbook readback was unavailable',
+                                'whether the applied worksheet retained its intended structure, or query execution or rendering succeeds — post-apply workbook readback was unavailable',
                               ],
                         }),
                         'Direct template apply dispatched — see verification',
@@ -427,31 +433,44 @@ export const getApplyWorksheetTool = (
           return new Ok(
             withNextAction(
               {
-                message: `Successfully applied worksheet update for "${appliedWorksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
+                message:
+                  readback?.status === 'failed'
+                    ? `Desktop applied the worksheet update for "${appliedWorksheetName}", but verification found invalid or dropped worksheet state. Diagnose the verification findings; do not retry automatically.${readbackWarning}${hostVerification}`
+                    : `Successfully applied worksheet update for "${appliedWorksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
+                title: appliedWorksheetName,
+                applied: true as const,
+                retrySafe: false as const,
+                verification: readback ?? {
+                  ok: true,
+                  status: 'skipped' as const,
+                  message: 'Post-apply verification was unavailable.',
+                },
               },
-              readback?.status === 'skipped'
+              readback?.status === 'skipped' && !isUnsupportedUsedFieldValidation(readback)
                 ? prefillNextAction('Verification unavailable — inspect live worksheet state')
-                : doneNextAction(
-                    receipt({
-                      did: [
-                        `Desktop accepted the worksheet XML apply for "${appliedWorksheetName}"`,
-                        `preflight validation returned ${receiptInput?.validationWarnings.length ?? 0} warning(s)`,
-                        ...(readbackRan
+                : readback?.status === 'failed'
+                  ? prefillNextAction('Verification failed — diagnose listed findings')
+                  : doneNextAction(
+                      receipt({
+                        did: [
+                          `Desktop accepted the worksheet XML apply for "${appliedWorksheetName}"`,
+                          `preflight validation returned ${receiptInput?.validationWarnings.length ?? 0} warning(s)`,
+                          ...(readbackRan
+                            ? [
+                                `read back the applied worksheet — verification status "${readback.status}", promise outcome "${promiseOutcome}"`,
+                              ]
+                            : []),
+                        ],
+                        unverified: readbackRan
                           ? [
-                              `read back the applied worksheet — verification status "${readback.status}", promise outcome "${promiseOutcome}"`,
+                              'whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering',
                             ]
-                          : []),
-                      ],
-                      unverified: readbackRan
-                        ? [
-                            'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
-                          ]
-                        : [
-                            'whether the applied worksheet retained its intended structure — post-apply readback was unavailable',
-                          ],
-                    }),
-                    'Worksheet apply finished — see verification',
-                  ),
+                          : [
+                              'whether the applied worksheet retained its intended structure, or query execution or rendering succeeds — post-apply readback was unavailable',
+                            ],
+                      }),
+                      'Worksheet apply finished — see verification',
+                    ),
             ),
           );
         },
@@ -462,3 +481,18 @@ export const getApplyWorksheetTool = (
 
   return applyWorksheetTool;
 };
+
+function isUnsupportedUsedFieldValidation(
+  verification: ReadbackVerificationResult | undefined,
+): boolean {
+  const findings = verification?.findings ?? [];
+  return (
+    findings.some(
+      (finding) => finding.source === 'used-field-validity' && finding.reason === 'unsupported-api',
+    ) &&
+    !findings.some(
+      (finding) =>
+        finding.source === 'readback' && finding.reason === 'structural-readback-unavailable',
+    )
+  );
+}
