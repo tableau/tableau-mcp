@@ -208,10 +208,9 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
 /**
  * Annotates each upstream data source with `isQueryable` by calling VDS's user-has-query-permissions
  * endpoint once per data source (concurrently). Maps the result to:
- *  - 200 → Set `isQueryable` to API response's `hasQueryPermission` value.
- *  - 403 (Forbidden) → `false`: VDS authenticated the caller and denied query access, meaning caller cannot query.
- *  - Anything else — Any non-403 HTTP status is not a permission verdict so we leave it unset.
- *    This covers 401 (authentication failure), 404 (no endpoint, feature disabled), thrown errors, etc.
+ *  - 200 → the API's `hasQueryPermission` value.
+ *  - 403, or feature-disabled (404, no endpoint on older servers) → `false`: the caller can't query it.
+ *  - Anything else (401, transient 429/5xx, zodios-error, thrown) → left unset (indeterminate).
  *
  * Best-effort: a failed check never fails get-workbook.
  */
@@ -239,8 +238,13 @@ export async function enrichUpstreamDatasourceQueryability({
         if (result.isOk()) {
           return { ...ds, isQueryable: result.value.hasQueryPermission };
         }
-        // Only a 403 (Forbidden) is a permission verdict.
-        if (result.error.type === 'api-error' && result.error.httpStatus === 403) {
+        // isQueryable is false in these scenarios:
+        // * 403 (feature off or access denied)
+        // * feature-disabled (404, no endpoint on older servers).
+        if (
+          result.error.type === 'feature-disabled' ||
+          (result.error.type === 'api-error' && result.error.httpStatus === 403)
+        ) {
           return { ...ds, isQueryable: false };
         }
         detail = JSON.stringify(result.error);

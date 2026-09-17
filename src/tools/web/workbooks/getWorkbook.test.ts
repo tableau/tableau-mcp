@@ -60,11 +60,20 @@ describe('getWorkbookTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    // Safe defaults: no connections, empty published lineage, and a server that doesn't expose the
-    // has-query-permissions endpoint (feature-disabled), so isQueryable is left unset.
+    // Safe defaults: no connections, empty published lineage, and an indeterminate
+    // has-query-permissions result so isQueryable is left unset and stays out of the
+    // discovery/merge assertions below. Queryability mapping (including feature-disabled → false)
+    // is exercised in the 'isQueryable enrichment' block.
     mocks.mockQueryWorkbookConnections.mockResolvedValue([]);
     mocks.mockGraphql.mockResolvedValue(emptyWorkbookLineage);
-    mocks.mockUserHasQueryPermissions.mockResolvedValue(Err({ type: 'feature-disabled' }));
+    mocks.mockUserHasQueryPermissions.mockResolvedValue(
+      Err({
+        type: 'api-error',
+        message: 'queryability not under test',
+        httpStatus: 503,
+        errorCode: '503800',
+      }),
+    );
   });
 
   afterEach(() => {
@@ -366,17 +375,27 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
-    it('leaves isQueryable unset for every datasource when the endpoint is unavailable', async () => {
-      // feature-disabled means the server doesn't expose the endpoint yet. We still call it, but
-      // can't determine queryability, so isQueryable is left unset for both published and embedded.
+    it('sets isQueryable false for every datasource when the endpoint is unavailable (old server)', async () => {
+      // On older servers the endpoint is absent (404), surfaced as feature-disabled. VDS can't be
+      // queried there, so isQueryable is false for both published and embedded.
       mocks.mockUserHasQueryPermissions.mockResolvedValue(Err({ type: 'feature-disabled' }));
 
       const response = await getResponseData({ workbookId });
 
       expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalled();
       expect(response.data.upstreamDatasources).toEqual([
-        { luid: 'pub-luid-1', name: 'Published DS', datasourceType: 'published' },
-        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: false,
+        },
+        {
+          luid: 'emb-luid-1',
+          name: 'Embedded DS',
+          datasourceType: 'embedded',
+          isQueryable: false,
+        },
       ]);
     });
 
@@ -420,6 +439,38 @@ describe('getWorkbookTool', () => {
               type: 'api-error',
               message:
                 'The user does not have permission to view query permissions for data source emb-luid-1.',
+              httpStatus: 403,
+              errorCode: '403800',
+            }),
+      );
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: true,
+        },
+        {
+          luid: 'emb-luid-1',
+          name: 'Embedded DS',
+          datasourceType: 'embedded',
+          isQueryable: false,
+        },
+      ]);
+    });
+
+    it('sets isQueryable false when the feature is not enabled (403 / errorCode 403800)', async () => {
+      // Feature-disabled arrives as a 403 with errorCode 403800 (same code as a per-datasource
+      // denial, differing only in message). Either way the caller can't query → false.
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        datasource.datasourceLuid === 'pub-luid-1'
+          ? Ok({ hasQueryPermission: true })
+          : Err({
+              type: 'api-error',
+              message: 'The VDSForWorkbookDatasources feature is not enabled.',
               httpStatus: 403,
               errorCode: '403800',
             }),
