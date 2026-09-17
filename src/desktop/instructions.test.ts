@@ -138,9 +138,39 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('mark density unverified');
   });
 
-  // Live incident (v11 bundle): asked to move "warmer" onto color, the agent had no route
-  // for an encoding edit. refine-worksheet handles bounded structural refinements, while
-  // the edit-in-place route still has to name the tool pair that can re-encode a sheet.
+  it('recognizes a filter action in the trigger and defers scope detail to knowledge', () => {
+    const guidance = routes.find((route) => route.id === 'dynamic-authoring');
+
+    expect(guidance).toBeDefined();
+    expect(guidance?.trigger).toContain("'highlight to filter'");
+    expect(guidance?.trigger).toContain("'click to filter'");
+    expect(guidance?.trigger).toContain('NOT a highlight action that only dims marks');
+
+    const rendered = renderInstructionEntry(guidance!);
+    expect(rendered).toContain('author it with author-action mode:filter');
+    expect(rendered).toContain('worksheet vs dashboard scope from the ask, not workbook structure');
+    expect(rendered).toContain('before authoring, consult the knowledge docs via search-knowledge');
+    expect(rendered).toContain('map sourceWorksheet/sourceDashboard/targetSheet');
+    expect(rendered).toContain('If the scope is unclear, ask-user (urgency=blocking)');
+  });
+
+  it('routes edit/delete-an-action asks through ask-user as a blocker', () => {
+    const guidance = routes.find((route) => route.id === 'dynamic-authoring');
+
+    expect(guidance).toBeDefined();
+    expect(guidance?.trigger).toContain('edit or delete an existing action');
+
+    const rendered = renderInstructionEntry(guidance!);
+    expect(rendered).toContain('author-action only creates actions; it cannot edit or delete');
+    expect(rendered).toContain('is a blocker');
+    expect(rendered).toContain('ask-user (urgency=blocking)');
+    expect(rendered).toContain('delete the original yourself in Tableau Desktop');
+    expect(rendered).toContain('give explicit permission to create a new action anyway');
+    expect(rendered).toContain('Do not author until the user picks');
+    expect(rendered).toContain('A genuinely new action needs no blocker');
+    expect(rendered).toContain('If create-vs-edit-or-delete intent is ambiguous, ask-user');
+  });
+
   it('names add-field then apply-worksheet as the encoding edit path', () => {
     const editInPlace = routes.find((route) => route.id === 'edit-in-place');
 
@@ -207,6 +237,8 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'list-available-fields',
       'build-worksheets-from-templates',
       'apply-worksheet',
+      'search-knowledge',
+      'ask-user',
     ]);
     expect(dynamicAuthoring?.action).toContain('build-worksheets-from-templates');
   });
