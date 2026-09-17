@@ -10,6 +10,8 @@ import {
 import { WithExecutorAndAbortSignal } from '../../../../desktop/externalApi/executorTypes.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveUniqueDatasourceName } from '../../../../desktop/metadata/field-resolver.js';
+import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
+import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -78,6 +80,7 @@ export interface AuthorCalcBatchRequest {
 
 export type CalcFailureKind =
   | 'invalid-formula' // validator ran and reported errors for this formula
+  | 'invalid-caption' // apply-calculation rejected the caption (empty, duplicate, or otherwise invalid)
   | 'dependency-failed' // an in-batch calc it references failed; never attempted
   | 'cycle'; // caught in a dependency cycle; never attempted
 // An infra failure of the validate command (transport / non-completed envelope) is NOT a per-calc
@@ -214,10 +217,14 @@ function captionTokens(formula: string): string[] {
  * Authors a batch of calculations with per-calc validation and dependency ordering.
  * Resolves ONE target datasource for the whole batch, activates it once, then walks the
  * dependency layers: within a layer it validates each formula (cascading a failure to any
- * calc that depends on it), then creates the layer's valid calcs in a single whole-document
- * apply. Returns a per-calc outcome; calcs created in earlier layers persist even when a
- * later calc fails (partial success). An unresolvable/failed activation, a caption collision,
- * an empty batch, or a duplicate caption aborts the whole batch with no partial state.
+ * calc that depends on it), then creates each valid calc through the monolith calc-authoring
+ * commands (`tabdoc:create-calc` + `tabdoc:apply-calculation`) rather than injecting a
+ * `<calculation>` column into the document. Tableau assigns the internal Calculation_N name and
+ * infers role/datatype; one workbook readback per layer captures those and feeds sibling caption
+ * references in the next layer. Returns a per-calc outcome; calcs created in earlier layers
+ * persist even when a later calc fails (partial success). An unresolvable/failed activation, a
+ * caption collision, an empty batch, or a duplicate caption aborts the whole batch with no
+ * partial state.
  */
 export async function authorCalculationsWithValidation({
   workbookXml,
@@ -301,7 +308,7 @@ export async function authorCalculationsWithValidation({
       targetResult.value.xml,
       workbookXml,
     );
-    if (existingCalcMatches(existingColumn, resolvedFormula, calc)) {
+    if (existingCalcMatches(existingColumn, resolvedFormula)) {
       idempotentOutcomes.set(index, {
         status: 'created',
         caption: calc.caption,
@@ -427,60 +434,87 @@ export async function authorCalculationsWithValidation({
       continue;
     }
 
-    // Re-resolve the target after every splice: each insertion shifts later offsets.
-    let editedXml = liveXml;
-    const created: Array<{ index: number; calcName: string; caption: string }> = [];
+    // Create each valid calc through the monolith calc-authoring commands (create-calc +
+    // apply-calculation) rather than splicing a <calculation> column. The formula is sent in caption
+    // form; Tableau's calc editor resolves sibling references (including calcs committed in earlier
+    // layers) and assigns the internal Calculation_N name, so nothing is positioned in the document
+    // here.
+    const applied: Array<{ index: number; caption: string }> = [];
     for (const item of toCreate) {
       const calc = specs[item.index];
-      const target = selectTargetDatasource(editedXml, datasourceName);
-      if (target.isErr()) {
-        return target.error.toErr();
-      }
-      const resolvedFormula = resolveCaptionReferences(item.formula, target.value.xml, editedXml);
-      const calcName = nextCalculationName(editedXml, Date.now());
-      const columnXml = renderCalculationColumn({
+      const outcome = await applyCalculationCommand({
         caption: calc.caption,
-        formula: resolvedFormula,
-        role: calc.role,
-        datatype: calc.datatype,
-        calcName,
+        formula: item.formula,
+        datasourceName,
+        executor,
+        signal,
       });
-      editedXml = spliceColumnIntoDatasource(editedXml, target.value, columnXml);
-      created.push({ index: item.index, calcName, caption: calc.caption });
+      if (outcome.status === 'error') {
+        // create-calc/apply-calculation could not run (transport / non-completed envelope /
+        // unrecognized result) — an infra failure, not a verdict on this calc. Abort with the typed
+        // error, matching the set-active-datasource and validate aborts above.
+        return outcome.error.toErr();
+      }
+      if (outcome.status === 'invalid-caption') {
+        outcomes[item.index] = {
+          status: 'failed',
+          caption: calc.caption,
+          failure: 'invalid-caption',
+          message: outcome.message,
+        };
+        continue;
+      }
+      if (outcome.status === 'invalid-formula') {
+        // apply-calculation reports a bad caption reliably but a bad formula only sometimes (the
+        // pre-apply validate catches most). Surface it as invalid-formula when it does.
+        outcomes[item.index] = {
+          status: 'failed',
+          caption: calc.caption,
+          failure: 'invalid-formula',
+          message: outcome.message,
+        };
+        continue;
+      }
+      applied.push({ index: item.index, caption: calc.caption });
     }
 
-    const guard = validateWorkbookDocumentApply(editedXml, liveXml);
-    if (!guard.ok) {
-      return new ArgsValidationError(guard.message).toErr();
+    if (applied.length === 0) {
+      continue;
     }
 
-    const applied = await applyAndVerify({
-      xml: editedXml,
-      baselineXml: liveXml,
+    // One readback per layer confirms the applied calcs committed and captures the internal name
+    // Tableau assigned to each. The commands commit into the live session directly (no document
+    // load), but the commit settles asynchronously, so poll rather than read once — matching
+    // applyAndVerify's contract.
+    const readback = await pollReadback({
+      read: () => getWorkbookXml({ executor, signal }),
       settled: (xml) =>
-        created.every((calc) =>
-          hasColumnNameAndCaptionInDatasource(xml, datasourceName, calc.calcName, calc.caption),
+        applied.every(
+          (calc) => findCalcColumnByCaption(xml, datasourceName, calc.caption) !== undefined,
         ),
-      executor,
       signal,
     });
-    if (applied.status === 'failed') {
-      return applied.error.toErr();
+    if (!readback.ok) {
+      return new DesktopCommandExecutionError(readback.error).toErr();
     }
-    if (applied.status === 'not-applied') {
+    if (!readback.settled) {
       return new XmlModificationError(
-        'load completed but did not apply: readback did not contain the new column name and caption',
+        'apply-calculation completed but did not apply: readback did not contain the new calculation caption',
       ).toErr();
     }
 
-    // The readback is the live base for the next layer, so its dependencies resolve against
-    // the internal names just created.
-    liveXml = applied.workbookXml;
-    for (const calc of created) {
+    // The readback is the live base for the next layer, so its dependencies resolve against the
+    // internal names Tableau just assigned.
+    liveXml = readback.value;
+    for (const calc of applied) {
+      const column = findCalcColumnByCaption(liveXml, datasourceName, calc.caption);
+      // Unreachable when column is undefined: the poll settled only once every applied caption was
+      // present. The empty-string fallback keeps the type honest without an assertion.
+      const calcName = column === undefined ? '' : unescapeXml(getAttr(column, 'name') ?? '');
       outcomes[calc.index] = {
         status: 'created',
         caption: calc.caption,
-        calcName: calc.calcName,
+        calcName,
         datasource: datasourceName,
       };
     }
@@ -555,6 +589,115 @@ async function validateCalcFormula({
     return { status: 'invalid', message: formatValidatorErrors(errors) };
   }
   return { status: 'valid' };
+}
+
+// The three CalcApplyResult wire values apply-calculation returns (monolith codegen/doc/enums.data:
+// CalcApplyResult). 'succeed' is the only success; the two others are per-calc verdicts. The value
+// 'succeed' is confirmed against a live Desktop apply; the key is camelCase (calculationApplyResult),
+// matching the rest of the External API result surface.
+const CALC_APPLY_SUCCEED = 'succeed';
+const CALC_APPLY_INVALID_CAPTION = 'invalid-caption-for-new-calc';
+const CALC_APPLY_INVALID_FORMULA = 'invalid-formula';
+
+type ApplyCalcOutcome =
+  | { status: 'created' }
+  | { status: 'invalid-caption'; message: string }
+  | { status: 'invalid-formula'; message: string }
+  // Infra failure: the command could not run or returned a result we don't recognize. Carries the
+  // typed error so the caller aborts rather than misreporting a verdict on the calc.
+  | { status: 'error'; error: DesktopCommandExecutionError };
+
+// Creates one calculated field through the monolith calc-authoring commands: create-calc opens a
+// pending calc on the active datasource, apply-calculation commits its caption + formula. Tableau
+// assigns the internal Calculation_N name and infers role/datatype, so neither is sent. The
+// datasource is already active (set-active-datasource ran once for the batch); create-calc still
+// takes it explicitly so the pending calc lands on the intended datasource.
+async function applyCalculationCommand({
+  caption,
+  formula,
+  datasourceName,
+  executor,
+  signal,
+}: {
+  caption: string;
+  formula: string;
+  datasourceName: string;
+} & WithExecutorAndAbortSignal): Promise<ApplyCalcOutcome> {
+  const create = await executor.executeCommand({
+    namespace: 'tabdoc',
+    command: 'create-calc',
+    args: { datasource: datasourceName },
+    signal,
+  });
+  if (create.isErr()) {
+    return { status: 'error', error: new DesktopCommandExecutionError(create.error) };
+  }
+  if (create.value.status !== 'completed') {
+    return {
+      status: 'error',
+      error: new DesktopCommandExecutionError(
+        { type: 'command-failed', error: create.value.error },
+        `create-calc did not complete (status: ${create.value.status})`,
+      ),
+    };
+  }
+
+  const apply = await executor.executeCommand({
+    namespace: 'tabdoc',
+    command: 'apply-calculation',
+    args: {
+      'updated-calculation-caption': caption,
+      'updated-calculation-formula': formula,
+    },
+    signal,
+  });
+  if (apply.isErr()) {
+    return { status: 'error', error: new DesktopCommandExecutionError(apply.error) };
+  }
+  if (apply.value.status !== 'completed') {
+    return {
+      status: 'error',
+      error: new DesktopCommandExecutionError(
+        { type: 'command-failed', error: apply.value.error },
+        `apply-calculation did not complete (status: ${apply.value.status})`,
+      ),
+    };
+  }
+
+  const applyResult = apply.value.result?.['calculationApplyResult'];
+  if (applyResult === CALC_APPLY_SUCCEED) {
+    return { status: 'created' };
+  }
+  if (applyResult === CALC_APPLY_INVALID_CAPTION) {
+    return {
+      status: 'invalid-caption',
+      message: applyErrorMessage(apply.value.result, `caption "${caption}" was rejected`),
+    };
+  }
+  if (applyResult === CALC_APPLY_INVALID_FORMULA) {
+    return {
+      status: 'invalid-formula',
+      message: applyErrorMessage(apply.value.result, 'formula was rejected'),
+    };
+  }
+  // A completed apply with a missing/unknown calculationApplyResult means the wire contract
+  // drifted — fail closed rather than report a create that may not have committed (the
+  // W-24061123 false-success failure mode).
+  return {
+    status: 'error',
+    error: new DesktopCommandExecutionError(
+      { type: 'invalid-response', error: apply.value.result },
+      'apply-calculation completed but returned no recognized calculationApplyResult',
+    ),
+  };
+}
+
+// apply-calculation sets DPI_ErrorStr (camelCased on the wire: errorStr) alongside an invalid
+// result. Prefer it when present so the agent sees Desktop's own message; otherwise fall back to a
+// generic description.
+function applyErrorMessage(result: Record<string, unknown> | undefined, fallback: string): string {
+  const errorStr = result?.['errorStr'];
+  return typeof errorStr === 'string' && errorStr.length > 0 ? errorStr : fallback;
 }
 
 // Mirrors the numbered-list format used by XmlValidationError in mcpToolError.ts:447 so agents
@@ -767,26 +910,24 @@ function calculationDatatypesMatch(existing: string, requested: Datatype, role: 
   return numericDatatypes.has(existing) && numericDatatypes.has(requested);
 }
 
-// An existing column is an idempotent match for a requested calc when its stored definition is
-// identical: same normalized formula, same role, a compatible numeric datatype, and no extra
-// default format (the validation path never sets one). Mirrors prepareCalculationBatch's check so
-// author-calc retries behave the same on both authoring paths.
-function existingCalcMatches(
-  existingColumn: string,
-  resolvedFormula: string,
-  calc: Pick<CalcSpec, 'role' | 'datatype'>,
-): boolean {
+// An existing column is an idempotent match for a requested calc when its stored formula is
+// identical and it carries no extra default format (the command path never sets one). Role and
+// datatype are deliberately NOT compared: the command path lets Tableau infer both from the
+// formula, so the caller's requested role/datatype (author-calc defaults to measure/real) need not
+// match what Tableau stored — e.g. a string IF/THEN calc infers to dimension/string. Comparing them
+// would reject an identical retry as a false collision. The formula is the stable identity.
+//
+// This is looser than prepareCalculationBatch's inline check, which still writes role/datatype into
+// the spliced column and so must compare them. The two paths intentionally differ now that
+// author-calc no longer authors role/datatype.
+function existingCalcMatches(existingColumn: string, resolvedFormula: string): boolean {
   const existingFormula = getAttr(existingColumn, 'formula');
   if (existingFormula === undefined) {
     return false;
   }
-  const existingRole = unescapeXml(getAttr(existingColumn, 'role') ?? '');
-  const existingDatatype = unescapeXml(getAttr(existingColumn, 'datatype') ?? '');
   const existingDefaultFormat = unescapeXml(getAttr(existingColumn, 'default-format') ?? '');
   return (
     normalizeFormula(unescapeXml(existingFormula)) === normalizeFormula(resolvedFormula) &&
-    existingRole === calc.role &&
-    calculationDatatypesMatch(existingDatatype, calc.datatype, calc.role) &&
     existingDefaultFormat === ''
   );
 }
@@ -1141,6 +1282,25 @@ function normalizeFormula(formula: string): string {
 function findColumnByCaption(datasourceXml: string, caption: string): string | undefined {
   return findColumnTags(datasourceXml).find(
     (tag) => unescapeXml(getAttr(tag, 'caption') ?? '') === caption,
+  );
+}
+
+// Finds the calculated-field column with the given caption inside the named datasource, returning
+// its full <column> tag so the caller can read the internal name Tableau assigned. Restricted to
+// calc columns (those carrying a <calculation>) so a base field sharing the caption never matches.
+function findCalcColumnByCaption(
+  xml: string,
+  datasourceName: string,
+  caption: string,
+): string | undefined {
+  const datasource = findDatasourceElements(xml).find(
+    (candidate) => candidate.name === datasourceName,
+  );
+  if (datasource === undefined) {
+    return undefined;
+  }
+  return findColumnTags(datasource.xml).find(
+    (tag) => unescapeXml(getAttr(tag, 'caption') ?? '') === caption && tag.includes('<calculation'),
   );
 }
 
