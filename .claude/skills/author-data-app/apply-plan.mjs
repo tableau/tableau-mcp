@@ -4,8 +4,8 @@
  * `postUnzip` plan returned by the `scaffold-data-app` MCP tool.
  *
  * The remote (http) transport returns a plan of the shape:
- *   { instructions, edits: [{ file, replacements: [{ find, replace }] }],
- *     renames: [{ from, to }] }
+ *   { instructions, edits: [{ file, replacements: [{ find, replace, occurrence }] }],
+ *     renames: [{ from, to }], wiresDatasource }
  * where every `file`/`from`/`to` path is relative to the unzip directory and
  * includes the template root dir prefix (e.g. "Data App Name/...").
  *
@@ -14,6 +14,13 @@
  * contents), THEN apply the renames in the given order (deepest paths first,
  * the root dir last). Doing renames before edits would invalidate the edit
  * paths; reordering renames would rename a parent out from under a child.
+ *
+ * Each replacement's `occurrence` is `'first'` (replace only the first
+ * remaining occurrence — used to resolve two textually-identical anchors to
+ * two different values in sequence) or `'all'`/omitted (replace every
+ * occurrence, the default). When `wiresDatasource` is truthy, the plan's
+ * `.twb` edit included datasource-wiring replacements, so the residual-token
+ * check below also verifies no empty `<datasources />` anchor survived.
  *
  * Usage:
  *   node apply-plan.mjs <unzipDir> <planJsonPath>
@@ -26,6 +33,7 @@ import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const PLACEHOLDER_TOKENS = ['TODO-MANIFEST-ID', 'TODO App Name', 'TODO Username via Tableau MCP'];
+const WIRING_ANCHOR_TOKEN = '<datasources />';
 
 function die(message) {
   console.error(`✗ ${message}`);
@@ -70,11 +78,16 @@ for (const { file, replacements } of edits) {
   } catch (error) {
     die(`Edit target missing: ${file} (${error.message})`);
   }
-  for (const { find, replace } of replacements ?? []) {
+  for (const { find, replace, occurrence } of replacements ?? []) {
     if (!content.includes(find)) {
       die(`Placeholder "${find}" not found in ${file} — template/plan out of sync.`);
     }
-    content = content.split(find).join(replace);
+    if (occurrence === 'first') {
+      const idx = content.indexOf(find);
+      content = content.slice(0, idx) + replace + content.slice(idx + find.length);
+    } else {
+      content = content.split(find).join(replace);
+    }
   }
   writeFileSync(abs, content, 'utf8');
   console.error(`  edited  ${file}`);
@@ -110,7 +123,10 @@ for (const { file } of edits) {
   } catch {
     continue;
   }
-  for (const token of PLACEHOLDER_TOKENS) {
+  const tokens = plan.wiresDatasource
+    ? [...PLACEHOLDER_TOKENS, WIRING_ANCHOR_TOKEN]
+    : PLACEHOLDER_TOKENS;
+  for (const token of tokens) {
     if (content.includes(token)) {
       residual.push(`${finalRel}: "${token}"`);
     }

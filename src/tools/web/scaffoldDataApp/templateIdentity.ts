@@ -31,6 +31,13 @@ const PLACEHOLDER_AUTHOR = 'TODO Username via Tableau MCP';
 export interface Replacement {
   find: string;
   replace: string;
+  /**
+   * `'all'` (default when omitted) replaces every occurrence, matching today's
+   * split/join semantics. `'first'` replaces only the first remaining
+   * occurrence — used to resolve two textually-identical anchors (e.g. two
+   * `<datasources />` placeholders) to two different values in sequence.
+   */
+  occurrence?: 'first' | 'all';
 }
 
 export interface FileEdit {
@@ -49,6 +56,8 @@ export interface PostUnzipPlan {
   instructions: string;
   edits: FileEdit[];
   renames: Rename[];
+  /** True when this plan's `.twb` edits include datasource-wiring replacements. */
+  wiresDatasource?: boolean;
 }
 
 export interface DataAppIdentity {
@@ -139,9 +148,19 @@ export function buildTextReplacements(identity: DataAppIdentity): Record<string,
   };
 }
 
-/** Applies literal (non-regex) find/replace edits in order. */
+/**
+ * Applies literal (non-regex) find/replace edits in order. An entry with
+ * `occurrence: 'first'` replaces only the first remaining occurrence of
+ * `find`; all other entries (the default) replace every occurrence.
+ */
 export function applyReplacements(content: string, replacements: Replacement[]): string {
-  return replacements.reduce((acc, { find, replace }) => acc.split(find).join(replace), content);
+  return replacements.reduce((acc, { find, replace, occurrence }) => {
+    if (occurrence === 'first') {
+      const idx = acc.indexOf(find);
+      return idx === -1 ? acc : acc.slice(0, idx) + replace + acc.slice(idx + find.length);
+    }
+    return acc.split(find).join(replace);
+  }, content);
 }
 
 /**
@@ -163,15 +182,55 @@ export function mapToFinalRelativePath(relPath: string, identity: DataAppIdentit
 }
 
 /**
+ * The literal find/replace edits used to wire a published datasource into the
+ * `.twb`'s two empty `<datasources />` anchors (root, then view). See
+ * `datasourceWiring.ts` for how these XML blocks are built.
+ */
+export interface WiringEdits {
+  rootDatasourceXml: string;
+  viewDatasourceXml: string;
+}
+
+/**
  * The plan the remote (http) path returns so the client can finalize the
  * workspace after unzipping the static template: apply every `edits` entry
  * first, then the `renames` in order (deepest paths first, the root dir last).
  * Paths are relative to the unzip directory and include the template root dir.
+ *
+ * When `wiringEdits` is provided, two additional `occurrence: 'first'`
+ * replacements are appended to the `.twb`'s edit entry so the client resolves
+ * the workbook's two empty `<datasources />` anchors (root, then view) to the
+ * given XML blocks, in that order — the root anchor precedes the view anchor
+ * in the file, so two sequential first-occurrence replacements resolve
+ * correctly without needing to locate `<worksheets>`.
  */
-export function buildPostUnzipPlan(identity: DataAppIdentity): PostUnzipPlan {
+export function buildPostUnzipPlan(
+  identity: DataAppIdentity,
+  wiringEdits?: WiringEdits,
+): PostUnzipPlan {
   const root = TEMPLATE_ROOT_DIRNAME;
   const edits: FileEdit[] = Object.entries(buildTextReplacements(identity)).map(
-    ([relPath, replacements]) => ({ file: `${root}/${relPath}`, replacements }),
+    ([relPath, replacements]) => {
+      if (relPath === TWB_RELPATH && wiringEdits) {
+        return {
+          file: `${root}/${relPath}`,
+          replacements: [
+            ...replacements,
+            {
+              find: '<datasources />',
+              replace: wiringEdits.rootDatasourceXml,
+              occurrence: 'first' as const,
+            },
+            {
+              find: '<datasources />',
+              replace: wiringEdits.viewDatasourceXml,
+              occurrence: 'first' as const,
+            },
+          ],
+        };
+      }
+      return { file: `${root}/${relPath}`, replacements };
+    },
   );
   const renames: Rename[] = [
     {
@@ -186,5 +245,6 @@ export function buildPostUnzipPlan(identity: DataAppIdentity): PostUnzipPlan {
       'Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.',
     edits,
     renames,
+    ...(wiringEdits ? { wiresDatasource: true } : {}),
   };
 }

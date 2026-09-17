@@ -2,16 +2,21 @@ import { existsSync, statSync } from 'fs';
 import { mkdtemp, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../config.js';
-import { stubDefaultEnvVars } from '../../../testShared.js';
+import { stubDefaultEnvVars, testProductVersion } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { exportedForTesting } from '../s3Client.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { createDataAppWorkspace } from './dataAppWorkspaceStore.js';
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   getSignedUrl: vi.fn(),
+  mockResolveDatasourceDescriptor: vi.fn(),
+  mockBuildDatasourceWiringEdits: vi.fn(),
+  originalBuildDatasourceWiringEdits: undefined as ((...args: unknown[]) => unknown) | undefined,
 }));
 
 vi.mock('@aws-sdk/client-s3', () => ({
@@ -24,6 +29,26 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: mocks.getSignedUrl,
 }));
 
+vi.mock('./datasourceWiring.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./datasourceWiring.js')>();
+  mocks.originalBuildDatasourceWiringEdits = original.buildDatasourceWiringEdits;
+  return {
+    ...original,
+    resolveDatasourceDescriptor: mocks.mockResolveDatasourceDescriptor,
+    buildDatasourceWiringEdits: mocks.mockBuildDatasourceWiringEdits,
+  };
+});
+
+const wiredDescriptor = {
+  caption: 'Superstore',
+  repositoryId: 'superstore',
+  site: 'tc25',
+  server: 'test.tableau.com',
+  channel: 'https',
+  port: 443,
+  fields: [{ name: 'Profit', datatype: 'real', role: 'measure' as const }],
+};
+
 describe('createDataAppWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -32,6 +57,9 @@ describe('createDataAppWorkspace', () => {
     exportedForTesting.resetS3Bundle();
     mocks.send.mockResolvedValue({});
     mocks.getSignedUrl.mockResolvedValue('https://s3.example.com/signed-template-url');
+    mocks.mockBuildDatasourceWiringEdits.mockImplementation(
+      mocks.originalBuildDatasourceWiringEdits,
+    );
   });
 
   afterEach(() => {
@@ -55,6 +83,8 @@ describe('createDataAppWorkspace', () => {
         datappName: 'Sales Demo',
         username: 'jdoe',
         config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
@@ -108,7 +138,12 @@ describe('createDataAppWorkspace', () => {
     });
 
     it('falls back to "Tableau MCP" author when no username is provided', async () => {
-      const result = await createDataAppWorkspace({ datappName: 'No User', config: getConfig() });
+      const result = await createDataAppWorkspace({
+        datappName: 'No User',
+        config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
+      });
       invariant(result.isOk());
       const value = result.value;
       invariant(value.filePath);
@@ -123,20 +158,79 @@ describe('createDataAppWorkspace', () => {
     });
 
     it('refuses to overwrite an existing workspace', async () => {
-      const first = await createDataAppWorkspace({ datappName: 'Dupe', config: getConfig() });
+      const first = await createDataAppWorkspace({
+        datappName: 'Dupe',
+        config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
+      });
       expect(first.isOk()).toBe(true);
 
-      const second = await createDataAppWorkspace({ datappName: 'Dupe', config: getConfig() });
+      const second = await createDataAppWorkspace({
+        datappName: 'Dupe',
+        config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
+      });
       invariant(second.isErr());
       expect(second.error.message).toContain('already exists');
     });
 
     it('rejects names that would escape the workspace root', async () => {
       for (const datappName of ['a/b', '..']) {
-        const result = await createDataAppWorkspace({ datappName, config: getConfig() });
+        const result = await createDataAppWorkspace({
+          datappName,
+          config: getConfig(),
+          extra: getMockRequestHandlerExtra(),
+          productVersion: testProductVersion,
+        });
         invariant(result.isErr());
         expect(result.error.message).toContain('Invalid data app name');
       }
+    });
+
+    it('wires the resolved datasource into the .twb when datasourceLuid is given', async () => {
+      mocks.mockResolveDatasourceDescriptor.mockResolvedValue(new Ok(wiredDescriptor));
+
+      const result = await createDataAppWorkspace({
+        datappName: 'Wired Demo',
+        config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
+        datasourceLuid: 'ds-luid-123',
+        fields: ['Profit'],
+      });
+
+      invariant(result.isOk(), result.isErr() ? result.error.message : '');
+      invariant(result.value.filePath);
+      expect(mocks.mockResolveDatasourceDescriptor).toHaveBeenCalledWith(
+        expect.objectContaining({ datasourceLuid: 'ds-luid-123', fieldNames: ['Profit'] }),
+      );
+
+      const twb = await readFile(join(result.value.filePath, 'Wired Demo.twb'), 'utf8');
+      expect(twb).not.toContain('<datasources />');
+      expect(twb).toContain('Superstore');
+    });
+
+    it('returns DataAppWiringFailedError when applying the wiring edits throws', async () => {
+      mocks.mockResolveDatasourceDescriptor.mockResolvedValue(new Ok(wiredDescriptor));
+      mocks.mockBuildDatasourceWiringEdits.mockReturnValue({
+        connectionName: 'sqlproxy.abc',
+        rootDatasourceXml: "<datasource name='sqlproxy.abc' />",
+        viewDatasourceXml: "<datasource name='sqlproxy.abc' />",
+      });
+
+      const result = await createDataAppWorkspace({
+        datappName: 'Broken Wiring',
+        config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
+        datasourceLuid: 'ds-luid-123',
+      });
+
+      invariant(result.isErr());
+      expect(result.error.type).toBe('data-app-wiring-failed');
+      expect(result.error.message).toContain('wiring incomplete');
     });
   });
 
@@ -155,6 +249,8 @@ describe('createDataAppWorkspace', () => {
         datappName: 'Sales Demo',
         username: 'jdoe',
         config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
@@ -182,7 +278,12 @@ describe('createDataAppWorkspace', () => {
       vi.stubEnv('MCP_S3_BUCKET', 'tmpl-bucket');
       vi.stubEnv('DATA_APP_TEMPLATE_S3_KEY', '');
 
-      const result = await createDataAppWorkspace({ datappName: 'X', config: getConfig() });
+      const result = await createDataAppWorkspace({
+        datappName: 'X',
+        config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
+      });
       invariant(result.isErr());
       expect(result.error.message).toContain('DATA_APP_TEMPLATE_S3_KEY');
       expect(mocks.getSignedUrl).not.toHaveBeenCalled();
@@ -192,9 +293,34 @@ describe('createDataAppWorkspace', () => {
       vi.stubEnv('MCP_S3_BUCKET', '');
       vi.stubEnv('DATA_APP_TEMPLATE_S3_KEY', 'templates/data-app.zip');
 
-      const result = await createDataAppWorkspace({ datappName: 'X', config: getConfig() });
+      const result = await createDataAppWorkspace({
+        datappName: 'X',
+        config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
+      });
       invariant(result.isErr());
       expect(result.error.message).toContain('MCP_S3_BUCKET');
+    });
+
+    it('embeds the wiring edits in the post-unzip plan when datasourceLuid is given', async () => {
+      vi.stubEnv('MCP_S3_BUCKET', 'tmpl-bucket');
+      vi.stubEnv('DATA_APP_TEMPLATE_S3_KEY', 'templates/data-app.zip');
+      mocks.mockResolveDatasourceDescriptor.mockResolvedValue(new Ok(wiredDescriptor));
+
+      const result = await createDataAppWorkspace({
+        datappName: 'Sales Demo',
+        config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
+        datasourceLuid: 'ds-luid-123',
+        fields: ['Profit'],
+      });
+
+      invariant(result.isOk(), result.isErr() ? result.error.message : '');
+      invariant(result.value.postUnzip);
+      expect(result.value.postUnzip.wiresDatasource).toBe(true);
+      expect(JSON.stringify(result.value.postUnzip)).toContain('Superstore');
     });
   });
 });

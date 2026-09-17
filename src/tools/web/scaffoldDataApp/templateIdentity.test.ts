@@ -95,6 +95,28 @@ describe('applyReplacements', () => {
     ]);
     expect(out).toBe('id=com.tableau.mcp.x name=My App');
   });
+
+  it('replaces every occurrence by default (or when occurrence is "all")', () => {
+    expect(applyReplacements('<a/><a/>', [{ find: '<a/>', replace: 'X' }])).toBe('XX');
+    expect(applyReplacements('<a/><a/>', [{ find: '<a/>', replace: 'X', occurrence: 'all' }])).toBe(
+      'XX',
+    );
+  });
+
+  it('with occurrence: "first", replaces only the first remaining occurrence, leaving later occurrences intact for a subsequent entry', () => {
+    const out = applyReplacements('<a/><a/>', [
+      { find: '<a/>', replace: 'ROOT', occurrence: 'first' },
+      { find: '<a/>', replace: 'VIEW', occurrence: 'first' },
+    ]);
+    expect(out).toBe('ROOTVIEW');
+  });
+
+  it('with occurrence: "first", is a no-op when find does not appear', () => {
+    const out = applyReplacements('no anchors here', [
+      { find: '<a/>', replace: 'X', occurrence: 'first' },
+    ]);
+    expect(out).toBe('no anchors here');
+  });
 });
 
 describe('mapToFinalRelativePath', () => {
@@ -143,5 +165,48 @@ describe('buildPostUnzipPlan', () => {
       },
       { from: TEMPLATE_ROOT_DIRNAME, to: 'Sales Demo' },
     ]);
+  });
+
+  it('leaves wiresDatasource unset and the .twb edits unchanged when wiringEdits is omitted', () => {
+    const identity = deriveIdentity('Sales Demo', 'jsmith@example.com');
+    const plan = buildPostUnzipPlan(identity);
+
+    expect(plan.wiresDatasource).toBeUndefined();
+    const twbEdit = plan.edits.find((e) => e.file === `${TEMPLATE_ROOT_DIRNAME}/${TWB_RELPATH}`);
+    expect(twbEdit?.replacements).toEqual([
+      { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
+      { find: 'TODO App Name', replace: 'Sales Demo' },
+    ]);
+  });
+
+  it('sets wiresDatasource and appends two ordered occurrence:"first" <datasources /> replacements to the .twb edit when wiringEdits is given', () => {
+    const identity = deriveIdentity('Sales Demo', 'jsmith@example.com');
+    const plan = buildPostUnzipPlan(identity, {
+      rootDatasourceXml: '<datasources>ROOT</datasources>',
+      viewDatasourceXml: '<datasources>VIEW</datasources>',
+    });
+
+    expect(plan.wiresDatasource).toBe(true);
+    const twbEdit = plan.edits.find((e) => e.file === `${TEMPLATE_ROOT_DIRNAME}/${TWB_RELPATH}`);
+    expect(twbEdit?.replacements).toEqual([
+      { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
+      { find: 'TODO App Name', replace: 'Sales Demo' },
+      {
+        find: '<datasources />',
+        replace: '<datasources>ROOT</datasources>',
+        occurrence: 'first',
+      },
+      {
+        find: '<datasources />',
+        replace: '<datasources>VIEW</datasources>',
+        occurrence: 'first',
+      },
+    ]);
+
+    // Other files' edits are untouched by wiringEdits.
+    const manifestEdit = plan.edits.find(
+      (e) => e.file === `${TEMPLATE_ROOT_DIRNAME}/${MANIFEST_RELPATH}`,
+    );
+    expect(manifestEdit?.replacements.some((r) => r.occurrence)).toBe(false);
   });
 });

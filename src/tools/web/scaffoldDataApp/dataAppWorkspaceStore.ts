@@ -19,12 +19,21 @@ import { Ok, Result } from 'ts-results-es';
 import { Config } from '../../../config.js';
 import {
   DataAppTemplateUnavailableError,
+  DataAppWiringFailedError,
   DataAppWorkspaceExistsError,
   InvalidDataAppNameError,
   McpToolError,
 } from '../../../errors/mcpToolError.js';
+import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { presignGetObjectUrl } from '../s3Client.js';
+import { TableauWebRequestHandlerExtra } from '../toolContext.js';
+import {
+  applyDatasourceWiring,
+  buildDatasourceWiringEdits,
+  DatasourceWiringEdits,
+  resolveDatasourceDescriptor,
+} from './datasourceWiring.js';
 import {
   applyReplacements,
   buildPostUnzipPlan,
@@ -34,6 +43,7 @@ import {
   mapToFinalRelativePath,
   PostUnzipPlan,
   TEMPLATE_ROOT_DIRNAME,
+  TWB_RELPATH,
 } from './templateIdentity.js';
 
 /**
@@ -85,26 +95,50 @@ export async function createDataAppWorkspace({
   datappName,
   username,
   config,
+  extra,
+  productVersion,
+  datasourceLuid,
+  fields,
 }: {
   datappName: string;
   username?: string;
   config: Config;
+  extra: TableauWebRequestHandlerExtra;
+  productVersion: ProductVersion;
+  datasourceLuid?: string;
+  fields?: string[];
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName, username);
 
+  let wiringEdits: DatasourceWiringEdits | undefined;
+  if (datasourceLuid) {
+    const descriptorResult = await resolveDatasourceDescriptor({
+      datasourceLuid,
+      fieldNames: fields,
+      extra,
+      productVersion,
+    });
+    if (descriptorResult.isErr()) {
+      return descriptorResult;
+    }
+    wiringEdits = buildDatasourceWiringEdits(descriptorResult.value);
+  }
+
   return config.transport === 'http'
-    ? await createRemoteWorkspace({ datappName, identity, config })
-    : await createLocalWorkspace({ datappName, identity, config });
+    ? await createRemoteWorkspace({ datappName, identity, config, wiringEdits })
+    : await createLocalWorkspace({ datappName, identity, config, wiringEdits });
 }
 
 async function createRemoteWorkspace({
   datappName,
   identity,
   config,
+  wiringEdits,
 }: {
   datappName: string;
   identity: DataAppIdentity;
   config: Config;
+  wiringEdits?: DatasourceWiringEdits;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   if (!config.bucketS3.enabled || !config.dataAppTemplateS3Key) {
     return new DataAppTemplateUnavailableError(
@@ -132,7 +166,7 @@ async function createRemoteWorkspace({
   return new Ok({
     datappName,
     s3URL,
-    postUnzip: buildPostUnzipPlan(identity),
+    postUnzip: buildPostUnzipPlan(identity, wiringEdits),
   });
 }
 
@@ -140,10 +174,12 @@ async function createLocalWorkspace({
   datappName,
   identity,
   config,
+  wiringEdits,
 }: {
   datappName: string;
   identity: DataAppIdentity;
   config: Config;
+  wiringEdits?: DatasourceWiringEdits;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const resolvedRoot = resolve(config.dataAppWorkspaceRoot);
   const dest = resolve(resolvedRoot, datappName);
@@ -179,7 +215,17 @@ async function createLocalWorkspace({
       const edits = replacements[rel];
       if (edits) {
         const original = await readFile(join(templateRoot, ...rel.split('/')), 'utf8');
-        await writeFile(finalPath, applyReplacements(original, edits), 'utf8');
+        let finalContent = applyReplacements(original, edits);
+        if (rel === TWB_RELPATH && wiringEdits) {
+          try {
+            finalContent = applyDatasourceWiring(finalContent, wiringEdits);
+          } catch (error) {
+            return new DataAppWiringFailedError(
+              `Failed to wire the datasource into the workbook: ${getExceptionMessage(error)}.`,
+            ).toErr();
+          }
+        }
+        await writeFile(finalPath, finalContent, 'utf8');
       } else {
         await writeFile(finalPath, await readFile(join(templateRoot, ...rel.split('/'))));
       }
