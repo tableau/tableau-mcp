@@ -1,33 +1,31 @@
 /**
- * Domain-backed adapter for the agent-facing field resolver (trial).
+ * Workbook-level field resolver (heuristics) — NOT part of the metadata model.
  *
- * Reproduces the `resolveField(workbookXml, query, options): FieldResolution`
- * contract from `field-resolver.ts`, but built entirely on the domain layer
- * (`datasource.ts`): `toDatasources` builds first-class Datasources, the
- * per-datasource `resolveField(ds, …)` does the matching, and this module only
- * adds the *workbook-level* concerns the domain layer deliberately leaves out —
- * cross-datasource ambiguity and datasource-caption → internal-name selection.
+ * Reproduces the agent-facing `resolveField(workbookXml, query, options):
+ * FieldResolution` contract on top of the metadata model + the per-datasource
+ * `resolveField` heuristics. It adds only the workbook-level concerns the
+ * per-datasource resolver deliberately leaves out: cross-datasource ambiguity
+ * and datasource-caption → internal-name selection.
  *
- * Purpose: prove the domain layer can back a real consumer end-to-end. It runs
- * alongside the legacy resolver and is checked against it in
- * `field-resolver-domain.test.ts` (parity over the real fixtures). Nothing in
- * production calls this yet — wiring it in is the reviewed step-4 cutover.
+ * Purpose (trial): prove the domain layer can back a real consumer end-to-end.
+ * Checked against the legacy resolver in `workbook-resolver.test.ts` (parity
+ * over the real fixtures). Nothing in production calls this yet — wiring it in
+ * is the reviewed cutover.
  */
 import {
   type Datasource,
   defaultInstance,
   type Field,
   isGlobalFieldName,
-  type Resolution,
-  resolveField as resolveInDatasource,
   toDatasources,
-} from './datasource.js';
+} from '../metadata/datasource.js';
 import {
   type FieldCandidate,
   type FieldResolution,
   type FieldResolveOptions,
   resolveUniqueDatasourceName,
-} from './field-resolver.js';
+} from '../metadata/field-resolver.js';
+import { type Resolution, resolveField as resolveInDatasource } from './resolve.js';
 
 function toCandidate(ds: Datasource, field: Field): FieldCandidate {
   return {

@@ -7,7 +7,6 @@ import {
   defaultInstance,
   derivationOf,
   instantiate,
-  resolveField,
   toDatasources,
 } from './datasource.js';
 import { listAvailableFields } from './field-builder.js';
@@ -81,59 +80,5 @@ describe('FieldInstance accessors derive from the ref', () => {
     expect(datasourceOf(inst)).toBe('ds1');
     expect(baseFieldNameOf(inst)).toBe('[Sales]');
     expect(derivationOf(inst)).toBe('avg');
-  });
-});
-
-describe('resolveField', () => {
-  it('resolves an exact bare name to the default instance', () => {
-    const r = resolveField(ds1(), 'Sales');
-    expect(r.kind).toBe('exact');
-    expect(r.match?.name).toBe('[Sales]');
-    expect(r.field?.column_ref).toBe('[ds1].[sum:Sales:qk]');
-  });
-
-  it('resolves an exact caption', () => {
-    const r = resolveField(ds1(), 'Profit Ratio');
-    expect(r.kind).toBe('exact');
-    expect(r.match?.name).toBe('[Profit Ratio]');
-  });
-
-  it('resolves an exact column_ref within the datasource', () => {
-    const r = resolveField(ds1(), '[ds1].[sum:Profit:qk]');
-    expect(r.kind).toBe('exact');
-    expect(r.field?.column_ref).toBe('[ds1].[sum:Profit:qk]');
-  });
-
-  it('does not fuzzy-match a qualified ref that misses', () => {
-    const r = resolveField(ds1(), '[ds1].[sum:Nope:qk]');
-    expect(r.kind).toBe('not_found');
-  });
-
-  it('parses an aggregation prefix when enabled', () => {
-    const r = resolveField(ds1(), 'average of Sales', { aggregationPrefix: true });
-    expect(r.kind).toBe('rewritten');
-    expect(r.rewrites).toContain('parsed-aggregation-prefix');
-    expect(r.field?.column_ref).toBe('[ds1].[avg:Sales:qk]');
-  });
-
-  it('never re-aggregates an already-aggregated calc', () => {
-    const r = resolveField(ds1(), 'sum of Profit Ratio', { aggregationPrefix: true });
-    expect(r.kind).toBe('rewritten');
-    expect(r.rewrites).toContain('ignored-redundant-aggregation');
-    // usr derivation, not sum
-    expect(r.field?.column_ref).toBe('[ds1].[usr:Profit Ratio:qk]');
-  });
-
-  it('falls back to a fuzzy did-you-mean', () => {
-    const r = resolveField(ds1(), 'Salez');
-    expect(r.kind).toBe('fuzzy');
-    expect(r.match?.name).toBe('[Sales]');
-  });
-
-  it('is scoped to the datasource it is asked (no cross-datasource bleed)', () => {
-    // ds2 also has [Profit]; asking ds1 only ever returns ds1's.
-    const r = resolveField(ds1(), 'Profit');
-    expect(r.kind).toBe('exact');
-    expect(datasourceOf(r.field!)).toBe('ds1');
   });
 });

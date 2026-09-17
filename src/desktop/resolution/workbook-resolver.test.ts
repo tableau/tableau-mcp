@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { type FieldResolution, type FieldResolveOptions, resolveField } from './field-resolver.js';
-import { resolveFieldViaDomain } from './field-resolver-domain.js';
+import {
+  type FieldResolution,
+  type FieldResolveOptions,
+  resolveField,
+} from '../metadata/field-resolver.js';
+import { resolveFieldViaDomain } from './workbook-resolver.js';
 
 // Same fixtures the legacy resolver test uses — the domain adapter is checked
 // against the legacy resolver as the parity oracle on each one.
