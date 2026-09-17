@@ -398,9 +398,6 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             });
           } else if (mode === 'filter') {
             target = effectiveTargetSheet;
-            const targetIsDashboard = findSheetNames(liveXml, 'dashboards', 'dashboard').has(
-              target,
-            );
             const hasFilterFields = (filterFields ?? []).some((field) => field.trim().length > 0);
             if (hasFilterFields) {
               const datasourceResult = selectTargetDatasource(liveXml, datasource);
@@ -619,10 +616,7 @@ function renderSourceAttrs(sourceWorksheet: string, sourceDashboard: string): st
 // Serializes the <activation> element uniformly for every action type:
 // click ('on-select') and hover ('on-hover') write a type attribute; the tooltip-menu trigger
 // ('on-menu') writes none. auto-clear (the filter clear-on-empty flag) is written when set.
-function renderActivation(
-  activation: z.infer<typeof activationSchema>,
-  autoClear = false,
-): string {
+function renderActivation(activation: z.infer<typeof activationSchema>, autoClear = false): string {
   const autoClearAttr = autoClear ? " auto-clear='true'" : '';
   const typeAttr = activation === 'on-menu' ? '' : ` type='${activation}'`;
   return `<activation${autoClearAttr}${typeAttr} />`;
@@ -943,12 +937,12 @@ function renderDependencyColumn(field: ResolvedFilterField): string {
 
 // A filter action is the legacy <action> tag with a <command command='tsc:tsl-filter'> payload;
 // the source's selected marks filter the target. We only author the <action> — Tableau backfills
-// the "sheet_link" <group> column on the target datasource at run time. 
+// the "sheet_link" <group> column on the target datasource at run time.
 // Fields come in two shapes (both confirmed against field-observed XML):
 //   All Fields (filterFields undefined) -> a lone <command> with special-fields='all'.
 //   Specific fields (filterFields defined) -> a tsl: <link> of field locators plus a <command> keeping only the target
 //     param, with the fields declared in sibling <datasources>/<datasource-dependencies> blocks
-//     (see spliceFilterActionWithDependencies). 
+//     (see spliceFilterActionWithDependencies).
 function renderFilterAction({
   caption,
   actionName,
