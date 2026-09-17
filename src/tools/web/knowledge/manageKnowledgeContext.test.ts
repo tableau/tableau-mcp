@@ -84,6 +84,27 @@ describe('manageKnowledgeContextTool', () => {
     expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-tools');
   });
 
+  it('exposes only parameters relevant to each management action', async () => {
+    const schema = await Provider.from(getTool().paramsSchema);
+    expect(schema).toHaveProperty('safeParse', expect.any(Function));
+    if (!('safeParse' in schema)) return;
+
+    expect(schema.safeParse({ action: 'delete', contextId: 'ctx-1' }).success).toBe(true);
+    expect(schema.safeParse({ action: 'delete' }).success).toBe(false);
+    expect(schema.safeParse({ action: 'delete', contextId: 'ctx-1', statements: [] }).success).toBe(
+      false,
+    );
+    expect(
+      schema.safeParse({
+        action: 'create',
+        statements: [{ statement: 'AOV = revenue / orders' }],
+        isGlobal: true,
+      }).success,
+    ).toBe(true);
+    expect(schema.safeParse({ action: 'create', statements: [] }).success).toBe(false);
+    expect(schema.safeParse({ action: 'status', contextId: 'ctx-1' }).success).toBe(false);
+  });
+
   it('uses conservative mutation annotations and requires both Knowledge scopes', async () => {
     const tool = getTool();
 
@@ -221,20 +242,13 @@ describe('manageKnowledgeContextTool', () => {
   });
 
   it('rejects create without statements', async () => {
-    const result = await getResult({ action: 'create', isGlobal: true });
+    const result = await parseParams({ action: 'create', isGlobal: true });
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0]).toMatchObject({
-      type: 'text',
-      text: expect.stringContaining('statements'),
-    });
+    expect(result.success).toBe(false);
     expect(mocks.createSemanticStatements).not.toHaveBeenCalled();
   });
 
   it('deletes a context by exact contextId without overstating the result', async () => {
-    const actionSchema = (await Provider.from(getTool().paramsSchema)).action;
-    expect(actionSchema.safeParse('delete').success).toBe(true);
-
     const out = payload(
       await getResult({ action: 'delete', graphId: 'graph-1', contextId: 'ctx-1' }),
     );
@@ -251,13 +265,9 @@ describe('manageKnowledgeContextTool', () => {
   });
 
   it('rejects delete without contextId', async () => {
-    const result = await getResult({ action: 'delete' });
+    const result = await parseParams({ action: 'delete' });
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0]).toMatchObject({
-      type: 'text',
-      text: expect.stringContaining('contextId'),
-    });
+    expect(result.success).toBe(false);
     expect(mocks.deleteSemanticStatements).not.toHaveBeenCalled();
   });
 
@@ -285,6 +295,12 @@ function getTool(): ReturnType<typeof getManageKnowledgeContextTool> {
 async function getResult(args: Record<string, unknown>): Promise<CallToolResult> {
   const tool = getTool();
   return (await Provider.from(tool.callback))(args as never, getMockRequestHandlerExtra());
+}
+
+async function parseParams(args: Record<string, unknown>): Promise<{ success: boolean }> {
+  const schema = await Provider.from(getTool().paramsSchema);
+  invariant('safeParse' in schema);
+  return schema.safeParse(args);
 }
 
 function payload(result: CallToolResult): any {

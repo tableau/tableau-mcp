@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
@@ -24,44 +23,86 @@ import {
   resultLimitSchema,
 } from './knowledgeToolUtils.js';
 
-const intentSchema = z.enum(['ground', 'relationships', 'lineage', 'impact', 'sources']);
-
-const paramsSchema = {
-  intent: intentSchema.describe(
-    'Operation to perform: ground curated context, inspect relationships, trace lineage, assess impact, or list graph sources.',
-  ),
-  graphId: graphIdSchema
-    .optional()
-    .describe("Knowledge graph ID. Omit to use the site's primary graph."),
-  query: z
-    .string()
-    .trim()
-    .min(1)
-    .max(2000)
-    .optional()
-    .describe('Natural-language node search. Returns candidates; it never chooses a node for you.'),
-  nodeId: z
-    .string()
-    .trim()
-    .min(1)
-    .max(512)
-    .optional()
-    .describe('Exact node ID selected from a prior candidate response.'),
-  nodeType: nodeTypeSchema.optional().describe('Optional node type filter for search or sources.'),
-  includeGlobal: z
-    .boolean()
-    .optional()
-    .describe('Include graph-wide customer-governed context while grounding. Defaults to true.'),
-  edgeType: edgeTypeSchema
-    .optional()
-    .describe('Optional relationship type. Use with direction to narrow truncated results.'),
-  direction: z
-    .enum(['outgoing', 'incoming'])
-    .optional()
-    .describe('Optional relationship direction. Use with edgeType to narrow truncated results.'),
-  threshold: z.number().min(0).max(1).optional(),
-  limit: resultLimitSchema.describe('Maximum returned candidates, statements, or traversal rows.'),
+const graphIdParam = graphIdSchema
+  .optional()
+  .describe("Knowledge graph ID. Omit to use the site's primary graph.");
+const queryParam = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2000)
+  .optional()
+  .describe('Natural-language node search. Returns candidates; it never chooses a node for you.');
+const nodeIdParam = z
+  .string()
+  .trim()
+  .min(1)
+  .max(512)
+  .optional()
+  .describe('Exact node ID selected from a prior candidate response.');
+const nodeTypeParam = nodeTypeSchema.optional().describe('Optional node type filter for search.');
+const thresholdParam = z
+  .number()
+  .min(0)
+  .max(1)
+  .optional()
+  .describe('Minimum node-search relevance score.');
+const limitParam = resultLimitSchema.describe(
+  'Maximum returned candidates, statements, or traversal rows.',
+);
+const nodeSelectorShape = {
+  graphId: graphIdParam,
+  query: queryParam,
+  nodeId: nodeIdParam,
+  nodeType: nodeTypeParam,
+  threshold: thresholdParam,
+  limit: limitParam,
 };
+
+const intentParamsSchema = z.discriminatedUnion('intent', [
+  z
+    .object({
+      intent: z.literal('ground'),
+      ...nodeSelectorShape,
+      includeGlobal: z
+        .boolean()
+        .optional()
+        .describe('Include graph-wide customer-governed context. Defaults to true.'),
+    })
+    .strict(),
+  z
+    .object({
+      intent: z.literal('relationships'),
+      ...nodeSelectorShape,
+      edgeType: edgeTypeSchema
+        .optional()
+        .describe('Relationship type. Use with direction to narrow truncated results.'),
+      direction: z
+        .enum(['outgoing', 'incoming'])
+        .optional()
+        .describe('Relationship direction. Use with edgeType to narrow truncated results.'),
+    })
+    .strict(),
+  z.object({ intent: z.literal('lineage'), ...nodeSelectorShape }).strict(),
+  z.object({ intent: z.literal('impact'), ...nodeSelectorShape }).strict(),
+  z
+    .object({
+      intent: z.literal('sources'),
+      graphId: graphIdParam,
+      nodeType: nodeTypeSchema.optional().describe('Optional source node type filter.'),
+      limit: limitParam,
+    })
+    .strict(),
+]);
+
+const paramsSchema = intentParamsSchema.superRefine((args, context) => {
+  if (args.intent !== 'sources' && !args.nodeId && !args.query) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `query or nodeId is required when intent is "${args.intent}".`,
+    });
+  }
+});
 
 type QueryWarning = {
   type: 'ENTITY_UNAVAILABLE' | 'ATTACHED_CONTEXT_UNAVAILABLE' | 'GLOBAL_CONTEXT_UNAVAILABLE';
@@ -109,12 +150,6 @@ If relationships are truncated, rerun with edgeType and direction before reporti
         extra,
         args,
         callback: async () => {
-          if (args.intent !== 'sources' && !args.nodeId && !args.query) {
-            return new ArgsValidationError(
-              `query or nodeId is required when intent is "${args.intent}".`,
-            ).toErr();
-          }
-
           return new Ok(
             await useRestApi({
               ...extra,

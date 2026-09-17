@@ -92,6 +92,23 @@ describe('queryKnowledgeContextTool', () => {
     expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-tools');
   });
 
+  it('exposes only parameters relevant to each query intent', async () => {
+    const schema = await Provider.from(getTool().paramsSchema);
+    expect(schema).toHaveProperty('safeParse', expect.any(Function));
+    if (!('safeParse' in schema)) return;
+
+    expect(schema.safeParse({ intent: 'sources', nodeType: 'WORKBOOK' }).success).toBe(true);
+    expect(schema.safeParse({ intent: 'sources', query: 'Sales Cloud' }).success).toBe(false);
+    expect(schema.safeParse({ intent: 'lineage' }).success).toBe(false);
+    expect(schema.safeParse({ intent: 'lineage', nodeId: 'pds-1' }).success).toBe(true);
+    expect(
+      schema.safeParse({ intent: 'relationships', nodeId: 'pds-1', includeGlobal: true }).success,
+    ).toBe(false);
+    expect(schema.safeParse({ intent: 'ground', query: 'AOV', edgeType: 'HAS' }).success).toBe(
+      false,
+    );
+  });
+
   it('is a read-only tool with the Knowledge read scope', async () => {
     const tool = getTool();
     const paramsSchema = await Provider.from(tool.paramsSchema);
@@ -99,10 +116,7 @@ describe('queryKnowledgeContextTool', () => {
     expect(tool.name).toBe('query-knowledge-context');
     expect(tool.minRequiredRole).toBe(SiteRole.VIEWER);
     expect(tool.registrationConditions).toEqual(['RequiresKnowledge']);
-    expect(paramsSchema).not.toHaveProperty('includeChildren');
-    expect(paramsSchema).not.toHaveProperty('relationshipQuery');
-    expect(paramsSchema.edgeType.description).toContain('narrow truncated results');
-    expect(paramsSchema.direction.description).toContain('narrow truncated results');
+    expect(paramsSchema).toHaveProperty('safeParse', expect.any(Function));
     expect(tool.description).toContain('If relationships are truncated');
     expect(await Provider.from(tool.annotations)).toMatchObject({
       readOnlyHint: true,
@@ -290,13 +304,9 @@ describe('queryKnowledgeContextTool', () => {
   });
 
   it('rejects a node-based intent without either query or nodeId', async () => {
-    const result = await getResult({ intent: 'impact' });
+    const result = await parseParams({ intent: 'impact' });
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0]).toMatchObject({
-      type: 'text',
-      text: expect.stringContaining('query or nodeId'),
-    });
+    expect(result.success).toBe(false);
   });
 });
 
@@ -307,6 +317,12 @@ function getTool(): ReturnType<typeof getQueryKnowledgeContextTool> {
 async function getResult(args: Record<string, unknown>): Promise<CallToolResult> {
   const tool = getTool();
   return (await Provider.from(tool.callback))(args as never, getMockRequestHandlerExtra());
+}
+
+async function parseParams(args: Record<string, unknown>): Promise<{ success: boolean }> {
+  const schema = await Provider.from(getTool().paramsSchema);
+  invariant('safeParse' in schema);
+  return schema.safeParse(args);
 }
 
 function payload(result: CallToolResult): any {

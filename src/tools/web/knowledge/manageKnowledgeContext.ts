@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { severitySchema } from '../../../sdks/tableau/apis/knowledgeApi.js';
@@ -17,30 +16,96 @@ import {
   resultLimitSchema,
 } from './knowledgeToolUtils.js';
 
-const actionSchema = z.enum(['status', 'list', 'suggestions', 'create', 'update', 'delete']);
 const statementInputSchema = z.object({
   statement: z.string().trim().min(1).max(10000),
   id: z.string().trim().min(1).max(512).nullable().optional(),
 });
+const optionalGraphIdSchema = graphIdSchema
+  .optional()
+  .describe("Knowledge graph ID. Omit to use the site's primary graph.");
+const contextIdSchema = z.string().trim().min(1).max(512).describe('Exact semantic context ID.');
+const statementsSchema = z
+  .array(statementInputSchema)
+  .min(1)
+  .max(100)
+  .describe('One to 100 semantic statements.');
+const targetNodeIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(512)
+  .optional()
+  .describe('Attach the context to this exact Knowledge node ID.');
+const isGlobalSchema = z
+  .boolean()
+  .optional()
+  .describe('Set true to make the context graph-wide instead of node-specific.');
+const nameSchema = z.string().trim().min(1).max(1000).optional().describe('Context name.');
+const limitSchema = resultLimitSchema.describe(
+  'Maximum returned graphs, suggestions, or statements.',
+);
 
-const paramsSchema = {
-  action: actionSchema.describe(
-    'Management operation: inspect graph status, list contexts, review suggestions, create, update, or delete context.',
-  ),
-  graphId: graphIdSchema
-    .optional()
-    .describe("Knowledge graph ID. Omit to use the site's primary graph."),
-  nodeId: z.string().trim().min(1).max(512).optional(),
-  isGlobal: z.boolean().optional(),
-  pdsId: z.string().trim().min(1).max(512).optional(),
-  severity: severitySchema.optional(),
-  suggestionType: z.string().trim().min(1).max(200).optional(),
-  contextId: z.string().trim().min(1).max(512).optional(),
-  statements: z.array(statementInputSchema).min(1).max(100).optional(),
-  targetNodeId: z.string().trim().min(1).max(512).optional(),
-  name: z.string().trim().min(1).max(1000).optional(),
-  limit: resultLimitSchema.describe('Maximum returned graphs, suggestions, or statements.'),
-};
+const actionParamsSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('status'), limit: limitSchema }).strict(),
+  z
+    .object({
+      action: z.literal('list'),
+      graphId: optionalGraphIdSchema,
+      nodeId: z.string().trim().min(1).max(512).optional().describe('Exact Knowledge node ID.'),
+      isGlobal: z.boolean().optional().describe('Filter by graph-wide status.'),
+      limit: limitSchema,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('suggestions'),
+      graphId: optionalGraphIdSchema,
+      pdsId: z.string().trim().min(1).max(512).optional().describe('Published data source ID.'),
+      severity: severitySchema.optional().describe('Suggestion severity filter.'),
+      suggestionType: z
+        .string()
+        .trim()
+        .min(1)
+        .max(200)
+        .optional()
+        .describe('Suggestion type filter.'),
+      limit: limitSchema,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('create'),
+      graphId: optionalGraphIdSchema,
+      statements: statementsSchema,
+      targetNodeId: targetNodeIdSchema,
+      isGlobal: isGlobalSchema,
+      name: nameSchema,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('update'),
+      graphId: optionalGraphIdSchema,
+      contextId: contextIdSchema,
+      statements: statementsSchema.optional(),
+      targetNodeId: targetNodeIdSchema,
+      isGlobal: isGlobalSchema,
+      name: nameSchema,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('delete'),
+      graphId: optionalGraphIdSchema,
+      contextId: contextIdSchema,
+    })
+    .strict(),
+]);
+
+const paramsSchema = actionParamsSchema.superRefine((args, context) => {
+  const message = validateArgs(args);
+  if (message) context.addIssue({ code: z.ZodIssueCode.custom, message });
+});
 
 export const getManageKnowledgeContextTool = (
   server: WebMcpServer,
@@ -72,15 +137,15 @@ its read-before-write workflow spans both capabilities.
     },
     callback: async (args, extra): Promise<CallToolResult> => {
       const configuredLimit = (await extra.getConfigWithOverrides()).getMaxResultLimit(tool.name);
-      const limit = getKnowledgeResultLimit(args.limit, configuredLimit);
+      const limit = getKnowledgeResultLimit(
+        'limit' in args ? args.limit : undefined,
+        configuredLimit,
+      );
 
       return await tool.logAndExecute({
         extra,
         args,
         callback: async () => {
-          const validationError = validateArgs(args);
-          if (validationError) return new ArgsValidationError(validationError).toErr();
-
           return new Ok(
             await useRestApi({
               ...extra,
@@ -135,7 +200,7 @@ its read-before-write workflow spans both capabilities.
                   case 'create': {
                     const context = await methods.createSemanticStatements({
                       graphId: args.graphId,
-                      statements: args.statements!,
+                      statements: args.statements,
                       targetNodeId: args.targetNodeId,
                       isGlobal: args.isGlobal,
                       name: args.name,
@@ -145,7 +210,7 @@ its read-before-write workflow spans both capabilities.
                   case 'update': {
                     const context = await methods.updateSemanticStatements({
                       graphId: args.graphId,
-                      contextId: args.contextId!,
+                      contextId: args.contextId,
                       statements: args.statements,
                       targetNodeId: args.targetNodeId,
                       isGlobal: args.isGlobal,
@@ -156,11 +221,11 @@ its read-before-write workflow spans both capabilities.
                   case 'delete': {
                     await methods.deleteSemanticStatements({
                       graphId: args.graphId,
-                      contextId: args.contextId!,
+                      contextId: args.contextId,
                     });
                     return {
                       action: args.action,
-                      contextId: args.contextId!,
+                      contextId: args.contextId,
                       requestCompleted: true,
                     };
                   }
@@ -177,26 +242,14 @@ its read-before-write workflow spans both capabilities.
   return tool;
 };
 
-function validateArgs(args: {
-  action: z.infer<typeof actionSchema>;
-  contextId?: string;
-  statements?: z.infer<typeof statementInputSchema>[];
-  targetNodeId?: string;
-  isGlobal?: boolean;
-  name?: string;
-}): string | null {
+function validateArgs(args: z.infer<typeof actionParamsSchema>): string | null {
   if (args.action === 'create') {
-    if (!args.statements?.length) return 'statements is required when action is "create".';
     if (!args.targetNodeId && args.isGlobal !== true) {
       return 'create requires targetNodeId or isGlobal: true.';
     }
     if (args.targetNodeId && args.isGlobal === true) {
       return 'create accepts targetNodeId or isGlobal: true, not both.';
     }
-  }
-
-  if (args.action === 'update' || args.action === 'delete') {
-    if (!args.contextId) return `contextId is required when action is "${args.action}".`;
   }
 
   if (args.action === 'update') {

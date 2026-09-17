@@ -1,4 +1,8 @@
-import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import {
+  AnySchema,
+  SchemaOutput,
+  ZodRawShapeCompat,
+} from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
@@ -64,7 +68,11 @@ export type LogAndExecuteParams<
   extra: TExtra;
 
   // The arguments of the tool call
-  args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
+  args: Args extends ZodRawShape
+    ? z.objectOutputType<Args, ZodTypeAny>
+    : Args extends AnySchema
+      ? SchemaOutput<Args>
+      : undefined;
 
   // A function that contains the business logic of the tool to be logged and executed
   callback: () => Promise<Result<T, McpToolError>>;
@@ -83,7 +91,7 @@ export abstract class Tool<
   TToolName extends ToolName,
   TExtra extends TableauRequestHandlerExtra<TServer>,
   TCallback extends TableauToolCallback<TServer, TExtra, Args>,
-  Args extends ZodRawShape | undefined = undefined,
+  Args extends undefined | ZodRawShapeCompat | AnySchema = undefined,
 > {
   server: TServer;
   name: TToolName;
