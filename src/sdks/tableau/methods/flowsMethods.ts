@@ -3,7 +3,9 @@ import { Zodios } from '@zodios/core';
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { flowsApis } from '../apis/flowsApi.js';
 import { RestApiCredentials } from '../restApi.js';
+import { TableauRestError } from '../tableauRestError.js';
 import { Flow, FlowConnection, FlowOutputStep, FlowRun } from '../types/flow.js';
+import { RunFlowJob } from '../types/job.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
@@ -39,7 +41,7 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
     pageNumber,
   }: {
     siteId: string;
-    filter: string;
+    filter?: string;
     sort?: string;
     pageSize?: number;
     pageNumber?: number;
@@ -136,5 +138,68 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
       ...this.authHeader,
     });
     return response.flowRuns.flowRuns ?? [];
+  };
+
+  /** Enqueues a flow run. `flowId` is required in both the route and body.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#run_flow_now
+   */
+  runFlowNow = async ({
+    siteId,
+    flowId,
+    runMode,
+    outputStepIds,
+    parameterSpecs,
+  }: {
+    siteId: string;
+    flowId: string;
+    runMode?: 'full' | 'incremental';
+    outputStepIds?: string[];
+    parameterSpecs?: Array<{ parameterId: string; overrideValue: string }>;
+  }): Promise<RunFlowJob> => {
+    if (outputStepIds?.length === 0) {
+      throw new Error(
+        'outputStepIds must contain at least one output step id when provided; omit it to run all output steps.',
+      );
+    }
+
+    const raw = await this._apiClient.runFlowNow(
+      {
+        flowRunSpec: {
+          flowId,
+          ...(runMode && { runMode }),
+          ...(parameterSpecs && parameterSpecs.length > 0
+            ? { flowParameterSpecs: { flowParameterSpec: parameterSpecs } }
+            : {}),
+          ...(outputStepIds && outputStepIds.length > 0
+            ? { flowOutputSteps: { flowOutputStep: outputStepIds.map((id) => ({ id })) } }
+            : {}),
+        },
+      },
+      {
+        params: { siteId, flowId },
+        ...this.authHeader,
+      },
+    );
+    return raw.job;
+  };
+
+  /** Converts a 2xx Cancel Flow Run error envelope into a {@link TableauRestError}.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#cancel_flow_run
+   */
+  cancelFlowRun = async ({
+    siteId,
+    flowRunId,
+  }: {
+    siteId: string;
+    flowRunId: string;
+  }): Promise<void> => {
+    const body = await this._apiClient.cancelFlowRun(undefined, {
+      params: { siteId, flowRunId },
+      ...this.authHeader,
+    });
+    const tableauError = body.error;
+    if (tableauError && (tableauError.code || tableauError.summary || tableauError.detail)) {
+      throw new TableauRestError(tableauError);
+    }
   };
 }
