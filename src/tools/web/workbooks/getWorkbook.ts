@@ -209,10 +209,9 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
  * Annotates each upstream data source with `isQueryable` by calling VDS's user-has-query-permissions
  * endpoint once per data source (concurrently). Maps the result to:
  *  - 200 → Set `isQueryable` to API response's `hasQueryPermission` value.
- *  - A definitive HTTP rejection (e.g. 403800 "no API access permission") → `false`: VDS evaluated
- *    the request and rejected it.
- *  - A transient HTTP error (429 / 408 / 5xx), `feature-disabled` (404, no endpoint),
- *    `zodios-error`, or a thrown error → left unset (indeterminate).
+ *  - 403 (Forbidden) → `false`: VDS authenticated the caller and denied query access, meaning caller cannot query.
+ *  - Anything else — Any non-403 HTTP status is not a permission verdict so we leave it unset.
+ *    This covers 401 (authentication failure), 404 (no endpoint, feature disabled), thrown errors, etc.
  *
  * Best-effort: a failed check never fails get-workbook.
  */
@@ -240,9 +239,8 @@ export async function enrichUpstreamDatasourceQueryability({
         if (result.isOk()) {
           return { ...ds, isQueryable: result.value.hasQueryPermission };
         }
-        // A definitive (non-transient) HTTP rejection means VDS evaluated the request,
-        // so the caller cannot query this data source.
-        if (result.error.type === 'api-error' && !isTransientVdsError(result.error.httpStatus)) {
+        // Only a 403 (Forbidden) is a permission verdict.
+        if (result.error.type === 'api-error' && result.error.httpStatus === 403) {
           return { ...ds, isQueryable: false };
         }
         detail = JSON.stringify(result.error);
@@ -264,11 +262,6 @@ export async function enrichUpstreamDatasourceQueryability({
   );
 
   return { ...workbook, upstreamDatasources: enriched };
-}
-
-// Rate-limit (429), request-timeout (408), and server (5xx) responses are transient VDS failures, not a permission verdict
-function isTransientVdsError(httpStatus: number): boolean {
-  return httpStatus === 408 || httpStatus === 429 || httpStatus >= 500;
 }
 
 export function filterWorkbookViews({

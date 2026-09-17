@@ -410,9 +410,9 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
-    it('sets isQueryable false when the check returns an HTTP error (e.g. no permission to view)', async () => {
-      // A non-404 HTTP error (403800 "does not have permission" or "feature is not enabled") means
-      // VDS evaluated the request and rejected it → isQueryable is false.
+    it('sets isQueryable false when the check returns 403 (no permission to view)', async () => {
+      // A 403 (Forbidden, e.g. errorCode 403800 "does not have permission") means VDS
+      // authenticated the caller and denied query access → isQueryable is false.
       mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
         datasource.datasourceLuid === 'pub-luid-1'
           ? Ok({ hasQueryPermission: true })
@@ -440,6 +440,34 @@ describe('getWorkbookTool', () => {
           datasourceType: 'embedded',
           isQueryable: false,
         },
+      ]);
+    });
+
+    it('leaves isQueryable unset when the check fails authentication (401)', async () => {
+      // A 401 means authentication/scope failed, not that VDS evaluated permissions and denied
+      // them (e.g. a deployment whose token lacks the viz_data_service scope). That's
+      // indeterminate, so isQueryable stays unset rather than being falsely reported as false.
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        datasource.datasourceLuid === 'pub-luid-1'
+          ? Ok({ hasQueryPermission: true })
+          : Err({
+              type: 'api-error',
+              message: 'Invalid authentication credentials.',
+              httpStatus: 401,
+              errorCode: '401002',
+            }),
+      );
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: true,
+        },
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
       ]);
     });
 
