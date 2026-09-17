@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "2.68.7",
+  "version": "2.68.8",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -84,6 +84,7 @@
     "fuse.js": "7.4.2",
     "jose": "^6.0.12",
     "jsonc-parser": "^3.3.1",
+    "probe-image-size": "7.4.0",
     "ssrfcheck": "^1.2.0",
     "ts-results-es": "^7.1.0",
     "xpath": "^0.0.34",
@@ -102,6 +103,7 @@
     "@types/express": "^5.0.3",
     "@types/fast-levenshtein": "^0.0.1",
     "@types/node": "^22.15.3",
+    "@types/probe-image-size": "7.2.5",
     "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
