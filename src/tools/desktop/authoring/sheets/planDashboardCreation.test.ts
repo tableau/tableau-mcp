@@ -8,10 +8,11 @@ import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getPlanDashboardCreationTool } from './planDashboardCreation.js';
 
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
-vi.mock('../../../../desktop/metadata/index.js');
+vi.mock('../../../../desktop/resolution/index.js');
 vi.mock('../../../../desktop/templates/templatePath.js');
 
-import { FieldResolution, resolveField } from '../../../../desktop/metadata/index.js';
+import { type FieldResolution } from '../../../../desktop/metadata/index.js';
+import { resolveFieldViaDomain } from '../../../../desktop/resolution/index.js';
 import { listTemplateNames } from '../../../../desktop/templates/templatePath.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
@@ -68,7 +69,7 @@ describe('planDashboardCreationTool', () => {
   });
 
   it('should return a plan with phase1 and phase2 on success', async () => {
-    vi.mocked(resolveField).mockReturnValue(makeExactResolution('Sales'));
+    vi.mocked(resolveFieldViaDomain).mockReturnValue(makeExactResolution('Sales'));
 
     const result = await getResult({
       session: SESSION,
@@ -85,7 +86,7 @@ describe('planDashboardCreationTool', () => {
   });
 
   it('should block planning when a field is ambiguous', async () => {
-    vi.mocked(resolveField).mockReturnValue({
+    vi.mocked(resolveFieldViaDomain).mockReturnValue({
       kind: 'ambiguous',
       query: 'Sales',
       candidates: [
@@ -137,7 +138,7 @@ describe('planDashboardCreationTool', () => {
   });
 
   it('should include not_found fields in the blocked response alongside ambiguous', async () => {
-    vi.mocked(resolveField).mockImplementation((_, fieldName) => {
+    vi.mocked(resolveFieldViaDomain).mockImplementation((_, fieldName) => {
       if (fieldName === 'Sales')
         return {
           kind: 'ambiguous' as const,
@@ -169,7 +170,7 @@ describe('planDashboardCreationTool', () => {
   });
 
   it('should block planning when only not_found fields are present', async () => {
-    vi.mocked(resolveField).mockReturnValue({ kind: 'not_found', query: 'Unknown' });
+    vi.mocked(resolveFieldViaDomain).mockReturnValue({ kind: 'not_found', query: 'Unknown' });
 
     const result = await getResult({
       session: SESSION,
@@ -185,7 +186,7 @@ describe('planDashboardCreationTool', () => {
   });
 
   it('resolves object-shaped fields with datasource selectors and carries task datasource', async () => {
-    vi.mocked(resolveField).mockImplementation((_, query, options) => ({
+    vi.mocked(resolveFieldViaDomain).mockImplementation((_, query, options) => ({
       kind: 'exact',
       query,
       column_ref: `[${options?.datasource}].[sum:${query}:qk]`,
@@ -201,7 +202,7 @@ describe('planDashboardCreationTool', () => {
     });
 
     expect(result.isError).toBeFalsy();
-    expect(resolveField).toHaveBeenCalledWith(SAMPLE_WORKBOOK_XML, 'Profit', {
+    expect(resolveFieldViaDomain).toHaveBeenCalledWith(SAMPLE_WORKBOOK_XML, 'Profit', {
       datasource: 'ds2',
     });
     const plan = extractPlan(result);
@@ -211,7 +212,7 @@ describe('planDashboardCreationTool', () => {
   });
 
   it('caches field resolution by query and datasource selector', async () => {
-    vi.mocked(resolveField).mockImplementation((_, query, options) => ({
+    vi.mocked(resolveFieldViaDomain).mockImplementation((_, query, options) => ({
       kind: 'exact',
       query,
       column_ref: `[${options?.datasource}].[sum:${query}:qk]`,
@@ -228,11 +229,11 @@ describe('planDashboardCreationTool', () => {
     });
 
     expect(result.isError).toBeFalsy();
-    expect(resolveField).toHaveBeenCalledTimes(2);
-    expect(resolveField).toHaveBeenNthCalledWith(1, SAMPLE_WORKBOOK_XML, 'Profit', {
+    expect(resolveFieldViaDomain).toHaveBeenCalledTimes(2);
+    expect(resolveFieldViaDomain).toHaveBeenNthCalledWith(1, SAMPLE_WORKBOOK_XML, 'Profit', {
       datasource: 'ds1',
     });
-    expect(resolveField).toHaveBeenNthCalledWith(2, SAMPLE_WORKBOOK_XML, 'Profit', {
+    expect(resolveFieldViaDomain).toHaveBeenNthCalledWith(2, SAMPLE_WORKBOOK_XML, 'Profit', {
       datasource: 'ds2',
     });
     const plan = extractPlan(result);
@@ -263,7 +264,7 @@ describe('planDashboardCreationTool', () => {
   });
 
   it('should select default template kpi-text for kpi worksheets', async () => {
-    vi.mocked(resolveField).mockReturnValue(makeExactResolution('Revenue'));
+    vi.mocked(resolveFieldViaDomain).mockReturnValue(makeExactResolution('Revenue'));
 
     const result = await getResult({
       session: SESSION,
@@ -291,12 +292,12 @@ describe('planDashboardCreationTool', () => {
     expect(result.content[0].text).toContain(
       'KPI worksheet "Invalid KPI" requires exactly one field',
     );
-    expect(resolveField).not.toHaveBeenCalled();
+    expect(resolveFieldViaDomain).not.toHaveBeenCalled();
     expect(getWorkbookXml).not.toHaveBeenCalled();
   });
 
   it('should recommend parallelization for 5+ worksheets', async () => {
-    vi.mocked(resolveField).mockReturnValue(makeExactResolution('Sales'));
+    vi.mocked(resolveFieldViaDomain).mockReturnValue(makeExactResolution('Sales'));
 
     const worksheets = Array.from({ length: 5 }, (_, i) => ({
       name: `Sheet${i + 1}`,
@@ -316,7 +317,7 @@ describe('planDashboardCreationTool', () => {
   });
 
   it('should not recommend parallelization for fewer than 5 worksheets', async () => {
-    vi.mocked(resolveField).mockReturnValue(makeExactResolution('Sales'));
+    vi.mocked(resolveFieldViaDomain).mockReturnValue(makeExactResolution('Sales'));
 
     const result = await getResult({
       session: SESSION,

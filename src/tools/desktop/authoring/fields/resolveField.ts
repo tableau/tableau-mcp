@@ -4,7 +4,8 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
-import { type FieldResolution, resolveField } from '../../../../desktop/metadata/index.js';
+import { type FieldResolution } from '../../../../desktop/metadata/index.js';
+import { resolveFieldViaDomain as resolveField } from '../../../../desktop/resolution/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import {
   FileNotFoundError,

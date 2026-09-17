@@ -4,7 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
-import * as metadataModule from '../../../../desktop/metadata/index.js';
+import * as resolutionModule from '../../../../desktop/resolution/index.js';
 import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { FileNotFoundError, FileReadError } from '../../../../errors/mcpToolError.js';
@@ -17,7 +17,7 @@ import { getResolveFieldTool } from './resolveField.js';
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/externalApi/discovery.js');
-vi.mock('../../../../desktop/metadata/index.js');
+vi.mock('../../../../desktop/resolution/index.js');
 vi.mock('fs');
 
 const resultSchema = z.object({
@@ -119,7 +119,7 @@ describe('resolveFieldTool', () => {
   it('returns resolved status for exact resolution', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
-    vi.mocked(metadataModule.resolveField).mockReturnValue(exactResolution);
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockReturnValue(exactResolution);
 
     const result = await getResult({ workbookFile: WORKBOOK_FILE, query: 'Profit' });
 
@@ -134,7 +134,7 @@ describe('resolveFieldTool', () => {
   it('returns ambiguous status with deprecated nested error flag for ambiguous resolution', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
-    vi.mocked(metadataModule.resolveField).mockReturnValue(ambiguousResolution);
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockReturnValue(ambiguousResolution);
 
     const result = await getResult({ workbookFile: WORKBOOK_FILE, query: 'Profit' });
 
@@ -149,7 +149,7 @@ describe('resolveFieldTool', () => {
   it('returns not_found status with deprecated nested error flag for not_found resolution', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
-    vi.mocked(metadataModule.resolveField).mockReturnValue(notFoundResolution);
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockReturnValue(notFoundResolution);
 
     const result = await getResult({ workbookFile: WORKBOOK_FILE, query: 'NonExistent' });
 
@@ -165,7 +165,7 @@ describe('resolveFieldTool', () => {
   it('should pass datasource option to resolveField', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
-    vi.mocked(metadataModule.resolveField).mockReturnValue(exactResolution);
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockReturnValue(exactResolution);
 
     await getResult({
       workbookFile: WORKBOOK_FILE,
@@ -173,7 +173,7 @@ describe('resolveFieldTool', () => {
       datasource: 'Sample - Superstore',
     });
 
-    expect(metadataModule.resolveField).toHaveBeenCalledWith('<workbook/>', 'Profit', {
+    expect(resolutionModule.resolveFieldViaDomain).toHaveBeenCalledWith('<workbook/>', 'Profit', {
       datasource: 'Sample - Superstore',
     });
   });
@@ -223,7 +223,7 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     vi.mocked(readFileSync).mockReturnValue(STALE_XML);
     vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
     vi.mocked(cacheFingerprintModule.sourceSha256).mockReturnValue('f'.repeat(64));
-    vi.mocked(metadataModule.resolveField).mockImplementation((xml) =>
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockImplementation((xml) =>
       xml === LIVE_XML ? liveExact : staleNotFound,
     );
     const extra = extraWithExecutor();
@@ -251,7 +251,7 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
       'f'.repeat(64),
     );
     // Two resolves: once against the stale cache (miss), once against the refresh (hit).
-    expect(metadataModule.resolveField).toHaveBeenCalledTimes(2);
+    expect(resolutionModule.resolveFieldViaDomain).toHaveBeenCalledTimes(2);
   });
 
   it('without session: resolves the only instance and marks a failed refresh as stale', async () => {
@@ -262,7 +262,7 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(
       Err({ type: 'command-timed-out', error: 'transient executor fault' }),
     );
-    vi.mocked(metadataModule.resolveField).mockReturnValue(staleNotFound);
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockReturnValue(staleNotFound);
     const extra = extraWithExecutor();
 
     const result = await getResult({ workbookFile: WORKBOOK_FILE, query: 'Sales', extra });
@@ -284,7 +284,7 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(
       Err({ type: 'command-timed-out', error: 'transient executor fault' }),
     );
-    vi.mocked(metadataModule.resolveField).mockReturnValue(staleNotFound);
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockReturnValue(staleNotFound);
     const extra = extraWithExecutor();
 
     const result = await getResult({
@@ -318,7 +318,7 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockRejectedValue(
       new Error('transient executor fault'),
     );
-    vi.mocked(metadataModule.resolveField).mockReturnValue(staleNotFound);
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockReturnValue(staleNotFound);
     const extra = extraWithExecutor();
 
     // Must RESOLVE (not throw): a rejection must degrade, never escape as tool_error.
@@ -347,7 +347,7 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
 
   it('P2a: two concurrent resolves against the same stale cache trigger exactly ONE live refresh', async () => {
     vi.mocked(readFileSync).mockReturnValue(STALE_XML);
-    vi.mocked(metadataModule.resolveField).mockImplementation((xml) =>
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockImplementation((xml) =>
       xml === LIVE_XML ? liveExact : staleNotFound,
     );
     // Defer the refresh so both invocations reach the (shared) in-flight refresh
@@ -397,7 +397,7 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     };
     vi.mocked(readFileSync).mockReturnValue(STALE_XML);
     vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
-    vi.mocked(metadataModule.resolveField).mockReturnValue(stillNotFound);
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockReturnValue(stillNotFound);
     const extra = extraWithExecutor();
 
     const result = await getResult({
@@ -419,7 +419,7 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     expect(body.note).toContain('stop re-reading stale caches');
     // The refresh DID succeed (field just absent), so the cache is rewritten to LIVE.
     expect(writeFileSync).toHaveBeenCalledWith(WORKBOOK_FILE, LIVE_XML, 'utf-8');
-    expect(metadataModule.resolveField).toHaveBeenCalledTimes(2);
+    expect(resolutionModule.resolveFieldViaDomain).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -466,7 +466,7 @@ describe('resolve-field workbookFile is optional (self-fetches the current workb
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(writeFileSync).mockReturnValue(undefined);
     vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
-    vi.mocked(metadataModule.resolveField).mockReturnValue(liveExact);
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockReturnValue(liveExact);
   });
 
   function extraWithExecutor(): ReturnType<typeof getMockRequestHandlerExtra> {
@@ -499,7 +499,7 @@ describe('resolve-field workbookFile is optional (self-fetches the current workb
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('resolved');
     expect(body.resolution.column_ref).toBe('[Fresh DS].[sum:Sales:qk]');
-    expect(metadataModule.resolveField).toHaveBeenCalledWith(LIVE_XML, 'Sales', {
+    expect(resolutionModule.resolveFieldViaDomain).toHaveBeenCalledWith(LIVE_XML, 'Sales', {
       datasource: undefined,
     });
   });
@@ -531,7 +531,7 @@ describe('resolve-field workbookFile is optional (self-fetches the current workb
   });
 
   it('does not fetch twice when the self-fetched workbook does not contain the field', async () => {
-    vi.mocked(metadataModule.resolveField).mockReturnValue({
+    vi.mocked(resolutionModule.resolveFieldViaDomain).mockReturnValue({
       kind: 'not_found' as const,
       query: 'Nope',
       candidates: [],
@@ -541,7 +541,7 @@ describe('resolve-field workbookFile is optional (self-fetches the current workb
     const result = await getResult({ query: 'Nope', session: '4242', extra: extraWithExecutor() });
 
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
-    expect(metadataModule.resolveField).toHaveBeenCalledTimes(1);
+    expect(resolutionModule.resolveFieldViaDomain).toHaveBeenCalledTimes(1);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('not_found');
