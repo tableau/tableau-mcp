@@ -15,9 +15,8 @@ There are a couple different ways to authenticate to Tableau.
 
 ## Troubleshooting authentication errors
 
-An `Authentication failed (401): ...` message — whether returned at tool call or logged at startup
-while fetching site settings — means the server could **not authenticate**: the PAT/OAuth session
-is missing, invalid, or expired. This is distinct from a permission error
+An `Authentication failed (401): ...` message returned at tool call means the server could **not
+authenticate**: the PAT/OAuth session is missing, invalid, or expired. This is distinct from a permission error
 (`Permission denied (403): ...`, authenticated but the request was refused — missing role/permission
 or a capability not enabled) and from a feature genuinely not
 being provisioned. When several servers are configured, a `401` frequently means the request
