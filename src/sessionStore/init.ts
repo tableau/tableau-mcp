@@ -152,6 +152,8 @@ function loadCustomProvider(config?: Record<string, unknown>): SessionStore<unkn
   }
 
   try {
+    // `module` is trusted operator-controlled config, same trust model as
+    // FEATURE_GATE_PROVIDER/TELEMETRY_PROVIDER's custom loaders.
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- Sync load for preload script
     const module = require(resolvedPath);
 
