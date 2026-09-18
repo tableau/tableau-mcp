@@ -1225,6 +1225,58 @@ describe('binder/bindTemplate — two-call protocol', () => {
     expect(result.blockers[0].detail).toContain(detail);
     expect(result.proposal?.filters).toEqual([{ field, context: true }]);
   });
+
+  it('scopes resolution to the chosen datasource, clearing false cross-datasource ambiguity', async () => {
+    // Same bare name ("Region") lives in two connected datasources — unscoped this
+    // resolves ambiguous (the production fallback_required bug). Passing `datasource`
+    // must confine resolution to that source so the bind lands.
+    const workbookXml = WORKBOOK_XML.replace(
+      '</datasources>',
+      "<datasource name='Returns'><column name='[Region]' role='dimension' type='nominal' datatype='string' /></datasource></datasources>",
+    );
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Category filtered by Region',
+      workbookXml,
+      manifests: descriptors,
+      datasource: 'Superstore',
+      proposal: {
+        ...rankingProposal(),
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Category' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+        ],
+        filters: [{ field: 'Region', context: true }],
+      },
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.template_parameters.DATASOURCE).toBe('Superstore');
+  });
+
+  it('still fails closed on genuine cross-datasource ambiguity when no datasource is chosen', async () => {
+    const workbookXml = WORKBOOK_XML.replace(
+      '</datasources>',
+      "<datasource name='Returns'><column name='[Region]' role='dimension' type='nominal' datatype='string' /></datasource></datasources>",
+    );
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Category filtered by Region',
+      workbookXml,
+      manifests: descriptors,
+      proposal: {
+        ...rankingProposal(),
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Category' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+        ],
+        filters: [{ field: 'Region', context: true }],
+      },
+    });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('ambiguous-field');
+  });
 });
 
 describe('binder/proposal contract', () => {

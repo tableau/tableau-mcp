@@ -117,6 +117,7 @@ import {
   hasColumnNameAndCaptionInDatasource,
   prepareCalculationsInWorkbook,
   roleSchema,
+  selectTargetDatasource,
 } from '../datasource/authorCalcCore.js';
 // The nested `proposal` mirrors the binder library's public data contract
 // (`BindingProposal` / `PROPOSAL_OUTPUT_SCHEMA`) verbatim so a Call-1 `propose` payload
@@ -3124,10 +3125,29 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           let workbookXml = xmlResult.value;
           const hostBaselineWorkbookXml = workbookXml;
+
+          // When the caller names a datasource, scope every field resolution below
+          // to it (as its internal name). Without scoping, resolveInSummary flattens
+          // ALL connected datasources, so a bare name like "Sales" present in two
+          // sources resolves ambiguous (a false Gate-2 block) or silently binds
+          // against a non-primary datasource. `datasource` may be a caption, so we
+          // resolve it through the same selector the calc path uses — which also
+          // yields the actionable "not found" error. When omitted, `scopeDatasource`
+          // stays undefined: resolution keeps its all-datasource behaviour (and its
+          // ambiguous-field block-and-ask), since no datasource was chosen.
+          let scopeDatasource: string | undefined;
+          if (datasource !== undefined) {
+            const selected = selectTargetDatasource(workbookXml, datasource);
+            if (selected.isErr()) {
+              return selected.error.toErr();
+            }
+            scopeDatasource = selected.value.name;
+          }
+
           let baselineSchemaSummary: SchemaSummary | undefined;
           let baselineFilterIntent: ExactFilterIntent | undefined;
           if (priorRecovery === undefined) {
-            baselineSchemaSummary = summarizeSchema(workbookXml);
+            baselineSchemaSummary = summarizeSchema(workbookXml, scopeDatasource);
             baselineFilterIntent = parseExactFilterIntent(ask, baselineSchemaSummary);
             if (baselineFilterIntent.kind === 'ambiguous') {
               clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
@@ -3256,6 +3276,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               ask,
               workbookXml,
               manifests,
+              datasource: scopeDatasource,
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
             });
@@ -3271,6 +3292,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 ask,
                 workbookXml,
                 manifests,
+                datasource: scopeDatasource,
                 proposal: proposalFromRecommendation(ask, recommended),
                 ...(minConfidence !== undefined ? { minConfidence } : {}),
               });
@@ -3293,6 +3315,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   ask,
                   workbookXml,
                   manifests,
+                  datasource: scopeDatasource,
                   ...(minConfidence !== undefined ? { minConfidence } : {}),
                 });
                 const recommended =
@@ -3324,7 +3347,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             res = { ...res, args: { ...res.args, title: canonicalTargetWorksheet } };
           }
           const bindMs = Date.now() - bindStart;
-          schemaSummary ??= summarizeSchema(workbookXml);
+          schemaSummary ??= summarizeSchema(workbookXml, scopeDatasource);
           res = puppetCompatibility.expandBinderResult(res, schemaSummary);
 
           // ── One structured correction boundary ─────────────────────────

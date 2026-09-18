@@ -38,7 +38,7 @@ export interface SchemaField {
 }
 
 export interface SchemaSummary {
-  /** The primary datasource — substituted for {{DATASOURCE}} and the expected home of every bound field. */
+  /** The chosen datasource — substituted for {{DATASOURCE}} and the expected home of every bound field. Scoped when `summarizeSchema` was given a `scopeDatasource`, else the primary. */
   datasource: string;
   fields: SchemaField[];
 }
@@ -50,10 +50,15 @@ export function bareName(name: string): string {
 
 /**
  * Build a `SchemaSummary` from workbook XML. Pure: same XML => same summary.
- * The `fields` array preserves the order `listAvailableFields` returns; the
- * primary datasource is the one with the most fields (first-seen wins ties).
+ * The `fields` array preserves the order `listAvailableFields` returns.
+ *
+ * When `scopeDatasource` names a datasource present in the workbook, the summary
+ * is restricted to that datasource's fields and its `datasource` is that name —
+ * so resolution can never wander to a bare-name match in another connected
+ * datasource. When it is omitted (or names nothing present), behaviour is
+ * unchanged: all fields, primary datasource (most fields, first-seen wins ties).
  */
-export function summarizeSchema(workbookXml: string): SchemaSummary {
+export function summarizeSchema(workbookXml: string, scopeDatasource?: string): SchemaSummary {
   const raw = listAvailableFields(workbookXml);
 
   const fields: SchemaField[] = raw.map((f) => {
@@ -77,7 +82,26 @@ export function summarizeSchema(workbookXml: string): SchemaSummary {
     };
   });
 
+  if (scopeDatasource !== undefined) {
+    const canonical = canonicalDatasource(fields, scopeDatasource);
+    if (canonical !== undefined) {
+      return { datasource: canonical, fields: fields.filter((f) => f.datasource === canonical) };
+    }
+  }
+
   return { datasource: pickPrimaryDatasource(fields), fields };
+}
+
+/**
+ * The present datasource name matching `requested` — exact first, then
+ * case-insensitive. `undefined` when no connected datasource matches.
+ */
+function canonicalDatasource(fields: SchemaField[], requested: string): string | undefined {
+  const present = fields.map((f) => f.datasource);
+  return (
+    present.find((ds) => ds === requested) ??
+    present.find((ds) => ds.toLowerCase() === requested.toLowerCase())
+  );
 }
 
 /** The datasource contributing the most fields; first-seen wins ties. "" if none. */
