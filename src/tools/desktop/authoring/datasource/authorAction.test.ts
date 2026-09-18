@@ -92,6 +92,79 @@ describe('authorActionTool', () => {
     expect(loaded.match(/<actions>/g)?.length).toBe(1);
   });
 
+  // twb_2026.2.0.xsd fixes the child order of <actions>: legacy <action> (url/filter)
+  // -> datasources/deps -> nav -> <edit-group-action> (set) -> <edit-parameter-action>
+  // (parameter). A new action must slot into its family rather than append before </actions>
+  it('inserts a url action ahead of an existing parameter action (XSD family order)', async () => {
+    const existingParam =
+      "<edit-parameter-action caption='Existing Param' name='[Action1]'></edit-parameter-action>";
+    const initialXml = withActions(BASE_XML, existingParam);
+    const added =
+      "<action caption='Open Details' name='[Action2]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://example.com/' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open Details',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/',
+      },
+      initialXml,
+      readbackXml: withActions(BASE_XML, added + existingParam),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
+
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded.match(/<actions>/g)?.length).toBe(1);
+    expect(loaded).toContain(added);
+    const legacyAt = loaded.indexOf("<action caption='Open Details'");
+    const paramAt = loaded.indexOf('<edit-parameter-action');
+    expect(legacyAt).toBeGreaterThanOrEqual(0);
+    expect(legacyAt).toBeLessThan(paramAt);
+  });
+
+  it('inserts a set action ahead of an existing parameter action (XSD family order)', async () => {
+    const existingParam =
+      "<edit-parameter-action caption='Existing Param' name='[Action1]'></edit-parameter-action>";
+    const initialXml = withActions(BASE_XML, existingParam);
+    const added =
+      "<edit-group-action caption='Expand Category' name='[Action2]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<add-or-remove-marks value='assign' />" +
+      "<params><param name='selection-clear-set-option' value='do-nothing' />" +
+      "<param name='target-group' value='[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]' /></params>" +
+      '</edit-group-action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        targetSet: 'Category Set',
+      },
+      initialXml,
+      readbackXml: withActions(BASE_XML, added + existingParam),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
+
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded.match(/<actions>/g)?.length).toBe(1);
+    expect(loaded).toContain(added);
+    const groupAt = loaded.indexOf('<edit-group-action');
+    const paramAt = loaded.indexOf('<edit-parameter-action');
+    expect(groupAt).toBeGreaterThanOrEqual(0);
+    expect(groupAt).toBeLessThan(paramAt);
+  });
+
   it('rejects a caption collision before loading metadata', async () => {
     const xml = withActions(
       BASE_XML,

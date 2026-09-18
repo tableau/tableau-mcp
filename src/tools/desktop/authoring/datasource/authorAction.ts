@@ -465,9 +465,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               activation,
             });
           }
-          const editResult = filterDependencies
-            ? spliceFilterActionWithDependencies(liveXml, actionXml, filterDependencies)
-            : spliceActionIntoWorkbook(liveXml, actionXml);
+          const editResult = spliceActionIntoWorkbook(liveXml, actionXml, filterDependencies);
           if (editResult.isErr()) {
             return editResult.error.toErr();
           }
@@ -967,7 +965,7 @@ function renderDependencyColumn(field: ResolvedFilterField): string {
 //   All Fields (filterFields undefined) -> a lone <command> with special-fields='all'.
 //   Specific fields (filterFields defined) -> a tsl: <link> of field locators plus a <command> keeping only the target
 //     param, with the fields declared in sibling <datasources>/<datasource-dependencies> blocks
-//     (see spliceFilterActionWithDependencies).
+//     (see spliceActionIntoWorkbook's deps handling).
 function renderFilterAction({
   caption,
   actionName,
@@ -1206,32 +1204,47 @@ function locateActionsSite(xml: string): Result<ActionsSite, XmlModificationErro
   return new Ok({ kind: 'fresh', insertAt: dsClose + '</datasources>'.length });
 }
 
-// Splice a single action into the workbook-level <actions> block, creating the block
-// between </datasources> and <worksheets> if it does not yet exist.
+// twb_2026.2.0.xsd fixes the child order of <actions> as a sequence of families:
+//   legacy <action> -> <datasources>/<datasource-dependencies> -> <nav-action>
+//   -> <edit-group-action> (set) -> <edit-parameter-action> (parameter).
+// Each family's elements must stay grouped and in this order.
+const ACTION_FAMILY_MARKERS: readonly RegExp[] = [
+  /<action\b/,
+  /<datasources>|<datasource-dependencies\b/,
+  /<nav-action\b/,
+  /<edit-group-action\b/,
+  /<edit-parameter-action\b/,
+];
+
+// The family index of the element about to be inserted, read from its opening tag.
+// This tool authors only legacy <action>, <edit-group-action>, and <edit-parameter-action>.
+function actionFamilyIndex(actionXml: string): number {
+  if (actionXml.startsWith('<edit-parameter-action')) return 4;
+  if (actionXml.startsWith('<edit-group-action')) return 3;
+  if (actionXml.startsWith('<nav-action')) return 2;
+  return 0; // legacy <action> (url + filter)
+}
+
+// Offset within the <actions> body at which a new element of `familyIndex` belongs:
+// just before the first element of any later family, else the end of the body.
+function familySlotOffset(inner: string, familyIndex: number): number {
+  let offset = inner.length;
+  for (let later = familyIndex + 1; later < ACTION_FAMILY_MARKERS.length; later += 1) {
+    const match = ACTION_FAMILY_MARKERS[later].exec(inner);
+    if (match !== null && match.index < offset) {
+      offset = match.index;
+    }
+  }
+  return offset;
+}
+
+// Splice a new action into the workbook-level <actions> block, creating the block between
+// </datasources> and <worksheets> if it does not yet exist. The action lands in its XSD
+// family slot (see ACTION_FAMILY_MARKERS) rather than at the end of the block.
 function spliceActionIntoWorkbook(
   xml: string,
   actionXml: string,
-): Result<string, XmlModificationError> {
-  const siteResult = locateActionsSite(xml);
-  if (siteResult.isErr()) {
-    return siteResult.error.toErr();
-  }
-  const site = siteResult.value;
-
-  if (site.kind === 'existing') {
-    return new Ok(`${xml.slice(0, site.close)}${actionXml}${xml.slice(site.close)}`);
-  }
-  return new Ok(
-    `${xml.slice(0, site.insertAt)}<actions>${actionXml}</actions>${xml.slice(site.insertAt)}`,
-  );
-}
-
-// Splice a specific-field filter action plus its <datasources>/<datasource-dependencies> siblings
-// into the workbook-level <actions> block
-function spliceFilterActionWithDependencies(
-  xml: string,
-  actionXml: string,
-  deps: { datasourceName: string; datasourceXml: string; columnsXml: string[] },
+  deps?: { datasourceName: string; datasourceXml: string; columnsXml: string[] },
 ): Result<string, XmlModificationError> {
   const siteResult = locateActionsSite(xml);
   if (siteResult.isErr()) {
@@ -1242,47 +1255,43 @@ function spliceFilterActionWithDependencies(
   if (site.kind === 'existing') {
     let inner = xml.slice(site.innerStart, site.close);
 
-    // Peel the nested <datasources> and every <datasource-dependencies> block out of the actions
-    // body; what remains is the run of <action> elements. (The top-level <datasources> sits before
-    // <actions>, so these regexes only ever see the nested copies inside the block.)
-    let nestedDatasources = '';
-    inner = inner.replace(/<datasources>[\s\S]*?<\/datasources>/, (block) => {
-      nestedDatasources = block;
-      return '';
-    });
-    const dependencyBlocks: string[] = [];
-    inner = inner.replace(
-      /<datasource-dependencies\b[\s\S]*?<\/datasource-dependencies>/g,
-      (block) => {
-        dependencyBlocks.push(block);
+    // Extract any existing <datasources>/<datasource-dependencies> from the body
+    // so the new deps can be re-merged into that slot
+    let mergedMetadata = '';
+    if (deps !== undefined) {
+      let nestedDatasources = '';
+      inner = inner.replace(/<datasources>[\s\S]*?<\/datasources>/, (block) => {
+        nestedDatasources = block;
         return '';
-      },
-    );
+      });
+      const dependencyBlocks: string[] = [];
+      inner = inner.replace(
+        /<datasource-dependencies\b[\s\S]*?<\/datasource-dependencies>/g,
+        (block) => {
+          dependencyBlocks.push(block);
+          return '';
+        },
+      );
+      mergedMetadata =
+        mergeActionDatasources(nestedDatasources, deps.datasourceName, deps.datasourceXml) +
+        mergeDependencyBlocks(dependencyBlocks, deps.datasourceName, deps.columnsXml);
+    }
 
-    const mergedActions = `${inner}${actionXml}`;
-    const mergedDatasources = mergeActionDatasources(
-      nestedDatasources,
-      deps.datasourceName,
-      deps.datasourceXml,
-    );
-    const mergedDependencies = mergeDependencyBlocks(
-      dependencyBlocks,
-      deps.datasourceName,
-      deps.columnsXml,
-    );
-
-    return new Ok(
-      `${xml.slice(0, site.innerStart)}${mergedActions}${mergedDatasources}${mergedDependencies}${xml.slice(site.close)}`,
-    );
+    const offset = familySlotOffset(inner, actionFamilyIndex(actionXml));
+    const merged = `${inner.slice(0, offset)}${actionXml}${mergedMetadata}${inner.slice(offset)}`;
+    return new Ok(`${xml.slice(0, site.innerStart)}${merged}${xml.slice(site.close)}`);
   }
 
   // No <actions> block yet: there are no existing siblings to merge, so build a fresh block.
-  const actionsBlock =
-    `<actions>${actionXml}` +
-    mergeActionDatasources('', deps.datasourceName, deps.datasourceXml) +
-    mergeDependencyBlocks([], deps.datasourceName, deps.columnsXml) +
-    '</actions>';
-  return new Ok(`${xml.slice(0, site.insertAt)}${actionsBlock}${xml.slice(site.insertAt)}`);
+  const actionsBody =
+    deps === undefined
+      ? actionXml
+      : `${actionXml}` +
+        mergeActionDatasources('', deps.datasourceName, deps.datasourceXml) +
+        mergeDependencyBlocks([], deps.datasourceName, deps.columnsXml);
+  return new Ok(
+    `${xml.slice(0, site.insertAt)}<actions>${actionsBody}</actions>${xml.slice(site.insertAt)}`,
+  );
 }
 
 // Add the datasource entry to the nested <datasources> block, creating the block if absent and
