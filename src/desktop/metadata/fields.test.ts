@@ -311,6 +311,40 @@ describe('addFieldToRows aggregate correction consistency (regression)', () => {
   });
 });
 
+describe('addFieldToEncoding aggregate correction consistency (regression)', () => {
+  // Companion to the Rows regression above. addFieldToEncoding writes the encoding under
+  // the corrected [usr:...] ref but self-verifies the written structure afterward; that
+  // check must compare against the corrected ref, not the caller's original [ctd:...],
+  // or an aggregating calc absent from the worksheet deps throws before apply on
+  // Color/Size/Text.
+  const workbookXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="Sample">
+      <column name="[Calculation_1]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="SUM([Sales])"/>
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it.each(['color', 'size', 'text'] as const)(
+    'writes the corrected [usr:...] ref to %s without throwing on self-verify',
+    (encodingType) => {
+      const modified = addFieldToEncoding(
+        WORKSHEET_XML,
+        encodingType,
+        '[Sample].[ctd:Calculation_1:qk]',
+        undefined,
+        workbookXml,
+      );
+
+      expect(modified).toContain('[usr:Calculation_1:qk]');
+      expect(modified).not.toContain('[ctd:Calculation_1:qk]');
+    },
+  );
+});
+
 describe('addFieldToRows date-part derivations', () => {
   // Regression: mapDerivationToProperCase dropped the date-part keys, so a
   // [mn:...] ref was written with derivation="mn" (invalid) and Tableau
