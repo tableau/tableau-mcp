@@ -212,6 +212,27 @@ describe('createDataAppWorkspace', () => {
       expect(twb).toContain('Superstore');
     });
 
+    it('returns DataAppWiringFailedError when building the wiring edits throws', async () => {
+      mocks.mockResolveDatasourceDescriptor.mockResolvedValue(new Ok(wiredDescriptor));
+      // buildDatasourceWiringEdits throws for anticipated bad descriptors (e.g. empty
+      // fields, bad connectionName prefix); that must surface as a named error, not a 500.
+      mocks.mockBuildDatasourceWiringEdits.mockImplementation(() => {
+        throw new Error('Descriptor "fields" must list at least one field the app will query.');
+      });
+
+      const result = await createDataAppWorkspace({
+        datappName: 'Broken Descriptor',
+        config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
+        datasourceLuid: 'ds-luid-123',
+      });
+
+      invariant(result.isErr());
+      expect(result.error.type).toBe('data-app-wiring-failed');
+      expect(result.error.message).toContain('at least one field');
+    });
+
     it('returns DataAppWiringFailedError when applying the wiring edits throws', async () => {
       mocks.mockResolveDatasourceDescriptor.mockResolvedValue(new Ok(wiredDescriptor));
       mocks.mockBuildDatasourceWiringEdits.mockReturnValue({

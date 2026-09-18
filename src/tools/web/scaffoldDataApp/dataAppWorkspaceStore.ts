@@ -121,7 +121,13 @@ export async function createDataAppWorkspace({
     if (descriptorResult.isErr()) {
       return descriptorResult;
     }
-    wiringEdits = buildDatasourceWiringEdits(descriptorResult.value);
+    try {
+      wiringEdits = buildDatasourceWiringEdits(descriptorResult.value);
+    } catch (error) {
+      return new DataAppWiringFailedError(
+        `Failed to wire the datasource into the workbook: ${getExceptionMessage(error)}.`,
+      ).toErr();
+    }
   }
 
   return config.transport === 'http'
