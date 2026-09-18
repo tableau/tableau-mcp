@@ -327,9 +327,9 @@ SESSION_STORE_PROVIDER_CONFIG='{"module":"./my-session-store.js"}'
 
 The custom provider module should export a default class or named export `SessionStore` that
 implements the [`SessionStore`](https://github.com/tableau/tableau-mcp/blob/main/src/sessionStore/sessionStore.ts)
-interface. `consume` and `rotate` must be implemented as truly atomic operations against the
-backing store (e.g. an ETag-based conditional write for S3/blob storage, a Lua script or
-`MULTI`/`EXEC` for Redis, or a transaction for a relational store).
+interface. `consume` must be implemented as a truly atomic operation against the backing store
+(e.g. an ETag-based conditional write for S3/blob storage, a Lua script or `MULTI`/`EXEC` for
+Redis, or a transaction for a relational store).
 
 :::
 

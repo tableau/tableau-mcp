@@ -17,7 +17,6 @@ import {
 import { isSessionStoreProvider, sessionStoreProviderSchema } from './types.js';
 
 const FAKE_STORE_MODULE = './src/sessionStore/__fixtures__/fakeSessionStore.cjs';
-const NO_ROTATE_STORE_MODULE = './src/sessionStore/__fixtures__/noRotateSessionStore.cjs';
 const CONFIGURE_NAMESPACE_STORE_MODULE =
   './src/sessionStore/__fixtures__/configureNamespaceSessionStore.cjs';
 const LIFECYCLE_STORE_MODULE = './src/sessionStore/__fixtures__/lifecycleSessionStore.cjs';
@@ -94,17 +93,6 @@ describe('SessionStore init', () => {
       );
     });
 
-    it('throws when a custom provider is missing rotate', () => {
-      vi.mocked(getConfig).mockReturnValue({
-        sessionStore: {
-          provider: 'custom',
-          providerConfig: { module: NO_ROTATE_STORE_MODULE },
-        },
-      } as any);
-
-      expect(() => initializeSessionStore()).toThrow(/rotate/);
-    });
-
     it('propagates the original error when getConfig throws', () => {
       vi.mocked(getConfig).mockImplementation(() => {
         throw new Error('Config error');
@@ -153,8 +141,9 @@ describe('SessionStore init', () => {
       await expect(nsA.get('shared')).resolves.toBe('a-value');
       await expect(nsB.get('shared')).resolves.toBe('b-value');
 
-      // rotate on one namespace prefixes both keys and does not disturb the other.
-      await nsA.rotate!('shared', 'rotated', 'a-rotated');
+      // delete/set on one namespace prefixes both keys and does not disturb the other.
+      await nsA.delete('shared');
+      await nsA.set('rotated', 'a-rotated');
       await expect(nsA.get('shared')).resolves.toBeUndefined();
       await expect(nsA.get('rotated')).resolves.toBe('a-rotated');
       await expect(nsB.get('shared')).resolves.toBe('b-value');

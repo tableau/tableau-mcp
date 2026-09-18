@@ -22,7 +22,7 @@ export interface SessionStore<V> {
    * TTL is not a per-call argument: every call site for a given namespace always uses the
    * same constant (e.g. authorization codes always use `authzCodeTimeoutMs`), so it is
    * configured once, at construction time, per provider/namespace instead of being threaded
-   * through every `set`/`rotate` call.
+   * through every `set` call.
    */
   set(key: string, value: V): Promise<void>;
   delete(key: string): Promise<void>;
@@ -40,31 +40,14 @@ export interface SessionStore<V> {
   consume(key: string): Promise<V | undefined>;
 
   /**
-   * Atomic rotate: delete `oldKey` and set `newKey` to `value` in the same logical
-   * operation, so there is never a window in which both keys are simultaneously valid
-   * (used for OAuth refresh-token rotation).
-   *
-   * As with `consume`, a distributed backend MUST make this truly atomic (conditional
-   * write, Lua script/MULTI-EXEC, or a DB transaction). The in-memory default is atomic
-   * because there is no `await` between the delete and the set.
-   *
-   * `rotate` is declared TypeScript-optional only so that a trivial delete-then-set
-   * fallback body is a valid implementation to write. This repo's loader nonetheless
-   * treats `rotate` as REQUIRED for custom providers (validation fails if it is absent),
-   * because the OAuth refresh-token rotation call sites invoke it directly with no runtime
-   * branching on whether it exists.
-   */
-  rotate?(oldKey: string, newKey: string, value: V): Promise<void>;
-
-  /**
    * Announce the TTL/bound intended for a given namespace's keys, so a custom provider can
-   * apply them itself (e.g. native Redis `EX`/`PEXPIRE` in its own `set`/`rotate`). The
+   * apply them itself (e.g. native Redis `EX`/`PEXPIRE` in its own `set`). The
    * in-memory default learns this automatically via per-namespace construction; a custom
    * provider shares one backend across namespaces and otherwise has no way to know which
    * TTL/bound the app computed for which namespace's keys.
    *
-   * Optional (like `rotate`): a provider that does not implement it is a valid no-op, so
-   * existing custom providers keep working. It may be called more than once for the same
+   * Optional: a provider that does not implement it is a valid no-op, so existing custom
+   * providers keep working. It may be called more than once for the same
    * namespace with identical options, so implementations should treat repeated calls as
    * harmless.
    */
@@ -75,8 +58,8 @@ export interface SessionStore<V> {
    * establishing a connection pool). Awaited once at startup; if it rejects, boot fails closed
    * rather than opening the port over a store that would 500 on the first OAuth request.
    *
-   * Optional (like `rotate`): the in-memory default has nothing external to connect to, so it
-   * needs neither `init` nor `close`, and existing custom providers without them keep working.
+   * Optional: the in-memory default has nothing external to connect to, so it needs neither
+   * `init` nor `close`, and existing custom providers without them keep working.
    */
   init?(): Promise<void>;
 

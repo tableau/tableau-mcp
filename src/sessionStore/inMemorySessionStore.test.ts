@@ -38,16 +38,6 @@ describe('InMemorySessionStore', () => {
     await expect(store.consume('key')).resolves.toBeUndefined();
   });
 
-  it('rotate removes oldKey and makes newKey readable with no window where both are valid', async () => {
-    const store = new InMemorySessionStore<string>({ ttlMs: 10000 });
-    await store.set('old', 'value');
-
-    await store.rotate('old', 'new', 'value');
-
-    await expect(store.get('old')).resolves.toBeUndefined();
-    await expect(store.get('new')).resolves.toBe('value');
-  });
-
   it('expires values after the ttl', async () => {
     const store = new InMemorySessionStore<string>({ ttlMs: 1000 });
     await store.set('key', 'value');
@@ -55,15 +45,6 @@ describe('InMemorySessionStore', () => {
 
     vi.advanceTimersByTime(1000);
     await expect(store.get('key')).resolves.toBeUndefined();
-  });
-
-  it('applies the store-configured ttl to rotate as well as set', async () => {
-    const store = new InMemorySessionStore<string>({ ttlMs: 1000 });
-    await store.set('old', 'value');
-    await store.rotate('old', 'new', 'value');
-
-    vi.advanceTimersByTime(1000);
-    await expect(store.get('new')).resolves.toBeUndefined();
   });
 
   it('evicts the oldest key when constructed with maxSize', async () => {

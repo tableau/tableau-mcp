@@ -247,7 +247,9 @@ export function token(
           // Rotate the refresh token and extend its expiration time
           const refreshTokenId = randomBytes(32).toString('hex');
 
-          await refreshTokens.rotate!(refreshToken, refreshTokenId, {
+          await refreshTokenIndex.delete(tokenData.tokens.accessToken);
+          await refreshTokenIndex.set(tokensToStore.accessToken, refreshTokenId);
+          await refreshTokens.set(refreshTokenId, {
             user: tokenData.user,
             server: tokenData.server,
             clientId: tokenData.clientId,
@@ -257,11 +259,6 @@ export function token(
             expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
             tableauClientId: tokenData.tableauClientId,
           });
-          await refreshTokenIndex.rotate!(
-            tokenData.tokens.accessToken,
-            tokensToStore.accessToken,
-            refreshTokenId,
-          );
 
           res.json({
             access_token: accessToken,

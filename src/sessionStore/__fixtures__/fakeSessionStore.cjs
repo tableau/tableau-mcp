@@ -24,12 +24,6 @@ class FakeSessionStore {
     this.map.delete(key);
     return Promise.resolve(value);
   }
-
-  rotate(oldKey, newKey, value) {
-    this.map.delete(oldKey);
-    this.map.set(newKey, value);
-    return Promise.resolve();
-  }
 }
 
 // Mirror the ESM `export default class` convention the loader expects (module.default).

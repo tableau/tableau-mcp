@@ -55,14 +55,6 @@ export class InMemorySessionStore<V> implements SessionStore<V> {
     return Promise.resolve(value);
   }
 
-  rotate(oldKey: string, newKey: string, value: V): Promise<void> {
-    // No await between the delete and the re-arm, so both keys are never simultaneously valid.
-    this.clearRefreshTimer(oldKey);
-    this.map.delete(oldKey);
-    this.scheduleSet(newKey, value, this.ttlMs);
-    return Promise.resolve();
-  }
-
   /**
    * ExpiringMap schedules expiry via a raw setTimeout, which shares Node/setTimeout's 32-bit
    * delay cap (~24.86 days) and throws above it. TTLs beyond that (e.g. a 30-day refresh token)

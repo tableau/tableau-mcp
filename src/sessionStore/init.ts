@@ -15,10 +15,10 @@ function isRecord(obj: unknown): obj is Record<string, unknown> {
 /**
  * Validate that a provider implements the SessionStore interface.
  *
- * `rotate` is required here even though it is TypeScript-optional on the interface: the OAuth
- * refresh-token rotation call sites invoke it directly with no runtime existence check, so a
- * custom provider missing it would fail at runtime. Missing rotate is reported distinctly from
- * the other required methods.
+ * A custom provider is loaded via a dynamic `require()` (see `loadCustomProvider` below), so
+ * TypeScript cannot verify the loaded module actually has the required methods — this runtime
+ * check is what catches a misbehaving custom provider before it reaches call sites that invoke
+ * these methods directly with no runtime existence check of their own.
  */
 function validateSessionStore(provider: unknown): asserts provider is SessionStore<unknown> {
   if (!isRecord(provider)) {
@@ -29,14 +29,6 @@ function validateSessionStore(provider: unknown): asserts provider is SessionSto
     if (typeof provider[method] !== 'function') {
       throw new Error(`Custom provider missing required method: ${method}`);
     }
-  }
-
-  if (typeof provider.rotate !== 'function') {
-    throw new Error(
-      'Custom provider missing required method: rotate. ' +
-        'A delete-old + set-new implementation is sufficient, but it must be present because ' +
-        'OAuth refresh-token rotation call sites invoke it directly.',
-    );
   }
 }
 
@@ -196,7 +188,7 @@ function loadCustomProvider(config?: Record<string, unknown>): SessionStore<unkn
  *
  * The per-namespace TTL/bound is handed to the provider via `configureNamespace` (a no-op if
  * the provider doesn't implement it); the provider still owns applying it (e.g. native Redis
- * `EX`/`PEXPIRE` inside its own `set`/`rotate`).
+ * `EX`/`PEXPIRE` inside its own `set`).
  */
 function createPrefixedStore<V>(
   namespace: string,
@@ -213,8 +205,6 @@ function createPrefixedStore<V>(
     set: (key, value) => shared.set(`${prefix}${key}`, value),
     delete: (key) => shared.delete(`${prefix}${key}`),
     consume: (key) => shared.consume(`${prefix}${key}`),
-    rotate: (oldKey, newKey, value) =>
-      shared.rotate!(`${prefix}${oldKey}`, `${prefix}${newKey}`, value),
   };
 }
 

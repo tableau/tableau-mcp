@@ -69,7 +69,6 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
     { ttlMs: getConfig().oauth.refreshTokenTimeoutMs },
   );
   // Secondary index for O(1) revocation: Tableau access token -> MCP refresh token ID.
-  // Expiry-timeout entries may become stale but are harmless and self-clean on next revoke.
   private readonly refreshTokenIndex: SessionStore<string> = createNamespacedStore(
     'refreshTokenIndex',
     { ttlMs: getConfig().oauth.refreshTokenTimeoutMs },
