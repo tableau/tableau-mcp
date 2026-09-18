@@ -19,7 +19,6 @@ function field(p: {
   caption?: string;
   isAggregated?: boolean;
   semanticRole?: string;
-  approxCount?: number;
   datasource?: string;
 }): SchemaField {
   const bare = p.columnName.replace(/^\[|\]$/g, '');
@@ -32,7 +31,6 @@ function field(p: {
     type: p.type,
     datatype: p.datatype,
     ...(p.semanticRole ? { semanticRole: p.semanticRole } : {}),
-    ...(p.approxCount !== undefined ? { approxCount: p.approxCount } : {}),
     datasource: ds,
     isAggregated: p.isAggregated ?? false,
     column_ref: `[${ds}].[none:${bare}:nk]`,
@@ -621,9 +619,7 @@ describe('binder/validate — cardinality advice', () => {
     const manifest = manifests.get('ranking-ordered-bar')!;
     const schema: SchemaSummary = {
       ...SUMMARY,
-      fields: SUMMARY.fields.map((candidate) =>
-        candidate.name === 'Region' ? { ...candidate, approxCount: 397 } : candidate,
-      ),
+      approxCountByRef: { '[Superstore].[none:Region:nk]': 397 },
     };
     const result = validateBinding(
       manifest,
@@ -671,9 +667,9 @@ describe('binder/validate — cardinality advice', () => {
           role: 'measure',
           type: 'quantitative',
           datatype: 'real',
-          approxCount: 397,
         }),
       ],
+      approxCountByRef: { '[Superstore].[none:Sales:nk]': 397 },
     };
 
     const result = validateBinding(
@@ -719,9 +715,9 @@ describe('binder/validate — cardinality advice', () => {
           role: 'measure',
           type: 'quantitative',
           datatype: 'real',
-          approxCount: 397,
         }),
       ],
+      approxCountByRef: { '[Superstore].[none:Sales:nk]': 397 },
     };
 
     const result = validateBinding(

@@ -29,7 +29,6 @@ export interface SchemaField {
   type: string; // "quantitative" | "nominal" | "ordinal" | ...
   datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
   semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
-  approxCount?: number;
   datasource: string;
   table?: string; // metadata-record parent-name for federated grain disambiguation
   isAggregated: boolean;
@@ -41,6 +40,12 @@ export interface SchemaSummary {
   /** The chosen datasource — substituted for {{DATASOURCE}} and the expected home of every bound field. Scoped when `summarizeSchema` was given a `scopeDatasource`, else the primary. */
   datasource: string;
   fields: SchemaField[];
+  /**
+   * Per-field distinct-value counts, keyed by `column_ref`. A statistic, not a
+   * definition fact — kept off `SchemaField` so a field carries only what it IS,
+   * not what a given extract measured. Absent key = unknown count.
+   */
+  approxCountByRef?: Record<string, number>;
 }
 
 /** Strip surrounding brackets from a Tableau field name: "[Region]" -> "Region". */
@@ -73,7 +78,6 @@ export function summarizeSchema(workbookXml: string, scopeDatasource?: string): 
       type: f.type,
       datatype: f.datatype ?? '',
       semanticRole: f.semanticRole,
-      ...(f.approxCount !== undefined ? { approxCount: f.approxCount } : {}),
       datasource: f.datasource,
       ...(f.table ? { table: f.table } : {}),
       isAggregated: !!f.isAggregated,
@@ -82,14 +86,23 @@ export function summarizeSchema(workbookXml: string, scopeDatasource?: string): 
     };
   });
 
+  const approxCountByRef: Record<string, number> = {};
+  for (const f of raw) {
+    if (f.approxCount !== undefined) approxCountByRef[f.column_ref] = f.approxCount;
+  }
+
   if (scopeDatasource !== undefined) {
     const canonical = canonicalDatasource(fields, scopeDatasource);
     if (canonical !== undefined) {
-      return { datasource: canonical, fields: fields.filter((f) => f.datasource === canonical) };
+      return {
+        datasource: canonical,
+        fields: fields.filter((f) => f.datasource === canonical),
+        approxCountByRef,
+      };
     }
   }
 
-  return { datasource: pickPrimaryDatasource(fields), fields };
+  return { datasource: pickPrimaryDatasource(fields), fields, approxCountByRef };
 }
 
 /**

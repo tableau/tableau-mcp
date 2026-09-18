@@ -706,12 +706,13 @@ export function validateBinding(
       (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('color'),
     );
     const slice = sliceSlot ? resolved.get(sliceSlot.slot_id)?.field : undefined;
-    if (slice?.approxCount !== undefined && slice.approxCount > PIE_SLICE_WORKABLE_MAX) {
+    const sliceCount = slice ? s.approxCountByRef?.[slice.column_ref] : undefined;
+    if (slice && sliceCount !== undefined && sliceCount > PIE_SLICE_WORKABLE_MAX) {
       blockers.push({
         code: 'kind-mismatch',
         slot_id: sliceSlot?.slot_id,
         detail:
-          `pie slice field "${slice.name}" has ${slice.approxCount} distinct values, above the ` +
+          `pie slice field "${slice.name}" has ${sliceCount} distinct values, above the ` +
           `workable maximum of ${PIE_SLICE_WORKABLE_MAX}; choose a lower-cardinality dimension`,
       });
     }
@@ -1135,7 +1136,14 @@ export function validateBinding(
           ? 'usr'
           : effectiveSlotDerivation(slot, entry.field, overrideBySlot.get(slot.slot_id))
         : undefined;
-      const advice = entry ? cardinalityAdvice(slot, entry.field, effectiveDerivation) : undefined;
+      const advice = entry
+        ? cardinalityAdvice(
+            slot,
+            entry.field.name,
+            s.approxCountByRef?.[entry.field.column_ref],
+            effectiveDerivation,
+          )
+        : undefined;
       return advice ? [advice] : [];
     }),
     ...(ask ? matchAvoidWhen(ask, m.avoid_when, m.intent_keywords) : []),

@@ -1,5 +1,4 @@
 import type { SlotSpec } from './manifest-types.js';
-import type { SchemaField } from './schema-summary.js';
 
 export interface CardinalityBand {
   ideal_max: number;
@@ -78,23 +77,23 @@ export function idealCardinality(slot: SlotSpec): CardinalityBand | undefined {
 
 export function cardinalityAdvice(
   slot: SlotSpec,
-  field: SchemaField,
+  fieldName: string,
+  approxCount: number | undefined,
   effectiveDerivation: string = slot.derivation,
 ): string | undefined {
   const band = idealCardinality(slot);
   if (
     !band ||
     !MEMBER_PRESERVING_DERIVATIONS.has(effectiveDerivation) ||
-    field.approxCount === undefined ||
-    field.approxCount <= band.ideal_max
+    approxCount === undefined ||
+    approxCount <= band.ideal_max
   ) {
     return undefined;
   }
 
-  const severity =
-    field.approxCount > band.workable_max ? 'far more than' : 'more than the ideal for';
+  const severity = approxCount > band.workable_max ? 'far more than' : 'more than the ideal for';
   return (
-    `slot '${slot.slot_id}' has ${field.approxCount} distinct values in "${field.name}" — ` +
+    `slot '${slot.slot_id}' has ${approxCount} distinct values in "${fieldName}" — ` +
     `${severity} this slot's ideal of ~${band.ideal_max} (${band.rationale}). ` +
     'This is a legibility hint, not a restriction: keep the bind if the density is intended, ' +
     'or choose a lower-cardinality field or a template that summarizes instead.'

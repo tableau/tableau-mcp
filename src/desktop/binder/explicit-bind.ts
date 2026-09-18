@@ -105,7 +105,6 @@ export function schemaSummaryFromAvailableFields(fields: AvailableFieldLike[]): 
       type: f.type,
       datatype: f.datatype ?? '',
       ...(f.semanticRole ? { semanticRole: f.semanticRole } : {}),
-      ...(f.approxCount !== undefined ? { approxCount: f.approxCount } : {}),
       datasource: f.datasource,
       isAggregated: !!f.isAggregated,
       ...(f.isGroup ? { isGroup: true } : {}),
@@ -114,7 +113,16 @@ export function schemaSummaryFromAvailableFields(fields: AvailableFieldLike[]): 
     };
   });
 
-  return { datasource: pickPrimaryDatasource(summaryFields), fields: summaryFields };
+  const approxCountByRef: Record<string, number> = {};
+  for (const f of fields) {
+    if (f.approxCount !== undefined) approxCountByRef[f.column_ref] = f.approxCount;
+  }
+
+  return {
+    datasource: pickPrimaryDatasource(summaryFields),
+    fields: summaryFields,
+    approxCountByRef,
+  };
 }
 
 export function bindExplicitTemplate(
