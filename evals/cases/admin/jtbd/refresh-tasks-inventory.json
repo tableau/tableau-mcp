@@ -1,0 +1,12 @@
+{
+  "id": "refresh-tasks-inventory",
+  "name": "JTBD2 — Extract-refresh task + schedule inventory",
+  "description": "Job-performance JTBD inventory path. Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT on Tableau Cloud. Model should use list-extract-refresh-tasks to enumerate every extract-refresh task and its schedule (cadence such as Hourly vs Daily), which explains which task dominates total execution load. Read-only.",
+  "tags": ["admin", "tasks", "job-performance", "read-only", "jtbd2", "cloud", "real-server"],
+  "prompt": "Inventory all extract-refresh tasks on this site along with their schedules (cadence). Use the list-extract-refresh-tasks tool. Report each task, its target datasource, and its schedule frequency, and note which task runs most often. Do not modify anything.",
+  "expected_tools": ["list-extract-refresh-tasks"],
+  "budget": {
+    "max_tool_calls": 5,
+    "max_wall_ms": 120000
+  }
+}
