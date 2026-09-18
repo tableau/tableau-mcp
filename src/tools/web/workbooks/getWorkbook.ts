@@ -16,17 +16,23 @@ import {
   PublishedParent,
   toEmbeddedLineageContents,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
+import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook, WorkbookConnection } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
+import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 
 const paramsSchema = {
   workbookId: z.string(),
 };
+
+// Cap on concurrent user-has-query-permissions calls when enriching a workbook's upstream data
+// sources, so a workbook with many data sources can't burst an unbounded number of VDS requests.
+const VDS_QUERYABILITY_CONCURRENCY = 5;
 
 export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getWorkbookTool = new WebTool({
@@ -34,7 +40,10 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
     name: 'get-workbook',
     minRequiredRole: SiteRole.VIEWER,
     description:
-      'Retrieves information about the specified workbook, including information about the views contained in the workbook.',
+      'Retrieves information about the specified workbook, including information about the views contained in the workbook and backing datasources. ' +
+      "The response's upstreamDatasources list each data source the workbook depends on; " +
+      "an entry's isQueryable is true when the calling user can query that data source with the query-datasource tool, " +
+      'false when they cannot, and absent when it could not be determined.',
     paramsSchema,
     annotations: {
       title: 'Get Workbook',
@@ -143,7 +152,16 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                   filterLineageContentsByAllowedIds(published, allowedIds),
                   filterLineageContentsByAllowedIds(embedded, allowedIds),
                 );
-                return mergeWorkbookLineage([workbook], new Map([[workbook.id, merged]]))[0];
+                const mergedWorkbook = mergeWorkbookLineage(
+                  [workbook],
+                  new Map([[workbook.id, merged]]),
+                )[0];
+
+                return await enrichUpstreamDatasourceQueryability({
+                  workbook: mergedWorkbook,
+                  vizqlDataServiceMethods: restApi.vizqlDataServiceMethods,
+                  extra,
+                });
               } catch (error) {
                 log(
                   {
@@ -191,6 +209,105 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
 
   return getWorkbookTool;
 };
+
+/**
+ * Annotates each upstream data source with `isQueryable` by calling VDS's user-has-query-permissions
+ * endpoint. The first data source is probed on its own: if that probe reports a *systemic* failure
+ * (feature-disabled — VDS off site-wide or the endpoint absent on older servers), no data source is
+ * queryable, so every entry is marked `false` and the remaining checks are skipped. Otherwise the
+ * probe result is kept and the remaining data sources are checked concurrently, in batches of
+ * {@link VDS_QUERYABILITY_CONCURRENCY} so VDS isn't hit by an unbounded burst. Each check maps to:
+ *  - 200 → the API's `hasQueryPermission` value.
+ *  - feature-disabled, errorCode 403800 (permission denied), or 404937 (data source not found)
+ *    → `false`: not queryable.
+ *  - Anything else (401, transient 429/5xx, zodios-error, thrown) → left unset (indeterminate).
+ *
+ * Best-effort: a failed check never fails get-workbook.
+ */
+export async function enrichUpstreamDatasourceQueryability({
+  workbook,
+  vizqlDataServiceMethods,
+  extra,
+}: {
+  workbook: Workbook;
+  vizqlDataServiceMethods: VizqlDataServiceMethods;
+  extra: TableauWebRequestHandlerExtra;
+}): Promise<Workbook> {
+  const upstreamDatasources = workbook.upstreamDatasources;
+  if (!upstreamDatasources?.length) {
+    return workbook;
+  }
+
+  const checkDatasourceQueryability = async (
+    ds: LineageContent,
+  ): Promise<{ datasource: LineageContent; systemic: boolean }> => {
+    let detail: string;
+    try {
+      const result = await vizqlDataServiceMethods.userHasQueryPermissions({
+        datasource: { datasourceLuid: ds.luid },
+      });
+      if (result.isOk()) {
+        return {
+          datasource: { ...ds, isQueryable: result.value.hasQueryPermission },
+          systemic: false,
+        };
+      }
+      // feature-disabled is systemic: VDS is off site-wide or the endpoint is absent, so NO data
+      // source is queryable. Flag it so the caller can skip the rest.
+      if (result.error.type === 'feature-disabled') {
+        return { datasource: { ...ds, isQueryable: false }, systemic: true };
+      }
+      // Per-data-source denials are false but not systemic:
+      // * 403800: the caller lacks permission to query this data source
+      // * 404937: the data source no longer exists
+      if (
+        result.error.type === 'api-error' &&
+        (result.error.errorCode === '403800' || result.error.errorCode === '404937')
+      ) {
+        return { datasource: { ...ds, isQueryable: false }, systemic: false };
+      }
+      detail = JSON.stringify(result.error);
+    } catch (error) {
+      detail = getExceptionMessage(error);
+    }
+
+    log(
+      {
+        message: `Could not determine queryability for data source ${ds.luid}`,
+        level: 'warning',
+        logger: 'lineage',
+        data: detail,
+      },
+      extra,
+    );
+    return { datasource: ds, systemic: false };
+  };
+
+  const [first, ...rest] = upstreamDatasources;
+
+  // PROBE: Check the first data source on its own. If it fails systemically (FF is off or endpoint is absent),
+  // we can short-circuit and set isQueryable to false for all data sources without checking the rest.
+  const probe = await checkDatasourceQueryability(first);
+  if (probe.systemic) {
+    return {
+      ...workbook,
+      upstreamDatasources: upstreamDatasources.map((ds) => ({ ...ds, isQueryable: false })),
+    };
+  }
+
+  // The first probe succeeded (or failed non-systemically), so check the rest concurrently, in
+  // batches so no more than VDS_QUERYABILITY_CONCURRENCY calls hit VDS at once.
+  const restEnriched: Array<{ datasource: LineageContent; systemic: boolean }> = [];
+  for (let i = 0; i < rest.length; i += VDS_QUERYABILITY_CONCURRENCY) {
+    const batch = rest.slice(i, i + VDS_QUERYABILITY_CONCURRENCY);
+    restEnriched.push(...(await Promise.all(batch.map((ds) => checkDatasourceQueryability(ds)))));
+  }
+
+  return {
+    ...workbook,
+    upstreamDatasources: [probe.datasource, ...restEnriched.map((r) => r.datasource)],
+  };
+}
 
 export function filterWorkbookViews({
   workbook,
