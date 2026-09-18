@@ -83,6 +83,14 @@ interface FieldBase {
   vizType: string;
   /** True for calcs whose formula already aggregates (SUM(...) etc.) — never re-aggregated. */
   isAggregated: boolean;
+  /**
+   * Tableau geographic semantic role, read verbatim from the column's
+   * `@_semantic-role` attribute (e.g. `[State].[Name]`). Same provenance as
+   * `datatype`/`role`; drives map-capable field detection. Undefined = non-geo.
+   */
+  semanticRole?: string;
+  /** Federated parent-table name (metadata-record) for grain disambiguation. */
+  table?: string;
 }
 
 export interface ColumnField extends FieldBase {
@@ -217,6 +225,8 @@ function toField(row: FieldReference): Field {
     defaultDerivation: row.derivation,
     vizType: row.type,
     isAggregated: !!row.isAggregated,
+    semanticRole: row.semanticRole,
+    ...(row.table ? { table: row.table } : {}),
   };
   if (row.isGroup) return { ...base, kind: 'bin' };
   if (row.formula) return { ...base, kind: 'calculation', formula: row.formula };
