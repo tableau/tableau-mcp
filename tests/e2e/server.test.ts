@@ -9,6 +9,7 @@ import { McpClient } from './mcpClient.js';
 const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
 const flowToolsEnabled = Boolean(features['flow-tools']);
+const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
 
 describe('server', () => {
   beforeAll(setEnv);
@@ -69,6 +70,12 @@ describe('server', () => {
         'request-workbook-upload',
         'publish-workbook',
       ];
+      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      const knowledgeTools: ReadonlyArray<WebToolName> = [
+        'query-knowledge-context',
+        'inspect-knowledge-context',
+        'manage-knowledge-context',
+      ];
 
       let expectedToolNames = [...webToolNames];
 
@@ -94,6 +101,11 @@ describe('server', () => {
 
       if (!features['authoring-tools']) {
         expectedToolNames = expectedToolNames.filter((name) => !authoringTools.includes(name));
+      }
+
+      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
+      if (!knowledgeToolsEnabled) {
+        expectedToolNames = expectedToolNames.filter((name) => !knowledgeTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
@@ -235,6 +247,12 @@ describe('server', () => {
         'request-workbook-upload',
         'publish-workbook',
       ];
+      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      const knowledgeTools: ReadonlyArray<WebToolName> = [
+        'query-knowledge-context',
+        'inspect-knowledge-context',
+        'manage-knowledge-context',
+      ];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -265,6 +283,13 @@ describe('server', () => {
       if (!features['authoring-tools']) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !authoringTools.includes(name),
+        );
+      }
+
+      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
+      if (!knowledgeToolsEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !knowledgeTools.includes(name),
         );
       }
 
