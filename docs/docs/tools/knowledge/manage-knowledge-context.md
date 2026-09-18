@@ -1,11 +1,10 @@
 ---
-sidebar_position: 2
+sidebar_position: 3
 ---
 
 # Manage Knowledge Context
 
-Inspects graph status and curates customer-governed semantic context through one management tool. It
-is available on Tableau+ sites.
+Creates, updates, and deletes customer-governed semantic context. It is available on Tableau+ sites.
 
 :::warning[Disabled by Default]
 This tool requires the `knowledge-tools` feature flag, which defaults to `false` in `features.json`.
@@ -21,9 +20,6 @@ See [Feature Flags](../../developers/feature-flags.md).
 
 | `action`      | Behavior                                                             | Mutation |
 | ------------- | -------------------------------------------------------------------- | -------- |
-| `status`      | Lists graphs and identifies the primary graph                        | No       |
-| `list`        | Lists semantic statements, optionally for one node or global context | No       |
-| `suggestions` | Returns a compact graph-health suggestions report                    | No       |
 | `create`      | Creates a global context or one attached to `targetNodeId`           | Yes      |
 | `update`      | Updates an existing customer-managed context by exact `contextId`    | Yes      |
 | `delete`      | Deletes an existing customer-managed context by exact `contextId`    | Yes      |
@@ -31,6 +27,10 @@ See [Feature Flags](../../developers/feature-flags.md).
 `create` requires one to 100 non-empty statements and exactly one placement: `isGlobal: true` or
 `targetNodeId`. `update` requires `contextId` and at least one changed field. `delete` requires the
 exact `contextId`.
+
+Use [inspect-knowledge-context](inspect-knowledge-context.md) when you need to find existing context,
+check for possible duplicates, or obtain a `contextId`. Inspection is not required when the user
+provides a complete, confirmed change with exact identifiers.
 
 ```json title="Create global context"
 {
@@ -54,20 +54,10 @@ not read-only, may be destructive, and is not idempotent. A successful delete re
 the request completed; because the API is idempotent, it does not claim that the context previously
 existed.
 
-## Suggestions response
-
-The tool returns the report's score, statistics, metrics, summary, errors, and capped top-level
-suggestions. It omits the duplicate category and topic trees to keep agent context bounded. A graph
-status does not by itself prove that every source is synchronized or every recommendation is
-current.
-
 ## Scopes
 
-The management tool requires both read and write scopes because it combines inspection and curation
-in one public contract:
-
-- MCP: `tableau:mcp:knowledge:read`, `tableau:mcp:knowledge:write`
-- Tableau API: `tableau:knowledge:read`, `tableau:knowledge:write`
+- MCP: `tableau:mcp:knowledge:write`
+- Tableau API: `tableau:knowledge:write`
 
 The tool is omitted from sessions where Tableau Knowledge is unavailable. It can also be excluded
 with [`EXCLUDE_TOOLS`](../../configuration/mcp-config/env-vars.md#exclude_tools), including through

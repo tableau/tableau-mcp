@@ -524,9 +524,11 @@ describe('scopes', () => {
     });
   });
 
-  it('should require read and write API scopes for the management tool', () => {
-    expect(getRequiredApiScopesForTool('manage-knowledge-context')).toEqual([
+  it('should separate Knowledge inspection and management API scopes', () => {
+    expect(getRequiredApiScopesForTool('inspect-knowledge-context')).toEqual([
       'tableau:knowledge:read',
+    ]);
+    expect(getRequiredApiScopesForTool('manage-knowledge-context')).toEqual([
       'tableau:knowledge:write',
     ]);
   });

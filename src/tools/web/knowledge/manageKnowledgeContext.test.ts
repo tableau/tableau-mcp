@@ -10,9 +10,6 @@ import { getManageKnowledgeContextTool } from './manageKnowledgeContext.js';
 
 const mocks = vi.hoisted(() => ({
   isFeatureEnabled: vi.fn(),
-  listGraphs: vi.fn(),
-  listSemanticStatements: vi.fn(),
-  getKnowledgeSuggestions: vi.fn(),
   createSemanticStatements: vi.fn(),
   updateSemanticStatements: vi.fn(),
   deleteSemanticStatements: vi.fn(),
@@ -48,30 +45,6 @@ describe('manageKnowledgeContextTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isFeatureEnabled.mockResolvedValue(true);
-    mocks.listGraphs.mockResolvedValue([]);
-    mocks.listSemanticStatements.mockResolvedValue([]);
-    mocks.getKnowledgeSuggestions.mockResolvedValue({
-      health_score: 95,
-      stats: {
-        total_nodes: 10,
-        total_relationships: 9,
-        connected_sources: 2,
-        workbooks: 3,
-      },
-      metrics: [],
-      suggestions: [],
-      categories: [],
-      topics: [],
-      summary: {
-        total: 0,
-        by_severity: {},
-        by_type: {},
-        by_category: {},
-        by_topic: {},
-        errors: 0,
-      },
-      errors: [],
-    });
     mocks.createSemanticStatements.mockResolvedValue(context());
     mocks.updateSemanticStatements.mockResolvedValue(context(['Updated definition']));
     mocks.deleteSemanticStatements.mockResolvedValue(undefined);
@@ -84,7 +57,7 @@ describe('manageKnowledgeContextTool', () => {
     expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-tools');
   });
 
-  it('exposes only parameters relevant to each management action', async () => {
+  it('exposes only mutation parameters', async () => {
     const schema = await Provider.from(getTool().paramsSchema);
     expect(schema).toHaveProperty('safeParse', expect.any(Function));
     if (!('safeParse' in schema)) return;
@@ -102,10 +75,10 @@ describe('manageKnowledgeContextTool', () => {
       }).success,
     ).toBe(true);
     expect(schema.safeParse({ action: 'create', statements: [] }).success).toBe(false);
-    expect(schema.safeParse({ action: 'status', contextId: 'ctx-1' }).success).toBe(false);
+    expect(schema.safeParse({ action: 'status' }).success).toBe(false);
   });
 
-  it('uses conservative mutation annotations and requires both Knowledge scopes', async () => {
+  it('uses mutation annotations and requires only the Knowledge write scope', async () => {
     const tool = getTool();
 
     expect(tool.name).toBe('manage-knowledge-context');
@@ -118,95 +91,16 @@ describe('manageKnowledgeContextTool', () => {
       openWorldHint: false,
     });
 
-    await getResult({ action: 'status' });
-    expect(vi.mocked(useRestApi)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        jwtScopes: ['tableau:knowledge:read', 'tableau:knowledge:write'],
-      }),
-    );
-  });
-
-  it('reports graph status from graph discovery', async () => {
-    mocks.listGraphs.mockResolvedValue([
-      {
-        id: 'g1',
-        name: 'Primary',
-        description: 'Main graph',
-        status: 'active',
-        is_primary: true,
-        created_at: null,
-        updated_at: null,
-      },
-    ]);
-
-    const out = payload(await getResult({ action: 'status' }));
-
-    expect(out.action).toBe('status');
-    expect(out.graphs).toHaveLength(1);
-    expect(out.primaryGraph.id).toBe('g1');
-  });
-
-  it('lists semantic contexts while capping flattened statements', async () => {
-    mocks.listSemanticStatements.mockResolvedValue([context(['First', 'Second'])]);
-
-    const out = payload(await getResult({ action: 'list', isGlobal: true, limit: 1 }));
-
-    expect(mocks.listSemanticStatements).toHaveBeenCalledWith({
-      graphId: undefined,
-      nodeId: undefined,
+    await getResult({
+      action: 'create',
+      statements: [{ statement: 'AOV = revenue / orders' }],
       isGlobal: true,
     });
-    expect(out.statements).toHaveLength(1);
-    expect(out.resultInfo).toMatchObject({
-      originalStatementCount: 2,
-      returnedStatementCount: 1,
-      truncated: true,
-    });
-  });
-
-  it('returns a compact suggestions report without duplicating category and topic trees', async () => {
-    mocks.getKnowledgeSuggestions.mockResolvedValue({
-      health_score: 72,
-      stats: {
-        total_nodes: 10,
-        total_relationships: 4,
-        connected_sources: 1,
-        workbooks: 2,
-      },
-      metrics: [],
-      suggestions: [
-        {
-          id: 'sg-1',
-          type: 'coverage',
-          category: 'context',
-          topic: 'definitions',
-          title: 'Add definitions',
-          detail: 'Missing definitions',
-          recommended_action: 'Add context',
-          severity: 'medium',
-          target_ids: ['pds-1'],
-          metadata: {},
-        },
-      ],
-      categories: [{ category: 'context', count: 1, severity: 'medium', suggestions: [] }],
-      topics: [],
-      summary: {
-        total: 1,
-        by_severity: { medium: 1 },
-        by_type: { coverage: 1 },
-        by_category: { context: 1 },
-        by_topic: { definitions: 1 },
-        errors: 0,
-      },
-      errors: [],
-    });
-
-    const out = payload(await getResult({ action: 'suggestions' }));
-
-    expect(out.healthScore).toBe(72);
-    expect(out.suggestions).toHaveLength(1);
-    expect(out).not.toHaveProperty('categories');
-    expect(out).not.toHaveProperty('topics');
+    expect(vi.mocked(useRestApi)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jwtScopes: ['tableau:knowledge:write'],
+      }),
+    );
   });
 
   it('creates a global customer-governed context', async () => {
@@ -269,22 +163,6 @@ describe('manageKnowledgeContextTool', () => {
 
     expect(result.success).toBe(false);
     expect(mocks.deleteSemanticStatements).not.toHaveBeenCalled();
-  });
-
-  it('derives global scope when listing mixed contexts', async () => {
-    mocks.listSemanticStatements.mockResolvedValue([context()]);
-
-    const out = payload(await getResult({ action: 'list' }));
-
-    expect(out.statements[0].scope).toBe('global');
-  });
-
-  it('preserves global scope when a node listing includes applicable global context', async () => {
-    mocks.listSemanticStatements.mockResolvedValue([context()]);
-
-    const out = payload(await getResult({ action: 'list', nodeId: 'pds-1' }));
-
-    expect(out.statements[0].scope).toBe('global');
   });
 });
 

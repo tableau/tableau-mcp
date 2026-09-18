@@ -185,9 +185,13 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:knowledge:read'],
     api: new Set(['tableau:knowledge:read']),
   },
+  'inspect-knowledge-context': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
   'manage-knowledge-context': {
-    mcp: ['tableau:mcp:knowledge:read', 'tableau:mcp:knowledge:write'],
-    api: new Set(['tableau:knowledge:read', 'tableau:knowledge:write']),
+    mcp: ['tableau:mcp:knowledge:write'],
+    api: new Set(['tableau:knowledge:write']),
   },
   'list-users': {
     mcp: ['tableau:mcp:users:read'],
@@ -451,6 +455,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
 
   if (!knowledgeToolsEnabled) {
     enabledTools.delete('query-knowledge-context');
+    enabledTools.delete('inspect-knowledge-context');
     enabledTools.delete('manage-knowledge-context');
   }
 

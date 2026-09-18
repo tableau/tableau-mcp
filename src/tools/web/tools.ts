@@ -13,6 +13,7 @@ import { getListFlowTasksTool } from './flows/listFlowTasks/listFlowTasks.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getEmbedTokenTool } from './getEmbedToken/getEmbedToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
+import { getInspectKnowledgeContextTool } from './knowledge/inspectKnowledgeContext.js';
 import { getManageKnowledgeContextTool } from './knowledge/manageKnowledgeContext.js';
 import { getQueryKnowledgeContextTool } from './knowledge/queryKnowledgeContext.js';
 import { getListProjectsTool } from './projects/listProjects.js';
@@ -55,6 +56,7 @@ export const webToolFactories = [
   getConfirmUpdateCloudExtractRefreshTaskTool,
   getListJobsTool,
   getQueryKnowledgeContextTool,
+  getInspectKnowledgeContextTool,
   getManageKnowledgeContextTool,
   getListUsersTool,
   getUpdateUserTool,

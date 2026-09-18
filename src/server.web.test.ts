@@ -8,6 +8,7 @@ import { serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
+import { getInspectKnowledgeContextTool } from './tools/web/knowledge/inspectKnowledgeContext.js';
 import { getManageKnowledgeContextTool } from './tools/web/knowledge/manageKnowledgeContext.js';
 import { getQueryKnowledgeContextTool } from './tools/web/knowledge/queryKnowledgeContext.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
@@ -557,44 +558,59 @@ describe('server', () => {
     name === 'enforce-registration-conditions';
 
   it.each([
-    ['omits both for an unlicensed user', 'Unlicensed', false, []],
-    ['omits both for a Guest', 'Guest', false, []],
-    ['omits both for a Support User', SiteRole.SUPPORT_USER, false, []],
-    ['omits both for an unrecognized role', 'Unknown', false, []],
-    ['omits both on Tableau Server', SiteRole.SERVER_ADMINISTRATOR, false, []],
+    ['omits Knowledge tools for an unlicensed user', 'Unlicensed', false, []],
+    ['omits Knowledge tools for a Guest', 'Guest', false, []],
+    ['omits Knowledge tools for a Support User', SiteRole.SUPPORT_USER, false, []],
+    ['omits Knowledge tools for an unrecognized role', 'Unknown', false, []],
+    ['omits Knowledge tools on Tableau Server', SiteRole.SERVER_ADMINISTRATOR, false, []],
     [
       'registers read only when the role lookup fails but the Knowledge read probe succeeds',
       undefined,
       true,
-      ['query-knowledge-context'],
+      ['query-knowledge-context', 'inspect-knowledge-context'],
     ],
-    ['registers read only for a Viewer', SiteRole.VIEWER, true, ['query-knowledge-context']],
-    ['registers read only for an Explorer', SiteRole.EXPLORER, true, ['query-knowledge-context']],
+    [
+      'registers read only for a Viewer',
+      SiteRole.VIEWER,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context'],
+    ],
+    [
+      'registers read only for an Explorer',
+      SiteRole.EXPLORER,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context'],
+    ],
     [
       'registers read only for an Explorer who can publish',
       SiteRole.EXPLORER_CAN_PUBLISH,
       true,
-      ['query-knowledge-context'],
+      ['query-knowledge-context', 'inspect-knowledge-context'],
     ],
     [
       'registers read and manage for a Creator',
       SiteRole.CREATOR,
       true,
-      ['query-knowledge-context', 'manage-knowledge-context'],
+      ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
     ],
     [
       'registers read and manage for a Site Administrator Explorer',
       SiteRole.SITE_ADMINISTRATOR_EXPLORER,
       true,
-      ['query-knowledge-context', 'manage-knowledge-context'],
+      ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
     ],
     [
       'registers read and manage for a Site Administrator Creator',
       SiteRole.SITE_ADMINISTRATOR_CREATOR,
       true,
-      ['query-knowledge-context', 'manage-knowledge-context'],
+      ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
     ],
-    ['omits both when Knowledge is unavailable on the site', SiteRole.CREATOR, false, []],
+    [
+      'omits Knowledge tools when Knowledge is unavailable on the site',
+      SiteRole.CREATOR,
+      false,
+      [],
+    ],
   ] as const)('%s', async (_, siteRole, knowledgeAvailable, expectedTools) => {
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
       (name: string) =>
@@ -612,6 +628,7 @@ describe('server', () => {
     const server = getServer();
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
       getQueryKnowledgeContextTool(server),
+      getInspectKnowledgeContextTool(server),
       getManageKnowledgeContextTool(server),
     ]);
 
@@ -637,6 +654,7 @@ describe('server', () => {
     const server = getServer();
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
       getQueryKnowledgeContextTool(server),
+      getInspectKnowledgeContextTool(server),
       getManageKnowledgeContextTool(server),
     ]);
 

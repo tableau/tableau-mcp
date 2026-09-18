@@ -4,17 +4,11 @@ import { z } from 'zod';
 
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { severitySchema } from '../../../sdks/tableau/types/knowledge.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
-import {
-  flattenKnowledgeStatements,
-  getKnowledgeResultLimit,
-  graphIdSchema,
-  resultLimitSchema,
-} from './knowledgeToolUtils.js';
+import { graphIdSchema } from './knowledgeToolUtils.js';
 
 const statementInputSchema = z.object({
   statement: z.string().trim().min(1).max(10000),
@@ -41,37 +35,8 @@ const isGlobalSchema = z
   .optional()
   .describe('Set true to make the context graph-wide instead of node-specific.');
 const nameSchema = z.string().trim().min(1).max(1000).optional().describe('Context name.');
-const limitSchema = resultLimitSchema.describe(
-  'Maximum returned graphs, suggestions, or statements.',
-);
 
 const actionParamsSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('status'), limit: limitSchema }).strict(),
-  z
-    .object({
-      action: z.literal('list'),
-      graphId: optionalGraphIdSchema,
-      nodeId: z.string().trim().min(1).max(512).optional().describe('Exact Knowledge node ID.'),
-      isGlobal: z.boolean().optional().describe('Filter by graph-wide status.'),
-      limit: limitSchema,
-    })
-    .strict(),
-  z
-    .object({
-      action: z.literal('suggestions'),
-      graphId: optionalGraphIdSchema,
-      pdsId: z.string().trim().min(1).max(512).optional().describe('Published data source ID.'),
-      severity: severitySchema.optional().describe('Suggestion severity filter.'),
-      suggestionType: z
-        .string()
-        .trim()
-        .min(1)
-        .max(200)
-        .optional()
-        .describe('Suggestion type filter.'),
-      limit: limitSchema,
-    })
-    .strict(),
   z
     .object({
       action: z.literal('create'),
@@ -119,13 +84,12 @@ export const getManageKnowledgeContextTool = (
     minRequiredRole: SiteRole.CREATOR,
     registrationConditions: ['RequiresKnowledge'],
     description: `
-Inspects and curates customer-governed Tableau Knowledge context through one management entry point.
-Use action="status" to discover graphs, "list" to inspect existing semantic context,
-"suggestions" to review graph-health recommendations, "create" to add context, and "update" to
-revise a context by exact contextId. Use "delete" to delete a customer-managed context by exact
-contextId. Create, update, and delete change shared graph state; present the exact proposed change
-to the user before invoking them. This tool requires both Knowledge read and write scopes because
-its read-before-write workflow spans both capabilities.
+Creates, updates, and deletes customer-governed Tableau Knowledge context. Use action="create" to
+add context, "update" to revise a context by exact contextId, and "delete" to remove a context by
+exact contextId. Every action changes shared graph state; present the exact proposed change to the
+user before invoking it. Use inspect-knowledge-context when you need to find existing context, check
+for possible duplicates, or obtain a contextId. Inspection is not required when the user provides a
+complete, confirmed change with exact identifiers.
 `.trim(),
     paramsSchema,
     annotations: {
@@ -136,12 +100,6 @@ its read-before-write workflow spans both capabilities.
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {
-      const configuredLimit = (await extra.getConfigWithOverrides()).getMaxResultLimit(tool.name);
-      const limit = getKnowledgeResultLimit(
-        'limit' in args ? args.limit : undefined,
-        configuredLimit,
-      );
-
       return await tool.logAndExecute({
         extra,
         args,
@@ -153,50 +111,6 @@ its read-before-write workflow spans both capabilities.
               callback: async (restApi) => {
                 const methods = restApi.knowledgeMethods;
                 switch (args.action) {
-                  case 'status': {
-                    const graphs = await methods.listGraphs();
-                    const returned = graphs.slice(0, limit);
-                    return {
-                      action: args.action,
-                      graphs: returned,
-                      primaryGraph: graphs.find((graph) => graph.is_primary) ?? null,
-                      resultInfo: listResultInfo('Graph', graphs.length, limit),
-                    };
-                  }
-                  case 'list': {
-                    const contexts = await methods.listSemanticStatements({
-                      graphId: args.graphId,
-                      nodeId: args.nodeId,
-                      isGlobal: args.isGlobal,
-                    });
-                    return {
-                      action: args.action,
-                      ...flattenKnowledgeStatements({
-                        contexts,
-                        scope: args.isGlobal && !args.nodeId ? 'global' : undefined,
-                        limit,
-                      }),
-                    };
-                  }
-                  case 'suggestions': {
-                    const report = await methods.getKnowledgeSuggestions({
-                      graphId: args.graphId,
-                      pdsId: args.pdsId,
-                      severity: args.severity,
-                      type: args.suggestionType,
-                      limit,
-                    });
-                    return {
-                      action: args.action,
-                      healthScore: report.health_score ?? null,
-                      stats: report.stats,
-                      metrics: report.metrics.slice(0, limit),
-                      summary: report.summary,
-                      suggestions: report.suggestions.slice(0, limit),
-                      errors: report.errors.slice(0, limit),
-                      resultInfo: listResultInfo('Suggestion', report.suggestions.length, limit),
-                    };
-                  }
                   case 'create': {
                     const context = await methods.createSemanticStatements({
                       graphId: args.graphId,
@@ -267,16 +181,4 @@ function validateArgs(args: z.infer<typeof actionParamsSchema>): string | null {
   }
 
   return null;
-}
-
-function listResultInfo(
-  label: string,
-  original: number,
-  limit: number,
-): Record<string, number | boolean> {
-  return {
-    [`original${label}Count`]: original,
-    [`returned${label}Count`]: Math.min(original, limit),
-    truncated: original > limit,
-  };
 }
