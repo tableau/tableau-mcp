@@ -643,6 +643,41 @@ describe('authorActionTool (filter mode)', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it('rejects a source worksheet that is not a real sheet', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Typo Source',
+        sourceWorksheet: 'Proft',
+        targetSheet: 'Details',
+      },
+      initialXml: WORKSHEETS_ONLY,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('sourceWorksheet "Proft" was not found');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a source dashboard that is not a real dashboard', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Typo Source Dashboard',
+        sourceWorksheet: '',
+        sourceDashboard: 'Overvew',
+        targetSheet: 'Details',
+      },
+      initialXml: DASHBOARD_WITH_BOTH_SHEETS,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('sourceDashboard "Overvew" was not found');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('fails filter readback when the tsl-filter target is absent', async () => {
     const incompleteAction =
       "<action caption='Filter to Details' name='[Action1]'>" +
@@ -668,6 +703,33 @@ describe('authorActionTool (filter mode)', () => {
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain("value='Details'");
   });
 
+  it('fails readback when a specific-field filter is rewritten to all-fields (link dropped)', async () => {
+    const rewritten =
+      "<action caption='Filter Selected' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter Selected',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        filterFields: ['Category', 'Sub-Category'],
+      },
+      initialXml: WORKSHEETS_WITH_FILTER_FIELDS,
+      readbackXml: withActions(WORKSHEETS_WITH_FILTER_FIELDS, rewritten),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects a duplicate filter action with the same source and target', async () => {
     const existing =
       "<action caption='Existing Filter' name='[Action1]'>" +
@@ -685,6 +747,77 @@ describe('authorActionTool (filter mode)', () => {
         targetSheet: 'Details',
       },
       initialXml: withActions(WORKSHEETS_ONLY, existing),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('identical filter action');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('allows a second filter on the same source and target with different fields', async () => {
+    const existing =
+      "<action caption='Category Filter' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      filterLink(
+        'Category Filter',
+        'tsl:Details?%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BCategory%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Category]~na&gt;',
+      ) +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const initialXml = withActions(WORKSHEETS_WITH_FILTER_FIELDS, existing);
+    const added =
+      "<action caption='Sub-Category Filter' name='[Action2]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      filterLink(
+        'Sub-Category Filter',
+        'tsl:Details?%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BSub-Category%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Sub-Category]~na&gt;',
+      ) +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Sub-Category Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        filterFields: ['Sub-Category'],
+      },
+      initialXml,
+      readbackXml: initialXml.replace('</actions>', `${added}</actions>`),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a duplicate specific-field filter with the same fields', async () => {
+    const existing =
+      "<action caption='Category Filter' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      filterLink(
+        'Category Filter',
+        'tsl:Details?%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BCategory%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Category]~na&gt;',
+      ) +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'New Category Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        filterFields: ['Category'],
+      },
+      initialXml: withActions(WORKSHEETS_WITH_FILTER_FIELDS, existing),
     });
 
     expect(result.isError).toBe(true);
