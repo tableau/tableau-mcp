@@ -1,7 +1,8 @@
-import { canonicalShortDerivation, resolveDerivation } from '../derivations.js';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createHash } from 'crypto';
 import * as xpath from 'xpath';
+
+import { canonicalShortDerivation, resolveDerivation } from '../derivations.js';
 
 // =============================================================================
 // LOCKSTEP-CORE CANDIDATE — shared DOM-structural field-reference rewriter.
@@ -273,9 +274,7 @@ export function rewriteFieldReferencesWithDiagnostics(
   const resolveFieldInfo = (field: string, templateDeriv?: string): FieldInfo | undefined => {
     if (templateDeriv) {
       const bindingDerivation = canonicalShortDerivation(templateDeriv);
-      const q = bindingDerivation
-        ? qualifiedKeyInfo[`${field}@${bindingDerivation}`]
-        : undefined;
+      const q = bindingDerivation ? qualifiedKeyInfo[`${field}@${bindingDerivation}`] : undefined;
       if (q) return q;
     }
     return bareKeyInfo[field];
@@ -654,12 +653,7 @@ export function rewriteFieldReferencesWithDiagnostics(
   // Defense in depth after every substitution pass: a required template field
   // that was not successfully mapped must never reach Desktop as a literal
   // sample-data column. Optional cleanup is verified here for the same reason.
-  assertNoUnresolvedTemplateSlots(
-    doc,
-    mappedFields,
-    baseTarget,
-    options?.templateSlots,
-  );
+  assertNoUnresolvedTemplateSlots(doc, mappedFields, baseTarget, options?.templateSlots);
   assertNoFieldPlaceholderResidue(doc);
 
   // Wrap <run> text with newlines / angle brackets in CDATA (matches Tableau).
@@ -756,9 +750,7 @@ function normalizeFieldMapping(
   for (const [rawKey, value] of Object.entries(fieldMapping)) {
     const { base, derivation } = splitMappingKey(rawKey);
     const slot = bySlotId.get(base) ?? byTemplateField.get(base);
-    const canonical = slot
-      ? `${slot.template_field}${derivation ? `@${derivation}` : ''}`
-      : rawKey;
+    const canonical = slot ? `${slot.template_field}${derivation ? `@${derivation}` : ''}` : rawKey;
     addNormalizedMapping(normalized, canonical, value);
   }
 
@@ -838,8 +830,7 @@ function pruneShelfFieldReferences(doc: Document, templateField: string): void {
   for (const tag of ['rows', 'cols']) {
     for (const shelf of selectElements(`//${tag}`, doc)) {
       for (const text of Array.from(shelf.childNodes).filter(
-        (node): node is Text =>
-          node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE,
+        (node): node is Text => node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE,
       )) {
         if (!referencesTemplateField(text.data, templateField)) continue;
         const kept = text.data
@@ -877,9 +868,7 @@ function pruneOptionalTemplateField(
     );
     if (!unresolvedRef) continue;
     if (element.tagName === 'computed-sort') {
-      droppedOptionalElements.push(
-        `computed-sort dropped: ${unresolvedRef.value} did not resolve`,
-      );
+      droppedOptionalElements.push(`computed-sort dropped: ${unresolvedRef.value} did not resolve`);
     }
     removeOptionalReferenceElement(element);
   }
@@ -1022,11 +1011,11 @@ function collectPrimaryAuthoredDerivations(doc: Document): Map<string, Set<strin
   const recordQualifiedRefs = (value: string | null): void => {
     if (!value) return;
     let qualified = false;
-    for (const match of value.matchAll(/\[[^\[\]]+\]\.\[([^\[\]]+)\]/g)) {
+    for (const match of value.matchAll(/\[[^[\]]+\]\.\[([^[\]]+)\]/g)) {
       qualified = true;
       recordInstance(`[${match[1]}]`);
     }
-    if (!qualified && /^\[[^\[\]]+\]$/.test(value)) recordInstance(value);
+    if (!qualified && /^\[[^[\]]+\]$/.test(value)) recordInstance(value);
   };
 
   for (const tag of ['rows', 'cols', 'mark']) {
@@ -1043,7 +1032,9 @@ function collectPrimaryAuthoredDerivations(doc: Document): Map<string, Set<strin
     recordQualifiedRefs(filter.getAttribute('column'));
   }
   for (const slices of selectElements('//slices', doc)) {
-    for (const column of Array.from(slices.getElementsByTagName('column')) as unknown as Element[]) {
+    for (const column of Array.from(
+      slices.getElementsByTagName('column'),
+    ) as unknown as Element[]) {
       recordQualifiedRefs(column.textContent);
     }
   }
@@ -1122,7 +1113,7 @@ function instanceTypeFromRole(role: string): string {
  */
 function collectQualifiedInstanceRefs(doc: Document): Map<string, Set<string>> {
   const byDatasource = new Map<string, Set<string>>();
-  const pattern = /\[([^\[\]]+)\]\.\[([^\[\]]+:[^\[\]]+:[^\[\]]+)\]/g;
+  const pattern = /\[([^[\]]+)\]\.\[([^[\]]+:[^[\]]+:[^[\]]+)\]/g;
   const record = (value: string): void => {
     for (const m of value.matchAll(pattern)) {
       const set = byDatasource.get(m[1]) ?? new Set<string>();
@@ -1234,7 +1225,10 @@ function deriveRemappedCalcCaption(
   if (replaced !== caption) return replaced;
 
   const humanized = rewrittenFormula
-    .replace(/\b(?:SUM|AVG|MIN|MAX|MEDIAN|ATTR|COUNTD|COUNT|STDEVP|STDEV|VARP|VAR)\s*\(\s*\[([^\]]+)\]\s*\)/gi, '$1')
+    .replace(
+      /\b(?:SUM|AVG|MIN|MAX|MEDIAN|ATTR|COUNTD|COUNT|STDEVP|STDEV|VARP|VAR)\s*\(\s*\[([^\]]+)\]\s*\)/gi,
+      '$1',
+    )
     .replace(/\[([^\]]+)\]/g, '$1')
     .replace(/\s*([+\-*/])\s*/g, ' $1 ')
     .replace(/\s+/g, ' ')
