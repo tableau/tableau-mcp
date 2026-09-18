@@ -321,8 +321,21 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
           }
           if (mode === 'filter') {
-            // A filter action names the sheet/dashboard it filters. A target that is not a
+            // A filter action's source and target must both be real sheets/dashboards. A target that is not a
             // real sheet or dashboard silently filters nothing, so reject a typo up front.
+            if (effectiveSourceSheet.length > 0 && !worksheetNames.has(effectiveSourceSheet)) {
+              return new ArgsValidationError(
+                `sourceWorksheet "${effectiveSourceSheet}" was not found. Available worksheets: ${worksheetNames.size > 0 ? [...worksheetNames].join(', ') : 'none'}`,
+              ).toErr();
+            }
+            if (
+              effectiveSourceDashboard.length > 0 &&
+              !dashboardNames.has(effectiveSourceDashboard)
+            ) {
+              return new ArgsValidationError(
+                `sourceDashboard "${effectiveSourceDashboard}" was not found. Available dashboards: ${dashboardNames.size > 0 ? [...dashboardNames].join(', ') : 'none'}`,
+              ).toErr();
+            }
             const trimmedTarget = targetSheet!.trim();
             if (!worksheetNames.has(trimmedTarget) && !dashboardNames.has(trimmedTarget)) {
               const available = [...worksheetNames, ...dashboardNames];
@@ -331,6 +344,40 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               ).toErr();
             }
           }
+
+          let filterDependencies:
+            | { datasourceName: string; datasourceXml: string; columnsXml: string[] }
+            | undefined;
+          let targetDatasource: DatasourceElement | undefined;
+          let resolvedFields: ResolvedFilterField[] | undefined;
+          let filterLinkExpression: string | undefined;
+          if (mode === 'filter' && (filterFields ?? []).some((field) => field.trim().length > 0)) {
+            const datasourceResult = selectTargetDatasource(liveXml, datasource);
+            if (datasourceResult.isErr()) {
+              return datasourceResult.error.toErr();
+            }
+            targetDatasource = datasourceResult.value;
+            const fieldsResult = resolveFilterFields(
+              liveXml,
+              targetDatasource.name,
+              filterFields ?? [],
+            );
+            if (fieldsResult.isErr()) {
+              return fieldsResult.error.toErr();
+            }
+            resolvedFields = fieldsResult.value;
+            filterLinkExpression = buildTslExpression(
+              effectiveTargetSheet,
+              targetDatasource.name,
+              resolvedFields.map((field) => field.columnName),
+            );
+            filterDependencies = {
+              datasourceName: targetDatasource.name,
+              datasourceXml: renderActionDatasource(targetDatasource),
+              columnsXml: resolvedFields.map((field) => renderDependencyColumn(field)),
+            };
+          }
+
           if (
             mode === 'url' &&
             hasUrlActionDuplicate(
@@ -351,21 +398,17 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               effectiveTargetSheet,
               effectiveSourceSheet,
               effectiveSourceDashboard,
+              filterLinkExpression,
             )
           ) {
             return new ArgsValidationError(
-              'an identical filter action (same source and same target) already exists',
+              'an identical filter action (same source, target, and fields) already exists',
             ).toErr();
           }
 
           const actionName = nextActionName(liveXml);
           let target: string;
           let actionXml: string;
-          let filterDependencies:
-            | { datasourceName: string; datasourceXml: string; columnsXml: string[] }
-            | undefined;
-          let targetDatasource: DatasourceElement | undefined;
-          let resolvedFields: ResolvedFilterField[] | undefined;
           if (mode === 'set') {
             const targetResult = resolveTargetSet(liveXml, targetSet, datasource);
             if (targetResult.isErr()) {
@@ -398,28 +441,6 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             });
           } else if (mode === 'filter') {
             target = effectiveTargetSheet;
-            const hasFilterFields = (filterFields ?? []).some((field) => field.trim().length > 0);
-            if (hasFilterFields) {
-              const datasourceResult = selectTargetDatasource(liveXml, datasource);
-              if (datasourceResult.isErr()) {
-                return datasourceResult.error.toErr();
-              }
-              targetDatasource = datasourceResult.value;
-              const fieldsResult = resolveFilterFields(
-                liveXml,
-                targetDatasource.name,
-                filterFields ?? [],
-              );
-              if (fieldsResult.isErr()) {
-                return fieldsResult.error.toErr();
-              }
-              resolvedFields = fieldsResult.value;
-              filterDependencies = {
-                datasourceName: targetDatasource.name,
-                datasourceXml: renderActionDatasource(targetDatasource),
-                columnsXml: resolvedFields.map((field) => renderDependencyColumn(field)),
-              };
-            }
             actionXml = renderFilterAction({
               caption,
               actionName,
@@ -471,7 +492,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               return hasUrlActionWithLink(xml, caption, target);
             }
             if (mode === 'filter') {
-              return hasFilterActionWithTarget(xml, caption, target);
+              return hasFilterActionWithTarget(xml, caption, target, filterLinkExpression);
             }
             return hasActionWithTargetParam(
               xml,
@@ -524,10 +545,14 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             });
           }
           if (mode === 'filter') {
-            const scopeHint =
-              effectiveSourceDashboard.length > 0
-                ? `source scoped to dashboard '${effectiveSourceDashboard}', so target is the dashboard, not a single worksheet; `
-                : '';
+            const hint = `readback verified the tsl-filter action targeting '${target}'; source scoped to ${[
+              hasWorksheet ? `worksheet '${effectiveSourceSheet}'` : '',
+              hasDashboard ? `dashboard '${effectiveSourceDashboard}'` : '',
+            ]
+              .filter(Boolean)
+              .join(
+                ' on ',
+              )}; Tableau generates the sheet_link group column on the target datasource(s) when the action runs, and the source view must expose marks that drive the filter`;
             return new Ok({
               actionName,
               caption,
@@ -544,7 +569,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               clearSelection,
               singleSelect: singleSelect === true,
               activation,
-              hint: `readback verified the tsl-filter action; ${scopeHint}Tableau generates the sheet_link group column on the target datasource(s) when the action runs, and the source view must expose marks that drive the filter`,
+              hint,
             });
           }
           return new Ok({
@@ -1088,7 +1113,14 @@ function hasUrlActionDuplicate(
 // Readback predicate for filter mode: the caption-matched legacy <action> must carry a
 // <command command='tsc:tsl-filter'> whose target param survived. An action that
 // persisted under a different command (or lost its target) is not a working filter action.
-function hasFilterActionWithTarget(xml: string, caption: string, target: string): boolean {
+// For a specific-field filter the fields live in a tsl: <link> (as url mode's <link>), so its
+// expression must survive as well
+function hasFilterActionWithTarget(
+  xml: string,
+  caption: string,
+  target: string,
+  linkExpression?: string,
+): boolean {
   return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) => {
     const block = match[0];
     const openingTag = block.match(/^<action\b[^>]*>/)?.[0];
@@ -1099,50 +1131,70 @@ function hasFilterActionWithTarget(xml: string, caption: string, target: string)
     if (commandTag === undefined || getAttr(commandTag, 'command') !== 'tsc:tsl-filter') {
       return false;
     }
-    return [...block.matchAll(/<param\b[^>]*>/g)].some(
+    const hasTarget = [...block.matchAll(/<param\b[^>]*>/g)].some(
       (paramMatch) =>
         getAttr(paramMatch[0], 'name') === 'target' &&
         unescapeXml(getAttr(paramMatch[0], 'value') ?? '') === target,
     );
+    if (!hasTarget) {
+      return false;
+    }
+    if (linkExpression !== undefined) {
+      const linkTag = block.match(/<link\b[^>]*>/)?.[0];
+      const expression = linkTag === undefined ? undefined : getAttr(linkTag, 'expression');
+      if (expression === undefined || unescapeXml(expression) !== linkExpression) {
+        return false;
+      }
+    }
+    return true;
   });
 }
 
-// Dedup guard: the document-apply path appends, so a same-source + same-target filter
-// action authored under a different caption would silently double. Caption collision is
-// handled separately by hasActionCaption.
+// Dedup guard: the document-apply path appends, so a same-source + same-target + same-fields
+// filter action authored under a different caption would silently double.
+// Caption collision is handled separately by hasActionCaption.
 function hasFilterActionDuplicate(
   xml: string,
   target: string,
   sourceWorksheet: string,
   sourceDashboard: string,
+  linkExpression?: string,
 ): boolean {
   return hasDuplicateActionForSource(xml, sourceWorksheet, sourceDashboard, (block) => {
     const commandTag = block.match(/<command\b[^>]*>/)?.[0];
     if (commandTag === undefined || getAttr(commandTag, 'command') !== 'tsc:tsl-filter') {
       return false;
     }
-    return [...block.matchAll(/<param\b[^>]*>/g)].some(
+    const sameTarget = [...block.matchAll(/<param\b[^>]*>/g)].some(
       (paramMatch) =>
         getAttr(paramMatch[0], 'name') === 'target' &&
         unescapeXml(getAttr(paramMatch[0], 'value') ?? '') === target,
     );
+    if (!sameTarget) {
+      return false;
+    }
+    const linkTag = block.match(/<link\b[^>]*>/)?.[0];
+    const existingExpression =
+      linkTag === undefined ? undefined : unescapeXml(getAttr(linkTag, 'expression') ?? '');
+    return existingExpression === linkExpression;
   });
 }
 
-// Splice a single action into the workbook-level <actions> block, creating the block
-// between </datasources> and <worksheets> if it does not yet exist. PROVEN live:
-// this is where Tableau expects workbook-scoped actions and where a merge takes.
-function spliceActionIntoWorkbook(
-  xml: string,
-  actionXml: string,
-): Result<string, XmlModificationError> {
+// Where an action should be spliced: inside an existing <actions> block (innerStart just past
+// <actions>, close at </actions>), or in a fresh block anchored right after the top-level
+// </datasources> when none exists yet.
+type ActionsSite =
+  | { kind: 'existing'; innerStart: number; close: number }
+  | { kind: 'fresh'; insertAt: number };
+
+function locateActionsSite(xml: string): Result<ActionsSite, XmlModificationError> {
   const actionsOpen = xml.indexOf('<actions>');
   if (actionsOpen !== -1) {
-    const actionsClose = xml.indexOf('</actions>', actionsOpen);
-    if (actionsClose === -1) {
+    const close = xml.indexOf('</actions>', actionsOpen);
+    if (close === -1) {
       return new XmlModificationError('malformed document: <actions> without </actions>').toErr();
     }
-    return new Ok(`${xml.slice(0, actionsClose)}${actionXml}${xml.slice(actionsClose)}`);
+    return new Ok({ kind: 'existing', innerStart: actionsOpen + '<actions>'.length, close });
   }
 
   const dsClose = xml.indexOf('</datasources>');
@@ -1151,8 +1203,27 @@ function spliceActionIntoWorkbook(
       'cannot place actions: no </datasources> anchor in document',
     ).toErr();
   }
-  const insertAt = dsClose + '</datasources>'.length;
-  return new Ok(`${xml.slice(0, insertAt)}<actions>${actionXml}</actions>${xml.slice(insertAt)}`);
+  return new Ok({ kind: 'fresh', insertAt: dsClose + '</datasources>'.length });
+}
+
+// Splice a single action into the workbook-level <actions> block, creating the block
+// between </datasources> and <worksheets> if it does not yet exist.
+function spliceActionIntoWorkbook(
+  xml: string,
+  actionXml: string,
+): Result<string, XmlModificationError> {
+  const siteResult = locateActionsSite(xml);
+  if (siteResult.isErr()) {
+    return siteResult.error.toErr();
+  }
+  const site = siteResult.value;
+
+  if (site.kind === 'existing') {
+    return new Ok(`${xml.slice(0, site.close)}${actionXml}${xml.slice(site.close)}`);
+  }
+  return new Ok(
+    `${xml.slice(0, site.insertAt)}<actions>${actionXml}</actions>${xml.slice(site.insertAt)}`,
+  );
 }
 
 // Splice a specific-field filter action plus its <datasources>/<datasource-dependencies> siblings
@@ -1162,14 +1233,14 @@ function spliceFilterActionWithDependencies(
   actionXml: string,
   deps: { datasourceName: string; datasourceXml: string; columnsXml: string[] },
 ): Result<string, XmlModificationError> {
-  const actionsOpen = xml.indexOf('<actions>');
-  if (actionsOpen !== -1) {
-    const actionsClose = xml.indexOf('</actions>', actionsOpen);
-    if (actionsClose === -1) {
-      return new XmlModificationError('malformed document: <actions> without </actions>').toErr();
-    }
-    const innerStart = actionsOpen + '<actions>'.length;
-    let inner = xml.slice(innerStart, actionsClose);
+  const siteResult = locateActionsSite(xml);
+  if (siteResult.isErr()) {
+    return siteResult.error.toErr();
+  }
+  const site = siteResult.value;
+
+  if (site.kind === 'existing') {
+    let inner = xml.slice(site.innerStart, site.close);
 
     // Peel the nested <datasources> and every <datasource-dependencies> block out of the actions
     // body; what remains is the run of <action> elements. (The top-level <datasources> sits before
@@ -1201,25 +1272,17 @@ function spliceFilterActionWithDependencies(
     );
 
     return new Ok(
-      `${xml.slice(0, innerStart)}${mergedActions}${mergedDatasources}${mergedDependencies}${xml.slice(actionsClose)}`,
+      `${xml.slice(0, site.innerStart)}${mergedActions}${mergedDatasources}${mergedDependencies}${xml.slice(site.close)}`,
     );
   }
 
-  // No <actions> block yet: there are no existing siblings to merge, so build a fresh block and
-  // anchor it right after the top-level </datasources>.
-  const dsClose = xml.indexOf('</datasources>');
-  if (dsClose === -1) {
-    return new XmlModificationError(
-      'cannot place actions: no </datasources> anchor in document',
-    ).toErr();
-  }
-  const insertAt = dsClose + '</datasources>'.length;
+  // No <actions> block yet: there are no existing siblings to merge, so build a fresh block.
   const actionsBlock =
     `<actions>${actionXml}` +
     mergeActionDatasources('', deps.datasourceName, deps.datasourceXml) +
     mergeDependencyBlocks([], deps.datasourceName, deps.columnsXml) +
     '</actions>';
-  return new Ok(`${xml.slice(0, insertAt)}${actionsBlock}${xml.slice(insertAt)}`);
+  return new Ok(`${xml.slice(0, site.insertAt)}${actionsBlock}${xml.slice(site.insertAt)}`);
 }
 
 // Add the datasource entry to the nested <datasources> block, creating the block if absent and
