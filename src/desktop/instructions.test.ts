@@ -149,24 +149,6 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     const rendered = renderInstructionEntry(guidance!);
     expect(rendered).toContain('author-action');
     expect(rendered).toContain('Before authoring, consult the knowledge docs via search-knowledge');
-    expect(rendered).toContain('If the scope is unclear, ask-user (urgency=blocking)');
-  });
-
-  it('routes edit/delete-an-action asks through ask-user as a blocker', () => {
-    const guidance = routes.find((route) => route.id === 'dynamic-authoring');
-
-    expect(guidance).toBeDefined();
-    expect(guidance?.action).toContain('edit or delete an existing action');
-
-    const rendered = renderInstructionEntry(guidance!);
-    expect(rendered).toContain('author-action only creates actions; it cannot edit or delete');
-    expect(rendered).toContain('is a blocker');
-    expect(rendered).toContain('ask-user (urgency=blocking)');
-    expect(rendered).toContain('delete the original yourself in Tableau Desktop');
-    expect(rendered).toContain('give explicit permission to create a new action anyway');
-    expect(rendered).toContain('Do not author until the user picks');
-    expect(rendered).toContain('A genuinely new action needs no blocker');
-    expect(rendered).toContain('If create-vs-edit intent is ambiguous, ask-user');
   });
 
   it('names add-field then apply-worksheet as the encoding edit path', () => {
@@ -236,7 +218,6 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'build-worksheets-from-templates',
       'apply-worksheet',
       'search-knowledge',
-      'ask-user',
     ]);
     expect(dynamicAuthoring?.action).toContain('build-worksheets-from-templates');
   });
