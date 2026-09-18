@@ -15,6 +15,7 @@ export const lineageContentSchema = z.object({
   luid: z.string(),
   name: z.string(),
   datasourceType: z.enum(['published', 'embedded']).optional(),
+  isQueryable: z.boolean().optional(),
   publishedParent: publishedParentSchema.optional(),
 });
 

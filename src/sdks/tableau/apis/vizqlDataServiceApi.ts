@@ -430,6 +430,18 @@ export const queryOutputSchema = z
   .partial()
   .passthrough();
 
+export const userHasQueryPermissionsRequestSchema = z
+  .object({
+    datasource: datasourceSchema,
+  })
+  .passthrough();
+
+// Only hasQueryPermission is consumed; passthrough keeps the diagnostic fields (datasourceType,
+// resources, capabilities) available for logging without over-modeling a shape HBI may still change.
+export const queryPermissionsOutputSchema = z
+  .object({ hasQueryPermission: z.boolean() })
+  .passthrough();
+
 // Exported Types
 export type Datasource = z.infer<typeof datasourceSchema>;
 export type DataType = z.infer<typeof dataTypeSchema>;
@@ -454,6 +466,9 @@ export type QueryParameter = z.infer<typeof queryParameterSchema>;
 export type ReadMetadataRequest = z.infer<typeof readMetadataRequestSchema>;
 export type GetDatasourceModelRequest = z.infer<typeof getDatasourceModelRequestSchema>;
 export type DatasourceModelResponse = z.infer<typeof datasourceModelResponseSchema>;
+
+export type UserHasQueryPermissionsRequest = z.infer<typeof userHasQueryPermissionsRequestSchema>;
+export type QueryPermissionsOutput = z.infer<typeof queryPermissionsOutputSchema>;
 
 export type TableauError = z.infer<typeof tableauErrorSchema>;
 
@@ -539,11 +554,39 @@ const simpleRequestEndpoint = makeEndpoint({
   response: z.string(),
 });
 
+const userHasQueryPermissionsEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/user-has-query-permissions',
+  alias: 'userHasQueryPermissions',
+  description:
+    'Checks whether the calling user has permission to query the specified data source via the VizQL Data Service.',
+  requestFormat: 'json',
+  parameters: [
+    {
+      name: 'body',
+      type: 'Body',
+      schema: userHasQueryPermissionsRequestSchema,
+    },
+  ],
+  response: queryPermissionsOutputSchema,
+  errors: [
+    {
+      status: 'default',
+      schema: tableauErrorSchema,
+    },
+    {
+      status: 404,
+      schema: z.any(),
+    },
+  ],
+});
+
 const vizqlDataServiceApi = makeApi([
   queryDatasourceEndpoint,
   readMetadataEndpoint,
   getDatasourceModelEndpoint,
   simpleRequestEndpoint,
+  userHasQueryPermissionsEndpoint,
 ]);
 
 export const vizqlDataServiceApis = [

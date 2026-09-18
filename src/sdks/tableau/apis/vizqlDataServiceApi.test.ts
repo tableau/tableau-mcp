@@ -1,4 +1,10 @@
-import { datasourceModelResponseSchema, fieldSchema, filterSchema } from './vizqlDataServiceApi.js';
+import {
+  datasourceModelResponseSchema,
+  fieldSchema,
+  filterSchema,
+  queryPermissionsOutputSchema,
+  userHasQueryPermissionsRequestSchema,
+} from './vizqlDataServiceApi.js';
 
 describe('Field schema', () => {
   it('accepts a minimal valid Field', () => {
@@ -29,6 +35,61 @@ describe('Field schema', () => {
   it('rejects a Field with both function and calculation', () => {
     const data = { fieldCaption: 'Profit', function: 'SUM', calculation: 'SUM([Profit])' };
     expect(() => fieldSchema.parse(data)).toThrow();
+  });
+});
+
+describe('user-has-query-permissions request schema', () => {
+  it('accepts a request with a datasourceLuid', () => {
+    const data = { datasource: { datasourceLuid: 'abc-123' } };
+    expect(() => userHasQueryPermissionsRequestSchema.parse(data)).not.toThrow();
+  });
+
+  it('rejects a request with an empty datasourceLuid', () => {
+    const data = { datasource: { datasourceLuid: '' } };
+    expect(() => userHasQueryPermissionsRequestSchema.parse(data)).toThrow();
+  });
+
+  it('rejects a request missing the datasource', () => {
+    expect(() => userHasQueryPermissionsRequestSchema.parse({})).toThrow();
+  });
+});
+
+describe('query permissions output schema', () => {
+  it('accepts a minimal output with only hasQueryPermission', () => {
+    expect(() => queryPermissionsOutputSchema.parse({ hasQueryPermission: true })).not.toThrow();
+  });
+
+  it('preserves a full real response (WORKBOOK with workbook + upstream resources) via passthrough', () => {
+    const data = {
+      hasQueryPermission: false,
+      datasourceType: 'WORKBOOK',
+      resources: [
+        {
+          resourceType: 'Workbook',
+          luid: 'wb-1',
+          capabilities: [{ name: 'Connect', mode: 'Allow' }],
+        },
+        {
+          resourceType: 'Datasource',
+          luid: 'upstream-pds-1',
+          capabilities: [{ name: 'Connect', mode: 'Deny' }],
+        },
+      ],
+    };
+    expect(queryPermissionsOutputSchema.parse(data)).toEqual(data);
+  });
+
+  it('tolerates unknown diagnostic fields (passthrough)', () => {
+    const data = { hasQueryPermission: false, unexpected: { nested: true } };
+    expect(() => queryPermissionsOutputSchema.parse(data)).not.toThrow();
+  });
+
+  it('rejects output missing hasQueryPermission', () => {
+    expect(() => queryPermissionsOutputSchema.parse({ datasourceType: 'EMBEDDED' })).toThrow();
+  });
+
+  it('rejects a non-boolean hasQueryPermission', () => {
+    expect(() => queryPermissionsOutputSchema.parse({ hasQueryPermission: 'yes' })).toThrow();
   });
 });
 

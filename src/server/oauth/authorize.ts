@@ -241,7 +241,7 @@ async function getOAuthRedirectUrl(
 }
 
 // https://client.dev/servers
-async function getClientFromMetadataDoc(
+export async function getClientFromMetadataDoc(
   clientMetadataUrl: URL,
 ): Promise<Result<ClientMetadata, { error: string; error_description: string }>> {
   const originalUrl = clientMetadataUrl.toString();

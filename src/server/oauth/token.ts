@@ -11,6 +11,7 @@ import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
+import { verifyPrivateKeyJwtClient } from './privateKeyJwt.js';
 import { mcpTokenSchema } from './schemas.js';
 import { formatScopes, getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
 import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens } from './types.js';
@@ -45,7 +46,25 @@ export function token(
     }
 
     let clientCredentialClientId = '';
-    if (config.oauth.clientIdSecretPairs) {
+    const hasClientAssertion = !!result.data.clientAssertion || !!result.data.clientAssertionType;
+
+    if (hasClientAssertion) {
+      const privateKeyJwtResult = await verifyPrivateKeyJwtClient({
+        clientId: result.data.clientId,
+        clientAssertion: result.data.clientAssertion,
+        clientAssertionType: result.data.clientAssertionType,
+      });
+
+      if (privateKeyJwtResult.isErr()) {
+        res.status(401).json({
+          error: 'invalid_client',
+          error_description: privateKeyJwtResult.error,
+        });
+        return;
+      }
+
+      clientCredentialClientId = privateKeyJwtResult.value.clientId;
+    } else if (config.oauth.clientIdSecretPairs) {
       const clientCredentialsResult = verifyClientCredentials({
         clientId: result.data.clientId,
         clientSecret: result.data.clientSecret,

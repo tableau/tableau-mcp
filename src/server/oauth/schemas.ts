@@ -45,14 +45,18 @@ export const mcpTokenSchema = z
       // Optional because client/secret pair may be provided in the request body instead of the query string
       client_id: z.string().optional(),
       client_secret: z.string().optional(),
+      client_assertion: z.string().optional(),
+      client_assertion_type: z.string().optional(),
       scope: z.string().optional(),
     }),
   )
   .transform((data) => {
-    const { client_id, client_secret, scope } = data;
+    const { client_id, client_secret, client_assertion, client_assertion_type, scope } = data;
     const clientIdSecretPair = {
       clientId: client_id,
       clientSecret: client_secret,
+      clientAssertion: client_assertion,
+      clientAssertionType: client_assertion_type,
       scope,
     };
 
@@ -160,8 +164,15 @@ export const cimdMetadataSchema = z.object({
   response_types: z.array(z.enum(['code', 'token'])).optional(),
   post_logout_redirect_uris: z.array(z.string().url()).optional(),
   scope: z.string().default('read').optional(),
+  jwks_uri: z.string().url().optional(),
+  jwks: z
+    .object({
+      keys: z.array(z.record(z.unknown())).min(1),
+    })
+    .optional(),
+  token_endpoint_auth_methods_supported: z.array(z.string()).optional(),
   token_endpoint_auth_method: z
-    .enum(['none', 'client_secret_basic', 'client_secret_post'])
+    .enum(['none', 'client_secret_basic', 'client_secret_post', 'private_key_jwt'])
     .optional(),
 });
 
