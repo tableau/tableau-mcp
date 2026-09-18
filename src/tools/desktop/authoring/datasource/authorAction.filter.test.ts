@@ -814,6 +814,142 @@ describe('authorActionTool (filter mode)', () => {
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
+  it('fails readback when the source dashboard scope is dropped', async () => {
+    const scopeDropped =
+      "<action caption='Scoped' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Scoped',
+        sourceWorksheet: 'Profit',
+        sourceDashboard: 'Overview',
+        targetSheet: 'Details',
+      },
+      initialXml: DASHBOARD_WITH_BOTH_SHEETS,
+      readbackXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, scopeDropped),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails readback when the activation trigger is rewritten', async () => {
+    const triggerRewritten =
+      "<action caption='Hover Filter' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Hover Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        activation: 'on-hover',
+      },
+      initialXml: WORKSHEETS_ONLY,
+      readbackXml: withActions(WORKSHEETS_ONLY, triggerRewritten),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails readback when the clearing behavior (auto-clear/on-empty) is dropped', async () => {
+    const clearingDropped =
+      "<action caption='Clear Filter' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Clear Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        clearSelection: 'exclude-all',
+      },
+      initialXml: WORKSHEETS_ONLY,
+      readbackXml: withActions(WORKSHEETS_ONLY, clearingDropped),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails readback when the exclude opt-out is dropped', async () => {
+    const excludeDropped =
+      "<action caption='Excluded' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' dashboard='Overview' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Overview' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Excluded',
+        sourceWorksheet: 'Profit',
+        sourceDashboard: 'Overview',
+        targetSheet: 'Overview',
+        excludeSheets: ['Profit'],
+      },
+      initialXml: DASHBOARD_WITH_BOTH_SHEETS,
+      readbackXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, excludeDropped),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails readback when single-select is dropped', async () => {
+    const singleSelectDropped =
+      "<action caption='Single Filter' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Single Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        singleSelect: true,
+      },
+      initialXml: WORKSHEETS_ONLY,
+      readbackXml: withActions(WORKSHEETS_ONLY, singleSelectDropped),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects a duplicate filter action with the same source and target', async () => {
     const existing =
       "<action caption='Existing Filter' name='[Action1]'>" +
