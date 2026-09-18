@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "4.11.0",
+  "version": "4.11.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -26,6 +26,9 @@
     },
     "./telemetry/telemetryProvider": {
       "types": "./build/telemetry/telemetryProvider.d.ts"
+    },
+    "./sessionStore/sessionStore": {
+      "types": "./build/sessionStore/sessionStore.d.ts"
     }
   },
   "scripts": {
