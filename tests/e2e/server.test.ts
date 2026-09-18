@@ -9,6 +9,7 @@ import { McpClient } from './mcpClient.js';
 const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
 const flowToolsEnabled = Boolean(features['flow-tools']);
+const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
 
 describe('server', () => {
   beforeAll(setEnv);
@@ -85,6 +86,16 @@ describe('server', () => {
       // Filter out flow tools unless both the env switch and the feature flag are on
       if (process.env.FLOW_TOOLS_ENABLED !== 'true' || !flowToolsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
+      }
+
+      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      const knowledgeTools: ReadonlyArray<WebToolName> = [
+        'query-knowledge-context',
+        'inspect-knowledge-context',
+        'manage-knowledge-context',
+      ];
+      if (!knowledgeToolsEnabled) {
+        expectedToolNames = expectedToolNames.filter((name) => !knowledgeTools.includes(name));
       }
 
       // Filter out insights tools if they are not enabled
@@ -255,6 +266,16 @@ describe('server', () => {
       // Filter out flow tools unless both the env switch and the feature flag are on
       if (process.env.FLOW_TOOLS_ENABLED !== 'true' || !flowToolsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
+      }
+
+      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      const knowledgeTools: ReadonlyArray<WebToolName> = [
+        'query-knowledge-context',
+        'inspect-knowledge-context',
+        'manage-knowledge-context',
+      ];
+      if (!knowledgeToolsEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => !knowledgeTools.includes(name));
       }
 
       // Filter out insights tools if they are not enabled
