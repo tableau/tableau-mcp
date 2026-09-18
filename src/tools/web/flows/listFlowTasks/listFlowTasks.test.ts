@@ -10,6 +10,11 @@ import { mockFlowRunTasks } from './mockFlowRunTasks.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetFlowRunTasks: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../../restApiInstance.js', () => ({
@@ -43,6 +48,7 @@ const NO_BOUNDED_CONTEXT = {
 describe('listFlowTasksTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -54,9 +60,9 @@ describe('listFlowTasksTool', () => {
     expect(tool.paramsSchema).toHaveProperty('limit');
   });
 
-  it('is not admin-gated (callable without ADMIN_TOOLS_ENABLED)', () => {
+  it('is not admin-gated (callable without ADMIN_TOOLS_ENABLED)', async () => {
     const tool = getListFlowTasksTool(new WebMcpServer());
-    expect(tool.disabled).toBeFalsy();
+    expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
   it('should be disabled when flow tools are not enabled', async () => {
@@ -66,6 +72,13 @@ describe('listFlowTasksTool', () => {
     } as ReturnType<typeof getConfig>);
     const tool = getListFlowTasksTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
+  it('should be disabled when the flow-tools feature flag is OFF', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    const tool = getListFlowTasksTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(true);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('flow-tools');
   });
 
   it('successfully lists flow run tasks with a resultInfo signal', async () => {

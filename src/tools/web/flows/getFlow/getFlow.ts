@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
 import { FlowNotAllowedError } from '../../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import {
@@ -12,6 +13,7 @@ import {
   FlowOutputStep,
   FlowRun,
 } from '../../../../sdks/tableau/types/flow.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import {
   GET_FLOW_BASE_API_SCOPES,
@@ -21,6 +23,7 @@ import {
 } from '../../../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../../../utils/getHttpStatus.js';
+import { Provider } from '../../../../utils/provider.js';
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
 
@@ -78,7 +81,11 @@ export const getGetFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   const getFlowTool = new WebTool({
     server,
     name: 'get-flow',
-    disabled: !config.flowToolsEnabled,
+    minRequiredRole: SiteRole.VIEWER,
+    disabled: new Provider(
+      async () =>
+        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+    ),
     description: `
   Retrieves detailed information about a specific Tableau Prep flow, including the flow's metadata (name, description, owner, project, tags, parameters), its output step IDs and names, and optionally its input connections and recent run history. This is the primary tool to use when a user asks about a specific flow's structure, contents, recent runs, or input data sources.
 

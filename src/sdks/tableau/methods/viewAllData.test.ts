@@ -35,6 +35,75 @@ const multipartBody = Buffer.from(
 );
 
 describe('parseViewAllData', () => {
+  it('parses a single successful sheet', () => {
+    const body = Buffer.from(
+      [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="Sales_payload"',
+        'Content-Type: text/csv; charset=utf-8',
+        'X-Tableau-Sheet-Name: Sales',
+        'X-Tableau-Sheet-Status: 200',
+        '',
+        'Region,Sales',
+        'West,100',
+        `--${boundary}--`,
+        '',
+      ].join('\r\n'),
+    );
+
+    expect(parseViewAllData(body, `multipart/form-data; boundary=${boundary}`)).toEqual([
+      {
+        sheetName: 'Sales',
+        status: 'OK',
+        errorDetail: undefined,
+        columns: ['Region', 'Sales'],
+        rows: [['West', '100']],
+      },
+    ]);
+  });
+
+  it('preserves successful sheets in multipart response order', () => {
+    const body = Buffer.from(
+      [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="Sales_payload"',
+        'Content-Type: text/csv; charset=utf-8',
+        'X-Tableau-Sheet-Name: Sales',
+        'X-Tableau-Sheet-Status: 200',
+        '',
+        'Region',
+        'West',
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="Profit_payload"',
+        'Content-Type: text/csv; charset=utf-8',
+        'X-Tableau-Sheet-Name: Profit',
+        'X-Tableau-Sheet-Status: 200',
+        '',
+        'Region',
+        'East',
+        `--${boundary}--`,
+        '',
+      ].join('\r\n'),
+    );
+
+    expect(parseViewAllData(body, `multipart/form-data; boundary=${boundary}`)).toEqual([
+      {
+        sheetName: 'Sales',
+        status: 'OK',
+        errorDetail: undefined,
+        columns: ['Region'],
+        rows: [['West']],
+      },
+      {
+        sheetName: 'Profit',
+        status: 'OK',
+        errorDetail: undefined,
+        columns: ['Region'],
+        rows: [['East']],
+      },
+    ]);
+  });
+
   it('preserves sheet order, headers, and CSV cells', () => {
     const sheets = parseViewAllData(multipartBody, `multipart/form-data; boundary=${boundary}`);
 

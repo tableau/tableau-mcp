@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<workbook original-version='18.1' source-build='2021.1.2 (20211.21.0511.0935)' source-platform='mac' version='18.1'>
+  <datasources>
+    <datasource caption='RetailNTO' inline='true' name='sqlproxy.retailnto_93c6b9d620e649b8b936cbfe18e8f7f6' version='18.1'>
+      <connection channel='http' class='sqlproxy' dbname='RetailNTO_17694499095510' directory='/dataserver' port='80' server='prod-uswest-c.online.tableau.com' username='' workgroup-auth-mode='prompt'>
+        <relation name='sqlproxy' table='[sqlproxy]' type='table' />
+      </connection>
+  </datasources>
+</workbook>

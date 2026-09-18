@@ -105,8 +105,12 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
     const authInfo = result.value;
     const { enforceScopes, advertiseApiScopes } = getConfig().oauth;
     if (enforceScopes) {
-      const requiredMcpScopes = await getRequiredMcpScopesForRequest(req.body);
-      const requiredApiScopes = await getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
+      const requiredMcpScopes = await getRequiredMcpScopesForRequest(req.body, authInfo.clientId);
+      const requiredApiScopes = await getRequiredApiScopesForRequest(
+        req.body,
+        advertiseApiScopes,
+        authInfo.clientId,
+      );
       const missingMcpScopes = requiredMcpScopes.filter(
         (scope) => !authInfo.scopes.includes(scope),
       );
@@ -160,14 +164,14 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
   };
 }
 
-async function getRequiredMcpScopesForRequest(body: unknown): Promise<string[]> {
+async function getRequiredMcpScopesForRequest(body: unknown, clientId?: string): Promise<string[]> {
   if (isInitializeRequest(body)) {
-    return getSupportedMcpScopes();
+    return getSupportedMcpScopes(clientId);
   }
 
   const toolName = getToolNameFromRequestBody(body);
   if (toolName === undefined) {
-    return getSupportedMcpScopes();
+    return getSupportedMcpScopes(clientId);
   }
 
   const scopes = new Set<string>();
@@ -181,13 +185,14 @@ async function getRequiredMcpScopesForRequest(body: unknown): Promise<string[]> 
 async function getRequiredApiScopesForRequest(
   body: unknown,
   includeApiScopes: boolean,
+  clientId?: string,
 ): Promise<string[]> {
   if (!includeApiScopes) {
     return [];
   }
 
   if (isInitializeRequest(body)) {
-    return getSupportedApiScopes();
+    return getSupportedApiScopes(clientId);
   }
 
   const toolName = getToolNameFromRequestBody(body);

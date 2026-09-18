@@ -13,9 +13,11 @@ import { getFeatureGate } from '../../../features/init.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
@@ -72,8 +74,8 @@ export type PublishWorkbookResult =
 type ValidationFinding = {
   severity: string;
   message: string;
-  line: number;
-  column: number;
+  line?: number;
+  column?: number;
   elementName: string;
 };
 
@@ -81,6 +83,7 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
   const tool = new WebTool({
     server,
     name: 'publish-workbook',
+    minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
       'Publishes a TWB or TWBX workbook from a local file path or staged upload id to the specified Tableau project. Use list-projects to discover project IDs. TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
     paramsSchema,
@@ -92,7 +95,9 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
       openWorldHint: true,
     },
     disabled: new Provider(
-      async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
+      async () =>
+        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
+        isSlackClient(server.clientId),
     ),
     callback: async (
       { workbookUploadId, workbookFilePath, name, projectId, overwrite = false },

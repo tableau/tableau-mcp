@@ -330,6 +330,10 @@ information about the client's identity, capabilities, and protocol version comp
   clients to provide that session ID in the `mcp-session-id` header for subsequent requests.
 - Set this to `true` if you are using the HTTP transport and your client does not support or need
   session management.
+- MCP-Apps interactive tool rendering requires session management to detect client capabilities.
+  When `true`, app tools fall back to plain tool registration, regardless of what the connecting
+  client supports — except tools that opt out of the plain-tool fallback entirely (via
+  `hideWhenUnsupported`), which are omitted from registration altogether in this mode.
 
 <hr />
 
@@ -463,8 +467,16 @@ Controls whether the Tableau Prep flow tools are registered.
 - Set to `true` to enable the Tableau Prep flow tools:
   - [`list-flows`](../../tools/flows/list-flows.md)
   - [`get-flow`](../../tools/flows/get-flow.md)
+  - [`list-flow-runs`](../../tools/flows/list-flow-runs.md)
+  - [`list-flow-tasks`](../../tools/flows/list-flow-tasks.md)
 - Only the exact value `true` enables them; any other value (or leaving it unset) keeps them
   disabled.
+- Setting this to `true` is necessary but not sufficient. The flow tools also require the
+  `flow-tools` feature flag to be enabled, which lets a deployment roll them out per environment
+  without a redeploy. Both switches must be on for the tools to register; either one turns them
+  off. Self-hosted deployments control the flag through `features.json`, where it ships as `false`.
+- When the tools are disabled, their OAuth scopes (`tableau:mcp:flow:read` and
+  `tableau:flows:read`) are neither advertised nor enforced.
 - When enabled, individual flow tools can still be excluded via
   [`EXCLUDE_TOOLS`](#exclude_tools) (e.g. `EXCLUDE_TOOLS=flow`).
 

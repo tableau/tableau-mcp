@@ -14,6 +14,10 @@ This is the dedicated, filterable, site-wide run-history tool:
 - [Get Flow](get-flow.md) returns recent runs for a **single** flow (as a capped sidecar). Use
   `list-flow-runs` for cross-flow questions ("all failures today") or deeper single-flow history.
 
+## Required permissions
+
+- **Site Role**: Requires Explorer (Can Publish) role or higher
+
 ## APIs called
 
 - [Get Flow Runs](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_runs)

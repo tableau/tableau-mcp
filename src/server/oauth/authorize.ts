@@ -120,7 +120,7 @@ export function authorize(
     const requestedScopes = parseScopes(scope);
     const { valid: validScopes, invalid: invalidScopes } = validateScopes(
       requestedScopes,
-      await getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
+      await getSupportedScopes({ includeApiScopes: advertiseApiScopes, clientId: client_id }),
     );
 
     if (invalidScopes.length > 0) {
@@ -135,7 +135,7 @@ export function authorize(
       validScopes.length > 0
         ? validScopes
         : enforceScopes
-          ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+          ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes, clientId: client_id })
           : [];
 
     // Redirect URI security enforcement for opaque client_ids (runs after baseline param

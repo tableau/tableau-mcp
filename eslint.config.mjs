@@ -72,7 +72,14 @@ export default [
     },
   },
   {
-    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**', 'docs/build/**'],
+    ignores: [
+      'node_modules/**',
+      'build/**',
+      'docs/.docusaurus/**',
+      'docs/build/**',
+      '.claude/**',
+      '.worktrees/**',
+    ],
   },
   {
     plugins: {

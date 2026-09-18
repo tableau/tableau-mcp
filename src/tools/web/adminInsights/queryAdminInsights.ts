@@ -6,12 +6,13 @@ import { getConfig } from '../../../config.js';
 import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
 import {
+  AdminInsightsQueryResult,
   executeAdminInsightsQuery,
-  QueryOutput,
   runAdminInsightsQuery,
 } from './adminInsightsToolBase.js';
 import {
@@ -25,7 +26,11 @@ import {
   computeStaleRows,
   StaleContentRow,
 } from './getStaleContentReport.js';
-import { ADMIN_INSIGHTS_DATASETS, AdminInsightsDataset } from './resolver.js';
+import {
+  ADMIN_INSIGHTS_DATASETS,
+  AdminInsightsDataset,
+  AdminInsightsResolverWarning,
+} from './resolver.js';
 
 /**
  * Dispatches on `kind` to one of five backends:
@@ -98,7 +103,7 @@ type StaleContentResult = {
   totalStaleItems: number;
   totalStaleSizeBytes: number;
   rows: StaleContentRow[];
-  mcp?: { warnings: _StaleReportWarning[] };
+  mcp?: { warnings: Array<_StaleReportWarning | AdminInsightsResolverWarning> };
 };
 
 export const getQueryAdminInsightsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -107,6 +112,7 @@ export const getQueryAdminInsightsTool = (server: WebMcpServer): WebTool<typeof 
     server,
     name: 'query-admin-insights',
     disabled: !config.adminToolsEnabled,
+    minRequiredRole: MIN_ADMIN_SITE_ROLE,
     description: `
 Queries the Tableau Admin Insights datasources on the current site. Restricted to site
 administrators on Tableau Cloud sites with Admin Insights enabled.
@@ -199,6 +205,10 @@ Consider this for general admin/site-health, governance, cleanup, and cost/licen
                   return siteContentResult;
                 }
 
+                // Surface any resolver diagnostics (ambiguous duplicate / dead-extract fallback)
+                // alongside the stale-content warnings.
+                const resolverWarnings = siteContentResult.value.mcp?.warnings ?? [];
+
                 const universe = z
                   .array(_siteContentRowSchema)
                   .parse(siteContentResult.value.data ?? []);
@@ -223,17 +233,22 @@ Consider this for general admin/site-health, governance, cleanup, and cost/licen
                     totalStaleSizeBytes,
                     rows: [] as StaleContentRow[],
                     mcp: {
-                      warnings: [...warnings, _buildRowCapWarning({ totalStaleItems, maxRows })],
+                      warnings: [
+                        ...resolverWarnings,
+                        ...warnings,
+                        _buildRowCapWarning({ totalStaleItems, maxRows }),
+                      ],
                     },
                   });
                 }
 
+                const allWarnings = [...resolverWarnings, ...warnings];
                 return new Ok({
                   thresholdDays,
                   totalStaleItems,
                   totalStaleSizeBytes,
                   rows,
-                  ...(warnings.length > 0 ? { mcp: { warnings } } : {}),
+                  ...(allWarnings.length > 0 ? { mcp: { warnings: allWarnings } } : {}),
                 });
               },
             });
@@ -242,7 +257,7 @@ Consider this for general admin/site-health, governance, cleanup, and cost/licen
         });
       }
 
-      return await tool.logAndExecute<QueryOutput>({
+      return await tool.logAndExecute<AdminInsightsQueryResult>({
         extra,
         args: { kind, query, limit },
         callback: async () => {
@@ -257,10 +272,11 @@ Consider this for general admin/site-health, governance, cleanup, and cost/licen
           const caps = [toolCap, limit].filter((v): v is number => typeof v === 'number' && v > 0);
           const rowLimit = caps.length > 0 ? Math.min(...caps) : undefined;
 
+          const datasetName = kindToDataset(kind);
           return await runAdminInsightsQuery({
             extra,
             jwtScopes: tool.requiredApiScopes,
-            datasetName: kindToDataset(kind),
+            datasetName,
             query,
             rowLimit,
           });

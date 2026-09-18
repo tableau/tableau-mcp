@@ -1,7 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { MockedFunction } from 'vitest';
 
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
+import * as logger from './logging/logger.js';
+import { SiteRole } from './sdks/tableau/types/user.js';
 import { serverName, WebMcpServer } from './server.web.js';
+import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
@@ -17,16 +21,29 @@ const mocks = vi.hoisted(() => ({
   mockRegisterAppTool: vi.fn(),
   mockRegisterAppResource: vi.fn(),
   mockFeatureGate: {
-    isFeatureEnabled: vi.fn(() => false),
+    isFeatureEnabled: vi.fn((_featureName: string) => false),
   },
   mockReadFile: vi.fn(),
+  mockGetCurrentUserSiteRole: vi.fn(),
+  mockAssertAdmin: vi.fn(),
+  mockCheckRegistrationConditions: vi.fn(),
 }));
+
+const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
 
 vi.mock('@modelcontextprotocol/ext-apps/server', () => ({
   registerAppTool: mocks.mockRegisterAppTool,
   registerAppResource: mocks.mockRegisterAppResource,
   RESOURCE_MIME_TYPE: 'text/html',
+  // Mirror ext-apps' real getUiCapability: return the SEP-1724 UI extension object, if present.
+  getUiCapability: (capabilities: { extensions?: Record<string, unknown> } | undefined) =>
+    capabilities?.extensions?.[UI_EXTENSION_ID],
 }));
+
+// Client capabilities advertising MCP-Apps rendering support (uses the mocked RESOURCE_MIME_TYPE).
+const uiCapableClientCapabilities: ClientCapabilitiesWithUiExtension = {
+  extensions: { [UI_EXTENSION_ID]: { mimeTypes: ['text/html'] } },
+};
 
 vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
@@ -36,6 +53,24 @@ vi.mock('fs/promises', () => ({
   readFile: (...args: any[]) => mocks.mockReadFile(...args),
 }));
 
+vi.mock('./tools/web/adminGate.js', () => ({
+  getCurrentUserSiteRole: mocks.mockGetCurrentUserSiteRole,
+  assertAdmin: mocks.mockAssertAdmin,
+}));
+
+// Only the capability probe is stubbed — the real `getUnmetConditionInstructions` is kept so the
+// instructions assertions below verify the copy users actually receive.
+vi.mock('./tools/web/registrationConditions.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./tools/web/registrationConditions.js')>();
+  return {
+    ...actual,
+    checkRegistrationConditions: mocks.mockCheckRegistrationConditions,
+  };
+});
+
+// Auto-mock the telemetry logger so the registration-time warning is captured as a spy call.
+vi.mock('./logging/logger.js');
+
 describe('server', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
@@ -44,6 +79,12 @@ describe('server', () => {
     mocks.mockRegisterAppResource.mockClear();
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
     mocks.mockReadFile.mockClear();
+    mocks.mockGetCurrentUserSiteRole.mockReset().mockResolvedValue('SiteAdministratorCreator');
+    mocks.mockAssertAdmin.mockReset();
+    mocks.mockCheckRegistrationConditions
+      .mockReset()
+      .mockResolvedValue({ registrationConditionsMet: true });
+    (logger.log as MockedFunction<typeof logger.log>).mockClear();
   });
 
   afterEach(() => {
@@ -51,13 +92,19 @@ describe('server', () => {
   });
 
   // Helper functions
-  function getServer(): WebMcpServer {
-    const server = new WebMcpServer();
+  function getServer(opts?: {
+    capabilities?: ClientCapabilitiesWithUiExtension;
+    clientId?: string;
+  }): WebMcpServer {
+    const server = new WebMcpServer({
+      capabilities: opts?.capabilities,
+      clientId: opts?.clientId,
+    });
     server.mcpServer.registerTool = vi.fn();
     return server;
   }
 
-  function createMockAppTool(): WebTool<any> {
+  function createMockAppTool(opts?: { hideWhenUnsupported?: boolean }): WebTool<any> {
     return {
       name: 'mock-app-tool' as WebToolName,
       server: {} as any,
@@ -74,12 +121,15 @@ describe('server', () => {
       callback: vi.fn(),
       disabled: false,
       requiredApiScopes: [],
+      minRequiredRole: SiteRole.VIEWER,
+      registrationConditions: [],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
       app: {
         name: 'test-app',
         resourceUri: 'tableau://app/test',
         htmlPath: '<html><body>Test App UI</body></html>',
+        ...(opts?.hideWhenUnsupported ? { hideWhenUnsupported: true } : {}),
       },
     };
   }
@@ -137,6 +187,9 @@ describe('server', () => {
     // so a future edit that drops the rendering guidance can't silently pass.
     expect(instructions).toContain('present them as Markdown tables');
     expect(instructions).toContain('to a chat or Slack surface');
+    // Admin-invocation nudge: the model must not gate admin-tool use on the user restating admin
+    // status — the per-call assertAdmin gate authorizes each call and cleanly rejects non-admins.
+    expect(instructions).toContain('Do not require the user to state or re-confirm admin status');
 
     // The clause belongs to the admin block specifically: it must be appended after the base
     // guidance and after the admin lead-in, never spliced into the base sentence.
@@ -165,6 +218,10 @@ describe('server', () => {
     // stayed out of the base instructions).
     expect(instructions).not.toContain('present them as Markdown tables');
     expect(instructions).not.toContain('Markdown tables');
+    // The admin-invocation nudge is part of the admin-only block and must also be absent.
+    expect(instructions).not.toContain(
+      'Do not require the user to state or re-confirm admin status',
+    );
   });
 
   it('should not register disabled tools', async () => {
@@ -204,7 +261,28 @@ describe('server', () => {
     expect(registeredToolNames).toContain('list-datasources');
   });
 
-  it('should register flow tools when FLOW_TOOLS_ENABLED is "true"', async () => {
+  it('should register flow tools when FLOW_TOOLS_ENABLED is "true" and the flow-tools flag is ON', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'flow-tools',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    // Both switches on turns on every flow tool...
+    expect(registeredToolNames).toContain('list-flows');
+    expect(registeredToolNames).toContain('get-flow');
+    expect(registeredToolNames).toContain('list-flow-runs');
+    expect(registeredToolNames).toContain('list-flow-tasks');
+    // ...alongside the unrelated tools.
+    expect(registeredToolNames).toContain('list-datasources');
+  });
+
+  it('should not register flow tools when FLOW_TOOLS_ENABLED is "true" but the flow-tools flag is OFF', async () => {
     vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
     const server = getServer();
     await server.registerTools();
@@ -213,12 +291,11 @@ describe('server', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
 
-    // The single switch turns on every flow tool...
-    expect(registeredToolNames).toContain('list-flows');
-    expect(registeredToolNames).toContain('get-flow');
-    expect(registeredToolNames).toContain('list-flow-runs');
-    expect(registeredToolNames).toContain('list-flow-tasks');
-    // ...alongside the unrelated tools.
+    // The feature flag is the per-environment rollout control, so it can veto the env switch.
+    expect(registeredToolNames).not.toContain('list-flows');
+    expect(registeredToolNames).not.toContain('get-flow');
+    expect(registeredToolNames).not.toContain('list-flow-runs');
+    expect(registeredToolNames).not.toContain('list-flow-tasks');
     expect(registeredToolNames).toContain('list-datasources');
   });
 
@@ -341,7 +418,8 @@ describe('server', () => {
 
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
 
-    const server = getServer();
+    // Flag on + client advertises the UI capability + a non-Claude clientId → app tool registers.
+    const server = getServer({ capabilities: uiCapableClientCapabilities });
     const mockAppTool = createMockAppTool();
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
 
@@ -419,6 +497,339 @@ describe('server', () => {
     });
   });
 
+  function createMockAdminTool(): WebTool<any> {
+    return {
+      name: 'mock-admin-tool' as WebToolName,
+      server: {} as any,
+      title: 'Mock Admin Tool',
+      description: 'Mock Admin Tool',
+      paramsSchema: {},
+      annotations: {
+        title: 'Mock Admin Tool',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      callback: vi.fn(),
+      disabled: false,
+      minRequiredRole: SiteRole.SITE_ADMINISTRATOR_EXPLORER,
+      registrationConditions: [],
+      requiredApiScopes: [],
+      logAndExecute: vi.fn(),
+      notifyInvocation: vi.fn(),
+    } as unknown as WebTool<any>;
+  }
+
+  function createMockConditionalTool(): WebTool<any> {
+    return {
+      name: 'mock-conditional-tool' as WebToolName,
+      server: {} as any,
+      title: 'Mock Conditional Tool',
+      description: 'Mock Conditional Tool',
+      paramsSchema: {},
+      annotations: {
+        title: 'Mock Conditional Tool',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      callback: vi.fn(),
+      disabled: false,
+      minRequiredRole: SiteRole.VIEWER,
+      registrationConditions: ['RequiresPulse'],
+      requiredApiScopes: [],
+      logAndExecute: vi.fn(),
+      notifyInvocation: vi.fn(),
+    } as unknown as WebTool<any>;
+  }
+
+  // The registration-time role check is gated behind the `enforce-role-requirements` flag. With the
+  // flag ON the tool's minRequiredRole is enforced; with it OFF the check is skipped entirely.
+  const enforceRoleRequirements = (name: string): boolean => name === 'enforce-role-requirements';
+
+  // Companion flag for the registration-conditions check (Pulse etc.). ON enforces a tool's
+  // declared `registrationConditions`; OFF skips the check entirely.
+  const enforceRegistrationConditions = (name: string): boolean =>
+    name === 'enforce-registration-conditions';
+
+  it('does not register a tool when the caller ranks below minRequiredRole', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('registers a tool when the caller ranks at or above minRequiredRole', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+  });
+
+  it('does not register a tool when the caller has no site role (fetch failed)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('registers a below-rank tool when enforce-role-requirements is off and never fetches the site role', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+    // The gate short-circuits before the role fetch, so no /users call is issued.
+    expect(mocks.mockGetCurrentUserSiteRole).not.toHaveBeenCalled();
+  });
+
+  // The SDK emits server-level instructions from `mcpServer.server._instructions` at initialize
+  // time; registration mutates that field, so read it directly to assert the handshake guidance.
+  function getInstructions(server: WebMcpServer): string {
+    return (server.mcpServer.server as unknown as { _instructions?: string })._instructions ?? '';
+  }
+
+  it('warns in the connect instructions when a role-gated tool is omitted because the role fetch failed', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    // undefined uniquely signals a failed fetch (a successful low-role fetch returns the role string).
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-admin-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(getInstructions(server)).toContain('site role could not be determined');
+  });
+
+  it('does not warn when the role was fetched but ranks too low (legitimate omission)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(getInstructions(server)).not.toContain('site role could not be determined');
+  });
+
+  it('does not warn when enforce-role-requirements is off (no role check, nothing omitted)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(getInstructions(server)).not.toContain('site role could not be determined');
+  });
+
+  it('registers a Viewer-minimum tool even when the role fetch failed (Viewer is never enforced)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    // Fetch failed (undefined): an above-Viewer tool would be omitted, but a Viewer minimum is
+    // satisfied by every authenticated caller, so enforcement is skipped for it entirely.
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockViewerTool = {
+      ...createMockAdminTool(),
+      name: 'mock-viewer-tool' as WebToolName,
+      minRequiredRole: SiteRole.VIEWER,
+    } as unknown as WebTool<any>;
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockViewerTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-viewer-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+    // The tool was registered, not omitted, so no "role could not be determined" warning is emitted.
+    expect(getInstructions(server)).not.toContain('site role could not be determined');
+  });
+
+  // Telemetry-side (server log) counterpart to the client-facing instructions warning above.
+  function getWarningLogs(): Array<Parameters<typeof logger.log>[0]> {
+    const log = logger.log as MockedFunction<typeof logger.log>;
+    return log.mock.calls.map((c) => c[0]).filter((e) => e.level === 'warning');
+  }
+
+  it('logs a telemetry warning when a role-gated tool is omitted because the role fetch failed', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    const warnings = getWarningLogs();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toContain('site role');
+    // Names the omitted tool so operators can see what was hidden.
+    expect(warnings[0].message).toContain('mock-admin-tool');
+  });
+
+  it('does not log a telemetry warning when the role was fetched but ranks too low', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue('Viewer');
+
+    const server = getServer();
+    const mockAdminTool = createMockAdminTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
+
+    await server.registerTools();
+
+    expect(getWarningLogs()).toHaveLength(0);
+  });
+
+  it('logs a telemetry warning naming the tools omitted for unmet conditions and the failing condition', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({
+      registrationConditionsMet: false,
+      failingCondition: 'RequiresPulse',
+    });
+
+    const server = getServer();
+    const mockConditionalTool = createMockConditionalTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockConditionalTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-conditional-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+    const warnings = getWarningLogs();
+    expect(warnings).toHaveLength(1);
+    // Names the omitted tool and the condition it failed, so operators can see what was hidden and why.
+    expect(warnings[0].message).toContain('mock-conditional-tool');
+    expect(warnings[0].message).toContain('RequiresPulse');
+  });
+
+  it('registers a conditional tool when its conditions are met', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    const mockConditionalTool = createMockConditionalTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockConditionalTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-conditional-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(getWarningLogs()).toHaveLength(0);
+  });
+
+  it('does not check conditions or warn when enforce-registration-conditions is off', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+
+    const server = getServer();
+    const mockConditionalTool = createMockConditionalTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockConditionalTool]);
+
+    await server.registerTools();
+
+    // With the flag off, conditions are not evaluated: the tool registers and nothing is logged.
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-conditional-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
+    expect(getWarningLogs()).toHaveLength(0);
+  });
+
+  it('explains in the connect instructions why Pulse tools were omitted', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({
+      registrationConditionsMet: false,
+      failingCondition: 'RequiresPulse',
+    });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
+
+    await server.registerTools();
+
+    // Without this the caller just sees a short tool list and no reason for it.
+    const instructions = getInstructions(server);
+    expect(instructions).toContain('Pulse is not available');
+    expect(instructions).toContain(
+      'https://help.tableau.com/current/online/en-us/pulse_set_up.htm',
+    );
+  });
+
+  it('does not mention Pulse in the connect instructions when conditions are met', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
+
+    await server.registerTools();
+
+    expect(getInstructions(server)).not.toContain('Pulse is not available');
+  });
+
   it('should register as standard tool when mcp-apps feature flag is disabled', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
 
@@ -449,5 +860,151 @@ describe('server', () => {
     // Should NOT register as app tool
     expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
     expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register as standard tool when client capabilities lack the UI extension', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // Flag on, but no client capabilities advertised → falls back to plain tool.
+    const server = getServer();
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register as standard tool when flag is off even if client is UI-capable', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+
+    const server = getServer({ capabilities: uiCapableClientCapabilities });
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register as standard tool for a known-incompatible client (claude.ai) despite UI support', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // Flag on + UI-capable, but clientId resolves to 'Claude' via getClientDisplayName → plain tool.
+    const server = getServer({
+      capabilities: uiCapableClientCapabilities,
+      clientId: 'https://claude.ai/some/cimd',
+    });
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should register app tool for a non-Claude known client (Cursor) that is UI-capable', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    const server = getServer({
+      capabilities: uiCapableClientCapabilities,
+      clientId: 'https://cursor.com/some/cimd',
+    });
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
+      server.mcpServer,
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppResource).toHaveBeenCalled();
+  });
+
+  it('should not register a hideWhenUnsupported app tool at all when the client lacks MCP-Apps support', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // Flag on, but no UI capability advertised. A hideWhenUnsupported tool skips the plain-tool
+    // fallback entirely, so it must be absent from registration (neither app nor plain).
+    const server = getServer();
+    const mockAppTool = createMockAppTool({ hideWhenUnsupported: true });
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should not register a hideWhenUnsupported app tool for the known-incompatible client (claude.ai)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // UI-capable but claude.ai → app path is blocked; hideWhenUnsupported means no plain fallback either.
+    const server = getServer({
+      capabilities: uiCapableClientCapabilities,
+      clientId: 'https://claude.ai/some/cimd',
+    });
+    const mockAppTool = createMockAppTool({ hideWhenUnsupported: true });
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('should still register a hideWhenUnsupported app tool as an app tool when the client supports MCP Apps', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    // hideWhenUnsupported only changes the fallback; the happy path still registers it as an app tool.
+    const server = getServer({ capabilities: uiCapableClientCapabilities });
+    const mockAppTool = createMockAppTool({ hideWhenUnsupported: true });
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
+      server.mcpServer,
+      'mock-app-tool',
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mocks.mockRegisterAppResource).toHaveBeenCalled();
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-app-tool',
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });

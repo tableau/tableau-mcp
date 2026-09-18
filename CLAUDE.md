@@ -266,6 +266,14 @@ Check in code:
 if (getFeatureGate().isFeatureEnabled('my-feature')) { ... }
 ```
 
+## Versioning & Releases
+
+`package.json`'s version is bumped automatically — do NOT manually edit the `version` field or run `npm run version:*` in a PR. `.github/workflows/auto-version-bump.yml` bumps it after merge to `main`, commits, and tags (`vX.Y.Z`).
+
+- Default bump is **patch**. To request minor/major instead, check the corresponding box under "Version Bump" in the PR description (see `.github/pull_request_template.md`) — the workflow reads the merged PR's checklist to decide the bump type.
+- Publishing to npm (`publish.yml`) is a separate, manual step: promoting a tag to a GitHub Release triggers it.
+- `.github/workflows/*.yml` files may be blocked from being read/edited by endpoint security tooling in some sandboxes — if so, hand the diff to the user as text for them to apply.
+
 ## NPM Package
 
 Published as `@tableau/mcp-server` with:
