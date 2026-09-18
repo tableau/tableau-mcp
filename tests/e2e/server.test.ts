@@ -70,6 +70,12 @@ describe('server', () => {
         'request-workbook-upload',
         'publish-workbook',
       ];
+      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      const knowledgeTools: ReadonlyArray<WebToolName> = [
+        'query-knowledge-context',
+        'inspect-knowledge-context',
+        'manage-knowledge-context',
+      ];
 
       let expectedToolNames = [...webToolNames];
 
@@ -88,16 +94,6 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
       }
 
-      // knowledge tools are gated off by default (knowledge-tools feature flag)
-      const knowledgeTools: ReadonlyArray<WebToolName> = [
-        'query-knowledge-context',
-        'inspect-knowledge-context',
-        'manage-knowledge-context',
-      ];
-      if (!knowledgeToolsEnabled) {
-        expectedToolNames = expectedToolNames.filter((name) => !knowledgeTools.includes(name));
-      }
-
       // Filter out insights tools if they are not enabled
       if (process.env.INSIGHTS_TOOLS_ENABLED !== 'true') {
         expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
@@ -105,6 +101,11 @@ describe('server', () => {
 
       if (!features['authoring-tools']) {
         expectedToolNames = expectedToolNames.filter((name) => !authoringTools.includes(name));
+      }
+
+      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
+      if (!knowledgeToolsEnabled) {
+        expectedToolNames = expectedToolNames.filter((name) => !knowledgeTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
@@ -246,6 +247,12 @@ describe('server', () => {
         'request-workbook-upload',
         'publish-workbook',
       ];
+      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      const knowledgeTools: ReadonlyArray<WebToolName> = [
+        'query-knowledge-context',
+        'inspect-knowledge-context',
+        'manage-knowledge-context',
+      ];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -268,16 +275,6 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
       }
 
-      // knowledge tools are gated off by default (knowledge-tools feature flag)
-      const knowledgeTools: ReadonlyArray<WebToolName> = [
-        'query-knowledge-context',
-        'inspect-knowledge-context',
-        'manage-knowledge-context',
-      ];
-      if (!knowledgeToolsEnabled) {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => !knowledgeTools.includes(name));
-      }
-
       // Filter out insights tools if they are not enabled
       if (process.env.INSIGHTS_TOOLS_ENABLED !== 'true') {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
@@ -286,6 +283,13 @@ describe('server', () => {
       if (!features['authoring-tools']) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !authoringTools.includes(name),
+        );
+      }
+
+      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
+      if (!knowledgeToolsEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !knowledgeTools.includes(name),
         );
       }
 
