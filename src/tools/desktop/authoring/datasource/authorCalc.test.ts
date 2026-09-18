@@ -105,38 +105,36 @@ describe('authorCalcTool', () => {
     }
   });
 
-  it('splices an escaped calculation into the target datasource and verifies readback', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        caption: 'Profit & "Growth"',
-        formula: 'IF [Sales] < 10 AND [Region] = \'West\' THEN "A & B" END',
-      },
+  it('creates the calc through apply-calculation and reports the name Tableau assigned', async () => {
+    const formula = 'IF [Sales] < 10 AND [Region] = \'West\' THEN "A & B" END';
+    const { result, executeCommand, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Profit & "Growth"', formula },
       readbackXml: withColumn(
         BASE_XML,
-        "<column caption='Profit &amp; &quot;Growth&quot;' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='IF [Sales] &lt; 10 AND [Region] = &apos;West&apos; THEN &quot;A &amp; B&quot; END' /></column>",
+        "<column caption='Profit &amp; &quot;Growth&quot;' datatype='real' name='[Calculation_881]' role='measure' type='quantitative'><calculation class='tableau' formula='IF [Sales] &lt; 10 AND [Region] = &apos;West&apos; THEN &quot;A &amp; B&quot; END' /></column>",
       ),
     });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual({
-      calcName: '[Calculation_1700000000000]',
+      calcName: '[Calculation_881]',
       caption: 'Profit & "Growth"',
       datasource: 'Superstore',
       hint: 'reference it by caption in a build-worksheets-from-templates fieldMapping (name the caption plus a chart shape)',
     });
 
-    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(
-      "<column caption='Profit &amp; &quot;Growth&quot;' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='IF [Sales] &lt; 10 AND [Region] = &apos;West&apos; THEN &quot;A &amp; B&quot; END' /></column>",
-    );
+    // The formula reaches apply-calculation in caption form (unescaped) — Tableau's calc editor
+    // resolves references and escapes on write; the MCP no longer builds the <calculation> XML.
+    expect(appliedCalcFormula(executeCommand)).toBe(formula);
+    // The command path commits through create-calc/apply-calculation, never a whole-document apply.
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('keeps a legacy friendly top-level datasource name instead of its nested connection id', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const calcXml =
-      "<column caption='Double Sales' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Sales] * 2' /></column>";
-    const { result, applyWorkbookDocument } = await getToolResult({
+      "<column caption='Double Sales' datatype='real' name='[Calculation_881]' role='measure' type='quantitative'><calculation class='tableau' formula='[Sales] * 2' /></column>";
+    const { result, executeCommand } = await getToolResult({
       args: {
         caption: 'Double Sales',
         formula: '[Sales] * 2',
@@ -153,16 +151,15 @@ describe('authorCalcTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text).datasource).toBe('Sample - Superstore');
-    const appliedXml = appliedDocumentXml(applyWorkbookDocument);
-    expect(datasourceBlock(appliedXml, 'Sample - Superstore')).toContain(calcXml);
-    expect(JSON.parse(result.content[0].text).datasource).not.toBe('excel-direct.0oz123');
+    // create-calc anchors on the friendly top-level name, not the nested connection id.
+    expect(createCalcDatasource(executeCommand)).toBe('Sample - Superstore');
+    expect(createCalcDatasource(executeCommand)).not.toBe('excel-direct.0oz123');
   });
 
   it('resolves a unique visible datasource caption to its top-level internal name', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const calcXml =
-      "<column caption='Double Quantity' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[quantity] * 2' /></column>";
-    const { result, applyWorkbookDocument } = await getToolResult({
+      "<column caption='Double Quantity' datatype='real' name='[Calculation_881]' role='measure' type='quantitative'><calculation class='tableau' formula='[quantity] * 2' /></column>";
+    const { result, executeCommand } = await getToolResult({
       args: {
         caption: 'Double Quantity',
         formula: '[Quantity] * 2',
@@ -181,19 +178,15 @@ describe('authorCalcTool', () => {
     expect(JSON.parse(result.content[0].text).datasource).toBe(
       'federated.csv040059ff380b040059ff380b',
     );
-    const appliedXml = appliedDocumentXml(applyWorkbookDocument);
-    expect(datasourceBlock(appliedXml, 'federated.csv040059ff380b040059ff380b')).toContain(calcXml);
-    expect(datasourceBlock(appliedXml, 'federated.orders')).not.toContain(calcXml);
-    expect(JSON.parse(result.content[0].text).datasource).not.toBe(
-      'textscan.csv040059ff380b040059ff380b',
-    );
+    // create-calc resolves the visible caption to the internal name, not the nested connection id.
+    expect(createCalcDatasource(executeCommand)).toBe('federated.csv040059ff380b040059ff380b');
+    expect(createCalcDatasource(executeCommand)).not.toBe('textscan.csv040059ff380b040059ff380b');
   });
 
   it('prefers an exact top-level internal name over a colliding datasource caption', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const calcXml =
-      "<column caption='Double Primary Sales' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[primary_sales] * 2' /></column>";
-    const { result, applyWorkbookDocument } = await getToolResult({
+      "<column caption='Double Primary Sales' datatype='real' name='[Calculation_881]' role='measure' type='quantitative'><calculation class='tableau' formula='[primary_sales] * 2' /></column>";
+    const { result, executeCommand } = await getToolResult({
       args: {
         caption: 'Double Primary Sales',
         formula: '[primary_sales] * 2',
@@ -210,10 +203,10 @@ describe('authorCalcTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text).datasource).toBe('federated.primary');
-    const appliedXml = appliedDocumentXml(applyWorkbookDocument);
-    expect(datasourceBlock(appliedXml, 'federated.primary')).toContain(calcXml);
-    expect(datasourceBlock(appliedXml, 'federated.secondary')).not.toContain(calcXml);
-    expect(JSON.parse(result.content[0].text).datasource).not.toBe('textscan.primary');
+    // The exact internal name wins over the datasource whose caption collides with it.
+    expect(createCalcDatasource(executeCommand)).toBe('federated.primary');
+    expect(createCalcDatasource(executeCommand)).not.toBe('federated.secondary');
+    expect(createCalcDatasource(executeCommand)).not.toBe('textscan.primary');
   });
 
   it('rejects an ambiguous datasource caption before apply and lists internal choices', async () => {
@@ -238,30 +231,6 @@ describe('authorCalcTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  it('rejects calc readback from a different internal datasource', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const calcXml =
-      "<column caption='Double Quantity' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[quantity] * 2' /></column>";
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        caption: 'Double Quantity',
-        formula: '[Quantity] * 2',
-        datasource: 'federated.csv040059ff380b040059ff380b',
-      },
-      initialXml: MODERN_CAPTIONED_DATASOURCE_XML,
-      readbackXml: withColumnInDatasource(
-        MODERN_CAPTIONED_DATASOURCE_XML,
-        'federated.orders',
-        calcXml,
-      ),
-    });
-
-    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('did not apply');
-  });
-
   it('rejects a caption collision before loading metadata', async () => {
     const xml = withColumn(
       BASE_XML,
@@ -279,48 +248,6 @@ describe('authorCalcTool', () => {
       'caption collision — pick a new caption or use the existing field',
     );
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('splices legally into a REAL Desktop document (regression: relation columns + clones + build comment)', async () => {
-    // Every author-calc bug tonight was invisible to synthetic fixtures and cost a
-    // live verse to find. This replays the tool against a real saved document.
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const realXml = readFileSync(
-      join(
-        process.cwd(),
-        'src',
-        'tools',
-        'desktop',
-        'authoring',
-        'datasource',
-        '__fixtures__',
-        'real-superstore-document.twb.xml',
-      ),
-      'utf8',
-    );
-    const calcXml =
-      "<column caption='Replay Tier' datatype='string' name='[Calculation_1700000000000]' role='dimension' type='nominal'><calculation class='tableau' formula='IF SUM([Profit]) &gt; 0 THEN &apos;Top&apos; ELSE &apos;Bottom&apos; END' /></column>";
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        caption: 'Replay Tier',
-        formula: "IF SUM([Profit]) > 0 THEN 'Top' ELSE 'Bottom' END",
-        role: 'dimension',
-        datatype: 'string',
-      },
-      initialXml: realXml,
-      readbackXml: realXml.replace('</datasource>', `${calcXml}</datasource>`),
-    });
-
-    expect(result.isError).toBe(false);
-    const loaded = appliedDocumentXml(applyWorkbookDocument);
-    const at = loaded.indexOf("caption='Replay Tier'");
-    expect(at).toBeGreaterThan(-1);
-    // legal position: NOT inside <relation>…</relation>, and inside the first datasource
-    const relStart = loaded.lastIndexOf('<relation', at);
-    const relEnd = relStart === -1 ? -1 : loaded.indexOf('</relation>', relStart);
-    expect(relStart === -1 || relEnd < at).toBe(true);
-    expect(at).toBeLessThan(loaded.indexOf('</datasource>', at) + '</datasource>'.length);
-    expect(at).toBeLessThan(loaded.indexOf('</datasources>'));
   });
 
   it('rejects a fabricated direct-calc field against a live-shaped workbook before dispatch', async () => {
@@ -353,80 +280,6 @@ describe('authorCalcTool', () => {
       ],
     });
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('resolves sibling-calc caption references to internal names (live 2026-07-19: 5 of 6 layered calcs broken)', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const priorCalc =
-      "<column caption='Member Profit' datatype='real' name='[Calculation_900]' role='measure' type='quantitative'><calculation class='tableau' formula='{ FIXED [Sub-Category] : SUM([Profit]) }' /></column>";
-    const xml = BASE_XML.replace('</datasource>', `${priorCalc}</datasource>`);
-
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        caption: 'Top Threshold',
-        formula: '{ FIXED : PERCENTILE([Member Profit], 0.80) }',
-      },
-      readbackXml: withColumn(
-        xml,
-        "<column caption='Top Threshold' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='{ FIXED : PERCENTILE([Calculation_900], 0.80) }' /></column>",
-      ),
-      initialXml: xml,
-    });
-
-    expect(result.isError).toBe(false);
-    const loaded = appliedDocumentXml(applyWorkbookDocument);
-    expect(loaded).toContain('PERCENTILE([Calculation_900], 0.80)');
-    expect(loaded).not.toContain('PERCENTILE([Member Profit]');
-    // base-field references (caption == name) stay untouched
-    expect(loaded).toContain('{ FIXED [Sub-Category] : SUM([Profit]) }');
-  });
-
-  it('ignores worksheet-dependencies datasource clones (live 2026-07-19: splicing a clone is silently discarded)', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const xml = BASE_XML.replace(
-      "<worksheets><worksheet name='Sheet 1' /></worksheets>",
-      "<worksheets><worksheet name='Sheet 1'><table><view><datasources><datasource name='Superstore' /></datasources><datasource-dependencies datasource='Superstore'><column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' /></datasource-dependencies></view></table></worksheet></worksheets>",
-    );
-
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: { caption: 'Margin', formula: '[Sales] * 0.2' },
-      initialXml: xml,
-      readbackXml: withColumn(
-        xml,
-        "<column caption='Margin' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Sales] * 0.2' /></column>",
-      ),
-    });
-
-    expect(result.isError).toBe(false);
-    // the splice must land INSIDE the top-level <datasources> block, before its close
-    const loaded = appliedDocumentXml(applyWorkbookDocument);
-    expect(loaded.indexOf("caption='Margin'")).toBeLessThan(loaded.indexOf('</datasources>'));
-  });
-
-  it('splices a calc after a published datasource CDATA payload and before the outer close', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const calcXml =
-      "<column caption='ARR Plus Ten' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[ARR] + 10' /></column>";
-    const readbackXml = PUBLISHED_BASE_XML.replace(
-      '</datasource></datasources>',
-      `${calcXml}</datasource></datasources>`,
-    );
-
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: { caption: 'ARR Plus Ten', formula: '[ARR] + 10' },
-      initialXml: PUBLISHED_BASE_XML,
-      readbackXml,
-    });
-
-    expect(result.isError).toBe(false);
-    const loaded = appliedDocumentXml(applyWorkbookDocument);
-    expect(loaded.slice(loaded.indexOf('<![CDATA[') + 9, loaded.indexOf(']]>'))).toBe(
-      EMBEDDED_PUBLISHED_DATASOURCE,
-    );
-    expect(loaded.indexOf("caption='ARR Plus Ten'")).toBeGreaterThan(loaded.indexOf(']]>'));
-    expect(loaded.indexOf("caption='ARR Plus Ten'")).toBeLessThan(
-      loaded.lastIndexOf('</datasource>'),
-    );
   });
 
   it('rejects a datasource name that exists only inside published metadata CDATA', async () => {
@@ -464,56 +317,24 @@ describe('authorCalcTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  it('errors when readback does not include the new column and caption', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_100);
-    const { result } = await getToolResult({
-      args: { caption: 'Margin', formula: '[Sales] * 0.2' },
-      readbackXml: BASE_XML,
-    });
+  it('errors when the post-apply readback never shows the new calc caption', async () => {
+    // apply-calculation reports 'succeed', but the readback keeps returning a document without the
+    // new caption — the commit never settled. The tool must fail closed, never report a phantom calc.
+    vi.useFakeTimers();
+    try {
+      const resultPromise = getToolResult({
+        args: { caption: 'Margin', formula: '[Sales] * 0.2' },
+        readbackXml: BASE_XML,
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      const { result } = await resultPromise;
 
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('load completed but did not apply');
-  });
-
-  it('surfaces guard rejection before loading metadata', async () => {
-    const xmlWithoutWorksheet = BASE_XML.replace(
-      "<worksheets><worksheet name='Sheet 1' /></worksheets>",
-      '',
-    );
-
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: { caption: 'Margin', formula: '[Sales] * 0.2' },
-      initialXml: xmlWithoutWorksheet,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('at least one <datasource');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('avoids colliding with existing Calculation ids', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const xml = withColumn(
-      BASE_XML,
-      "<column caption='Existing' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative' />",
-    );
-    const readbackXml = withColumn(
-      xml,
-      "<column caption='Margin' datatype='real' name='[Calculation_1700000000001]' role='measure' type='quantitative'><calculation class='tableau' formula='[Sales] * 0.2' /></column>",
-    );
-
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: { caption: 'Margin', formula: '[Sales] * 0.2' },
-      initialXml: xml,
-      readbackXml,
-    });
-
-    expect(result.isError).toBe(false);
-    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(
-      "name='[Calculation_1700000000001]'",
-    );
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('apply-calculation completed but did not apply');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('scopes loose field resolution to the selected target datasource', async () => {
@@ -633,24 +454,42 @@ async function getToolResult({
   args,
   initialXml = BASE_XML,
   readbackXml,
+  applyResult = 'succeed',
 }: {
   args: AuthorCalcArgs;
   initialXml?: string;
   readbackXml?: string;
+  // The calculationApplyResult the mocked apply-calculation returns. 'succeed' is the happy path;
+  // 'invalid-caption-for-new-calc' / 'invalid-formula' exercise the per-calc failure branches.
+  applyResult?: string;
 }): Promise<{
   result: CallToolResult;
+  executeCommand: ReturnType<typeof vi.fn>;
+  getWorkbookDocument: ReturnType<typeof vi.fn>;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
 }> {
-  const documents = [initialXml, initialXml, readbackXml ?? withColumn(initialXml, '')];
+  // First read is the tool's own pre-authoring read; every read after it is a pollReadback probe and
+  // returns the post-apply document. clamp() keeps returning the readback once the create commands ran.
+  const documents = [initialXml, readbackXml ?? withColumn(initialXml, '')];
   let readCount = 0;
   // The validate command must return a well-formed (empty errorMsgs) envelope: validateCalcFormula now
   // fails CLOSED on a missing errorMsgs field, so a blanket `result: null` would abort every calc.
+  // apply-calculation must return a recognized calculationApplyResult: the create path fails CLOSED
+  // on an unknown value, so a blanket `result: null` would abort every calc. The key is camelCase to
+  // match the live External API result surface (confirmed against a real Desktop apply).
   const executeCommand = vi.fn(async ({ command }: ExecuteCommandArgs) => {
     if (command === 'get-calc-details-pres-model-for-formula') {
       return new Ok({
         command_id: 'validate-1',
         status: 'completed',
         result: { userCalculationDetails: { errorMsgs: [], errorInds: [] } },
+      });
+    }
+    if (command === 'apply-calculation') {
+      return new Ok({
+        command_id: 'apply-calc-1',
+        status: 'completed',
+        result: { calculationApplyResult: applyResult },
       });
     }
     return new Ok({ command_id: 'command-1', status: 'completed', result: null });
@@ -712,7 +551,25 @@ async function getToolResult({
     extra,
   );
 
-  return { result, applyWorkbookDocument };
+  return { result, executeCommand, getWorkbookDocument, applyWorkbookDocument };
+}
+
+// The datasource passed to the create-calc command — the anchor the tool commits the calc into,
+// replacing the old "which datasource did we splice into" assertion.
+function createCalcDatasource(executeCommand: ReturnType<typeof vi.fn>): string | undefined {
+  const call = executeCommand.mock.calls
+    .map(([arg]) => arg as ExecuteCommandArgs)
+    .find((arg) => arg.command === 'create-calc');
+  return call?.args?.datasource as string | undefined;
+}
+
+// The formula string passed to apply-calculation, in caption form (Tableau's calc editor resolves
+// captions and assigns the internal name).
+function appliedCalcFormula(executeCommand: ReturnType<typeof vi.fn>): string | undefined {
+  const call = executeCommand.mock.calls
+    .map(([arg]) => arg as ExecuteCommandArgs)
+    .find((arg) => arg.command === 'apply-calculation');
+  return call?.args?.['updated-calculation-formula'] as string | undefined;
 }
 
 function withColumn(xml: string, column: string): string {
@@ -737,12 +594,6 @@ function datasourceBlock(xml: string, datasourceName: string): string {
     cursor = xml.indexOf('<datasource', openEnd);
   }
   throw new Error(`missing datasource ${datasourceName}`);
-}
-
-function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): string {
-  const [xml] = applyWorkbookDocument.mock.calls[0] ?? [];
-  invariant(typeof xml === 'string');
-  return xml;
 }
 
 describe('prepareCalculationsInWorkbook idempotency', () => {
@@ -963,6 +814,152 @@ describe('prepareCalculationsInWorkbook idempotency', () => {
   });
 });
 
+// author-calc now creates through commands and lets Tableau position the field, so these
+// splice-positioning regressions live on prepareCalculationsInWorkbook — the seam bind-template
+// still uses to inject a <calculation> column into the document. Each replays a shape that a
+// synthetic fixture missed and a live workbook exposed.
+describe('prepareCalculationsInWorkbook positioning', () => {
+  afterEach(() => {
+    if (vi.isMockFunction(Date.now)) {
+      vi.mocked(Date.now).mockRestore();
+    }
+  });
+
+  it('splices legally into a REAL Desktop document (regression: relation columns + clones + build comment)', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const realXml = readFileSync(
+      join(
+        process.cwd(),
+        'src',
+        'tools',
+        'desktop',
+        'authoring',
+        'datasource',
+        '__fixtures__',
+        'real-superstore-document.twb.xml',
+      ),
+      'utf8',
+    );
+
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: realXml,
+      calcs: [
+        {
+          caption: 'Replay Tier',
+          formula: "IF SUM([Profit]) > 0 THEN 'Top' ELSE 'Bottom' END",
+          role: 'dimension',
+          datatype: 'string',
+        },
+      ],
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    const loaded = result.value.workbookXml;
+    const at = loaded.indexOf("caption='Replay Tier'");
+    expect(at).toBeGreaterThan(-1);
+    // legal position: NOT inside <relation>…</relation>, and inside the first datasource
+    const relStart = loaded.lastIndexOf('<relation', at);
+    const relEnd = relStart === -1 ? -1 : loaded.indexOf('</relation>', relStart);
+    expect(relStart === -1 || relEnd < at).toBe(true);
+    expect(at).toBeLessThan(loaded.indexOf('</datasource>', at) + '</datasource>'.length);
+    expect(at).toBeLessThan(loaded.indexOf('</datasources>'));
+  });
+
+  it('resolves sibling-calc caption references to internal names (live 2026-07-19: 5 of 6 layered calcs broken)', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const priorCalc =
+      "<column caption='Member Profit' datatype='real' name='[Calculation_900]' role='measure' type='quantitative'><calculation class='tableau' formula='{ FIXED [Sub-Category] : SUM([Profit]) }' /></column>";
+    const xml = BASE_XML.replace('</datasource>', `${priorCalc}</datasource>`);
+
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: xml,
+      calcs: [
+        { caption: 'Top Threshold', formula: '{ FIXED : PERCENTILE([Member Profit], 0.80) }' },
+      ],
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    const loaded = result.value.workbookXml;
+    expect(loaded).toContain('PERCENTILE([Calculation_900], 0.80)');
+    expect(loaded).not.toContain('PERCENTILE([Member Profit]');
+    // base-field references (caption == name) stay untouched
+    expect(loaded).toContain('{ FIXED [Sub-Category] : SUM([Profit]) }');
+  });
+
+  it('ignores worksheet-dependencies datasource clones (live 2026-07-19: splicing a clone is silently discarded)', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const xml = BASE_XML.replace(
+      "<worksheets><worksheet name='Sheet 1' /></worksheets>",
+      "<worksheets><worksheet name='Sheet 1'><table><view><datasources><datasource name='Superstore' /></datasources><datasource-dependencies datasource='Superstore'><column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' /></datasource-dependencies></view></table></worksheet></worksheets>",
+    );
+
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: xml,
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    // the splice must land INSIDE the top-level <datasources> block, before its close
+    const loaded = result.value.workbookXml;
+    expect(loaded.indexOf("caption='Margin'")).toBeLessThan(loaded.indexOf('</datasources>'));
+  });
+
+  it('splices a calc after a published datasource CDATA payload and before the outer close', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: PUBLISHED_BASE_XML,
+      calcs: [{ caption: 'ARR Plus Ten', formula: '[ARR] + 10' }],
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    const loaded = result.value.workbookXml;
+    expect(loaded.slice(loaded.indexOf('<![CDATA[') + 9, loaded.indexOf(']]>'))).toBe(
+      EMBEDDED_PUBLISHED_DATASOURCE,
+    );
+    expect(loaded.indexOf("caption='ARR Plus Ten'")).toBeGreaterThan(loaded.indexOf(']]>'));
+    expect(loaded.indexOf("caption='ARR Plus Ten'")).toBeLessThan(
+      loaded.lastIndexOf('</datasource>'),
+    );
+  });
+
+  it('avoids colliding with existing Calculation ids', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const xml = withColumn(
+      BASE_XML,
+      "<column caption='Existing' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative' />",
+    );
+
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: xml,
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    expect(result.value.workbookXml).toContain("name='[Calculation_1700000000001]'");
+  });
+
+  it('refuses to splice into a document the apply guard would reject (missing worksheet)', () => {
+    const xmlWithoutWorksheet = BASE_XML.replace(
+      "<worksheets><worksheet name='Sheet 1' /></worksheets>",
+      '',
+    );
+
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: xmlWithoutWorksheet,
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('at least one <datasource');
+  });
+});
+
 describe('layerCalculationsByDependency', () => {
   it('orders a linear A -> B -> C chain one calc per layer', () => {
     const { layers, cycleIndices } = layerCalculationsByDependency([
@@ -1067,12 +1064,14 @@ describe('authorCalculationsWithValidation', () => {
     expect(vi.mocked(executor.executeCommand)).not.toHaveBeenCalled();
   });
 
-  it('does not settle validated calc readback from a different datasource', async () => {
+  it('does not settle a calc that apply-calculation reports created but the readback shows only in another datasource', async () => {
     vi.useFakeTimers();
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     try {
+      // apply-calculation returns 'succeed', but every readback shows the calc in federated.orders,
+      // never the requested federated.csv... — findCalcColumnByCaption never settles, so the batch
+      // must fail closed rather than report a create the target datasource never received.
       const calcXml =
-        "<column caption='Double Quantity' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Quantity] * 2' /></column>";
+        "<column caption='Double Quantity' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[quantity] * 2' /></column>";
       const wrongDatasourceReadback = withColumnInDatasource(
         MODERN_CAPTIONED_DATASOURCE_XML,
         'federated.orders',
@@ -1095,24 +1094,24 @@ describe('authorCalculationsWithValidation', () => {
           }),
         );
       const executor = makeExecutorMock({
-        executeCommand: vi.fn().mockImplementation(async ({ command }: ExecuteCommandArgs) =>
-          command === 'get-calc-details-pres-model-for-formula'
-            ? new Ok({
-                command_id: 'validate-1',
-                status: 'completed',
-                result: validValidatorEnvelope.result,
-              })
-            : new Ok({ command_id: 'activate-1', status: 'completed', result: null }),
-        ),
+        executeCommand: vi.fn().mockImplementation(async ({ command }: ExecuteCommandArgs) => {
+          if (command === 'get-calc-details-pres-model-for-formula') {
+            return new Ok({
+              command_id: 'validate-1',
+              status: 'completed',
+              result: validValidatorEnvelope.result,
+            });
+          }
+          if (command === 'apply-calculation') {
+            return new Ok({
+              command_id: 'apply-calc-1',
+              status: 'completed',
+              result: { calculationApplyResult: 'succeed' },
+            });
+          }
+          return new Ok({ command_id: 'activate-1', status: 'completed', result: null });
+        }),
         getWorkbookDocument,
-        applyWorkbookDocument: vi.fn().mockResolvedValue(
-          new Ok({
-            command_id: 'apply-1',
-            status: 'completed',
-            submitted_at: '',
-            result: {},
-          }),
-        ),
       });
 
       const resultPromise = authorCalculationsWithValidation({
@@ -1128,7 +1127,6 @@ describe('authorCalculationsWithValidation', () => {
       expect(result.isErr()).toBe(true);
       if (result.isOk()) throw new Error('wrong-datasource readback must not settle the calc');
       expect(result.error.message).toContain('did not apply');
-      expect(vi.mocked(executor.applyWorkbookDocument)).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }
