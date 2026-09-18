@@ -31,7 +31,9 @@ export type McpScope =
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read'
-  | 'tableau:mcp:users:write';
+  | 'tableau:mcp:users:write'
+  | 'tableau:mcp:knowledge:read'
+  | 'tableau:mcp:knowledge:write';
 
 export type TableauApiScope =
   | 'tableau:content:read'
@@ -45,6 +47,7 @@ export type TableauApiScope =
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
+  | 'tableau:entitlements:read'
   | 'tableau:insight_brief:create'
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
@@ -60,7 +63,9 @@ export type TableauApiScope =
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
-  | 'tableau:users:update';
+  | 'tableau:users:update'
+  | 'tableau:knowledge:read'
+  | 'tableau:knowledge:write';
 
 /**
  * Default scopes supported by the MCP server
@@ -83,6 +88,8 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:flow:read',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
+  'tableau:mcp:knowledge:read',
+  'tableau:mcp:knowledge:write',
 ];
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
@@ -174,6 +181,18 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:jobs:read'],
     api: new Set(['tableau:jobs:read', 'tableau:users:read']),
   },
+  'query-knowledge-context': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'inspect-knowledge-context': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+  },
+  'manage-knowledge-context': {
+    mcp: ['tableau:mcp:knowledge:write'],
+    api: new Set(['tableau:knowledge:write']),
+  },
   'list-users': {
     mcp: ['tableau:mcp:users:read'],
     api: new Set(['tableau:users:read']),
@@ -250,7 +269,11 @@ const toolScopeMap: Record<
   },
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
-    api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+    api: new Set([
+      'tableau:content:read',
+      'tableau:viz_data_service:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
   },
   'download-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
@@ -399,6 +422,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     (await featureGate.isFeatureEnabled('authoring-tools')) && !slackClient;
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
+  const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -431,6 +455,12 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('get-flow');
     enabledTools.delete('list-flow-runs');
     enabledTools.delete('list-flow-tasks');
+  }
+
+  if (!knowledgeToolsEnabled) {
+    enabledTools.delete('query-knowledge-context');
+    enabledTools.delete('inspect-knowledge-context');
+    enabledTools.delete('manage-knowledge-context');
   }
 
   if (!authoringToolsEnabled) {

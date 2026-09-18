@@ -7,8 +7,10 @@ import {
   GetDatasourceModelRequest,
   MetadataResponse,
   QueryOutput,
+  QueryPermissionsOutput,
   QueryRequest,
   ReadMetadataRequest,
+  UserHasQueryPermissionsRequest,
   vizqlDataServiceApis,
 } from '../apis/vizqlDataServiceApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -116,6 +118,56 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
         error.response.status === 404
       ) {
         return Err('feature-disabled');
+      }
+
+      throw error;
+    }
+  };
+
+  /**
+   * Checks whether the calling user has permission to query the specified data source via VDS.
+   * HTTP errors are returned as a `VdsQueryError`, not thrown.
+   *
+   * Required scopes: `tableau:viz_data_service:read`
+   *
+   * @param {UserHasQueryPermissionsRequest} request
+   */
+  userHasQueryPermissions = async (
+    request: UserHasQueryPermissionsRequest,
+  ): Promise<Result<QueryPermissionsOutput, VdsQueryError>> => {
+    try {
+      return Ok(await this._apiClient.userHasQueryPermissions(request, { ...this.authHeader }));
+    } catch (error) {
+      if (isErrorFromAlias(this._apiClient.api, 'userHasQueryPermissions', error)) {
+        const status: number = error.response.status;
+        const errorCode = error.response.data?.errorCode;
+        const message = error.response.data?.message;
+
+        // feature-disabled is reserved for *systemic* failures that apply to every data source,
+        // not just the one requested:
+        //  - 404950: the endpoint is absent on an older server.
+        //  - a 403 whose message says the feature "is not enabled": VDS is switched off site-wide.
+        //    (errorCode 403800 is overloaded — it also signals a per-data-source denial — so the
+        //    message is the only reliable discriminator.)
+        // Everything else (per-data-source denials, not-found data sources, auth failures,
+        // transient errors) is surfaced as api-error for the caller to interpret per data source.
+        if (
+          errorCode === '404950' ||
+          (status === 403 && (message ?? '').toLowerCase().includes('not enabled'))
+        ) {
+          return Err({ type: 'feature-disabled' });
+        }
+
+        return Err({
+          type: 'api-error',
+          message: message ?? 'Unknown Tableau error',
+          httpStatus: status,
+          errorCode,
+        });
+      }
+
+      if (error instanceof ZodiosError) {
+        return Err({ type: 'zodios-error', error });
       }
 
       throw error;

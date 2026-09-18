@@ -29,6 +29,7 @@ type JwtScopes =
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
+  | 'tableau:entitlements:read'
   | 'tableau:views:download'
   | 'tableau:views:embed'
   | 'tableau:insight_brief:create'
@@ -49,7 +50,9 @@ type JwtScopes =
   | 'tableau:users:update'
   | 'tableau:flows:read'
   | 'tableau:flow_connections:read'
-  | 'tableau:flow_runs:read';
+  | 'tableau:flow_runs:read'
+  | 'tableau:knowledge:read'
+  | 'tableau:knowledge:write';
 
 export type RestApiArgs = Pick<
   TableauWebRequestHandlerExtra,

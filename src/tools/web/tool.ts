@@ -1,6 +1,5 @@
 import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
-import { ZodRawShape } from 'zod';
 
 import { McpToolError, ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
@@ -22,6 +21,7 @@ import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js'
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
+import { RegistrationCondition } from './registrationConditions.js';
 import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.js';
 import { WebToolName } from './toolName.js';
 
@@ -62,29 +62,34 @@ export type ToolMeta = {
   };
 };
 
-export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = ToolParams<
-  WebMcpServer,
-  WebToolName,
-  TableauWebRequestHandlerExtra,
-  TableauWebToolCallback<Args>,
-  Args
-> & {
-  /**
-   * Lowest site role allowed to see this tool at registration time. OMITTED MEANS THE TOOL IS AVAILABLE FOR ALL USERS.
-   * When set, the caller's site role must rank at or above it in {@link SITE_ROLE_HIERARCHY} (see
-   * {@link siteRoleMeetsMinimum}) or the tool is not registered for that caller.
-   */
-  minRequiredRole?: SiteRole;
-} & (
-    | {
-        app?: AppDetails;
-        meta?: never;
-      }
-    | {
-        app?: never;
-        meta?: ToolMeta;
-      }
-  );
+export type WebToolParams<Args extends undefined | ZodRawShapeCompat | AnySchema = undefined> =
+  ToolParams<
+    WebMcpServer,
+    WebToolName,
+    TableauWebRequestHandlerExtra,
+    TableauWebToolCallback<Args>,
+    Args
+  > & {
+    /**
+     * Lowest site role allowed to see this tool at registration time. Required: every tool must
+     * declare its minimum. Use {@link SiteRole.VIEWER} for a tool with no role restriction — Viewer
+     * is satisfied by every authenticated caller, so it is never enforced (see
+     * {@link roleRequiresEnforcement}). When set above Viewer, the caller's site role must rank at or
+     * above it in {@link SITE_ROLE_HIERARCHY} (see {@link siteRoleMeetsMinimum}) or the tool is not
+     * registered for that caller.
+     */
+    minRequiredRole: SiteRole;
+    registrationConditions?: ReadonlyArray<RegistrationCondition>;
+  } & (
+      | {
+          app?: AppDetails;
+          meta?: never;
+        }
+      | {
+          app?: never;
+          meta?: ToolMeta;
+        }
+    );
 
 export type ConstrainedResult<T> =
   | {
@@ -115,7 +120,9 @@ export type WebToolLogAndExecuteParams<
   constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
 };
 
-export class WebTool<Args extends ZodRawShape | undefined = undefined> extends Tool<
+export class WebTool<
+  Args extends undefined | ZodRawShapeCompat | AnySchema = undefined,
+> extends Tool<
   WebMcpServer,
   WebToolName,
   TableauWebRequestHandlerExtra,
@@ -123,7 +130,8 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
   Args
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
-  minRequiredRole?: SiteRole;
+  minRequiredRole: SiteRole;
+  registrationConditions: ReadonlyArray<RegistrationCondition>;
   app?: AppDetails;
   meta?: ToolMeta;
 
@@ -136,6 +144,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     callback,
     disabled,
     minRequiredRole,
+    registrationConditions,
     app,
     meta,
   }: WebToolParams<Args>) {
@@ -143,6 +152,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
     this.minRequiredRole = minRequiredRole;
+    this.registrationConditions = registrationConditions ?? [];
     this.app = app;
     this.meta = meta;
   }

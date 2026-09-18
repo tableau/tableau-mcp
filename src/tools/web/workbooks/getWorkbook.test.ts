@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
 
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
@@ -27,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   mockQueryViewsForWorkbook: vi.fn(),
   mockQueryWorkbookConnections: vi.fn(),
   mockGraphql: vi.fn(),
+  mockUserHasQueryPermissions: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -42,6 +44,9 @@ vi.mock('../../../restApiInstance.js', () => ({
       metadataMethods: {
         graphql: mocks.mockGraphql,
       },
+      vizqlDataServiceMethods: {
+        userHasQueryPermissions: mocks.mockUserHasQueryPermissions,
+      },
       siteId: 'test-site-id',
     }),
   ),
@@ -55,9 +60,20 @@ describe('getWorkbookTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    // Safe defaults: no connections, empty published lineage.
+    // Safe defaults: no connections, empty published lineage, and an indeterminate
+    // has-query-permissions result so isQueryable is left unset and stays out of the
+    // discovery/merge assertions below. Queryability mapping (including feature-disabled → false)
+    // is exercised in the 'isQueryable enrichment' block.
     mocks.mockQueryWorkbookConnections.mockResolvedValue([]);
     mocks.mockGraphql.mockResolvedValue(emptyWorkbookLineage);
+    mocks.mockUserHasQueryPermissions.mockResolvedValue(
+      Err({
+        type: 'api-error',
+        message: 'queryability not under test',
+        httpStatus: 503,
+        errorCode: '503800',
+      }),
+    );
   });
 
   afterEach(() => {
@@ -181,6 +197,124 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
+    it('attaches a publishedParent pointer and drops the redundant standalone published entry', async () => {
+      // A live connection to a published DS surfaces as both the recovered published entry
+      // (pub-luid-1) and the sqlproxy embedded stub (emb-luid-1). The stub carries the
+      // publishedParent pointer, so the standalone published entry is de-duped away.
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                upstreamDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                embeddedDatasources: [
+                  {
+                    name: 'Embedded DS',
+                    parentPublishedDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'emb-luid-1',
+          name: 'Embedded DS',
+          datasourceType: 'embedded',
+          publishedParent: { luid: 'pub-luid-1', name: 'Published DS' },
+        },
+      ]);
+    });
+
+    it('keeps an allowed published DS when its embedded stub is out of the bounded context', async () => {
+      // Regression guard: the de-dupe must not let an out-of-bounds embedded stub suppress its
+      // in-bounds published parent. Only pub-luid-1 is allowed; the emb-luid-1 stub is not.
+      vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'pub-luid-1');
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                upstreamDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                embeddedDatasources: [
+                  {
+                    name: 'Embedded DS',
+                    parentPublishedDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        { luid: 'pub-luid-1', name: 'Published DS', datasourceType: 'published' },
+      ]);
+    });
+
+    it('omits the publishedParent when two connections share an embedded name across LUIDs', async () => {
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                upstreamDatasources: [],
+                embeddedDatasources: [
+                  {
+                    name: 'Embedded DS',
+                    parentPublishedDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+      // Same embedded name, distinct LUIDs -> name->LUID join is ambiguous, so neither entry
+      // may claim the authoritative parent.
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+        { id: 'conn-2', datasource: { id: 'emb-luid-2', name: 'Embedded DS' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+        { luid: 'emb-luid-2', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
+    });
+
+    it('does not attach a publishedParent when the Metadata API is disabled', async () => {
+      vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+      ]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
+    });
+
     it('falls back to the luid when a connection datasource has no name', async () => {
       mocks.mockQueryWorkbookConnections.mockResolvedValue([
         { id: 'conn-1', datasource: { id: 'emb-luid-1' } },
@@ -215,6 +349,300 @@ describe('getWorkbookTool', () => {
 
       expect(response.data.id).toBe(workbookId);
       expect(response.data.upstreamDatasources).toBeUndefined();
+    });
+  });
+
+  describe('isQueryable enrichment', () => {
+    const workbookId = '96a43833-27db-40b6-aa80-751efc776b9a';
+
+    beforeEach(() => {
+      mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
+      mocks.mockQueryViewsForWorkbook.mockResolvedValue([mockView]);
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                upstreamDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+              },
+            ],
+          },
+        },
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+      ]);
+    });
+
+    it('skips the permission calls when the workbook has zero upstream datasources', async () => {
+      // No connections and empty lineage → no upstream datasources, so enrichment early-returns
+      // without hitting the has-query-permissions endpoint at all.
+      mocks.mockGraphql.mockResolvedValue(emptyWorkbookLineage);
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(mocks.mockUserHasQueryPermissions).not.toHaveBeenCalled();
+      expect(response.data.upstreamDatasources ?? []).toEqual([]);
+    });
+
+    it('sets isQueryable false for every datasource when VDS is systemically unavailable (feature-disabled)', async () => {
+      // feature-disabled covers both systemic cases: the feature is off site-wide, or the endpoint
+      // is absent on an older server. VDS can't be queried at all, so isQueryable is false for both
+      // published and embedded. Since the first (probe) check already proves the systemic failure,
+      // the remaining data sources are marked false without another call — exactly one call total.
+      mocks.mockUserHasQueryPermissions.mockResolvedValue(Err({ type: 'feature-disabled' }));
+
+      const response = await getResponseData({ workbookId });
+
+      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalledTimes(1);
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: false,
+        },
+        {
+          luid: 'emb-luid-1',
+          name: 'Embedded DS',
+          datasourceType: 'embedded',
+          isQueryable: false,
+        },
+      ]);
+    });
+
+    it('sets isQueryable per datasource from a successful has-query-permissions check', async () => {
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        Ok({ hasQueryPermission: datasource.datasourceLuid === 'pub-luid-1' }),
+      );
+
+      const response = await getResponseData({ workbookId });
+
+      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalledTimes(2);
+      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalledWith({
+        datasource: { datasourceLuid: 'pub-luid-1' },
+      });
+      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalledWith({
+        datasource: { datasourceLuid: 'emb-luid-1' },
+      });
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: true,
+        },
+        {
+          luid: 'emb-luid-1',
+          name: 'Embedded DS',
+          datasourceType: 'embedded',
+          isQueryable: false,
+        },
+      ]);
+    });
+
+    it('caps in-flight has-query-permissions calls at 5 when fanning out many datasources', async () => {
+      // A workbook with many upstream datasources must not fire an unbounded burst of VDS calls; the
+      // fan-out is batched so at most 5 checks are in flight at once (the probe runs first, on its own).
+      const datasourceCount = 12;
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                upstreamDatasources: Array.from({ length: datasourceCount }, (_, i) => ({
+                  luid: `pub-luid-${i + 1}`,
+                  name: `Published DS ${i + 1}`,
+                })),
+              },
+            ],
+          },
+        },
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([]);
+
+      let inFlight = 0;
+      let peak = 0;
+      mocks.mockUserHasQueryPermissions.mockImplementation(async () => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        inFlight--;
+        return Ok({ hasQueryPermission: true });
+      });
+
+      const response = await getResponseData({ workbookId });
+
+      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalledTimes(datasourceCount);
+      expect(peak).toBe(5);
+      expect(response.data.upstreamDatasources).toHaveLength(datasourceCount);
+    });
+
+    it('sets isQueryable false when the check returns 403 (no permission to view)', async () => {
+      // A 403 (Forbidden, e.g. errorCode 403800 "does not have permission") means VDS
+      // authenticated the caller and denied query access → isQueryable is false.
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        datasource.datasourceLuid === 'pub-luid-1'
+          ? Ok({ hasQueryPermission: true })
+          : Err({
+              type: 'api-error',
+              message:
+                'The user does not have permission to view query permissions for data source emb-luid-1.',
+              httpStatus: 403,
+              errorCode: '403800',
+            }),
+      );
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: true,
+        },
+        {
+          luid: 'emb-luid-1',
+          name: 'Embedded DS',
+          datasourceType: 'embedded',
+          isQueryable: false,
+        },
+      ]);
+    });
+
+    it('sets isQueryable false when the data source is not found (404 / errorCode 404937)', async () => {
+      // A 404937 is scoped to the requested data source (it no longer exists), unlike the
+      // missing-endpoint 404950 which is systemic. The data source can't be queried → false.
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        datasource.datasourceLuid === 'pub-luid-1'
+          ? Ok({ hasQueryPermission: true })
+          : Err({
+              type: 'api-error',
+              message: 'Datasource not found.',
+              httpStatus: 404,
+              errorCode: '404937',
+            }),
+      );
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: true,
+        },
+        {
+          luid: 'emb-luid-1',
+          name: 'Embedded DS',
+          datasourceType: 'embedded',
+          isQueryable: false,
+        },
+      ]);
+    });
+
+    it('leaves isQueryable unset when the check fails authentication (401)', async () => {
+      // A 401 means authentication/scope failed, not that VDS evaluated permissions and denied
+      // them (e.g. a deployment whose token lacks the viz_data_service scope). That's
+      // indeterminate, so isQueryable stays unset rather than being falsely reported as false.
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        datasource.datasourceLuid === 'pub-luid-1'
+          ? Ok({ hasQueryPermission: true })
+          : Err({
+              type: 'api-error',
+              message: 'Invalid authentication credentials.',
+              httpStatus: 401,
+              errorCode: '401002',
+            }),
+      );
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: true,
+        },
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
+    });
+
+    it('leaves isQueryable unset when the check returns a transient HTTP error (e.g. 503)', async () => {
+      // Rate-limit / server errors are transient failures, not a permission verdict, so they stay
+      // indeterminate rather than being reported as false (matches how query-datasource treats them).
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        datasource.datasourceLuid === 'pub-luid-1'
+          ? Ok({ hasQueryPermission: true })
+          : Err({
+              type: 'api-error',
+              message: 'The underlying data engine is unavailable.',
+              httpStatus: 503,
+              errorCode: '503800',
+            }),
+      );
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: true,
+        },
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
+    });
+
+    it('leaves isQueryable unset when the check fails without an HTTP response (zodios-error)', async () => {
+      // A transport or schema-parse failure isn't evidence the user can't query, so it stays
+      // indeterminate (unset) rather than being reported as false.
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        datasource.datasourceLuid === 'pub-luid-1'
+          ? Ok({ hasQueryPermission: true })
+          : Err({ type: 'zodios-error', error: new Error('parse boom') }),
+      );
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: true,
+        },
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
+    });
+
+    it('leaves isQueryable unset (and still returns the workbook) when the check throws', async () => {
+      // A thrown error (e.g. a network failure) must not fail get-workbook — enrichment is best-effort.
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) => {
+        if (datasource.datasourceLuid === 'pub-luid-1') {
+          return Ok({ hasQueryPermission: true });
+        }
+        throw new Error('network boom');
+      });
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          isQueryable: true,
+        },
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
     });
   });
 

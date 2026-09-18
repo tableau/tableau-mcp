@@ -3,10 +3,14 @@ import type { MockedFunction } from 'vitest';
 
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import * as logger from './logging/logger.js';
+import { SiteRole } from './sdks/tableau/types/user.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
+import { getInspectKnowledgeContextTool } from './tools/web/knowledge/inspectKnowledgeContext.js';
+import { getManageKnowledgeContextTool } from './tools/web/knowledge/manageKnowledgeContext.js';
+import { getQueryKnowledgeContextTool } from './tools/web/knowledge/queryKnowledgeContext.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
@@ -25,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
   mockGetCurrentUserSiteRole: vi.fn(),
   mockAssertAdmin: vi.fn(),
+  mockCheckRegistrationConditions: vi.fn(),
 }));
 
 const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
@@ -56,6 +61,16 @@ vi.mock('./tools/web/adminGate.js', () => ({
   assertAdmin: mocks.mockAssertAdmin,
 }));
 
+// Only the capability probe is stubbed — the real `getUnmetConditionInstructions` is kept so the
+// instructions assertions below verify the copy users actually receive.
+vi.mock('./tools/web/registrationConditions.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./tools/web/registrationConditions.js')>();
+  return {
+    ...actual,
+    checkRegistrationConditions: mocks.mockCheckRegistrationConditions,
+  };
+});
+
 // Auto-mock the telemetry logger so the registration-time warning is captured as a spy call.
 vi.mock('./logging/logger.js');
 
@@ -69,6 +84,9 @@ describe('server', () => {
     mocks.mockReadFile.mockClear();
     mocks.mockGetCurrentUserSiteRole.mockReset().mockResolvedValue('SiteAdministratorCreator');
     mocks.mockAssertAdmin.mockReset();
+    mocks.mockCheckRegistrationConditions
+      .mockReset()
+      .mockResolvedValue({ registrationConditionsMet: true });
     (logger.log as MockedFunction<typeof logger.log>).mockClear();
   });
 
@@ -106,7 +124,8 @@ describe('server', () => {
       callback: vi.fn(),
       disabled: false,
       requiredApiScopes: [],
-      minRequiredRole: undefined,
+      minRequiredRole: SiteRole.VIEWER,
+      registrationConditions: [],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
       app: {
@@ -497,7 +516,32 @@ describe('server', () => {
       },
       callback: vi.fn(),
       disabled: false,
-      minRequiredRole: 'SiteAdministratorExplorer',
+      minRequiredRole: SiteRole.SITE_ADMINISTRATOR_EXPLORER,
+      registrationConditions: [],
+      requiredApiScopes: [],
+      logAndExecute: vi.fn(),
+      notifyInvocation: vi.fn(),
+    } as unknown as WebTool<any>;
+  }
+
+  function createMockConditionalTool(): WebTool<any> {
+    return {
+      name: 'mock-conditional-tool' as WebToolName,
+      server: {} as any,
+      title: 'Mock Conditional Tool',
+      description: 'Mock Conditional Tool',
+      paramsSchema: {},
+      annotations: {
+        title: 'Mock Conditional Tool',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      callback: vi.fn(),
+      disabled: false,
+      minRequiredRole: SiteRole.VIEWER,
+      registrationConditions: ['RequiresPulse'],
       requiredApiScopes: [],
       logAndExecute: vi.fn(),
       notifyInvocation: vi.fn(),
@@ -507,6 +551,117 @@ describe('server', () => {
   // The registration-time role check is gated behind the `enforce-role-requirements` flag. With the
   // flag ON the tool's minRequiredRole is enforced; with it OFF the check is skipped entirely.
   const enforceRoleRequirements = (name: string): boolean => name === 'enforce-role-requirements';
+
+  // Companion flag for the registration-conditions check (Pulse etc.). ON enforces a tool's
+  // declared `registrationConditions`; OFF skips the check entirely.
+  const enforceRegistrationConditions = (name: string): boolean =>
+    name === 'enforce-registration-conditions';
+
+  it.each([
+    ['omits Knowledge tools for an unlicensed user', 'Unlicensed', false, []],
+    ['omits Knowledge tools for a Guest', 'Guest', false, []],
+    ['omits Knowledge tools for a Support User', SiteRole.SUPPORT_USER, false, []],
+    ['omits Knowledge tools for an unrecognized role', 'Unknown', false, []],
+    ['omits Knowledge tools on Tableau Server', SiteRole.SERVER_ADMINISTRATOR, false, []],
+    [
+      'registers read only when the role lookup fails but the Knowledge read probe succeeds',
+      undefined,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context'],
+    ],
+    [
+      'registers read only for a Viewer',
+      SiteRole.VIEWER,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context'],
+    ],
+    [
+      'registers read only for an Explorer',
+      SiteRole.EXPLORER,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context'],
+    ],
+    [
+      'registers read only for an Explorer who can publish',
+      SiteRole.EXPLORER_CAN_PUBLISH,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context'],
+    ],
+    [
+      'registers read and manage for a Creator',
+      SiteRole.CREATOR,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
+    ],
+    [
+      'registers read and manage for a Site Administrator Explorer',
+      SiteRole.SITE_ADMINISTRATOR_EXPLORER,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
+    ],
+    [
+      'registers read and manage for a Site Administrator Creator',
+      SiteRole.SITE_ADMINISTRATOR_CREATOR,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
+    ],
+    [
+      'omits Knowledge tools when Knowledge is unavailable on the site',
+      SiteRole.CREATOR,
+      false,
+      [],
+    ],
+  ] as const)('%s', async (_, siteRole, knowledgeAvailable, expectedTools) => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) =>
+        name === 'knowledge-tools' ||
+        enforceRoleRequirements(name) ||
+        enforceRegistrationConditions(name),
+    );
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(siteRole);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue(
+      knowledgeAvailable
+        ? { registrationConditionsMet: true }
+        : { registrationConditionsMet: false, failingCondition: 'RequiresKnowledge' },
+    );
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+      getQueryKnowledgeContextTool(server),
+      getInspectKnowledgeContextTool(server),
+      getManageKnowledgeContextTool(server),
+    ]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(expectedTools.length);
+    for (const toolName of expectedTools) {
+      expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+        toolName,
+        expect.anything(),
+        expect.any(Function),
+      );
+    }
+  });
+
+  it('omits Knowledge tools when the knowledge-tools feature flag is off', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) => enforceRoleRequirements(name) || enforceRegistrationConditions(name),
+    );
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(SiteRole.CREATOR);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+      getQueryKnowledgeContextTool(server),
+      getInspectKnowledgeContextTool(server),
+      getManageKnowledgeContextTool(server),
+    ]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalled();
+  });
 
   it('does not register a tool when the caller ranks below minRequiredRole', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
@@ -629,6 +784,31 @@ describe('server', () => {
     expect(getInstructions(server)).not.toContain('site role could not be determined');
   });
 
+  it('registers a Viewer-minimum tool even when the role fetch failed (Viewer is never enforced)', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+    // Fetch failed (undefined): an above-Viewer tool would be omitted, but a Viewer minimum is
+    // satisfied by every authenticated caller, so enforcement is skipped for it entirely.
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+
+    const server = getServer();
+    const mockViewerTool = {
+      ...createMockAdminTool(),
+      name: 'mock-viewer-tool' as WebToolName,
+      minRequiredRole: SiteRole.VIEWER,
+    } as unknown as WebTool<any>;
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockViewerTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-viewer-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+    // The tool was registered, not omitted, so no "role could not be determined" warning is emitted.
+    expect(getInstructions(server)).not.toContain('site role could not be determined');
+  });
+
   // Telemetry-side (server log) counterpart to the client-facing instructions warning above.
   function getWarningLogs(): Array<Parameters<typeof logger.log>[0]> {
     const log = logger.log as MockedFunction<typeof logger.log>;
@@ -663,6 +843,100 @@ describe('server', () => {
     await server.registerTools();
 
     expect(getWarningLogs()).toHaveLength(0);
+  });
+
+  it('logs a telemetry warning naming the tools omitted for unmet conditions and the failing condition', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({
+      registrationConditionsMet: false,
+      failingCondition: 'RequiresPulse',
+    });
+
+    const server = getServer();
+    const mockConditionalTool = createMockConditionalTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockConditionalTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
+      'mock-conditional-tool',
+      expect.anything(),
+      expect.anything(),
+    );
+    const warnings = getWarningLogs();
+    expect(warnings).toHaveLength(1);
+    // Names the omitted tool and the condition it failed, so operators can see what was hidden and why.
+    expect(warnings[0].message).toContain('mock-conditional-tool');
+    expect(warnings[0].message).toContain('RequiresPulse');
+  });
+
+  it('registers a conditional tool when its conditions are met', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    const mockConditionalTool = createMockConditionalTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockConditionalTool]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-conditional-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(getWarningLogs()).toHaveLength(0);
+  });
+
+  it('does not check conditions or warn when enforce-registration-conditions is off', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+
+    const server = getServer();
+    const mockConditionalTool = createMockConditionalTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockConditionalTool]);
+
+    await server.registerTools();
+
+    // With the flag off, conditions are not evaluated: the tool registers and nothing is logged.
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'mock-conditional-tool',
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(mocks.mockCheckRegistrationConditions).not.toHaveBeenCalled();
+    expect(getWarningLogs()).toHaveLength(0);
+  });
+
+  it('explains in the connect instructions why Pulse tools were omitted', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({
+      registrationConditionsMet: false,
+      failingCondition: 'RequiresPulse',
+    });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
+
+    await server.registerTools();
+
+    // Without this the caller just sees a short tool list and no reason for it.
+    const instructions = getInstructions(server);
+    expect(instructions).toContain('Pulse is not available');
+    expect(instructions).toContain(
+      'https://help.tableau.com/current/online/en-us/pulse_set_up.htm',
+    );
+  });
+
+  it('does not mention Pulse in the connect instructions when conditions are met', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRegistrationConditions);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockConditionalTool()]);
+
+    await server.registerTools();
+
+    expect(getInstructions(server)).not.toContain('Pulse is not available');
   });
 
   it('should register as standard tool when mcp-apps feature flag is disabled', async () => {
