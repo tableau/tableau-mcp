@@ -8,6 +8,9 @@ import { serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
+import { getInspectKnowledgeContextTool } from './tools/web/knowledge/inspectKnowledgeContext.js';
+import { getManageKnowledgeContextTool } from './tools/web/knowledge/manageKnowledgeContext.js';
+import { getQueryKnowledgeContextTool } from './tools/web/knowledge/queryKnowledgeContext.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
@@ -553,6 +556,112 @@ describe('server', () => {
   // declared `registrationConditions`; OFF skips the check entirely.
   const enforceRegistrationConditions = (name: string): boolean =>
     name === 'enforce-registration-conditions';
+
+  it.each([
+    ['omits Knowledge tools for an unlicensed user', 'Unlicensed', false, []],
+    ['omits Knowledge tools for a Guest', 'Guest', false, []],
+    ['omits Knowledge tools for a Support User', SiteRole.SUPPORT_USER, false, []],
+    ['omits Knowledge tools for an unrecognized role', 'Unknown', false, []],
+    ['omits Knowledge tools on Tableau Server', SiteRole.SERVER_ADMINISTRATOR, false, []],
+    [
+      'registers read only when the role lookup fails but the Knowledge read probe succeeds',
+      undefined,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context'],
+    ],
+    [
+      'registers read only for a Viewer',
+      SiteRole.VIEWER,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context'],
+    ],
+    [
+      'registers read only for an Explorer',
+      SiteRole.EXPLORER,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context'],
+    ],
+    [
+      'registers read only for an Explorer who can publish',
+      SiteRole.EXPLORER_CAN_PUBLISH,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context'],
+    ],
+    [
+      'registers read and manage for a Creator',
+      SiteRole.CREATOR,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
+    ],
+    [
+      'registers read and manage for a Site Administrator Explorer',
+      SiteRole.SITE_ADMINISTRATOR_EXPLORER,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
+    ],
+    [
+      'registers read and manage for a Site Administrator Creator',
+      SiteRole.SITE_ADMINISTRATOR_CREATOR,
+      true,
+      ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
+    ],
+    [
+      'omits Knowledge tools when Knowledge is unavailable on the site',
+      SiteRole.CREATOR,
+      false,
+      [],
+    ],
+  ] as const)('%s', async (_, siteRole, knowledgeAvailable, expectedTools) => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) =>
+        name === 'knowledge-tools' ||
+        enforceRoleRequirements(name) ||
+        enforceRegistrationConditions(name),
+    );
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(siteRole);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue(
+      knowledgeAvailable
+        ? { registrationConditionsMet: true }
+        : { registrationConditionsMet: false, failingCondition: 'RequiresKnowledge' },
+    );
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+      getQueryKnowledgeContextTool(server),
+      getInspectKnowledgeContextTool(server),
+      getManageKnowledgeContextTool(server),
+    ]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(expectedTools.length);
+    for (const toolName of expectedTools) {
+      expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+        toolName,
+        expect.anything(),
+        expect.any(Function),
+      );
+    }
+  });
+
+  it('omits Knowledge tools when the knowledge-tools feature flag is off', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) => enforceRoleRequirements(name) || enforceRegistrationConditions(name),
+    );
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(SiteRole.CREATOR);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+      getQueryKnowledgeContextTool(server),
+      getInspectKnowledgeContextTool(server),
+      getManageKnowledgeContextTool(server),
+    ]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalled();
+  });
 
   it('does not register a tool when the caller ranks below minRequiredRole', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
