@@ -5,14 +5,12 @@
  * Centralizing the wording here keeps the message identical across every auth mode — PAT, OAuth,
  * direct-trust / connected-app, UAT, and passthrough — and across every surface that can emit an
  * auth failure:
- *   - the tool-execution error wrapper (src/tools/web/tool.ts),
- *   - the startup site-settings fetch (src/utils/mcpSiteSettings.ts), and
+ *   - the tool-execution error wrapper (src/tools/web/tool.ts), and
  *   - the OAuth transport challenge (src/server/oauth/authMiddleware.ts).
  *
- * W-23757363: a bare "Request failed with status code 401" (or a server that failed to start while
- * fetching site settings) was being paraphrased by the model into a misleading "feature not
- * configured" message. Naming the cause — and, where known, the targeted site + pod — makes a 401
- * impossible to misread as "Admin Insights is missing."
+ * W-23757363: a bare "Request failed with status code 401" was being paraphrased by the model into
+ * a misleading "feature not configured" message. Naming the cause — and, where known, the targeted
+ * site + pod — makes a 401 impossible to misread as "Admin Insights is missing."
  */
 
 type AuthTarget = { site?: string; server?: string };
