@@ -3,8 +3,9 @@
  * same-site/same-server case, so `scaffold-data-app` can return an already query-ready
  * workbook in a single call.
  *
- * This is a TypeScript port of `.claude/skills/author-data-app/wire-datasource.mjs` (kept for the
- * out-of-scope migration case: re-wiring an already-wired workbook onto a *different* datasource).
+ * This is a TypeScript port of the `author-data-app` skill's `wire-datasource.mjs` (now in the
+ * tableau-plugin repo, kept for the out-of-scope migration case: re-wiring an already-wired
+ * workbook onto a *different* datasource).
  * The wiring spans four coordinated locations (root datasource `name`, root `relation connection`,
  * view `datasource name`, `datasource-dependencies datasource`) that must agree exactly, and it's
  * easy to leave one empty `<datasources />` anchor behind. Get any of that wrong and the workbook
