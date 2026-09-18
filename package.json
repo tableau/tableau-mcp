@@ -60,6 +60,7 @@
     "version:major": "npm version major --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
     "version:patch": "npm version patch --no-git-tag-version",
+    "build:data-app-template": "tsx src/scripts/buildDataAppTemplate.ts",
     "docs:start": "npm run start --prefix docs"
   },
   "dependencies": {

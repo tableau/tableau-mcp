@@ -714,3 +714,46 @@ should be fetched promptly rather than stored.
 ```bash
 FILE_TTL=30
 ```
+
+<hr />
+
+## `DATA_APP_WORKSPACE_ROOT`
+
+The server-controlled root directory under which the `scaffold-data-app` tool writes new data-app
+workspaces. Only used by a local (`stdio`) server; on a remote (`http`) server the tool instead
+returns a short-lived presigned download URL for a pre-published template zip (see
+[`DATA_APP_TEMPLATE_S3_KEY`](#data_app_template_s3_key)), so this variable has no effect there.
+
+- Requires the `tableau-data-apps` feature flag to be enabled (see `features.json`). When the flag
+  is disabled, the tool is not registered and this variable has no effect.
+- Default: a `data-app-workspaces` folder next to the running server bundle.
+- This is never the caller's choice — the tool joins the requested app name onto this root and
+  refuses any name that would escape it, so callers cannot write outside the configured root.
+
+**Example:**
+
+```bash
+DATA_APP_WORKSPACE_ROOT=/var/lib/tableau-mcp/data-app-workspaces
+```
+
+<hr />
+
+## `DATA_APP_TEMPLATE_S3_KEY`
+
+The S3 object key of the pre-published data-app template zip that the `scaffold-data-app` tool
+presigns for a remote (`http`) server. The zip is published to S3 out of band; when the tool runs on
+a remote server it returns a short-lived presigned GET URL for this object plus a post-unzip
+rename/edit plan, rather than writing the workspace to disk. The tool never uploads or downloads the
+zip itself.
+
+- Requires the `tableau-data-apps` feature flag to be enabled (see `features.json`).
+- Requires [`MCP_S3_BUCKET`](#mcp_s3_bucket) to be set; the object lives in that bucket.
+- Default: unset. When unset on a remote server, `scaffold-data-app` returns an error.
+- Build the template zip with `npm run build:data-app-template`; publishing it to this key is a
+  separate, external step (this project only builds the zip artifact).
+
+**Example:**
+
+```bash
+DATA_APP_TEMPLATE_S3_KEY=templates/data-app-template.zip
+```

@@ -1,0 +1,8 @@
+{
+  "label": "Data Apps",
+  "position": 9,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for scaffolding starter Tableau data app (viz extension) workspaces."
+  }
+}

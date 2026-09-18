@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 
 import { build, BuildOptions } from 'esbuild';
-import { chmod, copyFile, mkdir, rm } from 'fs/promises';
+import { chmod, copyFile, cp, mkdir, rm } from 'fs/promises';
 import { resolve } from 'path';
 import { build as viteBuild } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
@@ -91,6 +91,14 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     resolve(process.cwd(), 'build', 'features.json'),
   );
   console.log('✅ features.json copied successfully');
+
+  // scaffold-data-app reads its starter template from a static asset bundled next to index.js
+  // (same idiom as features.json). The stdio path copies this tree per request; keep it verbatim.
+  console.log('🏗️ Copying templates to build directory...');
+  await cp(resolve(process.cwd(), 'src/templates'), resolve(process.cwd(), 'build', 'templates'), {
+    recursive: true,
+  });
+  console.log('✅ templates copied successfully');
 
   console.log('🏗️ Building MCP Apps...');
   try {
