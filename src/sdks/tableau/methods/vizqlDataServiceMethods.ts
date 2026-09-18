@@ -10,14 +10,27 @@ import {
   QueryPermissionsOutput,
   QueryRequest,
   ReadMetadataRequest,
+  TableauError,
   UserHasQueryPermissionsRequest,
   vizqlDataServiceApis,
 } from '../apis/vizqlDataServiceApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
+// The `VDSForWorkbookDatasources` gate: a site-scoped opt-in flag required to query embedded
+// (workbook) datasources. Enforced by headless-bi's interceptor as HTTP 403 / errorCode 403800 on
+// every VDS endpoint; we match the flag name in the message (403800 alone is a generic denial).
+export const WORKBOOK_DS_NOT_ENABLED_FLAG = 'VDSForWorkbookDatasources';
+
+export function isWorkbookDatasourceNotEnabled(error: TableauError | undefined): boolean {
+  return (
+    error?.message?.toLowerCase().includes(WORKBOOK_DS_NOT_ENABLED_FLAG.toLowerCase()) ?? false
+  );
+}
+
 export type VdsQueryError =
   | { type: 'feature-disabled' }
+  | { type: 'workbook-datasource-not-enabled' }
   | { type: 'api-error'; message: string; httpStatus: number; errorCode: string | undefined }
   | { type: 'zodios-error'; error: ZodiosError };
 
@@ -51,6 +64,11 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
     } catch (error) {
       if (isErrorFromAlias(this._apiClient.api, 'queryDatasource', error)) {
+        // Detection keys off the message, not the status (see predicate), so this runs before the
+        // 404 branch to keep the gate from being mislabeled as VizQL-disabled.
+        if (isWorkbookDatasourceNotEnabled(error.response.data)) {
+          return Err({ type: 'workbook-datasource-not-enabled' });
+        }
         if (error.response.status === 404) {
           return Err({ type: 'feature-disabled' });
         }
