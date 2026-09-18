@@ -205,7 +205,7 @@ describe('desktop tools/list serialized surface', () => {
     // Tool search owns discovery; pin the merged filter recovery, dense-scatter repair,
     // executive-dashboard guidance, rounded-bar build/refine proof route, and dashboard
     // corner routing without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(8_318);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(8_504);
   });
 });
 
@@ -276,7 +276,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
-    ['author-action', 1433], // remeasured after preserving URL authoring and standardizing the datasource selector as internal name or unique caption
+    ['author-action', 1521], // ratcheted down 2026-09-18 after trimming url/datasource describes for the source/target exclude split
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.
     ['format-worksheets', 1097],
