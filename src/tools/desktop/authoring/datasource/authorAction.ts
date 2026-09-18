@@ -297,8 +297,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             ).toErr();
           }
 
-          const worksheetNames = findSheetNames(liveXml, 'worksheets', 'worksheet');
-          const dashboardNames = findSheetNames(liveXml, 'dashboards', 'dashboard');
+          const worksheetNames = findElementNames(liveXml, 'worksheets', 'worksheet');
+          const dashboardNames = findElementNames(liveXml, 'dashboards', 'dashboard');
           if (mode === 'url' || mode === 'filter') {
             // Worksheet, dashboard, and story names share one namespace, so a source name
             // is unambiguously one kind. Emitting <source worksheet='<dashboard>'> (a
@@ -335,6 +335,16 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               return new ArgsValidationError(
                 `sourceDashboard "${effectiveSourceDashboard}" was not found. Available dashboards: ${dashboardNames.size > 0 ? [...dashboardNames].join(', ') : 'none'}`,
               ).toErr();
+            }
+            // Verify that the source worksheet is on the source dashboard.
+            if (hasWorksheet && hasDashboard) {
+              const zoneNames = findDashboardZoneNames(liveXml, effectiveSourceDashboard);
+              if (zoneNames !== undefined && !zoneNames.has(effectiveSourceSheet)) {
+                const members = [...zoneNames].filter((name) => worksheetNames.has(name));
+                return new ArgsValidationError(
+                  `sourceWorksheet "${effectiveSourceSheet}" is not on dashboard "${effectiveSourceDashboard}", so no mark on that dashboard can fire the action. Worksheets on "${effectiveSourceDashboard}": ${members.length > 0 ? members.join(', ') : 'none'}. Pass a worksheet that is on the dashboard, or omit sourceDashboard to scope the action to the worksheet.`,
+                ).toErr();
+              }
             }
             const trimmedTarget = targetSheet!.trim();
             if (!worksheetNames.has(trimmedTarget) && !dashboardNames.has(trimmedTarget)) {
@@ -738,11 +748,10 @@ function resolveTargetSet(
   return new Ok(`${bracketToken(match.datasourceName)}.${bracketToken(match.name)}`);
 }
 
-// Collect the declared sheet names inside a top-level container (<worksheets> or
-// <dashboards>). The (?=\s) lookahead keeps the plural container tag itself from
-// matching, and scanning only within the block avoids picking up sheet references
-// nested elsewhere in the document.
-function findSheetNames(xml: string, blockTag: string, elementTag: string): Set<string> {
+// Collect the name attributes of every <elementTag> inside the first <blockTag> container,
+// e.g. worksheet names in <worksheets>, dashboard names in <dashboards>, or zone names in a
+// dashboard's <zones>. Empty set when the container is absent.
+function findElementNames(xml: string, blockTag: string, elementTag: string): Set<string> {
   const names = new Set<string>();
   const blockStart = xml.indexOf(`<${blockTag}>`);
   if (blockStart === -1) {
@@ -759,6 +768,40 @@ function findSheetNames(xml: string, blockTag: string, elementTag: string): Set<
   }
   return names;
 }
+
+// Resolve the zones declared on a dashboard, returning the set of every <zone> name attribute
+// inside the dashboard's <zones> block.
+function findDashboardZoneNames(xml: string, dashboardName: string): Set<string> | undefined {
+  const blockStart = xml.indexOf('<dashboards>');
+  if (blockStart === -1) {
+    return undefined;
+  }
+  const blockEnd = xml.indexOf('</dashboards>', blockStart);
+  const dashboardsBlock = xml.slice(blockStart, blockEnd === -1 ? xml.length : blockEnd);
+
+  // The (?=\s) lookahead keeps the plural <dashboards> container from matching.
+  for (const match of dashboardsBlock.matchAll(/<dashboard(?=\s)[^>]*>/g)) {
+    const openTag = match[0];
+    if (unescapeXml(getAttr(openTag, 'name') ?? '') !== dashboardName) {
+      continue;
+    }
+    if (openTag.endsWith('/>')) {
+      return undefined;
+    }
+    const contentStart = (match.index ?? 0) + openTag.length;
+    const contentEnd = dashboardsBlock.indexOf('</dashboard>', contentStart);
+    const content = dashboardsBlock.slice(
+      contentStart,
+      contentEnd === -1 ? dashboardsBlock.length : contentEnd,
+    );
+    if (content.indexOf('<zones>') === -1) {
+      return undefined;
+    }
+    return findElementNames(content, 'zones', 'zone');
+  }
+  return undefined;
+}
+
 function findGroupTags(xml: string): string[] {
   return [...xml.matchAll(/<group\b[^>]*>/g)]
     .map((match) => match[0])

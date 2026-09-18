@@ -741,6 +741,27 @@ describe('authorActionTool (filter mode)', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it('rejects a worksheet that is not on the supplied source dashboard', async () => {
+    // Both names are individually valid — 'Profit' is a real worksheet and 'Overview' is a real
+    // dashboard — but 'Overview' only hosts 'Details', so no mark on it can fire the action.
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Unrelated Pair',
+        sourceWorksheet: 'Profit',
+        sourceDashboard: 'Overview',
+        targetSheet: 'Details',
+      },
+      initialXml: DASHBOARD_WITH_TARGET_SHEET_ONLY,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('is not on dashboard "Overview"');
+    expect(result.content[0].text).toContain('Details');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('fails filter readback when the tsl-filter target is absent', async () => {
     const incompleteAction =
       "<action caption='Filter to Details' name='[Action1]'>" +

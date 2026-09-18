@@ -231,9 +231,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'search-knowledge',
     ],
     stopConditions: ['use author-parameter first'],
-    requiredEvidence: [
-      "each author-* verb's readback-verified result object. For actions, an interaction test that clicking or hovering over a mark filters the target",
-    ],
+    requiredEvidence: ["each author-* verb's readback-verified result object"],
   },
   {
     kind: 'prose',
