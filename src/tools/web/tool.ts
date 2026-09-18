@@ -1,7 +1,7 @@
 import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
-import { ZodiosValidationError } from '../../errors/mcpToolError.js';
+import { McpToolError, ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
@@ -13,6 +13,10 @@ import {
 } from '../../telemetry/clientDisplayName.js';
 import { getTelemetryProvider } from '../../telemetry/init.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import {
+  buildAuthenticationErrorMessage,
+  buildPermissionErrorMessage,
+} from '../../utils/authErrorMessage.js';
 import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
@@ -249,7 +253,20 @@ export class WebTool<
         },
         extra,
       );
-      toolResult = getErrorResult(requestId, error);
+
+      // A raw REST 401/403 is thrown here rather than returned as a typed Err — e.g. a bad/expired
+      // PAT rejected at sign-in, or an OAuth token that is valid at the gateway but rejected by
+      // Tableau REST. Left alone it surfaces as a bare "Request failed with status code 401", which
+      // the model paraphrases into a misleading "feature not configured" message (W-23757363).
+      // Classify it into clear, self-explanatory guidance naming the targeted site + pod. This is
+      // the shared web-server path used by every auth mode (PAT, OAuth, direct-trust, UAT,
+      // passthrough). Typed McpToolErrors already carry curated messages, so they pass through
+      // unchanged.
+      const authErrorMessage =
+        error instanceof McpToolError ? undefined : getAuthErrorMessage(errorCode, extra);
+      toolResult = authErrorMessage
+        ? { isError: true, content: [{ type: 'text', text: authErrorMessage }] }
+        : getErrorResult(requestId, error);
       return toolResult;
     } finally {
       productTelemetryForwarder.send('tool_call', {
@@ -280,6 +297,31 @@ export class WebTool<
       });
     }
   }
+}
+
+/**
+ * Maps a downstream HTTP status to shared, self-explanatory auth guidance (W-23757363). Returns a
+ * clear message for 401 (authentication) and 403 (permission), naming the targeted site + pod so a
+ * misconfigured/unauthenticated server in a multi-server setup is unmistakable; returns undefined
+ * for every other status so the caller falls back to the generic error result.
+ *
+ * Site + pod are read from sources that exist for BOTH transports: `getSiteName()` resolves to the
+ * OAuth token's site name or `config.siteName` (PAT/direct-trust), and the pod comes from
+ * `config.server` or the OAuth auth info's server.
+ */
+function getAuthErrorMessage(
+  errorCode: string,
+  extra: TableauWebRequestHandlerExtra,
+): string | undefined {
+  if (errorCode !== '401' && errorCode !== '403') {
+    return undefined;
+  }
+
+  const site = extra.getSiteName();
+  const server = extra.config.server || extra.tableauAuthInfo?.server;
+  return errorCode === '401'
+    ? buildAuthenticationErrorMessage({ site, server })
+    : buildPermissionErrorMessage({ site, server });
 }
 
 function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {

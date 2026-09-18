@@ -13,6 +13,9 @@ agent-to-Tableau communication, enabling users to bring their Tableau data into 
 
 Tableau MCP is also a managed service on every Tableau Cloud pod, and it is accessible over the url: `https://mcp.tableau.com`. See [Hosted Tableau MCP](hosted-tableau-mcp) for more details.
 
+> Running more than one Tableau MCP server, or seeing a confusing "not configured"/`401` error?
+> See [Running Multiple Servers & Diagnosing Auth Errors](configuration/mcp-config/multiple-servers.md).
+
 Follow along and share ideas with the Tableau MCP team by creating issues or discussions on the
 repository. You can also join the [Tableau Developer Platform](https://www.tableau.com/developer)
 and reach out in the [#tableau-ai-solutions](https://tableau-datadev.slack.com/archives/C07LMAVG4N6)
