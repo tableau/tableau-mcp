@@ -374,6 +374,91 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(applyDashboardDocument).toHaveBeenCalledOnce();
     });
 
+    // ── Controlled repro: field placement vs dashboard viewpoints (PR #918 review) ──
+    // Native HasVisualDoc (ParseDashboardWindow in WindowParser.cpp) inspects the dashboard's
+    // registered visual documents, and the original conflated fixture carried BOTH a blank
+    // worksheet AND an empty <viewpoints />, so it could not establish which one trips the gate.
+    // Our preflight proxy keys on the WORKSHEET's <table> render-state (worksheetDocumentState),
+    // independent of <viewpoints>. These two cases pin that separation: the guard fires on a
+    // blank worksheet even when the dashboard window carries VALID viewpoints, and does NOT fire
+    // on a populated worksheet even when <viewpoints /> is empty.
+    function liveWorkbookWithViewpoints({
+      worksheetName = 'Sheet 1',
+      worksheetRendered,
+      dashboardName: dbName,
+      viewpoints,
+    }: {
+      worksheetName?: string;
+      worksheetRendered: boolean;
+      dashboardName: string;
+      viewpoints: string;
+    }): string {
+      const table = worksheetRendered
+        ? '<table><rows>[Sample - Superstore].[none:Category:nk]</rows><cols /></table>'
+        : '<table><rows /><cols /></table>';
+      return (
+        "<?xml version='1.0'?><workbook>" +
+        `<worksheets><worksheet name='${worksheetName}'>${table}</worksheet></worksheets>` +
+        `<dashboards><dashboard name='${dbName}'><zones><zone name='${worksheetName}' /></zones></dashboard></dashboards>` +
+        `<windows><window class='dashboard' name='${dbName}'>${viewpoints}</window></windows>` +
+        '</workbook>'
+      );
+    }
+
+    // Valid/populated viewpoints so the ONLY defect is the blank worksheet.
+    const VALID_VIEWPOINTS =
+      "<viewpoints><viewpoint name='Sheet 1'><zoom type='entire-view' /></viewpoint></viewpoints>";
+
+    it('fires on a blank worksheet even when the dashboard window has VALID viewpoints (blank worksheet is the cause, not viewpoints)', async () => {
+      const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
+      const { executor, calls } = dispatchingExecutor(
+        liveWorkbookWithViewpoints({
+          worksheetRendered: false,
+          dashboardName,
+          viewpoints: VALID_VIEWPOINTS,
+        }),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: dashboardXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-dashboard-xml-error');
+        invariant(result.error.error.type === 'sheet-not-rendered');
+        expect(result.error.error.worksheetNames).toEqual(['Sheet 1']);
+      }
+      expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+    });
+
+    it('does NOT fire on a populated worksheet even when <viewpoints /> is empty (guard does not over-fire on empty viewpoints)', async () => {
+      const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
+      const { executor, calls } = dispatchingExecutor(
+        liveWorkbookWithViewpoints({
+          worksheetRendered: true,
+          dashboardName,
+          viewpoints: '<viewpoints />',
+        }),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: dashboardXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+
+      expect(result.isOk()).toBe(true);
+      // The guard passed the empty-viewpoints/populated-worksheet workbook straight to apply.
+      expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
+    });
+
     it('fails open (skips the guard) when the live workbook read errors, letting the whole-workbook apply proceed', async () => {
       const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
       const { executor, calls } = dispatchingExecutor(
