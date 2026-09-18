@@ -29,9 +29,13 @@
 // deterministic fire / no-fire outcome — mirroring the planner's no-guessing
 // block (coordination.ts:185-303) without needing the raw workbook XML.
 
-import Fuse from 'fuse.js';
-
+import type { Datasource, Field, LocalFieldName } from '../metadata/datasource.js';
 import { COLUMN_REF_REGEX } from '../metadata/field-resolver.js';
+import { AggregationType } from '../metadata/types.js';
+import {
+  type Resolution as DomainResolution,
+  resolveField as resolveInDatasource,
+} from '../resolution/index.js';
 import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
 import {
   optionalFieldPrunesFor,
@@ -312,85 +316,94 @@ function exactWithNotes(fields: SchemaField[], field: SchemaField): Resolution {
   return { kind: 'exact', field, ...(note ? { notes: [note] } : {}) };
 }
 
-function rewrittenWithNotes(fields: SchemaField[], field: SchemaField): Resolution {
-  const note = nearDuplicateNote(fields, field);
-  return { kind: 'rewritten', field, ...(note ? { notes: [note] } : {}) };
-}
-
-function disambiguateRanked(
-  candidates: SchemaField[],
-  query: string,
-  fields: SchemaField[],
-): Resolution | null {
-  const captionMatches = candidates.filter((f) => f.caption === query);
-  if (captionMatches.length === 1) return exactWithNotes(fields, captionMatches[0]);
-
-  const parts = candidates.map((candidate) => ({
-    candidate,
-    parts: numericSuffixParts(displayName(candidate)),
-  }));
-  const bases = new Set(parts.map(({ parts: p }) => p.base));
-  const unsuffixed = parts.filter(({ parts: p }) => p.suffix === null);
-  const suffixed = parts.filter(({ parts: p }) => p.suffix !== null);
-  if (bases.size === 1 && unsuffixed.length === 1 && suffixed.length > 0) {
-    return exactWithNotes(fields, unsuffixed[0].candidate);
-  }
-
-  return null;
+/**
+ * Build a domain `Field` from a `SchemaField`. Only the fields the resolution
+ * ladder reads are populated (name/caption/role/vizType/datatype/isAggregated);
+ * `kind` and `defaultDerivation` are set for completeness but never affect
+ * matching. The `column_ref` the resolver would instantiate is discarded —
+ * resolveInSummary maps back to the SchemaField and keeps its real `column_ref`.
+ */
+function schemaFieldToDomainField(sf: SchemaField): Field {
+  const base = {
+    name: sf.columnName as LocalFieldName,
+    caption: sf.caption,
+    datatype: sf.datatype,
+    role: sf.role,
+    vizType: sf.type,
+    isAggregated: sf.isAggregated,
+    defaultDerivation: sf.isAggregated
+      ? AggregationType.User
+      : sf.role === 'measure'
+        ? AggregationType.Sum
+        : AggregationType.None,
+  };
+  return sf.isGroup ? { ...base, kind: 'bin' } : { ...base, kind: 'column' };
 }
 
 /**
- * Resolve a proposed field NAME against the schema summary. Mirrors
- * `resolveField`'s outcome semantics (exact → rewritten → ambiguous → not_found)
- * but returns the matched SchemaField directly, so gates 3/4/7 have the resolved
- * field's role/type/datatype/isAggregated (which `resolveField` does not expose).
+ * Flatten a `SchemaSummary` into ONE synthetic `Datasource` (all fields pooled)
+ * plus a Field→SchemaField back-map. A single pool reproduces resolveInSummary's
+ * original cross-datasource single-pass matching — a bare name present in two
+ * connected datasources stays ambiguous rather than resolving per-source.
+ */
+function flattenToDatasource(s: SchemaSummary): { ds: Datasource; back: Map<Field, SchemaField> } {
+  const back = new Map<Field, SchemaField>();
+  const fields = s.fields.map((sf) => {
+    const f = schemaFieldToDomainField(sf);
+    back.set(f, sf);
+    return f;
+  });
+  return { ds: { name: s.datasource, fields }, back };
+}
+
+/** Map a domain resolution back to the SchemaField-carrying binder Resolution. */
+function projectResolution(
+  r: DomainResolution,
+  fields: SchemaField[],
+  back: Map<Field, SchemaField>,
+): Resolution {
+  const toSchema = (f: Field): SchemaField => back.get(f)!;
+  switch (r.kind) {
+    case 'exact':
+    case 'rewritten': {
+      // Recompute the near-duplicate note here (datasource-filtered) rather than
+      // reuse the resolver's, which treats the flattened pool as one datasource.
+      const field = toSchema(r.match!);
+      const note = nearDuplicateNote(fields, field);
+      return { kind: r.kind, field, ...(note ? { notes: [note] } : {}) };
+    }
+    case 'ambiguous':
+      return { kind: 'ambiguous', candidates: r.candidates.map(toSchema) };
+    default:
+      // 'fuzzy' and 'not_found' both surface as not_found did-you-mean candidates.
+      return { kind: 'not_found', candidates: r.candidates.map(toSchema) };
+  }
+}
+
+/**
+ * Resolve a proposed field NAME against the schema summary. Returns the matched
+ * SchemaField directly, so gates 3/4/7 have the resolved field's
+ * role/type/datatype/isAggregated.
+ *
+ * The exact-`column_ref` fast path and the datasource-filtered near-duplicate
+ * note stay here; the name/caption/case-insensitive/fuzzy ladder and the
+ * disambiguation policy are delegated to the shared domain resolver
+ * (resolution/resolve.ts) over a flattened synthetic datasource. No aggregation
+ * prefix — binder proposals carry clean field names.
  */
 export function resolveInSummary(s: SchemaSummary, query: string): Resolution {
   const q = query.trim();
   if (!q) return { kind: 'not_found', candidates: [] };
-  const qBare = bareName(q);
 
-  // Exact column_ref is already datasource-qualified, so resolve it before names/captions.
+  // Exact column_ref is already datasource-qualified, so resolve it before names.
   const refMatches = s.fields.filter((f) => f.column_ref === q);
   if (refMatches.length === 1) return exactWithNotes(s.fields, refMatches[0]);
   if (refMatches.length > 1) return { kind: 'ambiguous', candidates: refMatches };
   if (COLUMN_REF_REGEX.test(q)) return { kind: 'not_found', candidates: [] };
 
-  // Phase 1: exact (case-sensitive) on friendly name, caption, or bare column name.
-  const exact = s.fields.filter(
-    (f) => f.name === q || f.caption === q || bareName(f.columnName) === qBare,
-  );
-  if (exact.length === 1) return exactWithNotes(s.fields, exact[0]);
-  if (exact.length > 1) {
-    const ranked = disambiguateRanked(exact, q, s.fields);
-    return ranked ?? { kind: 'ambiguous', candidates: exact };
-  }
-
-  // Phase 2: case-insensitive bare match (classifier/agent may vary casing).
-  const qi = q.toLowerCase();
-  const ci = s.fields.filter(
-    (f) =>
-      f.name.toLowerCase() === qi ||
-      (f.caption ? f.caption.toLowerCase() === qi : false) ||
-      bareName(f.columnName).toLowerCase() === qBare.toLowerCase(),
-  );
-  if (ci.length === 1) return rewrittenWithNotes(s.fields, ci[0]);
-  if (ci.length > 1) {
-    const ranked = disambiguateRanked(ci, q, s.fields);
-    return ranked ?? { kind: 'ambiguous', candidates: ci };
-  }
-
-  // Phase 3: fuzzy did-you-mean (mirrors resolveField's Fuse fallback).
-  const fuse = new Fuse(s.fields, {
-    keys: ['name', 'caption', 'columnName'],
-    threshold: 0.4,
-    includeScore: true,
-  });
-  const fuzzy = fuse
-    .search(q)
-    .slice(0, 5)
-    .map((r) => r.item);
-  return { kind: 'not_found', candidates: fuzzy };
+  const { ds, back } = flattenToDatasource(s);
+  const r = resolveInDatasource(ds, q, { caseInsensitive: true });
+  return projectResolution(r, s.fields, back);
 }
 
 /** Does the resolved field satisfy the slot's kind? (design §2.4 gate 3.) */

@@ -44,6 +44,13 @@ export interface Resolution {
 export interface ResolveOptions {
   /** Parse an aggregation prefix ("sum of Profit"); default false. */
   aggregationPrefix?: boolean;
+  /**
+   * Add a case-insensitive rung after the case-sensitive ones; default false.
+   * A single case-only match is a `rewritten` hit, not a fuzzy guess. The
+   * legacy/workbook resolvers leave this off (they are case-sensitive), so
+   * enabling it never changes their behaviour.
+   */
+  caseInsensitive?: boolean;
   fuzzyThreshold?: number;
 }
 
@@ -120,6 +127,25 @@ export function resolveField(ds: Datasource, query: string, opts: ResolveOptions
   if (bare.length > 1) {
     const winner = disambiguateRanked(bare, trimmed);
     return winner ? exactHit(ds, winner) : ambiguous(bare);
+  }
+
+  // Phase 2b: case-insensitive match (opt-in). Agents/classifiers vary casing;
+  // a single case-only match is a rewrite, not a fuzzy guess. Runs after the
+  // case-sensitive rungs so an exact-case hit always wins.
+  if (opts.caseInsensitive) {
+    const lower = stripBrackets(trimmed).trim().toLowerCase();
+    const ci = ds.fields.filter(
+      (f) =>
+        (f.caption ? f.caption.toLowerCase() === lower : false) ||
+        stripBrackets(f.name).toLowerCase() === lower,
+    );
+    if (ci.length === 1) {
+      return { ...exactHit(ds, ci[0]), kind: 'rewritten', rewrites: ['normalized-case'] };
+    }
+    if (ci.length > 1) {
+      const winner = disambiguateRanked(ci, trimmed);
+      return winner ? exactHit(ds, winner) : ambiguous(ci);
+    }
   }
 
   // Phase 3: aggregation prefix ("sum of Profit").
