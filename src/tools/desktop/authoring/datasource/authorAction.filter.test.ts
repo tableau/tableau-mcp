@@ -545,12 +545,18 @@ describe('authorActionTool (filter mode)', () => {
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
   });
 
-  it('appends a filter action into an existing <actions> block with a fresh name', async () => {
+  // twb_2026.2.0.xsd fixes the child order of <actions>: legacy <action> ->
+  // <datasources>/<datasource-dependencies> -> <nav-action> -> <edit-group-action> (set)
+  // -> <edit-parameter-action> (parameter). Adding a filter action to an
+  // already-interactive workbook must slot the new legacy <action> ahead of any later
+  // family rather than appending it before </actions>.
+  it('inserts an all-fields filter ahead of existing set and parameter actions (XSD family order)', async () => {
     const existing =
-      "<edit-parameter-action caption='Existing' name='[Action1]'></edit-parameter-action>";
+      "<edit-group-action caption='Existing Set' name='[Action1]'></edit-group-action>" +
+      "<edit-parameter-action caption='Existing Param' name='[Action2]'></edit-parameter-action>";
     const initialXml = withActions(WORKSHEETS_ONLY, existing);
     const added =
-      "<action caption='Cross Filter' name='[Action2]'>" +
+      "<action caption='Cross Filter' name='[Action3]'>" +
       "<activation type='on-select' />" +
       "<source type='sheet' worksheet='Profit' />" +
       "<command command='tsc:tsl-filter'>" +
@@ -565,13 +571,70 @@ describe('authorActionTool (filter mode)', () => {
         targetSheet: 'Details',
       },
       initialXml,
-      readbackXml: initialXml.replace('</actions>', `${added}</actions>`),
+      readbackXml: withActions(WORKSHEETS_ONLY, added + existing),
     });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
-    expect(appliedDocumentXml(applyWorkbookDocument).match(/<actions>/g)?.length).toBe(1);
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action3]');
+
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded.match(/<actions>/g)?.length).toBe(1);
+    expect(loaded).toContain(added);
+    const legacyAt = loaded.indexOf("<action caption='Cross Filter'");
+    const groupAt = loaded.indexOf('<edit-group-action');
+    const paramAt = loaded.indexOf('<edit-parameter-action');
+    expect(legacyAt).toBeGreaterThanOrEqual(0);
+    expect(legacyAt).toBeLessThan(groupAt);
+    expect(groupAt).toBeLessThan(paramAt);
+  });
+
+  it('inserts a specific-field filter and its datasource metadata ahead of a parameter action (XSD family order)', async () => {
+    const existingParam =
+      "<edit-parameter-action caption='Existing Param' name='[Action1]'></edit-parameter-action>";
+    const initialXml = withActions(WORKSHEETS_WITH_FILTER_FIELDS, existingParam);
+    const expectedAction =
+      "<action caption='Specific Cross Filter' name='[Action2]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      filterLink(
+        'Specific Cross Filter',
+        'tsl:Details?%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BCategory%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Category]~na&gt;',
+      ) +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const expectedBlocks = filterDependencyBlocks(['Category']);
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Specific Cross Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        filterFields: ['Category'],
+      },
+      initialXml,
+      readbackXml: withActions(
+        WORKSHEETS_WITH_FILTER_FIELDS,
+        expectedAction + expectedBlocks + existingParam,
+      ),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded.match(/<actions>/g)?.length).toBe(1);
+    expect(loaded).toContain(expectedAction);
+    expect(loaded).toContain(expectedBlocks);
+    // Search the datasource metadata from the in-<actions> legacy action so the top-level
+    // <datasources> block does not satisfy the ordering check.
+    const legacyAt = loaded.indexOf("<action caption='Specific Cross Filter'");
+    const datasourcesAt = loaded.indexOf('<datasources>', legacyAt);
+    const depsAt = loaded.indexOf('<datasource-dependencies', legacyAt);
+    const paramAt = loaded.indexOf('<edit-parameter-action');
+    expect(legacyAt).toBeGreaterThanOrEqual(0);
+    expect(legacyAt).toBeLessThan(datasourcesAt);
+    expect(datasourcesAt).toBeLessThan(depsAt);
+    expect(depsAt).toBeLessThan(paramAt);
   });
 
   it('requires targetSheet in filter mode', async () => {

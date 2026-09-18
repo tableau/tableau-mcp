@@ -137,6 +137,7 @@ const NON_TOOL_VOCABULARY = [
   'multi-select',
   'name-only',
   'name-style',
+  'nav-action',
   'nav-type',
   'no-desktop-instances-found',
   'non-empty',
