@@ -1070,4 +1070,77 @@ describe('authorActionTool (filter mode)', () => {
     expect(result.content[0].text).toContain('identical filter action');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
+
+  it('allows a filter that differs from an existing one only by activation trigger', async () => {
+    const existing =
+      "<action caption='Existing Filter' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const initialXml = withActions(WORKSHEETS_ONLY, existing);
+    const added =
+      "<action caption='New Filter' name='[Action2]'>" +
+      "<activation type='on-hover' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'New Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        activation: 'on-hover',
+      },
+      initialXml,
+      readbackXml: initialXml.replace('</actions>', `${added}</actions>`),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows a filter that differs from an existing one only by clearing behavior', async () => {
+    const existing =
+      "<action caption='Existing Filter' name='[Action1]'>" +
+      "<activation auto-clear='true' type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const initialXml = withActions(WORKSHEETS_ONLY, existing);
+    const added =
+      "<action caption='New Filter' name='[Action2]'>" +
+      "<activation auto-clear='true' type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='on-empty' value='none' />" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'New Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        clearSelection: 'exclude-all',
+      },
+      initialXml,
+      readbackXml: initialXml.replace('</actions>', `${added}</actions>`),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
 });

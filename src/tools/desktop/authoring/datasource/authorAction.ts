@@ -388,6 +388,20 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               columnsXml: resolvedFields.map((field) => renderDependencyColumn(field)),
             };
           }
+          if (mode === 'filter') {
+            filterAction = {
+              target: effectiveTargetSheet,
+              sourceWorksheet: effectiveSourceSheet,
+              sourceDashboard: effectiveSourceDashboard,
+              activation,
+              autoClear: clearSelection !== 'do-nothing',
+              excludeValue:
+                effectiveExcludedSheets.length > 0 ? effectiveExcludedSheets.join(',') : undefined,
+              onEmpty: clearSelection === 'exclude-all',
+              singleSelect: singleSelect === true,
+              linkExpression: filterLinkExpression,
+            };
+          }
 
           if (
             mode === 'url' &&
@@ -402,18 +416,9 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               'an identical URL action (same url and same source) already exists',
             ).toErr();
           }
-          if (
-            mode === 'filter' &&
-            hasFilterActionDuplicate(
-              liveXml,
-              effectiveTargetSheet,
-              effectiveSourceSheet,
-              effectiveSourceDashboard,
-              filterLinkExpression,
-            )
-          ) {
+          if (mode === 'filter' && hasFilterActionDuplicate(liveXml, filterAction!)) {
             return new ArgsValidationError(
-              'an identical filter action (same source, target, and fields) already exists',
+              'an identical filter action (same source, target, fields, and behavior) already exists',
             ).toErr();
           }
 
@@ -451,20 +456,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               activation,
             });
           } else if (mode === 'filter') {
-            target = effectiveTargetSheet;
-            filterAction = {
-              target,
-              sourceWorksheet: effectiveSourceSheet,
-              sourceDashboard: effectiveSourceDashboard,
-              activation,
-              autoClear: clearSelection !== 'do-nothing',
-              excludeValue:
-                effectiveExcludedSheets.length > 0 ? effectiveExcludedSheets.join(',') : undefined,
-              onEmpty: clearSelection === 'exclude-all',
-              singleSelect: singleSelect === true,
-              linkExpression: filterLinkExpression,
-            };
-            actionXml = renderFilterAction(caption, actionName, filterAction);
+            target = filterAction!.target;
+            actionXml = renderFilterAction(caption, actionName, filterAction!);
           } else {
             target = targetParameter!.trim();
             actionXml = renderParameterAction({
@@ -1123,7 +1116,6 @@ function hasUrlActionDuplicate(
   });
 }
 
-
 // The shape of a filter action
 type FilterAction = {
   target: string;
@@ -1137,6 +1129,56 @@ type FilterAction = {
   linkExpression?: string;
 };
 
+// True when an <action> block is the filter action described by `expected`
+function filterActionMatches(block: string, expected: FilterAction): boolean {
+  const commandTag = block.match(/<command\b[^>]*>/)?.[0];
+  if (commandTag === undefined || getAttr(commandTag, 'command') !== 'tsc:tsl-filter') {
+    return false;
+  }
+
+  const sourceTag = block.match(/<source\b[^>]*>/)?.[0];
+  const sourceWorksheet =
+    sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'worksheet') ?? '');
+  const sourceDashboard =
+    sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'dashboard') ?? '');
+  const expectedType = expected.activation === 'on-menu' ? undefined : expected.activation;
+  const activationTag = block.match(/<activation\b[^>]*>/)?.[0];
+  const activationType = activationTag === undefined ? undefined : getAttr(activationTag, 'type');
+  const autoClear = activationTag !== undefined && getAttr(activationTag, 'auto-clear') === 'true';
+
+  // Command params, keyed by name so presence/value checks ignore serialized order.
+  const params = new Map<string, string>();
+  for (const paramMatch of block.matchAll(/<param\b[^>]*>/g)) {
+    const name = getAttr(paramMatch[0], 'name');
+    if (name !== undefined) {
+      params.set(name, unescapeXml(getAttr(paramMatch[0], 'value') ?? ''));
+    }
+  }
+  const filterByAllFields = params.get('special-fields') === 'all';
+  if (
+    sourceWorksheet !== expected.sourceWorksheet ||
+    sourceDashboard !== expected.sourceDashboard ||
+    activationType !== expectedType ||
+    autoClear !== expected.autoClear ||
+    params.get('target') !== expected.target ||
+    params.get('exclude') !== expected.excludeValue ||
+    (params.get('on-empty') === 'none') !== expected.onEmpty ||
+    params.has('single-select') !== expected.singleSelect ||
+    filterByAllFields !== (expected.linkExpression === undefined)
+  ) {
+    return false;
+  }
+
+  if (expected.linkExpression !== undefined) {
+    const linkTag = block.match(/<link\b[^>]*>/)?.[0];
+    const expression = linkTag === undefined ? undefined : getAttr(linkTag, 'expression');
+    if (expression === undefined || unescapeXml(expression) !== expected.linkExpression) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // Readback predicate for filter mode: the caption-matched <action> must be the one we authored,
 // so every setting the receipt echoes is verified rather than assumed. Any dropped or rewritten
 // setting means it is not our action.
@@ -1147,99 +1189,19 @@ function hasFilterAction(xml: string, caption: string, expected: FilterAction): 
     if (openingTag === undefined || unescapeXml(getAttr(openingTag, 'caption') ?? '') !== caption) {
       return false;
     }
-    const commandTag = block.match(/<command\b[^>]*>/)?.[0];
-    if (commandTag === undefined || getAttr(commandTag, 'command') !== 'tsc:tsl-filter') {
-      return false;
-    }
-
-    // Source scope: the marks that drive the filter must come from the worksheet/dashboard we
-    // scoped to (absent when we scoped to neither), or the action fires from the wrong marks.
-    const sourceTag = block.match(/<source\b[^>]*>/)?.[0];
-    const sourceWorksheet =
-      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'worksheet') ?? '');
-    const sourceDashboard =
-      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'dashboard') ?? '');
-    if (
-      sourceWorksheet !== expected.sourceWorksheet ||
-      sourceDashboard !== expected.sourceDashboard
-    ) {
-      return false;
-    }
-
-    // Activation trigger (on-select/on-hover, or no type for on-menu) and the auto-clear flag.
-    const expectedType = expected.activation === 'on-menu' ? undefined : expected.activation;
-    const activationTag = block.match(/<activation\b[^>]*>/)?.[0];
-    const activationType = activationTag === undefined ? undefined : getAttr(activationTag, 'type');
-    const autoClear =
-      activationTag !== undefined && getAttr(activationTag, 'auto-clear') === 'true';
-    if (activationType !== expectedType || autoClear !== expected.autoClear) {
-      return false;
-    }
-
-    // Command params, keyed by name so presence/value checks ignore serialized order.
-    const params = new Map<string, string>();
-    for (const paramMatch of block.matchAll(/<param\b[^>]*>/g)) {
-      const name = getAttr(paramMatch[0], 'name');
-      if (name !== undefined) {
-        params.set(name, unescapeXml(getAttr(paramMatch[0], 'value') ?? ''));
-      }
-    }
-    if (params.get('target') !== expected.target) {
-      return false;
-    }
-    if (params.get('exclude') !== expected.excludeValue) {
-      return false;
-    }
-    if ((params.get('on-empty') === 'none') !== expected.onEmpty) {
-      return false;
-    }
-    if (params.has('single-select') !== expected.singleSelect) {
-      return false;
-    }
-    if ((params.get('special-fields') === 'all') !== (expected.linkExpression === undefined)) {
-      return false;
-    }
-
-    // Specific-field filter: verify the tsl: <link> expression matches.
-    if (expected.linkExpression !== undefined) {
-      const linkTag = block.match(/<link\b[^>]*>/)?.[0];
-      const expression = linkTag === undefined ? undefined : getAttr(linkTag, 'expression');
-      if (expression === undefined || unescapeXml(expression) !== expected.linkExpression) {
-        return false;
-      }
-    }
-    return true;
+    return filterActionMatches(block, expected);
   });
 }
 
-// Dedup guard: the document-apply path appends, so a same-source + same-target + same-fields
-// filter action authored under a different caption would silently double.
-// Caption collision is handled separately by hasActionCaption.
-function hasFilterActionDuplicate(
-  xml: string,
-  target: string,
-  sourceWorksheet: string,
-  sourceDashboard: string,
-  linkExpression?: string,
-): boolean {
-  return hasDuplicateActionForSource(xml, sourceWorksheet, sourceDashboard, (block) => {
-    const commandTag = block.match(/<command\b[^>]*>/)?.[0];
-    if (commandTag === undefined || getAttr(commandTag, 'command') !== 'tsc:tsl-filter') {
-      return false;
-    }
-    const sameTarget = [...block.matchAll(/<param\b[^>]*>/g)].some(
-      (paramMatch) =>
-        getAttr(paramMatch[0], 'name') === 'target' &&
-        unescapeXml(getAttr(paramMatch[0], 'value') ?? '') === target,
-    );
-    if (!sameTarget) {
-      return false;
-    }
-    const linkTag = block.match(/<link\b[^>]*>/)?.[0];
-    const existingExpression =
-      linkTag === undefined ? undefined : unescapeXml(getAttr(linkTag, 'expression') ?? '');
-    return existingExpression === linkExpression;
-  });
+// Dedup guard: the document-apply path appends, so an identical filter action authored under a
+// different caption would silently double. Identity is the full serialized shape (source, target,
+// fields, activation, clearing behavior, single-select, exclusions) via filterActionMatches, so an
+// exact retry is rejected while a behaviorally distinct action — on-select vs on-hover, or show-all
+// vs exclude-all — is not. Caption collision is handled separately by hasActionCaption.
+function hasFilterActionDuplicate(xml: string, expected: FilterAction): boolean {
+  return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) =>
+    filterActionMatches(match[0], expected),
+  );
 }
 
 // Where an action should be spliced: inside an existing <actions> block (innerStart just past
