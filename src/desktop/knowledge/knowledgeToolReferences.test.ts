@@ -8,7 +8,6 @@ const registeredDesktopToolNames = new Set<string>(desktopToolNames);
 
 const allowedNonToolTokens = new Set<string>([
   'advanced-chart-builds',
-  'agent-to-tableau-desktop',
   'apply-calculation-for-create-or-update',
   'attrition-kpi',
   'axis-column',

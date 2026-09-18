@@ -96,8 +96,8 @@ For `compose-dashboard` and `run-dashboard-batch`, use the returned structural v
 
 ## Source and Confidence
 
-- Source/evidence type: ported from the `agent-to-tableau-desktop` bundled skill "When things fail" rules 8 (stale-cache re-read) and 9 (honor the `HOST VERIFICATION` receipt), merged 2026-07-16. Adapted to tmcp tool names and the tmcp receipt seam.
+- Source/evidence type: ported from an upstream authoring skill's "When things fail" rules 8 (stale-cache re-read) and 9 (honor the `HOST VERIFICATION` receipt), merged 2026-07-16. Adapted to tmcp tool names and the tmcp receipt seam.
 - Enforcement/receipt seams in this repo: `src/desktop/validation/promise-check.ts` (the `HOST VERIFICATION` receipt), `src/desktop/validation/readback-verify.ts` (worksheet structural readback), `src/tools/desktop/fields/listAvailableFields.ts` (session refresh) and `src/tools/desktop/fields/resolveField.ts` (cache-only resolve).
 - Related: `expertise://tableau/tactics/workflow/recovery` (failed-apply recovery ladder) · `expertise://tableau/strategy/workflow/troubleshooting-workbooks` (general troubleshooting).
-- Confidence: field-tested (a2td merged rules)
+- Confidence: field-tested (merged upstream rules)
 - Last reviewed: 2026-08-07
