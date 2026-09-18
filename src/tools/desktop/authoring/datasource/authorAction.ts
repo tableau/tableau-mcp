@@ -361,6 +361,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           let targetDatasource: DatasourceElement | undefined;
           let resolvedFields: ResolvedFilterField[] | undefined;
           let filterLinkExpression: string | undefined;
+          let filterAction: FilterAction | undefined;
           if (mode === 'filter' && (filterFields ?? []).some((field) => field.trim().length > 0)) {
             const datasourceResult = selectTargetDatasource(liveXml, datasource);
             if (datasourceResult.isErr()) {
@@ -451,19 +452,19 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             });
           } else if (mode === 'filter') {
             target = effectiveTargetSheet;
-            actionXml = renderFilterAction({
-              caption,
-              actionName,
+            filterAction = {
+              target,
               sourceWorksheet: effectiveSourceSheet,
               sourceDashboard: effectiveSourceDashboard,
-              target: target,
-              targetDatasource,
-              resolvedFields,
-              excludeSheets: effectiveExcludedSheets,
-              clearSelection,
-              singleSelect,
               activation,
-            });
+              autoClear: clearSelection !== 'do-nothing',
+              excludeValue:
+                effectiveExcludedSheets.length > 0 ? effectiveExcludedSheets.join(',') : undefined,
+              onEmpty: clearSelection === 'exclude-all',
+              singleSelect: singleSelect === true,
+              linkExpression: filterLinkExpression,
+            };
+            actionXml = renderFilterAction(caption, actionName, filterAction);
           } else {
             target = targetParameter!.trim();
             actionXml = renderParameterAction({
@@ -500,7 +501,9 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               return hasUrlActionWithLink(xml, caption, target);
             }
             if (mode === 'filter') {
-              return hasFilterActionWithTarget(xml, caption, target, filterLinkExpression);
+              // Verify every semantic renderFilterAction serialized, not just the target, so the
+              // receipt does not report a dropped setting as applied. Same object we authored from.
+              return hasFilterAction(xml, caption, filterAction!);
             }
             return hasActionWithTargetParam(
               xml,
@@ -527,7 +530,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 : mode === 'url'
                   ? 'action applied but the <link> URL did not survive readback (it may have been dropped or rewritten as a command action)'
                   : mode === 'filter'
-                    ? 'action applied but the tsl-filter target did not survive readback (it may have been dropped or rewritten as a different action type)'
+                    ? 'action applied but did not survive readback with the requested filter semantics (the tsl-filter target/link, source scope, activation, clearing behavior, exclusions, or single-select may have been dropped or rewritten)'
                     : 'action applied but the target-parameter param did not survive readback',
             ).toErr();
           }
@@ -1005,69 +1008,38 @@ function renderDependencyColumn(field: ResolvedFilterField): string {
 // the source's selected marks filter the target. We only author the <action> — Tableau backfills
 // the "sheet_link" <group> column on the target datasource at run time.
 // Fields come in two shapes (both confirmed against field-observed XML):
-//   All Fields (filterFields undefined) -> a lone <command> with special-fields='all'.
-//   Specific fields (filterFields defined) -> a tsl: <link> of field locators plus a <command> keeping only the target
-//     param, with the fields declared in sibling <datasources>/<datasource-dependencies> blocks
-//     (see spliceActionIntoWorkbook's deps handling).
-function renderFilterAction({
-  caption,
-  actionName,
-  sourceWorksheet,
-  sourceDashboard,
-  target,
-  targetDatasource,
-  resolvedFields,
-  excludeSheets,
-  clearSelection,
-  singleSelect,
-  activation,
-}: {
-  caption: string;
-  actionName: string;
-  sourceWorksheet: string;
-  sourceDashboard: string;
-  target: string;
-  targetDatasource?: DatasourceElement;
-  resolvedFields?: ResolvedFilterField[];
-  excludeSheets: string[];
-  clearSelection: z.infer<typeof clearSelectionSchema>;
-  singleSelect: boolean | undefined;
-  activation: z.infer<typeof activationSchema>;
-}): string {
-  const activationXml = renderActivation(activation, clearSelection !== 'do-nothing');
+//   All Fields (no linkExpression) -> a lone <command> with special-fields='all'.
+//   Specific fields (linkExpression set) -> a tsl: <link> of field locators plus a <command> keeping
+//     only the target param, with the fields declared in sibling <datasources>/<datasource-dependencies>
+//     blocks (see spliceActionIntoWorkbook's deps handling).
+function renderFilterAction(caption: string, actionName: string, action: FilterAction): string {
+  const activationXml = renderActivation(action.activation, action.autoClear);
 
-  const sourceXml = `<source${renderSourceAttrs(sourceWorksheet, sourceDashboard)} />`;
+  const sourceXml = `<source${renderSourceAttrs(action.sourceWorksheet, action.sourceDashboard)} />`;
 
-  // The caller resolves the named fields (and only when at least one non-empty field was
-  // requested), so their presence is what marks a specific-field filter; otherwise All Fields.
-  const isSpecificFilter = (resolvedFields?.length ?? 0) > 0;
-
-  // A specific-field filter carries its fields in a tsl: <link> that precedes the <command>,
-  // built from the datasource and columns the caller resolved for the requested fields.
-  const linkXml = isSpecificFilter
-    ? `<link caption='${escapeXml(caption)}' delimiter=',' escape='\\' expression='${escapeXml(
-        buildTslExpression(
-          target,
-          targetDatasource?.name ?? '',
-          (resolvedFields ?? []).map((field) => field.columnName),
-        ),
-      )}' include-null='true' multi-select='true' url-escape='true' />`
-    : '';
+  // A specific-field filter carries its resolved field locators in a tsl: <link> that precedes the
+  // <command>; an all-fields filter has no link and sets special-fields='all' on the command.
+  const linkXml =
+    action.linkExpression !== undefined
+      ? `<link caption='${escapeXml(caption)}' delimiter=',' escape='\\' expression='${escapeXml(
+          action.linkExpression,
+        )}' include-null='true' multi-select='true' url-escape='true' />`
+      : '';
 
   const params: string[] = [];
-  if (excludeSheets.length > 0) {
-    params.push(`<param name='exclude' value='${escapeXml(excludeSheets.join(','))}' />`);
+  if (action.excludeValue !== undefined) {
+    params.push(`<param name='exclude' value='${escapeXml(action.excludeValue)}' />`);
   }
-  if (clearSelection === 'exclude-all') {
+  if (action.onEmpty) {
     params.push("<param name='on-empty' value='none' />");
   }
-  if (singleSelect === true) {
+  if (action.singleSelect) {
     params.push("<param name='single-select' value='' />");
   }
-  if (!isSpecificFilter) {
+  if (action.linkExpression === undefined) {
     params.push("<param name='special-fields' value='all' />");
   }
-  params.push(`<param name='target' value='${escapeXml(target)}' />`);
+  params.push(`<param name='target' value='${escapeXml(action.target)}' />`);
 
   return (
     `<action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
@@ -1151,17 +1123,24 @@ function hasUrlActionDuplicate(
   });
 }
 
-// Readback predicate for filter mode: the caption-matched legacy <action> must carry a
-// <command command='tsc:tsl-filter'> whose target param survived. An action that
-// persisted under a different command (or lost its target) is not a working filter action.
-// For a specific-field filter the fields live in a tsl: <link> (as url mode's <link>), so its
-// expression must survive as well
-function hasFilterActionWithTarget(
-  xml: string,
-  caption: string,
-  target: string,
-  linkExpression?: string,
-): boolean {
+
+// The shape of a filter action
+type FilterAction = {
+  target: string;
+  sourceWorksheet: string;
+  sourceDashboard: string;
+  activation: z.infer<typeof activationSchema>;
+  autoClear: boolean;
+  excludeValue?: string;
+  onEmpty: boolean;
+  singleSelect: boolean;
+  linkExpression?: string;
+};
+
+// Readback predicate for filter mode: the caption-matched <action> must be the one we authored,
+// so every setting the receipt echoes is verified rather than assumed. Any dropped or rewritten
+// setting means it is not our action.
+function hasFilterAction(xml: string, caption: string, expected: FilterAction): boolean {
   return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) => {
     const block = match[0];
     const openingTag = block.match(/^<action\b[^>]*>/)?.[0];
@@ -1172,18 +1151,60 @@ function hasFilterActionWithTarget(
     if (commandTag === undefined || getAttr(commandTag, 'command') !== 'tsc:tsl-filter') {
       return false;
     }
-    const hasTarget = [...block.matchAll(/<param\b[^>]*>/g)].some(
-      (paramMatch) =>
-        getAttr(paramMatch[0], 'name') === 'target' &&
-        unescapeXml(getAttr(paramMatch[0], 'value') ?? '') === target,
-    );
-    if (!hasTarget) {
+
+    // Source scope: the marks that drive the filter must come from the worksheet/dashboard we
+    // scoped to (absent when we scoped to neither), or the action fires from the wrong marks.
+    const sourceTag = block.match(/<source\b[^>]*>/)?.[0];
+    const sourceWorksheet =
+      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'worksheet') ?? '');
+    const sourceDashboard =
+      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'dashboard') ?? '');
+    if (
+      sourceWorksheet !== expected.sourceWorksheet ||
+      sourceDashboard !== expected.sourceDashboard
+    ) {
       return false;
     }
-    if (linkExpression !== undefined) {
+
+    // Activation trigger (on-select/on-hover, or no type for on-menu) and the auto-clear flag.
+    const expectedType = expected.activation === 'on-menu' ? undefined : expected.activation;
+    const activationTag = block.match(/<activation\b[^>]*>/)?.[0];
+    const activationType = activationTag === undefined ? undefined : getAttr(activationTag, 'type');
+    const autoClear =
+      activationTag !== undefined && getAttr(activationTag, 'auto-clear') === 'true';
+    if (activationType !== expectedType || autoClear !== expected.autoClear) {
+      return false;
+    }
+
+    // Command params, keyed by name so presence/value checks ignore serialized order.
+    const params = new Map<string, string>();
+    for (const paramMatch of block.matchAll(/<param\b[^>]*>/g)) {
+      const name = getAttr(paramMatch[0], 'name');
+      if (name !== undefined) {
+        params.set(name, unescapeXml(getAttr(paramMatch[0], 'value') ?? ''));
+      }
+    }
+    if (params.get('target') !== expected.target) {
+      return false;
+    }
+    if (params.get('exclude') !== expected.excludeValue) {
+      return false;
+    }
+    if ((params.get('on-empty') === 'none') !== expected.onEmpty) {
+      return false;
+    }
+    if (params.has('single-select') !== expected.singleSelect) {
+      return false;
+    }
+    if ((params.get('special-fields') === 'all') !== (expected.linkExpression === undefined)) {
+      return false;
+    }
+
+    // Specific-field filter: verify the tsl: <link> expression matches.
+    if (expected.linkExpression !== undefined) {
       const linkTag = block.match(/<link\b[^>]*>/)?.[0];
       const expression = linkTag === undefined ? undefined : getAttr(linkTag, 'expression');
-      if (expression === undefined || unescapeXml(expression) !== linkExpression) {
+      if (expression === undefined || unescapeXml(expression) !== expected.linkExpression) {
         return false;
       }
     }
