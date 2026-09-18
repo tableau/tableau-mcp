@@ -41,6 +41,15 @@ Call the `scaffold-data-app` MCP tool with the app name:
 
 > scaffold-data-app({ datappName: "Sales Demo" })
 
+If the user has already named a target published datasource on the **same
+site/server**, pass `datasourceLuid` (and optionally `fields`, a subset of
+field names to wire — omit to wire every field) directly in this call:
+
+> scaffold-data-app({ datappName: "Sales Demo", datasourceLuid: "<LUID>", fields: ["Profit", "Region"] })
+
+This wires the datasource into the scaffolded workbook server-side, in the
+same call — see Phase 1.5 below for when this does and doesn't apply.
+
 The result shape tells you which transport you're on and what's left to do:
 
 - **local (stdio):** result has `filePath` and **no** `postUnzip`. The workspace
@@ -99,8 +108,17 @@ root and inside the worksheet `<view>`). At runtime the app calls
 in the workbook."** To query live data the workbook must have a real published
 datasource wired in.
 
-**Do this only once the user has named a target published datasource.** It is
-skippable if the user only wants to publish the starter to prove packaging.
+**Skip this phase entirely if you already passed `datasourceLuid` (and
+optionally `fields`) to `scaffold-data-app` in Phase 1** — the tool wires the
+datasource into the returned workbook itself (same-site/same-server case
+only). Otherwise, do this only once the user has named a target published
+datasource; it is also skippable if the user only wants to publish the
+starter to prove packaging.
+
+This phase (and `wire-datasource.mjs`) remains the path for what
+`scaffold-data-app`'s built-in wiring does **not** cover: cross-site/
+cross-server datasources, or re-wiring an *already-wired* workbook onto a
+*different* datasource.
 
 Do **not** hand-edit the XML — the wiring spans four coordinated locations (root
 datasource `name`, root `relation connection`, view `datasource name`,
@@ -145,11 +163,10 @@ Trust that failure over patching the XML by hand. `datatype` maps to the column
 `type` (`real`/`integer` → quantitative, `date`/`datetime` → ordinal, else
 nominal); `role: "measure"` gets a `Sum` aggregation, `dimension` a `Count`.
 
-> **Long-term fix (separate follow-up, not this skill):** enhance the
-> `scaffold-data-app` MCP tool to accept `datasources` LUIDs and emit this wiring
-> server-side (as the `compass/data-apps-dev` branch does), retiring this client
-> step. Until that lands, `wire-datasource.mjs` is the near-term path. File it as
-> its own work item.
+> **Update:** `scaffold-data-app` now accepts `datasourceLuid`/`fields` and does
+> this wiring server-side for the same-site/same-server case (see Phase 1).
+> `wire-datasource.mjs` remains the path for cross-site/cross-server wiring and
+> for re-wiring an already-wired workbook onto a different datasource.
 
 ---
 
