@@ -14,16 +14,14 @@ describe('authorActionTool', () => {
     vi.clearAllMocks();
   });
 
-  it('describes datasource selection as name or unique caption', async () => {
+  it('describes datasource selection as name or caption', async () => {
     const tool = getAuthorActionTool(new DesktopMcpServer());
     const paramsSchema = (await Provider.from(tool.paramsSchema)) as Record<
       string,
       { description?: string }
     >;
 
-    expect(paramsSchema['datasource']?.description).toBe(
-      'Internal datasource name or unique caption.',
-    );
+    expect(paramsSchema['datasource']?.description).toBe('Internal name or caption.');
   });
 
   it('creates the workbook-level <actions> block and splices an edit-parameter-action, verifying readback', async () => {
@@ -634,7 +632,7 @@ describe('authorActionTool', () => {
         caption: 'Open Sales Person',
         sourceWorksheet: '',
         sourceDashboard: 'Commission Model',
-        excludeSheets: ['Sales', 'OTE'],
+        excludeSourceSheets: ['Sales', 'OTE'],
         url: 'https://www.google.com/search?q=<[Sales Person]>',
       },
       readbackXml: withActions(BASE_XML, expectedAction),
@@ -942,21 +940,39 @@ describe('authorActionTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  it('rejects excludeSheets when a worksheet source is present', async () => {
+  it('rejects excludeSourceSheets when a worksheet source is present', async () => {
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         mode: 'url',
         caption: 'Excludes',
         sourceWorksheet: 'Profit',
         sourceDashboard: 'Commission Model',
-        excludeSheets: ['Sales'],
+        excludeSourceSheets: ['Sales'],
         url: 'https://example.com/',
       },
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('excludeSheets is only allowed');
+    expect(result.content[0].text).toContain('excludeSourceSheets is only allowed');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects excludeTargetSheets in url mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Excludes',
+        sourceWorksheet: '',
+        sourceDashboard: 'Commission Model',
+        excludeTargetSheets: ['Sales'],
+        url: 'https://example.com/',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('excludeTargetSheets is only allowed in filter mode');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 

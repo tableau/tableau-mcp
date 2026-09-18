@@ -106,7 +106,8 @@ export type AuthorActionArgs = {
   activation?: 'on-select' | 'on-hover' | 'on-menu';
   url?: string;
   sourceDashboard?: string;
-  excludeSheets?: string[];
+  excludeSourceSheets?: string[];
+  excludeTargetSheets?: string[];
   urlTarget?: 'default-zone-or-browser' | 'browser' | 'specific-zone';
   zoneId?: string;
   urlEncode?: boolean;
@@ -168,7 +169,8 @@ export async function getToolResult({
       clearSelection: args.clearSelection ?? 'do-nothing',
       url: args.url,
       sourceDashboard: args.sourceDashboard,
-      excludeSheets: args.excludeSheets,
+      excludeSourceSheets: args.excludeSourceSheets,
+      excludeTargetSheets: args.excludeTargetSheets,
       urlTarget: args.urlTarget,
       zoneId: args.zoneId,
       urlEncode: args.urlEncode,
