@@ -174,7 +174,7 @@ describe('authorActionTool (filter mode)', () => {
         sourceDashboard: 'Overview',
         sourceWorksheet: 'Profit',
         targetSheet: 'Overview',
-        excludeSheets: ['Profit'],
+        excludeTargetSheets: ['Profit'],
         clearSelection: 'exclude-all',
         singleSelect: true,
       },
@@ -286,7 +286,7 @@ describe('authorActionTool (filter mode)', () => {
         sourceWorksheet: 'Profit',
         sourceDashboard: 'Overview',
         targetSheet: 'Overview',
-        excludeSheets: ['Profit'],
+        excludeTargetSheets: ['Profit'],
       },
       initialXml: DASHBOARD_WITHOUT_ZONES,
       readbackXml: withActions(DASHBOARD_WITHOUT_ZONES, expectedAction),
@@ -444,7 +444,7 @@ describe('authorActionTool (filter mode)', () => {
         sourceDashboard: 'Overview',
         targetSheet: 'Overview',
         filterFields: ['Category', 'Sub-Category'],
-        excludeSheets: ['Profit'],
+        excludeTargetSheets: ['Profit'],
         clearSelection: 'exclude-all',
       },
       initialXml: DASHBOARD_WITH_FILTER_FIELDS,
@@ -895,7 +895,7 @@ describe('authorActionTool (filter mode)', () => {
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
-  it('fails readback when the exclude opt-out is dropped', async () => {
+  it('fails readback when the target-sheet exclude opt-out is dropped', async () => {
     const excludeDropped =
       "<action caption='Excluded' name='[Action1]'>" +
       "<activation type='on-select' />" +
@@ -911,7 +911,7 @@ describe('authorActionTool (filter mode)', () => {
         sourceWorksheet: 'Profit',
         sourceDashboard: 'Overview',
         targetSheet: 'Overview',
-        excludeSheets: ['Profit'],
+        excludeTargetSheets: ['Profit'],
       },
       initialXml: DASHBOARD_WITH_BOTH_SHEETS,
       readbackXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, excludeDropped),
@@ -921,6 +921,154 @@ describe('authorActionTool (filter mode)', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('did not survive readback');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits <exclude-sheet> children in the source for a dashboard-scoped filter source', async () => {
+    const expectedAction =
+      "<action caption='Source Excludes' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' dashboard='Overview'>" +
+      "<exclude-sheet name='Details' />" +
+      '</source>' +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Source Excludes',
+        sourceWorksheet: '',
+        sourceDashboard: 'Overview',
+        targetSheet: 'Details',
+        excludeSourceSheets: ['Details'],
+      },
+      initialXml: DASHBOARD_WITH_BOTH_SHEETS,
+      readbackXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.excludeSourceSheets).toEqual(['Details']);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
+  });
+
+  it('emits independent source and target exclusions for a dashboard-to-dashboard cross filter', async () => {
+    // Clicking marks on the source sheets (dashboard minus the target sheets) filters the target
+    // sheets (dashboard minus the source sheets): source <exclude-sheet> children narrow the source,
+    // the command `exclude` param narrows the target.
+    const expectedAction =
+      "<action caption='Filter by Category' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' dashboard='Overview'>" +
+      "<exclude-sheet name='Details' />" +
+      '</source>' +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='exclude' value='Profit' />" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Overview' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter by Category',
+        sourceWorksheet: '',
+        sourceDashboard: 'Overview',
+        targetSheet: 'Overview',
+        excludeSourceSheets: ['Details'],
+        excludeTargetSheets: ['Profit'],
+      },
+      initialXml: DASHBOARD_WITH_BOTH_SHEETS,
+      readbackXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.excludeSourceSheets).toEqual(['Details']);
+    expect(parsed.excludeTargetSheets).toEqual(['Profit']);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
+  });
+
+  it('passes readback when the target exclude list survives in a different order', async () => {
+    // Authored as 'Profit,Details'; Tableau re-orders the comma list to 'Details,Profit' on save.
+    // The exclude param is compared as a set, so the reordered readback still matches.
+    const appliedAction =
+      "<action caption='Reordered Excludes' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' dashboard='Overview' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='exclude' value='Profit,Details' />" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Overview' /></command>" +
+      '</action>';
+    const reorderedReadback = appliedAction.replace(
+      "<param name='exclude' value='Profit,Details' />",
+      "<param name='exclude' value='Details,Profit' />",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Reordered Excludes',
+        sourceWorksheet: '',
+        sourceDashboard: 'Overview',
+        targetSheet: 'Overview',
+        excludeTargetSheets: ['Profit', 'Details'],
+      },
+      initialXml: DASHBOARD_WITH_BOTH_SHEETS,
+      readbackXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, reorderedReadback),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(appliedAction);
+  });
+
+  it('fails readback when the source-sheet exclude opt-out is dropped', async () => {
+    const sourceExcludeDropped =
+      "<action caption='Source Excludes' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' dashboard='Overview' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Source Excludes',
+        sourceWorksheet: '',
+        sourceDashboard: 'Overview',
+        targetSheet: 'Details',
+        excludeSourceSheets: ['Details'],
+      },
+      initialXml: DASHBOARD_WITH_BOTH_SHEETS,
+      readbackXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, sourceExcludeDropped),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects excludeSourceSheets when a worksheet source is present in filter mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Bad Source Exclude',
+        sourceWorksheet: 'Profit',
+        sourceDashboard: 'Overview',
+        targetSheet: 'Details',
+        excludeSourceSheets: ['Details'],
+      },
+      initialXml: DASHBOARD_WITH_BOTH_SHEETS,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('excludeSourceSheets is only allowed');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('fails readback when single-select is dropped', async () => {

@@ -42,19 +42,15 @@ const paramsSchema = {
   targetSet: z.string().optional().describe(''),
   targetSheet: z.string().optional().describe(''),
   filterFields: z.array(z.string()).optional().describe(''),
-  datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
+  datasource: z.string().optional().describe('Internal name or caption.'),
   setMembership: setMembershipSchema.default('assign').describe(''),
   clearSelection: clearSelectionSchema.default('do-nothing').describe(''),
   singleSelect: z.boolean().optional().describe(''),
   activation: activationSchema.default('on-select').describe(''),
-  url: z
-    .string()
-    .optional()
-    .describe(
-      'URL for url mode. Pass it raw and unescaped (the tool escapes it). Use <[Field Name]> to insert a field value.',
-    ),
+  url: z.string().optional().describe('URL for url mode, raw. <[Field Name]> = value.'),
   sourceDashboard: z.string().optional().describe(''),
-  excludeSheets: z.array(z.string()).optional().describe(''),
+  excludeSourceSheets: z.array(z.string()).optional().describe(''),
+  excludeTargetSheets: z.array(z.string()).optional().describe(''),
   urlTarget: urlTargetSchema.optional().describe(''),
   zoneId: z.string().optional().describe(''),
   urlEncode: z.boolean().optional().describe(''),
@@ -92,7 +88,8 @@ type AuthorActionResult = AuthorActionResultBase &
         clearSelection: z.infer<typeof clearSelectionSchema>;
         singleSelect: boolean;
         specificFields: { datasourceName: string | undefined; columnNames: string[] };
-        excludeSheets: string[];
+        excludeSourceSheets: string[];
+        excludeTargetSheets: string[];
       }
   );
 
@@ -135,7 +132,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
         activation = 'on-select',
         url,
         sourceDashboard,
-        excludeSheets,
+        excludeSourceSheets,
+        excludeTargetSheets,
         urlTarget,
         zoneId,
         urlEncode,
@@ -161,7 +159,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           activation,
           url,
           sourceDashboard,
-          excludeSheets,
+          excludeSourceSheets,
+          excludeTargetSheets,
           urlTarget,
           zoneId,
           urlEncode,
@@ -172,7 +171,10 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           const hasWorksheet = effectiveSourceSheet.length > 0;
           const hasDashboard = effectiveSourceDashboard.length > 0;
           const effectiveTargetSheet = targetSheet?.trim() ?? '';
-          const effectiveExcludedSheets = (excludeSheets ?? [])
+          const effectiveExcludedSourceSheets = (excludeSourceSheets ?? [])
+            .map((sheet) => sheet.trim())
+            .filter((sheet) => sheet.length > 0);
+          const effectiveExcludedTargetSheets = (excludeTargetSheets ?? [])
             .map((sheet) => sheet.trim())
             .filter((sheet) => sheet.length > 0);
 
@@ -181,6 +183,23 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           if (mode !== 'url' && mode !== 'filter' && effectiveSourceSheet.length === 0) {
             return new ArgsValidationError('sourceWorksheet empty').toErr();
+          }
+          if (effectiveExcludedTargetSheets.length > 0 && mode !== 'filter') {
+            return new ArgsValidationError(
+              'excludeTargetSheets is only allowed in filter mode',
+            ).toErr();
+          }
+          if (effectiveExcludedSourceSheets.length > 0) {
+            if (mode !== 'url' && mode !== 'filter') {
+              return new ArgsValidationError(
+                'excludeSourceSheets is only allowed in url or filter mode',
+              ).toErr();
+            }
+            if (hasWorksheet || !hasDashboard) {
+              return new ArgsValidationError(
+                'excludeSourceSheets is only allowed with a dashboard-only source (set sourceDashboard, leave sourceWorksheet empty)',
+              ).toErr();
+            }
           }
           if (mode === 'url') {
             if (url === undefined || url.trim().length === 0) {
@@ -207,11 +226,6 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             if (!hasWorksheet && !hasDashboard) {
               return new ArgsValidationError(
                 'url mode requires a source: set sourceWorksheet, sourceDashboard, or both',
-              ).toErr();
-            }
-            if ((excludeSheets?.length ?? 0) > 0 && (hasWorksheet || !hasDashboard)) {
-              return new ArgsValidationError(
-                'excludeSheets is only allowed with a dashboard-only source (set sourceDashboard, leave sourceWorksheet empty)',
               ).toErr();
             }
             if (urlTarget === 'specific-zone') {
@@ -393,10 +407,13 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               target: effectiveTargetSheet,
               sourceWorksheet: effectiveSourceSheet,
               sourceDashboard: effectiveSourceDashboard,
+              sourceExcludeSheets: effectiveExcludedSourceSheets,
               activation,
               autoClear: clearSelection !== 'do-nothing',
-              excludeValue:
-                effectiveExcludedSheets.length > 0 ? effectiveExcludedSheets.join(',') : undefined,
+              targetExcludeSheets:
+                effectiveExcludedTargetSheets.length > 0
+                  ? effectiveExcludedTargetSheets.join(',')
+                  : undefined,
               onEmpty: clearSelection === 'exclude-all',
               singleSelect: singleSelect === true,
               linkExpression: filterLinkExpression,
@@ -448,7 +465,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               actionName,
               sourceWorksheet: effectiveSourceSheet,
               sourceDashboard: effectiveSourceDashboard,
-              excludeSheets: (excludeSheets ?? []).map((sheet) => sheet.trim()),
+              excludeSourceSheets: effectiveExcludedSourceSheets,
               url: target,
               urlTarget: urlTarget ?? 'default-zone-or-browser',
               zoneId: zoneId?.trim() ?? '',
@@ -569,7 +586,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 datasourceName: targetDatasource?.name,
                 columnNames: resolvedFields?.map((field) => field.columnName) ?? [],
               },
-              excludeSheets: effectiveExcludedSheets,
+              excludeSourceSheets: effectiveExcludedSourceSheets,
+              excludeTargetSheets: effectiveExcludedTargetSheets,
               clearSelection,
               singleSelect: singleSelect === true,
               activation,
@@ -631,15 +649,31 @@ function nextActionName(xml: string): string {
   return `[Action${n}]`;
 }
 
-// Emit <source> attributes type-first (type, worksheet, dashboard). Attribute order is not
-// semantically meaningful and Tableau re-normalizes it on save, so we keep the shared order the
-// URL-action tests already pin rather than sorting.
+// Emit <source> attributes type-first (type, worksheet, dashboard)
 function renderSourceAttrs(sourceWorksheet: string, sourceDashboard: string): string {
   return (
     " type='sheet'" +
     (sourceWorksheet.length > 0 ? ` worksheet='${escapeXml(sourceWorksheet)}'` : '') +
     (sourceDashboard.length > 0 ? ` dashboard='${escapeXml(sourceDashboard)}'` : '')
   );
+}
+
+// Serialize the whole <source> element. Source-sheet opt-outs (<exclude-sheet> children) narrow
+// which sheets on a dashboard source fire the action; they open/close the element, otherwise it
+// self-closes. Shared by url and filter modes so the two paths emit identical source XML.
+function renderSourceElement(
+  sourceWorksheet: string,
+  sourceDashboard: string,
+  excludeSourceSheets: string[],
+): string {
+  const attrs = renderSourceAttrs(sourceWorksheet, sourceDashboard);
+  const excludeChildren = excludeSourceSheets
+    .filter((sheet) => sheet.length > 0)
+    .map((sheet) => `<exclude-sheet name='${escapeXml(sheet)}' />`)
+    .join('');
+  return excludeChildren.length > 0
+    ? `<source${attrs}>${excludeChildren}</source>`
+    : `<source${attrs} />`;
 }
 
 // Serializes the <activation> element uniformly for every action type:
@@ -872,7 +906,7 @@ function renderUrlAction({
   actionName,
   sourceWorksheet,
   sourceDashboard,
-  excludeSheets,
+  excludeSourceSheets,
   url,
   urlTarget,
   zoneId,
@@ -883,22 +917,14 @@ function renderUrlAction({
   actionName: string;
   sourceWorksheet: string;
   sourceDashboard: string;
-  excludeSheets: string[];
+  excludeSourceSheets: string[];
   url: string;
   urlTarget: z.infer<typeof urlTargetSchema>;
   zoneId: string;
   urlEncode: boolean;
   activation: z.infer<typeof activationSchema>;
 }): string {
-  const sourceAttrs = renderSourceAttrs(sourceWorksheet, sourceDashboard);
-  const excludeChildren = excludeSheets
-    .filter((sheet) => sheet.length > 0)
-    .map((sheet) => `<exclude-sheet name='${escapeXml(sheet)}' />`)
-    .join('');
-  const sourceXml =
-    excludeChildren.length > 0
-      ? `<source${sourceAttrs}>${excludeChildren}</source>`
-      : `<source${sourceAttrs} />`;
+  const sourceXml = renderSourceElement(sourceWorksheet, sourceDashboard, excludeSourceSheets);
 
   const urlEscapeAttr = urlEncode ? " url-escape='true'" : '';
   const linkChildren =
@@ -1008,7 +1034,11 @@ function renderDependencyColumn(field: ResolvedFilterField): string {
 function renderFilterAction(caption: string, actionName: string, action: FilterAction): string {
   const activationXml = renderActivation(action.activation, action.autoClear);
 
-  const sourceXml = `<source${renderSourceAttrs(action.sourceWorksheet, action.sourceDashboard)} />`;
+  const sourceXml = renderSourceElement(
+    action.sourceWorksheet,
+    action.sourceDashboard,
+    action.sourceExcludeSheets,
+  );
 
   // A specific-field filter carries its resolved field locators in a tsl: <link> that precedes the
   // <command>; an all-fields filter has no link and sets special-fields='all' on the command.
@@ -1020,8 +1050,8 @@ function renderFilterAction(caption: string, actionName: string, action: FilterA
       : '';
 
   const params: string[] = [];
-  if (action.excludeValue !== undefined) {
-    params.push(`<param name='exclude' value='${escapeXml(action.excludeValue)}' />`);
+  if (action.targetExcludeSheets !== undefined) {
+    params.push(`<param name='exclude' value='${escapeXml(action.targetExcludeSheets)}' />`);
   }
   if (action.onEmpty) {
     params.push("<param name='on-empty' value='none' />");
@@ -1121,13 +1151,54 @@ type FilterAction = {
   target: string;
   sourceWorksheet: string;
   sourceDashboard: string;
+  // Source-sheet opt-outs: <exclude-sheet> children of <source>, narrowing which sheets on a
+  // dashboard source fire the action.
+  sourceExcludeSheets: string[];
   activation: z.infer<typeof activationSchema>;
   autoClear: boolean;
-  excludeValue?: string;
+  // Target-sheet opt-outs: the comma-joined command `exclude` param on <target>, narrowing which sheets a
+  // dashboard target filters.
+  targetExcludeSheets?: string;
   onEmpty: boolean;
   singleSelect: boolean;
   linkExpression?: string;
 };
+
+// The <exclude-sheet> opt-out names inside a block's <source> element (source-sheet exclusions).
+// A self-closed <source ... /> has no children, so the open/close regex fails to match and this
+// returns []. Names are compared order-independently, so callers use sameSheetSet.
+function buildSourceExcludeSheetNames(block: string): string[] {
+  const sourceMatch = block.match(/<source\b[^>]*>([\s\S]*?)<\/source>/);
+  if (sourceMatch === null) {
+    return [];
+  }
+  return [...sourceMatch[1].matchAll(/<exclude-sheet\b[^>]*>/g)]
+    .map((tag) => unescapeXml(getAttr(tag[0], 'name') ?? ''))
+    .filter((name) => name.length > 0);
+}
+
+// Order-independent equality for sheet-name lists (Tableau may re-order children on save).
+function isSameSheetSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((value, index) => value === sortedB[index]);
+}
+
+// Split a comma-joined sheet list (the command `exclude` param value = target-sheet exclusions)
+// into trimmed names, dropping empties. undefined/absent -> []. Lets target exclusions compare as
+// a set, so Tableau re-ordering the comma list on save does not fail readback.
+function splitSheetList(value: string | undefined): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  return value
+    .split(',')
+    .map((sheet) => sheet.trim())
+    .filter((sheet) => sheet.length > 0);
+}
 
 // True when an <action> block is the filter action described by `expected`
 function filterActionMatches(block: string, expected: FilterAction): boolean {
@@ -1141,6 +1212,7 @@ function filterActionMatches(block: string, expected: FilterAction): boolean {
     sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'worksheet') ?? '');
   const sourceDashboard =
     sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'dashboard') ?? '');
+  const sourceExcludeSheets = buildSourceExcludeSheetNames(block);
   const expectedType = expected.activation === 'on-menu' ? undefined : expected.activation;
   const activationTag = block.match(/<activation\b[^>]*>/)?.[0];
   const activationType = activationTag === undefined ? undefined : getAttr(activationTag, 'type');
@@ -1158,10 +1230,14 @@ function filterActionMatches(block: string, expected: FilterAction): boolean {
   if (
     sourceWorksheet !== expected.sourceWorksheet ||
     sourceDashboard !== expected.sourceDashboard ||
+    !isSameSheetSet(sourceExcludeSheets, expected.sourceExcludeSheets) ||
     activationType !== expectedType ||
     autoClear !== expected.autoClear ||
     params.get('target') !== expected.target ||
-    params.get('exclude') !== expected.excludeValue ||
+    !isSameSheetSet(
+      splitSheetList(params.get('exclude')),
+      splitSheetList(expected.targetExcludeSheets),
+    ) ||
     (params.get('on-empty') === 'none') !== expected.onEmpty ||
     params.has('single-select') !== expected.singleSelect ||
     filterByAllFields !== (expected.linkExpression === undefined)
