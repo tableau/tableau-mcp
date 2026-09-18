@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { QueryRequest } from '../apis/vizqlDataServiceApi.js';
 import VizqlDataServiceMethods, {
   isWorkbookDatasourceNotEnabled,
-  WORKBOOK_DS_NOT_ENABLED_CODE,
 } from './vizqlDataServiceMethods.js';
 
 // A minimal data source request that satisfies userHasQueryPermissionsRequestSchema.
@@ -54,74 +53,51 @@ function unwrapErr<T, E>(result: Result<T, E>): E {
   return result.error;
 }
 
-// The actual query-datasource error body when the VDSForWorkbookDatasources flag is off. We send
-// debug=true, so the top-level `tab-error-code` (the hex) is dropped and only the message carries
-// the flag name; `errorCode` is the generic 501000 (NOT_IMPLEMENTED). HTTP status is 501.
-const debugModeErrorBody = {
-  errorCode: '501000',
-  message: 'VDSForWorkbookDatasources feature flag is not enabled',
-  datetime: '2026-09-14T22:57:31.118Z',
-};
-
-// The same gate on a non-debug request: the hex surfaces at the top level in `tab-error-code`.
-const nonDebugErrorBody = {
-  errorCode: '501000',
-  message: 'VDSForWorkbookDatasources feature flag is not enabled',
-  'tab-error-code': WORKBOOK_DS_NOT_ENABLED_CODE,
+// The query-datasource error body when the VDSForWorkbookDatasources flag is off: HTTP 403, generic
+// PERMISSION_DENIED errorCode 403800, localized message. Only the flag identifier in the message
+// distinguishes it from an ordinary per-datasource denial.
+const gateErrorBody = {
+  errorCode: '403800',
+  message: 'The VDSForWorkbookDatasources feature is not enabled.',
   datetime: '2026-09-14T22:57:31.118Z',
 };
 
 describe('isWorkbookDatasourceNotEnabled', () => {
-  it('matches on the flag name in the message (the debug-mode signal)', () => {
-    expect(isWorkbookDatasourceNotEnabled(debugModeErrorBody)).toBe(true);
+  it('matches on the flag identifier in the message', () => {
+    expect(isWorkbookDatasourceNotEnabled(gateErrorBody)).toBe(true);
   });
 
-  it('matches on the flag name case-insensitively', () => {
+  it('matches on the flag identifier case-insensitively', () => {
     expect(
       isWorkbookDatasourceNotEnabled({ message: 'the vdsforworkbookdatasources feature is off' }),
     ).toBe(true);
   });
 
-  it('matches on the top-level tab-error-code (the non-debug signal)', () => {
-    expect(isWorkbookDatasourceNotEnabled(nonDebugErrorBody)).toBe(true);
-  });
-
-  it('matches the tab-error-code case-insensitively even without the flag in the message', () => {
+  it('does not match a generic 403800 permission denial (same code, different message)', () => {
+    // 403800 is overloaded — it also signals ordinary per-datasource denials — so the errorCode
+    // alone must not trigger detection.
     expect(
-      isWorkbookDatasourceNotEnabled({ message: 'nope', 'tab-error-code': '0x4a7f2b19' }),
-    ).toBe(true);
+      isWorkbookDatasourceNotEnabled({
+        errorCode: '403800',
+        message: 'The user does not have permission to query data source ds-1.',
+      }),
+    ).toBe(false);
   });
 
-  it('does not match unrelated errors, undefined, or the generic errorCode alone', () => {
-    // errorCode 501000 is generic (NOT_IMPLEMENTED) and must not trigger detection on its own.
+  it('does not match unrelated errors, empty bodies, or undefined', () => {
     expect(
       isWorkbookDatasourceNotEnabled({ errorCode: '501000', message: 'not implemented' }),
     ).toBe(false);
-    expect(
-      isWorkbookDatasourceNotEnabled({ errorCode: '403800', message: 'permission denied' }),
-    ).toBe(false);
-    expect(isWorkbookDatasourceNotEnabled({ 'tab-error-code': '0xd3408984' })).toBe(false);
     expect(isWorkbookDatasourceNotEnabled({})).toBe(false);
     expect(isWorkbookDatasourceNotEnabled(undefined)).toBe(false);
   });
 });
 
 describe('VizqlDataServiceMethods.queryDatasource', () => {
-  it('maps the debug-mode gate response (HTTP 501, flag in message) to workbook-datasource-not-enabled', async () => {
+  it('maps the gate response (HTTP 403, flag in message) to workbook-datasource-not-enabled', async () => {
     const methods = makeMethods();
     stubTransport(methods, () =>
-      Promise.reject(axiosError(501, debugModeErrorBody, '/query-datasource')),
-    );
-
-    expect(unwrapErr(await methods.queryDatasource(queryRequest))).toEqual({
-      type: 'workbook-datasource-not-enabled',
-    });
-  });
-
-  it('maps the non-debug gate response (top-level tab-error-code) to workbook-datasource-not-enabled', async () => {
-    const methods = makeMethods();
-    stubTransport(methods, () =>
-      Promise.reject(axiosError(501, nonDebugErrorBody, '/query-datasource')),
+      Promise.reject(axiosError(403, gateErrorBody, '/query-datasource')),
     );
 
     expect(unwrapErr(await methods.queryDatasource(queryRequest))).toEqual({
@@ -130,10 +106,11 @@ describe('VizqlDataServiceMethods.queryDatasource', () => {
   });
 
   it('detects the gate independent of HTTP status, even when it arrives as a 404', async () => {
-    // Guards the ordering: the gate check runs before the 404 -> feature-disabled branch.
+    // Guards the ordering: the gate check runs before the 404 -> feature-disabled branch, so a body
+    // carrying the flag identifier is never mislabeled as VizQL-disabled.
     const methods = makeMethods();
     stubTransport(methods, () =>
-      Promise.reject(axiosError(404, debugModeErrorBody, '/query-datasource')),
+      Promise.reject(axiosError(404, gateErrorBody, '/query-datasource')),
     );
 
     expect(unwrapErr(await methods.queryDatasource(queryRequest))).toEqual({

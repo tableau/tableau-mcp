@@ -17,29 +17,15 @@ import {
 import { RestApiCredentials } from '../restApi.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
-// Signals that a VDS error is the `VDSForWorkbookDatasources` gate: the site-scoped flag (opt-in per
-// site, no discovery endpoint) that must be on to query an embedded (workbook) datasource. Catching
-// this error is the only client-side way to detect the gate. Exported so other VDS paths can reuse
-// the predicate rather than re-deriving these signals.
-//
-// The distinctive flag identifier appears in the error `message` on every enforcement path and in
-// both debug and non-debug responses, so it is the primary signal. The hex `tab-error-code` is an
-// exact secondary signal, but only surfaces at the top level on non-debug requests — on debug
-// requests (which query-datasource sends) the top-level field is dropped and the hex is buried in
-// the `debug` tree, so it can't be relied on alone. The numeric `errorCode` is unusable: it is the
-// generic `501000` (NOT_IMPLEMENTED), shared by unrelated errors.
+// The `VDSForWorkbookDatasources` gate: a site-scoped opt-in flag required to query embedded
+// (workbook) datasources. Enforced by headless-bi's interceptor as HTTP 403 / errorCode 403800 on
+// every VDS endpoint; we match the flag name in the message (403800 alone is a generic denial).
 export const WORKBOOK_DS_NOT_ENABLED_FLAG = 'VDSForWorkbookDatasources';
-export const WORKBOOK_DS_NOT_ENABLED_CODE = '0x4A7F2B19';
 
 export function isWorkbookDatasourceNotEnabled(error: TableauError | undefined): boolean {
-  if (!error) {
-    return false;
-  }
-  const flagInMessage =
-    error.message?.toLowerCase().includes(WORKBOOK_DS_NOT_ENABLED_FLAG.toLowerCase()) ?? false;
-  const codeMatches =
-    error['tab-error-code']?.toLowerCase() === WORKBOOK_DS_NOT_ENABLED_CODE.toLowerCase();
-  return flagInMessage || codeMatches;
+  return (
+    error?.message?.toLowerCase().includes(WORKBOOK_DS_NOT_ENABLED_FLAG.toLowerCase()) ?? false
+  );
 }
 
 export type VdsQueryError =
@@ -78,9 +64,8 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
     } catch (error) {
       if (isErrorFromAlias(this._apiClient.api, 'queryDatasource', error)) {
-        // Check the workbook-datasource gate independent of HTTP status and BEFORE the 404 branch:
-        // it arrives as a 501 today, but detection keys off the error body (see the predicate), not
-        // the status, so ordering it first keeps it from ever being mislabeled as VizQL-disabled.
+        // Detection keys off the message, not the status (see predicate), so this runs before the
+        // 404 branch to keep the gate from being mislabeled as VizQL-disabled.
         if (isWorkbookDatasourceNotEnabled(error.response.data)) {
           return Err({ type: 'workbook-datasource-not-enabled' });
         }
