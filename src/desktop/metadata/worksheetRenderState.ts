@@ -16,6 +16,13 @@ export function worksheetDocumentState(xml: string): 'blank' | 'populated' | 'un
   return rows === '' && cols === '' && !hasPlacedFieldReference(table) ? 'blank' : 'populated';
 }
 
+// A column-instance-style internal field token: `[<ns>:<name>:<suffix>]` (e.g. `[none:Category:nk]`,
+// `[usr:Profit:qk]`). This is how a placed field is spelled in single-datasource form, on ANY shelf,
+// encoding, sort, filter, or group attribute -- not only `column`/`*field`. A datasource declaration
+// name like `[Sample - Superstore]` has no inner colons, so it does not match, keeping a blank sheet
+// that carries only a datasource declaration classified as blank.
+const INTERNAL_FIELD_TOKEN = /\[[a-z]+:[^\]]+:[a-z]{2,3}\]/i;
+
 export function hasPlacedFieldReference(table: XmlElement): boolean {
   const stack = [table];
   while (stack.length > 0) {
@@ -33,9 +40,12 @@ export function hasPlacedFieldReference(table: XmlElement): boolean {
       const attribute = element.attributes.item(index);
       if (
         attribute &&
+        // A fully-qualified `[Datasource].[field]` ref, or a placed ref named on the shelf-style
+        // `column`/`*field` attributes, or a single-datasource internal field token on ANY attribute.
         (attribute.value.includes('].[') ||
           ((attribute.name === 'column' || attribute.name.endsWith('field')) &&
-            attribute.value.includes('[')))
+            attribute.value.includes('[')) ||
+          INTERNAL_FIELD_TOKEN.test(attribute.value))
       ) {
         return true;
       }

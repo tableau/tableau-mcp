@@ -299,7 +299,12 @@ describe('loadDashboardXml (External Client API transport)', () => {
         expect(result.error.error.worksheetNames).toEqual(['Sheet 1']);
         expect(result.error.error.message).toContain('Sales Dashboard');
         expect(result.error.error.message).toContain('Sheet 1');
-        expect(result.error.error.message).toContain('build-and-apply-worksheet');
+        // Recovery hint names only tools served by the dynamic-authoring profile (guardrail test
+        // recoveryTextNamesReachableTools): render via add-field or apply-worksheet, never the
+        // off-profile build-and-apply-worksheet.
+        expect(result.error.error.message).toContain('add-field');
+        expect(result.error.error.message).toContain('apply-worksheet');
+        expect(result.error.error.message).not.toContain('build-and-apply-worksheet');
         expect(result.error.error.message).toContain('No changes were sent to Tableau');
       }
       expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
@@ -372,6 +377,88 @@ describe('loadDashboardXml (External Client API transport)', () => {
 
       expect(result.isOk()).toBe(true);
       expect(applyDashboardDocument).toHaveBeenCalledOnce();
+    });
+
+    // ── Worksheet-zone semantics: type-v2='visual' + nested/container zones (PR #918 review) ──
+    // The guard must use the same worksheet-zone predicate as the authoritative
+    // target-dashboard-invariant: a <zone> at ANY depth whose @name is set and whose @type-v2 is
+    // absent or 'visual'. These pin the inclusive predicate and the deep walk (worksheet zones
+    // wrapped by a layout container are still reached), plus a negative control that a named
+    // non-visual (text) zone is NOT treated as a worksheet even when a blank worksheet shares its
+    // name.
+    it("fires when the worksheet zone carries type-v2='visual' (inclusive predicate, not just absent type-v2)", async () => {
+      const dashboardXml =
+        `<dashboard name='${dashboardName}'><zones>` +
+        "<zone name='Sheet 1' type-v2='visual' /></zones></dashboard>";
+      const { executor, calls } = dispatchingExecutor(
+        liveWorkbookWithBlankWorksheet(['Sales Dashboard']),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: dashboardXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-dashboard-xml-error');
+        invariant(result.error.error.type === 'sheet-not-rendered');
+        expect(result.error.error.worksheetNames).toEqual(['Sheet 1']);
+      }
+      expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+    });
+
+    it('fires on a worksheet zone nested inside a layout container zone (deep walk, matches real dashboard XML)', async () => {
+      // Real dashboards nest the worksheet zone under a type-v2='layout-basic' container zone.
+      const dashboardXml =
+        `<dashboard name='${dashboardName}'><zones>` +
+        "<zone type-v2='layout-basic' x='0' y='0' w='100000' h='100000'>" +
+        "<zone name='Sheet 1'><zone-pane name='pane-1' /></zone>" +
+        '</zone></zones></dashboard>';
+      const { executor, calls } = dispatchingExecutor(
+        liveWorkbookWithBlankWorksheet(['Sales Dashboard']),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: dashboardXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-dashboard-xml-error');
+        invariant(result.error.error.type === 'sheet-not-rendered');
+        expect(result.error.error.worksheetNames).toEqual(['Sheet 1']);
+      }
+      expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+    });
+
+    it('does NOT treat a named non-visual (text) zone as a worksheet, even when a blank worksheet shares its name', async () => {
+      // A text zone carries a non-visual type-v2, so it is not a worksheet zone; the guard must
+      // not collect it (and therefore must not fire) despite the blank worksheet of the same name.
+      const dashboardXml =
+        `<dashboard name='${dashboardName}'><zones>` +
+        "<zone name='Legend' type-v2='text' /></zones></dashboard>";
+      const { executor, calls } = dispatchingExecutor(
+        liveWorkbookWithBlankWorksheet(['Sales Dashboard'], 'Legend'),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: dashboardXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
     });
 
     // ── Controlled repro: field placement vs dashboard viewpoints (PR #918 review) ──
@@ -459,7 +546,11 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
     });
 
-    it('fails open (skips the guard) when the live workbook read errors, letting the whole-workbook apply proceed', async () => {
+    it('fails CLOSED (retriable error, no dispatch) when the live workbook read errors, so a transient read cannot silently disable the guard', async () => {
+      // The guard now reads under the apply lock and shares that one read with the apply. A read
+      // failure surfaces as a retriable execute-command error instead of skipping the protection
+      // (PR #918 review: do not bypass the render guard when its read fails). The workbook is read
+      // exactly once (no second apply-path read) and nothing is dispatched.
       const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
       const { executor, calls } = dispatchingExecutor(
         liveWorkbook(['Sales Dashboard'], ['Sheet 1']),
@@ -468,8 +559,6 @@ describe('loadDashboardXml (External Client API transport)', () => {
         type: 'command-failed' as const,
         error: { code: 'ERR', message: 'Transient', recoverable: false },
       };
-      // First call is the guard's live read (errors); the second is the normal apply path's own
-      // read, which the executor's default implementation (set up by dispatchingExecutor) serves.
       vi.mocked(executor.getWorkbookDocument).mockResolvedValueOnce(Err(readError));
 
       const result = await loadDashboardXml({
@@ -480,8 +569,32 @@ describe('loadDashboardXml (External Client API transport)', () => {
         focus: NO_FOCUS,
       });
 
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.type).toBe('execute-command-error');
+      }
+      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(1);
+      expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+    });
+
+    it('reads the live workbook only ONCE on the whole-workbook route (guard read is reused for the upsert)', async () => {
+      // Efficiency (PR #918 review): the guard and the whole-workbook upsert previously each
+      // fetched the full workbook. The guard now threads its single snapshot to the apply.
+      const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
+      const { executor, calls } = dispatchingExecutor(
+        liveWorkbook(['Sales Dashboard'], ['Sheet 1']),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: dashboardXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+
       expect(result.isOk()).toBe(true);
-      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(2);
+      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(1);
       expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
     });
   });

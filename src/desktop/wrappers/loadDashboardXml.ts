@@ -14,7 +14,11 @@ import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
-import { type PerSheetKind, tryApplyViaPerSheetRoute } from './perSheetDocumentApply.js';
+import {
+  type PerSheetApplyOutcome,
+  type PerSheetKind,
+  tryApplyViaPerSheetRoute,
+} from './perSheetDocumentApply.js';
 
 export type LoadDashboardXmlError =
   | { type: 'invalid-xml' }
@@ -117,11 +121,21 @@ function resolveCanonicalDashboardName(
 
 /**
  * Worksheet-zone names referenced by the dashboard fragment's zones, at any nesting depth.
- * Mirrors the selector convention used by the `dashboard-zones-reference-included-worksheets`
- * validation rule: a zone with a `@name` and no `@type-v2` names a worksheet; layout, text, and
- * blank zones carry `type-v2` and do not. Returns `[]` (never throws) when the fragment has no
- * `<dashboard>` root or no zones — malformed/absent XML has nothing to say here, and is caught
- * elsewhere.
+ * Uses the same worksheet-zone semantics as the authoritative `target-dashboard-invariant`
+ * (see {@link file://../validation/targetDashboardInvariant.ts} `namedWorksheetZones`): a
+ * `<zone>` element -- at ANY depth -- whose `@name` is set and whose `@type-v2` is either absent
+ * or `'visual'` names a worksheet. Layout, text, blank, and object zones carry a non-visual
+ * `@type-v2` and do not. The invariant walks every descendant `<zone>` via getElementsByTagName,
+ * so worksheet zones nested under a layout container or a `zone-pane` wrapper still count; this
+ * descends the whole zone subtree (following `<zone>` children through any intervening element)
+ * to match. Returns `[]` (never throws) when the fragment has no `<dashboard>` root or no zones --
+ * malformed/absent XML has nothing to say here, and is caught elsewhere.
+ *
+ * NOTE (code/code inconsistency, flagged to the maintainer): the older
+ * `dashboard-zones-reference-included-worksheets` rule uses the narrower selector
+ * `.//zone[@name and not(@type-v2)]`, which excludes `type-v2='visual'`. Both agree on every
+ * current fixture (no fixture carries `type-v2='visual'`), but the invariant is authoritative,
+ * so this guard adopts the invariant's inclusive predicate.
  */
 function collectWorksheetZoneNames(dashboardXml: string): string[] {
   let dashboard: ParsedDashboard | undefined;
@@ -135,66 +149,118 @@ function collectWorksheetZoneNames(dashboardXml: string): string[] {
   }
 
   const names = new Set<string>();
-  const visit = (zone: ParsedZone): void => {
-    if (zone['@_name'] && !zone['@_type-v2']) {
+  const visitZone = (zone: ParsedZone): void => {
+    const type = zone['@_type-v2'];
+    if (zone['@_name'] && (!type || type === 'visual')) {
       names.add(zone['@_name']);
     }
-    for (const child of normalizeArray(zone.zone as ParsedZone | ParsedZone[] | undefined)) {
-      visit(child);
+    descend(zone);
+  };
+  // Walk the parsed subtree, treating every `zone` key (object or array) as a nested <zone>
+  // element and recursing into all other element children so zones wrapped by a layout zone,
+  // a `zone-pane`, or any other container are still reached -- mirroring getElementsByTagName.
+  const descend = (node: unknown): void => {
+    if (!node || typeof node !== 'object') {
+      return;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'zone') {
+        for (const child of normalizeArray(value as ParsedZone | ParsedZone[] | undefined)) {
+          visitZone(child);
+        }
+      } else if (value && typeof value === 'object') {
+        descend(value);
+      }
     }
   };
-  for (const zone of normalizeArray(dashboard.zones.zone)) {
-    visit(zone);
-  }
+  descend(dashboard.zones);
   return [...names];
 }
 
 /**
- * Preflight render guard. A dashboard zone can name a worksheet that exists in the live
- * workbook but has never been rendered (no mark/encoding — a blank sheet skeleton). Desktop's
+ * Preflight render guard (pure). A dashboard zone can name a worksheet that exists in the live
+ * workbook but has never been rendered (no mark/encoding -- a blank sheet skeleton). Desktop's
  * own HasVisualDoc check rejects that combination only AFTER dispatch
  * (IDP_ERR_DASHBOARD_MISSING_VISUAL_DOC); catching it here keeps the apply retry-safe, since
- * nothing is sent to Tableau. Fails OPEN: a transient live-workbook read failure must not turn
- * into a spurious block, so it falls through to the normal apply path instead. Only worksheets
- * PRESENT-but-blank are flagged — absent worksheets are the `sheet-absent` / create path's
- * concern, and this guard must not duplicate that.
+ * nothing is sent to Tableau.
+ *
+ * This is a pure function over an ALREADY-FETCHED live workbook snapshot: the caller reads the
+ * workbook inside `withApplyLock` and hands the same snapshot both here and to the apply, so the
+ * check and the write see one consistent read-modify-write (no read/apply race), and a read
+ * failure is the caller's to surface as a retriable error (fail CLOSED) rather than being
+ * swallowed here. Only worksheets PRESENT-but-blank are flagged -- absent worksheets are the
+ * `sheet-absent` / create path's concern, and this guard must not duplicate that (so it returns
+ * `[]` for a zone naming a worksheet missing from the snapshot: nothing to flag here).
  */
-async function checkWorksheetsRendered(
-  canonicalName: string,
-  dashboardXml: string,
-  { executor, signal }: WithExecutorAndAbortSignal,
-): Promise<Result<void, Extract<LoadDashboardXmlError, { type: 'sheet-not-rendered' }>>> {
+function findBlankReferencedWorksheets(dashboardXml: string, liveWorkbookXml: string): string[] {
   const worksheetZoneNames = collectWorksheetZoneNames(dashboardXml);
   if (worksheetZoneNames.length === 0) {
-    return Ok.EMPTY;
+    return [];
   }
-
-  const workbookResult = await getWorkbookXml({ executor, signal });
-  if (workbookResult.isErr()) {
-    return Ok.EMPTY;
-  }
-  const liveWorkbookXml = workbookResult.value;
-
-  const blankNames = worksheetZoneNames.filter((name) => {
+  return worksheetZoneNames.filter((name) => {
     const match = findElement(liveWorkbookXml, 'worksheet', name);
     return match !== null && worksheetDocumentState(match.text) === 'blank';
   });
+}
 
-  if (blankNames.length === 0) {
-    return Ok.EMPTY;
-  }
-
-  return Err({
+function sheetNotRenderedError(
+  canonicalName: string,
+  blankNames: string[],
+): Extract<LoadDashboardXmlError, { type: 'sheet-not-rendered' }> {
+  return {
     type: 'sheet-not-rendered',
     worksheetNames: blankNames,
     message:
       `Dashboard "${canonicalName}" references worksheet(s) ${blankNames.join(', ')} that exist ` +
       'by name but have no applied mark/encoding, so Tableau cannot wire them into a dashboard ' +
-      '("no visual representation"). FIX: build/render each worksheet first (e.g. ' +
-      'build-and-apply-worksheet) so it has a mark, then re-apply the dashboard. No changes were ' +
-      'sent to Tableau.',
-  });
+      '("no visual representation"). FIX: render each worksheet first (place a field on it with ' +
+      'add-field, or apply-worksheet with a filled <table>) so it has a mark, then re-apply the ' +
+      'dashboard. No changes were sent to Tableau.',
+  };
 }
+
+// The render guard needs a live-workbook snapshot to inspect worksheet <table> state. Read it
+// under the same apply lock the write uses, evaluate the (pure) guard against that one snapshot,
+// and fail CLOSED on a read failure: a transient read error surfaces as a retriable
+// execute-command-error rather than silently disabling the protection. Both apply routes call
+// this from INSIDE their `withApplyLock` body so the read/check/apply run as one critical section.
+//
+// Returns the fetched live-workbook snapshot on success so a whole-workbook caller can reuse this
+// single fetch for its upsert (no second read). Returns `null` WITHOUT reading when the dashboard
+// names no worksheet zones -- there is nothing for the guard to check, so a zone-less apply
+// (per-sheet or whole-workbook) pays no guard fetch, exactly as before this guard existed.
+async function runRenderGuardInLock(
+  canonicalName: string,
+  dashboardXml: string,
+  { executor, signal }: WithExecutorAndAbortSignal,
+): Promise<Result<string | null, RenderGuardOrApplyError>> {
+  if (collectWorksheetZoneNames(dashboardXml).length === 0) {
+    return Ok(null);
+  }
+  const workbookResult = await getWorkbookXml({ executor, signal });
+  if (workbookResult.isErr()) {
+    return Err({ type: 'execute-command-error', error: workbookResult.error });
+  }
+  const liveWorkbookXml = workbookResult.value;
+  const blankNames = findBlankReferencedWorksheets(dashboardXml, liveWorkbookXml);
+  if (blankNames.length > 0) {
+    log({
+      level: 'error',
+      message: 'Dashboard references a blank (unrendered) worksheet -- not sent to Tableau',
+      logger: 'dashboardCommands',
+      data: { dashboardName: canonicalName, worksheetNames: blankNames },
+    });
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: sheetNotRenderedError(canonicalName, blankNames),
+    });
+  }
+  return Ok(liveWorkbookXml);
+}
+
+type RenderGuardOrApplyError =
+  | { type: 'execute-command-error'; error: ExecuteCommandError }
+  | { type: 'load-dashboard-xml-error'; error: LoadDashboardXmlError };
 
 type LoadDashboardKind = Extract<PerSheetKind, 'dashboard' | 'storyboard'>;
 
@@ -276,36 +342,38 @@ export async function loadDashboardXml({
   const canonicalFocus: ApplyFocus =
     focus.navigate === 'artifact' ? { ...focus, sheetName: canonicalName } : focus;
 
-  // Preflight render guard, ahead of both the per-sheet and whole-workbook apply routes below —
-  // a zone naming an existing-but-blank worksheet would otherwise dispatch and be rejected by
-  // Desktop's own HasVisualDoc check. See {@link checkWorksheetsRendered}.
-  const renderCheck = await checkWorksheetsRendered(canonicalName, xml, { executor, signal });
-  if (renderCheck.isErr()) {
-    log({
-      level: 'error',
-      message: 'Dashboard references a blank (unrendered) worksheet — not sent to Tableau',
-      logger: 'dashboardCommands',
-      data: { dashboardName: canonicalName, worksheetNames: renderCheck.error.worksheetNames },
-    });
-    return Err({ type: 'load-dashboard-xml-error', error: renderCheck.error });
-  }
-
+  // The render guard (a zone naming an existing-but-blank worksheet would be rejected by Desktop's
+  // own HasVisualDoc check) reads the live workbook. Run it INSIDE each route's apply lock so the
+  // read/check/apply are one critical section (no concurrent render between check and apply) and a
+  // read failure fails CLOSED. See {@link runRenderGuardInLock}.
   if (requireExistingSheet) {
     const targetRef = dashboardFragmentSimpleId(xml) ?? canonicalName;
-    const perSheetResult = await withApplyLock(() =>
-      tryApplyViaPerSheetRoute({
-        kind,
-        sheetName: targetRef,
-        fragmentXml: xml,
-        expectedSourceHash,
-        validationContext: cachedApply ? 'dashboard' : undefined,
-        focus: canonicalFocus,
-        executor,
-        signal,
-      }),
+    const perSheetResult = await withApplyLock(
+      async (): Promise<Result<PerSheetApplyOutcome, RenderGuardOrApplyError>> => {
+        const guard = await runRenderGuardInLock(canonicalName, xml, { executor, signal });
+        if (guard.isErr()) {
+          return Err(guard.error);
+        }
+        const applied = await tryApplyViaPerSheetRoute({
+          kind,
+          sheetName: targetRef,
+          fragmentXml: xml,
+          expectedSourceHash,
+          validationContext: cachedApply ? 'dashboard' : undefined,
+          focus: canonicalFocus,
+          executor,
+          signal,
+        });
+        if (applied.isErr()) {
+          return Err({ type: 'execute-command-error', error: applied.error });
+        }
+        return Ok(applied.value);
+      },
     );
     if (perSheetResult.isErr()) {
-      return Err({ type: 'execute-command-error', error: perSheetResult.error });
+      // RenderGuardOrApplyError already matches this function's error union (sheet-not-rendered
+      // rejection, its retriable read failure, or a per-sheet execute-command error).
+      return Err(perSheetResult.error);
     }
     const outcome = perSheetResult.value;
     if (typeof outcome === 'object' && 'status' in outcome) {
@@ -397,14 +465,26 @@ async function loadDashboardXmlViaExternalApi({
   focus: ApplyFocus;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardHelperResult> {
   return withApplyLock(async () => {
-    const workbookResult = await getWorkbookXml({ executor, signal });
-    if (workbookResult.isErr()) {
-      return Err({ type: 'execute-command-error', error: workbookResult.error });
+    // Run the render guard inside the lock; when it read the live workbook (dashboard names
+    // worksheet zones) reuse that single snapshot for the upsert so this route no longer fetches
+    // the whole workbook twice. When it short-circuited without reading (no worksheet zones), fetch
+    // the snapshot here for the upsert -- still exactly one read on that path.
+    const guard = await runRenderGuardInLock(dashboardName, xml, { executor, signal });
+    if (guard.isErr()) {
+      return Err(guard.error);
+    }
+    let liveWorkbookXml = guard.value;
+    if (liveWorkbookXml === null) {
+      const workbookResult = await getWorkbookXml({ executor, signal });
+      if (workbookResult.isErr()) {
+        return Err({ type: 'execute-command-error', error: workbookResult.error });
+      }
+      liveWorkbookXml = workbookResult.value;
     }
 
     let workbookDoc: string;
     try {
-      workbookDoc = upsertDashboardIntoWorkbook(workbookResult.value, dashboardName, xml);
+      workbookDoc = upsertDashboardIntoWorkbook(liveWorkbookXml, dashboardName, xml);
     } catch (error) {
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }

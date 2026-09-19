@@ -94,4 +94,28 @@ describe('hasPlacedFieldReference', () => {
 
     expect(hasPlacedFieldReference(table)).toBe(true);
   });
+
+  it('returns true for a single-datasource internal field token on an attribute other than column/*field', () => {
+    // A placed group/level reference in single-datasource form (`[none:Category:nk]`, no `].[`) on a
+    // non-column, non-*field attribute must still count as placed content — otherwise a rendered
+    // sheet would be misread as blank and falsely block the dashboard apply (PR #918 review).
+    const table = tableOf(`<table>
+      <panes><pane><encodings><encoding attr='level' level='[none:Category:nk]' /></encodings></pane></panes>
+      <rows /><cols />
+    </table>`);
+
+    expect(hasPlacedFieldReference(table)).toBe(true);
+  });
+
+  it('still returns false when only a bare datasource-name bracket lives outside the excluded elements', () => {
+    // A datasource name like `[Sample - Superstore]` has no inner `:...:` segments, so the internal
+    // field-token match does not fire; a sheet carrying only that stays blank.
+    const table = tableOf(`<table>
+      <view><breakdown default='true' /></view>
+      <panes><pane><customized-label context='[Sample - Superstore]' /></pane></panes>
+      <rows /><cols />
+    </table>`);
+
+    expect(hasPlacedFieldReference(table)).toBe(false);
+  });
 });
