@@ -99,7 +99,6 @@ export async function createDataAppWorkspace({
   extra,
   productVersion,
   datasourceLuid,
-  fields,
 }: {
   datappName: string;
   username?: string;
@@ -107,7 +106,6 @@ export async function createDataAppWorkspace({
   extra: TableauWebRequestHandlerExtra;
   productVersion: ProductVersion;
   datasourceLuid?: string;
-  fields?: string[];
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName, username);
 
@@ -115,7 +113,6 @@ export async function createDataAppWorkspace({
   if (datasourceLuid) {
     const descriptorResult = await resolveDatasourceDescriptor({
       datasourceLuid,
-      fieldNames: fields,
       extra,
       productVersion,
     });

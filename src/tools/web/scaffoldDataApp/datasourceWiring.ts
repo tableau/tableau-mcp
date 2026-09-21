@@ -16,11 +16,7 @@ import { randomBytes } from 'node:crypto';
 
 import { Ok, Result } from 'ts-results-es';
 
-import {
-  DatasourceNotAllowedError,
-  McpToolError,
-  UnknownDatasourceFieldError,
-} from '../../../errors/mcpToolError.js';
+import { DatasourceNotAllowedError, McpToolError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES } from '../../../server/oauth/scopes.js';
@@ -238,19 +234,17 @@ export function applyDatasourceWiring(twbContent: string, edits: DatasourceWirin
 }
 
 /**
- * Resolves everything `buildDatasourceWiringEdits` needs from a datasource LUID (and optional
- * field-name filter): access check, published-datasource lookup, effective server/site, and field
- * metadata. Cross-site/cross-server wiring is out of scope — the descriptor's `server`/`site`
+ * Resolves everything `buildDatasourceWiringEdits` needs from a datasource LUID: access check,
+ * published-datasource lookup, effective server/site, and field metadata for every field on the
+ * datasource. Cross-site/cross-server wiring is out of scope — the descriptor's `server`/`site`
  * always reflect the caller's current site/server.
  */
 export async function resolveDatasourceDescriptor({
   datasourceLuid,
-  fieldNames,
   extra,
   productVersion,
 }: {
   datasourceLuid: string;
-  fieldNames?: string[];
   extra: TableauWebRequestHandlerExtra;
   productVersion: ProductVersion;
 }): Promise<Result<DatasourceDescriptor, McpToolError>> {
@@ -293,25 +287,13 @@ export async function resolveDatasourceDescriptor({
     return fieldsResultResult;
   }
 
-  const allFields: WiringField[] = fieldsResultResult.value.fieldGroups.flatMap((group) =>
+  const fields: WiringField[] = fieldsResultResult.value.fieldGroups.flatMap((group) =>
     group.fields.map((field) => ({
       name: field.name ?? '',
       datatype: (field.dataType ?? 'string').toLowerCase(),
       role: field.role?.toUpperCase() === 'MEASURE' ? 'measure' : 'dimension',
     })),
   );
-
-  let fields = allFields;
-  if (fieldNames && fieldNames.length > 0) {
-    const byName = new Map(allFields.map((f) => [f.name, f]));
-    const missing = fieldNames.filter((name) => !byName.has(name));
-    if (missing.length > 0) {
-      return new UnknownDatasourceFieldError(
-        `Unknown field(s) on datasource "${caption}" (${datasourceLuid}): ${missing.join(', ')}.`,
-      ).toErr();
-    }
-    fields = fieldNames.map((name) => byName.get(name)!);
-  }
 
   return new Ok({ caption, repositoryId, site, server, channel, port, fields });
 }

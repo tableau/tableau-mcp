@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
@@ -28,14 +27,7 @@ const paramsSchema = {
     .nonempty()
     .optional()
     .describe(
-      'Optional LUID of a published Tableau datasource on the same site/server to wire into the scaffolded workbook, so the returned data app is already query-ready instead of needing a manual wiring pass. Only wires the same-site/same-server case for a freshly-scaffolded (not already-wired) workbook.',
-    ),
-  fields: z
-    .array(z.string().nonempty())
-    .nonempty()
-    .optional()
-    .describe(
-      'Optional subset of field names (from the datasource named by `datasourceLuid`) to wire into the workbook. Requires `datasourceLuid`. Omit to wire every field on the datasource.',
+      'Optional LUID of a published Tableau datasource on the same site/server to wire into the scaffolded workbook, so the returned data app is already query-ready instead of needing a manual wiring pass. Only wires the same-site/same-server case for a freshly-scaffolded (not already-wired) workbook. Wires every field on the datasource.',
     ),
 };
 
@@ -48,7 +40,7 @@ export const getScaffoldDataAppTool = (
     name: 'scaffold-data-app',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      'Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live via the Extensions API. Provide `datappName`; the tool derives the package id, display name, and author and returns a ready-to-use workspace (a workbook plus an extension package containing manifest.json, index.html, and a src/app.js starter you author the query and visualization into) that is always fully finalized server-side. Optionally provide `datasourceLuid` (and, to narrow it, `fields`) to also wire a published datasource on the same site/server into the workbook, so the returned data app is already query-ready. If S3 storage is configured, the finished workspace is zipped and uploaded, and a short-lived presigned URL to the zip is returned; otherwise the workspace is written to disk on the server and its path is returned. This tool only scaffolds and names the app (and optionally wires a datasource) — it does not author query logic, build, publish, or embed data.',
+      'Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live via the Extensions API. Provide `datappName`; the tool derives the package id, display name, and author and returns a ready-to-use workspace (a workbook plus an extension package containing manifest.json, index.html, and a src/app.js starter you author the query and visualization into) that is always fully finalized server-side. Optionally provide `datasourceLuid` to also wire a published datasource on the same site/server into the workbook (every field on it), so the returned data app is already query-ready. If S3 storage is configured, the finished workspace is zipped and uploaded, and a short-lived presigned URL to the zip is returned; otherwise the workspace is written to disk on the server and its path is returned. This tool only scaffolds and names the app (and optionally wires a datasource) — it does not author query logic, build, publish, or embed data.',
     paramsSchema,
     annotations: {
       title: 'Scaffold Data App',
@@ -60,15 +52,11 @@ export const getScaffoldDataAppTool = (
     disabled: new Provider(
       async () => !(await getFeatureGate().isFeatureEnabled('tableau-data-apps')),
     ),
-    callback: async ({ datappName, datasourceLuid, fields }, extra): Promise<CallToolResult> => {
+    callback: async ({ datappName, datasourceLuid }, extra): Promise<CallToolResult> => {
       return await scaffoldDataAppTool.logAndExecute<DataAppWorkspaceResult>({
         extra,
-        args: { datappName, datasourceLuid, fields },
+        args: { datappName, datasourceLuid },
         callback: async () => {
-          if (fields && !datasourceLuid) {
-            return new ArgsValidationError('fields requires datasourceLuid to be set.').toErr();
-          }
-
           return createDataAppWorkspace({
             datappName,
             username: extra.tableauAuthInfo?.username,
@@ -76,7 +64,6 @@ export const getScaffoldDataAppTool = (
             extra,
             productVersion,
             datasourceLuid,
-            fields,
           });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),

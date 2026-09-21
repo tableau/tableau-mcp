@@ -10,9 +10,8 @@ derives the extension package id, display name, and author and returns a ready-t
 workbook plus an extension package containing `manifest.json`, `index.html`, and a `src/app.js`
 starter you author the query and visualization into.
 
-Optionally, provide `datasourceLuid` (and, to narrow it, `fields`) to also wire a published
-datasource on the same site/server into the workbook, so the returned data app is already
-query-ready.
+Optionally, provide `datasourceLuid` to also wire a published datasource on the same site/server
+into the workbook (every field on it), so the returned data app is already query-ready.
 
 This tool only **scaffolds and names** the app (and, optionally, wires a datasource) — it does not
 author query logic, build, publish, or embed data. Those remain separate steps.
@@ -51,12 +50,8 @@ Example: `Sales Demo` → package id `com.tableau.mcp.sales-demo`
 ### `datasourceLuid`
 
 LUID of a published datasource on the same site/server to wire into the workbook. When provided,
-the tool calls the Tableau REST API to verify access to the datasource and resolve its fields.
-
-### `fields`
-
-Optional subset of field names (from the datasource named by `datasourceLuid`) to wire into the
-workbook. Requires `datasourceLuid`. Omit to wire every field on the datasource.
+the tool calls the Tableau REST API to verify access to the datasource and resolve its fields,
+and wires every field on the datasource into the workbook.
 
 ## Derived values
 

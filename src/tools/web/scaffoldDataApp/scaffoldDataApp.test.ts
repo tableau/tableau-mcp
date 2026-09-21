@@ -48,7 +48,6 @@ describe('getScaffoldDataAppTool', () => {
     expect(tool.paramsSchema).toMatchObject({
       datappName: expect.any(Object),
       datasourceLuid: expect.any(Object),
-      fields: expect.any(Object),
     });
 
     const annotations = await Provider.from(tool.annotations);
@@ -122,14 +121,6 @@ describe('getScaffoldDataAppTool', () => {
       expect(result.content[0].text).toContain('Invalid data app name');
     });
 
-    it('rejects `fields` when `datasourceLuid` is not provided', async () => {
-      const result = await invokeCallback('Sales Demo', { fields: ['Profit'] });
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('fields requires datasourceLuid');
-      expect(mocks.mockResolveDatasourceDescriptor).not.toHaveBeenCalled();
-    });
-
     it('wires the resolved datasource into the workbook when datasourceLuid is given', async () => {
       mocks.mockResolveDatasourceDescriptor.mockResolvedValue(
         new Ok({
@@ -145,7 +136,6 @@ describe('getScaffoldDataAppTool', () => {
 
       const result = await invokeCallback('Sales Demo', {
         datasourceLuid: 'ds-luid-123',
-        fields: ['Profit'],
       });
 
       expect(result.isError).toBeFalsy();
@@ -153,7 +143,7 @@ describe('getScaffoldDataAppTool', () => {
       const payload = JSON.parse(result.content[0].text);
       expect(payload.filePath.endsWith('Sales Demo')).toBe(true);
       expect(mocks.mockResolveDatasourceDescriptor).toHaveBeenCalledWith(
-        expect.objectContaining({ datasourceLuid: 'ds-luid-123', fieldNames: ['Profit'] }),
+        expect.objectContaining({ datasourceLuid: 'ds-luid-123' }),
       );
 
       const twb = await readFile(join(payload.filePath, 'Sales Demo.twb'), 'utf8');
@@ -165,12 +155,12 @@ describe('getScaffoldDataAppTool', () => {
 
 async function invokeCallback(
   datappName: string,
-  extraArgs: { datasourceLuid?: string; fields?: [string, ...string[]] } = {},
+  extraArgs: { datasourceLuid?: string } = {},
 ): Promise<CallToolResult> {
   const tool = getScaffoldDataAppTool(new WebMcpServer(), testProductVersion);
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { datappName, datasourceLuid: extraArgs.datasourceLuid, fields: extraArgs.fields },
+    { datappName, datasourceLuid: extraArgs.datasourceLuid },
     getMockRequestHandlerExtra(),
   );
 }

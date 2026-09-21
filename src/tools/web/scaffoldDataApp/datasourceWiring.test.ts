@@ -258,7 +258,7 @@ describe('resolveDatasourceDescriptor', () => {
     expect(result.value.fields).toHaveLength(2);
   });
 
-  it('returns every field when fieldNames is omitted', async () => {
+  it('returns every field on the datasource', async () => {
     const result = await resolveDatasourceDescriptor({
       datasourceLuid: 'ds-1',
       extra: getMockRequestHandlerExtra(),
@@ -267,31 +267,6 @@ describe('resolveDatasourceDescriptor', () => {
 
     invariant(result.isOk());
     expect(result.value.fields.map((f) => f.name).sort()).toEqual(['Profit', 'Region']);
-  });
-
-  it('filters to the requested fieldNames, preserving caller-requested order', async () => {
-    const result = await resolveDatasourceDescriptor({
-      datasourceLuid: 'ds-1',
-      fieldNames: ['Region', 'Profit'],
-      extra: getMockRequestHandlerExtra(),
-      productVersion: testProductVersion,
-    });
-
-    invariant(result.isOk());
-    expect(result.value.fields.map((f) => f.name)).toEqual(['Region', 'Profit']);
-  });
-
-  it('returns UnknownDatasourceFieldError when a requested field does not exist', async () => {
-    const result = await resolveDatasourceDescriptor({
-      datasourceLuid: 'ds-1',
-      fieldNames: ['Profit', 'Nonexistent'],
-      extra: getMockRequestHandlerExtra(),
-      productVersion: testProductVersion,
-    });
-
-    invariant(result.isErr());
-    expect(result.error.type).toBe('unknown-datasource-field');
-    expect(result.error.message).toContain('Nonexistent');
   });
 
   it('returns DatasourceNotAllowedError when the datasource is outside the bounded context', async () => {

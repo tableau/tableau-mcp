@@ -197,13 +197,12 @@ describe('createDataAppWorkspace', () => {
         extra: getMockRequestHandlerExtra(),
         productVersion: testProductVersion,
         datasourceLuid: 'ds-luid-123',
-        fields: ['Profit'],
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       invariant(result.value.filePath);
       expect(mocks.mockResolveDatasourceDescriptor).toHaveBeenCalledWith(
-        expect.objectContaining({ datasourceLuid: 'ds-luid-123', fieldNames: ['Profit'] }),
+        expect.objectContaining({ datasourceLuid: 'ds-luid-123' }),
       );
 
       const twb = await readFile(join(result.value.filePath, 'Wired Demo.twb'), 'utf8');
@@ -325,12 +324,11 @@ describe('createDataAppWorkspace', () => {
         extra: getMockRequestHandlerExtra(),
         productVersion: testProductVersion,
         datasourceLuid: 'ds-luid-123',
-        fields: ['Profit'],
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       expect(mocks.mockResolveDatasourceDescriptor).toHaveBeenCalledWith(
-        expect.objectContaining({ datasourceLuid: 'ds-luid-123', fieldNames: ['Profit'] }),
+        expect.objectContaining({ datasourceLuid: 'ds-luid-123' }),
       );
 
       const { PutObjectCommand } = await import('@aws-sdk/client-s3');

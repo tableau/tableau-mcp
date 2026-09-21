@@ -337,14 +337,6 @@ export class DataAppTemplateUnavailableError extends McpToolError {
   }
 }
 
-// Thrown by scaffold-data-app when a caller-supplied `fields` name doesn't match any field on the
-// resolved datasource. statusCode 400: bad input.
-export class UnknownDatasourceFieldError extends McpToolError {
-  constructor(message: string) {
-    super({ type: 'unknown-datasource-field', message, statusCode: 400 });
-  }
-}
-
 // Thrown by scaffold-data-app (stdio) when applying the datasource-wiring XML edits to the copied
 // `.twb` fails (missing/already-filled anchor, or the post-wiring invariant check). statusCode 500:
 // a server-side wiring step failed unexpectedly.
