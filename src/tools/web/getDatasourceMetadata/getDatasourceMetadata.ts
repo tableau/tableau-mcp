@@ -13,6 +13,7 @@ import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
+import { Provider } from '../../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ToolRules, WebTool } from '../tool.js';
@@ -120,13 +121,15 @@ export const getGetDatasourceMetadataTool = (
     server,
     name: 'get-datasource-metadata',
     minRequiredRole: SiteRole.VIEWER,
-    description: getResultForTableauVersion({
-      productVersion,
-      mappings: {
-        '2026.3.0': getDatasourceMetadataToolDescription20263,
-        default: getDatasourceMetadataToolDescription,
-      },
-    }),
+    description: new Provider(() =>
+      getResultForTableauVersion({
+        productVersion,
+        mappings: {
+          '2026.3.0': getDatasourceMetadataToolDescription20263,
+          default: getDatasourceMetadataToolDescription,
+        },
+      }),
+    ),
     paramsSchema,
     annotations: {
       title: 'Get Datasource Metadata',
