@@ -16,6 +16,7 @@ import { retry } from '../../utils/retry.js';
  * then add or update the `registrationConditions` property for all the tools the condition should apply to.
  */
 export type RegistrationCondition =
+  | 'RequiresKnowledge'
   | 'RequiresPulse'
   | 'RequiresPulsePremium'
   | 'MissingConditionCheck';
@@ -26,6 +27,7 @@ export type RegistrationCondition =
  */
 export type RegistrationContext = {
   siteRole?: string;
+  isKnowledgeAvailable?: boolean;
   isPulseEnabled?: boolean;
   hasPulsePremium?: boolean;
 };
@@ -56,6 +58,15 @@ export async function checkRegistrationConditions(
 ): Promise<ConditionsCheckResult> {
   for (const condition of conditions) {
     switch (condition) {
+      case 'RequiresKnowledge': {
+        if (context.isKnowledgeAvailable === undefined) {
+          context.isKnowledgeAvailable = await checkKnowledgeAvailable(restApiArgs);
+        }
+        if (!context.isKnowledgeAvailable) {
+          return { registrationConditionsMet: false, failingCondition: 'RequiresKnowledge' };
+        }
+        continue;
+      }
       case 'RequiresPulse': {
         if (context.isPulseEnabled === undefined) {
           context.isPulseEnabled = await checkPulseEnabled(restApiArgs);
@@ -104,6 +115,10 @@ export async function checkRegistrationConditions(
  * that some tools were omitted due to an unmet registration condition.
  */
 const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
+  RequiresKnowledge:
+    'NOTE: Tableau Knowledge tools were omitted because availability could not be confirmed for ' +
+    'this session. If the user asks for Knowledge context, explain that the feature requires ' +
+    'Tableau+ and suggest they contact their Tableau administrator.',
   // Kept generic: Pulse can be unavailable for several reasons (Tableau Server, site setting
   // off, or a user-level preference), and the probe cannot distinguish them cleanly enough to
   // name a single cause here.
@@ -131,6 +146,29 @@ export function getUnmetConditionInstructions(condition: RegistrationCondition):
 
 /** Number of retries for API calls for a condition check (1 initial attempt + {@link MAX_API_RETRY_ATTEMPTS} retries = 3 total attempts). */
 export const MAX_API_RETRY_ATTEMPTS = 2;
+
+/** `listGraphs` is available to every Knowledge read role and succeeds for an entitled empty site. */
+async function checkKnowledgeAvailable(restApiArgs: RestApiArgs): Promise<boolean> {
+  try {
+    return await retry(
+      () =>
+        useRestApi({
+          ...restApiArgs,
+          jwtScopes: ['tableau:knowledge:read'],
+          callback: async (restApi) => {
+            await restApi.knowledgeMethods.listGraphs();
+            return true;
+          },
+        }),
+      {
+        maxRetries: MAX_API_RETRY_ATTEMPTS,
+        retryIf: isRetryableProbeError,
+      },
+    );
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Whether a failed capability probe is worth retrying.
