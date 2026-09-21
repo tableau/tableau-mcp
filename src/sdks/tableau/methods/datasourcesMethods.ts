@@ -3,8 +3,14 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { datasourcesApis } from '../apis/datasourcesApi.js';
+import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
-import { DataSource, PublishedDataSource } from '../types/dataSource.js';
+import {
+  DataSource,
+  PublishedDataSource,
+  PublishedDataSourceResponse,
+  publishedDataSourceResponseSchema,
+} from '../types/dataSource.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
@@ -171,4 +177,76 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
       },
     );
   };
+
+  /**
+   * Publishes a data source on the specified site, committing a file previously uploaded
+   * via `PublishingMethods.uploadFileInChunks`.
+   * Sends a `multipart/mixed` body, which Zodios cannot construct, so this bypasses the
+   * Zodios-typed client and calls the underlying axios instance directly.
+   *
+   * Required scopes: `tableau:datasources:create`
+   *
+   * @param siteId - The Tableau site ID
+   * @param uploadSessionId - The upload session ID returned by `initiateFileUpload`
+   * @param datasourceType - `tds` or `tdsx`, matching the file uploaded to the session
+   * @param name - The name to give the published data source
+   * @param projectId - The ID of the project to publish the data source into
+   * @param overwrite - Whether to overwrite an existing data source with the same name
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#publish_data_source
+   */
+  publishDatasource = async ({
+    siteId,
+    uploadSessionId,
+    datasourceType,
+    name,
+    projectId,
+    overwrite,
+  }: {
+    siteId: string;
+    uploadSessionId: string;
+    datasourceType: 'tds' | 'tdsx';
+    name: string;
+    projectId: string;
+    overwrite?: boolean;
+  }): Promise<PublishedDataSourceResponse> => {
+    const xml =
+      `<tsRequest><datasource name="${escapeXmlAttribute(name)}">` +
+      `<project id="${escapeXmlAttribute(projectId)}"/>` +
+      '</datasource></tsRequest>';
+    const { body, contentType } = buildMultipartMixedBody([
+      { name: 'request_payload', contentType: 'text/xml', data: xml },
+    ]);
+
+    const response = await this._apiClient.axios.post(
+      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/datasources`,
+      body,
+      {
+        params: {
+          uploadSessionId,
+          datasourceType,
+          overwrite,
+        },
+        headers: {
+          'Content-Type': contentType,
+          ...this.authHeader.headers,
+        },
+      },
+    );
+
+    return publishedDataSourceResponseSchema.parse(response.data.datasource);
+  };
+}
+
+function escapeXmlAttribute(value: string): string {
+  return (
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      // Numeric char ref, not the named &apos; - &apos; is a valid XML 1.0 entity but is absent from
+      // the HTML predefined set and the Tableau publish endpoint's parser rejects it (a name like
+      // O'Brien then 400s). &#39; is universally accepted.
+      .replace(/'/g, '&#39;')
+  );
 }
