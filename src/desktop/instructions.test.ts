@@ -138,9 +138,19 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('mark density unverified');
   });
 
-  // Live incident (v11 bundle): asked to move "warmer" onto color, the agent had no route
-  // for an encoding edit. refine-worksheet handles bounded structural refinements, while
-  // the edit-in-place route still has to name the tool pair that can re-encode a sheet.
+  it('recognizes a filter action in the trigger and defers scope detail to knowledge', () => {
+    const guidance = routes.find((route) => route.id === 'dynamic-authoring');
+
+    expect(guidance).toBeDefined();
+    expect(guidance?.trigger).toContain('interactivity on mark interaction');
+    expect(guidance?.trigger).toContain('by selecting or hovering over marks');
+    expect(guidance?.trigger).toContain('selecting a link in a tooltip menu');
+
+    const rendered = renderInstructionEntry(guidance!);
+    expect(rendered).toContain('author-action');
+    expect(rendered).toContain('Before authoring, consult the knowledge docs via search-knowledge');
+  });
+
   it('names add-field then apply-worksheet as the encoding edit path', () => {
     const editInPlace = routes.find((route) => route.id === 'edit-in-place');
 
@@ -207,6 +217,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'list-available-fields',
       'build-worksheets-from-templates',
       'apply-worksheet',
+      'search-knowledge',
     ]);
     expect(dynamicAuthoring?.action).toContain('build-worksheets-from-templates');
   });
