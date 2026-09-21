@@ -100,9 +100,9 @@ export function schemaSummaryFromAvailableFields(fields: AvailableFieldLike[]): 
     return {
       friendlyName: caption ?? bare,
       caption,
-      columnName: f.columnName,
+      name: f.columnName,
       role: f.role === 'measure' ? 'measure' : 'dimension',
-      type: f.type,
+      vizType: f.type,
       datatype: f.datatype ?? '',
       ...(f.semanticRole ? { semanticRole: f.semanticRole } : {}),
       datasource: f.datasource,
@@ -366,7 +366,7 @@ function slotAffinity(slot: SlotSpec, field: SchemaField): number {
 function fieldNameMatchesSlot(field: SchemaField, slot: SlotSpec): boolean {
   if (slot.template_field.includes('{{')) return false;
   const templateFieldName = normalizeComparableName(slot.template_field);
-  return [field.friendlyName, field.caption, bareName(field.columnName)]
+  return [field.friendlyName, field.caption, bareName(field.name)]
     .filter((name): name is string => typeof name === 'string')
     .map(normalizeComparableName)
     .some((name) => name === templateFieldName);
@@ -405,7 +405,7 @@ function resolveSource(raw: string, schema: SchemaSummary): ResolvedSource | Exp
   if (parsed) {
     const matches = schema.fields.filter(
       (f) =>
-        bareName(f.columnName) === parsed.base &&
+        bareName(f.name) === parsed.base &&
         (!parsed.datasource || f.datasource === parsed.datasource),
     );
     if (matches.length === 1) return { raw, field: matches[0] };
@@ -425,7 +425,7 @@ function resolveSource(raw: string, schema: SchemaSummary): ResolvedSource | Exp
   }
 
   const named = schema.fields.filter(
-    (f) => f.friendlyName === raw || f.caption === raw || bareName(f.columnName) === bareName(raw),
+    (f) => f.friendlyName === raw || f.caption === raw || bareName(f.name) === bareName(raw),
   );
   if (named.length === 1) return { raw, field: named[0] };
   if (named.length > 1) {
@@ -465,12 +465,12 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
     case 'quantitative':
       return f.role === 'measure' || f.isAggregated;
     case 'categorical':
-      return f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal');
+      return f.role === 'dimension' && (f.vizType === 'nominal' || f.vizType === 'ordinal');
     case 'quantitative-or-categorical':
       return (
         f.role === 'measure' ||
         f.isAggregated ||
-        (f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal'))
+        (f.role === 'dimension' && (f.vizType === 'nominal' || f.vizType === 'ordinal'))
       );
     case 'temporal':
       return TEMPORAL_DATATYPES.has(f.datatype);
@@ -526,7 +526,7 @@ function emitRawFieldMapping(
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
     mapping[key] =
-      `[${field.datasource}].[${deriv}:${bareName(field.columnName)}:${suffixFor(deriv, field.type, slot.instance_role)}]`;
+      `[${field.datasource}].[${deriv}:${bareName(field.name)}:${suffixFor(deriv, field.vizType, slot.instance_role)}]`;
   }
   return mapping;
 }
@@ -544,7 +544,7 @@ function fieldMetadataFor(
       : slot.template_field;
     metadata[key] = {
       datatype: field.datatype,
-      type: field.type,
+      type: field.vizType,
       ...(field.semanticRole ? { semanticRole: field.semanticRole } : {}),
     };
   }

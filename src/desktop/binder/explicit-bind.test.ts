@@ -19,9 +19,9 @@ function field(p: {
   const datasource = p.datasource ?? 'Superstore';
   return {
     friendlyName: p.name,
-    columnName: `[${p.name}]`,
+    name: `[${p.name}]`,
     role: p.role,
-    type: p.type,
+    vizType: p.type,
     datatype: p.datatype,
     ...(p.semanticRole ? { semanticRole: p.semanticRole } : {}),
     datasource,

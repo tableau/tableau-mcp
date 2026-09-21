@@ -41,9 +41,9 @@ type TemplateManifest = RuntimeTemplateDescriptor;
 interface SchemaField {
   friendlyName: string; // friendly name: caption ?? bare column name
   caption?: string;
-  columnName: string; // bracketed local name, e.g. "[Region]"
+  name: string; // bracketed local name, e.g. "[Region]"
   role: 'dimension' | 'measure';
-  type: string; // "quantitative" | "nominal" | "ordinal" | ...
+  vizType: string; // "quantitative" | "nominal" | "ordinal" | ...
   datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
   semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
   datasource: string;
@@ -752,7 +752,7 @@ function askHasCoordinateOrPointIntent(rawAsk: string, maskedAsk: string): boole
 
 /** Whole-token affinity: does any of the field's names carry one of the coordinate tokens? */
 function fieldHasCoordinateToken(f: SchemaField, tokens: ReadonlySet<string>): boolean {
-  for (const n of [f.friendlyName, f.caption ?? '', bareName(f.columnName)]) {
+  for (const n of [f.friendlyName, f.caption ?? '', bareName(f.name)]) {
     for (const t of nameTokens(n)) if (tokens.has(t)) return true;
   }
   return false;
@@ -834,7 +834,7 @@ function federatedDuplicateBaseName(name: string): string {
 }
 
 function askDirectsFieldToDetail(rawAsk: string, f: SchemaField): boolean {
-  const names = [bareName(f.columnName), f.caption, f.friendlyName].filter(
+  const names = [bareName(f.name), f.caption, f.friendlyName].filter(
     (n): n is string => !!n && n.length > 0,
   );
   return names.some((name) => {
@@ -877,7 +877,7 @@ function pickBestDetailDim(
   maskedAsk: string,
 ): SchemaField | null {
   const scoreOf = (f: SchemaField): number => {
-    const toks = new Set([...nameTokens(f.friendlyName), ...nameTokens(bareName(f.columnName))]);
+    const toks = new Set([...nameTokens(f.friendlyName), ...nameTokens(bareName(f.name))]);
     const isCoarse = [...toks].some((t) => COARSE_GRAIN_TOKENS.has(t));
     let score = 0;
     let askOverlap = false;
@@ -1016,7 +1016,7 @@ function pluralEquivalent(a: string, b: string): boolean {
 function fieldExactNames(fields: SchemaField[]): Set<string> {
   const out = new Set<string>();
   for (const f of fields) {
-    for (const n of [bareName(f.columnName), f.caption, f.friendlyName]) {
+    for (const n of [bareName(f.name), f.caption, f.friendlyName]) {
       if (n && n.length > 0) out.add(n.toLowerCase());
     }
   }
@@ -1143,7 +1143,7 @@ function recommendedRankingDefault(
         field !== measure &&
         field.datasource === measure.datasource &&
         field.role === 'measure' &&
-        field.type === 'quantitative',
+        field.vizType === 'quantitative',
     )
     .map((field, index) => {
       const priority = PROFIT_CAPTION_PATTERNS.some((pattern) =>
@@ -1182,7 +1182,7 @@ function recommendedRankingDefault(
  */
 function acronymExpansionMatch(ask: string, field: SchemaField): number {
   let best = -1;
-  const names = [bareName(field.columnName), field.caption, field.friendlyName].filter(
+  const names = [bareName(field.name), field.caption, field.friendlyName].filter(
     (name): name is string => !!name && name.length > 0,
   );
   for (const name of names) {
@@ -1213,7 +1213,7 @@ function literalFieldMatchesInAsk(ask: string, s: SchemaSummary): FieldMatch[] {
   const exactNames = fieldExactNames(s.fields);
   const hits: FieldMatch[] = [];
   for (const field of s.fields) {
-    const names = [bareName(field.columnName), field.caption, field.friendlyName].filter(
+    const names = [bareName(field.name), field.caption, field.friendlyName].filter(
       (name): name is string => !!name && name.length > 0,
     );
     let best: PhraseMatch | null = null;
@@ -1240,7 +1240,7 @@ function literalFieldMatchesInAsk(ask: string, s: SchemaSummary): FieldMatch[] {
 }
 
 function fieldMatchesCaptionPattern(field: SchemaField, pattern: string): boolean {
-  return [field.friendlyName, field.caption, bareName(field.columnName)].some(
+  return [field.friendlyName, field.caption, bareName(field.name)].some(
     (name) => !!name && phraseIndexInAsk(name, pattern) >= 0,
   );
 }
@@ -1255,7 +1255,7 @@ function normalizeFieldPhrase(value: string): string {
 
 function fieldFullyMatchesCaptionPattern(field: SchemaField, pattern: string): boolean {
   const normalizedPattern = normalizeFieldPhrase(pattern);
-  return [field.friendlyName, field.caption, bareName(field.columnName)].some((name) => {
+  return [field.friendlyName, field.caption, bareName(field.name)].some((name) => {
     if (!name) return false;
     const normalizedName = normalizeFieldPhrase(name);
     return (
@@ -1294,7 +1294,7 @@ function businessSynonymCandidatesInAsk(
       const nounIndex = nounMatch.index;
 
       const literalClaimsNoun = literalHits.some(({ field }) => {
-        const names = [bareName(field.columnName), field.caption, field.friendlyName].filter(
+        const names = [bareName(field.name), field.caption, field.friendlyName].filter(
           (name): name is string => !!name && name.length > 0,
         );
         if (
@@ -1365,7 +1365,7 @@ export function resolveLooseFieldReference(
   if (!normalizedQuery) return { kind: 'not_found', candidates: [] };
 
   const fieldNames = (field: SchemaField): string[] =>
-    [field.friendlyName, field.caption, bareName(field.columnName)]
+    [field.friendlyName, field.caption, bareName(field.name)]
       .filter((name): name is string => !!name)
       .map(normalizeFieldPhrase);
   const exact = s.fields.filter((field) =>
@@ -1453,7 +1453,7 @@ function dimensionHeadCandidatesInAsk(
     // A bare leading token is only a grouping field reference in the explicit
     // "by <dimension-head>" position. Elsewhere it may be ordinary prose or a chart cue.
     const literalClaimsNoun = literalHits.some(({ field }) =>
-      [bareName(field.columnName), field.caption, field.friendlyName]
+      [bareName(field.name), field.caption, field.friendlyName]
         .filter((name): name is string => !!name && name.length > 0)
         .some((name) => {
           const literalMatch = fieldNameMatchInAskSpan(ask, name, exactNames);
@@ -1534,7 +1534,7 @@ interface GrainMeasureMatch {
 
 function fieldNameTokens(field: SchemaField): Set<string> {
   const tokens = new Set<string>();
-  for (const name of [bareName(field.columnName), field.caption, field.friendlyName]) {
+  for (const name of [bareName(field.name), field.caption, field.friendlyName]) {
     if (!name) continue;
     for (const token of normalizeFieldPhrase(name).split(' ')) {
       if (token) tokens.add(token);
@@ -1552,7 +1552,7 @@ function explicitMeasureAtToken(
 ): SchemaField | undefined {
   const ranked = candidates.map((field) => {
     let longest = 0;
-    for (const name of [bareName(field.columnName), field.caption, field.friendlyName]) {
+    for (const name of [bareName(field.name), field.caption, field.friendlyName]) {
       if (!name) continue;
       const match = fieldNameMatchInAskSpan(ask, name, exactNames);
       if (match && match.start <= start && match.end >= end) {
@@ -1663,7 +1663,7 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
   // its sub-names can fragment it.
   const fields = [...s.fields].sort((a, b) => b.friendlyName.length - a.friendlyName.length);
   for (const f of fields) {
-    const names = [bareName(f.columnName), f.caption, f.friendlyName].filter(
+    const names = [bareName(f.name), f.caption, f.friendlyName].filter(
       (n): n is string => !!n && n.length > 0,
     );
     for (const n of names) {
@@ -1737,7 +1737,7 @@ function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
 
 /** Whole-phrase test: does the ask NAME this field (by name, caption, or bare column)? */
 function askNamesField(ask: string, f: SchemaField, exactNames: ReadonlySet<string>): boolean {
-  const names = [bareName(f.columnName), f.caption, f.friendlyName].filter(
+  const names = [bareName(f.name), f.caption, f.friendlyName].filter(
     (n): n is string => !!n && n.length > 0,
   );
   return names.some((n) => fieldNameMatchInAsk(ask, n, exactNames) >= 0);
@@ -1746,7 +1746,7 @@ function askNamesField(ask: string, f: SchemaField, exactNames: ReadonlySet<stri
 /** Normalized content tokens of a field's name/caption/bare column name (for ask overlap). */
 function fieldContentTokens(f: SchemaField): Set<string> {
   const out = new Set<string>();
-  for (const n of [f.friendlyName, f.caption ?? '', bareName(f.columnName)]) {
+  for (const n of [f.friendlyName, f.caption ?? '', bareName(f.name)]) {
     for (const t of contentTokens(n)) out.add(t);
   }
   return out;
@@ -1872,7 +1872,9 @@ function isMeasure(f: SchemaField): boolean {
   return f.role === 'measure' || f.isAggregated;
 }
 function isCategorical(f: SchemaField): boolean {
-  return f.role === 'dimension' && !isTemporal(f) && (f.type === 'nominal' || f.type === 'ordinal');
+  return (
+    f.role === 'dimension' && !isTemporal(f) && (f.vizType === 'nominal' || f.vizType === 'ordinal')
+  );
 }
 
 function shouldExposeFieldIdentity(fields: SchemaField[]): boolean {
@@ -1894,7 +1896,7 @@ function proposeField(
   return {
     name: f.friendlyName,
     role: f.role,
-    type: f.type,
+    type: f.vizType,
     datatype: f.datatype,
     ...(exposeIdentity ? { datasource: f.datasource, column_ref: f.column_ref } : {}),
     ...(grainLabel && f.table ? { table: f.table, label: grainLabel } : {}),
@@ -1997,7 +1999,7 @@ function geoAffinityTokens(slot: TemplateManifest['slots'][number]): Set<string>
 /** Count of a geo slot's affinity tokens that appear as whole tokens in the field's names. */
 function geoAffinityOverlap(f: SchemaField, aff: Set<string>): number {
   const ft = new Set<string>();
-  for (const n of [f.friendlyName, f.caption ?? '', bareName(f.columnName)]) {
+  for (const n of [f.friendlyName, f.caption ?? '', bareName(f.name)]) {
     for (const t of nameTokens(n)) ft.add(t);
   }
   let n = 0;
@@ -2310,7 +2312,7 @@ function roleGreedyBind(
 
   const fieldTokens = (f: SchemaField): Set<string> => {
     const tokens = new Set<string>();
-    for (const name of [f.friendlyName, f.caption ?? '', bareName(f.columnName)]) {
+    for (const name of [f.friendlyName, f.caption ?? '', bareName(f.name)]) {
       for (const token of nameTokens(name)) tokens.add(token);
     }
     return tokens;
@@ -2323,7 +2325,7 @@ function roleGreedyBind(
   ): boolean => {
     if (slot.template_field.includes('{{')) return false;
     const templateFieldName = normalizedName(slot.template_field);
-    return [field.friendlyName, field.caption ?? '', bareName(field.columnName)]
+    return [field.friendlyName, field.caption ?? '', bareName(field.name)]
       .map(normalizedName)
       .some((name) => name === templateFieldName);
   };
@@ -2827,7 +2829,7 @@ function mostSpecificDirectedField(
   if (candidates.length < 2) return candidates[0] ?? null;
   const exactNames = fieldExactNames(summary.fields);
   const ranked = candidates.map((field) => {
-    const matchedNameLengths = [bareName(field.columnName), field.caption, field.friendlyName]
+    const matchedNameLengths = [bareName(field.name), field.caption, field.friendlyName]
       .filter((name): name is string => !!name && name.length > 0)
       .filter((name) => fieldNameMatchInAsk(clause, name, exactNames) >= 0)
       .map((name) => name.length);
@@ -3222,7 +3224,7 @@ function resolveExplicitCorrelationBubble(
 
   const exactNames = fieldExactNames(summary.fields);
   const position = (field: SchemaField): number => {
-    const candidates = [field.friendlyName, field.caption, bareName(field.columnName)]
+    const candidates = [field.friendlyName, field.caption, bareName(field.name)]
       .filter((name): name is string => Boolean(name))
       .map((name) => fieldNameMatchInAsk(ask, name, exactNames))
       .filter((index) => index >= 0);

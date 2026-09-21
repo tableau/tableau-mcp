@@ -26,9 +26,9 @@ function field(p: {
   return {
     friendlyName: p.caption ?? bare,
     caption: p.caption,
-    columnName: p.columnName,
+    name: p.columnName,
     role: p.role,
-    type: p.type,
+    vizType: p.type,
     datatype: p.datatype,
     ...(p.semanticRole ? { semanticRole: p.semanticRole } : {}),
     datasource: ds,

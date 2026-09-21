@@ -33,9 +33,9 @@ function field(
 ): SchemaField {
   return {
     friendlyName: name,
-    columnName: `[${name}]`,
+    name: `[${name}]`,
     role,
-    type,
+    vizType: type,
     datatype,
     ...(semanticRole ? { semanticRole } : {}),
     datasource: 'DS',
@@ -243,7 +243,7 @@ describe('binder/buildLlmInput — field narrowing (stage 2B)', () => {
       fields.map((f) => ({
         name: f.friendlyName,
         role: f.role,
-        type: f.type,
+        type: f.vizType,
         datatype: f.datatype,
       })),
     );

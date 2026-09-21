@@ -6,9 +6,9 @@ function field({ caption, columnName }: { caption?: string; columnName: string }
   return {
     friendlyName: caption ?? bare,
     caption,
-    columnName,
+    name: columnName,
     role: 'measure',
-    type: 'quantitative',
+    vizType: 'quantitative',
     datatype: 'real',
     datasource: 'Superstore',
     isAggregated: false,

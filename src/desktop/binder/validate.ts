@@ -281,7 +281,7 @@ interface Resolution {
 }
 
 function displayName(f: SchemaField): string {
-  return f.caption ?? bareName(f.columnName);
+  return f.caption ?? bareName(f.name);
 }
 
 function numericSuffixParts(name: string): { base: string; suffix: string | null } {
@@ -325,11 +325,11 @@ function exactWithNotes(fields: SchemaField[], field: SchemaField): Resolution {
  */
 function schemaFieldToDomainField(sf: SchemaField): Field {
   const base = {
-    name: sf.columnName as LocalFieldName,
+    name: sf.name as LocalFieldName,
     caption: sf.caption,
     datatype: sf.datatype,
     role: sf.role,
-    vizType: sf.type,
+    vizType: sf.vizType,
     isAggregated: sf.isAggregated,
     defaultDerivation: sf.isAggregated
       ? AggregationType.User
@@ -412,12 +412,12 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
     case 'quantitative':
       return f.role === 'measure' || f.isAggregated;
     case 'categorical':
-      return f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal');
+      return f.role === 'dimension' && (f.vizType === 'nominal' || f.vizType === 'ordinal');
     case 'quantitative-or-categorical':
       return (
         f.role === 'measure' ||
         f.isAggregated ||
-        (f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal'))
+        (f.role === 'dimension' && (f.vizType === 'nominal' || f.vizType === 'ordinal'))
       );
     case 'temporal':
       return TEMPORAL_DATATYPES.has(f.datatype);
@@ -561,7 +561,7 @@ export function validateBinding(
         if (inf) {
           dateparseAxis = {
             templateField: slot.template_field,
-            sourceField: bareName(f.columnName),
+            sourceField: bareName(f.name),
             format: inf.format,
           };
           dateparseAxisSlotId = slotId;
@@ -574,7 +574,7 @@ export function validateBinding(
         slot_id: slotId,
         detail:
           `slot '${slotId}' expects ${slot.kind} but "${fieldQuery}" is ` +
-          `role=${f.role}, type=${f.type}, datatype=${f.datatype}`,
+          `role=${f.role}, type=${f.vizType}, datatype=${f.datatype}`,
       });
       continue;
     }
@@ -742,7 +742,7 @@ export function validateBinding(
       actual &&
       target &&
       actual.datasource === target.datasource &&
-      bareName(actual.columnName) === bareName(target.columnName)
+      bareName(actual.name) === bareName(target.name)
     ) {
       blockers.push({
         code: 'base-column-conflict',
@@ -755,7 +755,7 @@ export function validateBinding(
   }
 
   const identityOf = (field: SchemaField): string =>
-    `${field.datasource}\u0000${bareName(field.columnName)}`;
+    `${field.datasource}\u0000${bareName(field.name)}`;
 
   if (m.template === 'box-plot-chart') {
     const boxFields = [...resolved.values()].map(({ field }) => field);
@@ -1004,7 +1004,7 @@ export function validateBinding(
   const byTemplateField = new Map<string, Set<string>>();
   for (const { slot, field } of resolved.values()) {
     const bases = byTemplateField.get(slot.template_field) ?? new Set<string>();
-    bases.add(bareName(field.columnName));
+    bases.add(bareName(field.name));
     byTemplateField.set(slot.template_field, bases);
   }
   for (const [templateField, bases] of byTemplateField) {
@@ -1028,7 +1028,7 @@ export function validateBinding(
   const fieldsByDatasource = new Map<string, string[]>();
   for (const { field } of resolved.values()) {
     const list = fieldsByDatasource.get(field.datasource) ?? [];
-    list.push(bareName(field.columnName));
+    list.push(bareName(field.name));
     fieldsByDatasource.set(field.datasource, list);
   }
   if (fieldsByDatasource.size > 1) {
@@ -1105,7 +1105,7 @@ export function validateBinding(
     const deriv = f.isAggregated ? 'usr' : effectiveSlotDerivation(slot, f, override);
     // Suffix follows the EFFECTIVE derivation, not the field type alone: a date
     // truncation is continuous (':qk') even on an ordinal date field (P1-3).
-    const suffix = suffixFor(deriv, f.type, slot.instance_role);
+    const suffix = suffixFor(deriv, f.vizType, slot.instance_role);
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
@@ -1114,9 +1114,7 @@ export function validateBinding(
     // five XML metachars EXACTLY ONCE, here at production. The KEY is the manifest's
     // template_field (trusted, shape-validated) and is NOT escaped. Tableau field-ref
     // brackets carry no metachars, so a clean value stays byte-identical.
-    field_mapping[key] = escapeXml(
-      `[${f.datasource}].[${deriv}:${bareName(f.columnName)}:${suffix}]`,
-    );
+    field_mapping[key] = escapeXml(`[${f.datasource}].[${deriv}:${bareName(f.name)}:${suffix}]`);
     if (first) {
       datasource = f.datasource;
       first = false;

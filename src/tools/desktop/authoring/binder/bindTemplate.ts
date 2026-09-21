@@ -355,7 +355,7 @@ function canonicalRefsIn(xml: string): CanonicalColumnRef[] {
 function refMatchesSchemaField(ref: CanonicalColumnRef, field: SchemaField): boolean {
   return (
     ref.datasource.toLowerCase() === field.datasource.toLowerCase() &&
-    ref.localFieldName.toLowerCase() === bareColumnName(field.columnName).toLowerCase()
+    ref.localFieldName.toLowerCase() === bareColumnName(field.name).toLowerCase()
   );
 }
 
@@ -384,15 +384,15 @@ function currencyHeterogeneityCaveat(
     (field) =>
       field.datasource === summedMeasure.datasource &&
       field.role === 'dimension' &&
-      [field.caption, bareColumnName(field.columnName)].some(
+      [field.caption, bareColumnName(field.name)].some(
         (name) => !!name && UNIT_HETEROGENEITY_DIMENSION_RE.test(name),
       ) &&
       !visibleDimensionRefs.some((ref) => refMatchesSchemaField(ref, field)),
   );
   if (!omittedUnitDimension) return '';
 
-  const measureName = summedMeasure.caption ?? bareColumnName(summedMeasure.columnName);
-  const unitName = omittedUnitDimension.caption ?? bareColumnName(omittedUnitDimension.columnName);
+  const measureName = summedMeasure.caption ?? bareColumnName(summedMeasure.name);
+  const unitName = omittedUnitDimension.caption ?? bareColumnName(omittedUnitDimension.name);
   return `Note: [${measureName}] is summed across [${unitName}] without conversion — state this assumption in one line.`;
 }
 
@@ -1783,7 +1783,7 @@ function ensureSortByColumnDependency(
     };
   }
 
-  const columnName = bareColumnName(field.columnName);
+  const columnName = bareColumnName(field.name);
   const columnDeclared = new RegExp(
     `<column\\s[^>]*\\bname=(['"])\\[${columnName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\1`,
   ).test(xml);
@@ -1798,7 +1798,7 @@ function ensureSortByColumnDependency(
     declarations.push(
       `<column datatype='${escapeXmlAttribute(field.datatype)}' name='[${escapeXmlAttribute(
         columnName,
-      )}]' role='${field.role}' type='${escapeXmlAttribute(field.type)}' />`,
+      )}]' role='${field.role}' type='${escapeXmlAttribute(field.vizType)}' />`,
     );
   }
   if (!instanceDeclared) {
@@ -1846,7 +1846,7 @@ function ensureFilterColumnDependency(
     };
   }
 
-  const columnName = bareColumnName(field.columnName);
+  const columnName = bareColumnName(field.name);
   const columnDeclared = new RegExp(
     `<column\\s[^>]*\\bname=(['"])\\[${columnName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\1`,
   ).test(xml);
@@ -1868,7 +1868,7 @@ function ensureFilterColumnDependency(
     declarations.push(
       `<column datatype='${escapeXmlAttribute(field.datatype)}' name='[${escapeXmlAttribute(
         columnName,
-      )}]' role='${field.role}' type='${escapeXmlAttribute(field.type)}' />`,
+      )}]' role='${field.role}' type='${escapeXmlAttribute(field.vizType)}' />`,
     );
   }
   if (!instanceDeclared) {

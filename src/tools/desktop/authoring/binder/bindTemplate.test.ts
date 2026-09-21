@@ -1195,9 +1195,9 @@ describe('bindTemplateTool', () => {
       { length: MAX_CLASSIFIABLE_FIELDS + 1 },
       (_, index) => ({
         friendlyName: index === 0 ? 'Region' : `Field ${index}`,
-        columnName: index === 0 ? '[Region]' : `[Field ${index}]`,
+        name: index === 0 ? '[Region]' : `[Field ${index}]`,
         role: 'dimension',
-        type: 'nominal',
+        vizType: 'nominal',
         datatype: 'string',
         datasource: 'Wide',
         isAggregated: false,
@@ -2450,9 +2450,9 @@ describe('bindTemplateTool', () => {
       datatype: 'string' | 'real',
     ): SchemaField => ({
       friendlyName: name,
-      columnName: `[${name}]`,
+      name: `[${name}]`,
       role,
-      type,
+      vizType: type,
       datatype,
       datasource: 'DS',
       isAggregated: false,

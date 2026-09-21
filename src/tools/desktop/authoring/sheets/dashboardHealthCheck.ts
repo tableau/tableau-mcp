@@ -186,7 +186,7 @@ function projectField(field: SchemaField): Record<string, string> {
     column_ref: field.column_ref,
     datatype: field.datatype,
     role: field.role,
-    type: field.type,
+    type: field.vizType,
   };
 }
 
@@ -304,7 +304,7 @@ export function runDashboardHealthCheck({
       const parsed = parseColumnRef(recordedRef);
       const retypedCandidates = parsed
         ? freshSummary.fields.filter(
-            (f) => f.datasource === parsed.datasource && bareName(f.columnName) === parsed.bare,
+            (f) => f.datasource === parsed.datasource && bareName(f.name) === parsed.bare,
           )
         : [];
       if (retypedCandidates.length > 0) {

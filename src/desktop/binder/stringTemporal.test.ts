@@ -6,9 +6,9 @@ import { inferStringTemporal } from './stringTemporal.js';
 function field(over: Partial<SchemaField>): SchemaField {
   return {
     friendlyName: 'x',
-    columnName: '[x]',
+    name: '[x]',
     role: 'dimension',
-    type: 'nominal',
+    vizType: 'nominal',
     datatype: 'string',
     datasource: 'ds',
     isAggregated: false,

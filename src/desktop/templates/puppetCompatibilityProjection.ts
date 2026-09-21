@@ -129,9 +129,9 @@ function withWaterfallAnchorDefault(
     (field) => field.role === 'dimension' && WATERFALL_ANCHOR_FIELD_RE.test(field.friendlyName),
   );
   if (!anchor) return result;
-  const suffix = anchor.type === 'ordinal' ? 'ok' : 'nk';
+  const suffix = anchor.vizType === 'ordinal' ? 'ok' : 'nk';
   const mapping = escapeXml(
-    `[${anchor.datasource}].[none:${bareColumnName(anchor.columnName)}:${suffix}]`,
+    `[${anchor.datasource}].[none:${bareColumnName(anchor.name)}:${suffix}]`,
   );
   return {
     ...result,

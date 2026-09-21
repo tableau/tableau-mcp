@@ -55,12 +55,12 @@ function fieldFitsKind(kind: SlotKind, f: SchemaField): boolean {
     case 'quantitative':
       return f.role === 'measure' || f.isAggregated;
     case 'categorical':
-      return f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal');
+      return f.role === 'dimension' && (f.vizType === 'nominal' || f.vizType === 'ordinal');
     case 'quantitative-or-categorical':
       return (
         f.role === 'measure' ||
         f.isAggregated ||
-        (f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal'))
+        (f.role === 'dimension' && (f.vizType === 'nominal' || f.vizType === 'ordinal'))
       );
     case 'temporal':
       return TEMPORAL_DATATYPES.has(f.datatype);

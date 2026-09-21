@@ -102,7 +102,7 @@ function enrichSemanticRoles(input: CoreLlmProposeInput, summary: SchemaSummary)
   const ambiguous = new Set<string>();
 
   for (const f of summary.fields) {
-    const key = fieldIdentityKey(f.friendlyName, f.role, f.type, f.datatype);
+    const key = fieldIdentityKey(f.friendlyName, f.role, f.vizType, f.datatype);
     if (semanticRoleByField.has(key) && semanticRoleByField.get(key) !== f.semanticRole) {
       ambiguous.add(key);
       continue;

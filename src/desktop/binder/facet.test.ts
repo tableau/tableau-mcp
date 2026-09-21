@@ -31,9 +31,9 @@ function field(
 ): SchemaField {
   return {
     friendlyName: name,
-    columnName: `[${name}]`,
+    name: `[${name}]`,
     role,
-    type,
+    vizType: type,
     datatype,
     datasource: 'DS',
     isAggregated: role === 'measure',

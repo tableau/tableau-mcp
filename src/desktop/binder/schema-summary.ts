@@ -18,15 +18,15 @@ import { listAvailableFields } from '../metadata/field-builder.js';
 /**
  * One field from the workbook's datasources, projected to just what the binder
  * and the small-LLM contract need. `friendlyName` is the human-friendly identifier
- * (caption when present, else the bare column name); `columnName` keeps the
- * bracketed local name used to build the column-instance VALUE.
+ * (caption when present, else the bare column name); `name` keeps the bracketed
+ * local name used to build the column-instance VALUE.
  */
 export interface SchemaField {
   friendlyName: string; // friendly name: caption ?? bare column name
   caption?: string;
-  columnName: string; // bracketed local name, e.g. "[Region]"
+  name: string; // bracketed local name, e.g. "[Region]"
   role: 'dimension' | 'measure';
-  type: string; // "quantitative" | "nominal" | "ordinal" | ...
+  vizType: string; // "quantitative" | "nominal" | "ordinal" | ...
   datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
   semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
   datasource: string;
@@ -73,9 +73,9 @@ export function summarizeSchema(workbookXml: string, scopeDatasource?: string): 
     return {
       friendlyName: caption ?? bare,
       caption,
-      columnName: f.columnName,
+      name: f.columnName,
       role,
-      type: f.type,
+      vizType: f.type,
       datatype: f.datatype ?? '',
       semanticRole: f.semanticRole,
       datasource: f.datasource,

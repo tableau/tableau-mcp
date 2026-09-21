@@ -1390,9 +1390,9 @@ describe('binder/schema width cap', () => {
       datasource: 'Big',
       fields: Array.from({ length: count }, (_, index) => ({
         friendlyName: `F${index}`,
-        columnName: `[F${index}]`,
+        name: `[F${index}]`,
         role: 'measure' as const,
-        type: 'quantitative',
+        vizType: 'quantitative',
         datatype: 'real',
         datasource: 'Big',
         isAggregated: false,

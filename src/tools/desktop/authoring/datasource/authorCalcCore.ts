@@ -807,9 +807,7 @@ function resolveLooseFormulaReferences(
 
     const resolution = resolveLooseFieldReference(token, schema);
     if (resolution.kind === 'resolved') {
-      return renderFieldReference(
-        resolution.field.caption ?? bareName(resolution.field.columnName),
-      );
+      return renderFieldReference(resolution.field.caption ?? bareName(resolution.field.name));
     }
 
     if (!error) {
@@ -889,9 +887,10 @@ function renderFieldReference(token: string): string {
 }
 
 function formatFieldCandidates(fields: SchemaField[]): string {
-  const names = [
-    ...new Set(fields.map((field) => field.caption ?? bareName(field.columnName))),
-  ].slice(0, 3);
+  const names = [...new Set(fields.map((field) => field.caption ?? bareName(field.name)))].slice(
+    0,
+    3,
+  );
   return names.length > 0 ? ` <one of: ${names.join(', ')}>` : '';
 }
 
