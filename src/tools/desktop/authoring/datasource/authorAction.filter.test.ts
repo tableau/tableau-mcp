@@ -762,8 +762,6 @@ describe('authorActionTool (filter mode)', () => {
   });
 
   it('rejects a worksheet that is not on the supplied source dashboard', async () => {
-    // Both names are individually valid — 'Profit' is a real worksheet and 'Overview' is a real
-    // dashboard — but 'Overview' only hosts 'Details', so no mark on it can fire the action.
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         mode: 'filter',
@@ -779,6 +777,26 @@ describe('authorActionTool (filter mode)', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('is not on dashboard "Overview"');
     expect(result.content[0].text).toContain('Details');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a combined source when the source dashboard declares no zones', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Unverifiable Source',
+        sourceWorksheet: 'Profit',
+        sourceDashboard: 'Overview',
+        targetSheet: 'Details',
+      },
+      initialXml: DASHBOARD_WITHOUT_ZONES,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'sourceDashboard "Overview" has no zones but sourceWorksheet "Profit" was passed.',
+    );
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 

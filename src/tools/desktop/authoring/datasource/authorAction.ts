@@ -349,11 +349,18 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               ).toErr();
             }
 
-            const sourceZoneNames = findDashboardZoneNames(liveXml, effectiveSourceDashboard);
-            // Verify that the source worksheet is on the source dashboard.
+            // Verify that the source worksheet is on the source dashboard. A dashboard that
+            // declares no worksheet zones leaves membership uninspectable, so reject rather than
+            // emit a combined source whose worksheet may not be on the dashboard.
             if (hasSourceWorksheet && hasSourceDashboard) {
-              if (sourceZoneNames !== undefined && !sourceZoneNames.has(effectiveSourceSheet)) {
-                const members = [...sourceZoneNames].filter((name) => worksheetNames.has(name));
+              const sourceZoneNames = findDashboardZoneNames(liveXml, effectiveSourceDashboard);
+              if (sourceZoneNames === undefined) {
+                return new ArgsValidationError(
+                  `sourceDashboard "${effectiveSourceDashboard}" has no zones but sourceWorksheet "${effectiveSourceSheet}" was passed.`,
+                ).toErr();
+              }
+              const members = [...sourceZoneNames].filter((name) => worksheetNames.has(name));
+              if (!members.includes(effectiveSourceSheet)) {
                 return new ArgsValidationError(
                   `sourceWorksheet "${effectiveSourceSheet}" is not on dashboard "${effectiveSourceDashboard}". Worksheets on "${effectiveSourceDashboard}": ${members.length > 0 ? members.join(', ') : 'none'}. Pass a worksheet that is on the dashboard, or omit sourceDashboard to scope the action to the worksheet.`,
                 ).toErr();
