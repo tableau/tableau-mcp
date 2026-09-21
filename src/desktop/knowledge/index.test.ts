@@ -1,11 +1,9 @@
 import { join, sep } from 'path';
 
 vi.mock('fs');
-vi.mock('../../utils/getDirname.js');
 
-import { Dirent, existsSync, readdirSync, readFileSync } from 'fs';
+import { Dirent, readdirSync, readFileSync } from 'fs';
 
-import { getDirname } from '../../utils/getDirname.js';
 import {
   _resetKnowledgeSearchCache,
   clearKnowledgeCache,
@@ -14,8 +12,10 @@ import {
   searchKnowledgeWithFallback,
 } from './index.js';
 
-const MOCK_ROOT = join('/', 'mock');
-const KNOWLEDGE_DIR = join(MOCK_ROOT, 'resources', 'desktop', 'knowledge');
+// Knowledge is served only from external roots (TABLEAU_KNOWLEDGE_DIR). The fs mock below
+// stands in for one such root; each test declares the files it contains by absolute path.
+const KNOWLEDGE_ROOT = join('/', 'mock', 'knowledge');
+const ORIGINAL_KNOWLEDGE_DIR = process.env.TABLEAU_KNOWLEDGE_DIR;
 
 function makeDirent(name: string, isDir: boolean): Dirent {
   return {
@@ -26,8 +26,6 @@ function makeDirent(name: string, isDir: boolean): Dirent {
 }
 
 function setupFsMock(files: Record<string, string>): void {
-  vi.mocked(getDirname).mockReturnValue(MOCK_ROOT);
-  vi.mocked(existsSync).mockImplementation((p) => String(p) === KNOWLEDGE_DIR);
   vi.mocked(readdirSync).mockImplementation(((dir: unknown) => {
     const prefix = String(dir);
     const children = new Set<string>();
@@ -57,14 +55,23 @@ describe('knowledge/index', () => {
     vi.clearAllMocks();
     clearKnowledgeCache();
     _resetKnowledgeSearchCache();
+    process.env.TABLEAU_KNOWLEDGE_DIR = KNOWLEDGE_ROOT;
+  });
+
+  afterEach(() => {
+    if (ORIGINAL_KNOWLEDGE_DIR === undefined) {
+      delete process.env.TABLEAU_KNOWLEDGE_DIR;
+    } else {
+      process.env.TABLEAU_KNOWLEDGE_DIR = ORIGINAL_KNOWLEDGE_DIR;
+    }
   });
 
   describe('listKnowledgeResources', () => {
     it('returns resources with correct URIs', () => {
       setupFsMock({
-        [join(KNOWLEDGE_DIR, 'strategy', 'viz-design', 'chart-selection.md')]:
+        [join(KNOWLEDGE_ROOT, 'strategy', 'viz-design', 'chart-selection.md')]:
           '# Chart Selection\nPick the right chart.',
-        [join(KNOWLEDGE_DIR, 'tactics', 'viz', 'filters.md')]: '# Filters\nHow to use filters.',
+        [join(KNOWLEDGE_ROOT, 'tactics', 'viz', 'filters.md')]: '# Filters\nHow to use filters.',
       });
 
       const resources = listKnowledgeResources();
@@ -76,17 +83,23 @@ describe('knowledge/index', () => {
       ]);
     });
 
-    it('throws an explicit asset-root error when the corpus is empty', () => {
+    it('returns [] when no knowledge root is configured', () => {
+      // No external root → empty corpus, not an error.
+      delete process.env.TABLEAU_KNOWLEDGE_DIR;
       setupFsMock({});
 
-      expect(() => listKnowledgeResources()).toThrow(
-        `Knowledge corpus is empty; expected assets under ${KNOWLEDGE_DIR}`,
-      );
+      expect(listKnowledgeResources()).toEqual([]);
+    });
+
+    it('returns [] when the configured root has no modules', () => {
+      setupFsMock({});
+
+      expect(listKnowledgeResources()).toEqual([]);
     });
 
     it('extracts name from h1 heading', () => {
       setupFsMock({
-        [join(KNOWLEDGE_DIR, 'test.md')]: '# My Resource\nDescription here.',
+        [join(KNOWLEDGE_ROOT, 'test.md')]: '# My Resource\nDescription here.',
       });
 
       const [resource] = listKnowledgeResources();
@@ -95,7 +108,7 @@ describe('knowledge/index', () => {
 
     it('extracts description from first non-heading text line', () => {
       setupFsMock({
-        [join(KNOWLEDGE_DIR, 'test.md')]: '# Title\n\nFirst paragraph.',
+        [join(KNOWLEDGE_ROOT, 'test.md')]: '# Title\n\nFirst paragraph.',
       });
 
       const [resource] = listKnowledgeResources();
@@ -103,7 +116,7 @@ describe('knowledge/index', () => {
     });
 
     it('caches results across calls', () => {
-      setupFsMock({ [join(KNOWLEDGE_DIR, 'test.md')]: '# Test\nContent.' });
+      setupFsMock({ [join(KNOWLEDGE_ROOT, 'test.md')]: '# Test\nContent.' });
 
       listKnowledgeResources();
       listKnowledgeResources();
@@ -115,7 +128,7 @@ describe('knowledge/index', () => {
   describe('readKnowledgeResource', () => {
     it('returns content for a valid URI', () => {
       setupFsMock({
-        [join(KNOWLEDGE_DIR, 'strategy', 'viz-design', 'chart-selection.md')]:
+        [join(KNOWLEDGE_ROOT, 'strategy', 'viz-design', 'chart-selection.md')]:
           '# Chart Selection\nContent.',
       });
 
@@ -149,12 +162,13 @@ describe('knowledge/index', () => {
   });
 
   describe('searchKnowledgeWithFallback', () => {
-    it('throws an explicit asset-root error when the search index is empty', () => {
+    it('returns no hits when the corpus is empty', () => {
       setupFsMock({});
 
-      expect(() => searchKnowledgeWithFallback('chart choice', 3)).toThrow(
-        `Knowledge corpus is empty; expected assets under ${KNOWLEDGE_DIR}`,
-      );
+      const result = searchKnowledgeWithFallback('chart choice', 3);
+
+      expect(result.hits).toEqual([]);
+      expect(result).not.toHaveProperty('topHitBody');
     });
 
     it('includes the only matching module body within the payload cap', () => {
@@ -165,7 +179,7 @@ describe('knowledge/index', () => {
         '## When to Use',
         'Use this for margin calculations.',
       ].join('\n');
-      setupFsMock({ [join(KNOWLEDGE_DIR, 'margin-calculation.md')]: body });
+      setupFsMock({ [join(KNOWLEDGE_ROOT, 'margin-calculation.md')]: body });
 
       const result = searchKnowledgeWithFallback('margin calculation', 5);
 
@@ -182,8 +196,8 @@ describe('knowledge/index', () => {
         'Use this for margin calculations.',
       ].join('\n');
       setupFsMock({
-        [join(KNOWLEDGE_DIR, 'alpha.md')]: `# Alpha\n${sharedMetadata}`,
-        [join(KNOWLEDGE_DIR, 'beta.md')]: `# Beta\n${sharedMetadata}`,
+        [join(KNOWLEDGE_ROOT, 'alpha.md')]: `# Alpha\n${sharedMetadata}`,
+        [join(KNOWLEDGE_ROOT, 'beta.md')]: `# Beta\n${sharedMetadata}`,
       });
 
       const result = searchKnowledgeWithFallback('margin calculation', 5);
@@ -202,8 +216,8 @@ describe('knowledge/index', () => {
         'Use this for margin calculations.',
       ].join('\n');
       setupFsMock({
-        [join(KNOWLEDGE_DIR, 'margin-calculation.md')]: topBody,
-        [join(KNOWLEDGE_DIR, 'margin-overview.md')]:
+        [join(KNOWLEDGE_ROOT, 'margin-calculation.md')]: topBody,
+        [join(KNOWLEDGE_ROOT, 'margin-overview.md')]:
           '# Margin Overview\n- Relevant user prompts/search terms: margin',
       });
 
@@ -224,7 +238,7 @@ describe('knowledge/index', () => {
         '',
         'x'.repeat(7_000),
       ].join('\n');
-      setupFsMock({ [join(KNOWLEDGE_DIR, 'margin-calculation.md')]: body });
+      setupFsMock({ [join(KNOWLEDGE_ROOT, 'margin-calculation.md')]: body });
 
       const result = searchKnowledgeWithFallback('margin calculation', 5);
 

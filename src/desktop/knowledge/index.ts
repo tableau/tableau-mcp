@@ -1,18 +1,12 @@
 import Fuse from 'fuse.js';
 
-import { getConfiguredKnowledgeDir, listKnowledgeSlugs, readKnowledgeBySlug } from '../assets.js';
+import { listKnowledgeSlugs, readKnowledgeBySlug } from '../assets.js';
 
 export interface KnowledgeResource {
   uri: string;
   name: string;
   description: string;
   mimeType: 'text/markdown';
-}
-
-function knowledgeCorpusEmptyError(): Error {
-  return new Error(
-    `Knowledge corpus is empty; expected assets under ${getConfiguredKnowledgeDir()}`,
-  );
 }
 
 export function getKnowledgeCorpusEntryCount(): number {
@@ -39,7 +33,8 @@ let _cache: KnowledgeResource[] | null = null;
 export function listKnowledgeResources(): KnowledgeResource[] {
   if (_cache) return _cache;
   const slugs = listKnowledgeSlugs();
-  if (slugs.length === 0) throw knowledgeCorpusEmptyError();
+  // No external knowledge root configured → empty corpus, not an error.
+  if (slugs.length === 0) return [];
 
   _cache = slugs.map((slug) => {
     const content = readKnowledgeBySlug(slug);
@@ -269,8 +264,7 @@ function buildKnowledgeIndex(): KnowledgeDoc[] {
     });
   }
 
-  if (docs.length === 0) throw knowledgeCorpusEmptyError();
-
+  // An empty corpus (no external knowledge root) yields an empty index, not an error.
   docs.sort((a, b) => a.slug.localeCompare(b.slug));
   _knowledgeDocs = docs;
   return docs;

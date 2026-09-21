@@ -310,8 +310,11 @@ export class DesktopMcpServer extends Server {
     if (!this.knowledgeCorpusChecked) {
       this.knowledgeCorpusChecked = true;
       if (getKnowledgeCorpusEntryCount() === 0) {
+        const configuredDir = getConfiguredKnowledgeDir();
         log({
-          message: `Knowledge corpus is empty; expected assets under ${getConfiguredKnowledgeDir()}`,
+          message: configuredDir
+            ? `Knowledge corpus is empty; expected assets under ${configuredDir}`
+            : 'Knowledge corpus is empty; set TABLEAU_KNOWLEDGE_DIR to a knowledge root to serve one',
           level: 'warning',
           logger: 'DesktopMcpServer',
         });
@@ -438,7 +441,8 @@ export class DesktopMcpServer extends Server {
     this.registerResource({
       name: 'tableau-expertise-knowledge',
       title: 'Tableau authoring knowledge',
-      description: 'Expertise modules scanned from resources/desktop/knowledge',
+      description:
+        'Expertise modules scanned from the configured knowledge root (TABLEAU_KNOWLEDGE_DIR)',
       template,
       readTemplateCallback: (uri, variables) => {
         const slug = variables['slug'];
