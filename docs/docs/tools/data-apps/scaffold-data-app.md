@@ -42,8 +42,7 @@ Example: `Sales Demo` → package id `com.tableau.mcp.sales-demo`
 ## Derived values
 
 From `datappName` (and the authenticated user's username, when available) the tool derives the
-following identity, which it applies to the workspace — substituted into the files on disk for
-`stdio`, and carried in the `postUnzip` plan for `http`:
+following identity, which it substitutes into the workspace files server-side (both output modes):
 
 - **package id**: `com.tableau.mcp.<slug(datappName)>` — lowercase, non-alphanumeric runs collapsed
   to a single hyphen.
@@ -53,24 +52,21 @@ following identity, which it applies to the workspace — substituted into the f
 
 ## Response behavior
 
-The result is a single object; which delivery field is set depends on the server's transport:
+The result is a single object; the workspace is always fully finalized server-side (identity
+tokens substituted, files renamed to their final names, and — if `datasourceLuid` was given — the
+datasource wired in). Which delivery field is set depends on whether S3 storage is configured:
 
-- **Local (`stdio`)**: the workspace is written to disk under the server-controlled
-  [`DATA_APP_WORKSPACE_ROOT`](../../configuration/mcp-config/env-vars.md#data_app_workspace_root),
-  with identity tokens substituted and files renamed to their final names. The result reports the
-  workspace `filePath` (and no `postUnzip` plan). An existing workspace of the same name is never
+- **[`MCP_S3_BUCKET`](../../configuration/mcp-config/env-vars.md#mcp_s3_bucket) configured**: the
+  tool zips the finished workspace and uploads it to S3, returning a short-lived presigned `s3URL`
+  to the zip. Download and unzip it — there is nothing left to substitute or rename.
+
+- **Otherwise (or if the S3 upload fails)**: the workspace is written to disk under the
+  server-controlled
+  [`DATA_APP_WORKSPACE_ROOT`](../../configuration/mcp-config/env-vars.md#data_app_workspace_root).
+  The result reports the workspace `filePath`. An existing workspace of the same name is never
   overwritten (the tool errors instead).
 
-- **Remote (`http`)**: the template zip is published to S3 out of band; the tool returns a
-  short-lived presigned `s3URL` for that object
-  (see [`DATA_APP_TEMPLATE_S3_KEY`](../../configuration/mcp-config/env-vars.md#data_app_template_s3_key))
-  plus a `postUnzip` plan. The client downloads and unzips the archive, then applies the plan:
-  first every `edits` entry (a literal find/replace on the file at `file`), then the `renames` in
-  order. The tool itself neither uploads nor downloads the zip. Requires
-  [`MCP_S3_BUCKET`](../../configuration/mcp-config/env-vars.md#mcp_s3_bucket) and
-  `DATA_APP_TEMPLATE_S3_KEY` to be configured.
-
-## Example result (local / `stdio`)
+## Example result (disk output)
 
 ```json
 {
@@ -79,39 +75,11 @@ The result is a single object; which delivery field is set depends on the server
 }
 ```
 
-## Example result (remote / `http`)
+## Example result (S3 output)
 
 ```json
 {
   "datappName": "Sales Demo",
-  "s3URL": "https://example-bucket.s3.amazonaws.com/...presigned...",
-  "postUnzip": {
-    "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",
-    "edits": [
-      {
-        "file": "Data App Name/Packages/PackageId/manifest.json",
-        "replacements": [
-          { "find": "com.example.name", "replace": "com.tableau.mcp.sales-demo" },
-          { "find": "<TODO Name>", "replace": "Sales Demo" },
-          { "find": "<TODO Username> via Tableau MCP", "replace": "jdoe via Tableau MCP" }
-        ]
-      },
-      {
-        "file": "Data App Name/Packages/PackageId/extensions/data-app.trex",
-        "replacements": [
-          { "find": "<TODO-manifest-id>", "replace": "com.tableau.mcp.sales-demo" },
-          { "find": "<TODO Username> via Tableau MCP", "replace": "jdoe via Tableau MCP" }
-        ]
-      }
-    ],
-    "renames": [
-      {
-        "from": "Data App Name/Packages/PackageId",
-        "to": "Data App Name/Packages/com.tableau.mcp.sales-demo"
-      },
-      { "from": "Data App Name/Data App Name.twb", "to": "Data App Name/Sales Demo.twb" },
-      { "from": "Data App Name", "to": "Sales Demo" }
-    ]
-  }
+  "s3URL": "https://example-bucket.s3.amazonaws.com/...presigned..."
 }
 ```

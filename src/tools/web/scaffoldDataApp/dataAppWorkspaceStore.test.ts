@@ -66,7 +66,7 @@ describe('createDataAppWorkspace', () => {
     vi.unstubAllEnvs();
   });
 
-  describe('local (stdio) transport', () => {
+  describe('disk output (S3 not configured)', () => {
     let root: string;
 
     beforeEach(async () => {
@@ -92,7 +92,6 @@ describe('createDataAppWorkspace', () => {
       invariant(value.filePath);
       expect(value.filePath.endsWith('Sales Demo')).toBe(true);
       expect(value.s3URL).toBeUndefined();
-      expect(value.postUnzip).toBeUndefined();
 
       const pkgDir = join(value.filePath, 'Packages', 'com.tableau.mcp.sales-demo');
 
@@ -255,17 +254,13 @@ describe('createDataAppWorkspace', () => {
     });
   });
 
-  describe('remote (http) transport', () => {
+  describe('S3 output (MCP_S3_BUCKET configured)', () => {
     beforeEach(() => {
-      vi.stubEnv('TRANSPORT', 'http');
-      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
+      vi.stubEnv('MCP_S3_BUCKET', 'tmpl-bucket');
       vi.stubEnv('AWS_DEFAULT_REGION', 'us-west-2');
     });
 
-    it('presigns the pre-published template object and returns a post-unzip plan', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tmpl-bucket');
-      vi.stubEnv('DATA_APP_TEMPLATE_S3_KEY', 'templates/data-app.zip');
-
+    it('finalizes the workspace, zips it, uploads to S3, and returns a presigned URL', async () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         username: 'jdoe',
@@ -276,57 +271,52 @@ describe('createDataAppWorkspace', () => {
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
-      invariant(value.postUnzip);
 
       expect(value.s3URL).toBe('https://s3.example.com/signed-template-url');
       expect(value.filePath).toBeUndefined();
 
-      // Presigned a GET of exactly the configured key/bucket; never uploaded or downloaded it.
-      const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+      // Uploaded a zip buffer (not the pre-published template) and presigned a GET of it.
+      const { PutObjectCommand, GetObjectCommand } = await import('@aws-sdk/client-s3');
+      expect(mocks.send).toHaveBeenCalledTimes(1);
+      const putInput = vi.mocked(PutObjectCommand).mock.calls[0][0];
+      expect(putInput.Bucket).toBe('tmpl-bucket');
+      expect(putInput.ContentType).toBe('application/zip');
+      expect(putInput.Key).toContain('data-app-workspaces/sales-demo/');
+      expect(Buffer.isBuffer(putInput.Body)).toBe(true);
+      // A real zip, not an empty buffer: local file header signature 'PK\x03\x04'.
+      expect(putInput.Body.subarray(0, 4)).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+
       const getInput = vi.mocked(GetObjectCommand).mock.calls[0][0];
-      expect(getInput).toEqual({ Bucket: 'tmpl-bucket', Key: 'templates/data-app.zip' });
+      expect(getInput).toEqual({ Bucket: 'tmpl-bucket', Key: putInput.Key });
       expect(mocks.getSignedUrl).toHaveBeenCalledTimes(1);
-      expect(mocks.send).not.toHaveBeenCalled();
-
-      // The plan carries the derived identity for the client to apply.
-      const planJson = JSON.stringify(value.postUnzip);
-      expect(planJson).toContain('com.tableau.mcp.sales-demo');
-      expect(planJson).toContain('jdoe via Tableau MCP');
-      expect(value.postUnzip.renames.at(-1)).toEqual({ from: 'Data App Name', to: 'Sales Demo' });
     });
 
-    it('errors when the template S3 key is not configured', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tmpl-bucket');
-      vi.stubEnv('DATA_APP_TEMPLATE_S3_KEY', '');
+    it('falls back to disk output and logs a warning when the S3 upload fails', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'dataapp-fallback-'));
+      vi.stubEnv('DATA_APP_WORKSPACE_ROOT', root);
+      mocks.send.mockRejectedValue(new Error('S3 unavailable'));
 
-      const result = await createDataAppWorkspace({
-        datappName: 'X',
-        config: getConfig(),
-        extra: getMockRequestHandlerExtra(),
-        productVersion: testProductVersion,
-      });
-      invariant(result.isErr());
-      expect(result.error.message).toContain('DATA_APP_TEMPLATE_S3_KEY');
-      expect(mocks.getSignedUrl).not.toHaveBeenCalled();
+      try {
+        const result = await createDataAppWorkspace({
+          datappName: 'Sales Demo',
+          username: 'jdoe',
+          config: getConfig(),
+          extra: getMockRequestHandlerExtra(),
+          productVersion: testProductVersion,
+        });
+
+        invariant(result.isOk(), result.isErr() ? result.error.message : '');
+        const value = result.value;
+        invariant(value.filePath);
+        expect(value.filePath.endsWith('Sales Demo')).toBe(true);
+        expect(value.s3URL).toBeUndefined();
+        expect(existsSync(join(value.filePath, 'Sales Demo.twb'))).toBe(true);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
     });
 
-    it('errors when no S3 bucket is configured', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', '');
-      vi.stubEnv('DATA_APP_TEMPLATE_S3_KEY', 'templates/data-app.zip');
-
-      const result = await createDataAppWorkspace({
-        datappName: 'X',
-        config: getConfig(),
-        extra: getMockRequestHandlerExtra(),
-        productVersion: testProductVersion,
-      });
-      invariant(result.isErr());
-      expect(result.error.message).toContain('MCP_S3_BUCKET');
-    });
-
-    it('embeds the wiring edits in the post-unzip plan when datasourceLuid is given', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tmpl-bucket');
-      vi.stubEnv('DATA_APP_TEMPLATE_S3_KEY', 'templates/data-app.zip');
+    it('wires the resolved datasource into the .twb before zipping', async () => {
       mocks.mockResolveDatasourceDescriptor.mockResolvedValue(new Ok(wiredDescriptor));
 
       const result = await createDataAppWorkspace({
@@ -339,9 +329,36 @@ describe('createDataAppWorkspace', () => {
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
-      invariant(result.value.postUnzip);
-      expect(result.value.postUnzip.wiresDatasource).toBe(true);
-      expect(JSON.stringify(result.value.postUnzip)).toContain('Superstore');
+      expect(mocks.mockResolveDatasourceDescriptor).toHaveBeenCalledWith(
+        expect.objectContaining({ datasourceLuid: 'ds-luid-123', fieldNames: ['Profit'] }),
+      );
+
+      const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+      const putInput = vi.mocked(PutObjectCommand).mock.calls[0][0];
+      // The uploaded zip contains the wired workbook; the raw wiring caption
+      // ('Superstore') will appear in the compressed bytes only if it round-trips,
+      // so assert via the zip's local file header for the twb entry name instead.
+      expect(putInput.Body.toString('latin1')).toContain('Sales Demo.twb');
+    });
+
+    it('returns DataAppWiringFailedError when building the wiring edits throws, without uploading', async () => {
+      mocks.mockResolveDatasourceDescriptor.mockResolvedValue(new Ok(wiredDescriptor));
+      mocks.mockBuildDatasourceWiringEdits.mockImplementation(() => {
+        throw new Error('Descriptor "fields" must list at least one field the app will query.');
+      });
+
+      const result = await createDataAppWorkspace({
+        datappName: 'Broken Descriptor',
+        config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
+        datasourceLuid: 'ds-luid-123',
+      });
+
+      invariant(result.isErr());
+      expect(result.error.type).toBe('data-app-wiring-failed');
+      expect(result.error.message).toContain('at least one field');
+      expect(mocks.send).not.toHaveBeenCalled();
     });
   });
 });

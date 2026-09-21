@@ -200,9 +200,9 @@ ${viewColumnInstances}
  * Applies the two wiring blocks to an on-disk `.twb`'s content via two sequential
  * first-occurrence replacements of the literal `<datasources />` anchor (root, then view), then
  * verifies the connection name appears at least 4 times (root datasource name, root relation
- * connection, view datasource name, datasource-dependencies datasource). Used only by the local
- * (stdio) transport path — the remote (http) path instead embeds these blocks in the returned
- * `postUnzip` plan for the client to apply.
+ * connection, view datasource name, datasource-dependencies datasource). Used by
+ * `finalizeTemplateFiles` for both output modes (disk and S3), since both finalize the workspace
+ * server-side.
  */
 export function applyDatasourceWiring(twbContent: string, edits: DatasourceWiringEdits): string {
   const { connectionName, rootDatasourceXml, viewDatasourceXml } = edits;
