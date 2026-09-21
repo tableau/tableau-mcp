@@ -30,6 +30,7 @@ import { getRecordEventTool } from './recordEvent/recordEvent.js';
 import { getRenderInteractiveVizTool } from './renderInteractiveViz/renderInteractiveViz.js';
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
+import { getScaffoldDataAppTool } from './scaffoldDataApp/scaffoldDataApp.js';
 import { getListUsersTool } from './users/listUsers.js';
 import { getUpdateUserTool } from './users/updateUser.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
@@ -92,4 +93,5 @@ export const webToolFactories = [
   getQueryAdminInsightsTool,
   getDeleteContentTool,
   getConfirmDeleteContentTool,
+  getScaffoldDataAppTool,
 ];

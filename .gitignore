@@ -12,6 +12,7 @@ config.json
 env.list
 *.env.list
 manifest.json
+!src/templates/**/manifest.json
 sea-prep.blob
 tableau-mcp
 tableau-mcp.dxt

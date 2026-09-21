@@ -311,3 +311,45 @@ export class FileReadError extends McpToolError {
     });
   }
 }
+
+// Thrown by scaffold-data-app when the requested data app name is rejected as a workspace directory
+// name (e.g. it would escape the server-controlled workspace root). statusCode 400: bad input.
+export class InvalidDataAppNameError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'invalid-data-app-name', message, statusCode: 400 });
+  }
+}
+
+// Thrown by scaffold-data-app (stdio) when a workspace with the requested name already exists. The
+// tool never overwrites an existing workspace. statusCode 409: the target already exists.
+export class DataAppWorkspaceExistsError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-workspace-exists', message, statusCode: 409 });
+  }
+}
+
+// Thrown by scaffold-data-app when the data app template cannot be served: the bundled template is
+// missing (stdio) or the remote template object is not configured (http). statusCode 500: a
+// server-side prerequisite is unavailable.
+export class DataAppTemplateUnavailableError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-template-unavailable', message, statusCode: 500 });
+  }
+}
+
+// Thrown by scaffold-data-app when a caller-supplied `fields` name doesn't match any field on the
+// resolved datasource. statusCode 400: bad input.
+export class UnknownDatasourceFieldError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'unknown-datasource-field', message, statusCode: 400 });
+  }
+}
+
+// Thrown by scaffold-data-app (stdio) when applying the datasource-wiring XML edits to the copied
+// `.twb` fails (missing/already-filled anchor, or the post-wiring invariant check). statusCode 500:
+// a server-side wiring step failed unexpectedly.
+export class DataAppWiringFailedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-wiring-failed', message, statusCode: 500 });
+  }
+}

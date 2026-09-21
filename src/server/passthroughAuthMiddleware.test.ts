@@ -27,6 +27,15 @@ const TOOLS_WITHOUT_API_SCOPES_WITH_PASSTHROUGH_GUARD: ReadonlyArray<WebToolName
   // Staged workbook upload URL creation: no Tableau REST API call. The tool callback explicitly
   // returns an error for Passthrough auth before issuing a signed upload URL.
   'request-workbook-upload',
+  // Data-app scaffolding: no Tableau REST API call when `datasourceLuid` is omitted — it only
+  // writes a starter workspace to server disk (stdio) or presigns a static template zip (http),
+  // reading the caller's username to fill an author string (falling back to "Tableau MCP"). When
+  // `datasourceLuid` IS supplied, the tool calls resourceAccessChecker.isDatasourceAllowed,
+  // queryDatasource, and the VDS/Metadata API (via fetchFieldsResult) to wire the datasource in —
+  // real REST calls, which is why scopes.ts declares non-empty API scopes for this tool. This
+  // entry only guards the no-datasourceLuid case, which is safe with passthrough auth since it
+  // performs no identity-bound or sensitive operation.
+  'scaffold-data-app',
 ];
 
 describe('passthroughAuthMiddleware', () => {

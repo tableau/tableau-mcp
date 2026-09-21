@@ -45,6 +45,7 @@ export const webToolNames = [
   'query-knowledge-context',
   'inspect-knowledge-context',
   'manage-knowledge-context',
+  'scaffold-data-app',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -66,6 +67,7 @@ export const webToolGroupNames = [
   'admin-insights',
   'content',
   'knowledge',
+  'tableau-data-apps',
 ] as const;
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
@@ -107,6 +109,7 @@ export const webToolGroups = {
   'admin-insights': ['query-admin-insights'],
   content: ['delete-content', 'confirm-delete-content'],
   knowledge: ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
+  'tableau-data-apps': ['scaffold-data-app'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
 export function isWebToolName(value: unknown): value is WebToolName {

@@ -1,22 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  ArgsValidationError,
-  DatasourceNotAllowedError,
-  FeatureDisabledError,
-} from '../../../errors/mcpToolError.js';
-import { useRestApi } from '../../../restApiInstance.js';
-import { GraphQLResponse } from '../../../sdks/tableau/apis/metadataApi.js';
+import { ArgsValidationError, DatasourceNotAllowedError } from '../../../errors/mcpToolError.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
-import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { ToolRules, WebTool } from '../tool.js';
-import { combineFields, simplifyReadMetadataResult } from './datasourceMetadataUtils.js';
+import { WebTool } from '../tool.js';
+import { fetchFieldsResult } from './fetchFieldsResult.js';
 
 export const getGraphqlQuery = (datasourceLuid: string): string => `
   query datasourceFieldInfo {
@@ -101,7 +92,6 @@ export const getGetDatasourceMetadataTool = (
   server: WebMcpServer,
   productVersion: ProductVersion,
 ): WebTool<typeof paramsSchema> => {
-  const rules = getDatasourceMetadataRules(productVersion);
   const getDatasourceMetadataTool = new WebTool({
     server,
     name: 'get-datasource-metadata',
@@ -121,8 +111,6 @@ export const getGetDatasourceMetadataTool = (
       openWorldHint: false,
     },
     callback: async ({ datasourceLuid }, extra): Promise<CallToolResult> => {
-      const query = getGraphqlQuery(datasourceLuid);
-
       return await getDatasourceMetadataTool.logAndExecute({
         extra,
         args: { datasourceLuid },
@@ -130,7 +118,6 @@ export const getGetDatasourceMetadataTool = (
           if (!datasourceLuid) {
             return new ArgsValidationError('datasourceLuid must be a non-empty string.').toErr();
           }
-          const configWithOverrides = await extra.getConfigWithOverrides();
 
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
@@ -141,68 +128,11 @@ export const getGetDatasourceMetadataTool = (
             return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
           }
 
-          return await useRestApi({
-            ...extra,
+          return await fetchFieldsResult({
+            datasourceLuid,
+            extra,
+            productVersion,
             jwtScopes: getDatasourceMetadataTool.requiredApiScopes,
-            callback: async (restApi) => {
-              // Fetching metadata from VizQL Data Service API.
-              const readMetadataResult = await restApi.vizqlDataServiceMethods.readMetadata({
-                datasource: {
-                  datasourceLuid,
-                },
-              });
-
-              if (readMetadataResult.isErr()) {
-                return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
-              }
-
-              // Fetching datasource model from VizQL Data Service API.
-              const datasourceModelResult = !rules.datasourceModelIsUnavailable
-                ? await restApi.vizqlDataServiceMethods.getDatasourceModel({
-                    datasource: {
-                      datasourceLuid,
-                    },
-                  })
-                : undefined;
-
-              if (datasourceModelResult && datasourceModelResult.isErr()) {
-                return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
-              }
-
-              if (configWithOverrides.disableMetadataApiRequests) {
-                // Exit early since requests to the Tableau Metadata API are disabled.
-                return Ok(
-                  simplifyReadMetadataResult(
-                    readMetadataResult.value,
-                    datasourceModelResult?.value,
-                  ),
-                );
-              }
-
-              let listFieldsResult: GraphQLResponse;
-
-              try {
-                // Fetching metadata from Tableau Metadata API.
-                // Using try-catch here since requests could fail if the service is not enabled.
-                listFieldsResult = await restApi.metadataMethods.graphql(query);
-              } catch {
-                return Ok(
-                  simplifyReadMetadataResult(
-                    readMetadataResult.value,
-                    datasourceModelResult?.value,
-                  ),
-                );
-              }
-
-              // Combine the results from the VizQL Data Service API and the Tableau Metadata API.
-              return Ok(
-                combineFields(
-                  readMetadataResult.value,
-                  listFieldsResult,
-                  datasourceModelResult?.value,
-                ),
-              );
-            },
           });
         },
         constrainSuccessResult: (fields) => {
@@ -217,15 +147,3 @@ export const getGetDatasourceMetadataTool = (
 
   return getDatasourceMetadataTool;
 };
-
-function getDatasourceMetadataRules(productVersion: ProductVersion): ToolRules {
-  return getResultForTableauVersion({
-    productVersion,
-    mappings: {
-      '2025.3.0': {},
-      default: {
-        datasourceModelIsUnavailable: true,
-      },
-    },
-  });
-}

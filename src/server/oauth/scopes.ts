@@ -407,6 +407,17 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
+  // Only needed when the caller supplies `datasourceLuid` to wire a datasource into the scaffolded
+  // workbook (queryDatasource + the same VizQL Data Service / Metadata API calls get-datasource-metadata
+  // makes to resolve fields). Without a datasourceLuid the tool makes no REST calls at all.
+  'scaffold-data-app': {
+    mcp: [],
+    api: new Set<TableauApiScope>([
+      'tableau:content:read',
+      'tableau:viz_data_service:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
 };
 
 async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>> {
@@ -423,6 +434,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
+  const dataAppsEnabled = await featureGate.isFeatureEnabled('tableau-data-apps');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -467,6 +479,10 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
     enabledTools.delete('download-workbook');
+  }
+
+  if (!dataAppsEnabled) {
+    enabledTools.delete('scaffold-data-app');
   }
 
   return enabledTools;

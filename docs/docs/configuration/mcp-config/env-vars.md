@@ -714,3 +714,24 @@ should be fetched promptly rather than stored.
 ```bash
 FILE_TTL=30
 ```
+
+<hr />
+
+## `DATA_APP_WORKSPACE_ROOT`
+
+The server-controlled root directory under which the `scaffold-data-app` tool writes new data-app
+workspaces on disk. Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is **not** set (or the S3
+upload fails) — when S3 is configured, the tool zips and uploads the finalized workspace instead of
+writing it to this root.
+
+- Requires the `tableau-data-apps` feature flag to be enabled (see `features.json`). When the flag
+  is disabled, the tool is not registered and this variable has no effect.
+- Default: a `data-app-workspaces` folder next to the running server bundle.
+- This is never the caller's choice — the tool joins the requested app name onto this root and
+  refuses any name that would escape it, so callers cannot write outside the configured root.
+
+**Example:**
+
+```bash
+DATA_APP_WORKSPACE_ROOT=/var/lib/tableau-mcp/data-app-workspaces
+```

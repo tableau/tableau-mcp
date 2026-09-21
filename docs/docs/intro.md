@@ -73,6 +73,7 @@ Slack channel in the Tableau #DataDev workspace.
 | [inspect-knowledge-context](tools/knowledge/inspect-knowledge-context.md)                                            | Inspects graph status, semantic context, health, and improvement suggestions without changing the graph | Tableau+ only |
 | [manage-knowledge-context](tools/knowledge/manage-knowledge-context.md)                                              | Creates, updates, or deletes customer-governed semantic context | Tableau+ only |
 | [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
+| [scaffold-data-app](tools/data-apps/scaffold-data-app.md)                                                             | Disabled by default (`tableau-data-apps` feature flag). Scaffolds a starter Tableau data app (viz extension) workspace from a template — no REST API                                                      | All SKUs     |
 
 \* The `get-datasource-metadata` tool relies on both the VizQL Data Service and the Metadata API to get rich metadata about a data source. Only sites with Data Management entitlements will be able to execute the Metadata API calls, though the tool will remain functional without it.
 
