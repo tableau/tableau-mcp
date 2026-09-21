@@ -19,6 +19,9 @@ const DATASOURCE_COLUMNS = {
     "<column caption='Category' datatype='string' name='[Category]' role='dimension' type='nominal' />",
   'Sub-Category':
     "<column caption='Sub-Category' datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />",
+  // Internal name carries sensitive characters '<', '>' and '&' to verify they're handled properly
+  'Special Characters Field':
+    "<column caption='Special Characters Field' datatype='string' name='[A &lt; B &gt; C &amp; D]' role='dimension' type='nominal' />",
 } as const;
 
 export type WorkbookField = keyof typeof DATASOURCE_COLUMNS;

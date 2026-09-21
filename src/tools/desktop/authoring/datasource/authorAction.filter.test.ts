@@ -334,6 +334,47 @@ describe('authorActionTool (filter mode)', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it('escapes a field whose internal name has <, > and & like the SheetLink serializer', async () => {
+    // '~s0' side is URL-escaped ([ ] < > & % -> %XX); the '~na' side doubles < -> << and > -> >> and
+    // leaves & raw; then the whole tsl string is XML-escaped into the expression attribute.
+    const expression =
+      'tsl:Details?%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BA%20%3C%20B%20%3E%20C%20%26%20D%5D~s0=' +
+      '&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[A &lt;&lt; B &gt;&gt; C &amp; D]~na&gt;';
+    const ampColumn =
+      "<column datatype='string' name='[A &lt; B &gt; C &amp; D]' role='dimension' type='nominal' />";
+    const expectedBlocks =
+      `<datasources><datasource caption='${FILTER_DS_CAPTION}' name='${FILTER_DS_NAME}' /></datasources>` +
+      `<datasource-dependencies datasource='${FILTER_DS_NAME}'>${ampColumn}</datasource-dependencies>`;
+    const expectedAction =
+      "<action caption='Special Characters Filter' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      filterLink('Special Characters Filter', expression) +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const initialXml = buildWorkbookXml({
+      worksheets: ['Profit', 'Details'],
+      fields: ['Profit', 'Special Characters Field'],
+    });
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Special Characters Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        filterFields: ['Special Characters Field'],
+      },
+      initialXml,
+      readbackXml: withActions(initialXml, expectedAction + expectedBlocks),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(expectedAction);
+    expect(loaded).toContain(expectedBlocks);
+  });
+
   it('emits an exclude param and a dashboard-scoped source', async () => {
     const expectedAction =
       "<action caption='Dash Filter' name='[Action1]'>" +

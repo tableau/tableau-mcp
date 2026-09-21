@@ -1070,15 +1070,29 @@ function resolveFilterFields(
   return new Ok(resolved);
 }
 
-// Build the raw tsl: sheet-link expression for a specific-field filter. Each field adds a clause
-// `<urlenc([ds].[field])>~s0=<[ds].[field]~na>` (locator URL-encoded on the left, raw in the <…~na>
-// token on the right), joined with '&'; the caller XML-escapes the result into <link expression>.
+// Percent-encode strings so only RFC 3986 unreserved chars (alnum and - . _ ~)
+// stay literal. encodeURIComponent also leaves ! * ' ( ) alone, so encode those too.
+function tslUrlEscape(value: string): string {
+  return encodeURIComponent(value).replace(
+    /[!*'()]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+// Build the raw tsl: sheet-link expression for a specific-field filter.
+// Each field adds a clause
+// `urlEscape([ds].[field]~s0)=<[ds].[field]~na>`, joined with '&'. The two sides escape differently:
+//   left  (~s0): TUrl::URLEscape — every reserved char (including [ ] < > & %) becomes %XX.
+//   right (~na): angle-bracket doubling only ('<'->'<<', '>'->'>>') wrapped in one <…>; '&', '%', '~',
+//                '[' and ']' stay raw
+// The caller XML-escapes the whole result into the <link expression> attribute.
 function buildTslExpression(target: string, datasourceName: string, columnNames: string[]): string {
   const clauses = columnNames.map((columnName) => {
     const locator = `[${datasourceName}].${columnName}`;
-    return `${encodeURIComponent(locator)}~s0=<${locator}~na>`;
+    const source = `${locator}~na`.replaceAll('<', '<<').replaceAll('>', '>>');
+    return `${tslUrlEscape(`${locator}~s0`)}=<${source}>`;
   });
-  return `tsl:${encodeURIComponent(target)}?${clauses.join('&')}`;
+  return `tsl:${tslUrlEscape(target)}?${clauses.join('&')}`;
 }
 
 function renderActionDatasource(datasourceElement: DatasourceElement): string {
@@ -1576,8 +1590,11 @@ function mergeDependencyBlocks(
   return merged.join('');
 }
 
-function getAttr(tag: string, name: string): string | undefined {
-  const match = tag.match(new RegExp(`\\b${name}=(['"])(.*?)\\1`));
+// Anchor the attribute name on a preceding delimiter (start-of-string, whitespace, or quote) rather
+// than a \b word boundary: \b also matches between a hyphen/colon and a letter, so a decoy like
+// param-name='A' would satisfy \bname= and win over the real name='B'. Exported for unit testing.
+export function getAttr(tag: string, name: string): string | undefined {
+  const match = tag.match(new RegExp(`(?:^|[\\s"'])${name}=(['"])(.*?)\\1`));
   return match?.[2];
 }
 

@@ -1,13 +1,30 @@
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
-import { getAuthorActionTool } from './authorAction.js';
+import { getAttr, getAuthorActionTool } from './authorAction.js';
 import {
   appliedDocumentXml,
   BASE_XML,
   getToolResult,
   withActions,
 } from './authorActionTestFixtures.js';
+
+describe('getAttr', () => {
+  it('reads the requested attribute', () => {
+    expect(getAttr("<x name='B' />", 'name')).toBe('B');
+    expect(getAttr('<x name="B" />', 'name')).toBe('B');
+  });
+
+  it('does not match a hyphen- or colon-suffixed decoy attribute', () => {
+    expect(getAttr("<x param-name='A' name='B' />", 'name')).toBe('B');
+    expect(getAttr("<x user:name='A' name='B' />", 'name')).toBe('B');
+    expect(getAttr("<column semantic-role='A' role='B' />", 'role')).toBe('B');
+  });
+
+  it('returns the sole attribute even when it is only a decoy', () => {
+    expect(getAttr("<x param-name='A' />", 'name')).toBeUndefined();
+  });
+});
 
 describe('authorActionTool', () => {
   beforeEach(() => {
