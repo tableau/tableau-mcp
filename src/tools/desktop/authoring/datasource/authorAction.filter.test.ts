@@ -288,12 +288,32 @@ describe('authorActionTool (filter mode)', () => {
         targetSheet: 'Overview',
         excludeTargetSheets: ['Profit'],
       },
-      initialXml: DASHBOARD_WITHOUT_ZONES,
-      readbackXml: withActions(DASHBOARD_WITHOUT_ZONES, expectedAction),
+      initialXml: DASHBOARD_WITH_BOTH_SHEETS,
+      readbackXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, expectedAction),
     });
 
     expect(result.isError).toBe(false);
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
+  });
+
+  it('rejects exclusions against a dashboard that declares no worksheet zones', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'No Zones Exclude',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Overview',
+        excludeTargetSheets: ['Profit'],
+      },
+      initialXml: DASHBOARD_WITHOUT_ZONES,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'dashboard "Overview" has no worksheet zones, so there are no sheets to exclude',
+    );
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('does not auto-scope or self-exclude a dashboard target that hosts the source', async () => {
@@ -1068,6 +1088,49 @@ describe('authorActionTool (filter mode)', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('excludeSourceSheets is only allowed');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects an excludeTargetSheets entry that is not on the target dashboard', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Bad Target Exclude',
+        sourceWorksheet: 'Details',
+        targetSheet: 'Overview',
+        excludeTargetSheets: ['Profit'],
+      },
+      initialXml: DASHBOARD_WITH_TARGET_SHEET_ONLY,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'excluded sheet Profit is not on dashboard "Overview"',
+    );
+    expect(result.content[0].text).toContain(
+      'Target must be a dashboard when there are excluded target sheets',
+    );
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects excludeTargetSheets when the target is a worksheet, not a dashboard', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Worksheet Target Exclude',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        excludeTargetSheets: ['Profit'],
+      },
+      initialXml: WORKSHEETS_ONLY,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      "'Details' is a worksheet, not a dashboard. Target must be a dashboard when there are excluded target sheets",
+    );
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 

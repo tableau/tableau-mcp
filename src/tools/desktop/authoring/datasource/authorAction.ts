@@ -168,8 +168,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
         callback: async () => {
           const effectiveSourceSheet = sourceWorksheet.trim();
           const effectiveSourceDashboard = sourceDashboard?.trim() ?? '';
-          const hasWorksheet = effectiveSourceSheet.length > 0;
-          const hasDashboard = effectiveSourceDashboard.length > 0;
+          const hasSourceWorksheet = effectiveSourceSheet.length > 0;
+          const hasSourceDashboard = effectiveSourceDashboard.length > 0;
           const effectiveTargetSheet = targetSheet?.trim() ?? '';
           const effectiveExcludedSourceSheets = (excludeSourceSheets ?? [])
             .map((sheet) => sheet.trim())
@@ -195,7 +195,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 'excludeSourceSheets is only allowed in url or filter mode',
               ).toErr();
             }
-            if (hasWorksheet || !hasDashboard) {
+            if (hasSourceWorksheet || !hasSourceDashboard) {
               return new ArgsValidationError(
                 'excludeSourceSheets is only allowed with a dashboard-only source (set sourceDashboard, leave sourceWorksheet empty)',
               ).toErr();
@@ -223,7 +223,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 'targetParameter/targetSet are not allowed in url mode',
               ).toErr();
             }
-            if (!hasWorksheet && !hasDashboard) {
+            if (!hasSourceWorksheet && !hasSourceDashboard) {
               return new ArgsValidationError(
                 'url mode requires a source: set sourceWorksheet, sourceDashboard, or both',
               ).toErr();
@@ -286,7 +286,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             if (targetSheet === undefined || targetSheet.trim().length === 0) {
               return new ArgsValidationError('targetSheet is required in filter mode').toErr();
             }
-            if (!hasWorksheet && !hasDashboard) {
+            if (!hasSourceWorksheet && !hasSourceDashboard) {
               return new ArgsValidationError(
                 'filter mode requires a source: set sourceWorksheet, sourceDashboard, or both',
               ).toErr();
@@ -335,8 +335,6 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
           }
           if (mode === 'filter') {
-            // A filter action's source and target must both be real sheets/dashboards. A target that is not a
-            // real sheet or dashboard silently filters nothing, so reject a typo up front.
             if (effectiveSourceSheet.length > 0 && !worksheetNames.has(effectiveSourceSheet)) {
               return new ArgsValidationError(
                 `sourceWorksheet "${effectiveSourceSheet}" was not found. Available worksheets: ${worksheetNames.size > 0 ? [...worksheetNames].join(', ') : 'none'}`,
@@ -350,22 +348,46 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 `sourceDashboard "${effectiveSourceDashboard}" was not found. Available dashboards: ${dashboardNames.size > 0 ? [...dashboardNames].join(', ') : 'none'}`,
               ).toErr();
             }
+
+            const sourceZoneNames = findDashboardZoneNames(liveXml, effectiveSourceDashboard);
             // Verify that the source worksheet is on the source dashboard.
-            if (hasWorksheet && hasDashboard) {
-              const zoneNames = findDashboardZoneNames(liveXml, effectiveSourceDashboard);
-              if (zoneNames !== undefined && !zoneNames.has(effectiveSourceSheet)) {
-                const members = [...zoneNames].filter((name) => worksheetNames.has(name));
+            if (hasSourceWorksheet && hasSourceDashboard) {
+              if (sourceZoneNames !== undefined && !sourceZoneNames.has(effectiveSourceSheet)) {
+                const members = [...sourceZoneNames].filter((name) => worksheetNames.has(name));
                 return new ArgsValidationError(
-                  `sourceWorksheet "${effectiveSourceSheet}" is not on dashboard "${effectiveSourceDashboard}", so no mark on that dashboard can fire the action. Worksheets on "${effectiveSourceDashboard}": ${members.length > 0 ? members.join(', ') : 'none'}. Pass a worksheet that is on the dashboard, or omit sourceDashboard to scope the action to the worksheet.`,
+                  `sourceWorksheet "${effectiveSourceSheet}" is not on dashboard "${effectiveSourceDashboard}". Worksheets on "${effectiveSourceDashboard}": ${members.length > 0 ? members.join(', ') : 'none'}. Pass a worksheet that is on the dashboard, or omit sourceDashboard to scope the action to the worksheet.`,
                 ).toErr();
               }
             }
+
             const trimmedTarget = targetSheet!.trim();
             if (!worksheetNames.has(trimmedTarget) && !dashboardNames.has(trimmedTarget)) {
               const available = [...worksheetNames, ...dashboardNames];
               return new ArgsValidationError(
                 `targetSheet "${trimmedTarget}" was not found. Available sheets: ${available.length > 0 ? available.join(', ') : 'none'}`,
               ).toErr();
+            }
+
+            const excludedSourceSheetsResult = validateExcludedSheets(
+              liveXml,
+              worksheetNames,
+              effectiveSourceDashboard,
+              effectiveExcludedSourceSheets,
+              'Source must be a dashboard when there are excluded source sheets',
+            );
+            if (excludedSourceSheetsResult !== undefined) {
+              return excludedSourceSheetsResult.toErr();
+            }
+
+            const excludedTargetSheetsResult = validateExcludedSheets(
+              liveXml,
+              worksheetNames,
+              effectiveTargetSheet,
+              effectiveExcludedTargetSheets,
+              'Target must be a dashboard when there are excluded target sheets',
+            );
+            if (excludedTargetSheetsResult !== undefined) {
+              return excludedTargetSheetsResult.toErr();
             }
           }
 
@@ -567,8 +589,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           if (mode === 'filter') {
             const hint = `readback verified the tsl-filter action targeting '${target}'; source scoped to ${[
-              hasWorksheet ? `worksheet '${effectiveSourceSheet}'` : '',
-              hasDashboard ? `dashboard '${effectiveSourceDashboard}'` : '',
+              hasSourceWorksheet ? `worksheet '${effectiveSourceSheet}'` : '',
+              hasSourceDashboard ? `dashboard '${effectiveSourceDashboard}'` : '',
             ]
               .filter(Boolean)
               .join(
@@ -609,6 +631,45 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
 
   return tool;
 };
+
+function validateExcludedSheets(
+  liveXml: string,
+  worksheetNames: Set<string>,
+  dashboardName: string,
+  excludedSheets: string[],
+  message: string,
+): ArgsValidationError | undefined {
+  if (excludedSheets.length === 0) {
+    return undefined;
+  }
+  // Verify that the dashboard name is actually a dashboard.
+  if (worksheetNames.has(dashboardName)) {
+    return new ArgsValidationError(
+      `'${dashboardName}' is a worksheet, not a dashboard. ${message}`,
+    );
+  }
+  // An exclusion can only drop a worksheet zone from the dashboard, so verify the dashboard has worksheet zones
+  const zoneNames = findDashboardZoneNames(liveXml, dashboardName);
+  const members =
+    zoneNames === undefined ? [] : [...zoneNames].filter((name) => worksheetNames.has(name));
+  if (members.length === 0) {
+    return new ArgsValidationError(
+      `dashboard "${dashboardName}" has no worksheet zones, so there are no sheets to exclude. ${message}`,
+    );
+  }
+  // Verify every excluded sheet is a worksheet on the dashboard.
+  const invalidExcludedSheets = excludedSheets.filter((name) => !members.includes(name));
+  if (invalidExcludedSheets.length > 0) {
+    const invalidSheetList =
+      invalidExcludedSheets.length > 1
+        ? `excluded sheets ${invalidExcludedSheets.join(', ')} are`
+        : `excluded sheet ${invalidExcludedSheets[0]} is`;
+    return new ArgsValidationError(
+      `${invalidSheetList} not on dashboard "${dashboardName}". Worksheets on "${dashboardName}": ${members.join(', ')}. ${message}`,
+    );
+  }
+  return undefined;
+}
 
 function hasActionCaption(xml: string, caption: string): boolean {
   return [...xml.matchAll(/<(?:action|edit-parameter-action|edit-group-action)\b[^>]*>/g)].some(
