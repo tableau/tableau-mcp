@@ -88,6 +88,24 @@ export class FeatureDisabledError extends McpToolError {
   }
 }
 
+// Thrown when query-datasource targets an embedded (workbook) datasource on a site where
+// workbook-datasource querying isn't enabled. This is the EXPECTED response on non-enabled sites
+// (opt-in per site), not a rare edge case, so the message names the site-admin opt-in. statusCode
+// 403: an opt-in/permission gate, not a missing feature/endpoint.
+export class WorkbookDatasourceNotEnabledError extends McpToolError {
+  constructor() {
+    super({
+      type: 'workbook-datasource-not-enabled',
+      message: 'Querying workbook data sources is not enabled on this Tableau site',
+      statusCode: 403,
+    });
+  }
+
+  override getErrorText(): string {
+    return 'This data source is embedded in a workbook, and querying workbook (embedded) data sources is not enabled on this Tableau site. This capability is opt-in per site: a site administrator must enable it before this data source can be queried.';
+  }
+}
+
 export class FlowNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'flow-not-allowed', message, statusCode: 403 });

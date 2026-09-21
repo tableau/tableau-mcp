@@ -7,6 +7,7 @@ import {
   DatasourceNotAllowedError,
   FeatureDisabledError,
   QueryValidationError,
+  WorkbookDatasourceNotEnabledError,
   ZodiosValidationError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -162,6 +163,9 @@ export const getQueryDatasourceTool = (
                 const vdsError = result.error;
                 if (vdsError.type === 'feature-disabled') {
                   return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
+                }
+                if (vdsError.type === 'workbook-datasource-not-enabled') {
+                  return new WorkbookDatasourceNotEnabledError().toErr();
                 }
                 if (vdsError.type === 'zodios-error') {
                   return new ZodiosValidationError(vdsError.error).toErr();

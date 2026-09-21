@@ -2,10 +2,18 @@ import { ZodiosError } from '@zodios/core';
 import { Result } from 'ts-results-es';
 import { describe, expect, it, vi } from 'vitest';
 
-import VizqlDataServiceMethods from './vizqlDataServiceMethods.js';
+import { QueryRequest } from '../apis/vizqlDataServiceApi.js';
+import VizqlDataServiceMethods, {
+  isWorkbookDatasourceNotEnabled,
+} from './vizqlDataServiceMethods.js';
 
 // A minimal data source request that satisfies userHasQueryPermissionsRequestSchema.
 const request = { datasource: { datasourceLuid: 'ds-1' } };
+
+const queryRequest: QueryRequest = {
+  datasource: { datasourceLuid: 'ds-luid' },
+  query: { fields: [{ fieldCaption: 'Category' }] },
+};
 
 function makeMethods(): VizqlDataServiceMethods {
   return new VizqlDataServiceMethods(
@@ -24,11 +32,16 @@ function stubTransport(methods: VizqlDataServiceMethods, impl: () => Promise<unk
 }
 
 // isErrorFromAlias only recognizes an error when config.method/url match the endpoint, so the
-// simulated error must carry the request config Zodios would have sent.
-function axiosError(status: number, data: Record<string, unknown>): unknown {
+// simulated error must carry the request config Zodios would have sent. `url` defaults to the
+// user-has-query-permissions endpoint; query-datasource tests override it.
+function axiosError(
+  status: number,
+  data: Record<string, unknown>,
+  url = '/user-has-query-permissions',
+): unknown {
   return {
     isAxiosError: true,
-    config: { method: 'post', url: '/user-has-query-permissions' },
+    config: { method: 'post', url },
     response: { status, data },
   };
 }
@@ -39,6 +52,114 @@ function unwrapErr<T, E>(result: Result<T, E>): E {
   }
   return result.error;
 }
+
+// The query-datasource error body when the VDSForWorkbookDatasources flag is off: HTTP 403, generic
+// PERMISSION_DENIED errorCode 403800, localized message. Only the flag identifier in the message
+// distinguishes it from an ordinary per-datasource denial.
+const gateErrorBody = {
+  errorCode: '403800',
+  message: 'The VDSForWorkbookDatasources feature is not enabled.',
+  datetime: '2026-09-14T22:57:31.118Z',
+};
+
+describe('isWorkbookDatasourceNotEnabled', () => {
+  it('matches on the flag identifier in the message', () => {
+    expect(isWorkbookDatasourceNotEnabled(gateErrorBody)).toBe(true);
+  });
+
+  it('matches on the flag identifier case-insensitively', () => {
+    expect(
+      isWorkbookDatasourceNotEnabled({ message: 'the vdsforworkbookdatasources feature is off' }),
+    ).toBe(true);
+  });
+
+  it('does not match a generic 403800 permission denial (same code, different message)', () => {
+    // 403800 is overloaded — it also signals ordinary per-datasource denials — so the errorCode
+    // alone must not trigger detection.
+    expect(
+      isWorkbookDatasourceNotEnabled({
+        errorCode: '403800',
+        message: 'The user does not have permission to query data source ds-1.',
+      }),
+    ).toBe(false);
+  });
+
+  it('does not match unrelated errors, empty bodies, or undefined', () => {
+    expect(
+      isWorkbookDatasourceNotEnabled({ errorCode: '501000', message: 'not implemented' }),
+    ).toBe(false);
+    expect(isWorkbookDatasourceNotEnabled({})).toBe(false);
+    expect(isWorkbookDatasourceNotEnabled(undefined)).toBe(false);
+  });
+});
+
+describe('VizqlDataServiceMethods.queryDatasource', () => {
+  it('maps the gate response (HTTP 403, flag in message) to workbook-datasource-not-enabled', async () => {
+    const methods = makeMethods();
+    stubTransport(methods, () =>
+      Promise.reject(axiosError(403, gateErrorBody, '/query-datasource')),
+    );
+
+    expect(unwrapErr(await methods.queryDatasource(queryRequest))).toEqual({
+      type: 'workbook-datasource-not-enabled',
+    });
+  });
+
+  it('detects the gate independent of HTTP status, even when it arrives as a 404', async () => {
+    // Guards the ordering: the gate check runs before the 404 -> feature-disabled branch, so a body
+    // carrying the flag identifier is never mislabeled as VizQL-disabled.
+    const methods = makeMethods();
+    stubTransport(methods, () =>
+      Promise.reject(axiosError(404, gateErrorBody, '/query-datasource')),
+    );
+
+    expect(unwrapErr(await methods.queryDatasource(queryRequest))).toEqual({
+      type: 'workbook-datasource-not-enabled',
+    });
+  });
+
+  it('still maps an unrelated 404 to feature-disabled', async () => {
+    const methods = makeMethods();
+    stubTransport(methods, () => Promise.reject(axiosError(404, {}, '/query-datasource')));
+
+    expect(unwrapErr(await methods.queryDatasource(queryRequest))).toEqual({
+      type: 'feature-disabled',
+    });
+  });
+
+  it('maps an unrelated non-404 error to api-error, passing the errorCode through', async () => {
+    const methods = makeMethods();
+    stubTransport(methods, () =>
+      Promise.reject(
+        axiosError(
+          400,
+          { errorCode: '403800', message: 'API access permission denied' },
+          '/query-datasource',
+        ),
+      ),
+    );
+
+    expect(unwrapErr(await methods.queryDatasource(queryRequest))).toEqual({
+      type: 'api-error',
+      message: 'API access permission denied',
+      httpStatus: 400,
+      errorCode: '403800',
+    });
+  });
+
+  it('returns the query output on success', async () => {
+    const output = { data: [{ Category: 'Technology' }] };
+    const methods = makeMethods();
+    stubTransport(methods, () =>
+      Promise.resolve({ data: output, status: 200, headers: {}, config: {} }),
+    );
+
+    const result = await methods.queryDatasource(queryRequest);
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual(output);
+  });
+});
 
 describe('VizqlDataServiceMethods.userHasQueryPermissions', () => {
   it('returns Ok with the API result when the user has permission', async () => {
