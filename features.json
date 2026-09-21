@@ -4,6 +4,7 @@
   "enforce-registration-conditions": false,
   "authoring-tools": true,
   "flow-tools": false,
+  "knowledge-tools": false,
   "view-file-mode": false,
   "view-data-file-mode": false,
   "workbook-file-mode": true

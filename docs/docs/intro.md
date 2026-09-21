@@ -13,6 +13,9 @@ agent-to-Tableau communication, enabling users to bring their Tableau data into 
 
 Tableau MCP is also a managed service on every Tableau Cloud pod, and it is accessible over the url: `https://mcp.tableau.com`. See [Hosted Tableau MCP](hosted-tableau-mcp) for more details.
 
+> Running more than one Tableau MCP server, or seeing a confusing "not configured"/`401` error?
+> See [Running Multiple Servers & Diagnosing Auth Errors](configuration/mcp-config/multiple-servers.md).
+
 Follow along and share ideas with the Tableau MCP team by creating issues or discussions on the
 repository. You can also join the [Tableau Developer Platform](https://www.tableau.com/developer)
 and reach out in the [#tableau-ai-solutions](https://tableau-datadev.slack.com/archives/C07LMAVG4N6)
@@ -66,6 +69,9 @@ Slack channel in the Tableau #DataDev workspace.
 | [list-users](tools/users/list-users.md)                                                                               | Admin-only. Retrieves a list of users on the site ([REST API][list-users-api])                                      | All SKUs     |
 | [update-user](tools/users/update-user.md)                                                                             | Admin-only. Confirm-gated update of a user's site role ([REST API][update-user-api])                               | All SKUs     |
 | [query-admin-insights](tools/admin-insights/query-admin-insights.md)                                                 | Admin-only. Dispatches on `kind` to TS Events, TS Users, Site Content, Job Performance, or stale-content report ([VDS API][vds]) | All SKUs     |
+| [query-knowledge-context](tools/knowledge/query-knowledge-context.md)                                                | Queries governed definitions, relationships, lineage, impact, and graph sources through one read-only tool | Tableau+ only |
+| [inspect-knowledge-context](tools/knowledge/inspect-knowledge-context.md)                                            | Inspects graph status, semantic context, health, and improvement suggestions without changing the graph | Tableau+ only |
+| [manage-knowledge-context](tools/knowledge/manage-knowledge-context.md)                                              | Creates, updates, or deletes customer-governed semantic context | Tableau+ only |
 | [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
 
 \* The `get-datasource-metadata` tool relies on both the VizQL Data Service and the Metadata API to get rich metadata about a data source. Only sites with Data Management entitlements will be able to execute the Metadata API calls, though the tool will remain functional without it.

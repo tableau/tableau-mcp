@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
-import { McpToolError } from '../../../errors/mcpToolError.js';
+import { McpToolError, WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
 import { queryOutputSchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -563,6 +563,17 @@ describe('queryDatasourceTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
+  });
+
+  it('should surface an actionable message when workbook-datasource querying is not enabled', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(Err({ type: 'workbook-datasource-not-enabled' }));
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(new WorkbookDatasourceNotEnabledError().getErrorText());
+    expect(result.content[0].text).toContain('not enabled on this Tableau site');
+    expect(result.content[0].text).toContain('site administrator');
   });
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
