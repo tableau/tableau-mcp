@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import express from 'express';
 
+import type { SessionStore } from '../../sessionStore/sessionStore.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { ClientRegistration } from './types.js';
 
@@ -13,9 +14,9 @@ import { ClientRegistration } from './types.js';
  */
 export function register(
   app: express.Application,
-  clientRegistrations: Map<string, ClientRegistration>,
+  clientRegistrations: SessionStore<ClientRegistration>,
 ): void {
-  app.post('/oauth2/register', express.json(), (req, res) => {
+  app.post('/oauth2/register', express.json(), async (req, res) => {
     const { redirect_uris } = req.body;
 
     const validatedRedirectUris = [];
@@ -44,7 +45,7 @@ export function register(
 
     // Mint a unique client ID and store the allowlisted redirect URIs
     const clientId = randomUUID();
-    clientRegistrations.set(clientId, {
+    await clientRegistrations.set(clientId, {
       redirectUris: validatedRedirectUris,
     });
 
