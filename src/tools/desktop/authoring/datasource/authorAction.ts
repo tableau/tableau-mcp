@@ -542,7 +542,12 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             if (mode === 'filter') {
               // Verify every semantic renderFilterAction serialized, not just the target, so the
               // receipt does not report a dropped setting as applied. Same object we authored from.
-              return hasFilterAction(xml, caption, filterAction!);
+              // For a specific-field filter also confirm the sibling <datasources>/
+              // <datasource-dependencies> survived — without them the <link> resolves no fields.
+              return (
+                hasFilterAction(xml, caption, filterAction!) &&
+                hasFilterDependencies(xml, filterDependencies)
+              );
             }
             return hasActionWithTargetParam(
               xml,
@@ -569,7 +574,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 : mode === 'url'
                   ? 'action applied but the <link> URL did not survive readback (it may have been dropped or rewritten as a command action)'
                   : mode === 'filter'
-                    ? 'action applied but did not survive readback with the requested filter semantics (the tsl-filter target/link, source scope, activation, clearing behavior, exclusions, or single-select may have been dropped or rewritten)'
+                    ? 'action applied but did not survive readback with the requested filter semantics (the tsl-filter target/link, source scope, activation, clearing behavior, exclusions, single-select, or the field datasource/dependency declarations may have been dropped or rewritten)'
                     : 'action applied but the target-parameter param did not survive readback',
             ).toErr();
           }
@@ -1313,6 +1318,7 @@ function filterActionMatches(block: string, expected: FilterAction): boolean {
     return false;
   }
 
+  // columns are verified by comparing the link expressions
   if (expected.linkExpression !== undefined) {
     const linkTag = block.match(/<link\b[^>]*>/)?.[0];
     const expression = linkTag === undefined ? undefined : getAttr(linkTag, 'expression');
@@ -1338,14 +1344,63 @@ function hasFilterAction(xml: string, caption: string, expected: FilterAction): 
 }
 
 // Dedup guard: the document-apply path appends, so an identical filter action authored under a
-// different caption would silently double. Identity is the full serialized shape (source, target,
-// fields, activation, clearing behavior, single-select, exclusions) via filterActionMatches, so an
-// exact retry is rejected while a behaviorally distinct action — on-select vs on-hover, or show-all
-// vs exclude-all — is not. Caption collision is handled separately by hasActionCaption.
+// different caption would silently double.
 function hasFilterActionDuplicate(xml: string, expected: FilterAction): boolean {
   return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) =>
     filterActionMatches(match[0], expected),
   );
+}
+
+// A specific-field filter resolves its fields through the sibling <datasources> entry and
+// <datasource-dependencies> columns. The <link> expression alone does nothing without them.
+// Return true if the given xml contains the given list of datasource columns
+function hasFilterDependencies(
+  xml: string,
+  deps: { datasourceName: string; columnsXml: string[] } | undefined,
+): boolean {
+  if (deps === undefined || deps.columnsXml.length === 0) {
+    return true;
+  }
+  const actionsBlock = xml.match(/<actions>[\s\S]*?<\/actions>/)?.[0];
+  if (actionsBlock === undefined) {
+    return false;
+  }
+  // The datasource must still be listed in the action-scoped <datasources> block.
+  const datasourcesBlock = actionsBlock.match(/<datasources>[\s\S]*?<\/datasources>/)?.[0];
+  const datasourceListed =
+    datasourcesBlock !== undefined &&
+    [...datasourcesBlock.matchAll(/<datasource\b[^>]*>/g)].some(
+      (match) => unescapeXml(getAttr(match[0], 'name') ?? '') === deps.datasourceName,
+    );
+  if (!datasourceListed) {
+    return false;
+  }
+  // Its <datasource-dependencies> block must still declare every resolved column.
+  const dependencyBlock = [
+    ...actionsBlock.matchAll(
+      /<datasource-dependencies\b[^>]*>[\s\S]*?<\/datasource-dependencies>/g,
+    ),
+  ]
+    .map((match) => match[0])
+    .find((block) => {
+      const openTag = block.match(/<datasource-dependencies\b[^>]*>/)?.[0];
+      return (
+        openTag !== undefined &&
+        unescapeXml(getAttr(openTag, 'datasource') ?? '') === deps.datasourceName
+      );
+    });
+  if (dependencyBlock === undefined) {
+    return false;
+  }
+  const declaredColumns = new Set(
+    [...dependencyBlock.matchAll(/<column\b[^>]*>/g)].map((match) =>
+      unescapeXml(getAttr(match[0], 'name') ?? ''),
+    ),
+  );
+  return deps.columnsXml.every((column) => {
+    const name = unescapeXml(getAttr(column.match(/<column\b[^>]*>/)?.[0] ?? '', 'name') ?? '');
+    return declaredColumns.has(name);
+  });
 }
 
 // Where an action should be spliced: inside an existing <actions> block (innerStart just past

@@ -250,6 +250,71 @@ describe('authorActionTool (filter mode)', () => {
     expect(loaded).not.toContain('special-fields');
   });
 
+  it('fails readback when the specific-field datasource-dependencies are dropped', async () => {
+    const survivingAction =
+      "<action caption='Filter Selected' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      filterLink(
+        'Filter Selected',
+        'tsl:Details?%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BCategory%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Category]~na&gt;&amp;%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BSub-Category%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Sub-Category]~na&gt;',
+      ) +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter Selected',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        filterFields: ['Category', 'Sub-Category'],
+      },
+      initialXml: WORKSHEETS_WITH_FILTER_FIELDS,
+      // <datasources>/<datasource-dependencies> for the filterFields are missing
+      readbackXml: withActions(WORKSHEETS_WITH_FILTER_FIELDS, survivingAction),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails readback when a resolved dependency column is dropped', async () => {
+    const survivingAction =
+      "<action caption='Filter Selected' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      filterLink(
+        'Filter Selected',
+        'tsl:Details?%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BCategory%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Category]~na&gt;&amp;%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BSub-Category%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Sub-Category]~na&gt;',
+      ) +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter Selected',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        filterFields: ['Category', 'Sub-Category'],
+      },
+      initialXml: WORKSHEETS_WITH_FILTER_FIELDS,
+      // Only the [Category] datasource dependency survives; [Sub-Category] is missing.
+      readbackXml: withActions(
+        WORKSHEETS_WITH_FILTER_FIELDS,
+        survivingAction + filterDependencyBlocks(['Category']),
+      ),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects a specific-field filter naming a field absent from the datasource', async () => {
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
@@ -1237,7 +1302,10 @@ describe('authorActionTool (filter mode)', () => {
         filterFields: ['Sub-Category'],
       },
       initialXml,
-      readbackXml: initialXml.replace('</actions>', `${added}</actions>`),
+      readbackXml: initialXml.replace(
+        '</actions>',
+        `${added}${filterDependencyBlocks(['Sub-Category'])}</actions>`,
+      ),
     });
 
     expect(result.isError).toBe(false);
