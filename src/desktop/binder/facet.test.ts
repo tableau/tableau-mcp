@@ -30,7 +30,7 @@ function field(
   datatype: string,
 ): SchemaField {
   return {
-    name,
+    friendlyName: name,
     columnName: `[${name}]`,
     role,
     type,

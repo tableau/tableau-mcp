@@ -138,7 +138,9 @@ export function prewarmForDatasource(
         slot_id: s.slot_id,
         kind: s.kind,
         required: s.required,
-        candidate_fields: summary.fields.filter((f) => fieldFitsKind(s.kind, f)).map((f) => f.name),
+        candidate_fields: summary.fields
+          .filter((f) => fieldFitsKind(s.kind, f))
+          .map((f) => f.friendlyName),
       }));
     const list = byFamily.get(m.family) ?? [];
     list.push({ template: m.template, bindable_slots });

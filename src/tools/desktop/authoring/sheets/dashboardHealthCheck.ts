@@ -182,7 +182,7 @@ function parseColumnRef(ref: string): { datasource: string; bare: string } | nul
 
 function projectField(field: SchemaField): Record<string, string> {
   return {
-    name: field.name,
+    name: field.friendlyName,
     column_ref: field.column_ref,
     datatype: field.datatype,
     role: field.role,

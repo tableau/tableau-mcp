@@ -683,7 +683,7 @@ export function validateBinding(
           slot_id: valueSlot?.slot_id,
           detail:
             `kpi-text supports one measure per worksheet, but the ask names ${namedMeasures.length}: ` +
-            `${namedMeasures.map((field) => `"${field.name}"`).join(', ')}; create one KPI worksheet per measure`,
+            `${namedMeasures.map((field) => `"${field.friendlyName}"`).join(', ')}; create one KPI worksheet per measure`,
         });
       } else if (
         namedMeasures.length === 1 &&
@@ -693,7 +693,7 @@ export function validateBinding(
         blockers.push({
           code: 'kind-mismatch',
           slot_id: valueSlot?.slot_id,
-          detail: `kpi-text ask names "${namedMeasures[0].name}" but the KPI binds "${boundMeasure.name}"`,
+          detail: `kpi-text ask names "${namedMeasures[0].friendlyName}" but the KPI binds "${boundMeasure.friendlyName}"`,
         });
       }
     }
@@ -712,7 +712,7 @@ export function validateBinding(
         code: 'kind-mismatch',
         slot_id: sliceSlot?.slot_id,
         detail:
-          `pie slice field "${slice.name}" has ${sliceCount} distinct values, above the ` +
+          `pie slice field "${slice.friendlyName}" has ${sliceCount} distinct values, above the ` +
           `workable maximum of ${PIE_SLICE_WORKABLE_MAX}; choose a lower-cardinality dimension`,
       });
     }
@@ -749,7 +749,7 @@ export function validateBinding(
         slot_id: targetSlot?.slot_id,
         detail:
           'bullet actual and target must resolve to distinct underlying fields; ' +
-          `both bindings resolve to "${actual.name}"`,
+          `both bindings resolve to "${actual.friendlyName}"`,
       });
     }
   }
@@ -809,9 +809,9 @@ export function validateBinding(
           code: 'kind-mismatch',
           slot_id: grainSlot?.slot_id,
           detail:
-            `box plot ask requires measure "${expectedMeasure.name}", category "${expectedCategory.name}", ` +
-            `and record grain "${expectedGrain.name}"; proposal mapped measure "${measure.name}", ` +
-            `category "${category.name}", and record grain "${grain.name}"`,
+            `box plot ask requires measure "${expectedMeasure.friendlyName}", category "${expectedCategory.friendlyName}", ` +
+            `and record grain "${expectedGrain.friendlyName}"; proposal mapped measure "${measure.friendlyName}", ` +
+            `category "${category.friendlyName}", and record grain "${grain.friendlyName}"`,
         });
       }
     }
@@ -857,7 +857,7 @@ export function validateBinding(
       blockers.push({
         code: 'kind-mismatch',
         slot_id: taskSlot?.slot_id,
-        detail: `gantt ask requires task "${expectedTask.name}"; proposal mapped "${task.name}"`,
+        detail: `gantt ask requires task "${expectedTask.friendlyName}"; proposal mapped "${task.friendlyName}"`,
       });
     }
     if (hasRangeCue && !phrase) {
@@ -883,8 +883,8 @@ export function validateBinding(
         blockers.push({
           code: 'kind-mismatch',
           detail:
-            `gantt ask requires start field "${expectedStart.name}" and end field "${expectedEnd.name}"; ` +
-            `proposal mapped start "${start.name}" and end "${end.name}"`,
+            `gantt ask requires start field "${expectedStart.friendlyName}" and end field "${expectedEnd.friendlyName}"; ` +
+            `proposal mapped start "${start.friendlyName}" and end "${end.friendlyName}"`,
         });
       }
     }
@@ -912,7 +912,7 @@ export function validateBinding(
       } else if (histogramFields.some((field) => identityOf(field) !== identityOf(expected))) {
         blockers.push({
           code: 'kind-mismatch',
-          detail: `histogram ask requires measure "${expected.name}"; proposal mapped "${histogramFields[0]?.name}"`,
+          detail: `histogram ask requires measure "${expected.friendlyName}"; proposal mapped "${histogramFields[0]?.friendlyName}"`,
         });
       }
     }
@@ -971,9 +971,9 @@ export function validateBinding(
         blockers.push({
           code: 'kind-mismatch',
           detail:
-            `bubble ask requires X "${expectedX.name}", Y "${expectedY.name}", size "${expectedSize.name}", ` +
-            `and grain "${expectedGrain.name}"; proposal mapped X "${x.name}", Y "${y.name}", ` +
-            `size "${size.name}", and grain "${grain.name}"`,
+            `bubble ask requires X "${expectedX.friendlyName}", Y "${expectedY.friendlyName}", size "${expectedSize.friendlyName}", ` +
+            `and grain "${expectedGrain.friendlyName}"; proposal mapped X "${x.friendlyName}", Y "${y.friendlyName}", ` +
+            `size "${size.friendlyName}", and grain "${grain.friendlyName}"`,
         });
       }
     }
@@ -1139,7 +1139,7 @@ export function validateBinding(
       const advice = entry
         ? cardinalityAdvice(
             slot,
-            entry.field.name,
+            entry.field.friendlyName,
             s.approxCountByRef?.[entry.field.column_ref],
             effectiveDerivation,
           )

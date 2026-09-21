@@ -32,7 +32,7 @@ function field(
   semanticRole?: string,
 ): SchemaField {
   return {
-    name,
+    friendlyName: name,
     columnName: `[${name}]`,
     role,
     type,
@@ -128,7 +128,7 @@ describe('binder/buildLlmInput — field narrowing (stage 2B)', () => {
     expect(serialized.length).toBeLessThan(CHAR_BUDGET);
 
     const names = new Set(input.fields.map((f) => f.name));
-    for (const f of askedFields) expect(names.has(f.name)).toBe(true);
+    for (const f of askedFields) expect(names.has(f.friendlyName)).toBe(true);
 
     expect(input.more_available?.count).toBe(280);
   });
@@ -142,7 +142,7 @@ describe('binder/buildLlmInput — field narrowing (stage 2B)', () => {
     expect(serialized.length).toBeLessThan(CHAR_BUDGET);
 
     const names = new Set(input.fields.map((f) => f.name));
-    for (const f of askedFields) expect(names.has(f.name)).toBe(true);
+    for (const f of askedFields) expect(names.has(f.friendlyName)).toBe(true);
 
     expect(input.more_available?.count).toBe(980);
   });
@@ -228,7 +228,7 @@ describe('binder/buildLlmInput — field narrowing (stage 2B)', () => {
     const input = buildLlmInput('show a summary', quantOnlyTemplate(), summary);
     expect(input.fields.length).toBe(20);
     const names = new Set(input.fields.map((f) => f.name));
-    for (const m of measures) expect(names.has(m.name)).toBe(true);
+    for (const m of measures) expect(names.has(m.friendlyName)).toBe(true);
   });
 
   it('passes through unchanged when there are fewer fields than the cap', () => {
@@ -240,7 +240,12 @@ describe('binder/buildLlmInput — field narrowing (stage 2B)', () => {
     const input = buildLlmInput('bar of Sales by Region', barTemplate(), summary);
 
     expect(input.fields).toEqual(
-      fields.map((f) => ({ name: f.name, role: f.role, type: f.type, datatype: f.datatype })),
+      fields.map((f) => ({
+        name: f.friendlyName,
+        role: f.role,
+        type: f.type,
+        datatype: f.datatype,
+      })),
     );
     expect(input.more_available).toBeUndefined();
   });

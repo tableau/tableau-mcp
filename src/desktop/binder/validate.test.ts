@@ -24,7 +24,7 @@ function field(p: {
   const bare = p.columnName.replace(/^\[|\]$/g, '');
   const ds = p.datasource ?? 'Superstore';
   return {
-    name: p.caption ?? bare,
+    friendlyName: p.caption ?? bare,
     caption: p.caption,
     columnName: p.columnName,
     role: p.role,

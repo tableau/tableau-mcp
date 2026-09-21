@@ -126,7 +126,7 @@ function withWaterfallAnchorDefault(
     return result;
   }
   const anchor = schemaSummary.fields.find(
-    (field) => field.role === 'dimension' && WATERFALL_ANCHOR_FIELD_RE.test(field.name),
+    (field) => field.role === 'dimension' && WATERFALL_ANCHOR_FIELD_RE.test(field.friendlyName),
   );
   if (!anchor) return result;
   const suffix = anchor.type === 'ordinal' ? 'ok' : 'nk';
@@ -144,7 +144,7 @@ function withWaterfallAnchorDefault(
     },
     warnings: [
       ...(result.warnings ?? []),
-      `auto-bound anchor_category to "${anchor.name}" to exclude subtotal and total rows when present`,
+      `auto-bound anchor_category to "${anchor.friendlyName}" to exclude subtotal and total rows when present`,
     ],
   };
 }

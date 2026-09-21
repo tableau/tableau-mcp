@@ -17,12 +17,12 @@ import { listAvailableFields } from '../metadata/field-builder.js';
 
 /**
  * One field from the workbook's datasources, projected to just what the binder
- * and the small-LLM contract need. `name` is the human-friendly identifier
+ * and the small-LLM contract need. `friendlyName` is the human-friendly identifier
  * (caption when present, else the bare column name); `columnName` keeps the
  * bracketed local name used to build the column-instance VALUE.
  */
 export interface SchemaField {
-  name: string; // friendly name: caption ?? bare column name
+  friendlyName: string; // friendly name: caption ?? bare column name
   caption?: string;
   columnName: string; // bracketed local name, e.g. "[Region]"
   role: 'dimension' | 'measure';
@@ -71,7 +71,7 @@ export function summarizeSchema(workbookXml: string, scopeDatasource?: string): 
     const caption = f.caption && f.caption.length > 0 ? f.caption : undefined;
     const role = f.role === 'measure' ? 'measure' : 'dimension';
     return {
-      name: caption ?? bare,
+      friendlyName: caption ?? bare,
       caption,
       columnName: f.columnName,
       role,

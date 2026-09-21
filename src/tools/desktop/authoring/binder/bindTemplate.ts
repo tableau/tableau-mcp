@@ -1243,8 +1243,8 @@ function waterfallOrderCandidates(schemaSummary?: SchemaSummary): string[] {
     return [];
   }
   const candidates = schemaSummary.fields
-    .filter((field) => WATERFALL_ORDER_FIELD_RE.test(field.name))
-    .map((field) => field.name);
+    .filter((field) => WATERFALL_ORDER_FIELD_RE.test(field.friendlyName))
+    .map((field) => field.friendlyName);
   return [...new Set(candidates)];
 }
 
@@ -1304,7 +1304,7 @@ function encodingColumnRefGuidance(
   const candidates = resolution.candidates
     .slice(0, MAX_ENCODING_FIELD_CANDIDATES)
     .map((candidate) => {
-      const caption = candidate.caption ?? candidate.name;
+      const caption = candidate.caption ?? candidate.friendlyName;
       return `${quoteGuidanceValue(candidate.column_ref)} (${quoteGuidanceValue(caption)})`;
     })
     .join(', ');
@@ -1779,7 +1779,7 @@ function ensureSortByColumnDependency(
   if (!parsed) {
     return {
       ok: false,
-      reason: `sort field "${field.name}" did not resolve to a column-instance ref`,
+      reason: `sort field "${field.friendlyName}" did not resolve to a column-instance ref`,
     };
   }
 
@@ -1819,7 +1819,7 @@ function ensureSortByColumnDependency(
   if (out === xml) {
     return {
       ok: false,
-      reason: `could not declare sort field "${field.name}" in datasource-dependencies`,
+      reason: `could not declare sort field "${field.friendlyName}" in datasource-dependencies`,
     };
   }
   return { ok: true, xml: out, columnRef: field.column_ref };
@@ -1842,7 +1842,7 @@ function ensureFilterColumnDependency(
   if (!parsed) {
     return {
       ok: false,
-      reason: `filter field "${field.name}" did not resolve to a column-instance ref`,
+      reason: `filter field "${field.friendlyName}" did not resolve to a column-instance ref`,
     };
   }
 
@@ -1889,7 +1889,7 @@ function ensureFilterColumnDependency(
   if (out === xml) {
     return {
       ok: false,
-      reason: `could not declare filter field "${field.name}" in datasource-dependencies`,
+      reason: `could not declare filter field "${field.friendlyName}" in datasource-dependencies`,
     };
   }
   return {

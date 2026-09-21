@@ -1194,7 +1194,7 @@ describe('bindTemplateTool', () => {
     const fields: SchemaField[] = Array.from(
       { length: MAX_CLASSIFIABLE_FIELDS + 1 },
       (_, index) => ({
-        name: index === 0 ? 'Region' : `Field ${index}`,
+        friendlyName: index === 0 ? 'Region' : `Field ${index}`,
         columnName: index === 0 ? '[Region]' : `[Field ${index}]`,
         role: 'dimension',
         type: 'nominal',
@@ -2449,7 +2449,7 @@ describe('bindTemplateTool', () => {
       type: 'nominal' | 'quantitative',
       datatype: 'string' | 'real',
     ): SchemaField => ({
-      name,
+      friendlyName: name,
       columnName: `[${name}]`,
       role,
       type,

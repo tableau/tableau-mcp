@@ -64,7 +64,6 @@ export {
 export type { BindingProposal, Blocker, EscalateReason, FilterSpec, SchemaField, SchemaSummary };
 
 type ProposeField = CoreLlmProposeInput['fields'][number] & { semanticRole?: string };
-type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
 
 // A waterfall's running total is order-dependent, and its intended P&L order almost always
 // lives in a non-displayed sequence column (display_order / sort_order / …). Left to the
@@ -78,8 +77,16 @@ export type LlmProposeInput = Omit<CoreLlmProposeInput, 'fields'> & {
   fields: ProposeField[];
 };
 
-function fieldIdentityKey(f: FieldIdentity): string {
-  return `${f.name}\0${f.role}\0${f.type}\0${f.datatype}`;
+// The identity tuple the core emits (friendly name / role / type / datatype). Taken as
+// explicit scalars because the two callers spell the friendly name differently — a
+// SchemaField carries it as `friendlyName`, the core propose field as `name`.
+function fieldIdentityKey(
+  friendlyName: string,
+  role: string,
+  type: string,
+  datatype: string,
+): string {
+  return `${friendlyName}\0${role}\0${type}\0${datatype}`;
 }
 
 /**
@@ -95,7 +102,7 @@ function enrichSemanticRoles(input: CoreLlmProposeInput, summary: SchemaSummary)
   const ambiguous = new Set<string>();
 
   for (const f of summary.fields) {
-    const key = fieldIdentityKey(f);
+    const key = fieldIdentityKey(f.friendlyName, f.role, f.type, f.datatype);
     if (semanticRoleByField.has(key) && semanticRoleByField.get(key) !== f.semanticRole) {
       ambiguous.add(key);
       continue;
@@ -106,7 +113,7 @@ function enrichSemanticRoles(input: CoreLlmProposeInput, summary: SchemaSummary)
   return {
     ...input,
     fields: input.fields.map((f) => {
-      const key = fieldIdentityKey(f);
+      const key = fieldIdentityKey(f.name, f.role, f.type, f.datatype);
       const semanticRole = ambiguous.has(key) ? undefined : semanticRoleByField.get(key);
       return semanticRole ? { ...f, semanticRole } : f;
     }),
@@ -419,7 +426,7 @@ function validateAndBuild(
   // WATERFALL_ORDER_FIELD_RE. Only when the column resolves unambiguously; otherwise leave the
   // template default (never guess). This is the deterministic fix for m1's sort-lands-~1/3 miss.
   if (!sort && m.template === WATERFALL_TEMPLATE_NAME) {
-    const orderFields = summary.fields.filter((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
+    const orderFields = summary.fields.filter((f) => WATERFALL_ORDER_FIELD_RE.test(f.friendlyName));
     if (orderFields.length > 1) {
       return {
         status: 'escalate',
@@ -428,7 +435,7 @@ function validateAndBuild(
           {
             code: 'kind-mismatch',
             detail:
-              `waterfall has multiple order fields (${orderFields.map((field) => `"${field.name}"`).join(', ')}); ` +
+              `waterfall has multiple order fields (${orderFields.map((field) => `"${field.friendlyName}"`).join(', ')}); ` +
               'set proposal.sort explicitly',
           },
         ],
@@ -437,11 +444,11 @@ function validateAndBuild(
     }
     const orderField = orderFields[0];
     if (orderField) {
-      const resolved = resolveInSummary(summary, orderField.name);
+      const resolved = resolveInSummary(summary, orderField.friendlyName);
       if ((resolved.kind === 'exact' || resolved.kind === 'rewritten') && resolved.field) {
-        sort = { by: orderField.name, direction: 'asc' };
+        sort = { by: orderField.friendlyName, direction: 'asc' };
         warnings.push(
-          `waterfall step order defaulted to "${orderField.name}" ascending (running total is order-dependent); pass proposal.sort to override`,
+          `waterfall step order defaulted to "${orderField.friendlyName}" ascending (running total is order-dependent); pass proposal.sort to override`,
         );
       }
     }

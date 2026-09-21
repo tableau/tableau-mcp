@@ -273,15 +273,17 @@ describe('binder/schema-summary', () => {
     const summary = summarizeSchema(WORKBOOK_XML);
 
     expect(summary.datasource).toBe('Superstore');
-    expect(summary.fields.find((field) => field.name === 'Sales')?.role).toBe('measure');
-    expect(summary.fields.find((field) => field.name === 'Region')?.role).toBe('dimension');
+    expect(summary.fields.find((field) => field.friendlyName === 'Sales')?.role).toBe('measure');
+    expect(summary.fields.find((field) => field.friendlyName === 'Region')?.role).toBe('dimension');
   });
 
   it('preserves federated parent-table identity', () => {
     const summary = summarizeSchema(GRAIN_AMBIGUOUS_WORKBOOK_XML);
 
-    expect(summary.fields.find((field) => field.name === 'Goals')?.table).toBe('[players.csv]');
-    expect(summary.fields.find((field) => field.name === 'Goals For')?.table).toBe(
+    expect(summary.fields.find((field) => field.friendlyName === 'Goals')?.table).toBe(
+      '[players.csv]',
+    );
+    expect(summary.fields.find((field) => field.friendlyName === 'Goals For')?.table).toBe(
       '[standings.csv]',
     );
   });
@@ -1387,7 +1389,7 @@ describe('binder/schema width cap', () => {
     return {
       datasource: 'Big',
       fields: Array.from({ length: count }, (_, index) => ({
-        name: `F${index}`,
+        friendlyName: `F${index}`,
         columnName: `[F${index}]`,
         role: 'measure' as const,
         type: 'quantitative',

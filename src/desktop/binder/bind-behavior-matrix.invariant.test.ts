@@ -233,7 +233,7 @@ describe('binder/bind-behavior-matrix — fixture contract', () => {
     const s = summarizeSchema(FIXTURE);
     expect(s.datasource).toBe(EXPECTED_DATASOURCE);
     // Sanity: the fields the matrix asks for exist with the expected roles.
-    const byName = new Map(s.fields.map((f) => [f.name, f]));
+    const byName = new Map(s.fields.map((f) => [f.friendlyName, f]));
     expect(byName.get('Sales')?.role).toBe('measure');
     expect(byName.get('Profit')?.role).toBe('measure');
     expect(byName.get('Sub-Category')?.role).toBe('dimension');

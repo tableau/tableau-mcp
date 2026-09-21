@@ -18,7 +18,7 @@ function field(p: {
   const deriv = p.refDerivation ?? (p.role === 'measure' ? 'sum' : 'none');
   const datasource = p.datasource ?? 'Superstore';
   return {
-    name: p.name,
+    friendlyName: p.name,
     columnName: `[${p.name}]`,
     role: p.role,
     type: p.type,
@@ -890,6 +890,6 @@ describe('schemaSummaryFromAvailableFields', () => {
 
     expect(summary.datasource).toBe('DS1');
     expect(summary.fields).toHaveLength(3);
-    expect(summary.fields[0].name).toBe('Sales');
+    expect(summary.fields[0].friendlyName).toBe('Sales');
   });
 });

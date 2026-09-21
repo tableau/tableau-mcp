@@ -39,7 +39,7 @@ type TemplateManifest = RuntimeTemplateDescriptor;
  * classifier consumes are declared here.
  */
 interface SchemaField {
-  name: string; // friendly name: caption ?? bare column name
+  friendlyName: string; // friendly name: caption ?? bare column name
   caption?: string;
   columnName: string; // bracketed local name, e.g. "[Region]"
   role: 'dimension' | 'measure';
@@ -752,7 +752,7 @@ function askHasCoordinateOrPointIntent(rawAsk: string, maskedAsk: string): boole
 
 /** Whole-token affinity: does any of the field's names carry one of the coordinate tokens? */
 function fieldHasCoordinateToken(f: SchemaField, tokens: ReadonlySet<string>): boolean {
-  for (const n of [f.name, f.caption ?? '', bareName(f.columnName)]) {
+  for (const n of [f.friendlyName, f.caption ?? '', bareName(f.columnName)]) {
     for (const t of nameTokens(n)) if (tokens.has(t)) return true;
   }
   return false;
@@ -834,7 +834,7 @@ function federatedDuplicateBaseName(name: string): string {
 }
 
 function askDirectsFieldToDetail(rawAsk: string, f: SchemaField): boolean {
-  const names = [bareName(f.columnName), f.caption, f.name].filter(
+  const names = [bareName(f.columnName), f.caption, f.friendlyName].filter(
     (n): n is string => !!n && n.length > 0,
   );
   return names.some((name) => {
@@ -849,7 +849,7 @@ function askDirectsFieldToDetail(rawAsk: string, f: SchemaField): boolean {
 }
 
 function askContainsFullFieldName(rawAsk: string, f: SchemaField): boolean {
-  const names = [f.caption, f.name].filter((n): n is string => !!n && n.length > 0);
+  const names = [f.caption, f.friendlyName].filter((n): n is string => !!n && n.length > 0);
   return names.some((name) => nameTokens(name).length > 1 && phraseIndexInAsk(rawAsk, name) >= 0);
 }
 
@@ -877,7 +877,7 @@ function pickBestDetailDim(
   maskedAsk: string,
 ): SchemaField | null {
   const scoreOf = (f: SchemaField): number => {
-    const toks = new Set([...nameTokens(f.name), ...nameTokens(bareName(f.columnName))]);
+    const toks = new Set([...nameTokens(f.friendlyName), ...nameTokens(bareName(f.columnName))]);
     const isCoarse = [...toks].some((t) => COARSE_GRAIN_TOKENS.has(t));
     let score = 0;
     let askOverlap = false;
@@ -917,10 +917,10 @@ function pickBestDetailDim(
   if (ranked.length > 1 && ranked[0].score === ranked[1].score) {
     const topScore = ranked[0].score;
     const tied = ranked.filter((r) => r.score === topScore).map((r) => r.f);
-    const bases = new Set(tied.map((f) => federatedDuplicateBaseName(f.name)));
+    const bases = new Set(tied.map((f) => federatedDuplicateBaseName(f.friendlyName)));
     if (bases.size !== 1) return null;
     const [base] = bases;
-    const unsuffixed = tied.filter((f) => f.name === base);
+    const unsuffixed = tied.filter((f) => f.friendlyName === base);
     if (unsuffixed.length !== 1) return null;
     return unsuffixed[0];
   }
@@ -978,11 +978,11 @@ function resolveLatLonSymbolMap(
   if (!lonSlot || !latSlot || detailSlots.length < detailDims.length) return null; // manifest shape changed → fail closed
 
   return [
-    { slot_id: lonSlot.slot_id, field: lon.name },
-    { slot_id: latSlot.slot_id, field: lat.name },
+    { slot_id: lonSlot.slot_id, field: lon.friendlyName },
+    { slot_id: latSlot.slot_id, field: lat.friendlyName },
     // Bind each dimension to detail1, detail2, … in order; extra (optional) detail slots
     // are left unbound and pruned by the optional-geo-LOD path.
-    ...detailDims.map((d, i) => ({ slot_id: detailSlots[i].slot_id, field: d.name })),
+    ...detailDims.map((d, i) => ({ slot_id: detailSlots[i].slot_id, field: d.friendlyName })),
   ];
 }
 
@@ -1016,7 +1016,7 @@ function pluralEquivalent(a: string, b: string): boolean {
 function fieldExactNames(fields: SchemaField[]): Set<string> {
   const out = new Set<string>();
   for (const f of fields) {
-    for (const n of [bareName(f.columnName), f.caption, f.name]) {
+    for (const n of [bareName(f.columnName), f.caption, f.friendlyName]) {
       if (n && n.length > 0) out.add(n.toLowerCase());
     }
   }
@@ -1157,18 +1157,18 @@ function recommendedRankingDefault(
     })
     .sort((a, b) => a.priority - b.priority || a.index - b.index)
     .slice(0, 3)
-    .map(({ field }) => field.name);
+    .map(({ field }) => field.friendlyName);
 
   return {
-    measure: measure.name,
+    measure: measure.friendlyName,
     top_n: 10,
     reason: REVENUE_RECOMMENDATION_REASON,
     context_measures: contextMeasures,
     binding: {
       template: candidate.template,
       bindings: [
-        { slot_id: categorySlots[0].slot_id, field: dimensions[0].name },
-        { slot_id: measureSlots[0].slot_id, field: measure.name },
+        { slot_id: categorySlots[0].slot_id, field: dimensions[0].friendlyName },
+        { slot_id: measureSlots[0].slot_id, field: measure.friendlyName },
       ],
     },
   };
@@ -1182,7 +1182,7 @@ function recommendedRankingDefault(
  */
 function acronymExpansionMatch(ask: string, field: SchemaField): number {
   let best = -1;
-  const names = [bareName(field.columnName), field.caption, field.name].filter(
+  const names = [bareName(field.columnName), field.caption, field.friendlyName].filter(
     (name): name is string => !!name && name.length > 0,
   );
   for (const name of names) {
@@ -1213,7 +1213,7 @@ function literalFieldMatchesInAsk(ask: string, s: SchemaSummary): FieldMatch[] {
   const exactNames = fieldExactNames(s.fields);
   const hits: FieldMatch[] = [];
   for (const field of s.fields) {
-    const names = [bareName(field.columnName), field.caption, field.name].filter(
+    const names = [bareName(field.columnName), field.caption, field.friendlyName].filter(
       (name): name is string => !!name && name.length > 0,
     );
     let best: PhraseMatch | null = null;
@@ -1240,7 +1240,7 @@ function literalFieldMatchesInAsk(ask: string, s: SchemaSummary): FieldMatch[] {
 }
 
 function fieldMatchesCaptionPattern(field: SchemaField, pattern: string): boolean {
-  return [field.name, field.caption, bareName(field.columnName)].some(
+  return [field.friendlyName, field.caption, bareName(field.columnName)].some(
     (name) => !!name && phraseIndexInAsk(name, pattern) >= 0,
   );
 }
@@ -1255,7 +1255,7 @@ function normalizeFieldPhrase(value: string): string {
 
 function fieldFullyMatchesCaptionPattern(field: SchemaField, pattern: string): boolean {
   const normalizedPattern = normalizeFieldPhrase(pattern);
-  return [field.name, field.caption, bareName(field.columnName)].some((name) => {
+  return [field.friendlyName, field.caption, bareName(field.columnName)].some((name) => {
     if (!name) return false;
     const normalizedName = normalizeFieldPhrase(name);
     return (
@@ -1294,7 +1294,7 @@ function businessSynonymCandidatesInAsk(
       const nounIndex = nounMatch.index;
 
       const literalClaimsNoun = literalHits.some(({ field }) => {
-        const names = [bareName(field.columnName), field.caption, field.name].filter(
+        const names = [bareName(field.columnName), field.caption, field.friendlyName].filter(
           (name): name is string => !!name && name.length > 0,
         );
         if (
@@ -1365,7 +1365,7 @@ export function resolveLooseFieldReference(
   if (!normalizedQuery) return { kind: 'not_found', candidates: [] };
 
   const fieldNames = (field: SchemaField): string[] =>
-    [field.name, field.caption, bareName(field.columnName)]
+    [field.friendlyName, field.caption, bareName(field.columnName)]
       .filter((name): name is string => !!name)
       .map(normalizeFieldPhrase);
   const exact = s.fields.filter((field) =>
@@ -1418,7 +1418,7 @@ function dimensionHeadCandidatesInAsk(
     // Geographic fields have dedicated concept/affinity resolution with stricter
     // chart-family safeguards; a caption head must not bypass that path.
     if (field.role !== 'dimension' || field.semanticRole) continue;
-    const friendlyName = field.caption ?? field.name;
+    const friendlyName = field.caption ?? field.friendlyName;
     const tokens = normalizeFieldPhrase(friendlyName).split(' ').filter(Boolean);
     if (tokens.length < 2) continue;
     const head = tokens[0];
@@ -1453,7 +1453,7 @@ function dimensionHeadCandidatesInAsk(
     // A bare leading token is only a grouping field reference in the explicit
     // "by <dimension-head>" position. Elsewhere it may be ordinary prose or a chart cue.
     const literalClaimsNoun = literalHits.some(({ field }) =>
-      [bareName(field.columnName), field.caption, field.name]
+      [bareName(field.columnName), field.caption, field.friendlyName]
         .filter((name): name is string => !!name && name.length > 0)
         .some((name) => {
           const literalMatch = fieldNameMatchInAskSpan(ask, name, exactNames);
@@ -1504,7 +1504,7 @@ const IDENTITY_LIKE_DIMENSION_HEAD_SUFFIXES = new Set([
 ]);
 
 function hasIdentityLikeDimensionHeadSuffix(field: SchemaField): boolean {
-  const friendlyName = field.caption ?? field.name;
+  const friendlyName = field.caption ?? field.friendlyName;
   const tokens = normalizeFieldPhrase(friendlyName).split(' ').filter(Boolean);
   return tokens.length === 2 && IDENTITY_LIKE_DIMENSION_HEAD_SUFFIXES.has(tokens[1]);
 }
@@ -1534,7 +1534,7 @@ interface GrainMeasureMatch {
 
 function fieldNameTokens(field: SchemaField): Set<string> {
   const tokens = new Set<string>();
-  for (const name of [bareName(field.columnName), field.caption, field.name]) {
+  for (const name of [bareName(field.columnName), field.caption, field.friendlyName]) {
     if (!name) continue;
     for (const token of normalizeFieldPhrase(name).split(' ')) {
       if (token) tokens.add(token);
@@ -1552,7 +1552,7 @@ function explicitMeasureAtToken(
 ): SchemaField | undefined {
   const ranked = candidates.map((field) => {
     let longest = 0;
-    for (const name of [bareName(field.columnName), field.caption, field.name]) {
+    for (const name of [bareName(field.columnName), field.caption, field.friendlyName]) {
       if (!name) continue;
       const match = fieldNameMatchInAskSpan(ask, name, exactNames);
       if (match && match.start <= start && match.end >= end) {
@@ -1636,7 +1636,7 @@ function grainMeasureLabels(ask: string, s: SchemaSummary): Map<SchemaField, str
     if (group.winner) continue;
     for (const field of group.candidates) {
       if (!field.table) continue;
-      labels.set(field, `${field.name} (from ${remoteTableName(field.table)})`);
+      labels.set(field, `${field.friendlyName} (from ${remoteTableName(field.table)})`);
     }
   }
   return labels;
@@ -1661,9 +1661,9 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
   // spatial-choropleth-map's avoid_when → a spatial ask wrongly demotes to propose.
   // Masking the longest name first consumes the whole compound token before any of
   // its sub-names can fragment it.
-  const fields = [...s.fields].sort((a, b) => b.name.length - a.name.length);
+  const fields = [...s.fields].sort((a, b) => b.friendlyName.length - a.friendlyName.length);
   for (const f of fields) {
-    const names = [bareName(f.columnName), f.caption, f.name].filter(
+    const names = [bareName(f.columnName), f.caption, f.friendlyName].filter(
       (n): n is string => !!n && n.length > 0,
     );
     for (const n of names) {
@@ -1737,7 +1737,7 @@ function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
 
 /** Whole-phrase test: does the ask NAME this field (by name, caption, or bare column)? */
 function askNamesField(ask: string, f: SchemaField, exactNames: ReadonlySet<string>): boolean {
-  const names = [bareName(f.columnName), f.caption, f.name].filter(
+  const names = [bareName(f.columnName), f.caption, f.friendlyName].filter(
     (n): n is string => !!n && n.length > 0,
   );
   return names.some((n) => fieldNameMatchInAsk(ask, n, exactNames) >= 0);
@@ -1746,7 +1746,7 @@ function askNamesField(ask: string, f: SchemaField, exactNames: ReadonlySet<stri
 /** Normalized content tokens of a field's name/caption/bare column name (for ask overlap). */
 function fieldContentTokens(f: SchemaField): Set<string> {
   const out = new Set<string>();
-  for (const n of [f.name, f.caption ?? '', bareName(f.columnName)]) {
+  for (const n of [f.friendlyName, f.caption ?? '', bareName(f.columnName)]) {
     for (const t of contentTokens(n)) out.add(t);
   }
   return out;
@@ -1841,7 +1841,7 @@ function narrowFields(
       b.tier - a.tier ||
       Number(b.named) - Number(a.named) ||
       b.overlap - a.overlap ||
-      a.f.name.localeCompare(b.f.name) ||
+      a.f.friendlyName.localeCompare(b.f.friendlyName) ||
       a.index - b.index,
   );
 
@@ -1866,7 +1866,7 @@ function isTemporal(f: SchemaField): boolean {
 }
 const WATERFALL_PERIOD_FIELD_RE = /period|quarter|month|year|fiscal|fy|fq|date|week|day/i;
 function isWaterfallPeriodField(f: SchemaField): boolean {
-  return isTemporal(f) || WATERFALL_PERIOD_FIELD_RE.test(f.name);
+  return isTemporal(f) || WATERFALL_PERIOD_FIELD_RE.test(f.friendlyName);
 }
 function isMeasure(f: SchemaField): boolean {
   return f.role === 'measure' || f.isAggregated;
@@ -1880,8 +1880,8 @@ function shouldExposeFieldIdentity(fields: SchemaField[]): boolean {
   const names = new Set<string>();
   for (const f of fields) {
     datasources.add(f.datasource);
-    if (names.has(f.name)) return true;
-    names.add(f.name);
+    if (names.has(f.friendlyName)) return true;
+    names.add(f.friendlyName);
   }
   return datasources.size > 1;
 }
@@ -1892,7 +1892,7 @@ function proposeField(
   grainLabel?: string,
 ): LlmProposeInput['fields'][number] {
   return {
-    name: f.name,
+    name: f.friendlyName,
     role: f.role,
     type: f.type,
     datatype: f.datatype,
@@ -1997,7 +1997,7 @@ function geoAffinityTokens(slot: TemplateManifest['slots'][number]): Set<string>
 /** Count of a geo slot's affinity tokens that appear as whole tokens in the field's names. */
 function geoAffinityOverlap(f: SchemaField, aff: Set<string>): number {
   const ft = new Set<string>();
-  for (const n of [f.name, f.caption ?? '', bareName(f.columnName)]) {
+  for (const n of [f.friendlyName, f.caption ?? '', bareName(f.columnName)]) {
     for (const t of nameTokens(n)) ft.add(t);
   }
   let n = 0;
@@ -2310,7 +2310,7 @@ function roleGreedyBind(
 
   const fieldTokens = (f: SchemaField): Set<string> => {
     const tokens = new Set<string>();
-    for (const name of [f.name, f.caption ?? '', bareName(f.columnName)]) {
+    for (const name of [f.friendlyName, f.caption ?? '', bareName(f.columnName)]) {
       for (const token of nameTokens(name)) tokens.add(token);
     }
     return tokens;
@@ -2323,7 +2323,7 @@ function roleGreedyBind(
   ): boolean => {
     if (slot.template_field.includes('{{')) return false;
     const templateFieldName = normalizedName(slot.template_field);
-    return [field.name, field.caption ?? '', bareName(field.columnName)]
+    return [field.friendlyName, field.caption ?? '', bareName(field.columnName)]
       .map(normalizedName)
       .some((name) => name === templateFieldName);
   };
@@ -2521,7 +2521,7 @@ function roleGreedyBind(
     if (!chosen) return null; // required slot unfilled / geo affinity ambiguous → fail closed
     const binding: { slot_id: string; field: string; derivation?: Derivation } = {
       slot_id: slot.slot_id,
-      field: chosen.name,
+      field: chosen.friendlyName,
     };
     if (slot.kind === 'quantitative' && aggOverride) binding.derivation = aggOverride;
     bindings.push(binding);
@@ -2532,7 +2532,7 @@ function roleGreedyBind(
   const provenance: string[] = [];
   for (const [slotId, f] of geoAutoCompleted) {
     provenance.push(
-      `Using '${f.name}' for the required geo slot '${slotId}' — auto-completed from the ` +
+      `Using '${f.friendlyName}' for the required geo slot '${slotId}' — auto-completed from the ` +
         'datasource because the ask named no matching field.',
     );
   }
@@ -2541,7 +2541,7 @@ function roleGreedyBind(
   // chose for a required time axis the ask did not name.
   for (const [slotId, f] of temporalAutoCompleted) {
     provenance.push(
-      `Using '${f.name}' for required temporal slot '${slotId}' because it is the only date field in the datasource.`,
+      `Using '${f.friendlyName}' for required temporal slot '${slotId}' because it is the only date field in the datasource.`,
     );
   }
 
@@ -2727,9 +2727,9 @@ function facetBinding(
   const facetSlot = m.slots.find((s) => isFacetSlot(s) && !boundIds.has(s.slot_id));
   if (!facetSlot) return null;
   const boundFields = new Set(bound.map((b) => b.field));
-  const spare = matched.find((f) => isCategorical(f) && !boundFields.has(f.name));
+  const spare = matched.find((f) => isCategorical(f) && !boundFields.has(f.friendlyName));
   if (!spare) return null;
-  return { slot_id: facetSlot.slot_id, field: spare.name };
+  return { slot_id: facetSlot.slot_id, field: spare.friendlyName };
 }
 
 /**
@@ -2753,9 +2753,11 @@ function colorSeriesBinding(
   );
   if (!colorSlot) return null;
   const boundFields = new Set(bound.map((binding) => binding.field));
-  const spares = candidates.filter((field) => isCategorical(field) && !boundFields.has(field.name));
+  const spares = candidates.filter(
+    (field) => isCategorical(field) && !boundFields.has(field.friendlyName),
+  );
   if (spares.length !== 1) return null;
-  return { slot_id: colorSlot.slot_id, field: spares[0].name };
+  return { slot_id: colorSlot.slot_id, field: spares[0].friendlyName };
 }
 
 export type SymbolMapEncodingRole = 'size' | 'color' | 'tooltip';
@@ -2771,7 +2773,7 @@ export type EncodingReport = {
   unfilled: SymbolMapEncodingRole[];
 };
 
-export type EncodingFieldCandidate = Pick<SchemaField, 'name' | 'caption' | 'column_ref'>;
+export type EncodingFieldCandidate = Pick<SchemaField, 'friendlyName' | 'caption' | 'column_ref'>;
 
 export type EncodingFieldResolution = {
   field: EncodingFieldCandidate | null;
@@ -2825,7 +2827,7 @@ function mostSpecificDirectedField(
   if (candidates.length < 2) return candidates[0] ?? null;
   const exactNames = fieldExactNames(summary.fields);
   const ranked = candidates.map((field) => {
-    const matchedNameLengths = [bareName(field.columnName), field.caption, field.name]
+    const matchedNameLengths = [bareName(field.columnName), field.caption, field.friendlyName]
       .filter((name): name is string => !!name && name.length > 0)
       .filter((name) => fieldNameMatchInAsk(clause, name, exactNames) >= 0)
       .map((name) => name.length);
@@ -2866,7 +2868,7 @@ export function resolveEncodingFieldInAsk(
   );
   const field = mostSpecificDirectedField(ask, summary, matched);
   const project = (candidate: SchemaField): EncodingFieldCandidate => ({
-    name: candidate.name,
+    friendlyName: candidate.friendlyName,
     ...(candidate.caption ? { caption: candidate.caption } : {}),
     column_ref: candidate.column_ref,
   });
@@ -2913,7 +2915,9 @@ function fieldDirectedToSymbolMapEncoding(
     const measures = role === 'tooltip' ? candidates.filter(isMeasure) : [];
     if (
       measures.length !== 1 ||
-      candidates.some((candidate) => !isMeasure(candidate) && !detailFields.has(candidate.name))
+      candidates.some(
+        (candidate) => !isMeasure(candidate) && !detailFields.has(candidate.friendlyName),
+      )
     ) {
       return null;
     }
@@ -2982,7 +2986,9 @@ function sizeMeasureFromSymbolMapBindings(
   );
   const sizeBindings = bindings.filter((binding) => sizeSlotIds.has(binding.slot_id));
   if (sizeBindings.length !== 1) return null;
-  const field = summary.fields.find((candidate) => candidate.name === sizeBindings[0].field);
+  const field = summary.fields.find(
+    (candidate) => candidate.friendlyName === sizeBindings[0].field,
+  );
   return field && isMeasure(field) ? field : null;
 }
 
@@ -3003,7 +3009,7 @@ function naturallyMatchedSizeMeasure(
   matched: SchemaField[],
   boundFieldNames: ReadonlySet<string>,
 ): SchemaField | null {
-  const measures = matched.filter((f) => isMeasure(f) && !boundFieldNames.has(f.name));
+  const measures = matched.filter((f) => isMeasure(f) && !boundFieldNames.has(f.friendlyName));
   return measures.length === 1 ? measures[0] : null;
 }
 
@@ -3063,7 +3069,7 @@ function symbolMapEncodingBindings(
     if (!field) continue;
     additions.push({
       slot_id: slot.slot_id,
-      field: field.name,
+      field: field.friendlyName,
       ...(aggOverride && isMeasure(field) ? { derivation: aggOverride } : {}),
     });
     boundIds.add(slot.slot_id);
@@ -3216,7 +3222,7 @@ function resolveExplicitCorrelationBubble(
 
   const exactNames = fieldExactNames(summary.fields);
   const position = (field: SchemaField): number => {
-    const candidates = [field.name, field.caption, bareName(field.columnName)]
+    const candidates = [field.friendlyName, field.caption, bareName(field.columnName)]
       .filter((name): name is string => Boolean(name))
       .map((name) => fieldNameMatchInAsk(ask, name, exactNames))
       .filter((index) => index >= 0);
@@ -3269,10 +3275,10 @@ function resolveExplicitCorrelationBubble(
   const lod = uniqueSlot('lod', 'categorical');
   if (!cols || !rows || !sizeSlot || !lod) return null;
   const bindings = [
-    { slot_id: cols.slot_id, field: x.field.name },
-    { slot_id: rows.slot_id, field: y.field.name },
-    { slot_id: sizeSlot.slot_id, field: size.field.name },
-    { slot_id: lod.slot_id, field: dimension.field.name },
+    { slot_id: cols.slot_id, field: x.field.friendlyName },
+    { slot_id: rows.slot_id, field: y.field.friendlyName },
+    { slot_id: sizeSlot.slot_id, field: size.field.friendlyName },
+    { slot_id: lod.slot_id, field: dimension.field.friendlyName },
   ];
   if (colorField) {
     const color = manifest.slots.find(
@@ -3284,7 +3290,7 @@ function resolveExplicitCorrelationBubble(
         slot.role.includes('color'),
     );
     if (!color) return null;
-    bindings.push({ slot_id: color.slot_id, field: colorField.name });
+    bindings.push({ slot_id: color.slot_id, field: colorField.friendlyName });
   }
   return bindings;
 }
@@ -3339,11 +3345,11 @@ function resolveExplicitBoxPlot(
   return [
     {
       slot_id: measureSlot.slot_id,
-      field: measures[0].name,
+      field: measures[0].friendlyName,
       ...(aggOverride ? { derivation: aggOverride } : {}),
     },
-    { slot_id: categorySlot.slot_id, field: categories[0].name },
-    { slot_id: grainSlot.slot_id, field: grain.name },
+    { slot_id: categorySlot.slot_id, field: categories[0].friendlyName },
+    { slot_id: grainSlot.slot_id, field: grain.friendlyName },
   ];
 }
 
@@ -3392,9 +3398,9 @@ function resolveExplicitGantt(
     (slot) => slot.bindable && slot.template_field === startSlot.template_field,
   );
   return [
-    { slot_id: taskSlot.slot_id, field: tasks[0].name },
-    ...startSlots.map((slot) => ({ slot_id: slot.slot_id, field: startFields[0].name })),
-    { slot_id: endSlot.slot_id, field: endFields[0].name },
+    { slot_id: taskSlot.slot_id, field: tasks[0].friendlyName },
+    ...startSlots.map((slot) => ({ slot_id: slot.slot_id, field: startFields[0].friendlyName })),
+    { slot_id: endSlot.slot_id, field: endFields[0].friendlyName },
   ];
 }
 
@@ -3413,7 +3419,7 @@ function resolveSingleMeasureHistogram(
   if (slots.length !== 2 || new Set(slots.map((slot) => slot.template_field)).size !== 1) {
     return null;
   }
-  return slots.map((slot) => ({ slot_id: slot.slot_id, field: matched[0].name }));
+  return slots.map((slot) => ({ slot_id: slot.slot_id, field: matched[0].friendlyName }));
 }
 
 function resolveOrderedWaterfall(
@@ -3428,14 +3434,16 @@ function resolveOrderedWaterfall(
   ) {
     return null;
   }
-  const orderFields = summary.fields.filter((field) => WATERFALL_ORDER_FIELD_RE.test(field.name));
+  const orderFields = summary.fields.filter((field) =>
+    WATERFALL_ORDER_FIELD_RE.test(field.friendlyName),
+  );
   if (orderFields.length !== 1) return null;
   const named = matched.filter((field) => field !== orderFields[0]);
   const measures = named.filter(
-    (field) => isMeasure(field) && !WATERFALL_ANCHOR_FIELD_RE.test(field.name),
+    (field) => isMeasure(field) && !WATERFALL_ANCHOR_FIELD_RE.test(field.friendlyName),
   );
   const categories = named.filter(
-    (field) => isCategorical(field) && !WATERFALL_ANCHOR_FIELD_RE.test(field.name),
+    (field) => isCategorical(field) && !WATERFALL_ANCHOR_FIELD_RE.test(field.friendlyName),
   );
   if (named.length !== 2 || measures.length !== 1 || categories.length !== 1) return null;
   const measureSlots = manifest.slots.filter(
@@ -3452,8 +3460,8 @@ function resolveOrderedWaterfall(
     return null;
   }
   return [
-    ...measureSlots.map((slot) => ({ slot_id: slot.slot_id, field: measures[0].name })),
-    { slot_id: categorySlots[0].slot_id, field: categories[0].name },
+    ...measureSlots.map((slot) => ({ slot_id: slot.slot_id, field: measures[0].friendlyName })),
+    { slot_id: categorySlots[0].slot_id, field: categories[0].friendlyName },
   ];
 }
 
@@ -3623,9 +3631,9 @@ function parseExactFilterMemberConstraints(
     if (!hit) return false;
     const value = parseBoundedFilterMember(source);
     if (value === null) return false;
-    const existing = constraints.find((constraint) => constraint.field === hit.field.name);
+    const existing = constraints.find((constraint) => constraint.field === hit.field.friendlyName);
     if (existing) return existing.values.length === 1 && existing.values[0] === value;
-    constraints.push({ field: hit.field.name, values: [value] });
+    constraints.push({ field: hit.field.friendlyName, values: [value] });
     return constraints.length <= MAX_EXACT_FILTER_FIELDS;
   };
 
@@ -3703,7 +3711,7 @@ export function parseExactFilterIntent(ask: string, summary: SchemaSummary): Exa
     const constrainedFields =
       valueParse.kind === 'exact'
         ? summary.fields.filter((field) =>
-            valueParse.constraints.some((constraint) => constraint.field === field.name),
+            valueParse.constraints.some((constraint) => constraint.field === field.friendlyName),
           )
         : [];
     if (
@@ -3714,7 +3722,7 @@ export function parseExactFilterIntent(ask: string, summary: SchemaSummary): Exa
     ) {
       return {
         kind: 'exact',
-        fieldNames: constrainedFields.map((field) => field.name),
+        fieldNames: constrainedFields.map((field) => field.friendlyName),
         valueConstraints: valueParse.kind === 'exact' ? valueParse.constraints : [],
       };
     }
@@ -3726,7 +3734,7 @@ export function parseExactFilterIntent(ask: string, summary: SchemaSummary): Exa
           : boundedAmbiguousFilterCandidateRefs(ask, summary),
     };
   }
-  const fieldNames = fields.map((field) => field.name);
+  const fieldNames = fields.map((field) => field.friendlyName);
   if (
     valueParse.kind === 'exact' &&
     valueParse.constraints.some((constraint) => !fieldNames.includes(constraint.field))
@@ -3764,7 +3772,7 @@ function attachAskModifiers(
 ): NoLlmClassification {
   const topN = topNFromAsk(ask);
   const filters = filterCandidates.map((candidate) => ({
-    field: candidate.name,
+    field: candidate.friendlyName,
     ...(topN !== undefined ? { context: true } : {}),
   }));
 
@@ -3993,7 +4001,9 @@ export function classifyNoLlm(
   // silently (the retrieval-without-adherence failure). Field names are masked
   // so a field literally named after a caution term can't force the demotion.
   const avoidMatches = matchAvoidWhen(maskedAsk, chosen.avoid_when, chosen.intent_keywords);
-  const sequenceField = summary.fields.find((field) => WATERFALL_ORDER_FIELD_RE.test(field.name));
+  const sequenceField = summary.fields.find((field) =>
+    WATERFALL_ORDER_FIELD_RE.test(field.friendlyName),
+  );
   const hasSequenceField = sequenceField !== undefined;
   const waterfallCanOrderDeterministically =
     chosen.template === WATERFALL_TEMPLATE_NAME && hasSequenceField;
@@ -4032,8 +4042,8 @@ export function classifyNoLlm(
         (field) =>
           isMeasure(field) &&
           field !== sequenceField &&
-          !WATERFALL_ANCHOR_FIELD_RE.test(field.name) &&
-          (!WATERFALL_ORDER_FIELD_RE.test(field.name) || matched.includes(field)),
+          !WATERFALL_ANCHOR_FIELD_RE.test(field.friendlyName) &&
+          (!WATERFALL_ORDER_FIELD_RE.test(field.friendlyName) || matched.includes(field)),
       );
       if (measureCandidates.length !== 1) return null;
       matchedForBinding.push(measureCandidates[0]);
@@ -4042,8 +4052,8 @@ export function classifyNoLlm(
       const categoricalCandidates = summary.fields.filter(
         (field) =>
           isCategorical(field) &&
-          !WATERFALL_ORDER_FIELD_RE.test(field.name) &&
-          !WATERFALL_ANCHOR_FIELD_RE.test(field.name) &&
+          !WATERFALL_ORDER_FIELD_RE.test(field.friendlyName) &&
+          !WATERFALL_ANCHOR_FIELD_RE.test(field.friendlyName) &&
           !isWaterfallPeriodField(field),
       );
       if (categoricalCandidates.length !== 1) return null;

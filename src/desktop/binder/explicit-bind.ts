@@ -98,7 +98,7 @@ export function schemaSummaryFromAvailableFields(fields: AvailableFieldLike[]): 
     const bare = bareName(f.columnName);
     const caption = f.caption && f.caption.length > 0 ? f.caption : undefined;
     return {
-      name: caption ?? bare,
+      friendlyName: caption ?? bare,
       caption,
       columnName: f.columnName,
       role: f.role === 'measure' ? 'measure' : 'dimension',
@@ -366,7 +366,7 @@ function slotAffinity(slot: SlotSpec, field: SchemaField): number {
 function fieldNameMatchesSlot(field: SchemaField, slot: SlotSpec): boolean {
   if (slot.template_field.includes('{{')) return false;
   const templateFieldName = normalizeComparableName(slot.template_field);
-  return [field.name, field.caption, bareName(field.columnName)]
+  return [field.friendlyName, field.caption, bareName(field.columnName)]
     .filter((name): name is string => typeof name === 'string')
     .map(normalizeComparableName)
     .some((name) => name === templateFieldName);
@@ -425,7 +425,7 @@ function resolveSource(raw: string, schema: SchemaSummary): ResolvedSource | Exp
   }
 
   const named = schema.fields.filter(
-    (f) => f.name === raw || f.caption === raw || bareName(f.columnName) === bareName(raw),
+    (f) => f.friendlyName === raw || f.caption === raw || bareName(f.columnName) === bareName(raw),
   );
   if (named.length === 1) return { raw, field: named[0] };
   if (named.length > 1) {
@@ -489,7 +489,7 @@ function appendCategoricalSwapWarning(warnings: string[], assignments: GreedyAss
   if (categorical.length < 2) return;
 
   const landed = categorical
-    .map(({ slot, field }) => `field '${field.name}' landed on slot '${slot.slot_id}'`)
+    .map(({ slot, field }) => `field '${field.friendlyName}' landed on slot '${slot.slot_id}'`)
     .join('; ');
   warnings.push(
     `Ambiguous categorical assignment: ${landed}. These categorical sources fit either slot and could swap when field order changes.`,

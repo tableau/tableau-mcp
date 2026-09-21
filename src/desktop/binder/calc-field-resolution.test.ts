@@ -4,7 +4,7 @@ import type { SchemaField, SchemaSummary } from './schema-summary.js';
 function field({ caption, columnName }: { caption?: string; columnName: string }): SchemaField {
   const bare = columnName.replace(/^\[|\]$/g, '');
   return {
-    name: caption ?? bare,
+    friendlyName: caption ?? bare,
     caption,
     columnName,
     role: 'measure',

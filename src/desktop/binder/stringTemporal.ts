@@ -20,7 +20,7 @@
  * satisfies this shape, so callers pass one unchanged.
  */
 interface TemporalCandidateField {
-  name: string;
+  friendlyName: string;
   datatype: string;
   role: 'dimension' | 'measure';
 }
@@ -44,7 +44,7 @@ export interface StringTemporalInference {
 export function inferStringTemporal(field: TemporalCandidateField): StringTemporalInference | null {
   if (field.datatype !== 'string') return null;
   if (field.role !== 'dimension') return null;
-  const name = field.name;
+  const name = field.friendlyName;
   if (!TEMPORAL_NAME_RE.test(name)) return null;
 
   // Format inference from the name. "month"/"year-month"/"ym" → month granularity
