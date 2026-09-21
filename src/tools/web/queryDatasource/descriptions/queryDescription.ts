@@ -1,6 +1,6 @@
 export const queryDatasourceToolDescription = `# Query Tableau Data Source Tool
 
-Executes VizQL queries against a Tableau data source (identified by \`datasourceLuid\`) to answer business questions, retrieving aggregated and filtered data with proper sorting and grouping. The \`datasourceLuid\` may be a published or an embedded (workbook) data source — including embedded LUIDs from \`get-workbook\`'s \`upstreamDatasources\` (\`datasourceType: 'embedded'\`); prefer the embedded copy when both exist, as it carries the workbook's local field semantics and calculations. Embedded querying must be enabled on the site — when a LUID comes from \`get-workbook\`, its \`isQueryable\` flag tells you up front whether you can query it (\`false\` → skip); otherwise, querying a data source that isn't enabled returns a clear "not enabled" error.
+Executes VizQL queries against Tableau data sources to answer business questions from published data. This tool allows you to retrieve aggregated and filtered data with proper sorting and grouping.
 
 ## Prerequisites
 Before using this tool, you should:
