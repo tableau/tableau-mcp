@@ -10,8 +10,12 @@ derives the extension package id, display name, and author and returns a ready-t
 workbook plus an extension package containing `manifest.json`, `index.html`, and a `src/app.js`
 starter you author the query and visualization into.
 
-This tool only **scaffolds and names** the app. It does not author query logic, resolve datasources,
-build, publish, or embed data — those are separate steps.
+Optionally, provide `datasourceLuid` (and, to narrow it, `fields`) to also wire a published
+datasource on the same site/server into the workbook, so the returned data app is already
+query-ready.
+
+This tool only **scaffolds and names** the app (and, optionally, wires a datasource) — it does not
+author query logic, build, publish, or embed data. Those remain separate steps.
 
 :::warning[Disabled by Default]
 This tool is gated behind the `tableau-data-apps` feature flag, which defaults to `false` in
@@ -25,8 +29,11 @@ This tool is gated behind the `tableau-data-apps` feature flag, which defaults t
 
 ## APIs called
 
-None. This tool does not call the Tableau REST API; it emits the starter workspace from a bundled
-template.
+None, when `datasourceLuid` is omitted — the tool emits the starter workspace from a bundled
+template with no Tableau REST API calls.
+
+When `datasourceLuid` is provided, the tool calls the Tableau REST/VizQL Data Service APIs to
+verify access to the datasource and resolve its fields for wiring into the workbook.
 
 ## Required arguments
 
@@ -38,6 +45,18 @@ filename, and the extension display name, and slugified into the extension packa
 end with a letter or digit; no path separators or `..`; 1–100 characters.
 
 Example: `Sales Demo` → package id `com.tableau.mcp.sales-demo`
+
+## Optional arguments
+
+### `datasourceLuid`
+
+LUID of a published datasource on the same site/server to wire into the workbook. When provided,
+the tool calls the Tableau REST API to verify access to the datasource and resolve its fields.
+
+### `fields`
+
+Optional subset of field names (from the datasource named by `datasourceLuid`) to wire into the
+workbook. Requires `datasourceLuid`. Omit to wire every field on the datasource.
 
 ## Derived values
 
