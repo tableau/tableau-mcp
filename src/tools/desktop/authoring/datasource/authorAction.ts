@@ -1019,7 +1019,10 @@ function bracketToken(value: string): string {
 
 function formatSetCandidates(candidates: SetCandidate[]): string {
   if (candidates.length === 0) {
-    return 'none';
+    // "none" alone was a dead end: the traces show the agent retrying against a set that never
+    // existed. Say what recovery actually is — the set must be authored before an action can
+    // point at it.
+    return 'none — author one first with author-set, then retry';
   }
   return candidates
     .map(
@@ -1050,13 +1053,17 @@ function formatAvailableFields(liveXml: string): string {
 // Enumerate the parameters already in the workbook, for the targetParameter recovery message.
 // findWorkbookParameters reads the Parameters datasource (the field summary excludes it). Each
 // entry pairs the caption with the fully qualified token the caller passes as targetParameter,
-// e.g. "p.Period ([Parameters].[Parameter 1])". "none" when the workbook has no parameters yet.
+// e.g. "p.Period ([Parameters].[Parameter 1])". When the workbook has no parameters yet, "none"
+// alone was the dead end the traces got stuck on — the target has to be authored before an action
+// can point at it, so name that recovery instead of leaving the agent to retry a phantom.
 function formatAvailableParameters(liveXml: string): string {
   const entries = findWorkbookParameters(liveXml).map(
     (parameter) =>
       `${parameter.caption ?? parameter.name} ([Parameters].${bracketToken(parameter.name)})`,
   );
-  return entries.length > 0 ? entries.join(', ') : 'none';
+  return entries.length > 0
+    ? entries.join(', ')
+    : 'none — author one first with author-parameter, then retry';
 }
 
 function renderSetAction({

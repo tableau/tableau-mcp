@@ -348,6 +348,36 @@ describe('authorActionTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it('tells the caller to author a set first when the datasource has none', async () => {
+    // The ticket's literal example was "targetSet is required in set mode. Available sets: none".
+    // "none" alone left the agent retrying a set that never existed; name the recovery instead.
+    const noSets = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'>",
+      '<datasources>',
+      "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
+      "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+      '</datasource>',
+      '</datasources>',
+      "<worksheets><worksheet name='Profit' /></worksheets>",
+      '</workbook>',
+    ].join('');
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+      },
+      initialXml: noSets,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('targetSet is required in set mode');
+    expect(result.content[0].text).toContain('author one first with author-set');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('accepts set-action readback when Desktop backfills single-select', async () => {
     const normalizedAction =
       "<edit-group-action caption='Expand Category' name='[Action1]'>" +
@@ -556,6 +586,37 @@ describe('authorActionTool', () => {
     expect(result.content[0].text).toContain('Available parameters');
     expect(result.content[0].text).toContain('p.Period');
     expect(result.content[0].text).toContain('[Parameters].[Parameter 1]');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('tells the caller to author a parameter first when the workbook has none', async () => {
+    // The LangSmith traces show the agent stuck retrying against a target that never existed:
+    // "Available parameters: none" alone was a dead end. When the workbook carries no parameters,
+    // the recovery is to author one first, so the message must name that path, not just "none".
+    const noParameters = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'>",
+      '<datasources>',
+      "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
+      "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+      '</datasource>',
+      '</datasources>',
+      "<worksheets><worksheet name='Profit' /></worksheets>",
+      '</workbook>',
+    ].join('');
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+      },
+      initialXml: noParameters,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('targetParameter is required in parameter mode');
+    expect(result.content[0].text).toContain('author one first with author-parameter');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
