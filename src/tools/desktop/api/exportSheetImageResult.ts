@@ -29,6 +29,58 @@ type BuildSheetImageToolResultArgs = {
   config: Config;
 };
 
+type BuildCachedImageToolResultArgs = {
+  tool: string;
+  label: string;
+  cachePrefix: string;
+  bytes: Buffer;
+  inlineBytes: number;
+  capBytes: number;
+  mimeType: string;
+  nextStep?: string;
+};
+
+export function buildCachedImageToolResult({
+  tool,
+  label,
+  cachePrefix,
+  bytes,
+  inlineBytes,
+  capBytes,
+  mimeType,
+  nextStep,
+}: BuildCachedImageToolResultArgs): CallToolResult | undefined {
+  if (!isOverInlineImageCap(inlineBytes, capBytes)) return undefined;
+
+  let cacheFile: string;
+  try {
+    cacheFile = new DesktopCache().getCacheFilePath({
+      prefix: cachePrefix,
+      extension: imageExtensionForMimeType(mimeType),
+    });
+    writeFileSync(cacheFile, bytes, { flag: 'wx', mode: 0o600 });
+  } catch {
+    throw new Error('Could not write the image to the local cache.');
+  }
+
+  logInlineImageCapHit({ tool, bytes: inlineBytes, capBytes, file: cacheFile });
+  return {
+    isError: false,
+    content: [
+      {
+        type: 'text',
+        text: buildInlineImageCapFileMessage({
+          label,
+          bytes: inlineBytes,
+          capBytes,
+          file: cacheFile,
+          nextStep,
+        }),
+      },
+    ],
+  };
+}
+
 /**
  * Translates a Desktop image-export envelope into an MCP tool result.
  *
@@ -93,28 +145,16 @@ export function buildSheetImageToolResult({
   const inlineBytes = inlineImageFootprintBytes(decoded.length, actualMimeType);
 
   // (3) Over the cap: write the decoded bytes to a cache file and return its path.
-  if (isOverInlineImageCap(inlineBytes, capBytes)) {
-    const cacheFile = new DesktopCache().getCacheFilePath({
-      prefix: cachePrefix,
-      extension: imageExtensionForMimeType(actualMimeType),
-    });
-    writeFileSync(cacheFile, decoded);
-    logInlineImageCapHit({ tool, bytes: inlineBytes, capBytes, file: cacheFile });
-    return {
-      isError: false,
-      content: [
-        {
-          type: 'text',
-          text: buildInlineImageCapFileMessage({
-            label,
-            bytes: inlineBytes,
-            capBytes,
-            file: cacheFile,
-          }),
-        },
-      ],
-    };
-  }
+  const cachedResult = buildCachedImageToolResult({
+    tool,
+    label,
+    cachePrefix,
+    bytes: decoded,
+    inlineBytes,
+    capBytes,
+    mimeType: actualMimeType,
+  });
+  if (cachedResult) return cachedResult;
 
   // (2) Under the cap: inline image block. Real SVG also rides as a decoded text block.
   if (actualMimeType === 'image/svg+xml') {

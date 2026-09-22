@@ -6,6 +6,7 @@ on:
       - main
       - feature/desktop
       - 'claude/**'
+      - 'codex/**'
 
 jobs:
   build:
