@@ -284,6 +284,7 @@ describe('server', () => {
     expect(registeredToolNames).toContain('list-flow-runs');
     expect(registeredToolNames).toContain('list-flow-tasks');
     expect(registeredToolNames).toContain('describe-flow');
+    expect(registeredToolNames).toContain('get-flow-task');
     // ...alongside the unrelated tools.
     expect(registeredToolNames).toContain('list-datasources');
   });
@@ -333,6 +334,29 @@ describe('server', () => {
     const registeredToolNames = vi
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).not.toContain('run-flow');
+    expect(registeredToolNames).not.toContain('run-flow-task');
+    expect(registeredToolNames).not.toContain('cancel-flow-run');
+  });
+
+  it('should register read-only flow tools but not mutating flow tools when FLOW_WRITE_TOOLS_ENABLED is unset', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'flow-tools',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).toContain('list-flows');
+    expect(registeredToolNames).toContain('get-flow');
+    expect(registeredToolNames).toContain('list-flow-runs');
+    expect(registeredToolNames).toContain('list-flow-tasks');
+    expect(registeredToolNames).toContain('get-flow-task');
 
     expect(registeredToolNames).not.toContain('run-flow');
     expect(registeredToolNames).not.toContain('run-flow-task');
