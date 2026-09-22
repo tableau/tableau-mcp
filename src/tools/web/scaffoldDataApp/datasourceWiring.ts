@@ -193,11 +193,11 @@ ${viewColumnInstances}
 }
 
 /**
- * Applies the two wiring blocks to an on-disk `.twb`'s content via two sequential
+ * Applies the two wiring blocks to a `.twb`'s in-memory content via two sequential
  * first-occurrence replacements of the literal `<datasources />` anchor (root, then view), then
  * verifies the connection name appears at least 4 times (root datasource name, root relation
  * connection, view datasource name, datasource-dependencies datasource). Used by
- * `finalizeTemplateFiles` for both output modes (disk and S3), since both finalize the workspace
+ * `buildFinalizedEntries` for both output modes (disk and S3), since both finalize the workspace
  * server-side.
  */
 export function applyDatasourceWiring(twbContent: string, edits: DatasourceWiringEdits): string {

@@ -1,20 +1,19 @@
 /**
  * Creates a new data app workspace from the committed placeholder template.
  *
- * Both output modes share one finalize path (`finalizeTemplateFiles`): walk the bundled template,
- * rewrite identity tokens, optionally wire a datasource, and write the finished files under a
- * destination root. They differ only in where that root lives and what's returned:
- *  - S3 configured (`config.bucketS3.enabled`): finalize into a temp scratch directory, zip it,
- *    upload the zip to S3, and return a short-lived presigned GET URL to the zip.
- *  - otherwise (or if the S3 upload fails): finalize directly into the server-controlled
+ * Both output modes share one finalize path (`buildFinalizedEntries`): walk the bundled template,
+ * rewrite identity tokens, optionally wire a datasource, and produce the finished files entirely
+ * in memory. They differ only in what happens with those entries and what's returned:
+ *  - S3 configured (`config.bucketS3.enabled`): zip the in-memory entries directly, upload the zip
+ *    to S3, and return a short-lived presigned GET URL to the zip. No scratch directory is written.
+ *  - otherwise (or if the S3 upload fails): write the entries under the server-controlled
  *    `dataAppWorkspaceRoot` on disk and return the workspace's file path.
  */
 
 import { randomUUID } from 'node:crypto';
 
 import { existsSync } from 'fs';
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'fs/promises';
-import { tmpdir } from 'os';
+import { mkdir, readdir, readFile, writeFile } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 import { Ok, Result } from 'ts-results-es';
 
@@ -132,29 +131,28 @@ export async function createDataAppWorkspace({
 }
 
 /**
- * Walks the bundled template, rewrites identity tokens (and, if `wiringEdits` is given, the .twb's
- * datasource anchors), and writes the finished files under `destRoot`. Shared by both output modes
- * so they finalize a workspace identically, differing only in where `destRoot` lives.
+ * Walks the bundled template and, entirely in memory, rewrites identity tokens (and, if
+ * `wiringEdits` is given, the .twb's datasource anchors), returning each file's finished content
+ * keyed by its final relative path. Shared by both output modes so they finalize a workspace
+ * identically, differing only in what they do with the resulting entries (write to disk vs. zip
+ * for S3) — neither writes a scratch copy of the template to disk.
  */
-async function finalizeTemplateFiles({
+async function buildFinalizedEntries({
   templateRoot,
-  destRoot,
   identity,
   wiringEdits,
 }: {
   templateRoot: string;
-  destRoot: string;
   identity: DataAppIdentity;
   wiringEdits?: DatasourceWiringEdits;
-}): Promise<Result<void, McpToolError>> {
+}): Promise<Result<ZipEntry[], McpToolError>> {
   const replacements = buildTextReplacements(identity);
 
   try {
     const relFiles = (await walkFiles(templateRoot)).sort();
+    const entries: ZipEntry[] = [];
     for (const rel of relFiles) {
       const finalRel = mapToFinalRelativePath(rel, identity);
-      const finalPath = join(destRoot, ...finalRel.split('/'));
-      await mkdir(dirname(finalPath), { recursive: true });
 
       const edits = replacements[rel];
       if (edits) {
@@ -169,30 +167,26 @@ async function finalizeTemplateFiles({
             ).toErr();
           }
         }
-        await writeFile(finalPath, finalContent, 'utf8');
+        entries.push({ path: finalRel, data: Buffer.from(finalContent, 'utf8') });
       } else {
-        await writeFile(finalPath, await readFile(join(templateRoot, ...rel.split('/'))));
+        entries.push({ path: finalRel, data: await readFile(join(templateRoot, ...rel.split('/'))) });
       }
     }
+    return new Ok(entries);
   } catch (error) {
     return new DataAppTemplateUnavailableError(
       `Failed to create the data app workspace: ${getExceptionMessage(error)}.`,
     ).toErr();
   }
-
-  return new Ok(undefined);
 }
 
-/** Zips every file under `root` (recursively, preserving relative paths) into an in-memory buffer. */
-async function zipDirectoryToBuffer(root: string): Promise<Buffer> {
-  const relFiles = await walkFiles(root);
-  const entries: ZipEntry[] = await Promise.all(
-    relFiles.map(async (rel) => ({
-      path: rel,
-      data: await readFile(join(root, ...rel.split('/'))),
-    })),
-  );
-  return buildZip(entries);
+/** Writes finalized entries (relative path + content) under `destRoot`. */
+async function writeEntriesToDisk(entries: ZipEntry[], destRoot: string): Promise<void> {
+  for (const entry of entries) {
+    const finalPath = join(destRoot, ...entry.path.split('/'));
+    await mkdir(dirname(finalPath), { recursive: true });
+    await writeFile(finalPath, entry.data);
+  }
 }
 
 async function createS3Workspace({
@@ -213,22 +207,13 @@ async function createS3Workspace({
     ).toErr();
   }
 
-  let scratchRoot: string | undefined;
+  const finalizeResult = await buildFinalizedEntries({ templateRoot, identity, wiringEdits });
+  if (finalizeResult.isErr()) {
+    return finalizeResult;
+  }
+
   try {
-    scratchRoot = await mkdtemp(join(tmpdir(), 'data-app-workspace-'));
-    const destRoot = join(scratchRoot, datappName);
-
-    const finalizeResult = await finalizeTemplateFiles({
-      templateRoot,
-      destRoot,
-      identity,
-      wiringEdits,
-    });
-    if (finalizeResult.isErr()) {
-      return finalizeResult;
-    }
-
-    const zipBuffer = await zipDirectoryToBuffer(scratchRoot);
+    const zipBuffer = buildZip(finalizeResult.value);
     const keyPrefix = joinS3Prefix(config.bucketS3.keyPrefix, 'data-app-workspaces');
     const key = `${keyPrefix}${slug(datappName)}/${randomUUID()}.zip`;
     const s3URL = await uploadBufferToS3(zipBuffer, {
@@ -249,10 +234,6 @@ async function createS3Workspace({
       logger: 'tool',
     });
     return await createLocalWorkspace({ datappName, identity, config, wiringEdits });
-  } finally {
-    if (scratchRoot) {
-      await rm(scratchRoot, { recursive: true, force: true });
-    }
   }
 }
 
@@ -289,14 +270,17 @@ async function createLocalWorkspace({
     ).toErr();
   }
 
-  const finalizeResult = await finalizeTemplateFiles({
-    templateRoot,
-    destRoot: dest,
-    identity,
-    wiringEdits,
-  });
+  const finalizeResult = await buildFinalizedEntries({ templateRoot, identity, wiringEdits });
   if (finalizeResult.isErr()) {
     return finalizeResult;
+  }
+
+  try {
+    await writeEntriesToDisk(finalizeResult.value, dest);
+  } catch (error) {
+    return new DataAppTemplateUnavailableError(
+      `Failed to create the data app workspace: ${getExceptionMessage(error)}.`,
+    ).toErr();
   }
 
   return new Ok({

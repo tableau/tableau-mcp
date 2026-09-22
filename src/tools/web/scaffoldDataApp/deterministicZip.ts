@@ -1,7 +1,7 @@
 /**
  * Minimal, dependency-free ZIP writer used at request time by
- * `dataAppWorkspaceStore.ts`'s `zipDirectoryToBuffer` to build a byte-stable
- * archive of a finalized data app workspace for S3 delivery.
+ * `dataAppWorkspaceStore.ts`'s `createS3Workspace` to build a byte-stable
+ * archive of a finalized data app workspace's in-memory entries for S3 delivery.
  *
  * Entries are STORE'd (no compression), sorted by path, and written with a
  * fixed DOS timestamp and no extra fields, so identical inputs always produce
