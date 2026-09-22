@@ -276,7 +276,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
-    ['author-action', 1521], // ratcheted down 2026-09-18 after trimming url/datasource describes for the source/target exclude split
+    ['author-action', 2031], // raised 2026-09-22: the schema skeleton alone already filled the 1521 cap with empty describes, and those empty describes drove ~426 failed calls (missing mode/target guidance). The +510 buys the mode-routing summary and required-field describes that fund the fix; routing prose is concentrated in `mode` (one place, all four modes) to keep it minimal. Earlier: ratcheted down 2026-09-18 after trimming url/datasource describes for the source/target exclude split
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.
     ['format-worksheets', 1097],

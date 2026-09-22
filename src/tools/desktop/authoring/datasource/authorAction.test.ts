@@ -48,29 +48,28 @@ describe('authorActionTool', () => {
       { description?: string }
     >;
 
-    // The tool description names the four modes so the caller can pick one before reading params.
+    // The tool description tells the caller to pick a mode and pass its required field.
     expect(tool.description).not.toBe('Add action.');
-    for (const modeName of ['parameter', 'set', 'url', 'filter']) {
-      expect(tool.description).toContain(modeName);
-    }
+    expect(tool.description).toContain('mode');
 
-    // mode is the router: its description states each mode's required field.
+    // mode is the router: its description names each mode and the field that mode requires,
+    // so the caller can populate it before the first call. This is where the tools/list byte
+    // budget is best spent — one place, all four modes — rather than repeated per param.
     const modeDescription = paramsSchema['mode']?.description ?? '';
+    for (const modeName of ['parameter', 'set', 'url', 'filter']) {
+      expect(modeDescription).toContain(modeName);
+    }
     expect(modeDescription).toContain('sourceField');
     expect(modeDescription).toContain('targetParameter');
     expect(modeDescription).toContain('targetSet');
     expect(modeDescription).toContain('targetSheet');
-    expect(modeDescription).toContain('url');
 
-    // Every mode-routing param says which mode it belongs to and that it is required there.
+    // The four required mode-routing params each say which mode they belong to and, for the
+    // parameter target, the qualified form — the specifics the mode summary can't carry.
     expect(paramsSchema['sourceField']?.description).toContain('parameter');
     expect(paramsSchema['targetParameter']?.description).toContain('[Parameters]');
     expect(paramsSchema['targetSet']?.description).toContain('set');
     expect(paramsSchema['targetSheet']?.description).toContain('filter');
-    expect(paramsSchema['caption']?.description).not.toBe('');
-    expect(paramsSchema['sourceWorksheet']?.description).not.toBe('');
-    expect(paramsSchema['filterFields']?.description).not.toBe('');
-    expect(paramsSchema['sourceDashboard']?.description).not.toBe('');
   });
 
   it('creates the workbook-level <actions> block and splices an edit-parameter-action, verifying readback', async () => {

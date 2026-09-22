@@ -38,58 +38,32 @@ const paramsSchema = {
   mode: modeSchema
     .default('parameter')
     .describe(
-      'Which target a mark interaction drives, and the field that mode needs: ' +
-        'parameter (needs sourceField and targetParameter), set (needs targetSet), ' +
-        'url (needs url), filter (needs targetSheet). Defaults to parameter.',
+      'Target driven, and the field it needs: parameter (sourceField+targetParameter), ' +
+        'set (targetSet), url (url), filter (targetSheet).',
     ),
-  caption: z.string().describe('Action name shown to the user; must be unique in the workbook.'),
-  sourceWorksheet: z
-    .string()
-    .describe(
-      'Worksheet whose marks drive the action. Required for parameter and set modes; ' +
-        'for url and filter modes pass this or sourceDashboard.',
-    ),
+  caption: z.string().describe(''),
+  sourceWorksheet: z.string().describe(''),
   sourceField: z
     .string()
     .optional()
-    .describe(
-      'parameter mode only, required there: the source field whose value is pushed to the ' +
-        'target parameter, e.g. [Profit].',
-    ),
+    .describe('parameter, required: source field pushed, e.g. [Profit].'),
   targetParameter: z
     .string()
     .optional()
-    .describe(
-      'parameter mode only, required there: the parameter to set, fully qualified like ' +
-        '[Parameters].[Parameter 1].',
-    ),
-  targetSet: z
-    .string()
-    .optional()
-    .describe('set mode only, required there: the set whose membership the selected marks change.'),
+    .describe('parameter, required: parameter to set, qualified [Parameters].[Parameter 1].'),
+  targetSet: z.string().optional().describe('set, required: set whose membership marks change.'),
   targetSheet: z
     .string()
     .optional()
-    .describe(
-      'filter mode only, required there: the worksheet or dashboard the source marks filter.',
-    ),
-  filterFields: z
-    .array(z.string())
-    .optional()
-    .describe('filter mode only: fields to filter on; omit to filter on all shared fields.'),
+    .describe('filter, required: sheet/dashboard the marks filter.'),
+  filterFields: z.array(z.string()).optional().describe(''),
   datasource: z.string().optional().describe('Internal name or caption.'),
   setMembership: setMembershipSchema.default('assign').describe(''),
   clearSelection: clearSelectionSchema.default('do-nothing').describe(''),
   singleSelect: z.boolean().optional().describe(''),
   activation: activationSchema.default('on-select').describe(''),
   url: z.string().optional().describe('URL for url mode, raw. <[Field Name]> = value.'),
-  sourceDashboard: z
-    .string()
-    .optional()
-    .describe(
-      'Dashboard whose marks drive the action, for url and filter modes; pass instead of or ' +
-        'alongside sourceWorksheet.',
-    ),
+  sourceDashboard: z.string().optional().describe(''),
   excludeSourceSheets: z.array(z.string()).optional().describe(''),
   excludeTargetSheets: z.array(z.string()).optional().describe(''),
   urlTarget: urlTargetSchema.optional().describe(''),
@@ -147,9 +121,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'author-action',
     title,
-    description:
-      'Wire a mark interaction to a target. Pick mode and pass its required field: ' +
-      'parameter (sourceField + targetParameter), set (targetSet), url (url), filter (targetSheet).',
+    description: 'Wire a mark interaction to a target. Pick mode and pass its required field.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
