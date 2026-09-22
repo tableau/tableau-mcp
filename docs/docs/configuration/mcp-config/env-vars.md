@@ -469,14 +469,15 @@ Controls whether the Tableau Prep flow tools are registered.
   - [`get-flow`](../../tools/flows/get-flow.md)
   - [`list-flow-runs`](../../tools/flows/list-flow-runs.md)
   - [`list-flow-tasks`](../../tools/flows/list-flow-tasks.md)
+  - [`describe-flow`](../../tools/flows/describe-flow.md)
 - Only the exact value `true` enables them; any other value (or leaving it unset) keeps them
   disabled.
 - Setting this to `true` is necessary but not sufficient. The flow tools also require the
   `flow-tools` feature flag to be enabled, which lets a deployment roll them out per environment
   without a redeploy. Both switches must be on for the tools to register; either one turns them
   off. Self-hosted deployments control the flag through `features.json`, where it ships as `false`.
-- When the tools are disabled, their OAuth scopes (`tableau:mcp:flow:read` and
-  `tableau:flows:read`) are neither advertised nor enforced.
+- When the tools are disabled, their OAuth scopes (`tableau:mcp:flow:read`,
+  `tableau:flows:read`, and `tableau:flows:download`) are neither advertised nor enforced.
 - When enabled, individual flow tools can still be excluded via
   [`EXCLUDE_TOOLS`](#exclude_tools) (e.g. `EXCLUDE_TOOLS=flow`).
 

@@ -402,6 +402,27 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:flows:read');
     });
 
+    it('should include tableau:flows:download when flowToolsEnabled and flow-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'flow-tools',
+      );
+      mockGetConfig.mockReturnValue({
+        flowToolsEnabled: true,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:flows:download');
+    });
+
+    it('should exclude tableau:flows:download when flowToolsEnabled is false', async () => {
+      mockGetConfig.mockReturnValue({
+        flowToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).not.toContain('tableau:flows:download');
+    });
+
     it('should exclude tableau:workbooks:create when authoring-tools is disabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,

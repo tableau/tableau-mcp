@@ -6,6 +6,7 @@ import { getListDatasourcesTool } from './datasources/listDatasources.js';
 import { getConfirmUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/confirmUpdateCloudExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
+import { getDescribeFlowTool } from './flows/describeFlow/describeFlow.js';
 import { getGetFlowTool } from './flows/getFlow/getFlow.js';
 import { getListFlowRunsTool } from './flows/listFlowRuns/listFlowRuns.js';
 import { getListFlowsTool } from './flows/listFlows/listFlows.js';
@@ -65,6 +66,7 @@ export const webToolFactories = [
   getGetFlowTool,
   getListFlowRunsTool,
   getListFlowTasksTool,
+  getDescribeFlowTool,
   getListAllPulseMetricDefinitionsTool,
   getListPulseMetricDefinitionsFromDefinitionIdsTool,
   getListPulseMetricsFromMetricDefinitionIdTool,
