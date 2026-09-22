@@ -223,10 +223,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'dynamic-authoring',
     trigger:
-      'an explicit request to create or change a dynamic construct or non-conventional calculated field, or a visualization using one (examples include running total and LOD)',
+      'an explicit request to create or change a dynamic construct or non-conventional calculated field, or a visualization using one (examples include running total, LOD, and interactivity on mark interaction such as by selecting or hovering over marks or selecting a link in a tooltip menu)',
     action:
-      'Do not create or change workbook content for an analytical question alone. Use only the author-* verbs the request needs: author-parameter, author-set, author-calc, author-action, and format-worksheets. When a requested construct depends on a parameter, author and verify that parameter before its dependents. For an author-only request, verify every requested author-* result and stop after all requested constructs have read back successfully. For a visualization request, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+      'Do not create or change workbook content for an analytical question alone. Before authoring, consult the knowledge docs via search-knowledge. Use only the author-* verbs the request needs: author-parameter, author-set, author-calc, author-action, and format-worksheets. When a requested construct depends on a parameter, author and verify that parameter before its dependents. For an author-only request, verify every requested author-* result and stop after all requested constructs have read back successfully. For a visualization request, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
     toolSequence: [
+      'search-knowledge',
       'author-parameter',
       'author-set',
       'author-calc',

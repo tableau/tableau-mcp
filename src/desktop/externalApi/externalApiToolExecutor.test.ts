@@ -812,6 +812,36 @@ describe('ExternalApiToolExecutor', () => {
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets/sheet-sales');
     });
 
+    it('gets ordered native Show Me options without narrowing runtime type tokens', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getWorksheetShowMeOptions(
+        'sheet-sales',
+        {
+          fieldsSelectedInSchemaViewer: [
+            '[Sample - Superstore].[none:Region:nk]',
+            '[Sample - Superstore].[sum:Sales:qk]',
+          ],
+        },
+        signal,
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().options.map(({ showMeType }) => showMeType)).toEqual([
+        'bar-horiz',
+        'native-future-viz',
+      ]);
+      expect(result.unwrap().options[1].isApplicable).toBe(false);
+      const last = server.requests.at(-1);
+      expect(last?.method).toBe('GET');
+      expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales/showMe');
+      expect(last?.searchParams).toEqual({
+        selectionMode: 'explicit',
+        fieldsSelectedInSchemaViewer: '[Sample - Superstore].[sum:Sales:qk]',
+      });
+    });
+
     it('gets a dashboard item by id', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();

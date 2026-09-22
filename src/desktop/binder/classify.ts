@@ -3257,7 +3257,7 @@ function resolveExplicitCorrelationBubble(
   }
   if (!/\bby\b/i.test(ask.slice(y.index, dimension.index))) return null;
 
-  const uniqueSlot = (role: string, kind: SlotKind) => {
+  const uniqueSlot = (role: string, kind: SlotKind): TemplateManifest['slots'][number] | null => {
     const slots = manifest.slots.filter(
       (slot) => slot.bindable && slot.kind === kind && slot.role.includes(role),
     );

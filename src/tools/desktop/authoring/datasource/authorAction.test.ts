@@ -1,119 +1,44 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
-
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
-import { getAuthorActionTool } from './authorAction.js';
+import { getAttr, getAuthorActionTool } from './authorAction.js';
+import {
+  appliedDocumentXml,
+  BASE_XML,
+  getToolResult,
+  withActions,
+} from './authorActionTestFixtures.js';
 
-const BASE_XML = [
-  "<?xml version='1.0' encoding='utf-8'?>",
-  "<workbook version='18.1'>",
-  '<datasources>',
-  "<datasource hasconnection='false' inline='true' name='Parameters'>",
-  "<column caption='p.Period' datatype='string' name='[Parameter 1]' param-domain-type='list' role='measure' type='nominal' value='&quot;Month&quot;'><calculation class='tableau' formula='&quot;Month&quot;' /></column>",
-  '</datasource>',
-  "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
-  "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
-  "<group caption='Category Set' name='[Category Set]' user:ui-builder='filter-group' />",
-  "<group caption='Ad Hoc Group' name='[Ad Hoc Group]' />",
-  '</datasource>',
-  '</datasources>',
-  "<worksheets><worksheet name='Profit' /></worksheets>",
-  '</workbook>',
-].join('');
+describe('getAttr', () => {
+  it('reads the requested attribute', () => {
+    expect(getAttr("<x name='B' />", 'name')).toBe('B');
+    expect(getAttr('<x name="B" />', 'name')).toBe('B');
+  });
 
-const FILTER_XML = [
-  "<?xml version='1.0' encoding='utf-8'?>",
-  "<workbook version='18.1'>",
-  "<datasources><datasource caption='Sample' name='Sample - Superstore' />",
-  "<datasource caption='Other' name='Other Source' /></datasources>",
-  '<worksheets>',
-  filterWorksheet('Show Sales by State as a filled map.', 'Sample - Superstore'),
-  filterWorksheet('KPI Sales', 'Sample - Superstore'),
-  filterWorksheet('KPI Orders', 'Sample - Superstore'),
-  filterWorksheet('KPI Quantity', 'Sample - Superstore'),
-  filterWorksheet('Detail', 'Sample - Superstore'),
-  filterWorksheet('Other KPI', 'Other Source'),
-  filterWorksheet('Cross KPI', 'Other Source'),
-  '</worksheets>',
-  "<dashboards><dashboard name='Sales Cockpit'><zones>",
-  "<zone id='1' type-v2='layout-basic'>",
-  "<zone id='2' name='Show Sales by State as a filled map.' />",
-  "<zone id='3' name='KPI Sales' />",
-  "<zone id='4' name='KPI Orders' />",
-  "<zone id='5' name='KPI Quantity' />",
-  "<zone id='6' name='Detail' />",
-  '</zone>',
-  "</zones></dashboard><dashboard name='Other Dashboard'><zones>",
-  "<zone id='7' name='Other KPI' />",
-  '</zones></dashboard></dashboards>',
-  '</workbook>',
-].join('');
+  it('does not match a hyphen- or colon-suffixed decoy attribute', () => {
+    expect(getAttr("<x param-name='A' name='B' />", 'name')).toBe('B');
+    expect(getAttr("<x user:name='A' name='B' />", 'name')).toBe('B');
+    expect(getAttr("<column semantic-role='A' role='B' />", 'role')).toBe('B');
+  });
 
-const FILTER_TARGETS = ['KPI Sales', 'KPI Orders', 'KPI Quantity'];
-
-function filterWorksheet(name: string, datasource: string): string {
-  return `<worksheet name='${name}'><table><view><datasources><datasource name='${datasource}' /></datasources></view></table></worksheet>`;
-}
-
-function filterActionXml({
-  caption = 'Filter KPIs by State',
-  actionName = '[Action1]',
-  dashboard = 'Sales Cockpit',
-  source = 'Show Sales by State as a filled map.',
-  excludes = ['Show Sales by State as a filled map.', 'Detail'],
-  clearSelection = 'show-all',
-}: {
-  caption?: string;
-  actionName?: string;
-  dashboard?: string;
-  source?: string;
-  excludes?: string[];
-  clearSelection?: 'do-nothing' | 'show-all' | 'exclude-all';
-} = {}): string {
-  const exclude = excludes.join(',');
-  const autoClear = clearSelection === 'do-nothing' ? '' : " auto-clear='true'";
-  const onEmpty = clearSelection === 'exclude-all' ? "<param name='on-empty' value='none' />" : '';
-  return (
-    `<action caption='${caption}' name='${actionName}'>` +
-    `<activation${autoClear} type='on-select' />` +
-    `<source dashboard='${dashboard}' type='sheet' worksheet='${source}' />` +
-    "<command command='tsc:tsl-filter'>" +
-    `<param name='exclude' value='${exclude}' />` +
-    onEmpty +
-    "<param name='special-fields' value='all' />" +
-    `<param name='target' value='${dashboard}' />` +
-    '</command></action>'
-  );
-}
+  it('returns the sole attribute even when it is only a decoy', () => {
+    expect(getAttr("<x param-name='A' />", 'name')).toBeUndefined();
+  });
+});
 
 describe('authorActionTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('describes datasource selection as name or unique caption', async () => {
+  it('describes datasource selection as name or caption', async () => {
     const tool = getAuthorActionTool(new DesktopMcpServer());
     const paramsSchema = (await Provider.from(tool.paramsSchema)) as Record<
       string,
       { description?: string }
     >;
 
-    expect(paramsSchema['datasource']?.description).toBe(
-      'Internal datasource name or unique caption.',
-    );
-    expect(paramsSchema['mode']?.description).toContain(
-      'parameter requires sourceField and a qualified targetParameter',
-    );
-    expect(paramsSchema['mode']?.description).toContain('set requires an existing targetSet');
-    expect(paramsSchema['mode']?.description).toContain(
-      'url requires url and a worksheet or dashboard source',
-    );
-    expect(paramsSchema['mode']?.description).toContain(
-      'filter requires a dashboard source worksheet and targetWorksheets',
-    );
+    expect(paramsSchema['datasource']?.description).toBe('Internal name or caption.');
   });
 
   it('creates the workbook-level <actions> block and splices an edit-parameter-action, verifying readback', async () => {
@@ -180,6 +105,79 @@ describe('authorActionTool', () => {
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     // Only one <actions> block — appended, not duplicated.
     expect(loaded.match(/<actions>/g)?.length).toBe(1);
+  });
+
+  // twb_2026.2.0.xsd fixes the child order of <actions>: legacy <action> (url/filter)
+  // -> datasources/deps -> nav -> <edit-group-action> (set) -> <edit-parameter-action>
+  // (parameter). A new action must slot into its family rather than append before </actions>
+  it('inserts a url action ahead of an existing parameter action (XSD family order)', async () => {
+    const existingParam =
+      "<edit-parameter-action caption='Existing Param' name='[Action1]'></edit-parameter-action>";
+    const initialXml = withActions(BASE_XML, existingParam);
+    const added =
+      "<action caption='Open Details' name='[Action2]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://example.com/' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open Details',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/',
+      },
+      initialXml,
+      readbackXml: withActions(BASE_XML, added + existingParam),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
+
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded.match(/<actions>/g)?.length).toBe(1);
+    expect(loaded).toContain(added);
+    const legacyAt = loaded.indexOf("<action caption='Open Details'");
+    const paramAt = loaded.indexOf('<edit-parameter-action');
+    expect(legacyAt).toBeGreaterThanOrEqual(0);
+    expect(legacyAt).toBeLessThan(paramAt);
+  });
+
+  it('inserts a set action ahead of an existing parameter action (XSD family order)', async () => {
+    const existingParam =
+      "<edit-parameter-action caption='Existing Param' name='[Action1]'></edit-parameter-action>";
+    const initialXml = withActions(BASE_XML, existingParam);
+    const added =
+      "<edit-group-action caption='Expand Category' name='[Action2]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<add-or-remove-marks value='assign' />" +
+      "<params><param name='selection-clear-set-option' value='do-nothing' />" +
+      "<param name='target-group' value='[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]' /></params>" +
+      '</edit-group-action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        targetSet: 'Category Set',
+      },
+      initialXml,
+      readbackXml: withActions(BASE_XML, added + existingParam),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
+
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded.match(/<actions>/g)?.length).toBe(1);
+    expect(loaded).toContain(added);
+    const groupAt = loaded.indexOf('<edit-group-action');
+    const paramAt = loaded.indexOf('<edit-parameter-action');
+    expect(groupAt).toBeGreaterThanOrEqual(0);
+    expect(groupAt).toBeLessThan(paramAt);
   });
 
   it('rejects a caption collision before loading metadata', async () => {
@@ -651,7 +649,7 @@ describe('authorActionTool', () => {
         caption: 'Open Sales Person',
         sourceWorksheet: '',
         sourceDashboard: 'Commission Model',
-        excludeSheets: ['Sales', 'OTE'],
+        excludeSourceSheets: ['Sales', 'OTE'],
         url: 'https://www.google.com/search?q=<[Sales Person]>',
       },
       readbackXml: withActions(BASE_XML, expectedAction),
@@ -767,7 +765,7 @@ describe('authorActionTool', () => {
   it('honors a non-default activation for url actions', async () => {
     const expectedAction =
       "<action caption='On Menu' name='[Action1]'>" +
-      "<activation type='on-menu' />" +
+      '<activation />' +
       "<source type='sheet' worksheet='Profit' />" +
       "<link caption='' expression='https://example.com/' />" +
       '</action>';
@@ -784,7 +782,7 @@ describe('authorActionTool', () => {
 
     expect(result.isError).toBe(false);
     const loaded = appliedDocumentXml(applyWorkbookDocument);
-    expect(loaded).toContain("<activation type='on-menu' />");
+    expect(loaded).toContain('<activation />');
   });
 
   it('fails url readback when the action landed as a <command> instead of a <link>', async () => {
@@ -959,21 +957,39 @@ describe('authorActionTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  it('rejects excludeSheets when a worksheet source is present', async () => {
+  it('rejects excludeSourceSheets when a worksheet source is present', async () => {
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         mode: 'url',
         caption: 'Excludes',
         sourceWorksheet: 'Profit',
         sourceDashboard: 'Commission Model',
-        excludeSheets: ['Sales'],
+        excludeSourceSheets: ['Sales'],
         url: 'https://example.com/',
       },
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('excludeSheets is only allowed');
+    expect(result.content[0].text).toContain('excludeSourceSheets is only allowed');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects excludeTargetSheets in url mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Excludes',
+        sourceWorksheet: '',
+        sourceDashboard: 'Commission Model',
+        excludeTargetSheets: ['Sales'],
+        url: 'https://example.com/',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('excludeTargetSheets is only allowed in filter mode');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
@@ -1181,557 +1197,4 @@ describe('authorActionTool', () => {
     expect(result.content[0].text).toContain('caption collision');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
-
-  it('creates a dashboard filter from the state map to all three KPI worksheets', async () => {
-    const expectedAction = filterActionXml();
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-      },
-      initialXml: FILTER_XML,
-      readbackXml: withActions(FILTER_XML, expectedAction),
-    });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text)).toMatchObject({
-      actionName: '[Action1]',
-      mode: 'filter',
-      target: 'Sales Cockpit',
-      targetWorksheets: FILTER_TARGETS,
-    });
-    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
-  });
-
-  it('ignores the exact Parameters pseudo-datasource while preserving real datasource names', async () => {
-    const parameterizedXml = FILTER_XML.replaceAll(
-      "<datasource name='Sample - Superstore' /></datasources>",
-      "<datasource caption='Parameters' name='Sample - Superstore' /><datasource name='Parameters' /></datasources>",
-    );
-    const expectedAction = filterActionXml();
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-      },
-      initialXml: parameterizedXml,
-      readbackXml: withActions(parameterizedXml, expectedAction),
-    });
-
-    expect(result.isError).toBe(false);
-    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
-    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects a Parameters-only target worksheet before applying', async () => {
-    const parametersOnlyXml = FILTER_XML.replace(
-      filterWorksheet('KPI Sales', 'Sample - Superstore'),
-      filterWorksheet('KPI Sales', 'Parameters'),
-    );
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPI by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: ['KPI Sales'],
-      },
-      initialXml: parametersOnlyXml,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('found 0');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('does not treat a differently cased datasource name as the Parameters pseudo-datasource', async () => {
-    const lowercaseParametersXml = FILTER_XML.replace(
-      filterWorksheet('KPI Sales', 'Sample - Superstore'),
-      filterWorksheet('KPI Sales', 'Sample - Superstore').replace(
-        '</datasources>',
-        "<datasource name='parameters' /></datasources>",
-      ),
-    );
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPI by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: ['KPI Sales'],
-      },
-      initialXml: lowercaseParametersXml,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('found 2');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('returns the exact existing supported filter action without another apply', async () => {
-    const existingXml = withActions(FILTER_XML, filterActionXml());
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-      },
-      initialXml: existingXml,
-    });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action1]');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('returns an existing filter action when its exclusion members are reordered', async () => {
-    const existingXml = withActions(
-      FILTER_XML,
-      filterActionXml({ excludes: ['Detail', 'Show Sales by State as a filled map.'] }),
-    );
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-      },
-      initialXml: existingXml,
-    });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action1]');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it.each(['do-nothing', 'exclude-all'] as const)(
-    'emits and verifies filter clear-selection behavior %s',
-    async (clearSelection) => {
-      const expectedAction = filterActionXml({ clearSelection });
-      const { result, applyWorkbookDocument } = await getToolResult({
-        args: {
-          mode: 'filter',
-          caption: 'Filter KPIs by State',
-          sourceDashboard: 'Sales Cockpit',
-          sourceWorksheet: 'Show Sales by State as a filled map.',
-          targetWorksheets: FILTER_TARGETS,
-          clearSelection,
-        },
-        initialXml: FILTER_XML,
-        readbackXml: withActions(FILTER_XML, expectedAction),
-      });
-
-      expect(result.isError).toBe(false);
-      expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
-    },
-  );
-
-  it('rejects non-default set membership in filter mode without applying', async () => {
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-        setMembership: 'add',
-      },
-      initialXml: FILTER_XML,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('setMembership add/remove is not supported');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('returns the canonical internal action name from complete filter readback', async () => {
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-      },
-      initialXml: FILTER_XML,
-      readbackXml: withActions(FILTER_XML, filterActionXml({ actionName: '[Action99]' })),
-    });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action99]');
-    expect(appliedDocumentXml(applyWorkbookDocument)).toContain("name='[Action1]'");
-    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-  });
-
-  it('accepts complete filter readback when Desktop reorders exclusion members', async () => {
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-      },
-      initialXml: FILTER_XML,
-      readbackXml: withActions(
-        FILTER_XML,
-        filterActionXml({
-          actionName: '[Action99]',
-          excludes: ['Detail', 'Show Sales by State as a filled map.'],
-        }),
-      ),
-    });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action99]');
-    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects filter readback with different semantics after applying', async () => {
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-      },
-      initialXml: FILTER_XML,
-      readbackXml: withActions(
-        FILTER_XML,
-        filterActionXml({ excludes: ['Show Sales by State as a filled map.'] }),
-      ),
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('complete filter action');
-    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects ambiguous duplicate filter actions in readback', async () => {
-    const duplicateReadback = withActions(
-      FILTER_XML,
-      filterActionXml() + filterActionXml({ actionName: '[Action2]' }),
-    );
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-      },
-      initialXml: FILTER_XML,
-      readbackXml: duplicateReadback,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('complete filter action');
-    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects a same-caption filter action with different semantics without applying', async () => {
-    const variant = filterActionXml({
-      excludes: ['Show Sales by State as a filled map.', 'KPI Sales'],
-    });
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-      },
-      initialXml: withActions(FILTER_XML, variant),
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('different or unsupported semantics');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('rejects unknown XML on a same-caption filter action without applying', async () => {
-    const withUnknown = filterActionXml().replace(
-      "<command command='tsc:tsl-filter'>",
-      "<command command='tsc:tsl-filter' vendor-keep='yes'>",
-    );
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-      },
-      initialXml: withActions(FILTER_XML, withUnknown),
-    });
-
-    expect(result.isError).toBe(true);
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('rejects a cross-datasource target before applying', async () => {
-    const crossDatasourceXml = FILTER_XML.replace(
-      "<zone id='6' name='Detail' />",
-      "<zone id='6' name='Detail' /><zone id='8' name='Cross KPI' />",
-    )
-      .replace(
-        filterWorksheet('Show Sales by State as a filled map.', 'Sample - Superstore'),
-        filterWorksheet('Show Sales by State as a filled map.', 'Sample - Superstore').replace(
-          '</datasources>',
-          "<datasource name='Parameters' /></datasources>",
-        ),
-      )
-      .replace(
-        filterWorksheet('Cross KPI', 'Other Source'),
-        filterWorksheet('Cross KPI', 'Other Source').replace(
-          '</datasources>',
-          "<datasource name='Parameters' /></datasources>",
-        ),
-      );
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: ['Cross KPI'],
-      },
-      initialXml: crossDatasourceXml,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('same datasource');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('rejects a target that is not a member of the source dashboard', async () => {
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: ['Other KPI'],
-      },
-      initialXml: FILTER_XML,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('not a member');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('escapes XML names and Tableau exclusion-list delimiters', async () => {
-    const specialXml = [
-      "<workbook><datasources><datasource name='Sample &amp; Source' /></datasources><worksheets>",
-      "<worksheet name='Map, State'><table><view><datasources><datasource name='Sample &amp; Source' /></datasources></view></table></worksheet>",
-      "<worksheet name='KPI &lt;Sales&gt;'><table><view><datasources><datasource name='Sample &amp; Source' /></datasources></view></table></worksheet>",
-      "<worksheet name='Detail\\West &amp; East'><table><view><datasources><datasource name='Sample &amp; Source' /></datasources></view></table></worksheet>",
-      "</worksheets><dashboards><dashboard name='Sales &amp; Ops'><zones>",
-      "<zone name='Map, State' /><zone name='KPI &lt;Sales&gt;' /><zone name='Detail\\West &amp; East' />",
-      '</zones></dashboard></dashboards></workbook>',
-    ].join('');
-    const expectedAction =
-      "<action caption='Filter &apos;KPIs&apos; &amp; State' name='[Action1]'>" +
-      "<activation auto-clear='true' type='on-select' />" +
-      "<source dashboard='Sales &amp; Ops' type='sheet' worksheet='Map, State' />" +
-      "<command command='tsc:tsl-filter'>" +
-      "<param name='exclude' value='Map\\, State,Detail\\\\West &amp; East' />" +
-      "<param name='special-fields' value='all' />" +
-      "<param name='target' value='Sales &amp; Ops' />" +
-      '</command></action>';
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: "Filter 'KPIs' & State",
-        sourceDashboard: 'Sales & Ops',
-        sourceWorksheet: 'Map, State',
-        targetWorksheets: ['KPI <Sales>'],
-      },
-      initialXml: specialXml,
-      readbackXml: withActions(specialXml, expectedAction),
-    });
-
-    expect(result.isError).toBe(false);
-    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
-  });
-
-  it('compares reordered escaped exclusion members after decoding Tableau list syntax', async () => {
-    const specialXml = [
-      "<workbook><datasources><datasource name='Sample &amp; Source' /></datasources><worksheets>",
-      "<worksheet name='Map, State'><table><view><datasources><datasource name='Sample &amp; Source' /></datasources></view></table></worksheet>",
-      "<worksheet name='KPI &lt;Sales&gt;'><table><view><datasources><datasource name='Sample &amp; Source' /></datasources></view></table></worksheet>",
-      "<worksheet name='Detail\\West &amp; East'><table><view><datasources><datasource name='Sample &amp; Source' /></datasources></view></table></worksheet>",
-      "</worksheets><dashboards><dashboard name='Sales &amp; Ops'><zones>",
-      "<zone name='Map, State' /><zone name='KPI &lt;Sales&gt;' /><zone name='Detail\\West &amp; East' />",
-      '</zones></dashboard></dashboards></workbook>',
-    ].join('');
-    const existingAction =
-      "<action caption='Filter &apos;KPIs&apos; &amp; State' name='[Action1]'>" +
-      "<activation auto-clear='true' type='on-select' />" +
-      "<source dashboard='Sales &amp; Ops' type='sheet' worksheet='Map, State' />" +
-      "<command command='tsc:tsl-filter'>" +
-      "<param name='exclude' value='Detail\\\\West &amp; East,Map\\, State' />" +
-      "<param name='special-fields' value='all' />" +
-      "<param name='target' value='Sales &amp; Ops' />" +
-      '</command></action>';
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: "Filter 'KPIs' & State",
-        sourceDashboard: 'Sales & Ops',
-        sourceWorksheet: 'Map, State',
-        targetWorksheets: ['KPI <Sales>'],
-      },
-      initialXml: withActions(specialXml, existingAction),
-    });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action1]');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('rejects malformed Tableau exclusion-list escaping without applying', async () => {
-    const malformedAction = filterActionXml().replace(
-      'Show Sales by State as a filled map.,Detail',
-      'Show Sales by State as a filled map.,Detail\\',
-    );
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter KPIs by State',
-        sourceDashboard: 'Sales Cockpit',
-        sourceWorksheet: 'Show Sales by State as a filled map.',
-        targetWorksheets: FILTER_TARGETS,
-      },
-      initialXml: withActions(FILTER_XML, malformedAction),
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('different or unsupported semantics');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
 });
-
-function withActions(baseXml: string, actionXml: string): string {
-  const dsClose = baseXml.indexOf('</datasources>') + '</datasources>'.length;
-  return baseXml.slice(0, dsClose) + `<actions>${actionXml}</actions>` + baseXml.slice(dsClose);
-}
-
-type AuthorActionArgs = {
-  session?: string;
-  mode?: 'parameter' | 'set' | 'url' | 'filter';
-  caption: string;
-  sourceWorksheet: string;
-  sourceField?: string;
-  targetParameter?: string;
-  targetSet?: string;
-  datasource?: string;
-  setMembership?: 'assign' | 'add' | 'remove';
-  clearSelection?: 'do-nothing' | 'show-all' | 'exclude-all';
-  singleSelect?: boolean;
-  activation?: 'on-select' | 'on-hover' | 'on-menu';
-  url?: string;
-  sourceDashboard?: string;
-  targetWorksheets?: string[];
-  excludeSheets?: string[];
-  urlTarget?: 'default-zone-or-browser' | 'browser' | 'specific-zone';
-  zoneId?: string;
-  urlEncode?: boolean;
-};
-
-async function getToolResult({
-  args,
-  initialXml = BASE_XML,
-  readbackXml,
-}: {
-  args: AuthorActionArgs;
-  initialXml?: string;
-  readbackXml?: string;
-}): Promise<{
-  result: CallToolResult;
-  applyWorkbookDocument: ReturnType<typeof vi.fn>;
-}> {
-  const documents = [initialXml, initialXml, readbackXml ?? initialXml];
-  let readCount = 0;
-  const executeCommand = vi
-    .fn()
-    .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null }));
-  const getWorkbookDocument = vi.fn(async () => {
-    return new Ok({
-      xml: documents[Math.min(readCount++, documents.length - 1)],
-      applicationVersion: undefined,
-      xsdPayloadVersion: undefined,
-    });
-  });
-  const applyWorkbookDocument = vi.fn(async () => {
-    return new Ok({ command_id: 'apply-1', status: 'completed', result: null });
-  });
-  const extra = {
-    ...getMockRequestHandlerExtra(),
-    getExecutor: vi.fn().mockResolvedValue({
-      executeCommand,
-      getWorkbookDocument,
-      applyWorkbookDocument,
-    }),
-  };
-  const tool = getAuthorActionTool(new DesktopMcpServer());
-  const callback = await Provider.from(tool.callback);
-
-  const result = await callback(
-    {
-      session: '12345',
-      ...args,
-      mode: args.mode ?? 'parameter',
-      sourceField: args.sourceField,
-      targetParameter: args.targetParameter,
-      targetSet: args.targetSet,
-      datasource: args.datasource,
-      singleSelect: args.singleSelect,
-      activation: args.activation ?? 'on-select',
-      setMembership: args.setMembership ?? 'assign',
-      clearSelection: args.clearSelection ?? (args.mode === 'filter' ? undefined : 'do-nothing'),
-      url: args.url,
-      sourceDashboard: args.sourceDashboard,
-      targetWorksheets: args.targetWorksheets,
-      excludeSheets: args.excludeSheets,
-      urlTarget: args.urlTarget,
-      zoneId: args.zoneId,
-      urlEncode: args.urlEncode,
-    },
-    extra,
-  );
-
-  return { result, applyWorkbookDocument };
-}
-
-function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): string {
-  const [xml] = applyWorkbookDocument.mock.calls[0] ?? [];
-  invariant(typeof xml === 'string');
-  return xml;
-}

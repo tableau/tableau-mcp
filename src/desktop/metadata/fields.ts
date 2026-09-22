@@ -196,7 +196,10 @@ export function addFieldToEncoding(
   const verifyPanes = normalizeArray(worksheet.table.panes.pane);
   const verifyPane = verifyPanes[0];
   const verifyEncodings = normalizeArray(verifyPane?.encodings?.[encodingType]);
-  const encodingAdded = verifyEncodings.some((enc: any) => enc['@_column'] === columnRef);
+  // W-24126644: verify against the corrected ref we actually wrote. For an aggregating
+  // calc, ensureColumnInstanceInDependencies rewrites [ctd:...] -> [usr:...]; checking the
+  // original columnRef here would fail this self-verify and throw before apply.
+  const encodingAdded = verifyEncodings.some((enc: any) => enc['@_column'] === correctedColumnRef);
 
   if (!encodingAdded) {
     // Log detailed debug info
@@ -206,10 +209,10 @@ export function addFieldToEncoding(
       encodingType,
       verifyEncodingsCount: verifyEncodings.length,
       verifyEncodings: verifyEncodings,
-      expectedColumnRef: columnRef,
+      expectedColumnRef: correctedColumnRef,
     });
     throw new Error(
-      `Failed to add encoding: encoding not found in structure after modification. Expected: ${columnRef}, Found: ${JSON.stringify(verifyEncodings)}`,
+      `Failed to add encoding: encoding not found in structure after modification. Expected: ${correctedColumnRef}, Found: ${JSON.stringify(verifyEncodings)}`,
     );
   }
 
@@ -961,6 +964,10 @@ function ensureColumnInstanceInDependencies(
             datasource,
           });
         }
+        // W-24126644: return the User-corrected ref (usr:) the caller places on the
+        // shelf/encoding. Diverging from the written column-instance makes Tableau
+        // reconcile the pill, which readback verification reports as a false drop.
+        correctedInstanceName = actualColumnInstanceName;
       }
     }
 

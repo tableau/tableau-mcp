@@ -29,6 +29,15 @@ export function makeExecutorMock(
     getActiveDialogs: vi
       .fn<ExternalApiToolExecutor['getActiveDialogs']>()
       .mockResolvedValue(Ok({ dialogs: [] })),
+    getDesktopState: vi.fn<ExternalApiToolExecutor['getDesktopState']>().mockResolvedValue(
+      Ok({
+        state: 'IDLE',
+        uiSnapshotAvailable: true,
+        activeActivities: [],
+        blockingWindows: [],
+        progressWindows: [],
+      }),
+    ),
     invokeDialogAction: vi
       .fn<ExternalApiToolExecutor['invokeDialogAction']>()
       .mockResolvedValue(Ok({ outcome: 'no-active-dialog', dialogs: [] })),
@@ -42,6 +51,7 @@ export function makeExecutorMock(
     listWorkbookDatasources: vi.fn(),
     getWorkbookDatasource: vi.fn(),
     getWorksheet: vi.fn(),
+    getWorksheetShowMeOptions: vi.fn(),
     getDashboard: vi.fn(),
     getStoryboard: vi.fn(),
     getWorkbookDocument: vi.fn(),
@@ -76,6 +86,7 @@ export function makeExecutorMock(
     deleteSheet: vi.fn(),
     renameSheet: vi.fn(),
     sortWorksheet: vi.fn(),
+    showMeWorksheet: vi.fn(),
     goToSheet: vi.fn(),
     pauseWorksheetAutoUpdates: vi.fn(),
     resumeWorksheetAutoUpdates: vi.fn(),
