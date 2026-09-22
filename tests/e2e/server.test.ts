@@ -10,6 +10,7 @@ const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
 const flowToolsEnabled = Boolean(features['flow-tools']);
 const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
+const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
 describe('server', () => {
   beforeAll(setEnv);
@@ -56,13 +57,15 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag
+      // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag.
       const flowTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
         'describe-flow',
+        'get-flow-task',
+        ...flowWriteTools,
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
@@ -100,13 +103,18 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!features['authoring-tools']) {
+      if (!authoringToolsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !authoringTools.includes(name));
       }
 
       // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
       if (!knowledgeToolsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !knowledgeTools.includes(name));
+      }
+
+      // Filter out content-mutating flow tools unless explicitly enabled.
+      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+        expectedToolNames = expectedToolNames.filter((name) => !flowWriteTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
@@ -234,13 +242,15 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
+      // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag.
       const flowTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
         'describe-flow',
+        'get-flow-task',
+        ...flowWriteTools,
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
@@ -282,7 +292,7 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!features['authoring-tools']) {
+      if (!authoringToolsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !authoringTools.includes(name),
         );
@@ -292,6 +302,13 @@ describe('server', () => {
       if (!knowledgeToolsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !knowledgeTools.includes(name),
+        );
+      }
+
+      // Filter out content-mutating flow tools unless explicitly enabled.
+      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !flowWriteTools.includes(name),
         );
       }
 
