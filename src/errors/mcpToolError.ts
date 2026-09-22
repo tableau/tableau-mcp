@@ -320,7 +320,7 @@ export class InvalidDataAppNameError extends McpToolError {
   }
 }
 
-// Thrown by scaffold-data-app (stdio) when a workspace with the requested name already exists. The
+// Thrown by scaffold-data-app when a workspace with the requested name already exists. The
 // tool never overwrites an existing workspace. statusCode 409: the target already exists.
 export class DataAppWorkspaceExistsError extends McpToolError {
   constructor(message: string) {
@@ -329,15 +329,16 @@ export class DataAppWorkspaceExistsError extends McpToolError {
 }
 
 // Thrown by scaffold-data-app when the data app template cannot be served: the bundled template is
-// missing (stdio) or the remote template object is not configured (http). statusCode 500: a
-// server-side prerequisite is unavailable.
+// missing on disk (local workspace, config.bucketS3.enabled=false) or the remote template object is
+// not configured (S3-backed workspace, config.bucketS3.enabled=true). statusCode 500: a server-side
+// prerequisite is unavailable.
 export class DataAppTemplateUnavailableError extends McpToolError {
   constructor(message: string) {
     super({ type: 'data-app-template-unavailable', message, statusCode: 500 });
   }
 }
 
-// Thrown by scaffold-data-app (stdio) when applying the datasource-wiring XML edits to the copied
+// Thrown by scaffold-data-app when applying the datasource-wiring XML edits to the copied
 // `.twb` fails (missing/already-filled anchor, or the post-wiring invariant check). statusCode 500:
 // a server-side wiring step failed unexpectedly.
 export class DataAppWiringFailedError extends McpToolError {
