@@ -215,9 +215,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'dynamic-authoring',
     trigger:
-      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total and LOD)',
+      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total, LOD, and  interactivity on mark interaction such as by selecting or hovering over marks or selecting a link in a tooltip menu)',
     action:
-      'use author-parameter first, then author-set, author-calc, author-action, and format-worksheets as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+      'use author-parameter first, then author-set, author-calc, author-action, and format-worksheets as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet. Before authoring, consult the knowledge docs via search-knowledge.',
     toolSequence: [
       'author-parameter',
       'author-set',
@@ -228,6 +228,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'list-available-fields',
       'build-worksheets-from-templates',
       'apply-worksheet',
+      'search-knowledge',
     ],
     stopConditions: ['use author-parameter first'],
     requiredEvidence: ["each author-* verb's readback-verified result object"],

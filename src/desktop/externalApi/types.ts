@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.13), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.15), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -17,6 +17,7 @@ export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
   appDialogs: '/v0/app/dialogs',
+  appState: '/v0/app/state',
   appInvokeDialogAction: '/v0/app:invokeDialogAction',
   appOpenFile: '/v0/app:openFile',
   appToggleStartPage: '/v0/app:toggleStartPage',
@@ -54,12 +55,14 @@ export const EXTERNAL_API_ROUTES = {
   worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetDocument: '/v0/workbook/worksheets/{id}/document',
   worksheetImage: '/v0/workbook/worksheets/{id}/image',
+  worksheetShowMeOptions: '/v0/workbook/worksheets/{id}/showMe',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
   worksheetLogicalTables: '/v0/workbook/worksheets/{id}/logicalTables',
   worksheetLogicalTableData: '/v0/workbook/worksheets/{id}/logicalTables/{logicalTableId}/data',
   worksheetDelete: '/v0/workbook/worksheets/{id}:delete',
   worksheetRename: '/v0/workbook/worksheets/{id}:rename',
   worksheetSort: '/v0/workbook/worksheets/{id}:sort',
+  worksheetShowMe: '/v0/workbook/worksheets/{id}:showMe',
   worksheetPauseAutoUpdates: '/v0/workbook/worksheets/{id}:pauseAutoUpdates',
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
@@ -92,6 +95,17 @@ export type WorksheetSummaryDataQuery = {
   columnsToIncludeByFieldName?: Array<string>;
 };
 
+/** Selection context accepted by {@link worksheetShowMeOptionsRoute}. */
+export type ShowMeOptionsQuery = {
+  /** Internal datasource name used to evaluate the native Show Me model. */
+  dataSource?: string;
+  /**
+   * Ordered fully qualified field names selected in the schema viewer. Omission
+   * preserves Desktop's ambient selection; an explicit empty array clears it.
+   */
+  fieldsSelectedInSchemaViewer?: Array<string>;
+};
+
 /** Query accepted by {@link worksheetLogicalTableDataRoute}. */
 export type WorksheetUnderlyingDataQuery = WorksheetSummaryDataQuery & {
   includeAllColumns?: boolean;
@@ -112,6 +126,44 @@ export type WorksheetSort = {
   direction?: 'asc' | 'desc';
   sortType?: 'data-source-order' | 'alpha';
   clearSort?: boolean;
+};
+
+/** Serialized visualization types known to the captured External API contract. */
+export const SHOW_ME_TYPES = [
+  'text',
+  'heat',
+  'spot-table',
+  'bar-horiz',
+  'bar-stack',
+  'bar-side',
+  'bar-measure',
+  'o-line',
+  'qi-line',
+  'o-area',
+  'qi-area',
+  'circle',
+  'circle-side',
+  'gantt',
+  'scatter',
+  'scatter-matrix',
+  'histogram',
+  'maps',
+  'filled-maps',
+  'pies',
+  'dual-bar-line',
+  'dual-line',
+  'bullet',
+  'treemap',
+  'bubble',
+  'box-plot',
+] as const;
+export type ShowMeType = (typeof SHOW_ME_TYPES)[number];
+
+/** Body of `POST /v0/workbook/worksheets/{id}:showMe`. */
+export type WorksheetShowMeRequest = {
+  showMeType: string;
+  dataSource?: string;
+  fieldsSelectedInSchemaViewer?: Array<string>;
 };
 
 /** Body of `POST /v0/app:openFile`. `filePath` is the absolute path of the file to open. */
@@ -232,6 +284,25 @@ export function worksheetSummaryDataRoute(
   return `${worksheetRoute(worksheetId)}/summaryData${suffix}`;
 }
 
+export function worksheetShowMeOptionsRoute(
+  worksheetId: string,
+  query: ShowMeOptionsQuery,
+): string {
+  const search = new URLSearchParams();
+  if (query.dataSource !== undefined) {
+    search.set('dataSource', query.dataSource);
+  }
+  if (query.fieldsSelectedInSchemaViewer !== undefined) {
+    search.set('selectionMode', 'explicit');
+    for (const field of query.fieldsSelectedInSchemaViewer) {
+      search.append('fieldsSelectedInSchemaViewer', field);
+    }
+  }
+
+  const suffix = search.size > 0 ? `?${search.toString()}` : '';
+  return `${worksheetRoute(worksheetId)}/showMe${suffix}`;
+}
+
 const SHEET_ROUTE_PREFIX: Record<SheetKind, string> = {
   worksheet: EXTERNAL_API_ROUTES.workbookWorksheets,
   dashboard: EXTERNAL_API_ROUTES.workbookDashboards,
@@ -261,6 +332,10 @@ export function workbookStoryboardsNewRoute(index?: number): string {
 
 export function worksheetSortRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:sort`;
+}
+
+export function worksheetShowMeRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}:showMe`;
 }
 
 export function worksheetPauseAutoUpdatesRoute(worksheetId: string): string {
@@ -356,13 +431,29 @@ export function datasourceRefreshExtractRoute(datasourceId: string): string {
 /**
  * Discovery file written by Desktop to `<OS app-local-data>/ExternalApi/<pid>.json`.
  * Only `schemaVersion === 1` is understood. Version fields are optional so a slightly
- * newer/older build still parses; the essentials (pid/baseUrl/token) are required.
+ * newer/older build still parses; the essentials (pid/baseUrl/token) are required. The
+ * producer publishes an origin, not a general URL: plain HTTP on numeric IPv4 loopback with
+ * an explicit valid port and no credentials, path, query, or fragment.
  */
+export function isExternalApiLoopbackOrigin(value: string): boolean {
+  const match = /^http:\/\/127\.0\.0\.1:(\d{1,5})$/.exec(value);
+  if (match === null) {
+    return false;
+  }
+
+  const port = Number(match[1]);
+  return Number.isInteger(port) && port >= 1 && port <= 65_535;
+}
+
+export const externalApiLoopbackOriginSchema = z.string().refine(isExternalApiLoopbackOrigin, {
+  message: 'Expected an exact http://127.0.0.1:<port> loopback origin.',
+});
+
 export const discoveryFileSchema = z.object({
   schemaVersion: z.literal(1),
   instanceId: z.string(),
   pid: z.number(),
-  baseUrl: z.string().url(),
+  baseUrl: externalApiLoopbackOriginSchema,
   tokenType: z.string().optional(),
   token: z.string(),
   applicationVersion: z.string().optional(),
@@ -416,7 +507,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.13). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.15). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -447,6 +538,8 @@ export const PROBLEM_CODES = [
   'unsupported-file-type',
   'unsupported-target-version',
   'file-not-found',
+  'show-me-not-applicable',
+  'show-me-unavailable',
   'operation-failed',
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
@@ -542,6 +635,43 @@ export const dialogListSchema = z
   .passthrough();
 export type DialogList = z.infer<typeof dialogListSchema>;
 
+/** One app-wide point-in-time snapshot of Desktop activity and modal state. */
+export const desktopStateSchema = z
+  .object({
+    state: z.string().min(1),
+    blockedBy: z.string().min(1).optional(),
+    uiSnapshotAvailable: z.boolean(),
+    activeActivities: z.array(z.string().min(1)).optional().default([]),
+    blockingWindows: z.array(windowInfoSchema).optional().default([]),
+    progressWindows: z.array(windowInfoSchema).optional().default([]),
+  })
+  .passthrough()
+  .superRefine((value, context) => {
+    if (value.state === 'BLOCKED' && value.blockedBy === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A BLOCKED state requires blockedBy.',
+        path: ['blockedBy'],
+      });
+    }
+
+    if (
+      value.state === 'IDLE' &&
+      (!value.uiSnapshotAvailable ||
+        value.blockedBy !== undefined ||
+        value.activeActivities.length > 0 ||
+        value.blockingWindows.length > 0 ||
+        value.progressWindows.length > 0)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'An IDLE state requires one complete empty UI snapshot.',
+        path: ['state'],
+      });
+    }
+  });
+export type DesktopState = z.infer<typeof desktopStateSchema>;
+
 /** Exact compare-and-act request accepted by `POST /v0/app:invokeDialogAction`. */
 export const invokeDialogActionRequestSchema = z
   .object({
@@ -620,6 +750,34 @@ export const worksheetItemSchema = z
   })
   .passthrough();
 export type WorksheetItem = z.infer<typeof worksheetItemSchema>;
+
+/** Worksheet identity evaluated by the native Show Me presentation model. */
+export const showMeWorksheetSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+  })
+  .passthrough();
+
+/** One runtime option from the native Show Me presentation model. */
+export const showMeOptionSchema = z
+  .object({
+    showMeType: z.string(),
+    isApplicable: z.boolean(),
+    vizHasRequiredFields: z.boolean(),
+    dataSourceHasRequiredFields: z.boolean(),
+    helpUrl: z.string(),
+  })
+  .passthrough();
+
+/** Ordered Show Me discovery result returned for a worksheet. */
+export const showMeOptionsResultSchema = z
+  .object({
+    worksheet: showMeWorksheetSchema,
+    options: z.array(showMeOptionSchema),
+  })
+  .passthrough();
+export type ShowMeOptionsResult = z.infer<typeof showMeOptionsResultSchema>;
 
 /** Worksheet list returned by `GET /v0/workbook/worksheets`. */
 export const worksheetListSchema = z

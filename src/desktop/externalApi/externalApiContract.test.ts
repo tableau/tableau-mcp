@@ -10,6 +10,7 @@ import {
   dashboardListSchema,
   datasourceItemSchema,
   datasourceListSchema,
+  desktopStateSchema,
   dialogActionSchema,
   dialogIdentitySchema,
   dialogListSchema,
@@ -26,6 +27,9 @@ import {
   PROBLEM_CODES,
   problemResponseSchema,
   protectedResourceMetadataSchema,
+  showMeOptionSchema,
+  showMeOptionsResultSchema,
+  showMeWorksheetSchema,
   siteDatasourceItemSchema,
   siteDatasourceListSchema,
   siteSchema,
@@ -53,10 +57,13 @@ import {
  * `Operation`/`OperationList` with `progressWindows`, documents `UnprocessableContent` (422)
  * on the document-replace routes, and adds individual datasource metadata and document
  * GET/POST contracts on top of the 0.2.8 surface.
- * The worksheet `:refreshNow` path and `info.version` 0.2.13 were projected from
+ * The worksheet `:refreshNow` path was projected from
  * monolith PR #64791 at commit 364d19f2e624c1859afebc34367e15c1e4b95e99 because no live
- * 0.2.13 capture was available. The dialog contract was generated from the monolith production
- * registry and canonical-JSON compared on 2026-09-08. The rest remains the live 0.2.9 capture.
+ * capture was available. The 0.2.13 dialog contract and 0.2.14 app-state contract were generated
+ * from the monolith production registry. The worksheet `/showMe` path, its response components,
+ * and `info.version` 0.2.15 were projected on 2026-09-12 from the W-23715530 monolith producer
+ * branch `dev/michaelyu/w-23715530-get-show-me-options` because no live 0.2.15 Desktop capture was
+ * available. The rest remains the live 0.2.9 capture.
  */
 
 type SpecProperty = {
@@ -65,6 +72,7 @@ type SpecProperty = {
   minLength?: number;
   maxLength?: number;
   const?: string;
+  enum?: Array<string>;
   items?: SpecProperty;
   'x-extensible-enum'?: Array<string>;
 };
@@ -145,8 +153,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('is the authoritative 0.2.13 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.13');
+  it('tracks the 0.2.15 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.15');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -211,6 +219,9 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['SummaryData', summaryDataSchema],
       ['LogicalTableItem', logicalTableItemSchema],
       ['LogicalTableList', logicalTableListSchema],
+      ['ShowMeWorksheet', showMeWorksheetSchema],
+      ['ShowMeOption', showMeOptionSchema],
+      ['ShowMeOptions', showMeOptionsResultSchema],
       ['WindowInfo', windowInfoSchema],
       ['ValidationResult', validationResultSchema],
       ['ImageExport', imageResultSchema],
@@ -226,7 +237,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.13 requiredness exception set', () => {
+    it('pins the complete 0.2.15 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
@@ -453,11 +464,85 @@ describe('external client API contract (captured openapi fixture)', () => {
     });
   });
 
+  describe('app-state contract', () => {
+    const appState = specSchema('AppState');
+
+    it('pins the producer properties, required fields, and shared window references', () => {
+      expect(Object.keys(appState.properties ?? {}).sort()).toEqual([
+        'activeActivities',
+        'blockedBy',
+        'blockingWindows',
+        'progressWindows',
+        'state',
+        'uiSnapshotAvailable',
+      ]);
+      expect([...(appState.required ?? [])].sort()).toEqual([
+        'activeActivities',
+        'state',
+        'uiSnapshotAvailable',
+      ]);
+      expect(appState.properties?.blockingWindows?.items?.$ref).toBe(
+        '#/components/schemas/WindowInfo',
+      );
+      expect(appState.properties?.progressWindows?.items?.$ref).toBe(
+        '#/components/schemas/WindowInfo',
+      );
+    });
+
+    it('normalizes omitted window arrays and preserves shared dialog action context', () => {
+      expect(desktopStateSchema.parse({ state: 'IDLE', uiSnapshotAvailable: true })).toEqual({
+        state: 'IDLE',
+        uiSnapshotAvailable: true,
+        activeActivities: [],
+        blockingWindows: [],
+        progressWindows: [],
+      });
+
+      const parsed = desktopStateSchema.parse({
+        state: 'BLOCKED',
+        blockedBy: 'MODAL_DIALOG',
+        uiSnapshotAvailable: true,
+        activeActivities: [],
+        blockingWindows: [
+          {
+            objectName: 'modal',
+            title: 'Save changes',
+            className: 'QMessageBox',
+            detailedTextTruncated: true,
+            actions: [{ kind: 'button', label: 'Save' }, { kind: 'close' }],
+          },
+        ],
+      });
+      expect(parsed.blockingWindows[0].actions).toEqual([
+        { kind: 'button', label: 'Save' },
+        { kind: 'close' },
+      ]);
+      expect(parsed.blockingWindows[0].detailedTextTruncated).toBe(true);
+    });
+
+    it('rejects BLOCKED without a cause and IDLE without complete empty evidence', () => {
+      expect(
+        desktopStateSchema.safeParse({ state: 'BLOCKED', uiSnapshotAvailable: true }).success,
+      ).toBe(false);
+      expect(
+        desktopStateSchema.safeParse({ state: 'IDLE', uiSnapshotAvailable: false }).success,
+      ).toBe(false);
+      expect(
+        desktopStateSchema.safeParse({
+          state: 'IDLE',
+          uiSnapshotAvailable: true,
+          activeActivities: ['QUERYING'],
+        }).success,
+      ).toBe(false);
+    });
+  });
+
   describe('routes', () => {
     it.each([
       EXTERNAL_API_ROUTES.health,
       EXTERNAL_API_ROUTES.app,
       EXTERNAL_API_ROUTES.appDialogs,
+      EXTERNAL_API_ROUTES.appState,
       EXTERNAL_API_ROUTES.appInvokeDialogAction,
       EXTERNAL_API_ROUTES.root,
       EXTERNAL_API_ROUTES.workbook,
@@ -481,6 +566,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.worksheetSummaryData,
       EXTERNAL_API_ROUTES.worksheetLogicalTables,
       EXTERNAL_API_ROUTES.worksheetLogicalTableData,
+      EXTERNAL_API_ROUTES.worksheetShowMeOptions,
       EXTERNAL_API_ROUTES.worksheetDelete,
       EXTERNAL_API_ROUTES.worksheetRename,
       EXTERNAL_API_ROUTES.worksheetSort,
@@ -572,8 +658,22 @@ describe('external client API contract (captured openapi fixture)', () => {
       ).toContain('409');
     });
 
-    it('projects the 0.2.13 worksheet refresh-now Operation contract', () => {
-      expect(spec.info.version).toBe('0.2.13');
+    it('documents the app-state read with the shared AppState response', () => {
+      const path = spec.paths[EXTERNAL_API_ROUTES.appState] as {
+        get?: {
+          operationId?: string;
+          responses?: Record<string, { content?: Record<string, { schema?: { $ref?: string } }> }>;
+        };
+      };
+
+      expect(path.get?.operationId).toBe('getAppState');
+      expect(path.get?.responses?.['200']?.content?.['application/json']?.schema?.$ref).toBe(
+        '#/components/schemas/AppState',
+      );
+    });
+
+    it('retains the worksheet refresh-now Operation contract in 0.2.15', () => {
+      expect(spec.info.version).toBe('0.2.15');
 
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetRefreshNow] as {
         post?: {
@@ -598,6 +698,118 @@ describe('external client API contract (captured openapi fixture)', () => {
         '#/components/responses/NotFound',
       );
       expect(spec.paths).not.toHaveProperty('/v0/workbook/dashboards/{id}:refreshNow');
+    });
+
+    it('projects the 0.2.15 worksheet Show Me option discovery contract', () => {
+      const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetShowMeOptions] as {
+        get?: {
+          operationId?: string;
+          parameters?: Array<{
+            name?: string;
+            in?: string;
+            required?: boolean;
+            schema?: SpecProperty;
+          }>;
+          responses?: Record<string, unknown>;
+        };
+      };
+
+      expect(Object.keys(pathItem)).toEqual(['get']);
+      expect(pathItem.get?.operationId).toBe('getWorksheetShowMeOptions');
+      expect(pathItem.get?.parameters).toEqual([
+        expect.objectContaining({
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        }),
+        expect.objectContaining({
+          name: 'dataSource',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        }),
+        expect.objectContaining({
+          name: 'fieldsSelectedInSchemaViewer',
+          in: 'query',
+          required: false,
+          schema: { type: 'array', items: { type: 'string' } },
+        }),
+        expect.objectContaining({
+          name: 'selectionMode',
+          in: 'query',
+          required: false,
+          schema: { type: 'string', enum: ['ambient', 'explicit'] },
+        }),
+      ]);
+      expect(Object.keys(pathItem.get?.responses ?? {})).toEqual([
+        '200',
+        '202',
+        '400',
+        '401',
+        '404',
+        '421',
+        '500',
+        '503',
+      ]);
+      expect(pathItem.get?.responses).toHaveProperty(
+        '200.content.application/json.schema.$ref',
+        '#/components/schemas/ShowMeOptions',
+      );
+      expect(pathItem.get?.responses).toHaveProperty('202.$ref', '#/components/responses/Accepted');
+      expect(pathItem.get?.responses).toHaveProperty(
+        '400.$ref',
+        '#/components/responses/BadRequest',
+      );
+      expect(pathItem.get?.responses).toHaveProperty('404.$ref', '#/components/responses/NotFound');
+    });
+
+    it('projects observable Show Me apply rejections', () => {
+      const pathItem = spec.paths['/v0/workbook/worksheets/{id}:showMe'] as {
+        post?: {
+          operationId?: string;
+          responses?: Record<string, unknown>;
+        };
+      };
+
+      expect(pathItem.post?.operationId).toBe('showMeWorksheet');
+      expect(pathItem.post?.responses).toHaveProperty(
+        '409.$ref',
+        '#/components/responses/Conflict',
+      );
+      expect(PROBLEM_CODES).toEqual(
+        expect.arrayContaining(['show-me-not-applicable', 'show-me-unavailable']),
+      );
+    });
+  });
+
+  describe('Show Me option discovery provenance', () => {
+    it('preserves native option ordering and the worksheet identity shape', () => {
+      const result = specSchema('ShowMeOptions');
+
+      expect(result.properties?.worksheet?.$ref).toBe('#/components/schemas/ShowMeWorksheet');
+      expect(result.properties?.options?.type).toBe('array');
+      expect(result.properties?.options?.items?.$ref).toBe('#/components/schemas/ShowMeOption');
+      expect(result.description).toContain('native order');
+    });
+
+    it('keeps showMeType runtime-extensible and exposes only native applicability evidence', () => {
+      const option = specSchema('ShowMeOption');
+      const showMeType = option.properties?.showMeType;
+
+      expect(showMeType?.type).toBe('string');
+      expect(showMeType).not.toHaveProperty('enum');
+      expect(showMeType).not.toHaveProperty('x-extensible-enum');
+      expect(Object.keys(option.properties ?? {})).toEqual([
+        'showMeType',
+        'isApplicable',
+        'vizHasRequiredFields',
+        'dataSourceHasRequiredFields',
+        'helpUrl',
+      ]);
+      expect(option.properties).not.toHaveProperty('recommendation');
+      expect(option.properties).not.toHaveProperty('rating');
+      expect(option.properties).not.toHaveProperty('isDefault');
     });
   });
 

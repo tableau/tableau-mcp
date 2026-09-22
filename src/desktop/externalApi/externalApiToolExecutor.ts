@@ -43,6 +43,8 @@ import {
   datasourceListSchema,
   datasourceRefreshDataRoute,
   datasourceRefreshExtractRoute,
+  DesktopState,
+  desktopStateSchema,
   DialogList,
   dialogListSchema,
   ExportAsWorkbookRequest,
@@ -63,6 +65,9 @@ import {
   RefreshExtractRequest,
   sheetActionRoute,
   SheetRef,
+  ShowMeOptionsQuery,
+  ShowMeOptionsResult,
+  showMeOptionsResultSchema,
   Site,
   SiteDatasourceList,
   siteDatasourceListSchema,
@@ -102,6 +107,9 @@ import {
   worksheetRefreshNowRoute,
   worksheetResumeAutoUpdatesRoute,
   worksheetRoute,
+  worksheetShowMeOptionsRoute,
+  WorksheetShowMeRequest,
+  worksheetShowMeRoute,
   WorksheetSort,
   worksheetSortRoute,
   WorksheetSummaryDataQuery,
@@ -323,6 +331,12 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async getDesktopState(signal: AbortSignal): Promise<Result<DesktopState, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.appState, desktopStateSchema, signal),
+    );
+  }
+
   async invokeDialogAction(
     request: InvokeDialogActionRequest,
     signal: AbortSignal,
@@ -410,6 +424,20 @@ export class ExternalApiToolExecutor {
   ): Promise<Result<WorksheetItem, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(worksheetRoute(worksheetId), worksheetItemSchema, signal),
+    );
+  }
+
+  async getWorksheetShowMeOptions(
+    worksheetId: string,
+    query: ShowMeOptionsQuery,
+    signal: AbortSignal,
+  ): Promise<Result<ShowMeOptionsResult, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(
+        worksheetShowMeOptionsRoute(worksheetId, query),
+        showMeOptionsResultSchema,
+        signal,
+      ),
     );
   }
 
@@ -672,6 +700,17 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(worksheetSortRoute(worksheetId), sort, signal),
       'sort-worksheet',
+    );
+  }
+
+  async showMeWorksheet(
+    worksheetId: string,
+    request: WorksheetShowMeRequest,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postJsonEnvelope(worksheetShowMeRoute(worksheetId), request, signal),
+      'show-me-worksheet',
     );
   }
 
