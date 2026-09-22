@@ -72,10 +72,11 @@ datasource wired in). Which delivery field is set depends on whether S3 storage 
 
 - **[`MCP_S3_BUCKET`](../../configuration/mcp-config/env-vars.md#mcp_s3_bucket) configured**: the
   tool zips the finished workspace and uploads it to S3, returning a short-lived presigned `s3URL`
-  to the zip. Download and unzip it — there is nothing left to substitute or rename.
+  to the zip. Download and unzip it — there is nothing left to substitute or rename. If the upload
+  fails, the tool returns an error rather than silently redirecting the workspace to server-local
+  disk.
 
-- **Otherwise (or if the S3 upload fails)**: the workspace is written to disk under the
-  server-controlled
+- **Otherwise**: the workspace is written to disk under the server-controlled
   [`DATA_APP_WORKSPACE_ROOT`](../../configuration/mcp-config/env-vars.md#data_app_workspace_root).
   The result reports the workspace `filePath`. An existing workspace of the same name is never
   overwritten (the tool errors instead).

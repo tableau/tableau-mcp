@@ -345,3 +345,13 @@ export class DataAppWiringFailedError extends McpToolError {
     super({ type: 'data-app-wiring-failed', message, statusCode: 500 });
   }
 }
+
+// Thrown by scaffold-data-app when S3 is configured but zipping or uploading the finalized
+// workspace fails. Surfaced directly rather than silently falling back to disk output, so a
+// misconfigured/unreachable S3 bucket doesn't quietly redirect data to server-local disk instead.
+// statusCode 502: the configured upstream (S3) failed.
+export class DataAppS3UploadFailedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-s3-upload-failed', message, statusCode: 502 });
+  }
+}

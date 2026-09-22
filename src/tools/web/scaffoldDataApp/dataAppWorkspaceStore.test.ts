@@ -258,28 +258,19 @@ describe('createDataAppWorkspace', () => {
       expect(mocks.getSignedUrl).toHaveBeenCalledTimes(1);
     });
 
-    it('falls back to disk output and logs a warning when the S3 upload fails', async () => {
-      const root = await mkdtemp(join(tmpdir(), 'dataapp-fallback-'));
-      vi.stubEnv('DATA_APP_WORKSPACE_ROOT', root);
+    it('returns DataAppS3UploadFailedError, without writing to disk, when the S3 upload fails', async () => {
       mocks.send.mockRejectedValue(new Error('S3 unavailable'));
 
-      try {
-        const result = await createDataAppWorkspace({
-          datappName: 'Sales Demo',
-          config: getConfig(),
-          extra: getMockRequestHandlerExtra(),
-          productVersion: testProductVersion,
-        });
+      const result = await createDataAppWorkspace({
+        datappName: 'Sales Demo',
+        config: getConfig(),
+        extra: getMockRequestHandlerExtra(),
+        productVersion: testProductVersion,
+      });
 
-        invariant(result.isOk(), result.isErr() ? result.error.message : '');
-        const value = result.value;
-        invariant(value.filePath);
-        expect(value.filePath.endsWith('Sales Demo')).toBe(true);
-        expect(value.s3URL).toBeUndefined();
-        expect(existsSync(join(value.filePath, 'Sales Demo.twb'))).toBe(true);
-      } finally {
-        await rm(root, { recursive: true, force: true });
-      }
+      invariant(result.isErr());
+      expect(result.error.type).toBe('data-app-s3-upload-failed');
+      expect(result.error.message).toContain('S3 unavailable');
     });
 
     it('wires the resolved datasource into the .twb before zipping', async () => {

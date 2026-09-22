@@ -6,8 +6,11 @@
  * in memory. They differ only in what happens with those entries and what's returned:
  *  - S3 configured (`config.bucketS3.enabled`): zip the in-memory entries directly, upload the zip
  *    to S3, and return a short-lived presigned GET URL to the zip. No scratch directory is written.
- *  - otherwise (or if the S3 upload fails): write the entries under the server-controlled
- *    `dataAppWorkspaceRoot` on disk and return the workspace's file path.
+ *    A failed upload is returned as an error (`DataAppS3UploadFailedError`), not silently retried
+ *    against disk — a misconfigured or unreachable bucket should surface, not quietly redirect the
+ *    workspace to server-local disk instead.
+ *  - otherwise: write the entries under the server-controlled `dataAppWorkspaceRoot` on disk and
+ *    return the workspace's file path.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -19,13 +22,13 @@ import { Ok, Result } from 'ts-results-es';
 
 import { Config } from '../../../config.js';
 import {
+  DataAppS3UploadFailedError,
   DataAppTemplateUnavailableError,
   DataAppWiringFailedError,
   DataAppWorkspaceExistsError,
   InvalidDataAppNameError,
   McpToolError,
 } from '../../../errors/mcpToolError.js';
-import { log } from '../../../logging/logger.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
@@ -226,14 +229,9 @@ async function createS3Workspace({
 
     return new Ok({ datappName, s3URL });
   } catch (error) {
-    log({
-      message: `scaffold-data-app: S3 workspace upload failed, falling back to disk output: ${getExceptionMessage(
-        error,
-      )}`,
-      level: 'warning',
-      logger: 'tool',
-    });
-    return await createLocalWorkspace({ datappName, identity, config, wiringEdits });
+    return new DataAppS3UploadFailedError(
+      `Failed to upload the data app workspace to S3: ${getExceptionMessage(error)}.`,
+    ).toErr();
   }
 }
 
