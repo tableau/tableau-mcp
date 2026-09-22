@@ -42,7 +42,7 @@ describe('applyDashboardWithViewpointsTool', () => {
       mockWorkbookXmlWithViewpoints,
     );
     vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
-      Ok({ validationWarnings: [] }),
+      Ok({ validationWarnings: [], documentWarnings: [] }),
     );
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
       Ok({ validationWarnings: [] }),

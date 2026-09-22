@@ -277,7 +277,7 @@ describe('composeDashboardTool', () => {
 });
 
 function setupHarness({
-  applyResult = Ok({ validationWarnings: [] }),
+  applyResult = Ok({ validationWarnings: [], documentWarnings: [] }),
   readbackXml,
   pristineXml = LIVE_WORKBOOK,
 }: {

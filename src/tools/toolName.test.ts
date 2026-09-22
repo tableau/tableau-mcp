@@ -3,6 +3,10 @@ import { toolNames } from './toolName.js';
 import { isWebToolName, webToolNames } from './web/toolName.js';
 
 describe('ToolName', () => {
+  it('recognizes capture-window-screenshot as a Desktop tool name', () => {
+    expect(isDesktopToolName('capture-window-screenshot')).toBe(true);
+  });
+
   it('registers each dialog tool name exactly once', () => {
     for (const toolName of [
       'get-desktop-state',

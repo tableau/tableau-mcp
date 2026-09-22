@@ -13,7 +13,7 @@ import {
   unknownInstanceUnreachableMessage,
   unreachableInstanceMessage,
 } from '../session/unreachableInstance.js';
-import { apiVersionAtLeast } from './apiVersion.js';
+import { apiVersionAtLeast, SCREENSHOT_MIN_API_VERSION } from './apiVersion.js';
 import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandArgs,
@@ -91,10 +91,13 @@ import {
   workbookDashboardsNewRoute,
   workbookDatasourceDocumentRoute,
   workbookDatasourceRoute,
+  WorkbookDiagnostics,
+  workbookDiagnosticsSchema,
   WorkbookInventory,
   workbookInventorySchema,
   workbookStoryboardsNewRoute,
   workbookWorksheetsNewRoute,
+  worksheetDiagnosticsRoute,
   worksheetDocumentRoute,
   worksheetImageRoute,
   WorksheetItem,
@@ -148,6 +151,8 @@ export type DesktopRpcTelemetryEvent = {
 
 type NoInstance = { type: 'no-instance'; pinnedPid?: number };
 type InstanceMismatch = { type: 'instance-mismatch'; expected: string; actual: string };
+type ScreenshotCommandBlocked = { type: 'screenshot-command-blocked' };
+type ExecutorOperationError = ExternalApiError | InstanceMismatch | ScreenshotCommandBlocked;
 
 /** Normalized shape shared by document + invokeCommand responses. */
 type RawOutcome = {
@@ -155,6 +160,8 @@ type RawOutcome = {
   state: string | undefined;
   envelopeError: OperationError | undefined;
   warnings: OperationWarning[] | undefined;
+  diagnostics: WorkbookDiagnostics | undefined;
+  diagnosticsInvalid: boolean;
   createdAt: string | undefined;
   completedAt: string | undefined;
   operationId: string | undefined;
@@ -222,6 +229,10 @@ export class ExternalApiToolExecutor {
     return this.http?.instanceId;
   }
 
+  get desktopApiVersion(): string | undefined {
+    return this.http?.apiVersion;
+  }
+
   async executeCommand(
     args: ExecuteCommandArgs<undefined>,
   ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>>;
@@ -241,15 +252,34 @@ export class ExternalApiToolExecutor {
       ExecuteCommandError
     >
   > {
+    if (namespace.includes('\0') || command.includes('\0')) {
+      return Err({
+        type: 'command-failed',
+        error: {
+          code: 'invalid-command',
+          message: 'Command namespace and name must not contain NUL characters.',
+          recoverable: false,
+        },
+      });
+    }
     const resolvedArgs = args ?? {};
 
     const outcomeResult = await this.withRescan('command', async (http) => {
+      if (isScreenshotCaptureCommand(namespace, command)) {
+        expectedInstanceId ??= http.instanceId;
+      }
       if (expectedInstanceId !== undefined && http.instanceId !== expectedInstanceId) {
         return Err({
           type: 'instance-mismatch' as const,
           expected: expectedInstanceId,
           actual: http.instanceId,
         });
+      }
+      if (
+        isScreenshotCaptureCommand(namespace, command) &&
+        !isSafeScreenshotApiVersion(http.apiVersion)
+      ) {
+        return Err({ type: 'screenshot-command-blocked' as const });
       }
       const result = await http.postJsonEnvelope(
         EXTERNAL_API_ROUTES.invokeCommand,
@@ -425,6 +455,61 @@ export class ExternalApiToolExecutor {
     return this.readExternalApi((http) =>
       http.getJson(worksheetRoute(worksheetId), worksheetItemSchema, signal),
     );
+  }
+
+  async getWorkbookDiagnostics(
+    signal: AbortSignal,
+    expectedInstanceId: string,
+  ): Promise<Result<WorkbookDiagnostics, ExecuteCommandError>> {
+    return this.readPinnedDiagnostics(
+      EXTERNAL_API_ROUTES.workbookDiagnostics,
+      signal,
+      expectedInstanceId,
+    );
+  }
+
+  async getWorksheetDiagnostics(
+    worksheetId: string,
+    signal: AbortSignal,
+    expectedInstanceId: string,
+  ): Promise<Result<WorkbookDiagnostics, ExecuteCommandError>> {
+    const result = await this.readPinnedDiagnostics(
+      worksheetDiagnosticsRoute(worksheetId),
+      signal,
+      expectedInstanceId,
+    );
+    if (result.isErr()) return result;
+    if (
+      result.value.worksheets.length !== 1 ||
+      result.value.worksheets[0]?.worksheetId !== worksheetId
+    ) {
+      return Err({
+        type: 'unknown',
+        error: `Worksheet diagnostics did not return exactly one record for ${worksheetId}.`,
+      });
+    }
+    return result;
+  }
+
+  private async readPinnedDiagnostics(
+    route: string,
+    signal: AbortSignal,
+    expectedInstanceId: string,
+  ): Promise<Result<WorkbookDiagnostics, ExecuteCommandError>> {
+    const result = await this.withRescan('read', (http) => {
+      if (http.instanceId !== expectedInstanceId) {
+        return Promise.resolve(
+          Err({
+            type: 'instance-mismatch' as const,
+            expected: expectedInstanceId,
+            actual: http.instanceId,
+          }),
+        );
+      }
+      return http.getJson(route, workbookDiagnosticsSchema, signal);
+    });
+    if (result.isErr()) return Err(mapClientError(result.error, this.deps.pid));
+    return Ok(result.value);
   }
 
   async getWorksheetShowMeOptions(
@@ -624,10 +709,12 @@ export class ExternalApiToolExecutor {
     worksheetId: string,
     xml: string,
     signal: AbortSignal,
+    options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postXmlEnvelope(worksheetDocumentRoute(worksheetId), xml, signal),
       'apply-worksheet-document',
+      options,
     );
   }
 
@@ -961,11 +1048,11 @@ export class ExternalApiToolExecutor {
 
   private async withRescan<T>(
     operation: DesktopRpcTelemetryEvent['operation'],
-    op: (http: ExternalApiHttp) => Promise<Result<T, ExternalApiError | InstanceMismatch>>,
-  ): Promise<Result<T, ExternalApiError | NoInstance | InstanceMismatch>> {
+    op: (http: ExternalApiHttp) => Promise<Result<T, ExecutorOperationError>>,
+  ): Promise<Result<T, ExecutorOperationError | NoInstance>> {
     const startedAt = performance.now();
     let rescanCount = 0;
-    let finalResult: Result<T, ExternalApiError | NoInstance | InstanceMismatch> | undefined;
+    let finalResult: Result<T, ExecutorOperationError | NoInstance> | undefined;
     try {
       const first = await this.ensureHttp();
       if (first.isErr()) {
@@ -1019,11 +1106,18 @@ export class ExternalApiToolExecutor {
 }
 
 function normalizeEnvelope(envelope: OperationEnvelope, apiVersion?: string): RawOutcome {
+  const hasDiagnostics = Object.hasOwn(envelope, 'diagnostics');
+  const parsedDiagnostics = hasDiagnostics
+    ? workbookDiagnosticsSchema.safeParse(envelope['diagnostics'])
+    : undefined;
+  const diagnosticsInvalid = parsedDiagnostics !== undefined && !parsedDiagnostics.success;
   return {
     result: isRecord(envelope.result) ? envelope.result : undefined,
     state: envelope.state,
     envelopeError: envelope.error,
     warnings: envelope.warnings,
+    diagnostics: parsedDiagnostics?.success ? parsedDiagnostics.data : undefined,
+    diagnosticsInvalid,
     createdAt: envelope.createdAt,
     completedAt: envelope.completedAt,
     operationId: envelope.id,
@@ -1074,6 +1168,8 @@ function buildCommandStatus(
     completed_at: outcome.completedAt ?? now,
     ...resultPayload,
     ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
+    ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
+    ...(outcome.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
   });
 }
 
@@ -1084,6 +1180,25 @@ function getTableauErrorCode(error: OperationError | undefined): string | undefi
 
 function supportsOperationResult(apiVersion: string | undefined): boolean {
   return apiVersionAtLeast(apiVersion, '0.1.1');
+}
+
+function isScreenshotCaptureCommand(namespace: string, command: string): boolean {
+  return (
+    namespace === 'tabui' &&
+    (command === 'take-all-screenshots' || command === 'take-active-widget-screenshot')
+  );
+}
+
+function isSafeScreenshotApiVersion(apiVersion: string | undefined): boolean {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(apiVersion ?? '');
+  if (
+    match === null ||
+    match[0] !== apiVersion ||
+    !match.slice(1).every((part) => Number.isSafeInteger(Number(part)))
+  ) {
+    return false;
+  }
+  return apiVersionAtLeast(apiVersion, SCREENSHOT_MIN_API_VERSION);
 }
 
 function describeWindows(windows: Array<WindowInfo> | undefined): string {
@@ -1100,10 +1215,21 @@ function describeWindows(windows: Array<WindowInfo> | undefined): string {
 }
 
 function mapClientError(
-  error: ExternalApiError | NoInstance | InstanceMismatch,
+  error: ExternalApiError | NoInstance | InstanceMismatch | ScreenshotCommandBlocked,
   pinnedPid?: number,
 ): ExecuteCommandError {
   switch (error.type) {
+    case 'screenshot-command-blocked':
+      return {
+        type: 'command-failed',
+        error: {
+          code: 'screenshot-command-blocked',
+          message:
+            `Upgrade Tableau Desktop to a build with External Client API ${SCREENSHOT_MIN_API_VERSION} or newer. ` +
+            'Screenshot capture is unavailable because older or unrecognized builds can capture other applications.',
+          recoverable: false,
+        },
+      };
     case 'instance-mismatch':
       return {
         type: 'unknown',
@@ -1201,7 +1327,7 @@ function mapClientError(
  * api-disabled 503 is a perimeter rejection that happens before route dispatch and stays definitive.
  */
 function mapInvokeDialogActionError(
-  error: ExternalApiError | NoInstance | InstanceMismatch,
+  error: ExternalApiError | NoInstance | InstanceMismatch | ScreenshotCommandBlocked,
   pinnedPid?: number,
 ): ExecuteCommandError {
   if (error.type === 'invalid-response') {
