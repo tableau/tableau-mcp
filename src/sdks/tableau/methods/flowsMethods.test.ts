@@ -150,5 +150,18 @@ describe('FlowsMethods', () => {
         flowsMethods.cancelFlowRun({ siteId: 'site-1', flowRunId: 'run-1' }),
       ).rejects.toMatchObject({ name: 'TableauRestError' });
     });
+
+    it('throws TableauRestError for an empty error envelope', async () => {
+      const mockApiClient = {
+        cancelFlowRun: vi.fn().mockResolvedValue({
+          error: {},
+        }),
+      };
+      const flowsMethods = makeMethods(mockApiClient);
+
+      await expect(
+        flowsMethods.cancelFlowRun({ siteId: 'site-1', flowRunId: 'run-1' }),
+      ).rejects.toMatchObject({ name: 'TableauRestError' });
+    });
   });
 });

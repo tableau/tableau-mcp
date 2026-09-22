@@ -198,9 +198,8 @@ export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis>
       params: { siteId, flowRunId },
       ...this.authHeader,
     });
-    const tableauError = body.error;
-    if (tableauError && (tableauError.code || tableauError.summary || tableauError.detail)) {
-      throw new TableauRestError(tableauError);
+    if (body.error) {
+      throw new TableauRestError(body.error);
     }
   };
 }
