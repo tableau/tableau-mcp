@@ -4,7 +4,7 @@
 // running from a normal build or under tests, the same calls fall back to reading
 // the files from disk. SEA asset keys are forward-slash paths relative to the
 // build root, e.g. "desktop/data/corpus.json" or
-// "resources/desktop/knowledge/strategy/viz-design/chart-selection.md".
+// "resources/desktop/dashboard-xml-guide.md".
 
 import { createHash } from 'crypto';
 import { existsSync, readdirSync, readFileSync } from 'fs';
@@ -253,7 +253,7 @@ function walkMarkdownSlugs(root: string): string[] {
 
 export function listKnowledgeSlugs(): string[] {
   // Knowledge is served only from external roots (TABLEAU_KNOWLEDGE_DIR). With no root
-  // configured the corpus is simply empty — the desktop build no longer bundles one.
+  // configured the corpus is simply empty -- the desktop build no longer bundles one.
   const externalRoots = externalKnowledgeRoots();
   if (externalRoots.length === 0) {
     return [];

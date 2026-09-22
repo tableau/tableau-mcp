@@ -33,7 +33,7 @@ let _cache: KnowledgeResource[] | null = null;
 export function listKnowledgeResources(): KnowledgeResource[] {
   if (_cache) return _cache;
   const slugs = listKnowledgeSlugs();
-  // No external knowledge root configured → empty corpus, not an error.
+  // No external knowledge root configured -> empty corpus, not an error.
   if (slugs.length === 0) return [];
 
   _cache = slugs.map((slug) => {
