@@ -408,7 +408,7 @@ function setupHarness({
     .mockImplementation(async () => readbackResults.shift() ?? Ok(postedXml.at(-1) ?? pristineXml));
   vi.mocked(loadWorkbookXmlModule.loadWorkbookXml).mockImplementation(async ({ xml }) => {
     postedXml.push(xml);
-    return applyResults.shift() ?? Ok({ validationWarnings: [] });
+    return applyResults.shift() ?? Ok({ validationWarnings: [], documentWarnings: [] });
   });
   return {
     executor: {} as ExternalApiToolExecutor,

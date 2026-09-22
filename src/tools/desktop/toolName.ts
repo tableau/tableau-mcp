@@ -1,6 +1,7 @@
 export const desktopToolNames = [
   'list-instances',
   'get-desktop-state',
+  'get-diagnostics',
   'get-active-dialogs',
   'invoke-dialog-action',
   'get-workbook-xml',
@@ -70,6 +71,7 @@ export const desktopToolNames = [
   'get-summary-data',
   'list-worksheet-logical-tables',
   'get-worksheet-underlying-data',
+  'capture-window-screenshot',
   'export-worksheet-image',
   'export-dashboard-image',
   'export-storyboard-image',

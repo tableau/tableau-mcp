@@ -2,6 +2,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import * as logger from '../../logging/logger.js';
 import { INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE } from '../callDeadline.js';
+import { captureWindowScreenshot } from '../wrappers/captureWindowScreenshot.js';
 import type { ExternalApiHttp as ExternalApiClient } from './externalApiHttp.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import {
@@ -145,6 +146,117 @@ describe('ExternalApiToolExecutor', () => {
       expect(last?.body).toBe(xml);
     });
 
+    it('retains terminal workbook diagnostics beside independent operation warnings', async () => {
+      const diagnostics = {
+        worksheets: [
+          {
+            worksheetId: 'sheet-sales',
+            status: 'partial',
+            invalidFields: [],
+            message: 'Some worksheet fields could not be checked.',
+          },
+        ],
+      };
+      server.setOverride('POST /v0/workbook/document', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'apply-with-diagnostics',
+          kind: 'workbook.document.apply',
+          state: 'SUCCEEDED',
+          warnings: [{ code: 'document-warning', message: 'Dropped unsupported formatting.' }],
+          diagnostics,
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.applyWorkbookDocument('<workbook />', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        status: 'completed',
+        warnings: [{ code: 'document-warning', message: 'Dropped unsupported formatting.' }],
+        diagnostics,
+      });
+    });
+
+    it('does not turn malformed optional diagnostics into a retryable document-apply error', async () => {
+      server.setOverride('POST /v0/workbook/document', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'apply-with-malformed-diagnostics',
+          kind: 'workbook.document.apply',
+          state: 'SUCCEEDED',
+          diagnostics: { worksheets: 'not-an-array' },
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.applyWorkbookDocument('<workbook />', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        status: 'completed',
+        diagnosticsInvalid: true,
+      });
+      expect(result.unwrap()).not.toHaveProperty('warnings');
+      expect(result.unwrap()).not.toHaveProperty('diagnostics');
+    });
+
+    it('keeps a polled document apply successful when terminal diagnostics are malformed', async () => {
+      server.setOverride('POST /v0/workbook/document', {
+        status: 202,
+        contentType: 'application/json',
+        headers: {
+          location: '/v0/operations/apply-polled-malformed-diagnostics',
+          'retry-after': '0',
+          'x-tableau-operation-id': 'apply-polled-malformed-diagnostics',
+        },
+        body: JSON.stringify({
+          id: 'apply-polled-malformed-diagnostics',
+          kind: 'workbook.document.apply',
+          state: 'RUNNING',
+        }),
+      });
+      server.setOperation('apply-polled-malformed-diagnostics', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'apply-polled-malformed-diagnostics',
+            kind: 'workbook.document.apply',
+            state: 'RUNNING',
+          },
+          {
+            id: 'apply-polled-malformed-diagnostics',
+            kind: 'workbook.document.apply',
+            state: 'SUCCEEDED',
+            diagnostics: { worksheets: [{ worksheetId: 17, status: 'complete' }] },
+          },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.applyWorkbookDocument('<workbook />', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        status: 'completed',
+        diagnosticsInvalid: true,
+      });
+      expect(result.unwrap()).not.toHaveProperty('warnings');
+      expect(result.unwrap()).not.toHaveProperty('diagnostics');
+    });
+
     it('surfaces the tableauErrorCode extension from a client-rejected apply as tableau-error-code', async () => {
       server.setOverride('POST /v0/workbook/worksheets/sheet-sales/document', {
         status: 422,
@@ -200,6 +312,186 @@ describe('ExternalApiToolExecutor', () => {
       const result = await executor.getWorkbookDocument(signal);
 
       expect(result.unwrap().instanceId).toBe('inst-read');
+    });
+  });
+
+  describe('workbook diagnostics', () => {
+    it('returns the default mock diagnostics for a known worksheet', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetDiagnostics('sheet-sales', signal, 'inst-exec');
+
+      expect(result.unwrap()).toEqual({
+        worksheets: [{ worksheetId: 'sheet-sales', status: 'complete', invalidFields: [] }],
+      });
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'GET',
+        path: '/v0/workbook/worksheets/sheet-sales/diagnostics',
+      });
+    });
+
+    it('reads and parses diagnostics for the exact encoded worksheet id', async () => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet%2Fsales/diagnostics', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          worksheets: [
+            {
+              worksheetId: 'sheet/sales',
+              status: 'complete',
+              invalidFields: [
+                {
+                  fieldName: '[none:Sales:qk]',
+                  fieldCaption: 'Sales',
+                  shelf: 'rows',
+                  marksSpecificationId: 'marks-1',
+                  encodingType: 'text',
+                  reason: 'The field is not available from the current datasource.',
+                },
+              ],
+            },
+          ],
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetDiagnostics('sheet/sales', signal, 'inst-exec');
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toEqual({
+        worksheets: [
+          {
+            worksheetId: 'sheet/sales',
+            status: 'complete',
+            invalidFields: [
+              {
+                fieldName: '[none:Sales:qk]',
+                fieldCaption: 'Sales',
+                shelf: 'rows',
+                marksSpecificationId: 'marks-1',
+                encodingType: 'text',
+                reason: 'The field is not available from the current datasource.',
+              },
+            ],
+          },
+        ],
+      });
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'GET',
+        path: '/v0/workbook/worksheets/sheet%2Fsales/diagnostics',
+      });
+    });
+
+    it.each([
+      ['an empty aggregate', { worksheets: [] }],
+      [
+        'a different worksheet',
+        {
+          worksheets: [{ worksheetId: 'sheet-decoy', status: 'complete', invalidFields: [] }],
+        },
+      ],
+      [
+        'duplicate target records',
+        {
+          worksheets: [
+            { worksheetId: 'sheet-sales', status: 'complete', invalidFields: [] },
+            { worksheetId: 'sheet-sales', status: 'unavailable', message: 'Not checked.' },
+          ],
+        },
+      ],
+    ])('rejects %s from a worksheet-scoped diagnostics read', async (_label, body) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/diagnostics', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetDiagnostics('sheet-sales', signal, 'inst-exec');
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr()).toMatchObject({ type: 'unknown' });
+      expect(String(result.unwrapErr().error)).toContain('sheet-sales');
+    });
+
+    it.each([
+      [
+        'partial',
+        {
+          worksheetId: 'sheet-sales',
+          status: 'partial',
+          invalidFields: [],
+          message: 'Some fields were not checked.',
+        },
+      ],
+      [
+        'unavailable',
+        {
+          worksheetId: 'sheet-sales',
+          status: 'unavailable',
+          message: 'The worksheet could not be checked.',
+        },
+      ],
+    ])('accepts a single exact %s worksheet diagnostics record', async (_label, worksheet) => {
+      const body = { worksheets: [worksheet] };
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/diagnostics', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.16')],
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetDiagnostics('sheet-sales', signal, 'inst-exec');
+
+      expect(result.unwrap()).toEqual(body);
+    });
+
+    it('does not read diagnostics from a replacement Desktop instance after a 401', async () => {
+      const discover = vi
+        .fn()
+        .mockReturnValueOnce([
+          {
+            ...instanceFor(server, 'stale-token', '0.2.16'),
+            instanceId: 'inst-expected',
+          },
+        ])
+        .mockReturnValue([
+          {
+            ...instanceFor(server, 'valid-token', '0.2.16'),
+            instanceId: 'inst-restarted',
+          },
+        ]);
+      const executor = new ExternalApiToolExecutor({ pid: 999, discover });
+      await executor.start();
+
+      const result = await executor.getWorksheetDiagnostics('sheet-1', signal, 'inst-expected');
+
+      expect(result.isErr()).toBe(true);
+      expect(
+        server.requests.filter(
+          (request) =>
+            request.method === 'GET' &&
+            request.path === '/v0/workbook/worksheets/sheet-1/diagnostics',
+        ),
+      ).toHaveLength(1);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('unknown');
+      if (error.type === 'unknown') {
+        expect(String(error.error)).toContain('inst-expected');
+        expect(String(error.error)).toContain('inst-restarted');
+      }
     });
   });
 
@@ -535,6 +827,163 @@ describe('ExternalApiToolExecutor', () => {
   });
 
   describe('executeCommand routing', () => {
+    it.each([
+      {
+        caseName: 'take-all-screenshots command',
+        namespace: 'tabui' as const,
+        command: 'take-all-screenshots\0ignored',
+        apiVersion: '0.2.14',
+      },
+      {
+        caseName: 'take-active-widget-screenshot command',
+        namespace: 'tabui' as const,
+        command: 'take-active-widget-screenshot\0ignored',
+        apiVersion: '0.2.14',
+      },
+      {
+        caseName: 'namespace',
+        namespace: 'tabui\0ignored' as 'tabui',
+        command: 'take-all-screenshots',
+        apiVersion: '0.2.15',
+      },
+    ])(
+      'rejects a NUL-containing $caseName before POST',
+      async ({ namespace, command, apiVersion }) => {
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [instanceFor(server, 'valid-token', apiVersion)],
+        });
+        await executor.start();
+
+        const result = await executor.executeCommand({ namespace, command, signal });
+
+        expect(result.isErr()).toBe(true);
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-failed');
+        if (error.type === 'command-failed') {
+          expect(error.error).toEqual({
+            code: 'invalid-command',
+            message: expect.stringContaining('NUL'),
+            recoverable: false,
+          });
+        }
+        expect(
+          server.requests.filter(
+            (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+          ),
+        ).toHaveLength(0);
+      },
+    );
+
+    it.each([
+      ['take-all-screenshots', '0.2.14'],
+      ['take-active-widget-screenshot', '0.2.14'],
+      ['take-all-screenshots', '0.2.15'],
+      ['take-active-widget-screenshot', '0.2.15'],
+      ['take-all-screenshots', '0.2.16'],
+      ['take-active-widget-screenshot', '0.2.16'],
+      ['take-all-screenshots', undefined],
+      ['take-active-widget-screenshot', undefined],
+      ['take-all-screenshots', '0.2'],
+      ['take-active-widget-screenshot', '0.2.015'],
+      ['take-all-screenshots', '0.2.15-preview'],
+      ['take-active-widget-screenshot', ' 0.2.15'],
+      ['take-all-screenshots', '0.2.15.0'],
+      ['take-active-widget-screenshot', '0.2.15\n'],
+      ['take-active-widget-screenshot', '9007199254740992.2.15'],
+    ])(
+      'blocks tabui:%s on unsafe API version %s before sending the command',
+      async (command, apiVersion) => {
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [{ ...instanceFor(server, 'valid-token'), apiVersion }],
+        });
+        await executor.start();
+
+        const result = await executor.executeCommand({ namespace: 'tabui', command, signal });
+
+        expect(result.isErr()).toBe(true);
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-failed');
+        if (error.type === 'command-failed') {
+          expect(error.error?.code).toBe('screenshot-command-blocked');
+          expect(error.error?.message).toContain('Upgrade Tableau Desktop');
+          expect(error.error?.message).toContain('capture other applications');
+          expect(error.error?.recoverable).toBe(false);
+        }
+        expect(
+          server.requests.filter(
+            (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+          ),
+        ).toHaveLength(0);
+      },
+    );
+
+    it.each([
+      ['take-all-screenshots', '0.2.17'],
+      ['take-active-widget-screenshot', '0.2.18'],
+    ])('allows tabui:%s on safe API version %s', async (command, apiVersion) => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', apiVersion)],
+      });
+      await executor.start();
+
+      const result = await executor.executeCommand({ namespace: 'tabui', command, signal });
+
+      expect(result.isOk()).toBe(true);
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('preserves non-screenshot tabui commands on older API versions', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.14')],
+      });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabui',
+        command: 'open-bookmark',
+        signal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'POST',
+        path: '/v0/app:invokeCommand',
+      });
+    });
+
+    it('checks the pinned instance version rather than another newer instance', async () => {
+      const executor = new ExternalApiToolExecutor({
+        pid: 999,
+        discover: () => [
+          { ...instanceFor(server, 'valid-token', '0.2.15'), pid: 111 },
+          instanceFor(server, 'valid-token', '0.2.14'),
+        ],
+      });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabui',
+        command: 'take-all-screenshots',
+        signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('screenshot-command-blocked');
+      }
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+        ),
+      ).toHaveLength(0);
+    });
+
     it('routes any other command to POST /v0/app:invokeCommand', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
@@ -1504,6 +1953,69 @@ describe('ExternalApiToolExecutor', () => {
   });
 
   describe('401 rescan-once', () => {
+    it.each([
+      ['take-all-screenshots', '0.2.14'],
+      ['take-all-screenshots', undefined],
+      ['take-all-screenshots', '0.2.15'],
+      ['take-all-screenshots', '0.2.16'],
+      ['take-active-widget-screenshot', '0.2.15'],
+      ['take-active-widget-screenshot', '0.2.16'],
+    ])(
+      'blocks tabui:%s retry when a 401 rescan selects API %s',
+      async (command, rescannedApiVersion) => {
+        const discover = vi
+          .fn()
+          .mockReturnValueOnce([instanceFor(server, 'stale-token', '0.2.17')])
+          .mockReturnValue([
+            { ...instanceFor(server, 'valid-token'), apiVersion: rescannedApiVersion },
+          ]);
+        const executor = new ExternalApiToolExecutor({ discover });
+        await executor.start();
+
+        const result = await executor.executeCommand({
+          namespace: 'tabui',
+          command,
+          signal,
+        });
+
+        expect(result.isErr()).toBe(true);
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-failed');
+        if (error.type === 'command-failed') {
+          expect(error.error?.code).toBe('screenshot-command-blocked');
+        }
+        expect(discover).toHaveBeenCalledTimes(2);
+        expect(
+          server.requests.filter(
+            (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+          ),
+        ).toHaveLength(1);
+      },
+    );
+
+    it('retries a screenshot once when both pre- and post-401 instances are safe', async () => {
+      const discover = vi
+        .fn()
+        .mockReturnValueOnce([instanceFor(server, 'stale-token', '0.2.17')])
+        .mockReturnValue([instanceFor(server, 'valid-token', '0.2.17')]);
+      const executor = new ExternalApiToolExecutor({ discover });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabui',
+        command: 'take-active-widget-screenshot',
+        signal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(discover).toHaveBeenCalledTimes(2);
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+        ),
+      ).toHaveLength(2);
+    });
+
     it('emits one logical RPC event across a successful read', async () => {
       const onRpc = vi.fn();
       const executor = new ExternalApiToolExecutor({
@@ -1664,6 +2176,28 @@ describe('ExternalApiToolExecutor', () => {
         expect(String(error.error)).toContain('inst-expected');
         expect(String(error.error)).toContain('inst-restarted');
       }
+    });
+
+    it('does not retry a cold screenshot capture when a 401 rescan finds a new instance with the same pid', async () => {
+      const discover = vi
+        .fn()
+        .mockReturnValueOnce([
+          { ...instanceFor(server, 'stale-token', '0.2.17'), instanceId: 'inst-capture' },
+        ])
+        .mockReturnValue([
+          { ...instanceFor(server, 'valid-token', '0.2.17'), instanceId: 'inst-restarted' },
+        ]);
+      const executor = new ExternalApiToolExecutor({ pid: 999, discover });
+
+      const result = await captureWindowScreenshot({ executor, signal });
+
+      expect(result.isErr()).toBe(true);
+      expect(discover).toHaveBeenCalledTimes(2);
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeCommand',
+        ),
+      ).toHaveLength(1);
     });
 
     it('does not retry a workbook POST when a 401 rescan finds a new instance with the same pid', async () => {

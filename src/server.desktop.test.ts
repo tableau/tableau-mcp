@@ -439,14 +439,14 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 73-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 75-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(73);
+      expect(selected).toHaveLength(75);
       // The full dynamic dialect, semantically named — every author-* verb present,
-      // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
-      // knowledge doors the system prompt's "consult the expertise library" law routes to.
+      // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
+      // fast-path, and the two knowledge doors the system prompt's "consult the expertise library" law routes to.
       for (const verb of [
         'author-calc',
         'author-set',
@@ -483,6 +483,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
         'redo-workbook',
         'list-instances',
         'get-desktop-state',
+        'get-diagnostics',
         'get-active-dialogs',
         'invoke-dialog-action',
         'list-available-fields',
@@ -492,6 +493,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
         'list-dashboards',
         'list-worksheet-logical-tables',
         'get-worksheet-underlying-data',
+        'capture-window-screenshot',
         'add-worksheet',
         'add-dashboard',
         'add-storyboard',
@@ -581,6 +583,26 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(
       selectToolsForProfile(tools, 'dynamic-authoring').filter(
         (tool) => tool.name === 'search-workbook-fields',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('registers capture-window-screenshot once in full and dynamic-authoring profiles', () => {
+    const tools = allTools();
+    const captureTool = tools.find((tool) => tool.name === 'capture-window-screenshot');
+
+    expect(captureTool).toBeDefined();
+    expect(captureTool?.paramsSchema).toEqual({ session: expect.any(Object) });
+    expect(captureTool?.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('capture-window-screenshot')).toBe(true);
+    expect(
+      selectToolsForProfile(tools, 'dynamic-authoring').filter(
+        (tool) => tool.name === 'capture-window-screenshot',
       ),
     ).toHaveLength(1);
   });
@@ -728,6 +750,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
         .map((factory) => factory(new DesktopMcpServer()))
         .map((tool) => [tool.name, tool.minApiVersion]),
     );
+    expect(floors.get('capture-window-screenshot')).toBe('0.2.17');
     expect(floors.get('pause-auto-updates')).toBe('0.2.5');
     expect(floors.get('refresh-auto-updates')).toBe('0.2.13');
     expect(floors.get('resume-auto-updates')).toBe('0.2.5');
@@ -745,11 +768,25 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('get-active-dialogs')).toBe('0.2.13');
     expect(floors.get('invoke-dialog-action')).toBe('0.2.13');
     expect(floors.get('get-desktop-state')).toBe('0.2.14');
+    expect(floors.get('get-diagnostics')).toBe('0.2.16');
     expect(floors.get('get-datasource-info')).toBe('0.2.10');
     expect(floors.get('get-datasource-xml')).toBe('0.2.10');
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
     expect(floors.get('get-show-me-options')).toBe('0.2.18');
+  });
+
+  it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {
+    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
+    const registered = tools.filter((tool) => tool.name === 'get-diagnostics');
+
+    expect(registered).toHaveLength(1);
+    expect(filterToolsByApiVersion(tools, '0.2.15').map((tool) => tool.name)).not.toContain(
+      'get-diagnostics',
+    );
+    expect(filterToolsByApiVersion(tools, '0.2.16').map((tool) => tool.name)).toContain(
+      'get-diagnostics',
+    );
   });
 
   it('gates all individual datasource tools at 0.2.10 and fails open for an unknown version', () => {

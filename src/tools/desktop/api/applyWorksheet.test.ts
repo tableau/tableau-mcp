@@ -10,7 +10,10 @@ import {
   TemplateArtifactStore,
   type TemplateWorksheetArtifact,
 } from '../../../desktop/templates/templateArtifactStore.js';
-import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
+import type {
+  ReadbackFinding,
+  VerificationFinding,
+} from '../../../desktop/validation/readback-verify.js';
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as listWorksheetsModule from '../../../desktop/wrappers/listWorksheets.js';
 import * as loadWorksheetXmlModule from '../../../desktop/wrappers/loadWorksheetXml.js';
@@ -67,6 +70,20 @@ describe('applyWorksheetTool', () => {
     ok: true,
     status: 'skipped' as const,
     message: 'worksheet busy',
+    findings: [
+      {
+        severity: 'warning' as const,
+        source: 'readback' as const,
+        message: 'worksheet busy',
+        reason: 'structural-readback-unavailable',
+      },
+      {
+        severity: 'warning' as const,
+        source: 'used-field-validity' as const,
+        message: 'Field verification requires External Client API 0.2.16 or newer.',
+        reason: 'unsupported-api',
+      },
+    ],
   };
   const promisedSortLossWarning: ReadbackFinding = {
     kind: 'sort',
@@ -75,6 +92,11 @@ describe('applyWorksheetTool', () => {
     intended: '<computed-sort column="[DS].[none:State:nk]">',
     readback: 'missing',
     severity: 'warning',
+  };
+  const promisedSortLossVerificationFinding: VerificationFinding = {
+    severity: 'warning',
+    source: 'readback',
+    message: 'Tableau missing computed-sort ([DS].[none:State:nk]).',
   };
 
   beforeEach(() => {
@@ -157,6 +179,13 @@ describe('applyWorksheetTool', () => {
     expect(mockLoadWorksheetXml).toHaveBeenCalledOnce();
     expect(buildArtifact).toHaveBeenCalledOnce();
     expect(put).not.toHaveBeenCalled();
+    expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      nextAction: {
+        receipt: { unverified: [expect.stringContaining('query execution or rendering')] },
+      },
+    });
     // A stale add-field/remove-field buffer for this sheet predates the direct-plan
     // apply and must not survive it.
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
@@ -186,6 +215,8 @@ describe('applyWorksheetTool', () => {
 
     expect(result.isError).toBe(false);
     expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
       verification: { status: 'skipped' },
       nextAction: {
         kind: 'prefill',
@@ -195,6 +226,107 @@ describe('applyWorksheetTool', () => {
     expect(
       (result.structuredContent as { nextAction: { receipt?: unknown } }).nextAction.receipt,
     ).toBeUndefined();
+  });
+
+  it.each<[string, VerificationFinding[]]>([
+    ['passed', []],
+    [
+      'warning',
+      [
+        {
+          severity: 'warning' as const,
+          source: 'readback' as const,
+          message: 'A non-critical formatting node changed.',
+        },
+      ],
+    ],
+  ])(
+    'keeps a structurally %s templatePlan terminal when only native validation is unsupported',
+    async (_structuralStatus, structuralFindings) => {
+      const artifact = templateArtifact('direct-plan');
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+        args.artifactApply!.dispatchState.attempted = true;
+        return Ok({
+          readbackWarnings: [],
+          readbackVerification: {
+            ok: true,
+            status: 'skipped',
+            findings: [
+              ...structuralFindings,
+              {
+                severity: 'warning' as const,
+                source: 'used-field-validity' as const,
+                message: 'Field verification requires External Client API 0.2.16 or newer.',
+                reason: 'unsupported-api',
+              },
+            ],
+          },
+        });
+      });
+
+      const result = await getDirectTemplateToolResult({
+        buildArtifact: vi.fn().mockReturnValue(Ok({ artifact, provenance: 'protected' })),
+        getExecutor: vi.fn().mockResolvedValue({
+          getWorkbookDocument: vi.fn().mockResolvedValue(
+            Ok({
+              xml: '<workbook><worksheets/><windows/></workbook>',
+              instanceId: 'inst-build',
+            }),
+          ),
+        }),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(result.structuredContent).toMatchObject({
+        applied: true,
+        retrySafe: false,
+        verification: { status: 'skipped' },
+        nextAction: { kind: 'done' },
+      });
+    },
+  );
+
+  it('keeps a structurally failed templatePlan failed when native validation is unsupported', async () => {
+    const artifact = templateArtifact('direct-plan');
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
+      args.artifactApply!.dispatchState.attempted = true;
+      return Ok({
+        readbackWarnings: [],
+        readbackVerification: {
+          ok: false,
+          status: 'failed',
+          findings: [
+            { severity: 'error', source: 'readback', message: 'A shelf was dropped.' },
+            {
+              severity: 'warning',
+              source: 'used-field-validity',
+              message: 'Field verification requires External Client API 0.2.16 or newer.',
+              reason: 'unsupported-api',
+            },
+          ],
+        },
+      });
+    });
+
+    const result = await getDirectTemplateToolResult({
+      buildArtifact: vi.fn().mockReturnValue(Ok({ artifact, provenance: 'protected' })),
+      getExecutor: vi.fn().mockResolvedValue({
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: '<workbook><worksheets/><windows/></workbook>',
+            instanceId: 'inst-build',
+          }),
+        ),
+      }),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: { status: 'failed' },
+      nextAction: { kind: 'prefill' },
+    });
   });
 
   it('applies a live-shaped templatePlan with a matching worksheetName and unique datasource caption exactly once', async () => {
@@ -414,13 +546,12 @@ describe('applyWorksheetTool', () => {
   it('reports direct-plan verification findings with the target and clears stale edit state', async () => {
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
       args.artifactApply!.dispatchState.attempted = true;
-      return Err({
-        type: 'load-worksheet-xml-error',
-        error: {
-          type: 'readback-failed',
-          findings: [promisedSortLossWarning],
-          message:
-            'Worksheet "Artifact Sheet" failed post-apply verification: <computed-sort column="[DS].[none:State:nk]">.',
+      return Ok({
+        readbackWarnings: [promisedSortLossWarning],
+        readbackVerification: {
+          ok: false,
+          status: 'failed',
+          findings: [promisedSortLossVerificationFinding],
         },
       });
     });
@@ -441,12 +572,24 @@ describe('applyWorksheetTool', () => {
       }),
     });
 
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const errorMessage = JSON.parse(result.content[0].text).error.message;
-    expect(errorMessage).toContain('Worksheet "Artifact Sheet"');
-    expect(errorMessage).toContain('<computed-sort column="[DS].[none:State:nk]">');
-    expect(errorMessage).toContain('Do not retry');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      title: 'Artifact Sheet',
+      applied: true,
+      retrySafe: false,
+      verification: {
+        ok: false,
+        status: 'failed',
+        findings: [promisedSortLossVerificationFinding],
+      },
+    });
+    expect(result.structuredContent).toMatchObject({
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification failed — diagnose listed findings',
+      },
+    });
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
       worksheetId: 'artifact-sheet-uuid',
@@ -528,34 +671,48 @@ describe('applyWorksheetTool', () => {
   );
 
   it.each(['artifactId', 'templatePlan'] as const)(
-    'preserves post-dispatch readback failure facts for %s mode',
+    'reports confirmed post-dispatch readback failure as applied for %s mode',
     async (mode) => {
       const store = artifactStore();
       const release = vi.spyOn(store, 'release');
       const consume = vi.spyOn(store, 'consume');
       vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {
         args.artifactApply!.dispatchState.attempted = true;
-        return Err({
-          type: 'load-worksheet-xml-error',
-          error: readbackFailure('public readback diagnostic'),
+        return Ok({
+          readbackWarnings: [],
+          readbackVerification: {
+            ok: false,
+            status: 'failed',
+            message: 'public readback diagnostic',
+            findings: [
+              {
+                severity: 'error',
+                source: 'readback',
+                message: 'public readback diagnostic',
+              },
+            ],
+          },
         });
       });
 
       const result = await getArtifactModeToolResult(mode, store);
 
-      expectArtifactFailure(result, {
-        state: 'unknown',
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        applied: true,
         retrySafe: false,
-        error: {
-          type: 'load-worksheet-xml-error',
-          statusCode: 500,
-          message:
-            'public readback diagnostic\n' +
-            'The artifact may have reached Desktop and was consumed. Do not retry it; build a fresh artifact after inspecting the workbook.',
+        verification: {
+          ok: false,
+          status: 'failed',
+          message: 'public readback diagnostic',
+          findings: [expect.objectContaining({ source: 'readback' })],
         },
+      });
+      expect(result.structuredContent).toMatchObject({
         nextAction: {
           kind: 'prefill',
-          label: 'Inspect worksheet state; do not retry this apply',
+          label: 'Verification failed — diagnose listed findings',
         },
       });
       expect(release).not.toHaveBeenCalled();
@@ -664,8 +821,13 @@ describe('applyWorksheetTool', () => {
       'Successfully applied worksheet update for "Sheet 1". The worksheet has been updated.\n\nHOST VERIFICATION — unverified: preflight clean · apply completed · readback unavailable. Do not claim the change is confirmed; report only the evidence above.',
     );
 
-    // The text block is unchanged: it still carries only { message }.
-    expect(Object.keys(JSON.parse(result.content[0].text))).toEqual(['message']);
+    expect(Object.keys(JSON.parse(result.content[0].text))).toEqual([
+      'message',
+      'title',
+      'applied',
+      'retrySafe',
+      'verification',
+    ]);
 
     // Superset rule: the structured block carries the full text message plus the
     // receipt. No readback ran here, so the receipt claims only dispatch and
@@ -679,7 +841,7 @@ describe('applyWorksheetTool', () => {
       ],
       didNot: [],
       unverified: [
-        'whether the applied worksheet retained its intended structure — post-apply readback was unavailable',
+        'whether the applied worksheet retained its intended structure, or query execution or rendering succeeds — post-apply readback was unavailable',
       ],
     });
   });
@@ -836,9 +998,25 @@ describe('applyWorksheetTool', () => {
     invariant(result.content[0].type === 'text');
     const message = resultSchema.parse(JSON.parse(result.content[0].text)).message;
     expect(message).toContain('HOST VERIFICATION — unverified');
-    expect(message).toContain('readback unavailable');
+    expect(message).toContain('verification incomplete (see findings)');
     expect(message).not.toMatch(/\bverified\b/i);
     expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: {
+        status: 'skipped',
+        message: 'worksheet busy',
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'readback',
+            reason: 'structural-readback-unavailable',
+          }),
+          expect.objectContaining({
+            source: 'used-field-validity',
+            reason: 'unsupported-api',
+          }),
+        ]),
+      },
       nextAction: {
         kind: 'prefill',
         label: 'Verification unavailable — inspect live worksheet state',
@@ -847,6 +1025,114 @@ describe('applyWorksheetTool', () => {
     expect(
       (result.structuredContent as { nextAction: { receipt?: unknown } }).nextAction.receipt,
     ).toBeUndefined();
+  });
+
+  it('returns a cached native-invalid apply without failing structured response construction', async () => {
+    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Ok({
+        readbackWarnings: [],
+        readbackVerification: {
+          ok: false,
+          status: 'failed',
+          findings: [
+            {
+              severity: 'error',
+              source: 'used-field-validity',
+              message: 'Missing Sales: Field is unavailable.',
+              worksheetId: 'sheet-1',
+              fieldName: '[none:Missing Sales:nk]',
+              shelf: 'rows',
+              marksSpecificationId: 'marks-1',
+              encodingType: 'text',
+              reason: 'Field is unavailable.',
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: {
+        ok: false,
+        status: 'failed',
+        findings: [expect.objectContaining({ source: 'used-field-validity' })],
+      },
+    });
+    expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: {
+        findings: [expect.objectContaining({ source: 'used-field-validity' })],
+      },
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification failed — diagnose listed findings',
+      },
+    });
+  });
+
+  it('post-apply contract: exposes a document warning as applied, non-retryable failed verification', async () => {
+    const warning = 'Dropped filter on [Country/Region].';
+    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Ok({
+        readbackWarnings: [],
+        readbackVerification: {
+          ok: false,
+          status: 'failed',
+          message: `Desktop accepted the worksheet document with a warning: ${warning}`,
+          findings: [
+            {
+              severity: 'error',
+              source: 'readback',
+              message: warning,
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: {
+        ok: false,
+        status: 'failed',
+        findings: [expect.objectContaining({ message: warning })],
+      },
+    });
+    expect(payload.message).toMatch(/applied.*verification found/i);
+    expect(JSON.stringify(payload.verification)).toContain(warning);
+    expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      nextAction: {
+        kind: 'prefill',
+        label: 'Verification failed — diagnose listed findings',
+      },
+    });
   });
 
   it('keeps file-based worksheet apply nonterminal when readback is skipped', async () => {
@@ -869,9 +1155,25 @@ describe('applyWorksheetTool', () => {
     invariant(result.content[0].type === 'text');
     const message = resultSchema.parse(JSON.parse(result.content[0].text)).message;
     expect(message).toContain('HOST VERIFICATION — unverified');
-    expect(message).toContain('readback unavailable');
+    expect(message).toContain('verification incomplete (see findings)');
     expect(message).not.toMatch(/\bverified\b/i);
     expect(result.structuredContent).toMatchObject({
+      applied: true,
+      retrySafe: false,
+      verification: {
+        status: 'skipped',
+        message: 'worksheet busy',
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'readback',
+            reason: 'structural-readback-unavailable',
+          }),
+          expect.objectContaining({
+            source: 'used-field-validity',
+            reason: 'unsupported-api',
+          }),
+        ]),
+      },
       nextAction: {
         kind: 'prefill',
         label: 'Verification unavailable — inspect live worksheet state',
@@ -926,10 +1228,13 @@ describe('applyWorksheetTool', () => {
       'Successfully applied worksheet update for "Sheet 1". The worksheet has been updated.\n\nHOST VERIFICATION — verified: preflight clean · apply completed · readback clean. No host evidence of any workbook problem beyond the findings listed above — do not report unlisted issues.',
     );
 
-    // The readback ran, so its outcome is an observation the receipt may claim;
-    // rendered output stays unverified because readback compares XML only.
+    // The readback ran, so its outcome is an observation the receipt may claim.
     const structured = structuredSchema.parse(result.structuredContent);
     expect(structured.message).toBe(resultSchema.parse(JSON.parse(result.content[0].text)).message);
+    expect(result.structuredContent).toMatchObject({ applied: true, retrySafe: false });
+    expect(structured.nextAction.receipt.unverified.join(' ')).toContain(
+      'query execution or rendering',
+    );
     expect(structured.nextAction.receipt).toEqual({
       did: [
         'Desktop accepted the worksheet XML apply for "Sheet 1"',
@@ -937,9 +1242,7 @@ describe('applyWorksheetTool', () => {
         'read back the applied worksheet — verification status "passed", promise outcome "verified"',
       ],
       didNot: [],
-      unverified: [
-        'whether the sheet renders as intended — readback compared workbook XML, not rendered output',
-      ],
+      unverified: [expect.stringContaining('query execution or rendering')],
     });
     expect(eventSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1153,25 +1456,52 @@ describe('applyWorksheetTool', () => {
       expect(args.artifactApply?.dispatchState.attempted).toBe(false);
       expect(args.artifactApply?.expectedInstanceId).toBe('inst-build');
       args.artifactApply!.dispatchState.attempted = true;
-      return Err({
-        type: 'load-worksheet-xml-error',
-        error: {
-          type: 'readback-failed',
-          findings: [promisedSortLossWarning],
-          message:
-            'Worksheet "Artifact Sheet" failed post-apply verification: <computed-sort column="[DS].[none:State:nk]">.',
+      return Ok({
+        readbackWarnings: [promisedSortLossWarning],
+        readbackVerification: {
+          ok: false,
+          status: 'failed',
+          findings: [promisedSortLossVerificationFinding],
         },
       });
     });
 
     const result = await getArtifactToolResult(store, 'artifact-1', '12345');
 
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const errorMessage = JSON.parse(result.content[0].text).error.message;
-    expect(errorMessage).toContain('Worksheet "Artifact Sheet"');
-    expect(errorMessage).toContain('<computed-sort column="[DS].[none:State:nk]">');
-    expect(errorMessage).toContain('Do not retry');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      artifactId: 'artifact-1',
+      title: 'Artifact Sheet',
+      applied: true,
+      retrySafe: false,
+      verification: { ok: false, status: 'failed' },
+    });
+
+    // The text block is unchanged: it still carries only the artifact result body.
+    expect(Object.keys(JSON.parse(result.content[0].text))).toEqual([
+      'artifactId',
+      'title',
+      'applied',
+      'retrySafe',
+      'verification',
+    ]);
+
+    // Superset rule: the structured block folds the same artifact body in — an
+    // observed failed readback, not a success claim. A failed verification must NOT
+    // mint a 'done' marker (that tells the agent to stop and would bury the failure);
+    // it directs the agent to inspect the sheet and build a fresh artifact instead.
+    expect(result.structuredContent).toMatchObject({
+      artifactId: 'artifact-1',
+      title: 'Artifact Sheet',
+      applied: true,
+      retrySafe: false,
+      verification: { ok: false, status: 'failed' },
+    });
+    expect(result.structuredContent?.nextAction).toEqual({
+      kind: 'prefill',
+      label: 'Verification failed — diagnose listed findings',
+    });
     expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
     expect(worksheetEditBufferModule.clearStickyWorksheetFile).toHaveBeenCalledWith({
       session: '12345',
@@ -1239,6 +1569,8 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(false);
     expect(result.structuredContent).toMatchObject({
       artifactId: 'artifact-1',
+      applied: true,
+      retrySafe: false,
       verification: { status: 'skipped' },
       nextAction: {
         kind: 'prefill',
@@ -1507,24 +1839,6 @@ function commandFailure(message: string): {
       internalError: 'private dependency diagnostic',
       internalErrorDetails: 'private dependency details',
     },
-  };
-}
-
-function readbackFailure(message: string): {
-  type: 'readback-failed';
-  findings: [];
-  message: string;
-  internalStatusCode: number;
-  internalError: string;
-  internalErrorDetails: string;
-} {
-  return {
-    type: 'readback-failed',
-    findings: [],
-    message,
-    internalStatusCode: 418,
-    internalError: 'private readback diagnostic',
-    internalErrorDetails: 'private readback details',
   };
 }
 

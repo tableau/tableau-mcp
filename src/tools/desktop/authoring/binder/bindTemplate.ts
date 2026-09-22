@@ -37,6 +37,7 @@ import {
   extractSheetXml,
   resolveWorksheetRef,
   upsertSheetIntoWorkbook,
+  worksheetFragmentSimpleId,
 } from '../../../../desktop/metadata/sheets.js';
 import type { ParsedWorkbook, ParsedWorksheet } from '../../../../desktop/metadata/types.js';
 import {
@@ -81,7 +82,7 @@ import {
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import {
   type PostApplyWorksheetReadbackVerification,
-  publicReadbackVerificationResult,
+  verifyAppliedWorksheetFields,
   verifyPostApplyWorksheetReadback,
 } from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
@@ -2324,13 +2325,14 @@ async function verifyTrustedWorkbookReadback({
     }
 
     const findings = verifyWorksheetReadback(intendedWorksheetXml, fragment);
+    const worksheetId = worksheetFragmentSimpleId(fragment) ?? undefined;
     if (findings.some((finding) => finding.severity === 'error')) {
-      return { ok: false, status: 'failed', findings };
+      return { ok: false, status: 'failed', findings, worksheetId };
     }
     if (findings.some((finding) => finding.severity === 'warning')) {
-      return { ok: true, status: 'warning', findings };
+      return { ok: true, status: 'warning', findings, worksheetId };
     }
-    return { ok: true, status: 'passed', findings: [] };
+    return { ok: true, status: 'passed', findings: [], worksheetId };
   } catch (error) {
     return {
       ok: true,
@@ -2524,6 +2526,7 @@ async function performAutoApply({
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
   await reportProgress(2, 'Applying workbook changes');
   const applyStart = Date.now();
+  const expectedInstanceId = executor.desktopInstanceId;
   const applyBaselineXml = hostBaselineWorkbookXml ?? workbookXml;
   const applyResult = await loadWorkbookXml({
     xml: appliedWorkbookXml,
@@ -2533,6 +2536,7 @@ async function performAutoApply({
     executor,
     signal,
     skipValidation,
+    applyOptions: expectedInstanceId ? { expectedInstanceId } : undefined,
   });
   if (applyResult.isErr()) {
     const failureDisposition = applyFailureDisposition(applyResult.error);
@@ -2587,9 +2591,27 @@ async function performAutoApply({
         }
       : undefined;
   const readbackMs = Date.now() - readbackStart;
+  const verificationReport = await verifyAppliedWorksheetFields({
+    structural: verification ?? {
+      ok: true,
+      status: 'skipped',
+      findings: [],
+      message: `Applied worksheet "${literalTitle}" could not be extracted for verification.`,
+    },
+    worksheetId:
+      verification?.worksheetId ??
+      (intendedWorksheetXml
+        ? (worksheetFragmentSimpleId(intendedWorksheetXml) ?? undefined)
+        : undefined),
+    expectedInstanceId,
+    executor,
+    signal,
+    diagnostics: applyResult.value.diagnostics,
+    diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
+  });
   const receiptInput = {
     validationWarnings: applyResult.value.validationWarnings,
-    readback: verification ? publicReadbackVerificationResult(verification) : undefined,
+    readback: verificationReport,
     readbackFindings: verification?.findings ?? [],
   };
   const promiseOutcome = classifyWorksheetPromiseOutcome(receiptInput);
@@ -2611,14 +2633,24 @@ async function performAutoApply({
   const promiseCheck = readbackRan ? formatWorksheetPromiseCheck(receiptInput) : '';
   const readbackError = formatReadbackVerificationError(receiptInput.readbackFindings);
   const readbackWarnings = formatReadbackVerificationWarnings(receiptInput.readbackFindings);
-  const readbackEvidence = `${readbackError ? `\n\n${readbackError}` : ''}${readbackWarnings}`;
+  const invalidUsedFields = verificationReport.findings?.filter(
+    (finding) => finding.source === 'used-field-validity' && finding.severity === 'error',
+  );
+  const nativeFieldEvidence = invalidUsedFields?.length
+    ? `\n\nField verification failed after apply: ${invalidUsedFields
+        .map(
+          (finding) =>
+            `${finding.fieldCaption ?? finding.fieldName ?? 'field'}: ${finding.reason ?? finding.message}`,
+        )
+        .join('; ')}. Diagnose the listed fields. Do NOT call bind-template again or replay apply.`
+    : '';
+  const readbackEvidence = `${readbackError ? `\n\n${readbackError}` : ''}${readbackWarnings}${nativeFieldEvidence}`;
 
   if (
     trustedDeterministicApply &&
     verification &&
     (verification.status === 'failed' || verification.status === 'skipped')
   ) {
-    const publicVerification = publicReadbackVerificationResult(verification);
     const failed = applyFallback(
       {
         ...base,
@@ -2635,7 +2667,7 @@ async function performAutoApply({
         sheet_name: literalTitle,
         may_have_applied: true,
         retry_safe: false,
-        verification: publicVerification,
+        verification: verificationReport,
         phase_ms: {
           bind: bindMs,
           inject: injectMs,
@@ -2696,10 +2728,21 @@ async function performAutoApply({
     unfilledEncodings !== undefined ||
     spliced.warnings.length > 0 ||
     promiseOutcome === 'failed';
+  const usedFieldValidityUnknown = receiptInput.readback.findings?.find(
+    (finding) =>
+      finding.source === 'used-field-validity' && receiptInput.readback?.status === 'skipped',
+  );
+  const postApplyUncertain =
+    !readbackRan ||
+    (usedFieldValidityUnknown !== undefined &&
+      usedFieldValidityUnknown.reason !== 'unsupported-api');
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
   const needsFollowUp =
-    incomplete || (injected.warnings?.length ?? 0) > 0 || emptySummaryReadback || !readbackRan;
+    incomplete ||
+    (injected.warnings?.length ?? 0) > 0 ||
+    emptySummaryReadback ||
+    postApplyUncertain;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
     ...(args.top_n !== undefined ? [TOP_N_APPLIED_GUIDANCE] : []),
@@ -2716,19 +2759,19 @@ async function performAutoApply({
     : '';
   const currencyGuidance = currencyHeterogeneityCaveat(schemaSummary, intendedWorksheetXml);
   const guidance = `${
-    unfilledEncodings
-      ? appendUnfilledEncodingGuidance(
-          receiptText,
-          literalTitle,
-          unfilledEncodings,
-          ask,
-          schemaSummary,
-        )
-      : needsFollowUp
-        ? `${appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)}${
-            !readbackRan ? ` ${POST_APPLY_UNCERTAINTY_GUIDANCE}` : ''
-          }`
-        : `${receiptText} ${terminalGuidance}`
+    promiseOutcome === 'failed' || postApplyUncertain
+      ? `${receiptText} ${POST_APPLY_UNCERTAINTY_GUIDANCE}`
+      : unfilledEncodings
+        ? appendUnfilledEncodingGuidance(
+            receiptText,
+            literalTitle,
+            unfilledEncodings,
+            ask,
+            schemaSummary,
+          )
+        : needsFollowUp
+          ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
+          : `${receiptText} ${terminalGuidance}`
   }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
@@ -2748,13 +2791,11 @@ async function performAutoApply({
           total: bindMs + injectMs + applyMs + readbackMs + summaryMs,
         }
       : { bind: bindMs, inject: injectMs, apply: applyMs },
-    ...(trustedDeterministicApply && receiptInput.readback
-      ? { verification: receiptInput.readback }
-      : {}),
+    verification: receiptInput.readback,
     ...summaryRows,
     ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
-  if (unfilledEncodings) {
+  if (unfilledEncodings && promiseOutcome !== 'failed' && !postApplyUncertain) {
     return {
       incomplete: true,
       result: withNextAction(
@@ -2788,10 +2829,10 @@ async function performAutoApply({
                   : []),
                 ...(readbackRan
                   ? [
-                      'whether the sheet renders any marks — structural readback compared XML but did not inspect rendered output',
+                      'whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering',
                     ]
                   : [
-                      'whether the applied sheet retained its intended structure or renders any marks — structural readback did not run',
+                      'whether the applied sheet retained its intended structure, or query execution or rendering succeeds — structural readback did not run',
                     ]),
               ],
             }),

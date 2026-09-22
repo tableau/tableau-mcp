@@ -62,7 +62,7 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
     vi.spyOn(getWorkbookXmlCmd, 'getWorkbookXml').mockResolvedValue(Ok(WORKBOOK));
     const loadSpy = vi
       .spyOn(loadWorkbookXmlCmd, 'loadWorkbookXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
 
     // 1) GET: inline requested, but the cap forces file mode. Agent gets a path + summary,
     //    NOT the 20KB workbook.
