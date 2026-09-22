@@ -23,7 +23,10 @@ export type ExternalApiCall = <T>(
     executor: ExternalApiToolExecutor,
     signal: AbortSignal,
   ) => Promise<Result<T, ExecuteCommandError>>,
-  options?: RouteMissingOptions & { routeMissingError?: () => McpToolError },
+  options?: RouteMissingOptions & {
+    routeMissingError?: () => McpToolError;
+    errorContext?: string;
+  },
 ) => Promise<Result<T, McpToolError>>;
 
 /** @deprecated Use {@link ExternalApiCall}; retained for source compatibility. */
@@ -59,7 +62,7 @@ export async function runExternalApiTool<T>({
       if (isRouteMissing(result.error, options)) {
         return (options?.routeMissingError?.() ?? endpointNotInThisBuild(endpoint)).toErr();
       }
-      return new DesktopCommandExecutionError(result.error).toErr();
+      return new DesktopCommandExecutionError(result.error, options?.errorContext).toErr();
     }
     return result;
   };

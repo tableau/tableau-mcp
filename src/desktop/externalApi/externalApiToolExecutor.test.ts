@@ -1057,6 +1057,39 @@ describe('ExternalApiToolExecutor', () => {
       ]);
     });
 
+    it('preserves the current Operation tableauErrorCode in the public diagnostic', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-fail-current',
+          kind: 'command.invoke',
+          state: 'FAILED',
+          error: {
+            code: 'operation-failed',
+            message: 'Desktop reported the real failure',
+            tableauErrorCode: '7A1775A4',
+          },
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.message).toBe('Desktop reported the real failure');
+        expect((error.error as Record<string, unknown>)['tableau-error-code']).toBe('7A1775A4');
+      }
+    });
+
     it('preserves failed Operation message and tableau-error-code extension', async () => {
       server.setOverride('POST /v0/app:invokeCommand', {
         status: 200,
@@ -2446,6 +2479,191 @@ describe('ExternalApiToolExecutor', () => {
 
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().xml).toBe('<workbook version="18.1"><worksheets /></workbook>');
+    });
+  });
+
+  describe('summary-data prerequisite overflow', () => {
+    const pendingResponse = (retryAfter: string): Response =>
+      new Response(
+        JSON.stringify({ code: 'operation-pending', status: 503, instance: '/v0/mock' }),
+        {
+          status: 503,
+          headers: {
+            'content-type': 'application/problem+json',
+            'retry-after': retryAfter,
+          },
+        },
+      );
+    const summaryResponse = (): Response =>
+      new Response(JSON.stringify({ columns: [{ name: 'Sales' }], rows: [[1200]] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    const unauthorizedResponse = (): Response => new Response(null, { status: 401 });
+
+    it('resolves two pending prerequisites inside one summary-data call', async () => {
+      const fetchSpy = vi
+        .fn()
+        .mockResolvedValueOnce(pendingResponse('0'))
+        .mockResolvedValueOnce(pendingResponse('0'))
+        .mockResolvedValueOnce(summaryResponse());
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        clientOptions: { fetchFn: fetchSpy as unknown as typeof fetch },
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetSummaryData('sheet-sales', {}, signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toEqual({ columns: [{ name: 'Sales' }], rows: [[1200]] });
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it('stops after three pending responses and removes the immediate retry instruction', async () => {
+      const fetchSpy = vi.fn().mockResolvedValue(pendingResponse('0'));
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        clientOptions: { fetchFn: fetchSpy as unknown as typeof fetch },
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetSummaryData('sheet-sales', {}, signal);
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error).toMatchObject({
+        type: 'command-failed',
+        error: { code: 'operation-pending', recoverable: false },
+      });
+      if (error.type === 'command-failed') {
+        expect(error.error?.message).toContain('operation-pending three times');
+        expect(error.error?.message).not.toContain('Retry the request');
+      }
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it('preserves the pending-response budget across a 401 rescan', async () => {
+      const fetchSpy = vi
+        .fn()
+        .mockResolvedValueOnce(pendingResponse('0'))
+        .mockResolvedValueOnce(pendingResponse('0'))
+        .mockResolvedValueOnce(unauthorizedResponse())
+        .mockResolvedValueOnce(pendingResponse('0'));
+      const discover = vi.fn().mockReturnValue([instanceFor(server)]);
+      const executor = new ExternalApiToolExecutor({
+        discover,
+        clientOptions: { fetchFn: fetchSpy as unknown as typeof fetch },
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetSummaryData('sheet-sales', {}, signal);
+
+      expect(result.unwrapErr()).toMatchObject({
+        type: 'command-failed',
+        error: { code: 'operation-pending', recoverable: false },
+      });
+      expect(fetchSpy).toHaveBeenCalledTimes(4);
+      expect(discover).toHaveBeenCalledTimes(2);
+    });
+
+    it('preserves one 401 rescan without consuming the pending-response budget', async () => {
+      const fetchSpy = vi
+        .fn()
+        .mockResolvedValueOnce(pendingResponse('0'))
+        .mockResolvedValueOnce(unauthorizedResponse())
+        .mockResolvedValueOnce(summaryResponse());
+      const discover = vi.fn().mockReturnValue([instanceFor(server)]);
+      const executor = new ExternalApiToolExecutor({
+        discover,
+        clientOptions: { fetchFn: fetchSpy as unknown as typeof fetch },
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetSummaryData('sheet-sales', {}, signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
+      expect(discover).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses a bounded fallback for malformed and negative Retry-After values', async () => {
+      const fetchSpy = vi
+        .fn()
+        .mockResolvedValueOnce(pendingResponse('not-a-number'))
+        .mockResolvedValueOnce(pendingResponse('-10'))
+        .mockResolvedValueOnce(summaryResponse());
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        clientOptions: { fetchFn: fetchSpy as unknown as typeof fetch },
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetSummaryData('sheet-sales', {}, signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not retry before a Retry-After beyond the bounded wait', async () => {
+      const fetchSpy = vi.fn().mockResolvedValue(pendingResponse('30'));
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        clientOptions: { fetchFn: fetchSpy as unknown as typeof fetch },
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetSummaryData('sheet-sales', {}, signal);
+
+      expect(result.unwrapErr()).toMatchObject({
+        type: 'command-failed',
+        error: { code: 'operation-pending', recoverable: false },
+      });
+      const error = result.unwrapErr();
+      if (error.type === 'command-failed') {
+        expect(error.error?.message).toContain('No early retry was sent');
+      }
+      expect(fetchSpy).toHaveBeenCalledOnce();
+    });
+
+    it('stops during the pending wait when the caller aborts', async () => {
+      const fetchSpy = vi.fn().mockResolvedValue(pendingResponse('1'));
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        clientOptions: { fetchFn: fetchSpy as unknown as typeof fetch },
+      });
+      await executor.start();
+      const controller = new AbortController();
+
+      const pending = executor.getWorksheetSummaryData('sheet-sales', {}, controller.signal);
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledOnce());
+      controller.abort(new DOMException('caller cancelled', 'AbortError'));
+      const result = await pending;
+
+      expect(result.unwrapErr().type).toBe('command-timed-out');
+      expect(fetchSpy).toHaveBeenCalledOnce();
+    });
+
+    it('does not retry a non-pending summary-data error', async () => {
+      const fetchSpy = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ code: 'api-disabled', status: 503, instance: '/v0/mock' }), {
+          status: 503,
+          headers: { 'content-type': 'application/problem+json' },
+        }),
+      );
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        clientOptions: { fetchFn: fetchSpy as unknown as typeof fetch },
+      });
+      await executor.start();
+
+      const result = await executor.getWorksheetSummaryData('sheet-sales', {}, signal);
+
+      expect(result.unwrapErr()).toMatchObject({
+        type: 'command-failed',
+        error: { code: 'api-disabled' },
+      });
+      expect(fetchSpy).toHaveBeenCalledOnce();
     });
   });
 });

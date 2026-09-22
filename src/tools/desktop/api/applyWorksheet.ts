@@ -29,6 +29,7 @@ import {
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
+  IncompleteOperationError,
   McpToolError,
   WorksheetXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
@@ -50,15 +51,20 @@ import {
   applyWorksheetArtifact,
   applyWorksheetArtifactPayload,
   templateArtifactUnavailableError,
+  type WorksheetArtifactOutcome,
 } from './applyWorksheetArtifact.js';
 
 const templatePlanSchema = z.object({
-  templateName: z.string().trim().min(1).max(128).describe('Worksheet template ID.'),
-  title: z.string().trim().min(1).max(255).describe('Worksheet name to create.'),
-  datasource: z.string().trim().min(1).max(255).describe('Live datasource name.'),
+  templateName: z.string().trim().min(1).max(128).describe('Template ID.'),
+  title: z.string().trim().min(1).max(255).describe('Worksheet name.'),
+  datasource: z.string().trim().min(1).max(255).describe('Datasource name.'),
   fieldMapping: z
     .record(z.string().trim().min(1).max(128), z.string().trim().min(1).max(255))
-    .describe('Template slot ID to live field reference.'),
+    .describe('Slot ID to exact live field ref.'),
+  derivationOverrides: z
+    .record(z.string(), z.enum(['cnt', 'ctd']))
+    .optional()
+    .describe('Count derivation by slot ID.'),
 });
 
 const paramsSchema = {
@@ -69,16 +75,14 @@ const paramsSchema = {
     .min(1)
     .max(255)
     .optional()
-    .describe('Template artifact ID; omit for a direct template plan or cached-file apply.'),
-  templatePlan: templatePlanSchema
-    .optional()
-    .describe('Exact template binding to build and apply in this call.'),
+    .describe('Artifact ID; omit with plan/file.'),
+  templatePlan: templatePlanSchema.optional().describe('Exact binding to build and apply.'),
   worksheetName: artifactNameParam('worksheet', { min: 1, max: 255 })
     .optional()
     .describe('Target id/name or plan/artifact title.'),
   worksheetFile: artifactFileParam('worksheet', { max: 4096 })
     .optional()
-    .describe('Cached worksheet path for manual apply; omit with other modes.'),
+    .describe('Cached-file path.'),
 };
 
 const title = 'Updating worksheet';
@@ -114,8 +118,7 @@ export const getApplyWorksheetTool = (
     server,
     name: 'apply-worksheet',
     title,
-    description:
-      'Build and apply an exact template plan, apply a template artifact, or update a cached worksheet file.',
+    description: 'Apply a worksheet artifact, plan, or cached file.',
     paramsSchema,
     annotations: {
       readOnlyHint: false, // updates worksheet in workbook
@@ -172,6 +175,11 @@ export const getApplyWorksheetTool = (
             }
             try {
               const executor = await extra.getExecutor(resolvedSession);
+              const existingArtifactBufferId = await resolveWorksheetSimpleId({
+                worksheetRef: reservation.artifact.title,
+                resolvedSession,
+                extra,
+              });
               const outcome = await applyWorksheetArtifact({
                 store: artifactStore,
                 artifactId,
@@ -180,22 +188,25 @@ export const getApplyWorksheetTool = (
                 signal: extra.signal,
                 reservation,
               });
-              if (outcome.state !== 'applied') return outcome.error.toErr();
 
-              // A prior add-field/remove-field edit buffer for this sheet+session predates
-              // this apply; whatever it was tracking is now stale, so close it rather than
-              // let a later name-only call silently resume editing on top of it.
-              const artifactBufferId = await resolveWorksheetSimpleId({
-                worksheetRef: outcome.receipt.title,
-                resolvedSession,
-                extra,
-              });
-              if (artifactBufferId) {
-                clearStickyWorksheetFile({
-                  session: resolvedSession,
-                  worksheetId: artifactBufferId,
-                });
+              if (outcome.state !== 'failed') {
+                const artifactBufferId =
+                  existingArtifactBufferId ??
+                  (outcome.state === 'applied'
+                    ? await resolveWorksheetSimpleId({
+                        worksheetRef: reservation.artifact.title,
+                        resolvedSession,
+                        extra,
+                      })
+                    : undefined);
+                if (artifactBufferId) {
+                  clearStickyWorksheetFile({
+                    session: resolvedSession,
+                    worksheetId: artifactBufferId,
+                  });
+                }
               }
+              if (outcome.state !== 'applied') return artifactApplyError(outcome);
 
               // The artifact apply already carries the verification outcome
               // (applyWorksheetArtifact resolves the skipped fallback), so the
@@ -276,24 +287,35 @@ export const getApplyWorksheetTool = (
             });
             if (built.isErr()) return built.error.toErr();
 
+            const existingTemplatePlanBufferId = await resolveWorksheetSimpleId({
+              worksheetRef: built.value.artifact.title,
+              resolvedSession,
+              extra,
+            });
             const outcome = await applyWorksheetArtifactPayload({
               artifact: built.value.artifact,
               executor,
               signal: extra.signal,
             });
-            if (outcome.state !== 'applied') return outcome.error.toErr();
 
-            const templatePlanBufferId = await resolveWorksheetSimpleId({
-              worksheetRef: outcome.receipt.title,
-              resolvedSession,
-              extra,
-            });
-            if (templatePlanBufferId) {
-              clearStickyWorksheetFile({
-                session: resolvedSession,
-                worksheetId: templatePlanBufferId,
-              });
+            if (outcome.state !== 'failed') {
+              const templatePlanBufferId =
+                existingTemplatePlanBufferId ??
+                (outcome.state === 'applied'
+                  ? await resolveWorksheetSimpleId({
+                      worksheetRef: built.value.artifact.title,
+                      resolvedSession,
+                      extra,
+                    })
+                  : undefined);
+              if (templatePlanBufferId) {
+                clearStickyWorksheetFile({
+                  session: resolvedSession,
+                  worksheetId: templatePlanBufferId,
+                });
+              }
             }
+            if (outcome.state !== 'applied') return artifactApplyError(outcome);
 
             const verification = outcome.receipt.verification;
             const verificationRan = verification.status !== 'skipped';
@@ -481,6 +503,29 @@ export const getApplyWorksheetTool = (
 
   return applyWorksheetTool;
 };
+
+function artifactApplyError(
+  outcome: Exclude<WorksheetArtifactOutcome, { state: 'applied' }>,
+): ReturnType<IncompleteOperationError<object>['toErr']> {
+  return new IncompleteOperationError(
+    withNextAction(
+      {
+        state: outcome.state,
+        retrySafe: outcome.retrySafe,
+        error: {
+          type: outcome.error.type,
+          statusCode: outcome.error.statusCode,
+          message: outcome.error.getErrorText(),
+        },
+      },
+      prefillNextAction(
+        outcome.state === 'failed'
+          ? 'Address the error, then retry the apply'
+          : 'Inspect worksheet state; do not retry this apply',
+      ),
+    ),
+  ).toErr();
+}
 
 function isUnsupportedUsedFieldValidation(
   verification: ReadbackVerificationResult | undefined,
