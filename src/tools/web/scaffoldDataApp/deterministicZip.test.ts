@@ -1,3 +1,5 @@
+import { inflateRawSync } from 'node:zlib';
+
 import { buildZip, ZipEntry } from './deterministicZip.js';
 
 const entry = (path: string, data: string): ZipEntry => ({ path, data: Buffer.from(data, 'utf8') });
@@ -41,10 +43,17 @@ describe('buildZip', () => {
     expect(one.equals(two)).toBe(false);
   });
 
-  it('stores the file name and raw (uncompressed) bytes in the archive', () => {
-    const zip = buildZip([entry('Data App Name/manifest.json', '{"id":"x"}')]);
-    const text = zip.toString('latin1');
-    expect(text).toContain('Data App Name/manifest.json');
-    expect(text).toContain('{"id":"x"}');
+  it('stores the file name in cleartext and the DEFLATE-compressed bytes recover the original content', () => {
+    const name = 'Data App Name/manifest.json';
+    const content = '{"id":"x"}';
+    const zip = buildZip([entry(name, content)]);
+
+    expect(zip.toString('latin1')).toContain(name);
+
+    const nameLen = zip.readUInt16LE(26);
+    const compressedSize = zip.readUInt32LE(18);
+    const dataStart = 30 + nameLen;
+    const compressed = zip.subarray(dataStart, dataStart + compressedSize);
+    expect(inflateRawSync(compressed).toString('utf8')).toBe(content);
   });
 });

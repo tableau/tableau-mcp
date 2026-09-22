@@ -3,11 +3,14 @@
  * `dataAppWorkspaceStore.ts`'s `createS3Workspace` to build a byte-stable
  * archive of a finalized data app workspace's in-memory entries for S3 delivery.
  *
- * Entries are STORE'd (no compression), sorted by path, and written with a
- * fixed DOS timestamp and no extra fields, so identical inputs always produce
- * byte-identical output. Directory entries are omitted; unzippers create the
- * directories implied by each file path.
+ * Entries are DEFLATE'd at a fixed compression level, sorted by path, and
+ * written with a fixed DOS timestamp and no extra fields, so identical inputs
+ * always produce byte-identical output (for a given Node/zlib version).
+ * Directory entries are omitted; unzippers create the directories implied by
+ * each file path.
  */
+
+import { deflateRawSync } from 'node:zlib';
 
 const CRC_TABLE = ((): Uint32Array => {
   const table = new Uint32Array(256);
@@ -43,10 +46,16 @@ const LOCAL_HEADER_SIG = 0x04034b50;
 const CENTRAL_HEADER_SIG = 0x02014b50;
 const EOCD_SIG = 0x06054b50;
 const VERSION = 20;
+const COMPRESSION_METHOD_DEFLATE = 8;
+
+// Best compression: this runs once per scaffold call on small-to-moderate
+// in-memory content (a few MB at most), so the extra CPU over a lower level
+// is negligible against the S3 upload/download time it saves.
+const DEFLATE_OPTIONS = { level: 9 };
 
 /**
- * Builds a STORE-method ZIP archive from the given entries. Entries are sorted
- * by path so output is deterministic regardless of input order.
+ * Builds a DEFLATE-method ZIP archive from the given entries. Entries are
+ * sorted by path so output is deterministic regardless of input order.
  */
 export function buildZip(entries: ZipEntry[]): Buffer {
   const sorted = [...entries].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
@@ -58,33 +67,35 @@ export function buildZip(entries: ZipEntry[]): Buffer {
   for (const entry of sorted) {
     const nameBuf = Buffer.from(entry.path, 'utf8');
     const crc = crc32(entry.data);
-    const size = entry.data.length;
+    const uncompressedSize = entry.data.length;
+    const compressed = deflateRawSync(entry.data, DEFLATE_OPTIONS);
+    const compressedSize = compressed.length;
 
     const local = Buffer.alloc(30);
     local.writeUInt32LE(LOCAL_HEADER_SIG, 0);
     local.writeUInt16LE(VERSION, 4);
     local.writeUInt16LE(0, 6); // general purpose flags
-    local.writeUInt16LE(0, 8); // compression method: store
+    local.writeUInt16LE(COMPRESSION_METHOD_DEFLATE, 8);
     local.writeUInt16LE(DOS_TIME, 10);
     local.writeUInt16LE(DOS_DATE, 12);
     local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(size, 18); // compressed size
-    local.writeUInt32LE(size, 22); // uncompressed size
+    local.writeUInt32LE(compressedSize, 18);
+    local.writeUInt32LE(uncompressedSize, 22);
     local.writeUInt16LE(nameBuf.length, 26);
     local.writeUInt16LE(0, 28); // extra field length
-    localParts.push(local, nameBuf, entry.data);
+    localParts.push(local, nameBuf, compressed);
 
     const central = Buffer.alloc(46);
     central.writeUInt32LE(CENTRAL_HEADER_SIG, 0);
     central.writeUInt16LE(VERSION, 4); // version made by
     central.writeUInt16LE(VERSION, 6); // version needed
     central.writeUInt16LE(0, 8); // general purpose flags
-    central.writeUInt16LE(0, 10); // compression method: store
+    central.writeUInt16LE(COMPRESSION_METHOD_DEFLATE, 10);
     central.writeUInt16LE(DOS_TIME, 12);
     central.writeUInt16LE(DOS_DATE, 14);
     central.writeUInt32LE(crc, 16);
-    central.writeUInt32LE(size, 20); // compressed size
-    central.writeUInt32LE(size, 24); // uncompressed size
+    central.writeUInt32LE(compressedSize, 20);
+    central.writeUInt32LE(uncompressedSize, 24);
     central.writeUInt16LE(nameBuf.length, 28);
     central.writeUInt16LE(0, 30); // extra field length
     central.writeUInt16LE(0, 32); // comment length
@@ -94,7 +105,7 @@ export function buildZip(entries: ZipEntry[]): Buffer {
     central.writeUInt32LE(offset, 42); // local header offset
     centralParts.push(central, nameBuf);
 
-    offset += local.length + nameBuf.length + entry.data.length;
+    offset += local.length + nameBuf.length + compressed.length;
   }
 
   const localData = Buffer.concat(localParts);
