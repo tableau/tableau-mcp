@@ -127,12 +127,11 @@ export const getListFlowTasksTool = (server: WebMcpServer): WebTool<typeof param
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
       return await listFlowTasksTool.logAndExecute<ListFlowTasksResult>({
         extra,
         args,
         callback: async () => {
-          const configWithOverrides = await extra.getConfigWithOverrides();
-
           // Return malformed filters as MCP errors.
           if (args.filter) {
             try {
@@ -201,13 +200,11 @@ export const getListFlowTasksTool = (server: WebMcpServer): WebTool<typeof param
             },
           } satisfies ListFlowTasksResult);
         },
-        constrainSuccessResult: async (result) => {
-          const configWithOverrides = await extra.getConfigWithOverrides();
-          return constrainFlowTasks({
+        constrainSuccessResult: (result) =>
+          constrainFlowTasks({
             result,
             boundedContext: configWithOverrides.boundedContext,
-          });
-        },
+          }),
       });
     },
   });
