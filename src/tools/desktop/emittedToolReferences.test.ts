@@ -33,6 +33,7 @@ const NON_TOOL_VOCABULARY = [
   'as-is',
   'async-settle',
   'auto-apply',
+  'auto-clear',
   'auto-grid',
   'auto-updates',
   'awaiting-user',
@@ -106,6 +107,7 @@ const NON_TOOL_VOCABULARY = [
   'in-dashboard',
   'in-place',
   'in-use',
+  'include-null',
   'input-validation',
   'instance-unavailable',
   'intermediate-leg',
@@ -134,8 +136,10 @@ const NON_TOOL_VOCABULARY = [
   'mark-labels',
   'mark-labels-show',
   'missing-required-slot',
+  'multi-select',
   'name-only',
   'name-style',
+  'nav-action',
   'nav-type',
   'no-desktop-instances-found',
   'non-empty',
@@ -145,6 +149,7 @@ const NON_TOOL_VOCABULARY = [
   'not-applied',
   'not-found',
   'not-run',
+  'on-empty',
   'on-hover',
   'on-menu',
   'on-select',
@@ -198,6 +203,7 @@ const NON_TOOL_VOCABULARY = [
   'slot-not-offered',
   'slot-to-field',
   'source-field',
+  'special-fields',
   'specific-zone',
   'stable-id',
   'start-page',
@@ -226,6 +232,7 @@ const NON_TOOL_VOCABULARY = [
   'too-new',
   'top-level',
   'top-n',
+  'tsl-filter',
   'type-v2',
   'ui-builder',
   'ui-domain',
@@ -269,12 +276,15 @@ type Candidate = {
   literal: string;
 };
 
-// Every non-test .ts file under src/tools/desktop, plus EXTRA_FILES: a new tool's guidance
-// prose is covered the moment its file lands, with no list to remember to update.
+// Every non-test-support .ts file under src/tools/desktop, plus EXTRA_FILES: a new tool's
+// guidance prose is covered the moment its file lands, with no list to remember to update.
+// Test-support modules (unit tests, mocks, shared fixtures) are scaffolding, not guidance the
+// model ever sees, so skip them all
+const TEST_SUPPORT_RE = /(\.test|\.mock|\.testutils|testfixtures)\.ts$/i;
 function sourceFiles(): string[] {
   return readdirSync(DESKTOP_TOOLS_ROOT, { recursive: true })
     .map(String)
-    .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+    .filter((file) => file.endsWith('.ts') && !TEST_SUPPORT_RE.test(file))
     .map((file) => join(DESKTOP_TOOLS_ROOT, file))
     .concat(EXTRA_FILES.map((file) => join(REPO_ROOT, file)));
 }

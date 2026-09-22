@@ -65,6 +65,9 @@ import {
   RefreshExtractRequest,
   sheetActionRoute,
   SheetRef,
+  ShowMeOptionsQuery,
+  ShowMeOptionsResult,
+  showMeOptionsResultSchema,
   Site,
   SiteDatasourceList,
   siteDatasourceListSchema,
@@ -107,6 +110,9 @@ import {
   worksheetRefreshNowRoute,
   worksheetResumeAutoUpdatesRoute,
   worksheetRoute,
+  worksheetShowMeOptionsRoute,
+  WorksheetShowMeRequest,
+  worksheetShowMeRoute,
   WorksheetSort,
   worksheetSortRoute,
   WorksheetSummaryDataQuery,
@@ -506,6 +512,20 @@ export class ExternalApiToolExecutor {
     return Ok(result.value);
   }
 
+  async getWorksheetShowMeOptions(
+    worksheetId: string,
+    query: ShowMeOptionsQuery,
+    signal: AbortSignal,
+  ): Promise<Result<ShowMeOptionsResult, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(
+        worksheetShowMeOptionsRoute(worksheetId, query),
+        showMeOptionsResultSchema,
+        signal,
+      ),
+    );
+  }
+
   async getDashboard(
     dashboardId: string,
     signal: AbortSignal,
@@ -767,6 +787,17 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(worksheetSortRoute(worksheetId), sort, signal),
       'sort-worksheet',
+    );
+  }
+
+  async showMeWorksheet(
+    worksheetId: string,
+    request: WorksheetShowMeRequest,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postJsonEnvelope(worksheetShowMeRoute(worksheetId), request, signal),
+      'show-me-worksheet',
     );
   }
 

@@ -27,6 +27,9 @@ import {
   PROBLEM_CODES,
   problemResponseSchema,
   protectedResourceMetadataSchema,
+  showMeOptionSchema,
+  showMeOptionsResultSchema,
+  showMeWorksheetSchema,
   siteDatasourceItemSchema,
   siteDatasourceListSchema,
   siteSchema,
@@ -51,8 +54,11 @@ import {
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: unmodified live Desktop `/openapi.json` captured on 2026-09-15 from
- * External Client API 0.2.16.
+ * Fixture provenance: live Desktop `/openapi.json` captured on 2026-09-15 from External Client
+ * API 0.2.16. The worksheet `/showMe` path and its response components were projected on
+ * 2026-09-12 from the W-23715530 monolith producer branch
+ * `dev/michaelyu/w-23715530-get-show-me-options` because the live 0.2.16 artifact did not yet
+ * include that producer addition.
  */
 
 type SpecProperty = {
@@ -61,6 +67,7 @@ type SpecProperty = {
   minLength?: number;
   maxLength?: number;
   const?: string;
+  enum?: Array<string>;
   items?: SpecProperty;
   'x-extensible-enum'?: Array<string>;
 };
@@ -141,7 +148,7 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('is the authoritative 0.2.16 producer contract', () => {
+  it('tracks the 0.2.16 contract with projected Show Me additions', () => {
     expect(spec.info.version).toBe('0.2.16');
   });
 
@@ -209,6 +216,9 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['SummaryData', summaryDataSchema],
       ['LogicalTableItem', logicalTableItemSchema],
       ['LogicalTableList', logicalTableListSchema],
+      ['ShowMeWorksheet', showMeWorksheetSchema],
+      ['ShowMeOption', showMeOptionSchema],
+      ['ShowMeOptions', showMeOptionsResultSchema],
       ['WindowInfo', windowInfoSchema],
       ['ValidationResult', validationResultSchema],
       ['ImageExport', imageResultSchema],
@@ -224,7 +234,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.13 requiredness exception set', () => {
+    it('pins the complete 0.2.16 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
@@ -579,6 +589,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.worksheetSummaryData,
       EXTERNAL_API_ROUTES.worksheetLogicalTables,
       EXTERNAL_API_ROUTES.worksheetLogicalTableData,
+      EXTERNAL_API_ROUTES.worksheetShowMeOptions,
       EXTERNAL_API_ROUTES.worksheetDelete,
       EXTERNAL_API_ROUTES.worksheetRename,
       EXTERNAL_API_ROUTES.worksheetSort,
@@ -742,6 +753,118 @@ describe('external client API contract (captured openapi fixture)', () => {
         '#/components/responses/NotFound',
       );
       expect(spec.paths).not.toHaveProperty('/v0/workbook/dashboards/{id}:refreshNow');
+    });
+
+    it('retains the projected worksheet Show Me option discovery contract in 0.2.16', () => {
+      const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetShowMeOptions] as {
+        get?: {
+          operationId?: string;
+          parameters?: Array<{
+            name?: string;
+            in?: string;
+            required?: boolean;
+            schema?: SpecProperty;
+          }>;
+          responses?: Record<string, unknown>;
+        };
+      };
+
+      expect(Object.keys(pathItem)).toEqual(['get']);
+      expect(pathItem.get?.operationId).toBe('getWorksheetShowMeOptions');
+      expect(pathItem.get?.parameters).toEqual([
+        expect.objectContaining({
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        }),
+        expect.objectContaining({
+          name: 'dataSource',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        }),
+        expect.objectContaining({
+          name: 'fieldsSelectedInSchemaViewer',
+          in: 'query',
+          required: false,
+          schema: { type: 'array', items: { type: 'string' } },
+        }),
+        expect.objectContaining({
+          name: 'selectionMode',
+          in: 'query',
+          required: false,
+          schema: { type: 'string', enum: ['ambient', 'explicit'] },
+        }),
+      ]);
+      expect(Object.keys(pathItem.get?.responses ?? {})).toEqual([
+        '200',
+        '202',
+        '400',
+        '401',
+        '404',
+        '421',
+        '500',
+        '503',
+      ]);
+      expect(pathItem.get?.responses).toHaveProperty(
+        '200.content.application/json.schema.$ref',
+        '#/components/schemas/ShowMeOptions',
+      );
+      expect(pathItem.get?.responses).toHaveProperty('202.$ref', '#/components/responses/Accepted');
+      expect(pathItem.get?.responses).toHaveProperty(
+        '400.$ref',
+        '#/components/responses/BadRequest',
+      );
+      expect(pathItem.get?.responses).toHaveProperty('404.$ref', '#/components/responses/NotFound');
+    });
+
+    it('projects observable Show Me apply rejections', () => {
+      const pathItem = spec.paths['/v0/workbook/worksheets/{id}:showMe'] as {
+        post?: {
+          operationId?: string;
+          responses?: Record<string, unknown>;
+        };
+      };
+
+      expect(pathItem.post?.operationId).toBe('showMeWorksheet');
+      expect(pathItem.post?.responses).toHaveProperty(
+        '409.$ref',
+        '#/components/responses/Conflict',
+      );
+      expect(PROBLEM_CODES).toEqual(
+        expect.arrayContaining(['show-me-not-applicable', 'show-me-unavailable']),
+      );
+    });
+  });
+
+  describe('Show Me option discovery provenance', () => {
+    it('preserves native option ordering and the worksheet identity shape', () => {
+      const result = specSchema('ShowMeOptions');
+
+      expect(result.properties?.worksheet?.$ref).toBe('#/components/schemas/ShowMeWorksheet');
+      expect(result.properties?.options?.type).toBe('array');
+      expect(result.properties?.options?.items?.$ref).toBe('#/components/schemas/ShowMeOption');
+      expect(result.description).toContain('native order');
+    });
+
+    it('keeps showMeType runtime-extensible and exposes only native applicability evidence', () => {
+      const option = specSchema('ShowMeOption');
+      const showMeType = option.properties?.showMeType;
+
+      expect(showMeType?.type).toBe('string');
+      expect(showMeType).not.toHaveProperty('enum');
+      expect(showMeType).not.toHaveProperty('x-extensible-enum');
+      expect(Object.keys(option.properties ?? {})).toEqual([
+        'showMeType',
+        'isApplicable',
+        'vizHasRequiredFields',
+        'dataSourceHasRequiredFields',
+        'helpUrl',
+      ]);
+      expect(option.properties).not.toHaveProperty('recommendation');
+      expect(option.properties).not.toHaveProperty('rating');
+      expect(option.properties).not.toHaveProperty('isDefault');
     });
   });
 

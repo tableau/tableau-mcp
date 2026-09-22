@@ -205,7 +205,7 @@ describe('desktop tools/list serialized surface', () => {
     // Tool search owns discovery; pin the merged filter recovery, dense-scatter repair,
     // executive-dashboard guidance, rounded-bar build/refine proof route, and dashboard
     // corner routing without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(8_318);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(8_504);
   });
 });
 
@@ -276,7 +276,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
-    ['author-action', 1433], // remeasured after preserving URL authoring and standardizing the datasource selector as internal name or unique caption
+    ['author-action', 1521], // ratcheted down 2026-09-18 after trimming url/datasource describes for the source/target exclude split
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.
     ['format-worksheets', 1097],
@@ -438,10 +438,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 70-tool modern surface with scoped XML fallbacks', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 72-tool modern surface with scoped XML fallbacks', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(70);
+    expect(selected).toHaveLength(72);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
     // fast-path, and the two knowledge doors the system prompt's "consult the expertise
@@ -477,17 +477,22 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'delete-sheet',
       'rename-sheet',
       'sort-worksheet',
+      'show-me',
       'undo-workbook',
       'redo-workbook',
       'list-instances',
+      'get-desktop-state',
+      'get-diagnostics',
       'get-active-dialogs',
       'invoke-dialog-action',
       'list-available-fields',
       'search-workbook-fields',
       'list-worksheets',
+      'get-show-me-options',
       'list-dashboards',
       'list-worksheet-logical-tables',
       'get-worksheet-underlying-data',
+      'capture-window-screenshot',
       'add-worksheet',
       'add-dashboard',
       'add-storyboard',
@@ -754,6 +759,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('publish-workbook')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
+    expect(floors.get('show-me')).toBe('0.2.11');
     expect(floors.get('get-active-dialogs')).toBe('0.2.13');
     expect(floors.get('invoke-dialog-action')).toBe('0.2.13');
     expect(floors.get('get-desktop-state')).toBe('0.2.14');
@@ -762,6 +768,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('get-datasource-xml')).toBe('0.2.10');
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
+    expect(floors.get('get-show-me-options')).toBe('0.2.18');
   });
 
   it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {
@@ -848,6 +855,19 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     }
   });
 
+  it('hides Show Me before 0.2.11 and exposes it at its registration floor', () => {
+    const fullTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'full',
+    );
+    expect(filterToolsByApiVersion(fullTools, '0.2.10').map((tool) => tool.name)).not.toContain(
+      'show-me',
+    );
+    expect(filterToolsByApiVersion(fullTools, '0.2.11').map((tool) => tool.name)).toContain(
+      'show-me',
+    );
+  });
+
   it('a connected 0.2.12 Desktop hides dialog tools and 0.2.13 exposes them', () => {
     const profileTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
@@ -892,6 +912,20 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(namesAt('0.3.0')).toContain('refresh-auto-updates');
     expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
     expect(namesAt(undefined)).toContain('refresh-auto-updates');
+  });
+
+  it('gates Show Me option discovery at External Client API 0.2.18', () => {
+    const profileTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'dynamic-authoring',
+    );
+    const namesAt = (apiVersion: string | undefined): string[] =>
+      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
+
+    expect(namesAt('0.2.17')).not.toContain('get-show-me-options');
+    expect(namesAt('0.2.18')).toContain('get-show-me-options');
+    expect(namesAt('0.3.0')).toContain('get-show-me-options');
+    expect(namesAt(undefined)).toContain('get-show-me-options');
   });
 });
 
