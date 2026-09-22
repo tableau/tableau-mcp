@@ -41,6 +41,38 @@ describe('authorActionTool', () => {
     expect(paramsSchema['datasource']?.description).toBe('Internal name or caption.');
   });
 
+  it('tells the caller which field each mode requires up front', async () => {
+    const tool = getAuthorActionTool(new DesktopMcpServer());
+    const paramsSchema = (await Provider.from(tool.paramsSchema)) as Record<
+      string,
+      { description?: string }
+    >;
+
+    // The tool description names the four modes so the caller can pick one before reading params.
+    expect(tool.description).not.toBe('Add action.');
+    for (const modeName of ['parameter', 'set', 'url', 'filter']) {
+      expect(tool.description).toContain(modeName);
+    }
+
+    // mode is the router: its description states each mode's required field.
+    const modeDescription = paramsSchema['mode']?.description ?? '';
+    expect(modeDescription).toContain('sourceField');
+    expect(modeDescription).toContain('targetParameter');
+    expect(modeDescription).toContain('targetSet');
+    expect(modeDescription).toContain('targetSheet');
+    expect(modeDescription).toContain('url');
+
+    // Every mode-routing param says which mode it belongs to and that it is required there.
+    expect(paramsSchema['sourceField']?.description).toContain('parameter');
+    expect(paramsSchema['targetParameter']?.description).toContain('[Parameters]');
+    expect(paramsSchema['targetSet']?.description).toContain('set');
+    expect(paramsSchema['targetSheet']?.description).toContain('filter');
+    expect(paramsSchema['caption']?.description).not.toBe('');
+    expect(paramsSchema['sourceWorksheet']?.description).not.toBe('');
+    expect(paramsSchema['filterFields']?.description).not.toBe('');
+    expect(paramsSchema['sourceDashboard']?.description).not.toBe('');
+  });
+
   it('creates the workbook-level <actions> block and splices an edit-parameter-action, verifying readback', async () => {
     const readbackXml = withActions(
       BASE_XML,
@@ -92,7 +124,7 @@ describe('authorActionTool', () => {
       args: {
         caption: 'Second',
         sourceWorksheet: 'Profit',
-        sourceField: '',
+        sourceField: '[Profit]',
         targetParameter: '[Parameters].[Parameter 1]',
       },
       initialXml: withOne,
@@ -456,7 +488,7 @@ describe('authorActionTool', () => {
       args: {
         caption: 'Set Period',
         sourceWorksheet: 'Profit',
-        sourceField: '',
+        sourceField: '[Profit]',
         targetParameter: 'Parameter 1',
       },
     });
@@ -467,7 +499,7 @@ describe('authorActionTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  it('requires sourceField in parameter mode', async () => {
+  it('requires sourceField in parameter mode and lists the available fields', async () => {
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Set Period',
@@ -479,6 +511,145 @@ describe('authorActionTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('sourceField is required in parameter mode');
+    // Recovery guidance: enumerate the fields the caller could drive the action from.
+    expect(result.content[0].text).toContain('Available fields');
+    expect(result.content[0].text).toContain('Profit');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty or whitespace sourceField instead of applying a no-op action', async () => {
+    // A blank sourceField would render an edit-parameter-action with a target but no
+    // source-field param — a no-op that pushes no value yet passes readback (which only
+    // checks the target survived). Reject it up front, same as an omitted sourceField.
+    for (const sourceField of ['', '   ']) {
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          caption: 'Set Period',
+          sourceWorksheet: 'Profit',
+          sourceField,
+          targetParameter: '[Parameters].[Parameter 1]',
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('sourceField is required in parameter mode');
+      expect(result.content[0].text).toContain('Available fields');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    }
+  });
+
+  it('requires targetParameter in parameter mode and lists the existing parameters', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('targetParameter is required in parameter mode');
+    // Recovery guidance: enumerate the parameters already in the workbook (the Parameters
+    // datasource carries p.Period as [Parameter 1]).
+    expect(result.content[0].text).toContain('Available parameters');
+    expect(result.content[0].text).toContain('p.Period');
+    expect(result.content[0].text).toContain('[Parameters].[Parameter 1]');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a well-formed targetParameter that names no existing parameter', async () => {
+    // [Parameters].[Profit] is correctly qualified but Profit is a data field, not a parameter.
+    // Tableau would persist an action pointing at a phantom parameter that can never fire, so
+    // reject it and list the parameters that do exist — as set mode does for an unknown set.
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Profit]',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'targetParameter "[Parameters].[Profit]" was not found',
+    );
+    expect(result.content[0].text).toContain('Available parameters');
+    expect(result.content[0].text).toContain('p.Period');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('resolves a targetParameter named by its caption to the internal token', async () => {
+    // A parameter's internal name ([Parameter 1]) is independent of its display caption
+    // (p.Period). A caller who names the parameter by the caption they see in the Parameters
+    // pane must still resolve — and the applied XML must carry the INTERNAL token, because that
+    // is the only form Tableau resolves an action against. Mirrors set mode's caption handling.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[p.Period]',
+        activation: 'on-select',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    // The echo and emit both report the resolved internal token, not the caption input.
+    expect(parsed.target).toBe('[Parameters].[Parameter 1]');
+    expect(parsed.targetParameter).toBe('[Parameters].[Parameter 1]');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(
+      "<param name='target-parameter' value='[Parameters].[Parameter 1]' />",
+    );
+    // The raw caption must never reach the serialized XML.
+    expect(loaded).not.toContain('[Parameters].[p.Period]');
+  });
+
+  it('rejects a sourceWorksheet that names no existing worksheet', async () => {
+    // "Sales Map" looks plausible but the workbook only has "Profit"; a phantom source persists
+    // as an action that can never fire. Reject it and enumerate the real worksheets.
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Sales Map',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('sourceWorksheet "Sales Map" was not found');
+    expect(result.content[0].text).toContain('Available worksheets');
+    expect(result.content[0].text).toContain('Profit');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a set-mode sourceWorksheet that names no existing worksheet', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Sales Map',
+        targetSet: 'Category Set',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('sourceWorksheet "Sales Map" was not found');
+    expect(result.content[0].text).toContain('Available worksheets');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
@@ -576,7 +747,7 @@ describe('authorActionTool', () => {
       args: {
         caption: 'Set Period',
         sourceWorksheet: 'Profit',
-        sourceField: '',
+        sourceField: '[Profit]',
         targetParameter: '[Parameters].[Parameter 1]',
       },
       readbackXml: withActions(BASE_XML, incompleteAction),

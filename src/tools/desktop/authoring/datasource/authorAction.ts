@@ -18,6 +18,7 @@ import { applyAndVerify } from './applyAndVerify.js';
 import {
   DatasourceElement,
   findDatasourceElements,
+  findWorkbookParameters,
   selectTargetDatasource,
 } from './authorCalcCore.js';
 
@@ -34,21 +35,61 @@ const urlTargetSchema = z.enum(['default-zone-or-browser', 'browser', 'specific-
 // intact. This is the interactivity layer over the key signature.
 const paramsSchema = {
   session: sessionParam(),
-  mode: modeSchema.default('parameter').describe(''),
-  caption: z.string().describe(''),
-  sourceWorksheet: z.string().describe(''),
-  sourceField: z.string().optional().describe(''),
-  targetParameter: z.string().optional().describe(''),
-  targetSet: z.string().optional().describe(''),
-  targetSheet: z.string().optional().describe(''),
-  filterFields: z.array(z.string()).optional().describe(''),
+  mode: modeSchema
+    .default('parameter')
+    .describe(
+      'Which target a mark interaction drives, and the field that mode needs: ' +
+        'parameter (needs sourceField and targetParameter), set (needs targetSet), ' +
+        'url (needs url), filter (needs targetSheet). Defaults to parameter.',
+    ),
+  caption: z.string().describe('Action name shown to the user; must be unique in the workbook.'),
+  sourceWorksheet: z
+    .string()
+    .describe(
+      'Worksheet whose marks drive the action. Required for parameter and set modes; ' +
+        'for url and filter modes pass this or sourceDashboard.',
+    ),
+  sourceField: z
+    .string()
+    .optional()
+    .describe(
+      'parameter mode only, required there: the source field whose value is pushed to the ' +
+        'target parameter, e.g. [Profit].',
+    ),
+  targetParameter: z
+    .string()
+    .optional()
+    .describe(
+      'parameter mode only, required there: the parameter to set, fully qualified like ' +
+        '[Parameters].[Parameter 1].',
+    ),
+  targetSet: z
+    .string()
+    .optional()
+    .describe('set mode only, required there: the set whose membership the selected marks change.'),
+  targetSheet: z
+    .string()
+    .optional()
+    .describe(
+      'filter mode only, required there: the worksheet or dashboard the source marks filter.',
+    ),
+  filterFields: z
+    .array(z.string())
+    .optional()
+    .describe('filter mode only: fields to filter on; omit to filter on all shared fields.'),
   datasource: z.string().optional().describe('Internal name or caption.'),
   setMembership: setMembershipSchema.default('assign').describe(''),
   clearSelection: clearSelectionSchema.default('do-nothing').describe(''),
   singleSelect: z.boolean().optional().describe(''),
   activation: activationSchema.default('on-select').describe(''),
   url: z.string().optional().describe('URL for url mode, raw. <[Field Name]> = value.'),
-  sourceDashboard: z.string().optional().describe(''),
+  sourceDashboard: z
+    .string()
+    .optional()
+    .describe(
+      'Dashboard whose marks drive the action, for url and filter modes; pass instead of or ' +
+        'alongside sourceWorksheet.',
+    ),
   excludeSourceSheets: z.array(z.string()).optional().describe(''),
   excludeTargetSheets: z.array(z.string()).optional().describe(''),
   urlTarget: urlTargetSchema.optional().describe(''),
@@ -106,7 +147,9 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'author-action',
     title,
-    description: 'Add action.',
+    description:
+      'Wire a mark interaction to a target. Pick mode and pass its required field: ' +
+      'parameter (sourceField + targetParameter), set (targetSet), url (url), filter (targetSheet).',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -254,25 +297,10 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               'targetParameter is not allowed in set mode; use targetSet',
             ).toErr();
           }
-          if (mode === 'parameter') {
-            if ((targetSet?.trim().length ?? 0) > 0) {
-              return new ArgsValidationError(
-                'targetSet is not allowed in parameter mode; use targetParameter',
-              ).toErr();
-            }
-            if (sourceField === undefined) {
-              return new ArgsValidationError('sourceField is required in parameter mode').toErr();
-            }
-            if (targetParameter === undefined || targetParameter.trim().length === 0) {
-              return new ArgsValidationError(
-                'targetParameter is required in parameter mode',
-              ).toErr();
-            }
-            if (!/^\[.+\]\.\[.+\]$/.test(targetParameter.trim())) {
-              return new ArgsValidationError(
-                'targetParameter must be fully qualified like [Parameters].[X]; unqualified targets can cause a blocking Tableau modal',
-              ).toErr();
-            }
+          if (mode === 'parameter' && (targetSet?.trim().length ?? 0) > 0) {
+            return new ArgsValidationError(
+              'targetSet is not allowed in parameter mode; use targetParameter',
+            ).toErr();
           }
           if (mode === 'filter') {
             if ((targetParameter?.trim().length ?? 0) > 0 || (targetSet?.trim().length ?? 0) > 0) {
@@ -311,8 +339,73 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             ).toErr();
           }
 
+          // parameter mode needs a source field and an existing target parameter. Both errors
+          // enumerate what the workbook actually offers — the same recovery guidance set mode
+          // gives with "Available sets" — so a first miss becomes a fixable second call rather
+          // than the repeated blind retries this tool used to provoke.
+          let resolvedTargetParameter = '';
+          if (mode === 'parameter') {
+            // Reject empty/whitespace as well as undefined: renderParameterAction omits the
+            // source-field param when it is blank, and the readback predicate only checks the
+            // target survived — so a blank sourceField would otherwise apply a no-op action
+            // (a target with no value to push) and report success. Mirrors targetParameter below.
+            if (sourceField === undefined || sourceField.trim().length === 0) {
+              return new ArgsValidationError(
+                `sourceField is required in parameter mode. Available fields: ${formatAvailableFields(liveXml)}`,
+              ).toErr();
+            }
+            if (targetParameter === undefined || targetParameter.trim().length === 0) {
+              return new ArgsValidationError(
+                `targetParameter is required in parameter mode. Available parameters: ${formatAvailableParameters(liveXml)}`,
+              ).toErr();
+            }
+            const qualifiedTarget = /^\[(.+)\]\.\[(.+)\]$/.exec(targetParameter.trim());
+            if (qualifiedTarget === null) {
+              return new ArgsValidationError(
+                `targetParameter must be fully qualified like [Parameters].[X]; unqualified targets can cause a blocking Tableau modal. Available parameters: ${formatAvailableParameters(liveXml)}`,
+              ).toErr();
+            }
+            // The target parameter must already exist. Tableau persists an action pointing at a
+            // phantom parameter without complaint — and the readback only checks the target
+            // survived, not that it resolves — so the action is applied but can never fire.
+            // Set mode rejects an unknown set the same way ("Set X was not found").
+            //
+            // Match on internal name OR caption, exactly as resolveTargetSet does: a parameter's
+            // internal <column name> ([Parameter N]) is minted at creation and is independent of
+            // its display caption, so a caller naming the parameter by the caption they see in the
+            // Parameters pane must still resolve. Then emit the resolved INTERNAL token — Tableau
+            // only resolves an action against the internal name, so serializing the raw caption
+            // would write an unresolvable [Parameters].[Caption] that silently never fires.
+            const requestedParameter = normalizeReferenceToken(qualifiedTarget[2]);
+            const matchedParameter =
+              normalizeReferenceToken(qualifiedTarget[1]) === 'Parameters'
+                ? findWorkbookParameters(liveXml).find(
+                    (parameter) =>
+                      normalizeReferenceToken(parameter.name) === requestedParameter ||
+                      (parameter.caption !== undefined &&
+                        normalizeReferenceToken(parameter.caption) === requestedParameter),
+                  )
+                : undefined;
+            if (matchedParameter === undefined) {
+              return new ArgsValidationError(
+                `targetParameter "${targetParameter.trim()}" was not found. Available parameters: ${formatAvailableParameters(liveXml)}`,
+              ).toErr();
+            }
+            resolvedTargetParameter = `[Parameters].${bracketToken(matchedParameter.name)}`;
+          }
+
           const worksheetNames = findElementNames(liveXml, 'worksheets', 'worksheet');
           const dashboardNames = findElementNames(liveXml, 'dashboards', 'dashboard');
+          // parameter and set modes drive off a single required source worksheet. A name that
+          // isn't a real worksheet persists as a source the action can never fire from, so reject
+          // it and enumerate the worksheets — the same recovery filter mode already gives.
+          if (mode === 'parameter' || mode === 'set') {
+            if (!worksheetNames.has(effectiveSourceSheet)) {
+              return new ArgsValidationError(
+                `sourceWorksheet "${effectiveSourceSheet}" was not found. Available worksheets: ${worksheetNames.size > 0 ? [...worksheetNames].join(', ') : 'none'}`,
+              ).toErr();
+            }
+          }
           if (mode === 'url' || mode === 'filter') {
             // Worksheet, dashboard, and story names share one namespace, so a source name
             // is unambiguously one kind. Emitting <source worksheet='<dashboard>'> (a
@@ -505,7 +598,10 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             target = filterAction!.target;
             actionXml = renderFilterAction(caption, actionName, filterAction!);
           } else {
-            target = targetParameter!.trim();
+            // Emit the internal token resolved during the existence check above, not the raw
+            // input, so a caption argument serializes as the [Parameters].[Parameter N] Tableau
+            // can actually resolve. Readback below compares against this same `target`.
+            target = resolvedTargetParameter;
             actionXml = renderParameterAction({
               caption,
               actionName,
@@ -931,6 +1027,36 @@ function formatSetCandidates(candidates: SetCandidate[]): string {
         `${candidate.caption ?? candidate.name} (${candidate.name}, datasource ${candidate.datasourceCaption ?? candidate.datasourceName})`,
     )
     .join(', ');
+}
+
+// Enumerate the fields a parameter action could read its source value from, for the sourceField
+// recovery message. summarizeSchema already excludes the Parameters datasource, so this lists only
+// real data fields. Each entry pairs the friendly name with the bracketed column name the caller
+// passes as sourceField, e.g. "Profit ([Profit])". "none" when the workbook exposes no fields.
+function formatAvailableFields(liveXml: string): string {
+  const seen = new Set<string>();
+  const entries: string[] = [];
+  for (const field of summarizeSchema(liveXml).fields) {
+    if (seen.has(field.columnName)) {
+      continue;
+    }
+    seen.add(field.columnName);
+    const friendly = field.caption ?? bareName(field.columnName);
+    entries.push(`${friendly} (${field.columnName})`);
+  }
+  return entries.length > 0 ? entries.join(', ') : 'none';
+}
+
+// Enumerate the parameters already in the workbook, for the targetParameter recovery message.
+// findWorkbookParameters reads the Parameters datasource (the field summary excludes it). Each
+// entry pairs the caption with the fully qualified token the caller passes as targetParameter,
+// e.g. "p.Period ([Parameters].[Parameter 1])". "none" when the workbook has no parameters yet.
+function formatAvailableParameters(liveXml: string): string {
+  const entries = findWorkbookParameters(liveXml).map(
+    (parameter) =>
+      `${parameter.caption ?? parameter.name} ([Parameters].${bracketToken(parameter.name)})`,
+  );
+  return entries.length > 0 ? entries.join(', ') : 'none';
 }
 
 function renderSetAction({
