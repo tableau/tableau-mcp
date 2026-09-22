@@ -191,9 +191,10 @@ describe('VizqlDataServiceMethods.userHasQueryPermissions', () => {
     });
   });
 
-  it('classifies a disabled feature (403 / "feature is not enabled") as systemic feature-disabled', async () => {
-    // 403800 is overloaded: it signals both a disabled feature and a per-data-source denial,
-    // distinguished only by the message. A disabled feature applies to every data source.
+  it('classifies the disabled feature flag (403 / VDSForWorkbookDatasources not enabled) as systemic workbook-datasource-not-enabled', async () => {
+    // 403800 is overloaded: it signals both a disabled feature flag and a per-data-source denial,
+    // distinguished only by the message. A disabled flag applies to every data source, and the
+    // caller marks those false — distinct from a missing endpoint, which is undeterminable.
     const methods = makeMethods();
     stubTransport(methods, () =>
       Promise.reject(
@@ -205,7 +206,7 @@ describe('VizqlDataServiceMethods.userHasQueryPermissions', () => {
     );
 
     expect(unwrapErr(await methods.userHasQueryPermissions(request))).toEqual({
-      type: 'feature-disabled',
+      type: 'workbook-datasource-not-enabled',
     });
   });
 

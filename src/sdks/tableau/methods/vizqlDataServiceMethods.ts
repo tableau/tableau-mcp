@@ -161,18 +161,20 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
         const errorCode = error.response.data?.errorCode;
         const message = error.response.data?.message;
 
-        // feature-disabled is reserved for *systemic* failures that apply to every data source,
-        // not just the one requested:
-        //  - 404950: the endpoint is absent on an older server.
-        //  - a 403 whose message says the feature "is not enabled": VDS is switched off site-wide.
-        //    (errorCode 403800 is overloaded — it also signals a per-data-source denial — so the
-        //    message is the only reliable discriminator.)
+        // Two *systemic* failures that apply to every data source, kept distinct because the caller
+        // maps them to different isQueryable verdicts (see enrichUpstreamDatasourceQueryability):
+        //  - workbook-datasource-not-enabled: the endpoint answered but the VDSForWorkbookDatasources
+        //    feature is off site-wide, so querying is disabled. (errorCode 403800 is overloaded — it
+        //    also signals a per-data-source denial — so the flag name in the message is the only
+        //    reliable discriminator.)
+        //  - feature-disabled: errorCode 404950, the endpoint itself is absent on an older server, so
+        //    it can't answer at all.
         // Everything else (per-data-source denials, not-found data sources, auth failures,
         // transient errors) is surfaced as api-error for the caller to interpret per data source.
-        if (
-          errorCode === '404950' ||
-          (status === 403 && (message ?? '').toLowerCase().includes('not enabled'))
-        ) {
+        if (isWorkbookDatasourceNotEnabled(error.response.data)) {
+          return Err({ type: 'workbook-datasource-not-enabled' });
+        }
+        if (errorCode === '404950') {
           return Err({ type: 'feature-disabled' });
         }
 
