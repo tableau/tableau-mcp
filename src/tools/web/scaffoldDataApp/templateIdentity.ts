@@ -49,29 +49,14 @@ export function slug(name: string): string {
 }
 
 /**
- * Reduces a username to a value that is safe to embed verbatim in an XML
- * attribute (data-app.trex) without escaping: disallowed characters
- * (including quotes and angle brackets) collapse to a single space; the
- * result is trimmed.
+ * Derives the data app identity from the requested name. `displayName` is the
+ * name verbatim; `packageId` is a deterministic `com.tableau.mcp.<slug>`;
+ * `author` is always "Tableau MCP".
  */
-function sanitizeUsername(username: string | undefined): string {
-  if (!username) {
-    return '';
-  }
-  return username.replace(/[^A-Za-z0-9 ._@-]+/g, ' ').trim();
-}
-
-/**
- * Derives the data app identity from the requested name and (optional) auth
- * username. `displayName` is the name verbatim; `packageId` is a deterministic
- * `com.tableau.mcp.<slug>`; `author` is "<username> via Tableau MCP", falling
- * back to "Tableau MCP" when no username is available.
- */
-export function deriveIdentity(datappName: string, username?: string): DataAppIdentity {
-  const cleanUsername = sanitizeUsername(username);
+export function deriveIdentity(datappName: string): DataAppIdentity {
   return {
     packageId: `com.tableau.mcp.${slug(datappName)}`,
-    author: cleanUsername ? `${cleanUsername} via Tableau MCP` : 'Tableau MCP',
+    author: 'Tableau MCP',
     displayName: datappName,
   };
 }

@@ -59,7 +59,6 @@ export const getScaffoldDataAppTool = (
         callback: async () => {
           return createDataAppWorkspace({
             datappName,
-            username: extra.tableauAuthInfo?.username,
             config: extra.config,
             extra,
             productVersion,

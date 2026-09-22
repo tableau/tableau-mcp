@@ -94,20 +94,18 @@ async function walkFiles(root: string, rel = ''): Promise<string[]> {
 
 export async function createDataAppWorkspace({
   datappName,
-  username,
   config,
   extra,
   productVersion,
   datasourceLuid,
 }: {
   datappName: string;
-  username?: string;
   config: Config;
   extra: TableauWebRequestHandlerExtra;
   productVersion: ProductVersion;
   datasourceLuid?: string;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
-  const identity = deriveIdentity(datappName, username);
+  const identity = deriveIdentity(datappName);
 
   let wiringEdits: DatasourceWiringEdits | undefined;
   if (datasourceLuid) {

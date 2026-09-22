@@ -26,30 +26,18 @@ describe('slug', () => {
 
 describe('deriveIdentity', () => {
   it('derives packageId, author, and displayName', () => {
-    const identity = deriveIdentity('Sales Demo', 'jsmith@example.com');
+    const identity = deriveIdentity('Sales Demo');
     expect(identity).toEqual({
       packageId: 'com.tableau.mcp.sales-demo',
-      author: 'jsmith@example.com via Tableau MCP',
+      author: 'Tableau MCP',
       displayName: 'Sales Demo',
     });
-  });
-
-  it('falls back to "Tableau MCP" when no username is available', () => {
-    expect(deriveIdentity('X', undefined).author).toBe('Tableau MCP');
-    expect(deriveIdentity('X', '').author).toBe('Tableau MCP');
-  });
-
-  it('sanitizes usernames so the author is safe to embed in JSON and XML', () => {
-    // Quotes/angle brackets collapse to a single space; result trimmed.
-    expect(deriveIdentity('X', 'a<b>"c').author).toBe('a b c via Tableau MCP');
-    // A username with no safe characters degrades to the fallback.
-    expect(deriveIdentity('X', '<<<>>>').author).toBe('Tableau MCP');
   });
 });
 
 describe('buildTextReplacements', () => {
   it('maps every placeholder token in the .twb and data-app.trex', () => {
-    const identity = deriveIdentity('Sales Demo', 'jsmith@example.com');
+    const identity = deriveIdentity('Sales Demo');
     const replacements = buildTextReplacements(identity);
 
     expect(replacements[TWB_RELPATH]).toEqual([
@@ -59,12 +47,12 @@ describe('buildTextReplacements', () => {
     expect(replacements[TREX_RELPATH]).toEqual([
       { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
       { find: 'TODO App Name', replace: 'Sales Demo' },
-      { find: 'TODO Username via Tableau MCP', replace: 'jsmith@example.com via Tableau MCP' },
+      { find: 'TODO Username via Tableau MCP', replace: 'Tableau MCP' },
     ]);
   });
 
   it('escapes displayName for XML text in the .twb and data-app.trex', () => {
-    const identity = deriveIdentity('Tom & "Jerry" <Co>', undefined);
+    const identity = deriveIdentity('Tom & "Jerry" <Co>');
     const replacements = buildTextReplacements(identity);
 
     // XML text (.twb, .trex): & < > escaped, quotes left as-is.
@@ -89,7 +77,7 @@ describe('applyReplacements', () => {
 });
 
 describe('mapToFinalRelativePath', () => {
-  const identity = deriveIdentity('Sales Demo', undefined);
+  const identity = deriveIdentity('Sales Demo');
 
   it('renames the workbook to the display name', () => {
     expect(mapToFinalRelativePath(TEMPLATE_TWB_FILENAME, identity)).toBe('Sales Demo.twb');

@@ -81,7 +81,6 @@ describe('createDataAppWorkspace', () => {
     it('writes the finalized, substituted workspace tree to disk', async () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
-        username: 'jdoe',
         config: getConfig(),
         extra: getMockRequestHandlerExtra(),
         productVersion: testProductVersion,
@@ -111,7 +110,7 @@ describe('createDataAppWorkspace', () => {
       expect(trex).not.toContain('TODO App Name');
       expect(trex).not.toContain('TODO Username');
       expect(trex).toContain('id="com.tableau.mcp.sales-demo"');
-      expect(trex).toContain('name="jdoe via Tableau MCP"');
+      expect(trex).toContain('name="Tableau MCP"');
 
       // Vendored Extensions API library copied byte-for-byte (large binary).
       const libPath = join(pkgDir, 'content', 'src', 'tableau.extensions.1.latest.js');
@@ -124,30 +123,6 @@ describe('createDataAppWorkspace', () => {
 
       // Files were written to their finalized paths on disk.
       expect(existsSync(join(pkgDir, 'extensions', 'data-app.trex'))).toBe(true);
-    });
-
-    it('falls back to "Tableau MCP" author when no username is provided', async () => {
-      const result = await createDataAppWorkspace({
-        datappName: 'No User',
-        config: getConfig(),
-        extra: getMockRequestHandlerExtra(),
-        productVersion: testProductVersion,
-      });
-      invariant(result.isOk());
-      const value = result.value;
-      invariant(value.filePath);
-
-      const trex = await readFile(
-        join(
-          value.filePath,
-          'Packages',
-          'com.tableau.mcp.no-user',
-          'extensions',
-          'data-app.trex',
-        ),
-        'utf8',
-      );
-      expect(trex).toContain('author name="Tableau MCP"');
     });
 
     it('refuses to overwrite an existing workspace', async () => {
@@ -256,7 +231,6 @@ describe('createDataAppWorkspace', () => {
     it('finalizes the workspace, zips it, uploads to S3, and returns a presigned URL', async () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
-        username: 'jdoe',
         config: getConfig(),
         extra: getMockRequestHandlerExtra(),
         productVersion: testProductVersion,
@@ -292,7 +266,6 @@ describe('createDataAppWorkspace', () => {
       try {
         const result = await createDataAppWorkspace({
           datappName: 'Sales Demo',
-          username: 'jdoe',
           config: getConfig(),
           extra: getMockRequestHandlerExtra(),
           productVersion: testProductVersion,

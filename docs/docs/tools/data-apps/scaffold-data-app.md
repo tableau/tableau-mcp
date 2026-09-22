@@ -55,13 +55,12 @@ and wires every field on the datasource into the workbook.
 
 ## Derived values
 
-From `datappName` (and the authenticated user's username, when available) the tool derives the
-following identity, which it substitutes into the workspace files server-side (both output modes):
+From `datappName` the tool derives the following identity, which it substitutes into the workspace
+files server-side (both output modes):
 
 - **package id**: `com.tableau.mcp.<slug(datappName)>` — lowercase, non-alphanumeric runs collapsed
   to a single hyphen.
-- **author**: `<username> via Tableau MCP`, falling back to `Tableau MCP` when no username is
-  available.
+- **author**: always `Tableau MCP`.
 - **display name**: `datappName` verbatim.
 
 ## Response behavior
