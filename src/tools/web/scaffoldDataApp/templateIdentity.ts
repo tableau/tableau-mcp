@@ -1,9 +1,12 @@
 /**
  * Single source of truth for turning a `datappName` into a data app's identity
  * (package id / display name) and for describing how the committed
- * placeholder template becomes a named workspace. Both output modes (disk and
- * S3) depend on this module's identity/replacement helpers so they finalize a
- * workspace identically.
+ * placeholder template becomes a named workspace.
+ *
+ * The disk output path applies these edits/renames itself while copying the
+ * template. The S3 output path instead returns a `postUnzip` plan (see
+ * `buildPostUnzipPlan`) describing the exact same edits/renames for the client
+ * to apply after downloading and unzipping the static, un-substituted template.
  */
 
 /** Placeholder names present in the committed template tree. */
@@ -26,6 +29,24 @@ const PLACEHOLDER_DISPLAY_NAME = 'TODO App Name';
 export interface Replacement {
   find: string;
   replace: string;
+}
+
+export interface FileEdit {
+  /** Path relative to the unzip directory (includes the template root dir prefix). */
+  file: string;
+  replacements: Replacement[];
+}
+
+export interface Rename {
+  /** Path relative to the unzip directory. */
+  from: string;
+  to: string;
+}
+
+export interface PostUnzipPlan {
+  instructions: string;
+  edits: FileEdit[];
+  renames: Rename[];
 }
 
 export interface DataAppIdentity {
@@ -105,4 +126,31 @@ export function mapToFinalRelativePath(relPath: string, identity: DataAppIdentit
     return `Packages/${identity.packageId}/${relPath.slice(packagePrefix.length)}`;
   }
   return relPath;
+}
+
+/**
+ * The plan the S3 path returns so the client can finalize the workspace after
+ * unzipping the static, un-substituted template: apply every `edits` entry
+ * first, then the `renames` in order (deepest paths first, the root dir last).
+ * Paths are relative to the unzip directory and include the template root dir.
+ */
+export function buildPostUnzipPlan(identity: DataAppIdentity): PostUnzipPlan {
+  const root = TEMPLATE_ROOT_DIRNAME;
+  const edits: FileEdit[] = Object.entries(buildTextReplacements(identity)).map(
+    ([relPath, replacements]) => ({ file: `${root}/${relPath}`, replacements }),
+  );
+  const renames: Rename[] = [
+    {
+      from: `${root}/Packages/${TEMPLATE_PACKAGE_DIRNAME}`,
+      to: `${root}/Packages/${identity.packageId}`,
+    },
+    { from: `${root}/${TEMPLATE_TWB_FILENAME}`, to: `${root}/${identity.displayName}.twb` },
+    { from: root, to: identity.displayName },
+  ];
+  return {
+    instructions:
+      'Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.',
+    edits,
+    renames,
+  };
 }

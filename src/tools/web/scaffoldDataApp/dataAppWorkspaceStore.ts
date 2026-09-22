@@ -1,19 +1,19 @@
 /**
  * Creates a new data app workspace from the committed placeholder template.
  *
- * Both output modes share one finalize path (`buildFinalizedEntries`): walk the bundled template,
- * rewrite identity tokens, optionally wire a datasource, and produce the finished files entirely
- * in memory. They differ only in what happens with those entries and what's returned:
- *  - S3 configured (`config.bucketS3.enabled`): zip the in-memory entries directly, upload the zip
- *    to S3, and return a short-lived presigned GET URL to the zip. No scratch directory is written.
- *    A failed upload is returned as an error (`DataAppS3UploadFailedError`), not silently retried
- *    against disk — a misconfigured or unreachable bucket should surface, not quietly redirect the
- *    workspace to server-local disk instead.
- *  - otherwise: write the entries under the server-controlled `dataAppWorkspaceRoot` on disk and
- *    return the workspace's file path.
+ * The two output modes differ in where identity substitution happens:
+ *  - disk (`config.bucketS3.enabled` false): the server walks the bundled template, rewrites
+ *    identity tokens, and writes the finished files under the server-controlled
+ *    `dataAppWorkspaceRoot`, returning the workspace's file path. Fully finalized server-side.
+ *  - S3 (`config.bucketS3.enabled` true): the template zip is already published to S3 out of band
+ *    (see `config.dataAppTemplateS3Key`); the server only presigns a short-lived GET URL for that
+ *    existing object and returns it alongside a `postUnzip` plan describing the same edits/renames
+ *    for the client to apply after downloading and unzipping. Neither uploads nor builds a zip.
+ *
+ * Datasource wiring is not performed here at all — it is entirely the caller's/skill's
+ * responsibility, applied to the finalized workbook (disk path) or the unzipped-and-finalized
+ * workbook (S3 path) after this returns.
  */
-
-import { randomUUID } from 'node:crypto';
 
 import { existsSync } from 'fs';
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises';
@@ -22,45 +22,36 @@ import { Ok, Result } from 'ts-results-es';
 
 import { Config } from '../../../config.js';
 import {
-  DataAppS3UploadFailedError,
   DataAppTemplateUnavailableError,
-  DataAppWiringFailedError,
   DataAppWorkspaceExistsError,
   InvalidDataAppNameError,
   McpToolError,
 } from '../../../errors/mcpToolError.js';
-import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
-import { TableauWebRequestHandlerExtra } from '../toolContext.js';
-import {
-  applyDatasourceWiring,
-  buildDatasourceWiringEdits,
-  DatasourceWiringEdits,
-  resolveDatasourceDescriptor,
-} from './datasourceWiring.js';
-import { buildZip, ZipEntry } from './deterministicZip.js';
+import { presignGetObjectUrl } from '../s3Client.js';
 import {
   applyReplacements,
+  buildPostUnzipPlan,
   buildTextReplacements,
   DataAppIdentity,
   deriveIdentity,
   mapToFinalRelativePath,
-  slug,
+  PostUnzipPlan,
   TEMPLATE_ROOT_DIRNAME,
-  TWB_RELPATH,
 } from './templateIdentity.js';
 
 /**
  * Result of scaffolding a workspace. A single shape covers both output modes, distinguished by
  * which delivery field is set:
- *  - disk: `filePath` points at the finished, on-disk workspace.
- *  - S3: `s3URL` is a presigned GET for a zip of the finished workspace.
+ *  - disk: `filePath` points at the finished, on-disk workspace; `postUnzip` is omitted.
+ *  - S3: `s3URL` is a presigned GET for the (un-substituted) template zip, and `postUnzip` is the
+ *    rename/edit plan the client applies after unzipping to finalize the workspace.
  */
 export type DataAppWorkspaceResult = {
   datappName: string;
   filePath?: string;
   s3URL?: string;
+  postUnzip?: PostUnzipPlan;
 };
 
 // Candidate parents of the template root dir, tried in order, resolved relative to this module's own
@@ -97,154 +88,64 @@ async function walkFiles(root: string, rel = ''): Promise<string[]> {
 export async function createDataAppWorkspace({
   datappName,
   config,
-  extra,
-  productVersion,
-  datasourceLuid,
 }: {
   datappName: string;
   config: Config;
-  extra: TableauWebRequestHandlerExtra;
-  productVersion: ProductVersion;
-  datasourceLuid?: string;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName);
 
-  let wiringEdits: DatasourceWiringEdits | undefined;
-  if (datasourceLuid) {
-    const descriptorResult = await resolveDatasourceDescriptor({
-      datasourceLuid,
-      extra,
-      productVersion,
-    });
-    if (descriptorResult.isErr()) {
-      return descriptorResult;
-    }
-    try {
-      wiringEdits = buildDatasourceWiringEdits(descriptorResult.value);
-    } catch (error) {
-      return new DataAppWiringFailedError(
-        `Failed to wire the datasource into the workbook: ${getExceptionMessage(error)}.`,
-      ).toErr();
-    }
-  }
-
   return config.bucketS3.enabled
-    ? await createS3Workspace({ datappName, identity, config, wiringEdits })
-    : await createLocalWorkspace({ datappName, identity, config, wiringEdits });
-}
-
-/**
- * Walks the bundled template and, entirely in memory, rewrites identity tokens (and, if
- * `wiringEdits` is given, the .twb's datasource anchors), returning each file's finished content
- * keyed by its final relative path. Shared by both output modes so they finalize a workspace
- * identically, differing only in what they do with the resulting entries (write to disk vs. zip
- * for S3) — neither writes a scratch copy of the template to disk.
- */
-async function buildFinalizedEntries({
-  templateRoot,
-  identity,
-  wiringEdits,
-}: {
-  templateRoot: string;
-  identity: DataAppIdentity;
-  wiringEdits?: DatasourceWiringEdits;
-}): Promise<Result<ZipEntry[], McpToolError>> {
-  const replacements = buildTextReplacements(identity);
-
-  try {
-    const relFiles = (await walkFiles(templateRoot)).sort();
-    const entries: ZipEntry[] = [];
-    for (const rel of relFiles) {
-      const finalRel = mapToFinalRelativePath(rel, identity);
-
-      const edits = replacements[rel];
-      if (edits) {
-        const original = await readFile(join(templateRoot, ...rel.split('/')), 'utf8');
-        let finalContent = applyReplacements(original, edits);
-        if (rel === TWB_RELPATH && wiringEdits) {
-          try {
-            finalContent = applyDatasourceWiring(finalContent, wiringEdits);
-          } catch (error) {
-            return new DataAppWiringFailedError(
-              `Failed to wire the datasource into the workbook: ${getExceptionMessage(error)}.`,
-            ).toErr();
-          }
-        }
-        entries.push({ path: finalRel, data: Buffer.from(finalContent, 'utf8') });
-      } else {
-        entries.push({ path: finalRel, data: await readFile(join(templateRoot, ...rel.split('/'))) });
-      }
-    }
-    return new Ok(entries);
-  } catch (error) {
-    return new DataAppTemplateUnavailableError(
-      `Failed to create the data app workspace: ${getExceptionMessage(error)}.`,
-    ).toErr();
-  }
-}
-
-/** Writes finalized entries (relative path + content) under `destRoot`. */
-async function writeEntriesToDisk(entries: ZipEntry[], destRoot: string): Promise<void> {
-  for (const entry of entries) {
-    const finalPath = join(destRoot, ...entry.path.split('/'));
-    await mkdir(dirname(finalPath), { recursive: true });
-    await writeFile(finalPath, entry.data);
-  }
+    ? await createS3Workspace({ datappName, identity, config })
+    : await createLocalWorkspace({ datappName, identity, config });
 }
 
 async function createS3Workspace({
   datappName,
   identity,
   config,
-  wiringEdits,
 }: {
   datappName: string;
   identity: DataAppIdentity;
   config: Config;
-  wiringEdits?: DatasourceWiringEdits;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
-  const templateRoot = resolveTemplateRoot();
-  if (!templateRoot) {
+  if (!config.dataAppTemplateS3Key) {
     return new DataAppTemplateUnavailableError(
-      'The data app template is not available in this deployment.',
+      'S3 data app scaffolding is not available: DATA_APP_TEMPLATE_S3_KEY must be configured.',
     ).toErr();
   }
 
-  const finalizeResult = await buildFinalizedEntries({ templateRoot, identity, wiringEdits });
-  if (finalizeResult.isErr()) {
-    return finalizeResult;
-  }
-
+  // The template zip is published to S3 out of band; the tool only signs a short-lived GET URL for
+  // that existing object (reusing the same presign path `download-workbook` uses). The client
+  // fetches the zip directly from S3 rather than receiving it inline.
+  let s3URL: string;
   try {
-    const zipBuffer = buildZip(finalizeResult.value);
-    const keyPrefix = joinS3Prefix(config.bucketS3.keyPrefix, 'data-app-workspaces');
-    const key = `${keyPrefix}${slug(datappName)}/${randomUUID()}.zip`;
-    const s3URL = await uploadBufferToS3(zipBuffer, {
-      key,
-      contentType: 'application/zip',
+    s3URL = await presignGetObjectUrl({
+      key: config.dataAppTemplateS3Key,
       bucket: config.bucketS3.bucket,
       region: config.bucketS3.region,
       presignTtlSeconds: config.bucketS3.presignTtlSeconds,
     });
-
-    return new Ok({ datappName, s3URL });
   } catch (error) {
-    return new DataAppS3UploadFailedError(
-      `Failed to upload the data app workspace to S3: ${getExceptionMessage(error)}.`,
+    return new DataAppTemplateUnavailableError(
+      `Failed to prepare the data app template: ${getExceptionMessage(error)}.`,
     ).toErr();
   }
+
+  return new Ok({
+    datappName,
+    s3URL,
+    postUnzip: buildPostUnzipPlan(identity),
+  });
 }
 
 async function createLocalWorkspace({
   datappName,
   identity,
   config,
-  wiringEdits,
 }: {
   datappName: string;
   identity: DataAppIdentity;
   config: Config;
-  wiringEdits?: DatasourceWiringEdits;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const resolvedRoot = resolve(config.dataAppWorkspaceRoot);
   const dest = resolve(resolvedRoot, datappName);
@@ -268,13 +169,23 @@ async function createLocalWorkspace({
     ).toErr();
   }
 
-  const finalizeResult = await buildFinalizedEntries({ templateRoot, identity, wiringEdits });
-  if (finalizeResult.isErr()) {
-    return finalizeResult;
-  }
+  const replacements = buildTextReplacements(identity);
 
   try {
-    await writeEntriesToDisk(finalizeResult.value, dest);
+    const relFiles = (await walkFiles(templateRoot)).sort();
+    for (const rel of relFiles) {
+      const finalRel = mapToFinalRelativePath(rel, identity);
+      const finalPath = join(dest, ...finalRel.split('/'));
+      await mkdir(dirname(finalPath), { recursive: true });
+
+      const edits = replacements[rel];
+      if (edits) {
+        const original = await readFile(join(templateRoot, ...rel.split('/')), 'utf8');
+        await writeFile(finalPath, applyReplacements(original, edits), 'utf8');
+      } else {
+        await writeFile(finalPath, await readFile(join(templateRoot, ...rel.split('/'))));
+      }
+    }
   } catch (error) {
     return new DataAppTemplateUnavailableError(
       `Failed to create the data app workspace: ${getExceptionMessage(error)}.`,

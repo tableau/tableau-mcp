@@ -407,16 +407,12 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  // Only needed when the caller supplies `datasourceLuid` to wire a datasource into the scaffolded
-  // workbook (queryDatasource + the same VizQL Data Service / Metadata API calls get-datasource-metadata
-  // makes to resolve fields). Without a datasourceLuid the tool makes no REST calls at all.
+  // The tool makes no Tableau REST API calls at all — it only writes a bundled template to disk
+  // or presigns a GET URL against a pre-published S3 object. Datasource wiring is entirely the
+  // caller's/skill's responsibility, applied outside this tool.
   'scaffold-data-app': {
     mcp: [],
-    api: new Set<TableauApiScope>([
-      'tableau:content:read',
-      'tableau:viz_data_service:read',
-      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
-    ]),
+    api: new Set<TableauApiScope>([]),
   },
 };
 

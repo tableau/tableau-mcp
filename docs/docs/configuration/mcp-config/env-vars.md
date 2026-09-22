@@ -720,9 +720,9 @@ FILE_TTL=30
 ## `DATA_APP_WORKSPACE_ROOT`
 
 The server-controlled root directory under which the `scaffold-data-app` tool writes new data-app
-workspaces on disk. Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is **not** set (or the S3
-upload fails) — when S3 is configured, the tool zips and uploads the finalized workspace instead of
-writing it to this root.
+workspaces on disk. Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is **not** set — when S3 is
+configured, the tool presigns a GET URL against the pre-published template object instead of
+writing anything to this root.
 
 - Requires the `tableau-data-apps` feature flag to be enabled (see `features.json`). When the flag
   is disabled, the tool is not registered and this variable has no effect.
@@ -734,4 +734,22 @@ writing it to this root.
 
 ```bash
 DATA_APP_WORKSPACE_ROOT=/var/lib/tableau-mcp/data-app-workspaces
+```
+
+<hr />
+
+## `DATA_APP_TEMPLATE_S3_KEY`
+
+The S3 key of the pre-published `scaffold-data-app` template zip. Only relevant when
+[`MCP_S3_BUCKET`](#mcp_s3_bucket) is set — in that mode the tool presigns a short-lived GET URL
+against this existing object rather than writing a workspace to disk. The object is expected to
+already exist in the bucket (published out of band); the tool never builds or uploads it.
+
+- Requires the `tableau-data-apps` feature flag to be enabled (see `features.json`).
+- No default — S3 output returns an error if `MCP_S3_BUCKET` is set but this is not configured.
+
+**Example:**
+
+```bash
+DATA_APP_TEMPLATE_S3_KEY=templates/data-app.zip
 ```

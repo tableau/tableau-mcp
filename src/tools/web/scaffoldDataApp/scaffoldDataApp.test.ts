@@ -2,11 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdtemp, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { WebMcpServer } from '../../../server.web.js';
-import { stubDefaultEnvVars, testProductVersion } from '../../../testShared.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -14,20 +13,11 @@ import { getScaffoldDataAppTool } from './scaffoldDataApp.js';
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
-  mockResolveDatasourceDescriptor: vi.fn(),
 }));
 
 vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
-
-vi.mock('./datasourceWiring.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./datasourceWiring.js')>();
-  return {
-    ...original,
-    resolveDatasourceDescriptor: mocks.mockResolveDatasourceDescriptor,
-  };
-});
 
 describe('getScaffoldDataAppTool', () => {
   beforeEach(() => {
@@ -42,12 +32,11 @@ describe('getScaffoldDataAppTool', () => {
   });
 
   it('creates a tool instance with the expected properties', async () => {
-    const tool = getScaffoldDataAppTool(new WebMcpServer(), testProductVersion);
+    const tool = getScaffoldDataAppTool(new WebMcpServer());
     expect(tool.name).toBe('scaffold-data-app');
     expect(tool.description).toContain('data app');
     expect(tool.paramsSchema).toMatchObject({
       datappName: expect.any(Object),
-      datasourceLuid: expect.any(Object),
     });
 
     const annotations = await Provider.from(tool.annotations);
@@ -58,7 +47,7 @@ describe('getScaffoldDataAppTool', () => {
 
   describe('datappName schema', () => {
     async function datappNameSchema(): Promise<z.ZodType<string>> {
-      const tool = getScaffoldDataAppTool(new WebMcpServer(), testProductVersion);
+      const tool = getScaffoldDataAppTool(new WebMcpServer());
       return (await Provider.from(tool.paramsSchema)).datappName;
     }
 
@@ -82,14 +71,14 @@ describe('getScaffoldDataAppTool', () => {
   describe('feature gate (disabled provider)', () => {
     it('is disabled when the tableau-data-apps flag is off', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-      const tool = getScaffoldDataAppTool(new WebMcpServer(), testProductVersion);
+      const tool = getScaffoldDataAppTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(true);
       expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('tableau-data-apps');
     });
 
     it('is enabled when the tableau-data-apps flag is on', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(true);
-      const tool = getScaffoldDataAppTool(new WebMcpServer(), testProductVersion);
+      const tool = getScaffoldDataAppTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(false);
     });
   });
@@ -112,6 +101,9 @@ describe('getScaffoldDataAppTool', () => {
       invariant(result.content[0].type === 'text');
       const payload = JSON.parse(result.content[0].text);
       expect(payload.filePath.endsWith('Sales Demo')).toBe(true);
+
+      const twb = await readFile(join(payload.filePath, 'Sales Demo.twb'), 'utf8');
+      expect(twb).toContain('com.tableau.mcp.sales-demo');
     });
 
     it('surfaces an error result for names that escape the workspace root', async () => {
@@ -120,47 +112,11 @@ describe('getScaffoldDataAppTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Invalid data app name');
     });
-
-    it('wires the resolved datasource into the workbook when datasourceLuid is given', async () => {
-      mocks.mockResolveDatasourceDescriptor.mockResolvedValue(
-        new Ok({
-          caption: 'Superstore',
-          repositoryId: 'superstore',
-          site: 'tc25',
-          server: 'test.tableau.com',
-          channel: 'https',
-          port: 443,
-          fields: [{ name: 'Profit', datatype: 'real', role: 'measure' as const }],
-        }),
-      );
-
-      const result = await invokeCallback('Sales Demo', {
-        datasourceLuid: 'ds-luid-123',
-      });
-
-      expect(result.isError).toBeFalsy();
-      invariant(result.content[0].type === 'text');
-      const payload = JSON.parse(result.content[0].text);
-      expect(payload.filePath.endsWith('Sales Demo')).toBe(true);
-      expect(mocks.mockResolveDatasourceDescriptor).toHaveBeenCalledWith(
-        expect.objectContaining({ datasourceLuid: 'ds-luid-123' }),
-      );
-
-      const twb = await readFile(join(payload.filePath, 'Sales Demo.twb'), 'utf8');
-      expect(twb).not.toContain('<datasources />');
-      expect(twb).toContain('Superstore');
-    });
   });
 });
 
-async function invokeCallback(
-  datappName: string,
-  extraArgs: { datasourceLuid?: string } = {},
-): Promise<CallToolResult> {
-  const tool = getScaffoldDataAppTool(new WebMcpServer(), testProductVersion);
+async function invokeCallback(datappName: string): Promise<CallToolResult> {
+  const tool = getScaffoldDataAppTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback(
-    { datappName, datasourceLuid: extraArgs.datasourceLuid },
-    getMockRequestHandlerExtra(),
-  );
+  return await callback({ datappName }, getMockRequestHandlerExtra());
 }

@@ -33,7 +33,7 @@ function getFetchFieldsResultRules(productVersion: ProductVersion): ToolRules {
  * `get-datasource-metadata` tool: reads basic metadata (and, where available for the connected
  * Tableau version, the datasource model) from VizQL Data Service, enriches it with the Tableau
  * Metadata API's GraphQL response when available, and combines the two into a single
- * `FieldsResult`. Shared by `get-datasource-metadata` and `scaffold-data-app`'s datasource wiring.
+ * `FieldsResult`.
  */
 export async function fetchFieldsResult({
   datasourceLuid,

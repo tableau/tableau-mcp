@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { getFeatureGate } from '../../../features/init.js';
-import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
@@ -22,25 +21,15 @@ const paramsSchema = {
     .describe(
       'Name for the new data app. Used verbatim as the workspace folder name, the workbook (.twb) filename, and the extension display name, and slugified into the extension package id. Letters, digits, spaces, dot, underscore, and hyphen only; no path separators.',
     ),
-  datasourceLuid: z
-    .string()
-    .nonempty()
-    .optional()
-    .describe(
-      'Optional LUID of a published Tableau datasource on the same site/server to wire into the scaffolded workbook, so the returned data app is already query-ready instead of needing a manual wiring pass. Only wires the same-site/same-server case for a freshly-scaffolded (not already-wired) workbook. Wires every field on the datasource.',
-    ),
 };
 
-export const getScaffoldDataAppTool = (
-  server: WebMcpServer,
-  productVersion: ProductVersion,
-): WebTool<typeof paramsSchema> => {
+export const getScaffoldDataAppTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const scaffoldDataAppTool = new WebTool({
     server,
     name: 'scaffold-data-app',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      'Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live via the Extensions API. Provide `datappName`; the tool derives the package id and display name and returns a ready-to-use workspace (a workbook plus an extension package containing index.html and a src/app.js starter you author the query and visualization into) that is always fully finalized server-side. Optionally provide `datasourceLuid` to also wire a published datasource on the same site/server into the workbook (every field on it), so the returned data app is already query-ready. If S3 storage is configured, the finished workspace is zipped and uploaded, and a short-lived presigned URL to the zip is returned (an S3 upload failure is returned as an error, not silently redirected to disk); otherwise the workspace is written to disk on the server and its path is returned. This tool only scaffolds and names the app (and optionally wires a datasource) — it does not author query logic, build, publish, or embed data.',
+      'Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live via the Extensions API. Provide `datappName`; the tool derives the package id and display name and returns a workspace (a workbook plus an extension package containing index.html and a src/app.js starter you author the query and visualization into). If S3 storage is configured, the (un-substituted) template is served from S3 as a presigned URL plus a `postUnzip` plan describing the identity edits/renames to apply after downloading and unzipping; otherwise the workspace is fully finalized and written to disk on the server, and its path is returned. This tool only scaffolds and names the app — it does not wire a datasource, author query logic, build, publish, or embed data.',
     paramsSchema,
     annotations: {
       title: 'Scaffold Data App',
@@ -52,17 +41,14 @@ export const getScaffoldDataAppTool = (
     disabled: new Provider(
       async () => !(await getFeatureGate().isFeatureEnabled('tableau-data-apps')),
     ),
-    callback: async ({ datappName, datasourceLuid }, extra): Promise<CallToolResult> => {
+    callback: async ({ datappName }, extra): Promise<CallToolResult> => {
       return await scaffoldDataAppTool.logAndExecute<DataAppWorkspaceResult>({
         extra,
-        args: { datappName, datasourceLuid },
+        args: { datappName },
         callback: async () => {
           return createDataAppWorkspace({
             datappName,
             config: extra.config,
-            extra,
-            productVersion,
-            datasourceLuid,
           });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),

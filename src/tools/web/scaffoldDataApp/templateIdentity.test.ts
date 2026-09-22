@@ -1,5 +1,6 @@
 import {
   applyReplacements,
+  buildPostUnzipPlan,
   buildTextReplacements,
   deriveIdentity,
   mapToFinalRelativePath,
@@ -89,5 +90,35 @@ describe('mapToFinalRelativePath', () => {
 
   it('leaves unrelated paths unchanged', () => {
     expect(mapToFinalRelativePath('Packages', identity)).toBe('Packages');
+  });
+});
+
+describe('buildPostUnzipPlan', () => {
+  it('describes the same edits buildTextReplacements produces, rooted under the template dir', () => {
+    const identity = deriveIdentity('Sales Demo');
+    const plan = buildPostUnzipPlan(identity);
+
+    expect(plan.edits).toContainEqual({
+      file: `Data App Name/${TWB_RELPATH}`,
+      replacements: buildTextReplacements(identity)[TWB_RELPATH],
+    });
+    expect(plan.edits).toContainEqual({
+      file: `Data App Name/${TREX_RELPATH}`,
+      replacements: buildTextReplacements(identity)[TREX_RELPATH],
+    });
+  });
+
+  it('renames the package dir, workbook, and root dir, deepest paths first', () => {
+    const identity = deriveIdentity('Sales Demo');
+    const plan = buildPostUnzipPlan(identity);
+
+    expect(plan.renames).toEqual([
+      {
+        from: 'Data App Name/Packages/TODO-MANIFEST-ID',
+        to: 'Data App Name/Packages/com.tableau.mcp.sales-demo',
+      },
+      { from: `Data App Name/${TEMPLATE_TWB_FILENAME}`, to: 'Data App Name/Sales Demo.twb' },
+      { from: 'Data App Name', to: 'Sales Demo' },
+    ]);
   });
 });

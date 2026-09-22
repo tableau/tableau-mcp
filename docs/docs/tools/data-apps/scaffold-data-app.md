@@ -10,11 +10,8 @@ derives the extension package id and display name and returns a ready-to-edit wo
 workbook plus an extension package containing `index.html` and a `src/app.js` starter you author
 the query and visualization into.
 
-Optionally, provide `datasourceLuid` to also wire a published datasource on the same site/server
-into the workbook (every field on it), so the returned data app is already query-ready.
-
-This tool only **scaffolds and names** the app (and, optionally, wires a datasource) — it does not
-author query logic, build, publish, or embed data. Those remain separate steps.
+This tool only **scaffolds and names** the app — it does not wire a datasource, author query
+logic, build, publish, or embed data. Those remain separate steps.
 
 :::warning[Disabled by Default]
 This tool is gated behind the `tableau-data-apps` feature flag, which defaults to `false` in
@@ -28,11 +25,8 @@ This tool is gated behind the `tableau-data-apps` feature flag, which defaults t
 
 ## APIs called
 
-None, when `datasourceLuid` is omitted — the tool emits the starter workspace from a bundled
-template with no Tableau REST API calls.
-
-When `datasourceLuid` is provided, the tool calls the Tableau REST/VizQL Data Service APIs to
-verify access to the datasource and resolve its fields for wiring into the workbook.
+None — the tool emits the starter workspace from a bundled or pre-published template with no
+Tableau REST API calls.
 
 ## Required arguments
 
@@ -45,18 +39,9 @@ end with a letter or digit; no path separators or `..`; 1–100 characters.
 
 Example: `Sales Demo` → package id `com.tableau.mcp.sales-demo`
 
-## Optional arguments
-
-### `datasourceLuid`
-
-LUID of a published datasource on the same site/server to wire into the workbook. When provided,
-the tool calls the Tableau REST API to verify access to the datasource and resolve its fields,
-and wires every field on the datasource into the workbook.
-
 ## Derived values
 
-From `datappName` the tool derives the following identity, which it substitutes into the workspace
-files server-side (both output modes):
+From `datappName` the tool derives the following identity:
 
 - **package id**: `com.tableau.mcp.<slug(datappName)>` — lowercase, non-alphanumeric runs collapsed
   to a single hyphen.
@@ -66,20 +51,25 @@ The extension's author is fixed to `Tableau MCP` in the template; it is not deri
 
 ## Response behavior
 
-The result is a single object; the workspace is always fully finalized server-side (identity
-tokens substituted, files renamed to their final names, and — if `datasourceLuid` was given — the
-datasource wired in). Which delivery field is set depends on whether S3 storage is configured:
+The result is a single object. Where and how identity substitution happens depends on whether S3
+storage is configured:
 
-- **[`MCP_S3_BUCKET`](../../configuration/mcp-config/env-vars.md#mcp_s3_bucket) configured**: the
-  tool zips the finished workspace and uploads it to S3, returning a short-lived presigned `s3URL`
-  to the zip. Download and unzip it — there is nothing left to substitute or rename. If the upload
-  fails, the tool returns an error rather than silently redirecting the workspace to server-local
-  disk.
-
-- **Otherwise**: the workspace is written to disk under the server-controlled
+- **Otherwise (disk output)**: the server walks the bundled template, substitutes the identity
+  tokens, and writes the finished files under the server-controlled
   [`DATA_APP_WORKSPACE_ROOT`](../../configuration/mcp-config/env-vars.md#data_app_workspace_root).
-  The result reports the workspace `filePath`. An existing workspace of the same name is never
-  overwritten (the tool errors instead).
+  The workspace is fully finalized; the result reports the `filePath`. An existing workspace of the
+  same name is never overwritten (the tool errors instead).
+
+- **[`MCP_S3_BUCKET`](../../configuration/mcp-config/env-vars.md#mcp_s3_bucket) configured (S3
+  output)**: the template zip is already published to S3 out of band (see
+  [`DATA_APP_TEMPLATE_S3_KEY`](../../configuration/mcp-config/env-vars.md#data_app_template_s3_key));
+  the tool only presigns a short-lived GET URL for that existing object — it never builds or
+  uploads a zip. The result's `s3URL` points at the **un-substituted** template; `postUnzip`
+  describes the literal find/replace edits and path renames to apply after downloading and
+  unzipping to finalize the workspace.
+
+Datasource wiring is never performed by this tool in either mode — it is the caller's
+responsibility, applied to the finalized workbook after this tool returns.
 
 ## Example result (disk output)
 
@@ -95,6 +85,23 @@ datasource wired in). Which delivery field is set depends on whether S3 storage 
 ```json
 {
   "datappName": "Sales Demo",
-  "s3URL": "https://example-bucket.s3.amazonaws.com/...presigned..."
+  "s3URL": "https://example-bucket.s3.amazonaws.com/...presigned...",
+  "postUnzip": {
+    "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",
+    "edits": [
+      {
+        "file": "Data App Name/Data App Name.twb",
+        "replacements": [
+          { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
+          { "find": "TODO App Name", "replace": "Sales Demo" }
+        ]
+      }
+    ],
+    "renames": [
+      { "from": "Data App Name/Packages/TODO-MANIFEST-ID", "to": "Data App Name/Packages/com.tableau.mcp.sales-demo" },
+      { "from": "Data App Name/Data App Name.twb", "to": "Data App Name/Sales Demo.twb" },
+      { "from": "Data App Name", "to": "Sales Demo" }
+    ]
+  }
 }
 ```
