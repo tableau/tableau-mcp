@@ -44,7 +44,7 @@ describe('buildZip', () => {
   });
 
   it('stores the file name in cleartext and the DEFLATE-compressed bytes recover the original content', () => {
-    const name = 'Data App Name/manifest.json';
+    const name = 'Data App Name/data-app.trex';
     const content = '{"id":"x"}';
     const zip = buildZip([entry(name, content)]);
 
@@ -55,5 +55,23 @@ describe('buildZip', () => {
     const dataStart = 30 + nameLen;
     const compressed = zip.subarray(dataStart, dataStart + compressedSize);
     expect(inflateRawSync(compressed).toString('utf8')).toBe(content);
+  });
+
+  it('compresses a large, repetitive payload to a fraction of its uncompressed size', () => {
+    // Sized comparably to the real vendored Extensions API library (~2.1MB) that
+    // motivated switching from STORE to DEFLATE, so a regression to STORE (or an
+    // accidental no-op) is caught here rather than only by manual verification.
+    const large = 'The quick brown fox jumps over the lazy dog. '.repeat(50_000);
+    const zip = buildZip([entry('big.txt', large)]);
+
+    expect(zip.length).toBeLessThan(large.length / 50);
+
+    const nameLen = zip.readUInt16LE(26);
+    const compressedSize = zip.readUInt32LE(18);
+    const uncompressedSize = zip.readUInt32LE(22);
+    const dataStart = 30 + nameLen;
+    const compressed = zip.subarray(dataStart, dataStart + compressedSize);
+    expect(uncompressedSize).toBe(Buffer.byteLength(large));
+    expect(inflateRawSync(compressed).toString('utf8')).toBe(large);
   });
 });
