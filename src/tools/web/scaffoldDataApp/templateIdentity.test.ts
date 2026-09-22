@@ -25,11 +25,10 @@ describe('slug', () => {
 });
 
 describe('deriveIdentity', () => {
-  it('derives packageId, author, and displayName', () => {
+  it('derives packageId and displayName', () => {
     const identity = deriveIdentity('Sales Demo');
     expect(identity).toEqual({
       packageId: 'com.tableau.mcp.sales-demo',
-      author: 'Tableau MCP',
       displayName: 'Sales Demo',
     });
   });
@@ -47,7 +46,6 @@ describe('buildTextReplacements', () => {
     expect(replacements[TREX_RELPATH]).toEqual([
       { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
       { find: 'TODO App Name', replace: 'Sales Demo' },
-      { find: 'TODO Username via Tableau MCP', replace: 'Tableau MCP' },
     ]);
   });
 

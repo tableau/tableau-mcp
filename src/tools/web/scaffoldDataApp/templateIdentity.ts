@@ -1,6 +1,6 @@
 /**
  * Single source of truth for turning a `datappName` into a data app's identity
- * (package id / author / display name) and for describing how the committed
+ * (package id / display name) and for describing how the committed
  * placeholder template becomes a named workspace. Both output modes (disk and
  * S3) depend on this module's identity/replacement helpers so they finalize a
  * workspace identically.
@@ -16,13 +16,12 @@ export const TWB_RELPATH = TEMPLATE_TWB_FILENAME;
 export const TREX_RELPATH = `Packages/${TEMPLATE_PACKAGE_DIRNAME}/extensions/data-app.trex`;
 
 /**
- * Literal placeholder tokens embedded in the committed template. The same three
- * tokens appear across the .twb and data-app.trex; the manifest id token
+ * Literal placeholder tokens embedded in the committed template. Both tokens
+ * appear across the .twb and data-app.trex; the manifest id token
  * (`TODO-MANIFEST-ID`) is also the package directory name.
  */
 const PLACEHOLDER_PACKAGE_ID = 'TODO-MANIFEST-ID';
 const PLACEHOLDER_DISPLAY_NAME = 'TODO App Name';
-const PLACEHOLDER_AUTHOR = 'TODO Username via Tableau MCP';
 
 export interface Replacement {
   find: string;
@@ -31,7 +30,6 @@ export interface Replacement {
 
 export interface DataAppIdentity {
   packageId: string;
-  author: string;
   displayName: string;
 }
 
@@ -50,13 +48,11 @@ export function slug(name: string): string {
 
 /**
  * Derives the data app identity from the requested name. `displayName` is the
- * name verbatim; `packageId` is a deterministic `com.tableau.mcp.<slug>`;
- * `author` is always "Tableau MCP".
+ * name verbatim; `packageId` is a deterministic `com.tableau.mcp.<slug>`.
  */
 export function deriveIdentity(datappName: string): DataAppIdentity {
   return {
     packageId: `com.tableau.mcp.${slug(datappName)}`,
-    author: 'Tableau MCP',
     displayName: datappName,
   };
 }
@@ -72,8 +68,7 @@ function escapeXmlText(value: string): string {
  * the remote plan (embedded for the client to apply).
  *
  * `displayName` is user-supplied and inserted verbatim, so it is XML-escaped.
- * `packageId` (a slug) and `author` (sanitized) contain no characters needing
- * escaping.
+ * `packageId` (a slug) contains no characters needing escaping.
  */
 export function buildTextReplacements(identity: DataAppIdentity): Record<string, Replacement[]> {
   const displayNameXml = escapeXmlText(identity.displayName);
@@ -85,7 +80,6 @@ export function buildTextReplacements(identity: DataAppIdentity): Record<string,
     [TREX_RELPATH]: [
       { find: PLACEHOLDER_PACKAGE_ID, replace: identity.packageId },
       { find: PLACEHOLDER_DISPLAY_NAME, replace: displayNameXml },
-      { find: PLACEHOLDER_AUTHOR, replace: identity.author },
     ],
   };
 }

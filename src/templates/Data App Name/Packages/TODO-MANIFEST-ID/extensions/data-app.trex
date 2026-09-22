@@ -4,7 +4,7 @@
     <default-locale>en_US</default-locale>
     <name resource-id="name" />
     <description>Tableau data app: queries its published datasource live via the Extensions API.</description>
-    <author name="TODO Username via Tableau MCP" email="noreply@tableau.com" website="https://www.tableau.com" />
+    <author name="Tableau MCP" email="noreply@tableau.com" website="https://www.tableau.com" />
     <min-api-version>1.11</min-api-version>
     <source-location>
       <url>index.html</url>

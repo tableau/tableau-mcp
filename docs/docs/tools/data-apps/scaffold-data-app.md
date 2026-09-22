@@ -6,7 +6,7 @@ sidebar_position: 1
 
 Scaffolds a new Tableau **data app** workspace: a starter Tableau viz (worksheet) extension that
 queries a published datasource live via the Extensions API. Given a single `datappName`, the tool
-derives the extension package id, display name, and author and returns a ready-to-edit workspace — a
+derives the extension package id and display name and returns a ready-to-edit workspace — a
 workbook plus an extension package containing `index.html` and a `src/app.js` starter you author
 the query and visualization into.
 
@@ -60,8 +60,9 @@ files server-side (both output modes):
 
 - **package id**: `com.tableau.mcp.<slug(datappName)>` — lowercase, non-alphanumeric runs collapsed
   to a single hyphen.
-- **author**: always `Tableau MCP`.
 - **display name**: `datappName` verbatim.
+
+The extension's author is fixed to `Tableau MCP` in the template; it is not derived per call.
 
 ## Response behavior
 
