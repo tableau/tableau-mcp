@@ -1,3 +1,4 @@
+import type { SessionStore } from '../../sessionStore/sessionStore.js';
 import { isNativeRedirectUri } from './isNativeRedirectUri.js';
 import { matchesRegisteredRedirectUri } from './matchesRegisteredRedirectUri.js';
 import { ClientRegistration } from './types.js';
@@ -16,11 +17,11 @@ import { ClientRegistration } from './types.js';
  *
  * Returns `null` if the redirect URI is allowed, or an OAuth error object if rejected.
  */
-export function checkRedirectUriAllowed(args: {
+export async function checkRedirectUriAllowed(args: {
   clientId: string;
   redirectUri: string;
-  clientRegistrations: Map<string, ClientRegistration>;
-}): { error: string; error_description: string } | null {
+  clientRegistrations: SessionStore<ClientRegistration>;
+}): Promise<{ error: string; error_description: string } | null> {
   const { clientId, redirectUri, clientRegistrations } = args;
 
   // Single rejection shape reused by every branch below (redirectUri is constant within this call).
@@ -29,7 +30,7 @@ export function checkRedirectUriAllowed(args: {
     error_description: `Invalid redirect URI: ${redirectUri}`,
   };
 
-  const registration = clientRegistrations.get(clientId);
+  const registration = await clientRegistrations.get(clientId);
   if (registration) {
     // Known client: redirect_uri must match a stored URI
     if (!registration.redirectUris.some((uri) => matchesRegisteredRedirectUri(redirectUri, uri))) {

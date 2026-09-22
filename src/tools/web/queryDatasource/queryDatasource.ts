@@ -29,6 +29,7 @@ import { ToolRules, WebTool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { queryDatasourceToolDescription20253 } from './descriptions/queryDescription.2025.3.js';
 import { queryDatasourceToolDescription20261 } from './descriptions/queryDescription.2026.1.js';
+import { queryDatasourceToolDescription20263 } from './descriptions/queryDescription.2026.3.js';
 import { queryDatasourceToolDescription } from './descriptions/queryDescription.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
@@ -64,6 +65,7 @@ export const getQueryDatasourceTool = (
       getResultForTableauVersion({
         productVersion,
         mappings: {
+          '2026.3.0': queryDatasourceToolDescription20263,
           '2026.1.0': queryDatasourceToolDescription20261,
           '2025.3.0': queryDatasourceToolDescription20253,
           default: queryDatasourceToolDescription,
